@@ -16,6 +16,7 @@ const (
 	CodeDanglingPlaceReference                                   = "factory.route.danglingPlaceReference"
 	CodeDanglingResourceReference                                = "factory.resource.danglingReference"
 	CodeWorkerWorkstationIncompatibleBehavior                    = "factory.workstation.incompatibleWorkerBehavior"
+	CodeWorkerUnsupportedModelProvider                            = "factory.worker.unsupportedModelProvider"
 	CodeWorkstationMissingOutputRoutes                           = "factory.workstation.missingOutputRoutes"
 	CodeWorkstationMissingFailureRoute                           = "factory.workstation.missingFailureRoute"
 	CodeWorkstationMissingRejectionRoute                         = "factory.workstation.missingRejectionRoute"

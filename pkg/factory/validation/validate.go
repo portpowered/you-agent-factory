@@ -47,6 +47,7 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 	result.Targets = append(result.Targets, WorkTypeHandlingBehaviorTargets(cfg, WorkTypeHandlingBehaviorOptions{})...)
 	result.Targets = append(result.Targets, PollerRunWorkstationKindTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkerWorkstationBehaviorCompatibilityTargets(cfg)...)
+	result.Targets = append(result.Targets, workerModelProviderTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationSignatureTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkPropagationTargets(cfg)...)
@@ -56,6 +57,48 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
 	result.Targets = append(result.Targets, ValidateLayout(cfg, topology).Targets...)
 	return result
+}
+
+func workerModelProviderTargets(cfg *interfaces.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+	var targets []Target
+	for workerIndex, worker := range cfg.Workers {
+		switch worker.Type {
+		case interfaces.WorkerTypeModel, interfaces.WorkerTypeInference, interfaces.WorkerTypeAgent:
+		default:
+			continue
+		}
+		provider := strings.TrimSpace(worker.ModelProvider)
+		if provider == "" || interfaces.IsSymbolicWorkerModelProviderDefault(provider) || invocationParameterInterpolation(cfg.InvocationSignature, provider) {
+			continue
+		}
+		if _, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(provider); ok {
+			continue
+		}
+		targets = append(targets, Target{
+			Code:     CodeWorkerUnsupportedModelProvider,
+			Severity: SeverityError,
+			Message:  fmt.Sprintf("worker modelProvider %q is unsupported; supported values: %s", worker.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary()),
+			Subject:  Subject{Type: SubjectTypeWorker, ID: worker.Name, Location: SubjectLocationDefinition},
+			Path:     fmt.Sprintf("%s.workers[%d](%s).modelProvider", validationRoot, workerIndex, worker.Name),
+		})
+	}
+	return targets
+}
+
+func invocationParameterInterpolation(signature *interfaces.InvocationSignatureConfig, value string) bool {
+	if signature == nil || len(value) < 4 || !strings.HasPrefix(value, "${") || !strings.HasSuffix(value, "}") {
+		return false
+	}
+	name := strings.TrimSpace(value[2 : len(value)-1])
+	for _, parameter := range signature.Parameters {
+		if parameter.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // InvocationReturnTargets validates the authored invocation primary-result

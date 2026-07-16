@@ -190,7 +190,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   non-success context for `sessionId`, `workId`, `workName`, and `workState`
   also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
-  validation shared by validate-only and save pre-check flows.
+  validation shared by validate-only and save pre-check flows. It also validates
+  explicit model-worker `modelProvider` values; permit only supported providers,
+  the symbolic `DEFAULT`, or an exact interpolation reference to a declared
+  invocation parameter so invalid materialized worker edits fail before runtime.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical
