@@ -71,7 +71,7 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 	assertWorkerPublicContractProviderRequest(t, runner)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	runStarted := requireFactoryOnlyRunStartedPayload(t, artifact.Events)
+	runStarted := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	runStartedJSON, err := json.Marshal(runStarted.Factory)
 	if err != nil {
 		t.Fatalf("marshal run-started factory: %v", err)

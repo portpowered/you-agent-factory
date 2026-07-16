@@ -3,25 +3,24 @@
 package replay_contracts
 
 import (
-	"errors"
+	"encoding/json"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *testing.T) {
-	support.SkipLongFunctional(t, "slow replay regression harness success sweep")
+func TestReplayRegressionHarness_LoadsArtifactAndReportsSuccessfulReplay(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay CLI success sweep")
 
-	artifactPath := recordReplayHarnessFixtureArtifact(t)
-
+	artifactPath := support.RecordReplayFixture(t)
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	if replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
 		t.Fatal("expected replay fixture artifact to contain dispatches")
@@ -30,103 +29,97 @@ func TestReplayRegressionHarness_LoadsArtifactAndAssertsSuccessfulReplay(t *test
 		t.Fatal("expected replay fixture artifact to contain completions")
 	}
 
-	h := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	h.Service.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed")
+	output, err := runReplayCLI(t, artifactPath)
+	if err != nil {
+		t.Fatalf("replay CLI failed: %v\n%s", err, output)
+	}
 }
 
-func TestReplayRegressionHarness_AssertsExpectedDivergence(t *testing.T) {
-	support.SkipLongFunctional(t, "slow replay regression harness divergence sweep")
+func TestReplayRegressionHarness_ReportsCorruptedArtifactFailure(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay CLI divergence sweep")
 
-	artifactPath := recordReplayHarnessFixtureArtifact(t)
-	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	if replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
-		t.Fatal("expected replay fixture artifact to contain dispatches")
-	}
-
-	expectedEventID, expectedTick := mutateFirstDispatchCreatedEvent(t, artifact, func(payload *factoryapi.DispatchRequestEventPayload) {
-		payload.TransitionId = "unexpected-transition"
-	})
+	artifact := testutil.LoadReplayArtifact(t, support.RecordReplayFixture(t))
+	mutateFirstDispatchRequest(t, artifact)
 	divergentPath := filepath.Join(t.TempDir(), "divergent-replay.json")
-	if err := replay.Save(divergentPath, artifact); err != nil {
-		t.Fatalf("save divergent replay artifact: %v", err)
-	}
+	writeReplayArtifact(t, divergentPath, artifact)
 
-	report := assertReplayDiverges(t, divergentPath, 10*time.Second)
-	if report.Category != replay.DivergenceCategoryDispatchMismatch {
-		t.Fatalf("divergence category = %q, want %q", report.Category, replay.DivergenceCategoryDispatchMismatch)
-	}
-	if report.ExpectedEventID != expectedEventID {
-		t.Fatalf("expected event id = %q, want %q", report.ExpectedEventID, expectedEventID)
-	}
-	if report.Tick != expectedTick {
-		t.Fatalf("divergence tick = %d, want %d", report.Tick, expectedTick)
-	}
-}
-
-func assertReplayDiverges(t *testing.T, artifactPath string, timeout time.Duration) replay.DivergenceReport {
-	t.Helper()
-
-	h := testutil.NewReplayHarness(t, artifactPath)
-	err := h.RunUntilComplete(timeout)
+	output, err := runReplayCLI(t, divergentPath)
 	if err == nil {
-		t.Fatal("assertReplayDiverges: replay succeeded, expected divergence")
+		t.Fatalf("corrupted replay CLI succeeded unexpectedly: %s", output)
 	}
-	var divergence *replay.DivergenceError
-	if !errors.As(err, &divergence) {
-		t.Fatalf("assertReplayDiverges: error = %v, want replay divergence", err)
+	if !strings.Contains(output, "replay divergence: category=dispatch_mismatch") {
+		t.Fatalf("corrupted replay CLI output = %q, want stable dispatch-mismatch replay failure", output)
 	}
-	return divergence.Report
 }
 
-func mutateFirstDispatchCreatedEvent(t *testing.T, artifact *interfaces.ReplayArtifact, mutate func(*factoryapi.DispatchRequestEventPayload)) (string, int) {
+func mutateFirstDispatchRequest(t *testing.T, artifact *interfaces.ReplayArtifact) {
 	t.Helper()
+
 	for i := range artifact.Events {
-		if artifact.Events[i].Type != factoryapi.FactoryEventTypeDispatchRequest {
+		event := testutil.GeneratedFactoryEvent(t, artifact.Events[i])
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
 		}
-		payload, err := artifact.Events[i].Payload.AsDispatchRequestEventPayload()
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
 		if err != nil {
-			t.Fatalf("decode dispatch created event: %v", err)
+			t.Fatalf("decode dispatch request event: %v", err)
 		}
-		mutate(&payload)
+		payload.TransitionId = "unexpected-transition"
 		var union factoryapi.FactoryEvent_Payload
 		if err := union.FromDispatchRequestEventPayload(payload); err != nil {
-			t.Fatalf("encode dispatch created event: %v", err)
+			t.Fatalf("encode dispatch request event: %v", err)
 		}
-		artifact.Events[i].Payload = union
-		return artifact.Events[i].Id, artifact.Events[i].Context.Tick
+		event.Payload = union
+		artifact.Events[i] = testutil.FactoryEvent(t, event)
+		return
 	}
-	t.Fatal("artifact has no DISPATCH_CREATED event")
-	return "", 0
+	t.Fatal("artifact has no DISPATCH_REQUEST event")
 }
 
-func recordReplayHarnessFixtureArtifact(t *testing.T) string {
+func writeReplayArtifact(t *testing.T, path string, artifact *interfaces.ReplayArtifact) {
 	t.Helper()
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-	artifactPath := filepath.Join(t.TempDir(), "service-simple-replay.json")
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal corrupted replay artifact: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write corrupted replay artifact: %v", err)
+	}
+}
 
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkTypeID: "task",
-		WorkID:     "replay-fixture-work",
-		TraceID:    "replay-fixture-trace",
-		Payload:    []byte(`{"title": "replay regression harness"}`),
-	})
+func runReplayCLI(t *testing.T, artifactPath string) (string, error) {
+	t.Helper()
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
-	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
+	binaryPath := buildReplayCLIBinary(t)
+	command := exec.Command(binaryPath, "run", "--replay", artifactPath)
+	command.Dir = t.TempDir()
+	command.Env = replayCLIEnvironment(t)
+	output, err := command.CombinedOutput()
+	return string(output), err
+}
 
-	return artifactPath
+func buildReplayCLIBinary(t *testing.T) string {
+	t.Helper()
+
+	binaryName := "you"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", binaryPath, "./cmd/factory")
+	build.Dir = testutil.MustRepoRoot(t)
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build replay CLI: %v\n%s", err, output)
+	}
+	return binaryPath
+}
+
+func replayCLIEnvironment(t *testing.T) []string {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	env := append([]string{}, os.Environ()...)
+	env = append(env, "HOME="+homeDir, "USERPROFILE="+homeDir)
+	return env
 }

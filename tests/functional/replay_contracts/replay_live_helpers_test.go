@@ -4,99 +4,34 @@ package replay_contracts
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-type replayFunctionalServer struct {
-	httpSrv *httptest.Server
-	service *service.FactoryService
-	cancel  context.CancelFunc
-	done    <-chan struct{}
-	*support.FunctionalAPIServer
-}
-
-func startReplayFunctionalServerWithConfig(
+func startReplayFunctionalServer(
 	t *testing.T,
 	factoryDir string,
-	useMockWorkers bool,
-	configure func(*service.FactoryServiceConfig),
-	extraOpts ...factory.FactoryOption,
-) *replayFunctionalServer {
+	replayPath string,
+	executionBaseDir string,
+) *support.FunctionalAPIServer {
 	t.Helper()
 
-	server := &replayFunctionalServer{}
-	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:     factoryDir,
-		UseMockWorkers: useMockWorkers,
-		Configure:      configure,
-		ExtraOptions:   extraOpts,
-		CaptureService: func(svc *service.FactoryService) {
-			server.service = svc
-		},
-		CaptureHTTPServer: func(httpSrv *httptest.Server) {
-			server.httpSrv = httpSrv
-		},
-		CaptureShutdown: func(cancel context.CancelFunc, done <-chan struct{}) {
-			server.cancel = cancel
-			server.done = done
-		},
+	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:       factoryDir,
+		ReplayPath:       replayPath,
+		ExecutionBaseDir: executionBaseDir,
 	})
-	server.FunctionalAPIServer = base
-	return server
-}
-
-func (fs *replayFunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
-	t.Helper()
-
-	snapshot := fs.GetEngineStateSnapshot(t)
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("get factory events: %v", err)
-	}
-
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
-	if err != nil {
-		t.Fatalf("reconstruct world state: %v", err)
-	}
-	worldView := projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, snapshot.ActiveThrottlePauses)
-
-	var out DashboardResponse
-	out.FactoryState = snapshot.FactoryState
-	out.TickCount = snapshot.TickCount
-	out.Runtime.InFlightDispatchCount = worldView.Runtime.InFlightDispatchCount
-	out.Runtime.Session.CompletedCount = worldView.Runtime.Session.CompletedCount
-	out.Runtime.Session.DispatchedCount = worldView.Runtime.Session.DispatchedCount
-	out.Runtime.Session.FailedCount = worldView.Runtime.Session.FailedCount
-	return out
-}
-
-type DashboardResponse struct {
-	FactoryState string `json:"factory_state"`
-	TickCount    int    `json:"tick_count"`
-	Runtime      struct {
-		InFlightDispatchCount int `json:"in_flight_dispatch_count"`
-		Session               struct {
-			CompletedCount  int `json:"completed_count"`
-			DispatchedCount int `json:"dispatched_count"`
-			FailedCount     int `json:"failed_count"`
-		} `json:"session"`
-	} `json:"runtime"`
 }
 
 type factoryEventHTTPStream struct {
@@ -290,4 +225,65 @@ func lastIndexOfFunctionalEventType(events []factoryapi.FactoryEvent, eventType 
 		}
 	}
 	return -1
+}
+
+func upsertFactoryWorkRequestOverHTTP(t *testing.T, baseURL, requestID string, request []byte) factoryapi.UpsertWorkRequestResponse {
+	t.Helper()
+
+	httpRequest, err := http.NewRequest(
+		http.MethodPut,
+		support.DefaultSessionWorkURL(baseURL, "/work-requests/"+requestID),
+		bytes.NewReader(request),
+	)
+	if err != nil {
+		t.Fatalf("build PUT /work-requests request: %v", err)
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		t.Fatalf("PUT /work-requests: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Fatalf("PUT /work-requests status = %d, want 201", response.StatusCode)
+	}
+
+	var result factoryapi.UpsertWorkRequestResponse
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatalf("decode PUT /work-requests response: %v", err)
+	}
+	return result
+}
+
+func waitForRecordedEvents(t *testing.T, artifactPath string, timeout time.Duration) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(artifactPath)
+		if err == nil {
+			var artifact struct {
+				Events []factoryapi.FactoryEvent `json:"events"`
+			}
+			if json.Unmarshal(data, &artifact) == nil && len(artifact.Events) > 0 {
+				return artifact.Events
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for public recording at %s", artifactPath)
+	return nil
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if condition() {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("timed out waiting for functional condition")
 }

@@ -14,7 +14,7 @@ const RELATION_TYPE_DEPENDS_ON = "DEPENDS_ON";
 export function projectSelectedWorkRelationshipGraphToDashboardRelations(
   relationshipGraph: SelectedWorkRelationshipGraph | null | undefined,
 ): DashboardWorkRelation[] | undefined {
-  if (!relationshipGraph || relationshipGraph.status !== "ready") {
+  if (relationshipGraph?.status !== "ready") {
     return undefined;
   }
 

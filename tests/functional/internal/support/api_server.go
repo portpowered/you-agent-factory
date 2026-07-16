@@ -12,6 +12,8 @@ import (
 type FunctionalAPIServerConfig = functionalhost.FunctionalAPIServerConfig
 type FunctionalAPIServer = functionalhost.FunctionalAPIServer
 
+// ConfigureWorkerCommands installs typed functional command edges before the
+// service graph is assembled.
 func ConfigureWorkerCommands(
 	t *testing.T,
 	cfg *service.FactoryServiceConfig,

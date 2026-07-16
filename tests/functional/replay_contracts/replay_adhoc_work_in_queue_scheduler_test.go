@@ -47,10 +47,10 @@ func assertRecordedAdhocReplayIsUnary(t *testing.T, artifact *interfaces.ReplayA
 	if replayEventCount(artifact, factoryapi.FactoryEventTypeDispatchRequest) == 0 {
 		t.Fatal("expected adhoc replay artifact to contain dispatches")
 	}
-	if got := submissionsObservedAtTick(artifact.Events, 1); got < 8 {
+	if got := submissionsObservedAtTick(testutil.GeneratedFactoryEvents(t, artifact.Events), 1); got < 8 {
 		t.Fatalf("adhoc replay submissions observed at tick 1 = %d, want at least 8", got)
 	}
-	if maxRecorded := maxRecordedDispatchesPerTick(artifact.Events); maxRecorded != 1 {
+	if maxRecorded := maxRecordedDispatchesPerTick(testutil.GeneratedFactoryEvents(t, artifact.Events)); maxRecorded != 1 {
 		t.Fatalf("recorded adhoc replay max dispatches per tick = %d, want unary recording", maxRecorded)
 	}
 }

@@ -30,6 +30,9 @@ type FunctionalAPIServerConfig struct {
 	FactoryDir                string
 	UseMockWorkers            bool
 	WaitForServiceModeRuntime bool
+	RecordPath                string
+	ReplayPath                string
+	ExecutionBaseDir          string
 	Configure                 func(*service.FactoryServiceConfig)
 	ExtraOptions              []factory.FactoryOption
 	CaptureAPISurface         func(apisurface.APISurface)
@@ -88,6 +91,9 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	if cfg.UseMockWorkers {
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
 	}
+	serviceCfg.RecordPath = cfg.RecordPath
+	serviceCfg.ReplayPath = cfg.ReplayPath
+	serviceCfg.ExecutionBaseDir = cfg.ExecutionBaseDir
 	if cfg.Configure != nil {
 		cfg.Configure(serviceCfg)
 	}
@@ -198,4 +204,8 @@ func (fs *FunctionalAPIServer) Stop(t *testing.T) {
 	case <-time.After(functionalServerReadyTimeout):
 		t.Fatal("FunctionalServer: timed out waiting for shutdown")
 	}
+}
+
+func (fs *FunctionalAPIServer) Done() <-chan struct{} {
+	return fs.done
 }
