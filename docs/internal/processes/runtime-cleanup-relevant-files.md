@@ -74,6 +74,13 @@ input snapshots, and topology-derived workstation, worker, provider, and model
 metadata; generated event conversion remains at the temporary outer projection
 compatibility entrypoint.
 
+Inference, script, and agent-run world-state reduction decodes the canonical
+Factory envelope into `pkg/workers/execution` payloads. Keep provider-session
+metadata detached, decode safe diagnostic JSON through the worker diagnostics
+owner, and reject malformed diagnostics before mutating the projection;
+generated event conversion remains only at the temporary outer compatibility
+entrypoint.
+
 Initial-structure and run-request producers carry the Factory-owned detached
 `FactorySnapshot` inside Factory-owned payloads. Runtime composition should
 hand the editable snapshot to event history without decoding it through a

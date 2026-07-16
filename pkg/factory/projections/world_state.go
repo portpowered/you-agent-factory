@@ -119,16 +119,6 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 			return err
 		}
 		return r.applyDispatchRequestEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeInferenceRequest:
-		return r.applyInferenceRequestEvent(event)
-	case factoryapi.FactoryEventTypeInferenceResponse:
-		return r.applyInferenceResponseEvent(event)
-	case factoryapi.FactoryEventTypeScriptRequest:
-		return r.applyScriptRequestEvent(event)
-	case factoryapi.FactoryEventTypeScriptResponse:
-		return r.applyScriptResponseEvent(event)
-	case factoryapi.FactoryEventTypeAgentRunResponse:
-		return r.applyAgentRunResponseEvent(event)
 	case factoryapi.FactoryEventTypeDispatchResponse:
 		return r.applyDispatchResponseEvent(event)
 	case factoryapi.FactoryEventTypeFactoryStateResponse:
@@ -137,6 +127,18 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return r.applyWorkStateChangeEvent(event)
 	case factoryapi.FactoryEventTypeRunResponse:
 		return nil
+	}
+	switch interfaces.FactoryEventType(event.Type) {
+	case interfaces.FactoryEventTypeInferenceRequest,
+		interfaces.FactoryEventTypeInferenceResponse,
+		interfaces.FactoryEventTypeScriptRequest,
+		interfaces.FactoryEventTypeScriptResponse,
+		interfaces.FactoryEventTypeAgentRunResponse:
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyWorkerExecutionEvent(canonicalEvent)
 	}
 	if handled, err := r.applyOrchestratorLifecycleEvent(event); handled {
 		return err
@@ -245,51 +247,6 @@ func (r *factoryWorldReducer) applyDispatchRequestEvent(event interfaces.Factory
 		return err
 	}
 	r.applyDispatchCreated(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyInferenceRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsInferenceRequestEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyInferenceRequest(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyInferenceResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsInferenceResponseEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyInferenceResponse(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyScriptRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsScriptRequestEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyScriptRequest(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyScriptResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsScriptResponseEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyScriptResponse(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyAgentRunResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsAgentRunResponseEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyAgentRunResponse(event, payload)
 	return nil
 }
 

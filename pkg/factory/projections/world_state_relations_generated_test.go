@@ -119,6 +119,96 @@ func TestFactoryWorldReducer_RemoveTokenCleansResourceIndexes(t *testing.T) {
 	}
 }
 
+func TestFactoryWorldReducer_AppliesCanonicalWorkerExecutionEvents(t *testing.T) {
+	t0 := time.Date(2026, 7, 16, 1, 30, 0, 0, time.UTC)
+	dispatchID := "dispatch-1"
+	context := interfaces.FactoryEventContext{DispatchID: &dispatchID, Tick: 3, EventTime: t0}
+	response := "finished"
+	exitCode := 0
+	failureType := workerexecution.ScriptFailureTypeTimeout
+	providerSession := &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "session-1"}
+	diagnostics := json.RawMessage(`{"provider":{"provider":"codex","model":"gpt-5"}}`)
+	events := []interfaces.FactoryEvent{
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceRequest, context, workerexecution.InferenceRequestEventPayload{
+			Attempt: 2, InferenceRequestID: "inference-1", Prompt: "review", WorkingDirectory: "/workspace", Worktree: "branch-a",
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceResponse, context, workerexecution.InferenceResponseEventPayload{
+			Attempt: 2, InferenceRequestID: "inference-1", Outcome: workerexecution.InferenceOutcomeSucceeded,
+			Response: &response, DurationMillis: 1250, ExitCode: &exitCode, ProviderSession: providerSession, Diagnostics: diagnostics,
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeScriptRequest, context, workerexecution.ScriptRequestEventPayload{
+			Attempt: 1, DispatchID: dispatchID, TransitionID: "review", ScriptRequestID: "script-1", Command: "go", Args: []string{"test", "./..."},
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeScriptResponse, context, workerexecution.ScriptResponseEventPayload{
+			Attempt: 1, DispatchID: dispatchID, TransitionID: "review", ScriptRequestID: "script-1",
+			Outcome: workerexecution.ScriptExecutionOutcomeTimedOut, Stdout: "partial", Stderr: "deadline", DurationMillis: 5000,
+			ExitCode: &exitCode, FailureType: &failureType,
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeAgentRunResponse, context, workerexecution.AgentRunResponseEventPayload{
+			AgentRunID: "agent-run-1", Outcome: "SUCCEEDED", DurationMillis: 1400, Diagnostics: diagnostics,
+		}),
+	}
+
+	reducer := newFactoryWorldReducer(3)
+	for _, event := range events {
+		if err := reducer.applyWorkerExecutionEvent(event); err != nil {
+			t.Fatalf("apply canonical %s event: %v", event.Type, err)
+		}
+	}
+	assertCanonicalInferenceProjection(t, reducer, dispatchID, response)
+	assertCanonicalScriptProjection(t, reducer, dispatchID)
+	assertCanonicalAgentRunProjection(t, reducer, dispatchID)
+}
+
+func assertCanonicalInferenceProjection(t *testing.T, reducer *factoryWorldReducer, dispatchID string, response string) {
+	t.Helper()
+	attempt := reducer.stateValue.InferenceAttemptsByDispatchID[dispatchID]["inference-1"]
+	if attempt.Attempt != 2 || attempt.Prompt != "review" || attempt.Response != response || attempt.DurationMillis != 1250 {
+		t.Fatalf("inference attempt = %#v, want canonical request and response facts", attempt)
+	}
+	if attempt.ProviderSession == nil || attempt.ProviderSession.ID != "session-1" || attempt.Diagnostics == nil || attempt.Diagnostics.Provider == nil || attempt.Diagnostics.Provider.Model != "gpt-5" {
+		t.Fatalf("inference diagnostics = %#v, provider session = %#v", attempt.Diagnostics, attempt.ProviderSession)
+	}
+}
+
+func assertCanonicalScriptProjection(t *testing.T, reducer *factoryWorldReducer, dispatchID string) {
+	t.Helper()
+	request := reducer.stateValue.ScriptRequestsByDispatchID[dispatchID]["script-1"]
+	if request.Command != "go" || len(request.Args) != 2 || request.Args[1] != "./..." {
+		t.Fatalf("script request = %#v, want canonical command facts", request)
+	}
+	scriptResponse := reducer.stateValue.ScriptResponsesByDispatchID[dispatchID]["script-1"]
+	if scriptResponse.Outcome != "TIMED_OUT" || scriptResponse.FailureType != "TIMEOUT" || scriptResponse.Stderr != "deadline" {
+		t.Fatalf("script response = %#v, want canonical timeout facts", scriptResponse)
+	}
+}
+
+func assertCanonicalAgentRunProjection(t *testing.T, reducer *factoryWorldReducer, dispatchID string) {
+	t.Helper()
+	agentResponse := reducer.stateValue.AgentRunResponsesByDispatchID[dispatchID]["agent-run-1"]
+	if agentResponse.Outcome != "SUCCEEDED" || agentResponse.Diagnostics == nil || agentResponse.Diagnostics.Provider == nil || agentResponse.Diagnostics.Provider.Provider != "codex" {
+		t.Fatalf("agent response = %#v, want canonical result and diagnostics", agentResponse)
+	}
+}
+
+func TestFactoryWorldReducer_RejectsMalformedCanonicalWorkerDiagnostics(t *testing.T) {
+	dispatchID := "dispatch-1"
+	event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInferenceResponse, interfaces.FactoryEventContext{
+		DispatchID: &dispatchID,
+	}, workerexecution.InferenceResponseEventPayload{
+		InferenceRequestID: "inference-1",
+		Diagnostics:        json.RawMessage(`"not-an-object"`),
+	})
+	reducer := newFactoryWorldReducer(0)
+
+	if err := reducer.applyWorkerExecutionEvent(event); err == nil {
+		t.Fatal("apply malformed canonical inference diagnostics error = nil, want decode failure")
+	}
+	if len(reducer.stateValue.InferenceAttemptsByDispatchID[dispatchID]) != 0 {
+		t.Fatalf("inference attempts = %#v, want no projection mutation after decode failure", reducer.stateValue.InferenceAttemptsByDispatchID[dispatchID])
+	}
+}
+
 func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t *testing.T) {
 	t0 := time.Date(2026, 5, 19, 9, 0, 0, 0, time.UTC)
 	input := work.FactoryWorkItem{
