@@ -382,13 +382,14 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
 		return workflowruntime.Outcome{}, err
 	}
 	return workflowruntime.Run(ctx, workflowruntime.Request{
-		Source:    sourceContent,
-		SourceRef: resolved.SourceRef,
-		SessionID: sessionID,
-		Args:      argsJSON,
-		Metadata:  workflowMetadataFromResolved(resolved, normalized),
-		Policy:    policyResolution.Policy,
-		Resume:    resume,
+		Source:     sourceContent,
+		SourceRef:  resolved.SourceRef,
+		SessionID:  sessionID,
+		Args:       argsJSON,
+		ArgsSchema: resolved.ArgsSchema,
+		Metadata:   workflowMetadataFromResolved(resolved, normalized),
+		Policy:     policyResolution.Policy,
+		Resume:     resume,
 	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized)))
 }
 

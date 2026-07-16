@@ -359,6 +359,8 @@ type ResolvedSource struct {
 	ResolutionOrder []string
 	Metadata        map[string]string
 	Agents          map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	ArgsSchema      json.RawMessage `json:"argsSchema,omitempty"`
+	DefaultPolicy   json.RawMessage `json:"defaultPolicy,omitempty"`
 }
 
 // InspectionLinks are API-relative links for polling and inspecting one session.

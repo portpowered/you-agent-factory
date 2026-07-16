@@ -59,8 +59,8 @@ func TestFactoryJSON_DeclaresRequiredTopicInvocationContract(t *testing.T) {
 	}
 	signature := authored["invocationSignature"].(map[string]any)
 	parameters := signature["parameters"].([]any)
-	if len(parameters) != 1 {
-		t.Fatalf("parameters = %#v, want one topic parameter", parameters)
+	if len(parameters) != 3 {
+		t.Fatalf("parameters = %#v, want topic plus two configuration parameters", parameters)
 	}
 	topic := parameters[0].(map[string]any)
 	if topic["name"] != "topic" || topic["required"] != true {
@@ -69,18 +69,18 @@ func TestFactoryJSON_DeclaresRequiredTopicInvocationContract(t *testing.T) {
 }
 
 func TestBuiltInFactoryWorkflow_CompletesWithoutDelegation(t *testing.T) {
-	outcome := runPackagedWorkflow(t, "Explain event sourcing")
+	outcome := runPackagedWorkflow(t, map[string]any{"topic": "Explain event sourcing"})
 	if !outcome.OK {
 		t.Fatalf("workflow failure = %#v", outcome.Failure)
 	}
 	if got := completedChildDispatches(outcome.Records); len(got) != 0 {
 		t.Fatalf("completed child dispatches = %#v, want none", got)
 	}
-	assertLeadSynthesis(t, outcome, "Explain event sourcing", 0)
+	assertLeadSynthesis(t, outcome, "Explain event sourcing", 2, 0)
 }
 
 func TestBuiltInFactoryWorkflow_DelegatesBoundedSpecialistsAndSynthesizes(t *testing.T) {
-	outcome := runPackagedWorkflow(t, "Compare event sourcing versus state machines")
+	outcome := runPackagedWorkflow(t, map[string]any{"topic": "Compare event sourcing versus state machines"})
 	if !outcome.OK {
 		t.Fatalf("workflow failure = %#v", outcome.Failure)
 	}
@@ -95,10 +95,35 @@ func TestBuiltInFactoryWorkflow_DelegatesBoundedSpecialistsAndSynthesizes(t *tes
 	if !labels["research-specialist-technical"] || !labels["research-specialist-tradeoffs"] {
 		t.Fatalf("specialist labels = %#v, want stable technical and trade-off roles", labels)
 	}
-	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines", 2)
+	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines", 2, 2)
 }
 
-func runPackagedWorkflow(t *testing.T, topic string) workflowruntime.Outcome {
+func TestBuiltInFactoryWorkflow_ConfiguresBreadthAndSpecialistCap(t *testing.T) {
+	outcome := runPackagedWorkflow(t, map[string]any{
+		"topic": "Compare event sourcing versus state machines", "researchDepth": 3, "maxSubagents": 1,
+	})
+	if !outcome.OK {
+		t.Fatalf("workflow failure = %#v", outcome.Failure)
+	}
+	if children := completedChildDispatches(outcome.Records); len(children) != 1 || children[0].Label != "research-specialist-technical" {
+		t.Fatalf("completed child dispatches = %#v, want one technical specialist", children)
+	}
+	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines", 3, 1)
+}
+
+func TestBuiltInFactoryWorkflow_RejectsInvalidConfigurationBeforeDispatch(t *testing.T) {
+	outcome := runPackagedWorkflow(t, map[string]any{
+		"topic": "Compare event sourcing versus state machines", "maxSubagents": 3,
+	})
+	if outcome.OK || outcome.Failure.Code != workflowruntime.CodePreExecutionInvalid {
+		t.Fatalf("workflow outcome = %#v, want pre-execution argument validation failure", outcome)
+	}
+	if len(outcome.Records) != 0 {
+		t.Fatalf("runtime records = %#v, want no lead or child dispatch activity", outcome.Records)
+	}
+}
+
+func runPackagedWorkflow(t *testing.T, arguments map[string]any) workflowruntime.Outcome {
 	t.Helper()
 	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), "@you/deep-research", deepresearch.BuiltInFactoryJSON)
 	if err != nil {
@@ -113,7 +138,7 @@ func runPackagedWorkflow(t *testing.T, topic string) workflowruntime.Outcome {
 	if err != nil {
 		t.Fatalf("ReadFile workflow: %v", err)
 	}
-	args, err := json.Marshal(map[string]string{"topic": topic})
+	args, err := json.Marshal(arguments)
 	if err != nil {
 		t.Fatalf("Marshal args: %v", err)
 	}
@@ -122,11 +147,12 @@ func runPackagedWorkflow(t *testing.T, topic string) workflowruntime.Outcome {
 		t.Fatalf("ResolveFromFactoryDefault issues = %#v", resolution.Issues)
 	}
 	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
-		Source:    string(source),
-		SourceRef: js.SourceRef,
-		SessionID: "deep-research-session",
-		Args:      args,
-		Policy:    resolution.Policy,
+		Source:     string(source),
+		SourceRef:  js.SourceRef,
+		SessionID:  "deep-research-session",
+		Args:       args,
+		ArgsSchema: js.ArgsSchema,
+		Policy:     resolution.Policy,
 	}, workflowruntime.Hooks{})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
@@ -144,13 +170,13 @@ func completedChildDispatches(records []workflowruntime.RuntimeRecord) []*workfl
 	return completed
 }
 
-func assertLeadSynthesis(t *testing.T, outcome workflowruntime.Outcome, topic string, wantSpecialists int) {
+func assertLeadSynthesis(t *testing.T, outcome workflowruntime.Outcome, topic string, wantDepth, wantSpecialists int) {
 	t.Helper()
 	var result map[string]any
 	if err := json.Unmarshal(outcome.Value.JSON, &result); err != nil {
 		t.Fatalf("unmarshal workflow result: %v", err)
 	}
-	if result["topic"] != topic || result["role"] != "lead-researcher" {
+	if result["topic"] != topic || result["role"] != "lead-researcher" || result["researchDepth"] != float64(wantDepth) {
 		t.Fatalf("workflow result = %#v, want lead synthesis for %q", result, topic)
 	}
 	synthesis, ok := result["synthesis"].(map[string]any)

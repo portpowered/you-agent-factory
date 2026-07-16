@@ -11,6 +11,26 @@
           {"kind": "POSITIONAL", "position": 1},
           {"kind": "STDIN"}
         ]
+      },
+      {
+        "name": "researchDepth",
+        "description": "Investigation breadth from 1 (focused) through 3 (broad). Defaults to 2.",
+        "externalName": "researchDepth",
+        "typeHint": "STRING",
+        "defaultValue": "2",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "maxSubagents",
+        "description": "Maximum specialist child agents for this invocation, from 0 through 2. Defaults to 2.",
+        "externalName": "maxSubagents",
+        "typeHint": "STRING",
+        "defaultValue": "2",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
       }
     ],
     "examples": [
@@ -37,6 +57,20 @@
             "type": "string",
             "minLength": 1,
             "description": "The subject to investigate."
+          },
+          "researchDepth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 2,
+            "description": "Investigation breadth: 1 focused, 2 balanced, or 3 broad."
+          },
+          "maxSubagents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2,
+            "default": 2,
+            "description": "Per-invocation specialist cap within the factory policy ceiling."
           }
         },
         "additionalProperties": false
