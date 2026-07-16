@@ -1,8 +1,12 @@
 package workflowvalidation
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 func validateConfig(req Request) []Issue {
@@ -10,6 +14,32 @@ func validateConfig(req Request) []Issue {
 	issues = append(issues, validateMetadata(req)...)
 	issues = append(issues, validateArgsSchema(req)...)
 	return issues
+}
+
+// ValidateArgs applies an authored JavaScript workflow argument schema before
+// execution so invalid invocation input cannot create workflow side effects.
+func ValidateArgs(schemaJSON json.RawMessage, args map[string]any) error {
+	if len(schemaJSON) == 0 || strings.TrimSpace(string(schemaJSON)) == "null" {
+		return nil
+	}
+	document, err := jsonschema.UnmarshalJSON(bytes.NewReader(schemaJSON))
+	if err != nil {
+		return fmt.Errorf("workflow args schema is invalid: %w", err)
+	}
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	const schemaID = "workflow-args-schema.json"
+	if err := compiler.AddResource(schemaID, document); err != nil {
+		return fmt.Errorf("workflow args schema is invalid: %w", err)
+	}
+	schema, err := compiler.Compile(schemaID)
+	if err != nil {
+		return fmt.Errorf("workflow args schema is invalid: %w", err)
+	}
+	if err := schema.Validate(args); err != nil {
+		return fmt.Errorf("workflow args do not satisfy argsSchema: %w", err)
+	}
+	return nil
 }
 
 func validateMetadata(req Request) []Issue {

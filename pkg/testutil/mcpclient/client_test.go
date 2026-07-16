@@ -88,14 +88,14 @@ func connectRecordingClient(t *testing.T, ctx context.Context) (*Client, *frameR
 	t.Helper()
 	serverInput, pipeWriter := io.Pipe()
 	pipeReader, serverOutput := io.Pipe()
-	requests := newFrameRecorder(2)
+	requests := newFrameRecorder(0)
 	responses := newFrameRecorder(0)
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- newRealServer(t).ServeStdio(ctx, serverInput, serverOutput)
 	}()
 	client, err := Connect(ctx, Pipes{
-		Reader: &recordingReader{source: pipeReader, recorder: responses, gate: requests.ready},
+		Reader: &recordingReader{source: pipeReader, recorder: responses},
 		Writer: &recordingWriter{destination: pipeWriter, recorder: requests},
 	}, Options{Name: "sdk-conversation-test", Version: "1.0.0"})
 	if err != nil {
@@ -299,27 +299,14 @@ func (w *recordingWriter) Write(data []byte) (int, error) {
 func (w *recordingWriter) Close() error { return w.destination.Close() }
 
 type recordingReader struct {
-	source    io.ReadCloser
-	recorder  *frameRecorder
-	gate      <-chan struct{}
-	responses int
+	source   io.ReadCloser
+	recorder *frameRecorder
 }
 
 func (r *recordingReader) Read(data []byte) (int, error) {
 	n, err := r.source.Read(data)
 	if n > 0 {
 		r.recorder.record(data[:n])
-		var frame rpcFrame
-		if json.Unmarshal(bytes.TrimSpace(data[:n]), &frame) == nil && frame.ID != nil && frame.Method == "" {
-			r.responses++
-			if r.responses > 1 {
-				select {
-				case <-r.gate:
-				case <-time.After(testTimeout):
-					return 0, context.DeadlineExceeded
-				}
-			}
-		}
 	}
 	return n, err
 }

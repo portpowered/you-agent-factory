@@ -47,6 +47,10 @@
   not put background commands behind live `while`/`tee` pipelines: on Windows,
   detached descendants can inherit the pipe handle after the tested command
   exits and prevent the repository-owned verification target from terminating.
+  When a change adds a measurable Go package to either profile, add its
+  package-specific minimum to the matching
+  `docs/internal/development/go-*-coverage-package-minimums.json` manifest in
+  the same change; the coverage gate rejects unowned measured packages.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned
