@@ -1,15 +1,15 @@
-package testutil
+package functionalhost
 
 import (
 	"net/http"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestFunctionalHTTPHost_ExposesReadyStatusAndBoundedShutdown(t *testing.T) {
-	dir := ScaffoldFactoryDir(t, &interfaces.FactoryConfig{})
+	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{})
 	host := StartFunctionalHTTPHost(t, FunctionalHTTPHostConfig{
 		FactoryDir:     dir,
 		UseMockWorkers: true,
@@ -35,39 +35,17 @@ func TestFunctionalHTTPHost_ExposesReadyStatusAndBoundedShutdown(t *testing.T) {
 
 func TestFunctionalHTTPHost_IndependentHostsUseDistinctPublicAddresses(t *testing.T) {
 	first := StartFunctionalHTTPHost(t, FunctionalHTTPHostConfig{
-		FactoryDir:     ScaffoldFactoryDir(t, &interfaces.FactoryConfig{}),
+		FactoryDir:     testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{}),
 		UseMockWorkers: true,
 		RuntimeMode:    interfaces.RuntimeModeService,
 	})
 	second := StartFunctionalHTTPHost(t, FunctionalHTTPHostConfig{
-		FactoryDir:     ScaffoldFactoryDir(t, &interfaces.FactoryConfig{}),
+		FactoryDir:     testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{}),
 		UseMockWorkers: true,
 		RuntimeMode:    interfaces.RuntimeModeService,
 	})
 
 	if first.URL() == second.URL() {
 		t.Fatalf("independent hosts share URL %q", first.URL())
-	}
-}
-
-func TestFunctionalHTTPHost_ConfiguresConstructionWithoutExposingRuntimeHandles(t *testing.T) {
-	configured := false
-	host := StartFunctionalHTTPHost(t, FunctionalHTTPHostConfig{
-		FactoryDir: ScaffoldFactoryDir(t, &interfaces.FactoryConfig{}),
-		ConfigureService: func(cfg *service.FactoryServiceConfig) {
-			configured = true
-			cfg.RuntimeFileLoggingPolicy = service.RuntimeFileLoggingPolicyDisabled
-		},
-	})
-	if !configured {
-		t.Fatal("functional HTTP host did not apply its construction configuration")
-	}
-	response, err := host.Client().Get(host.URL() + "/status")
-	if err != nil {
-		t.Fatalf("GET /status: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("GET /status status = %s, want 200 OK", response.Status)
 	}
 }

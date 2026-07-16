@@ -14,8 +14,8 @@ import (
 	"time"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/internal/functionalhost"
 )
 
 const startupTimeout = 10 * time.Second
@@ -51,7 +51,7 @@ func main() {
 	}
 	defer cleanupProjectRoot()
 
-	host, err := testutil.StartFunctionalHTTPServer(ctx, testutil.FunctionalHTTPServerConfig{
+	host, err := functionalhost.StartFunctionalHTTPServer(ctx, functionalhost.FunctionalHTTPServerConfig{
 		Address:          fmt.Sprintf("127.0.0.1:%d", cfg.apiPort),
 		ExecutionBaseDir: projectRoot,
 		FactoryDir:       cfg.factoryDir,

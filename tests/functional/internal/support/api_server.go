@@ -4,14 +4,12 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/tests/internal/functionalhost"
 )
 
-// FunctionalAPIServerConfig and FunctionalAPIServer retain the legacy
-// functional helper surface while product construction remains in pkg/testutil.
-type FunctionalAPIServerConfig = testutil.FunctionalAPIServerConfig
-type FunctionalAPIServer = testutil.FunctionalAPIServer
+type FunctionalAPIServerConfig = functionalhost.FunctionalAPIServerConfig
+type FunctionalAPIServer = functionalhost.FunctionalAPIServer
 
 func ConfigureWorkerCommands(
 	t *testing.T,
@@ -19,10 +17,10 @@ func ConfigureWorkerCommands(
 	providerRunner, scriptRunner workers.CommandRunner,
 ) {
 	t.Helper()
-	testutil.ConfigureWorkerCommands(t, cfg, providerRunner, scriptRunner)
+	functionalhost.ConfigureWorkerCommands(t, cfg, providerRunner, scriptRunner)
 }
 
 func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *FunctionalAPIServer {
 	t.Helper()
-	return testutil.StartFunctionalAPIServer(t, cfg)
+	return functionalhost.StartFunctionalAPIServer(t, cfg)
 }

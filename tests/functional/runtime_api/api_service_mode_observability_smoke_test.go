@@ -36,10 +36,14 @@ func TestServiceModeSmoke_PublicSessionEventsAndWorkStayReachableUntilCanceled(t
 		t.Fatalf("public lifecycle event order = dispatch:%d response:%d, want increasing", dispatch.Context.Sequence, response.Context.Sequence)
 	}
 	waitForPublicCompletedWork(t, host, traceID, 10*time.Second)
-	assertHostRunning(t, host)
+	requirePublicStatus(t, host, http.StatusOK)
 	stream.Close()
 	host.Stop(t)
-	assertHostStopped(t, host)
+	select {
+	case <-host.Done():
+	default:
+		t.Fatal("composed host remains running after explicit cancellation")
+	}
 }
 
 func newPublicServiceModeHost(t *testing.T) (*support.ComposedFunctionalHTTPHost, chan struct{}) {
@@ -141,21 +145,15 @@ func waitForPublicCompletedWork(t *testing.T, host *support.ComposedFunctionalHT
 	}
 }
 
-func assertHostRunning(t *testing.T, host *support.ComposedFunctionalHTTPHost) {
+func requirePublicStatus(t *testing.T, host *support.ComposedFunctionalHTTPHost, wantStatus int) {
 	t.Helper()
-	select {
-	case <-host.Done():
-		t.Fatal("composed host stopped before explicit cancellation")
-	case <-time.After(500 * time.Millisecond):
+	response, err := host.Client().Get(host.URL() + "/status")
+	if err != nil {
+		t.Fatalf("GET /status: %v", err)
 	}
-}
-
-func assertHostStopped(t *testing.T, host *support.ComposedFunctionalHTTPHost) {
-	t.Helper()
-	select {
-	case <-host.Done():
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("composed host did not stop after explicit cancellation")
+	defer response.Body.Close()
+	if response.StatusCode != wantStatus {
+		t.Fatalf("GET /status status = %d, want %d", response.StatusCode, wantStatus)
 	}
 }
 
