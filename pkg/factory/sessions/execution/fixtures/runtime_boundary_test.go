@@ -349,7 +349,7 @@ func TestJavaScriptRuntimeService_TypedFailures_MissingSessionMissingSourceBadSo
 
 		runtimeService, err := fse.NewExecutionService(
 			fse.ExecutionProviderJavaScriptRuntime,
-			fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
+			fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence(), Clock: fixtureClock{now: time.Now()}},
 		)
 		if err != nil {
 			t.Fatalf("NewExecutionService: %v", err)

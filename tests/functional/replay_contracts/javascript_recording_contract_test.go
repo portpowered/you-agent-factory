@@ -71,6 +71,31 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 	}
 }
 
+func TestRecordedRuntimeEventContract_AppendedEventRetainsCanonicalTimestamp(t *testing.T) {
+	t.Parallel()
+
+	recordedAt := time.Date(2026, time.July, 12, 9, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return recordedAt })
+	history.AppendRecordedEvent(factoryapi.FactoryEvent{
+		Id:   "factory-event/runtime-bridge/1",
+		Type: factoryapi.FactoryEventTypeScriptRequest,
+		Context: factoryapi.FactoryEventContext{
+			EventTime: recordedAt,
+		},
+	})
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("appended event count = %d, want 1", len(events))
+	}
+	if events[0].Id != "factory-event/runtime-bridge/1" || events[0].Type != factoryapi.FactoryEventTypeScriptRequest {
+		t.Fatalf("appended event identity = %#v, want recorded runtime event", events[0])
+	}
+	if got, want := events[0].Context.EventTime, recordedAt.UTC(); !got.Equal(want) || got.Location() != time.UTC {
+		t.Fatalf("appended event time = %s (%s), want %s (UTC)", got, got.Location(), want)
+	}
+}
+
 func javascriptRecordingFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		Name: "recorded-javascript-factory",

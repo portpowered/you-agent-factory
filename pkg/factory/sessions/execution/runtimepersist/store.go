@@ -24,6 +24,21 @@ type Store interface {
 // DirectoryStore persists snapshots beneath one explicit directory.
 type DirectoryStore struct{ Dir string }
 
+// NewProjectStore constructs the durable snapshot store for one project root.
+// Project path validation and filesystem initialization stay at this persistence
+// boundary rather than leaking into application composition.
+func NewProjectStore(projectRoot string) (Store, error) {
+	root := strings.TrimSpace(projectRoot)
+	if root == "" {
+		return nil, errors.New("durable session persistence project root is required")
+	}
+	store, err := NewDirectoryStore(DirForProjectRoot(root))
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
+}
+
 // NewDirectoryStore validates and initializes an explicit snapshot directory.
 func NewDirectoryStore(dir string) (DirectoryStore, error) {
 	trimmed := strings.TrimSpace(dir)

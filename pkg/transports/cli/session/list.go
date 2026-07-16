@@ -4,6 +4,7 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,11 +33,19 @@ type ListConfig struct {
 	Output        io.Writer
 	Diagnostics   io.Writer
 	DurableLister durableSessionLister
+	DurableCloser io.Closer
 }
 
 // List requests factory sessions from a running host and, when scoped listing
 // includes durable rows, from the deterministic fixture-backed provider.
-func List(cfg ListConfig) error {
+func List(cfg ListConfig) (err error) {
+	if cfg.DurableCloser != nil {
+		defer func() {
+			if closeErr := cfg.DurableCloser.Close(); closeErr != nil {
+				err = errors.Join(err, fmt.Errorf("close durable session listing: %w", closeErr))
+			}
+		}()
+	}
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
