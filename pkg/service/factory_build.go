@@ -1530,18 +1530,6 @@ func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefiniti
 	return factoryDefinitionHost{FactoryService: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
 }
 
-// StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*interfaces.WorkerConfig, bool) {
-	if core == nil {
-		return nil, false
-	}
-	runtimeCfg := coreStartupRuntimeConfigFromRuntimeHost(core)
-	if runtimeCfg == nil {
-		return nil, false
-	}
-	return runtimeCfg.Worker(name)
-}
-
 func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
 	if core == nil {
 		return nil
@@ -1575,16 +1563,6 @@ func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryS
 		RuntimeBuild:     core.RuntimeBuild(),
 		WorkersScheduler: core.WorkersScheduler(),
 	}
-}
-
-func coreStartupRuntimeConfigFromRuntimeHost(core *runtimehost.Core) *factoryconfig.LoadedFactoryConfig {
-	if core == nil {
-		return nil
-	}
-	if bundle := core.StartupBundle(); bundle != nil {
-		return bundle.RuntimeCfg
-	}
-	return nil
 }
 
 // InvocationBootstrap constructs and runs one-shot factory invocation
