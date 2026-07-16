@@ -18,6 +18,10 @@ primary-result behavior.
   but only fill omitted worker fields; they must not replace these authored
   selections or alter `classificationRoutes`. Cover that behavior in
   `pkg/factory/packages/classifier/factory_test.go`.
+- Customer guidance for the supported classifier workflow belongs in
+  `docs/reference/authoring-factories.md`; `docs/reference/run.md` contains the
+  short named-invocation entry point, and
+  `tests/functional/smoke/cli_docs_smoke_test.go` pins their embedded CLI output.
 
 ## Operator worker preset initialization
 

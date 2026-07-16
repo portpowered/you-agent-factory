@@ -70,6 +70,19 @@ Project-local named Factories are resolved before operator-level named
 Factories. Use `you run --named team-review --help` to inspect a named Factory's
 signature.
 
+For the supported complexity-routing packaged factory, initialize a new home
+and invoke `@you/classifier` by name:
+
+```bash
+you config init
+you run --named @you/classifier "Summarize the release notes."
+```
+
+It classifies the request as `small`, `medium`, or `large` and follows that
+factory-defined `classificationRoutes` target. See `you docs authoring-factories`
+for its baseline presets, customization, override precedence, and invalid-label
+behavior.
+
 ## Batch and continuous operation
 
 Batch startup uses `--work`; it is separate from one-shot positional or stdin

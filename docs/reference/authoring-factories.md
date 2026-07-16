@@ -279,12 +279,13 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal` and `@you/tts` also use the
-named-factory path:
+First-party built-ins such as `@you/goal`, `@you/tts`, and `@you/classifier`
+also use the named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
 you run --named @you/tts --output primary "Read the release summary."
+you run --named @you/classifier "Summarize the release notes."
 ```
 
 Start with `@you/goal` when you want a goal-oriented factory you can run
@@ -294,6 +295,66 @@ TTS example. See `you docs run` for named-Factory invocation inputs and stdout
 result modes, `you docs sessions` for stopped-run inspection and recovery, and
 `you docs models` for TTS readiness, direct invocation, and audio or JSON
 result choices.
+
+### Built-in `@you/classifier` model-size routing
+
+`@you/classifier` first classifies one text request as `small`, `medium`, or
+`large`, then routes it to the matching target workstation. The classifier and
+small target use the `small` baseline preset (`CODEX` / `gpt-5-mini`); the
+medium target uses `medium` (`CODEX` / `gpt-5`); and the large target uses
+`large` (`CODEX` / `gpt-5.4`). Run `you config init` in a new home before the
+first invocation so those baseline presets and the packaged factory are
+installed:
+
+```bash
+you config init
+you run --named @you/classifier "Summarize the release notes."
+```
+
+The classifier's `classificationRoutes` are the complete success-routing
+contract: `small` routes to `run-small`, `medium` to `run-medium`, and `large`
+to `run-large`. A result other than those three labels fails the invocation with
+the classifier route context; it never silently falls back to another target.
+
+The installed factory remains editable at
+`~/.you-agent-factory/you-agent-factories/@you/classifier`. To customize the
+policy, edit its `factory.json` so `classify-complexity.classificationRoutes`
+still contains exactly one `small`, `medium`, and `large` route, each consumed
+by one target workstation. You may point a label at a different target
+workstation and select a supported provider/model on that target worker:
+
+```json
+{
+  "label": "medium",
+  "outputs": [{ "workType": "task", "state": "medium" }]
+}
+```
+
+Before running, validate the edited definition:
+
+```bash
+you factory config validate ~/.you-agent-factory/you-agent-factories/@you/classifier
+```
+
+Validation rejects unknown or duplicate labels, a missing target, a target
+without a model selection, and unsupported provider/model selections. The
+error identifies the offending `classificationRoutes` field or worker value,
+and no Factory Session is created.
+
+Global model flags keep their ordinary `file < env < flag` precedence, but they
+only fill workers that omit a selection. Since all built-in classifier workers
+declare a provider and model, these supported overrides do not change the
+selected classification route or the built-in tier models:
+
+```bash
+you --default-worker-model-provider CODEX --default-worker-model gpt-5 \
+  run --named @you/classifier "Draft a migration plan."
+```
+
+Use the editable factory definition to change the classifier's model policy;
+use global flags only for worker fields that are intentionally omitted. See
+`you docs config` for baseline presets and configuration precedence, and
+`you docs workstations` for the `classificationRoutes` contract.
 
 ### Built-in `@you/goal` repeater
 
