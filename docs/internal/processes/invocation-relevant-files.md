@@ -22,6 +22,12 @@ primary-result behavior.
   `docs/reference/authoring-factories.md`; `docs/reference/run.md` contains the
   short named-invocation entry point, and
   `tests/functional/smoke/cli_docs_smoke_test.go` pins their embedded CLI output.
+- Session-visible classifier route proof lives in
+  `tests/functional/smoke/cli_named_classifier_routing_smoke_test.go`. It
+  materializes the named factory after `configinit.Init`, uses the generated
+  global worker presets, and asserts one classifier dispatch plus exactly the
+  selected target dispatch for each label; unknown labels must fail without a
+  target dispatch.
 
 ## Operator worker preset initialization
 
