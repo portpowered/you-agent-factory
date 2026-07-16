@@ -1027,6 +1027,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   source together with its source identity, args schema, agents, and default
   policy; resolving its scoped name again from the session directory loses the
   materialized named-factory context.
+- Functional coverage for `@you/deep-research` belongs in
+  `tests/functional/smoke/cli_named_deep_research_smoke_test.go` and
+  `tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go`.
+  For a signature-backed CLI run with `--with-mock-workers`, place the mock-worker
+  config path before `--`, then place factory-defined arguments after `--`; this
+  keeps the run-level config-path convention separate from signature parsing.
+  Verify delegated runs through the durable session ID returned by invocation and
+  `GET /factory-sessions/{session_id}/dispatches`, rather than inferring child
+  activity from the final synthesis alone.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
