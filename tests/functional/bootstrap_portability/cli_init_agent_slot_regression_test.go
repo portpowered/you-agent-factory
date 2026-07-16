@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 )
@@ -44,9 +44,7 @@ func TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers(t *testing.T)
 		t.Fatalf("expected processor worker to declare agent-slot resources; got:\n%s", workerBody)
 	}
 
-	if err := buildInitFactoryService(dir); err != nil {
-		t.Fatalf("expected aligned default init factory to build service: %v", err)
-	}
+	validateInitFactoryThroughCLI(t, dir)
 
 	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "agent-slot alignment e2e test"}`))
 
@@ -76,12 +74,16 @@ func TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers(t *testing.T)
 	}
 }
 
-func buildInitFactoryService(dir string) error {
-	_, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:                                     dir,
-		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
-	return err
+func validateInitFactoryThroughCLI(t *testing.T, dir string) {
+	t.Helper()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	result, err := session.Run(ctx, "factory", "config", "validate", dir)
+	session.RequireSuccess(t, "init-agent-slot-factory-validation", result, err)
 }
 
 func normalizeFactoryJSON(t *testing.T, raw string) string {
