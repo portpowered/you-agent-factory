@@ -255,6 +255,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/factory/packages/packageassets`. Their `sourceRef` must use the
   corresponding materialized `scripts/...` path, which `you config init`
   installs as editable factory files.
+- Package-owned execution selections belong in the invocation signature and
+  JavaScript args schema. Mirror their defaults in the workflow and constrain
+  selectable model and reasoning values with the package `defaultPolicy`
+  allowlists before specialist dispatch can begin.
 - Packaged JavaScript workflows can use `parallel([...])` with literal
   `agent.run` specifications for bounded specialist dispatches. Keep the
   factory `defaultPolicy.maxAgents` and `concurrency` explicit, and prove both

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -59,13 +60,85 @@ func TestFactoryJSON_DeclaresRequiredTopicInvocationContract(t *testing.T) {
 	}
 	signature := authored["invocationSignature"].(map[string]any)
 	parameters := signature["parameters"].([]any)
-	if len(parameters) != 3 {
-		t.Fatalf("parameters = %#v, want topic plus two configuration parameters", parameters)
+	if len(parameters) != 6 {
+		t.Fatalf("parameters = %#v, want topic, configuration, and execution parameters", parameters)
 	}
 	topic := parameters[0].(map[string]any)
 	if topic["name"] != "topic" || topic["required"] != true {
 		t.Fatalf("topic parameter = %#v, want required topic", topic)
 	}
+	for _, want := range []struct{ name, external string }{
+		{name: "modelProvider", external: "model-provider"},
+		{name: "model", external: "model"},
+		{name: "reasoningEffort", external: "reasoning-effort"},
+	} {
+		found := false
+		for _, raw := range parameters[1:] {
+			parameter := raw.(map[string]any)
+			if parameter["name"] == want.name && parameter["externalName"] == want.external {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("parameters = %#v, want named execution flag %q", parameters, want.external)
+		}
+	}
+}
+
+func TestBuiltInFactoryWorkflow_AcceptsApprovedExecutionFlagsWithoutExpandingCapabilities(t *testing.T) {
+	outcome := runPackagedWorkflow(t, map[string]any{
+		"topic":         "Compare event sourcing versus state machines for distributed workflow orchestration",
+		"modelProvider": "CODEX", "model": "gpt-5", "reasoningEffort": "medium",
+	})
+	if !outcome.OK {
+		t.Fatalf("workflow failure = %#v", outcome.Failure)
+	}
+	children := completedChildDispatches(outcome.Records)
+	if len(children) != 2 {
+		t.Fatalf("completed child dispatches = %#v, want two specialists", children)
+	}
+	for _, child := range children {
+		if child.ModelProvider != "CODEX" || child.Model != "gpt-5" || child.ReasoningEffort != "medium" {
+			t.Fatalf("child execution selection = %#v, want approved CODEX/gpt-5/medium", child)
+		}
+	}
+	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines for distributed workflow orchestration", 2, 2)
+}
+
+func TestBuiltInFactoryWorkflow_RejectsDisallowedExecutionSelectionBeforeChildDispatch(t *testing.T) {
+	outcome := runPackagedWorkflow(t, map[string]any{
+		"topic": "Compare event sourcing versus state machines for distributed workflow orchestration",
+		"model": "gpt-unapproved",
+	})
+	if outcome.OK || outcome.Failure.Code != workflowruntime.CodePreExecutionInvalid {
+		t.Fatalf("workflow outcome = %#v, want pre-execution validation failure", outcome)
+	}
+	if !strings.Contains(outcome.Failure.Message, "'/model'") {
+		t.Fatalf("failure = %#v, want actionable model validation diagnostic", outcome.Failure)
+	}
+	if children := completedChildDispatches(outcome.Records); len(children) != 0 {
+		t.Fatalf("completed child dispatches = %#v, want no disallowed execution", children)
+	}
+	resolution := workflowpolicy.ResolveFromFactoryDefault(deepresearchFactoryPolicy(t))
+	if err := workflowpolicy.ValidateChildRequest(resolution.Policy, workflowpolicy.ChildRequest{Model: "gpt-unapproved"}); err == nil || !strings.Contains(err.Error(), `policy denied: model "gpt-unapproved" is not listed in allowedModels`) {
+		t.Fatalf("policy diagnostic = %v, want existing denied-model diagnostic", err)
+	}
+}
+
+func deepresearchFactoryPolicy(t *testing.T) json.RawMessage {
+	t.Helper()
+	var authored struct {
+		Orchestrator struct {
+			JavaScript struct {
+				DefaultPolicy json.RawMessage `json:"defaultPolicy"`
+			} `json:"javascript"`
+		} `json:"orchestrator"`
+	}
+	if err := json.Unmarshal(deepresearch.FactoryJSON(), &authored); err != nil {
+		t.Fatalf("unmarshal factory policy: %v", err)
+	}
+	return authored.Orchestrator.JavaScript.DefaultPolicy
 }
 
 func TestBuiltInFactoryWorkflow_CompletesWithoutDelegation(t *testing.T) {
@@ -186,5 +259,9 @@ func assertLeadSynthesis(t *testing.T, outcome workflowruntime.Outcome, topic st
 	findings, ok := synthesis["specialistFindings"].([]any)
 	if !ok || len(findings) != wantSpecialists {
 		t.Fatalf("specialistFindings = %#v, want %d findings", synthesis["specialistFindings"], wantSpecialists)
+	}
+	execution, ok := result["execution"].(map[string]any)
+	if !ok || execution["modelProvider"] != "CODEX" || execution["model"] != "gpt-5" || execution["reasoningEffort"] != "medium" {
+		t.Fatalf("execution = %#v, want approved default selection", result["execution"])
 	}
 }

@@ -4,6 +4,9 @@ return (async function () {
   const topic = args.topic;
   const researchDepth = args.researchDepth === undefined ? 2 : args.researchDepth;
   const maxSubagents = args.maxSubagents === undefined ? 2 : args.maxSubagents;
+  const modelProvider = args.modelProvider === undefined ? "CODEX" : args.modelProvider;
+  const model = args.model === undefined ? "gpt-5" : args.model;
+  const reasoningEffort = args.reasoningEffort === undefined ? "medium" : args.reasoningEffort;
   // Longer topics carry enough scope to benefit from the two complementary
   // specialist roles while short questions remain a lead-only investigation.
   const needsSpecialists = args.topic.length >= 40;
@@ -15,10 +18,16 @@ return (async function () {
       {
         label: "research-specialist-technical",
         prompt: "Investigate technical mechanisms and supporting evidence for the research topic at breadth level " + researchDepth + ".",
+        modelProvider: modelProvider,
+        model: model,
+        reasoningEffort: reasoningEffort,
       },
       {
         label: "research-specialist-tradeoffs",
         prompt: "Investigate practical trade-offs, risks, and counterarguments for the research topic at breadth level " + researchDepth + ".",
+        modelProvider: modelProvider,
+        model: model,
+        reasoningEffort: reasoningEffort,
       },
     ].slice(0, maxSubagents));
   }
@@ -29,6 +38,11 @@ return (async function () {
     role: "lead-researcher",
     researchDepth: researchDepth,
     maxSubagents: maxSubagents,
+    execution: {
+      modelProvider: modelProvider,
+      model: model,
+      reasoningEffort: reasoningEffort,
+    },
     synthesis: {
       summary: "Lead research synthesis for " + topic + ".",
       specialistFindings: specialistFindings,

@@ -31,6 +31,36 @@
         "bindings": [
           {"kind": "NAMED"}
         ]
+      },
+      {
+        "name": "modelProvider",
+        "description": "Approved provider for specialist research execution. Defaults to CODEX.",
+        "externalName": "model-provider",
+        "typeHint": "STRING",
+        "defaultValue": "CODEX",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "model",
+        "description": "Approved model for specialist research execution. Defaults to gpt-5.",
+        "externalName": "model",
+        "typeHint": "STRING",
+        "defaultValue": "gpt-5",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "reasoningEffort",
+        "description": "Approved reasoning effort for specialist research execution. Defaults to medium.",
+        "externalName": "reasoning-effort",
+        "typeHint": "STRING",
+        "defaultValue": "medium",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
       }
     ],
     "examples": [
@@ -71,6 +101,26 @@
             "maximum": 2,
             "default": 2,
             "description": "Per-invocation specialist cap within the factory policy ceiling."
+          },
+          "modelProvider": {
+            "type": "string",
+            "enum": ["CODEX"],
+            "default": "CODEX",
+            "description": "The package's approved specialist execution provider."
+          },
+          "model": {
+            "type": "string",
+            "enum": ["gpt-5"],
+            "minLength": 1,
+            "default": "gpt-5",
+            "description": "The requested specialist execution model, subject to package policy."
+          },
+          "reasoningEffort": {
+            "type": "string",
+            "enum": ["medium"],
+            "minLength": 1,
+            "default": "medium",
+            "description": "The requested specialist reasoning effort, subject to package policy."
           }
         },
         "additionalProperties": false
@@ -84,7 +134,9 @@
         "allowNetwork": false,
         "allowConnectors": false,
         "allowDangerFullAccess": false,
-        "writableRoots": []
+        "writableRoots": [],
+        "allowedModels": ["gpt-5"],
+        "allowedReasoningEfforts": ["medium"]
       }
     }
   }
