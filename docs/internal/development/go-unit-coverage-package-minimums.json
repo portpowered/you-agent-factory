@@ -117,6 +117,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fix",
+      "minimum": 60.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion",
       "exception": {
         "kind": "measurement",
@@ -136,6 +140,16 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/fix",
       "exception": {
         "kind": "measurement",
         "justification": "The active unit coverage profile contains no measurable statements for this package.",

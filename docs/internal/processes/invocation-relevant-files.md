@@ -813,7 +813,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invocation return. Functional named-CLI coverage lives in
   `tests/functional/smoke/cli_named_fix_run_smoke_test.go`, which materializes
   the package in a temporary Git repository and proves default, configured,
-  and model/provider-flag invocations create one contained checkout.
+  and model/provider-flag invocations create one contained checkout. Because
+  these two new Go packages are measured by CI, their unit-coverage manifest
+  entries belong in `docs/internal/development/go-unit-coverage-package-minimums.json`:
+  the authored definition has a 60% floor and the metadata-only package has
+  the standard no-measurable-statements exception.
 - `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
   and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`
