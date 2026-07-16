@@ -18,6 +18,12 @@
   steps so an unrelated verification failure cannot suppress either result.
   Focused lint reruns must stay Windows-compatible: do not add standalone
   `printf` recipe lines to targets used by `make verify-lint`.
+  Backend Unit Coverage and Backend Functional Coverage are an independent,
+  fail-fast-disabled matrix gated only by Classify PR Impact. Preserve the
+  explicit run/intentional-skip summary, per-suite coverage thresholds,
+  diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
+  Their exact local reruns are `make test-unit-coverage` and
+  `make test-functional-coverage`.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned

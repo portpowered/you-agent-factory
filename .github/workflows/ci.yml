@@ -938,9 +938,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - classify-pr-impact
-      - build
-      - lint
-      - api
     if: always()
     timeout-minutes: 35
     strategy:
@@ -977,9 +974,6 @@ jobs:
           if [[ "${{ needs.classify-pr-impact.result }}" != "success" ]]; then
             decision="blocked-upstream"
             reason="Not executed because Classify PR Impact did not complete successfully."
-          elif [[ "${{ needs.build.result }}" != "success" || "${{ needs.lint.result }}" != "success" || "${{ needs.api.result }}" != "success" ]]; then
-            decision="blocked-upstream"
-            reason="Not executed because Build, Lint, or API did not complete successfully."
           fi
           {
             echo "## Backend ${{ matrix.label }} Coverage"
@@ -993,14 +987,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
-        if: needs.classify-pr-impact.result == 'success' && needs.build.result == 'success' && needs.lint.result == 'success' && needs.api.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Go from go.mod
-        if: needs.classify-pr-impact.result == 'success' && needs.build.result == 'success' && needs.lint.result == 'success' && needs.api.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -1009,7 +1003,7 @@ jobs:
 
       - name: Run backend ${{ matrix.suite }} coverage
         id: run_backend_coverage
-        if: needs.classify-pr-impact.result == 'success' && needs.build.result == 'success' && needs.lint.result == 'success' && needs.api.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         continue-on-error: true
         shell: bash
         timeout-minutes: 15
@@ -1025,7 +1019,7 @@ jobs:
           go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
 
       - name: Report lane execution
-        if: always() && needs.classify-pr-impact.result == 'success' && needs.build.result == 'success' && needs.lint.result == 'success' && needs.api.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: always() && needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         shell: bash
         run: |
           artifact_name="backend-${{ matrix.suite }}-coverage-report"
