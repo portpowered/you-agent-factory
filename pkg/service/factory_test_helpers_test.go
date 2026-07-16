@@ -2265,3 +2265,45 @@ You are a helpful agent.
 		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
 	}
 }
+
+func TestWorkerApplicationWithProgressPreservesCompositionSelection(t *testing.T) {
+	t.Run("production graph installs progress runner", func(t *testing.T) {
+		components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+		if err != nil {
+			t.Fatalf("construct production worker application: %v", err)
+		}
+		got, err := workerApplicationWithProgress(runtimeBundleBuildInput{
+			workerApplication:             components,
+			inferenceProgressPublisherSet: true,
+			inferenceProgressPublisher:    func(workerprovider.InferenceProgressFragment) {},
+		})
+		if err != nil {
+			t.Fatalf("workerApplicationWithProgress() error = %v", err)
+		}
+		if !got.ProviderCommandInjected {
+			t.Fatal("runtime progress runner was not installed on the composed provider factory")
+		}
+	})
+
+	t.Run("functional provider edge is not replaced", func(t *testing.T) {
+		runner := &providerCommandRunnerRecorder{}
+		components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+			ProviderCommandRunner: runner,
+			AgyPTYAllocator:       &agypty.MockAllocator{},
+		})
+		if err != nil {
+			t.Fatalf("construct functional worker application: %v", err)
+		}
+		got, err := workerApplicationWithProgress(runtimeBundleBuildInput{
+			workerApplication:             components,
+			inferenceProgressPublisherSet: true,
+			inferenceProgressPublisher:    func(workerprovider.InferenceProgressFragment) {},
+		})
+		if err != nil {
+			t.Fatalf("workerApplicationWithProgress() error = %v", err)
+		}
+		if got.Provider != components.Provider {
+			t.Fatal("runtime progress setup replaced the composition-selected provider factory")
+		}
+	})
+}

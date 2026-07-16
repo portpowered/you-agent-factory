@@ -1215,6 +1215,11 @@ func newRuntimeBuildService(
 				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
 				bundleInput.inferenceProgressPublisherSet = true
 			}
+			workerApplication, err := workerApplicationWithProgress(bundleInput)
+			if err != nil {
+				return nil, fmt.Errorf("construct runtime worker application: %w", err)
+			}
+			bundleInput.workerApplication = workerApplication
 			if dispatchCompletionFactory != nil {
 				bundleInput.dispatchCompleted = dispatchCompletionFactory(bundleInput.sessionID)
 			}
@@ -1224,6 +1229,37 @@ func newRuntimeBuildService(
 			}
 			return buildRuntimeBundle(ctx, bundleInput)
 		},
+	)
+}
+
+func workerApplicationWithProgress(input runtimeBundleBuildInput) (workerapplication.Components, error) {
+	if input.workerApplication.ProviderCommandInjected {
+		return input.workerApplication, nil
+	}
+	runner := wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner)
+	if runner == nil {
+		return input.workerApplication, nil
+	}
+	return input.workerApplication.WithCommandRunners(runner, nil)
+}
+
+func wrapProviderCommandRunnerForProgress(
+	input runtimeBundleBuildInput,
+	runner workers.CommandRunner,
+) workers.CommandRunner {
+	if !input.inferenceProgressPublisherSet || input.inferenceProgressPublisher == nil {
+		return runner
+	}
+	if runner != nil {
+		return runner
+	}
+	var logger logging.Logger = logging.NoopLogger{}
+	if input.baseLogger != nil {
+		logger = logging.NewZapLogger(input.baseLogger, input.cfg != nil && input.cfg.Verbose)
+	}
+	return workerprovider.NewInferenceProgressPublishingCommandRunner(
+		input.inferenceProgressPublisher,
+		logger,
 	)
 }
 
