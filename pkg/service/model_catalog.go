@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -21,14 +21,9 @@ import (
 )
 
 func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
-	if fs == nil {
-		return wireModelServiceCollaborator(nil, nil)
+	if fs == nil || fs.modelService == nil {
+		return unavailableModelService{}
 	}
-	fs.modelInitOnce.Do(func() {
-		if fs.modelService == nil {
-			fs.modelService = wireModelServiceCollaborator(fs, fs.cfg)
-		}
-	})
 	return fs.modelService
 }
 
@@ -42,31 +37,32 @@ func (fs *FactoryService) GetModel(ctx context.Context, modelName string) (facto
 
 type modelAssetPuller = localmodels.AssetPuller
 
-func newModelAssetPuller(cacheDir string) modelAssetPuller {
-	return localmodels.NewAssetPuller(cacheDir)
-}
-
 func (fs *FactoryService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
 	return fs.requireModelService().PullModel(ctx, modelName)
 }
 
-func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
-	if fs != nil && fs.modelAssets != nil {
-		return fs.modelAssets
-	}
-	cacheDir := ""
-	if fs != nil {
-		cacheDir = strings.TrimSpace(fs.coordinatorPolicy().modelCacheDir)
-	}
-	puller := newModelAssetPuller(cacheDir)
-	if fs != nil {
-		fs.modelAssets = puller
-	}
-	return puller
-}
-
 func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
+}
+
+var errModelServiceUnavailable = errors.New("model service is not attached to the factory service")
+
+type unavailableModelService struct{}
+
+func (unavailableModelService) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	return factoryapi.ListModelsResponse{}, errModelServiceUnavailable
+}
+
+func (unavailableModelService) GetModel(context.Context, string) (factoryapi.ModelDetail, error) {
+	return factoryapi.ModelDetail{}, errModelServiceUnavailable
+}
+
+func (unavailableModelService) PullModel(context.Context, string) (apisurface.ModelPullResult, error) {
+	return apisurface.ModelPullResult{}, errModelServiceUnavailable
+}
+
+func (unavailableModelService) InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	return apisurface.ModelInvocationResult{}, errModelServiceUnavailable
 }
 
 // CurrentModelRuntimeConfig returns the active runtime configuration used by
@@ -96,25 +92,6 @@ func (a modelPullMetricsHostAdapter) RecordModelPullMetric(metric modelsservice.
 	})
 }
 
-func wireModelServiceCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) apisurface.ModelAPI {
-	if cfg != nil && cfg.ModelAPI != nil {
-		return cfg.ModelAPI
-	}
-	if fs == nil {
-		return modelsservice.New(modelsservice.Dependencies{})
-	}
-	return modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig:           fs.currentRuntimeConfig,
-		ModelHost:               fs.modelHost(),
-		ModelAssetPuller:        fs.modelAssetPuller(),
-		Logger:                  fs.logger,
-		Clock:                   fs.modelServiceClock,
-		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
-		ModelInvocationExecutor: fs.modelInvocationExecutor,
-		FactoryRunnerID:         fs.factoryRunnerID(),
-	})
-}
-
 func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
 	if recorder == nil {
 		return nil
@@ -122,20 +99,37 @@ func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) model
 	return modelPullMetricsHostAdapter{inner: recorder}
 }
 
-func (fs *FactoryService) modelServiceClock() time.Time {
-	if fs == nil || fs.clock == nil {
-		return time.Now()
-	}
-	return fs.clock.Now()
-}
-
 // ProvideModelServiceCollaborator constructs the model-domain collaborator for a
 // built FactoryService shell.
 func ProvideModelServiceCollaborator(
 	shell FactoryServiceShell,
 	cfg *FactoryServiceConfig,
-) apisurface.ModelAPI {
-	return wireModelServiceCollaborator(shell.Service, cfg)
+) (apisurface.ModelAPI, error) {
+	if cfg != nil && cfg.ModelAPI != nil {
+		return cfg.ModelAPI, nil
+	}
+	if shell.Service == nil {
+		return nil, fmt.Errorf("construct model service: factory service shell is required")
+	}
+	fs := shell.Service
+	var now func() time.Time
+	if fs.clock != nil {
+		now = fs.clock.Now
+	}
+	modelAPI, err := modelsservice.NewService(modelsservice.Dependencies{
+		RuntimeConfig:           fs.currentRuntimeConfig,
+		ModelHost:               fs.modelHost(),
+		ModelAssetPuller:        fs.modelAssets,
+		Logger:                  fs.logger,
+		Clock:                   now,
+		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
+		ModelInvocationExecutor: fs.modelInvocationExecutor,
+		FactoryRunnerID:         fs.factoryRunnerID(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct model service: %w", err)
+	}
+	return modelAPI, nil
 }
 
 // AttachModelServiceCollaborator assigns the model-domain collaborator on the

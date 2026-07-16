@@ -104,13 +104,6 @@ type localModelRunner struct {
 	workerDef  *interfaces.WorkerConfig
 }
 
-func NewManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks) *Manager {
-	if isNilDependency(assetPuller) || isNilDependency(runtime) {
-		return nil
-	}
-	return newManager(assetPuller, runtime, hooks)
-}
-
 func newManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks) *Manager {
 	return &Manager{
 		entries:     make(map[string]*managedLocalModelEntry),

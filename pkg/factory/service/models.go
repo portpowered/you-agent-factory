@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -23,7 +24,7 @@ type LocalModelDomain struct {
 }
 
 // NewLocalModelDomain constructs local-model collaborators for one bundle build.
-func NewLocalModelDomain(cfg Config) LocalModelDomain {
+func NewLocalModelDomain(cfg Config) (LocalModelDomain, error) {
 	hooks := cfg.LocalModelHooks
 	if hooks.MarkResourceWaitStarted == nil {
 		hooks = LocalModelHooks()
@@ -35,24 +36,38 @@ func NewLocalModelDomain(cfg Config) LocalModelDomain {
 	}
 	localModelRuntime := cfg.LocalModelRuntimeOverride
 	if localModelRuntime == nil {
-		localModelRuntime = localmodels.NewOmniVoiceRuntime(nil)
+		localModelRuntime = localmodels.DefaultRuntime()
+	}
+	manager, err := localmodels.NewManagedRuntime(localmodels.ManagedRuntimeDependencies{
+		AssetPuller: modelAssets, Runtime: localModelRuntime, Hooks: hooks,
+	})
+	if err != nil {
+		return LocalModelDomain{}, fmt.Errorf("construct managed local runtime: %w", err)
 	}
 	host := cfg.ModelHostOverride
 	if host == nil {
-		host = modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
-			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-			Diagnostics:    ModelHostDiagnostics(cfg),
+		gateway := modelhost.NewLocalAssetGateway(modelAssets)
+		host, err = modelhost.NewHost(modelhost.Dependencies{
+			AssetPuller: gateway, CacheInspector: gateway,
+			ProcessLauncher: modelhost.DefaultProcessLauncher(),
+			Options: modelhost.Options{
+				SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+				Diagnostics:    ModelHostDiagnostics(cfg),
+			},
 		})
+		if err != nil {
+			return LocalModelDomain{}, fmt.Errorf("construct model host: %w", err)
+		}
 	}
 	domain := LocalModelDomain{
 		Resources: modelResources,
 		Assets:    modelAssets,
 		Runtime:   localModelRuntime,
-		Manager:   localmodels.NewManager(modelAssets, localModelRuntime, hooks),
+		Manager:   manager,
 		Host:      host,
 	}
 	domain.LeaseExecution = modelhost.NewLeaseExecution(host, modelAssets, localModelRuntime, hooks)
-	return domain
+	return domain, nil
 }
 
 func localModelHooks() localmodels.Hooks {

@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -1280,15 +1279,6 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	}
 }
 
-func TestFactoryService_ModelServiceClockUsesCompositionClock(t *testing.T) {
-	want := time.Date(2026, time.July, 10, 21, 30, 0, 0, time.UTC)
-	svc := &FactoryService{clock: clockwork.NewFakeClockAt(want)}
-
-	if got := svc.modelServiceClock(); !got.Equal(want) {
-		t.Fatalf("modelServiceClock() = %s, want %s", got, want)
-	}
-}
-
 func TestBuildFactoryService_WiresSessionGatewayCollaborator(t *testing.T) {
 	t.Parallel()
 
@@ -1434,6 +1424,7 @@ func TestFactoryService_ListModels_DelegatesToLocalmodelsCatalog(t *testing.T) {
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	svc := newModelCatalogServiceForTest(runtimeCfg, nil)
+	attachModelServiceForTest(t, svc)
 
 	got, err := svc.ListModels(context.Background())
 	if err != nil {
@@ -1456,6 +1447,7 @@ func TestFactoryService_GetModel_DelegatesToLocalmodelsCatalog(t *testing.T) {
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	svc := newModelCatalogServiceForTest(runtimeCfg, nil)
+	attachModelServiceForTest(t, svc)
 
 	got, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	if err != nil {
@@ -1476,6 +1468,7 @@ func TestFactoryService_PullModel_DelegatesToInjectedModelAssets(t *testing.T) {
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	puller := &recordingServiceModelAssetPuller{}
 	svc := newModelCatalogServiceForTest(runtimeCfg, puller)
+	attachModelServiceForTest(t, svc)
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
 		t.Fatalf("PullModel: %v", err)
@@ -1995,15 +1988,6 @@ func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged
 	}
 	if !reflect.DeepEqual(stub.calls, []string{"invoke"}) {
 		t.Fatalf("model calls = %#v, want invoke exactly once", stub.calls)
-	}
-}
-
-func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
-	t.Parallel()
-
-	api := wireModelServiceCollaborator(nil, nil)
-	if _, ok := api.(*modelsservice.Service); !ok {
-		t.Fatalf("wireModelServiceCollaborator(nil) type = %T, want *modelsservice.Service", api)
 	}
 }
 
@@ -2826,9 +2810,12 @@ func TestGeneratedFactoryFromRuntimeConfig_CapturesOperatorDefaultedModelWorkerF
 }
 
 func TestNewLocalModelDomain_WiresProcessWideModelHost(t *testing.T) {
-	domain := newRuntimeLocalModelDependencies(&FactoryServiceConfig{
+	domain, err := NewLocalModelDomain(&FactoryServiceConfig{
 		ModelCacheDir: t.TempDir(),
 	})
+	if err != nil {
+		t.Fatalf("NewLocalModelDomain: %v", err)
+	}
 	if domain.Host == nil {
 		t.Fatal("local model domain host = nil, want process-wide modelhost.Host")
 	}

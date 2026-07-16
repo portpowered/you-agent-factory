@@ -110,7 +110,10 @@ func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
 	}
 	localModels := input.PrefetchedLocalModels
 	if localModels.Manager == nil {
-		localModels = NewLocalModelDomain(input.Config)
+		localModels, err = NewLocalModelDomain(input.Config)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var workerOpts []factory.FactoryOption

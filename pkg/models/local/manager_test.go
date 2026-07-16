@@ -12,6 +12,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+func mustNewManagedRuntime(t *testing.T, assets AssetPuller, runtime Runtime, hooks Hooks) *Manager {
+	t.Helper()
+	manager, err := NewManagedRuntime(ManagedRuntimeDependencies{
+		AssetPuller: assets, Runtime: runtime, Hooks: hooks,
+	})
+	if err != nil {
+		t.Fatalf("NewManagedRuntime: %v", err)
+	}
+	return manager
+}
+
 type staticCatalogAssetPuller struct {
 	cache CacheLayout
 }
@@ -127,13 +138,10 @@ func TestNewManagedRuntime_ValidatesDependenciesBeforeRuntimeMutation(t *testing
 
 func TestManager_WrapRunner_AcceptsInferenceWorkerTaxonomyAlias(t *testing.T) {
 	runtime := &countingLocalRuntime{}
-	manager := NewManager(staticCatalogAssetPuller{cache: CacheLayout{
+	manager := mustNewManagedRuntime(t, staticCatalogAssetPuller{cache: CacheLayout{
 		ModelName: "OMNIVOICE_Q4_K_M",
 		CachePath: t.TempDir(),
 	}}, runtime, Hooks{})
-	if manager == nil {
-		t.Fatal("NewManager returned nil")
-	}
 
 	factoryCfg := managerTestFactoryConfig()
 	factoryCfg.Workers[0].Type = interfaces.WorkerTypeInference
@@ -157,13 +165,10 @@ func TestManager_WrapRunner_AcceptsInferenceWorkerTaxonomyAlias(t *testing.T) {
 
 func TestManager_WrapRunner_AcceptsAgentWorkerLocalModel(t *testing.T) {
 	runtime := &countingLocalRuntime{}
-	manager := NewManager(staticCatalogAssetPuller{cache: CacheLayout{
+	manager := mustNewManagedRuntime(t, staticCatalogAssetPuller{cache: CacheLayout{
 		ModelName: "OMNIVOICE_Q4_K_M",
 		CachePath: t.TempDir(),
 	}}, runtime, Hooks{})
-	if manager == nil {
-		t.Fatal("NewManager returned nil")
-	}
 
 	factoryCfg := managerTestFactoryConfig()
 	factoryCfg.Workers[0].Type = interfaces.WorkerTypeAgent

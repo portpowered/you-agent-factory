@@ -33,12 +33,15 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := service.ServiceClockForCompose(&service.FactoryServiceConfig{Dir: dir}, load)
-	collaborators := service.NewFactoryServiceCollaborators(
+	collaborators, err := service.NewFactoryServiceCollaborators(
 		&service.FactoryServiceConfig{Dir: dir},
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators: %v", err)
+	}
 	composeCfg := &service.FactoryServiceConfig{Dir: dir}
 	shell, err := service.ComposeFactoryService(
 		ctx,
@@ -52,7 +55,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	modelService, err := service.ProvideModelServiceCollaborator(shell, composeCfg)
+	if err != nil {
+		t.Fatalf("ProvideModelServiceCollaborator: %v", err)
+	}
+	composed := service.AttachModelServiceCollaborator(shell, modelService)
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
@@ -86,12 +93,15 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := service.ServiceClockForCompose(&service.FactoryServiceConfig{Dir: dir}, load)
-	collaborators := service.NewFactoryServiceCollaborators(
+	collaborators, err := service.NewFactoryServiceCollaborators(
 		&service.FactoryServiceConfig{Dir: dir},
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators: %v", err)
+	}
 	composed, err := service.ComposeFactoryCore(
 		ctx,
 		&service.FactoryServiceConfig{Dir: dir},
@@ -146,12 +156,15 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := service.ServiceClockForCompose(cfg, load)
-	collaborators := service.NewFactoryServiceCollaborators(
+	collaborators, err := service.NewFactoryServiceCollaborators(
 		cfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators: %v", err)
+	}
 	shell, err := service.ComposeFactoryService(
 		ctx,
 		cfg,
@@ -164,7 +177,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
+	modelService, err := service.ProvideModelServiceCollaborator(shell, cfg)
+	if err != nil {
+		t.Fatalf("ProvideModelServiceCollaborator: %v", err)
+	}
+	composed := service.AttachModelServiceCollaborator(shell, modelService)
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, cfg),

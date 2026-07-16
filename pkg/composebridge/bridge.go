@@ -53,7 +53,7 @@ func HostedWorkers(cfg *runtimehost.Config, logger *zap.Logger, clock factory.Cl
 }
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *runtimehost.Config) LocalModelDomain {
+func NewLocalModelDomain(cfg *runtimehost.Config) (LocalModelDomain, error) {
 	return service.NewLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(cfg))
 }
 

@@ -42,14 +42,6 @@ type trackedLease struct {
 	modelName  string
 }
 
-// NewCatalogHost constructs a process-wide model host backed by managed asset integration.
-func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
-	if isNilDependency(assets) {
-		return nil
-	}
-	return newCatalogHost(assets, assets, opts)
-}
-
 // NewHost constructs a process-wide model host after synchronously validating
 // its required pull, cache, and process boundaries. Construction only allocates
 // host state; it does not launch a subprocess or start application lifecycle.

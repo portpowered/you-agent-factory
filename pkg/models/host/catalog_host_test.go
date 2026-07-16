@@ -13,6 +13,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+func mustNewCatalogHost(t *testing.T, assets AssetGateway, opts Options) *CatalogHost {
+	t.Helper()
+	launcher := opts.Supervisor.ProcessLauncher
+	if launcher == nil {
+		launcher = DefaultProcessLauncher()
+	}
+	host, err := NewHost(Dependencies{
+		AssetPuller: assets, CacheInspector: assets,
+		ProcessLauncher: launcher, Options: opts,
+	})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	return host
+}
+
 func TestNewHost_ValidatesRequiredDependenciesWithoutLaunchingProcess(t *testing.T) {
 	assets := stubAssetGateway{}
 	launcher := &fakeProcessLauncher{}
@@ -274,7 +290,7 @@ func TestManagedRuntimeFromSnapshot_PreservesPublicVocabulary(t *testing.T) {
 
 func TestCatalogHost_InspectReadinessAndLeaseLifecycle(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {
 				Supported:          true,
@@ -313,7 +329,7 @@ func TestCatalogHost_InspectReadinessAndLeaseLifecycle(t *testing.T) {
 
 func TestCatalogHost_BlocksLeaseForNonReadyStates(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {Supported: true, InstalledFileCount: 1},
 		},
@@ -334,7 +350,7 @@ func TestCatalogHost_BlocksLeaseForNonReadyStates(t *testing.T) {
 
 func TestCatalogHost_InspectReadinessHonoursCancellation(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{}, Options{})
+	host := mustNewCatalogHost(t, stubAssetGateway{}, Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

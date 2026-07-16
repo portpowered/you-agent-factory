@@ -164,7 +164,6 @@ type FactoryService struct {
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
-	modelInitOnce            sync.Once
 	durableExecution         factorysessionexecution.Service
 }
 

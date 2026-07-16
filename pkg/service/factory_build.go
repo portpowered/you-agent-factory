@@ -194,7 +194,13 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 	service := NewFactoryServiceFromCore(core)
 	shell := FactoryServiceShell{Service: service}
-	service = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	if service.currentRuntimeConfig() != nil {
+		modelAPI, modelErr := ProvideModelServiceCollaborator(shell, cfg)
+		if modelErr != nil {
+			return nil, modelErr
+		}
+		service = AttachModelServiceCollaborator(shell, modelAPI)
+	}
 	service = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: service},
 		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: service}, cfg),
@@ -461,7 +467,11 @@ func buildRuntimeBundle(
 	}
 	localModels := input.prefetchedLocalModels
 	if localModels.Manager == nil {
-		localModels = NewLocalModelDomain(input.cfg)
+		var err error
+		localModels, err = NewLocalModelDomain(input.cfg)
+		if err != nil {
+			return nil, err
+		}
 	}
 	hostInput := factoryservice.BuildInput{
 		Dir:                   input.dir,
@@ -585,18 +595,6 @@ func loadRuntimeBundleWorkerOptions(
 
 // localModelDomain is the compatibility alias for extracted local-model wiring.
 type localModelDomain = LocalModelDomain
-
-func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) LocalModelDomain {
-	return NewLocalModelDomain(cfg)
-}
-
-func newLocalModelResourceLimiter() *localModelResourceLimiter {
-	return localmodels.NewResourceLimiter(localModelHooks())
-}
-
-func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
-	return localmodels.NewManager(assetPuller, runtime, localModelHooks())
-}
 
 func localModelHooks() localmodels.Hooks {
 	return localmodels.Hooks{
@@ -1517,7 +1515,7 @@ type ModelService = apisurface.ModelAPI
 // NewModelServiceFromCore constructs a model service from a composed runtime core.
 func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
 	if core == nil {
-		return wireModelServiceCollaborator(nil, nil)
+		return nil
 	}
 	return runtimehost.NewHostFromCore(core).ModelService()
 }
@@ -1682,27 +1680,38 @@ func ApplyInvocationBootstrapLocalModelTestFixture(
 	healthEndpoint string,
 	runtime localmodels.Runtime,
 	assets localmodels.AssetPuller,
-) {
+) error {
 	if cfg == nil {
-		return
+		return fmt.Errorf("apply invocation bootstrap local model fixture: config is required")
 	}
 	cfg.LocalModelRuntimeOverride = runtime
 	cfg.ModelAssets = assets
-	cfg.ModelHostOverride = newInvocationBootstrapSupervisedModelHost(assets, healthEndpoint)
+	host, err := newInvocationBootstrapSupervisedModelHost(assets, healthEndpoint)
+	if err != nil {
+		return err
+	}
+	cfg.ModelHostOverride = host
 	cfg.SkipBuiltInRunnerPrerequisiteValidation = true
+	return nil
 }
 
-func newInvocationBootstrapSupervisedModelHost(assets localmodels.AssetPuller, healthEndpoint string) modelhost.Host {
+func newInvocationBootstrapSupervisedModelHost(assets localmodels.AssetPuller, healthEndpoint string) (modelhost.Host, error) {
 	launcher := &invocationBootstrapFakeProcessLauncher{healthEndpoint: strings.TrimSpace(healthEndpoint)}
-	return modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(assets), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-		Supervisor: modelhost.SupervisorConfig{
-			ReadinessTimeout:    500 * time.Millisecond,
-			HealthCheckInterval: 10 * time.Millisecond,
-			ProcessLauncher:     launcher,
-			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
-		},
-	})
+	gateway := modelhost.NewLocalAssetGateway(assets)
+	host, err := modelhost.NewHost(modelhost.Dependencies{
+		AssetPuller: gateway, CacheInspector: gateway, ProcessLauncher: launcher,
+		Options: modelhost.Options{
+			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+			Supervisor: modelhost.SupervisorConfig{
+				ReadinessTimeout:    500 * time.Millisecond,
+				HealthCheckInterval: 10 * time.Millisecond,
+				HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+			},
+		}})
+	if err != nil {
+		return nil, fmt.Errorf("construct invocation bootstrap model host: %w", err)
+	}
+	return host, nil
 }
 
 type invocationBootstrapFakeProcessLauncher struct {

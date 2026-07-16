@@ -4036,6 +4036,7 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 		ModelAssets: puller,
 		LocalModels: newManagedLocalModelManager(puller, runtime),
 	})
+	attachModelServiceForTest(t, svc)
 
 	pullResult, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	if err != nil {
@@ -4105,6 +4106,7 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 	svc.cfg = &FactoryServiceConfig{
 		ModelPullMetricsRecorder: recorder,
 	}
+	attachModelServiceForTest(t, svc)
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
 		t.Fatalf("PullModel: %v", err)
@@ -4153,6 +4155,7 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 	svc.cfg = &FactoryServiceConfig{
 		ModelPullMetricsRecorder: recorder,
 	}
+	attachModelServiceForTest(t, svc)
 
 	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	pullErr, ok := apisurface.AsManagedRuntimePullError(err)
@@ -4368,7 +4371,7 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 
 	svc := NewFactoryServiceFromCore(core)
 	shell := FactoryServiceShell{Service: svc}
-	svc = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, core.cfg))
+	svc = AttachModelServiceCollaborator(shell, serviceCompatibilityModelAPI{})
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()

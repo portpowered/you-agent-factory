@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -15,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -46,25 +46,11 @@ func TestHostDurableOperationsRequireInjectedExecution(t *testing.T) {
 	}
 }
 
-func TestHostModelServiceClockUsesCompositionClock(t *testing.T) {
-	want := time.Date(2026, time.July, 10, 21, 30, 0, 0, time.UTC)
-	host := &Host{clock: clockwork.NewFakeClockAt(want)}
-
-	if got := host.modelServiceClock(); !got.Equal(want) {
-		t.Fatalf("modelServiceClock() = %s, want %s", got, want)
-	}
-}
-
-func TestWireModelServiceCollaboratorPreservesOverrideAndNilHostBehavior(t *testing.T) {
-	override := &catalogModelServiceStub{}
-	if got := wireModelServiceCollaborator(&Host{}, &Config{ModelAPI: override}); got != override {
-		t.Fatalf("wireModelServiceCollaborator override = %T, want configured ModelAPI", got)
-	}
-
+func TestHostWithoutAttachedModelServiceReturnsConstructionError(t *testing.T) {
 	var host *Host
 	_, err := host.ListModels(context.Background())
-	if err == nil || err.Error() != "factory service runtime is not available" {
-		t.Fatalf("nil Host ListModels error = %v, want unavailable runtime", err)
+	if !errors.Is(err, errModelServiceUnavailable) {
+		t.Fatalf("nil Host ListModels error = %v, want unavailable model service", err)
 	}
 }
 
@@ -93,7 +79,7 @@ func TestRuntimeHostModelServicePreservesCatalogPullObservabilityAndErrors(t *te
 	recorder := &runtimeHostPullMetricsRecorder{}
 	logCore, logs := observer.New(zap.InfoLevel)
 	logger := zap.New(logCore)
-	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{Logger: logger, ModelPullMetricsRecorder: recorder})
+	host := runtimeHostModelFacade(t, runtimeCfg, modelHost, puller, &Config{Logger: logger, ModelPullMetricsRecorder: recorder})
 
 	listed, err := host.ListModels(context.Background())
 	if err != nil || len(listed.Results) != 1 || listed.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
@@ -125,7 +111,7 @@ func TestRuntimeHostModelServicePreservesPullFailureSignals(t *testing.T) {
 	puller := &runtimeHostModelPuller{}
 	modelHost := &runtimeHostModelHost{pullErr: apisurface.ErrManagedRuntimeSourceFetchFailed}
 	logger := zap.New(logCore)
-	host := runtimeHostModelFacade(runtimeCfg, modelHost, puller, &Config{Logger: logger, ModelPullMetricsRecorder: recorder})
+	host := runtimeHostModelFacade(t, runtimeCfg, modelHost, puller, &Config{Logger: logger, ModelPullMetricsRecorder: recorder})
 
 	_, err := host.PullModel(context.Background(), "voice-model")
 	if !errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) {
@@ -143,7 +129,7 @@ func TestRuntimeHostModelServicePreservesFactoryRunnerIdentityForInvocation(t *t
 	runtimeCfg := runtimeHostModelConfig(t)
 	provider := &runtimeHostInvocationProvider{}
 	cfg := &Config{RunnerID: "factory-runner", ProviderOverride: provider}
-	host := runtimeHostModelFacade(runtimeCfg, &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
+	host := runtimeHostModelFacade(t, runtimeCfg, &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
 		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
 		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
 		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
@@ -177,13 +163,35 @@ func runtimeHostModelConfig(t *testing.T) *factoryconfig.LoadedFactoryConfig {
 	return cfg
 }
 
-func runtimeHostModelFacade(runtimeCfg *factoryconfig.LoadedFactoryConfig, host modelhost.Host, puller modelAssetPuller, cfg *Config) *Host {
+func runtimeHostModelFacade(t *testing.T, runtimeCfg *factoryconfig.LoadedFactoryConfig, host modelhost.Host, puller modelAssetPuller, cfg *Config) *Host {
+	t.Helper()
 	facade := &Host{
 		cfg: cfg, policy: CoordinatorPolicyFromConfig(cfg), modelAssets: puller, logger: cfg.Logger,
+		clock:         clockwork.NewRealClock(),
 		startupBundle: &factoryRuntimeBundle{RuntimeCfg: runtimeCfg, ModelHost: host, ModelAssets: puller},
 	}
-	facade.modelService = wireModelServiceCollaborator(facade, cfg)
+	modelAPI, err := modelsservice.NewService(modelsservice.Dependencies{
+		RuntimeConfig: facade.currentRuntimeConfig, ModelHost: facade.modelHost(),
+		ModelAssetPuller: puller, Logger: cfg.Logger, Clock: facade.clock.Now,
+		ModelPullMetrics:        runtimeHostModelMetricsAdapter{inner: cfg.ModelPullMetricsRecorder},
+		ModelInvocationExecutor: facade.modelInvocationExecutor,
+		FactoryRunnerID:         cfg.RunnerID,
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	facade.modelService = modelAPI
 	return facade
+}
+
+type runtimeHostModelMetricsAdapter struct {
+	inner ModelPullMetricsRecorder
+}
+
+func (a runtimeHostModelMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	if a.inner != nil {
+		a.inner.RecordModelPullMetric(InvocationMetric{Name: metric.Name, Labels: metric.Labels})
+	}
 }
 
 type runtimeHostModelPuller struct {

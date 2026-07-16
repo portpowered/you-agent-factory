@@ -381,7 +381,7 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 type LocalModelDomain = factoryservice.LocalModelDomain
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
+func NewLocalModelDomain(cfg *FactoryServiceConfig) (LocalModelDomain, error) {
 	return factoryservice.NewLocalModelDomain(hostConfigFromService(cfg))
 }
 
@@ -400,8 +400,11 @@ func NewFactoryServiceCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
-) FactoryServiceCollaborators {
-	startupLocalModels := NewLocalModelDomain(cfg)
+) (FactoryServiceCollaborators, error) {
+	startupLocalModels, err := NewLocalModelDomain(cfg)
+	if err != nil {
+		return FactoryServiceCollaborators{}, err
+	}
 	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
@@ -415,7 +418,7 @@ func NewFactoryServiceCollaborators(
 			newSessionDispatchCompletionObserverFactory(sessions),
 		),
 		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
-	}
+	}, nil
 }
 
 // NewFactoryServiceCollaboratorsFromParts assembles collaborators from explicit
@@ -683,7 +686,10 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		return nil, err
 	}
 	clock := ServiceClockForCompose(cfg, load)
-	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	if err != nil {
+		return nil, err
+	}
 	return ComposeFactoryCore(
 		ctx,
 		cfg,

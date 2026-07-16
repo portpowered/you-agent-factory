@@ -30,6 +30,7 @@ func NewHostFromCore(core *Core) *Host {
 		startupBundle:    core.StartupBundle(),
 		cfg:              core.cfg,
 		modelAssets:      core.modelAssets,
+		modelService:     core.ModelService(),
 		baseLogger:       core.BaseLogger(),
 		logger:           core.Logger(),
 		clock:            core.Clock(),
@@ -39,7 +40,6 @@ func NewHostFromCore(core *Core) *Host {
 	}
 	host.coordinator = newCoordinator(host)
 	host.definitions = newFactoryDefinitionService(host)
-	host.modelService = wireModelServiceCollaborator(host, core.cfg)
 	return host
 }
 

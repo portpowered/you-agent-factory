@@ -67,13 +67,6 @@ func NewService(deps Dependencies) (*Service, error) {
 	return &Service{deps: deps}, nil
 }
 
-// New constructs the legacy permissive model-domain service. Application
-// composition should use NewService; this compatibility entrypoint remains
-// only while service and runtime-host callers migrate to fallible construction.
-func New(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 func missingDependencyError(name string) error {
 	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
 }
