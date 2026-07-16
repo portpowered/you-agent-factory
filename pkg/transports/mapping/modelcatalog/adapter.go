@@ -2,10 +2,15 @@ package modelcatalog
 
 import (
 	"context"
+	"errors"
+	"strings"
 
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	contentmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 )
 
 // Adapter maps model-owned service values at the outward transport boundary.
@@ -42,7 +47,43 @@ func (a *Adapter) PullModel(ctx context.Context, modelName string) (apisurface.M
 }
 
 func (a *Adapter) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	return a.inner.InvokeModel(ctx, modelName, request)
+	result, err := a.inner.InvokeModel(ctx, modelName, invocationRequestFromGenerated(request))
+	if err == nil {
+		return result, nil
+	}
+	return apisurface.ModelInvocationResult{}, invocationErrorFromDomain(err, modelName, request.Operation)
+}
+
+func invocationErrorFromDomain(err error, modelName, operation string) error {
+	failureContext := apisurface.InferenceFailureContext{
+		ModelName: strings.TrimSpace(modelName),
+		Operation: strings.TrimSpace(operation),
+	}
+	var targeted *modelinference.TargetError
+	if errors.As(err, &targeted) && targeted != nil {
+		failureContext.ModelName = targeted.ModelName
+		failureContext.WorkerName = targeted.WorkerName
+		failureContext.Operation = targeted.Operation
+	}
+	if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
+		return failure
+	}
+	return err
+}
+
+func invocationRequestFromGenerated(request factoryapi.ModelInvocationRequest) modelinference.Request {
+	domain := modelinference.Request{
+		Operation: request.Operation,
+		Content:   contentmapping.PartsFromGenerated(request.Content),
+		Bindings:  workerinferencemapping.OperationBindingsFromGenerated(request.Bindings),
+	}
+	if request.Options != nil {
+		domain.Options = &modelinference.Options{}
+		if request.Options.ResponseMode != nil {
+			domain.Options.ResponseMode = modelinference.ResponseMode(*request.Options.ResponseMode)
+		}
+	}
+	return domain
 }
 
 var _ apisurface.ModelAPI = (*Adapter)(nil)

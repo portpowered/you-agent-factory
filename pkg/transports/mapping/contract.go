@@ -10,6 +10,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
 	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -918,7 +919,7 @@ var ErrManagedRuntimeSourceFetchFailed = modelassets.ErrSourceFetchFailed
 
 // ErrModelInvocationUnsupportedMode reports that the requested direct
 // invocation response mode is not valid for the selected operation output.
-var ErrModelInvocationUnsupportedMode = errors.New("model invocation response mode is not supported")
+var ErrModelInvocationUnsupportedMode = modelinference.ErrUnsupportedResponseMode
 
 // ErrModelInvocationUnsupportedOperation reports that the targeted model does
 // not expose the requested provider-agnostic operation.
@@ -926,16 +927,7 @@ var ErrModelInvocationUnsupportedOperation = modelcatalog.ErrUnsupportedOperatio
 
 // ModelInvocationResult carries the backend-owned direct invocation result used
 // by the API transport for either JSON metadata or streamed audio responses.
-type ModelInvocationResult struct {
-	ModelName         string
-	Worker            string
-	Operation         string
-	ProviderLocality  string
-	Content           []work.WorkContentPart
-	Bindings          []workerexecution.ResolvedModelOperationBinding
-	StreamFile        string
-	StreamContentType string
-}
+type ModelInvocationResult = modelinference.Result
 
 // ModelPullDownloadedFile describes one cached artifact materialized by a
 // managed local-model asset pull.

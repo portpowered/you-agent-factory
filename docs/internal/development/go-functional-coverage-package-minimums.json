@@ -403,6 +403,10 @@
       "minimum": 9.06
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/models/inference",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/models/local",
       "minimum": 22.16
     },

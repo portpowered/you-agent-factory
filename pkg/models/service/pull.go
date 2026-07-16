@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
+	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
@@ -34,7 +33,7 @@ const (
 )
 
 // PullModel starts or reports managed-runtime pull materialization for one model.
-func (s *Service) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
+func (s *Service) PullModel(ctx context.Context, modelName string) (modelassets.PullResult, error) {
 	started := s.now()
 	host := s.modelHost()
 	if host == nil {
@@ -56,20 +55,20 @@ func (s *Service) pullWithModelHost(
 	ctx context.Context,
 	host modelhost.Host,
 	modelName string,
-) (apisurface.ModelPullResult, error) {
+) (modelassets.PullResult, error) {
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
-		return apisurface.ModelPullResult{}, fmt.Errorf("factory service runtime is not available")
+		return modelassets.PullResult{}, fmt.Errorf("factory service runtime is not available")
 	}
 	snapshot, err := host.Pull(ctx, runtimeCfg, modelName)
 	result := modelPullResultFromSnapshot(snapshot)
 	if err == nil {
 		return result, nil
 	}
-	if pullErr, ok := apisurface.AsManagedRuntimePullError(err); ok {
+	if pullErr, ok := modelassets.AsPullError(err); ok {
 		return pullErr.Result, err
 	}
-	if errors.Is(err, apisurface.ErrModelNotFound) {
+	if errors.Is(err, managedruntime.ErrNotFound) {
 		return result, err
 	}
 	if isUnsupportedModelHostPull(err) {
@@ -77,7 +76,7 @@ func (s *Service) pullWithModelHost(
 		if name == "" {
 			name = strings.TrimSpace(modelName)
 		}
-		return result, fmt.Errorf("%w: model %q is not a local model", apisurface.ErrModelPullUnsupported, name)
+		return result, fmt.Errorf("%w: model %q is not a local model", modelassets.ErrPullUnsupported, name)
 	}
 
 	pullOutcome, readiness := localmodels.ClassifyPullFailure(err)
@@ -91,23 +90,23 @@ func (s *Service) pullWithModelHost(
 		result.ReadinessState = readiness
 	}
 	if strings.TrimSpace(result.LifecycleState) == "" {
-		result.LifecycleState = string(factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED)
+		result.LifecycleState = string(managedruntime.LifecycleStateNotInstalled)
 	}
-	return result, &apisurface.ManagedRuntimePullError{Result: result, Cause: err}
+	return result, &modelassets.PullError{Result: result, Cause: err}
 }
 
 func isUnsupportedModelHostPull(err error) bool {
-	if errors.Is(err, modelhost.ErrUnsupportedRuntime) || errors.Is(err, apisurface.ErrModelPullUnsupported) {
+	if errors.Is(err, modelhost.ErrUnsupportedRuntime) || errors.Is(err, modelassets.ErrPullUnsupported) {
 		return true
 	}
 	var readinessErr *modelhost.ReadinessError
 	return errors.As(err, &readinessErr) && errors.Is(readinessErr.Cause, modelhost.ErrUnsupportedRuntime)
 }
 
-func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) apisurface.ModelPullResult {
-	files := make([]apisurface.ModelPullDownloadedFile, 0, len(snapshot.DownloadedFiles))
+func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) modelassets.PullResult {
+	files := make([]modelassets.DownloadedFile, 0, len(snapshot.DownloadedFiles))
 	for _, file := range snapshot.DownloadedFiles {
-		files = append(files, apisurface.ModelPullDownloadedFile{
+		files = append(files, modelassets.DownloadedFile{
 			Path:   file.Path,
 			Bytes:  file.Bytes,
 			SHA256: file.SHA256,
@@ -117,7 +116,7 @@ func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) apisurface.Mod
 	if locality == "" {
 		locality = managedruntime.LocalityLocal
 	}
-	return apisurface.ModelPullResult{
+	return modelassets.PullResult{
 		ModelName:          strings.TrimSpace(snapshot.Identity.Name),
 		ProviderLocality:   string(locality),
 		Outcome:            strings.TrimSpace(snapshot.LegacyOutcome),
@@ -140,7 +139,7 @@ func (s *Service) modelAssetPuller() localmodels.AssetPuller {
 	return s.deps.ModelAssetPuller
 }
 
-func (s *Service) recordManagedRuntimePull(modelName string, result apisurface.ModelPullResult, err error, elapsed time.Duration) {
+func (s *Service) recordManagedRuntimePull(modelName string, result modelassets.PullResult, err error, elapsed time.Duration) {
 	labels := map[string]string{"model_name": strings.TrimSpace(modelName)}
 	s.recordModelPullMetric(modelPullMetricAttempts, labels)
 	if err != nil {
@@ -150,7 +149,7 @@ func (s *Service) recordManagedRuntimePull(modelName string, result apisurface.M
 			"readiness_state": readiness,
 		})
 		s.recordModelPullMetric(modelPullMetricFailure, failureLabels)
-		if errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED" {
+		if errors.Is(err, modelassets.ErrSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED" {
 			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
 		}
 		if logger := s.logger(); logger != nil {

@@ -8,14 +8,12 @@ import (
 	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"go.uber.org/zap"
 
@@ -24,10 +22,9 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
-	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 const directModelInvocationTransitionID = "direct-model-invocation"
@@ -43,40 +40,36 @@ type ModelInvocationExecutor func(
 func (s *Service) InvokeModel(
 	ctx context.Context,
 	modelName string,
-	request factoryapi.ModelInvocationRequest,
-) (apisurface.ModelInvocationResult, error) {
+	request modelinference.Request,
+) (modelinference.Result, error) {
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory service runtime is not available")
+		return modelinference.Result{}, fmt.Errorf("factory service runtime is not available")
 	}
 	factoryCfg := runtimeCfg.FactoryConfig()
 	if factoryCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory config is not available")
+		return modelinference.Result{}, fmt.Errorf("factory config is not available")
 	}
 
 	workerDef, operation, err := localmodels.SelectInvocationWorker(runtimeCfg, modelName, request.Operation)
-	failureContext := apisurface.InferenceFailureContext{
+	failureContext := modelinference.TargetError{
 		ModelName: strings.TrimSpace(modelName),
 		Operation: strings.TrimSpace(request.Operation),
 	}
 	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
+		failureContext.Cause = err
+		return modelinference.Result{}, &failureContext
 	}
 	failureContext.WorkerName = workerDef.Name
 	failureContext.ModelName = workerDef.Model
 	managed, readinessErr := s.ensureInvocationReady(ctx, runtimeCfg, workerDef.Model)
 	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
 	if readinessErr != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, readinessErr
+		failureContext.Cause = readinessErr
+		return modelinference.Result{}, &failureContext
 	}
 
-	inputContent := contentcontract.PartsFromGenerated(request.Content)
+	inputContent := request.Content
 	inputTokens := []factorytoken.Token{{
 		ID: "direct-model-invocation-input",
 		Color: factorytoken.Color{
@@ -85,43 +78,47 @@ func (s *Service) InvokeModel(
 	}}
 	workstationDef := workerinference.DirectInferenceWorkstationConfig(
 		request.Operation,
-		workerinferencemapping.OperationBindingsFromGenerated(request.Bindings),
+		request.Bindings,
 	)
 	resolvedBindings, err := workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 
 	executor, err := s.modelInvocationExecutor(runtimeCfg, factoryCfg, workerDef.Name)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 	workstationRequest := directModelInvocationWorkstationRequest(workerDef, request, inputTokens, resolvedBindings, s.factoryRunnerID())
 
 	result, err := executor.Execute(ctx, workstationRequest)
 	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
+		failureContext.Cause = err
+		return modelinference.Result{}, &failureContext
 	}
 	if result.Outcome == workerexecution.OutcomeFailed {
-		if failure, ok := apisurface.ClassifyInferenceWorkResultFailure(result, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
+		if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
+			failureContext.Cause = workerprovider.NewProviderError(
+				result.FailureMetadata.Type,
+				strings.TrimSpace(result.Error),
+				nil,
+			)
+		} else {
+			failureContext.Cause = fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
 		}
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
+		return modelinference.Result{}, &failureContext
 	}
 
 	outputContent, err := workerinference.WorkContentFromInferenceOutput(result.Output, operation)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 	streamFile, streamContentType, err := directModelInvocationStream(outputContent, request.Options)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 
-	return apisurface.ModelInvocationResult{
+	return modelinference.Result{
 		ModelName:         workerDef.Model,
 		Worker:            workerDef.Name,
 		Operation:         strings.TrimSpace(request.Operation),
@@ -158,13 +155,13 @@ func (s *Service) ensureInvocationReady(
 
 func directModelInvocationWorkstationRequest(
 	workerDef *workerconfig.Config,
-	request factoryapi.ModelInvocationRequest,
+	request modelinference.Request,
 	inputTokens []factorytoken.Token,
 	resolvedBindings []workerexecution.ResolvedModelOperationBinding,
 	factoryRunnerID string,
 ) workerexecution.WorkstationExecutionRequest {
 	selection := workerrunner.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
-	inputContent := contentcontract.PartsFromGenerated(request.Content)
+	inputContent := request.Content
 	return workerexecution.WorkstationExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,
@@ -185,8 +182,8 @@ func directModelInvocationWorkstationRequest(
 	}
 }
 
-func directModelInvocationStream(content []work.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
-	if options == nil || options.ResponseMode == nil || *options.ResponseMode != factoryapi.AUDIOSTREAM {
+func directModelInvocationStream(content []work.WorkContentPart, options *modelinference.Options) (string, string, error) {
+	if options == nil || options.ResponseMode != modelinference.ResponseModeAudioStream {
 		return "", "", nil
 	}
 	for _, part := range content {
@@ -199,7 +196,7 @@ func directModelInvocationStream(content []work.WorkContentPart, options *factor
 		}
 		return part.File, contentType, nil
 	}
-	return "", "", fmt.Errorf("%w: invocation did not produce audio output", apisurface.ErrModelInvocationUnsupportedMode)
+	return "", "", fmt.Errorf("%w: invocation did not produce audio output", modelinference.ErrUnsupportedResponseMode)
 }
 
 func (s *Service) modelInvocationExecutor(

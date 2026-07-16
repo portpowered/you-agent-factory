@@ -18,9 +18,9 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -43,13 +43,10 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 		},
 	})
 
-	mode := factoryapi.AUDIOSTREAM
-	result, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	result, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
-		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
+		Options:   &modelinference.Options{ResponseMode: modelinference.ResponseModeAudioStream},
 	})
 	if err != nil {
 		t.Fatalf("InvokeModel: %v", err)
@@ -74,7 +71,7 @@ func TestService_InvokeModel_ReturnsNotFoundWhenModelDoesNotExist(t *testing.T) 
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "MISSING", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	_, err := svc.InvokeModel(context.Background(), "MISSING", modelinference.Request{Operation: "TTS"})
 	if err == nil || !errors.Is(err, apisurface.ErrModelNotFound) {
 		t.Fatalf("InvokeModel error = %v, want ErrModelNotFound", err)
 	}
@@ -89,11 +86,9 @@ func TestService_InvokeModel_ReturnsManagedRuntimeMissingWhenCacheNotReady(t *te
 		ModelHost:     missingCacheInspectHost{},
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	})
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
@@ -134,11 +129,9 @@ func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
 		Logger:        logger,
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	})
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
@@ -251,7 +244,10 @@ func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testin
 			})
 
 			_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", directInvokeRequest(t))
-			failure, ok := apisurface.AsInferenceFailure(err)
+			failure, ok := apisurface.ClassifyInferenceFailure(err, apisurface.InferenceFailureContext{
+				ModelName: "OMNIVOICE_Q4_K_M",
+				Operation: "TTS",
+			})
 			if !ok || failure.Class != tt.wantClass {
 				t.Fatalf("InvokeModel error = %v, want %s InferenceFailure", err, tt.wantClass)
 			}
@@ -263,7 +259,6 @@ func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	mode := factoryapi.AUDIOSTREAM
 	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     readyInvokeHost{},
@@ -275,12 +270,10 @@ func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(
 		},
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
-		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
+		Options:   &modelinference.Options{ResponseMode: modelinference.ResponseModeAudioStream},
 	})
 	if err == nil || !errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode) {
 		t.Fatalf("InvokeModel error = %v, want unsupported audio stream mode", err)
@@ -305,11 +298,9 @@ func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
 		},
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	})
 	if err != nil {
 		t.Fatalf("InvokeModel: %v", err)
@@ -387,26 +378,15 @@ func (s capturingInvocationExecutor) Execute(_ context.Context, request workerex
 	}, nil
 }
 
-func mustGeneratedInvokeTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
-	t.Helper()
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeTextUpper,
-		Text: text,
-		Slot: stringPtr("text"),
-	}); err != nil {
-		t.Fatalf("build text content part: %v", err)
-	}
-	return part
+func invokeTextPart(text string) work.WorkContentPart {
+	return work.WorkContentPart{Type: work.WorkContentPartTypeText, Text: text, Slot: "text"}
 }
 
-func directInvokeRequest(t *testing.T) factoryapi.ModelInvocationRequest {
+func directInvokeRequest(t *testing.T) modelinference.Request {
 	t.Helper()
-	return factoryapi.ModelInvocationRequest{
+	return modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	}
 }
 
@@ -421,8 +401,4 @@ func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 		t.Fatalf("marshal audio content: %v", err)
 	}
 	return string(body)
-}
-
-func stringPtr(value string) *string {
-	return &value
 }

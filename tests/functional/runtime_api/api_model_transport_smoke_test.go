@@ -1,8 +1,11 @@
 package runtime_api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -72,12 +75,14 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("GET /models/{name} managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
 	}
 
+	responseMode := factoryapi.METADATA
 	response := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
 		Bindings:  providerBackedModelTransportBindings(),
 		Content: &factoryapi.WorkContent{
 			mustGeneratedFunctionalTextPart(t, "hello world"),
 		},
+		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &responseMode},
 	}, "model transport smoke invocation failure")
 	if response.ModelName != "OMNIVOICE_Q4_K_M" || response.Worker != "tts-worker" || response.Operation != "TTS" {
 		t.Fatalf("POST /models/.../invocations identity = %#v, want OMNIVOICE_Q4_K_M/tts-worker/TTS", response)
@@ -108,6 +113,24 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	}
 	if len(calls[0].ModelBindings) != 1 || len(calls[0].ModelBindings[0].Content) != 1 || calls[0].ModelBindings[0].Content[0].Text != "hello world" {
 		t.Fatalf("provider bindings = %#v, want one text binding for hello world", calls[0].ModelBindings)
+	}
+
+	unsupportedBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "EMBED"})
+	if err != nil {
+		t.Fatalf("marshal unsupported invocation: %v", err)
+	}
+	unsupportedResponse, err := http.Post(
+		server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations",
+		"application/json",
+		bytes.NewReader(unsupportedBody),
+	)
+	if err != nil {
+		t.Fatalf("POST unsupported model invocation: %v", err)
+	}
+	defer unsupportedResponse.Body.Close()
+	if unsupportedResponse.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(unsupportedResponse.Body)
+		t.Fatalf("unsupported invocation status = %d, want 400: %s", unsupportedResponse.StatusCode, body)
 	}
 }
 

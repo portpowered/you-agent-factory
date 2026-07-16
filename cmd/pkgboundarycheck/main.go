@@ -143,14 +143,10 @@ func defaultBoundaryPolicy() boundaryPolicy {
 	}
 }
 
-// documentedDomainTransportExceptions is a deletion-only inventory for the
-// remaining model and worker files that still adapt generated transport values.
-// New reverse dependencies are rejected across every protected domain while
-// these exact files migrate to domain-owned inputs and outward transport mapping.
-var documentedDomainTransportExceptions = []string{
-	"pkg/models/service/invoke.go",
-	"pkg/models/service/pull.go",
-}
+// documentedDomainTransportExceptions remains as a deletion-only inventory
+// hook. It is intentionally empty now that every protected domain uses
+// domain-owned inputs and outward transport mapping.
+var documentedDomainTransportExceptions []string
 
 type config struct {
 	root        string
