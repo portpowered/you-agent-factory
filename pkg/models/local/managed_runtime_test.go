@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestBuildManagedRuntime_MapsCompatibilityFieldsToManagedContract(t *testing.T) {
@@ -53,7 +52,7 @@ func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
 	if model.ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("managed runtime identity = %q, want OMNIVOICE_Q4_K_M", model.ManagedRuntime.Identity)
 	}
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if model.ManagedRuntime.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
 	}
 }

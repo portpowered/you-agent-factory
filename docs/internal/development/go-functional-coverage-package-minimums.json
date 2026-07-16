@@ -389,12 +389,22 @@
       "minimum": 0.27
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/models/catalog",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
+      }
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/models/host",
       "minimum": 9.06
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/models/local",
-      "minimum": 22.20
+      "minimum": 22.16
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/models/managedruntime",
@@ -751,6 +761,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot",
       "minimum": 83.33
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/modelcatalog",
+      "minimum": 88.63
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",

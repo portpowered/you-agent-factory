@@ -1499,7 +1499,7 @@ func TestFactoryService_GetModel_DelegatesToLocalmodelsCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("localmodels.GetModel: %v", err)
 	}
-	if got.Name != want.Name || got.Status != want.Status {
+	if got.Name != want.Name || string(got.Status) != string(want.Status) {
 		t.Fatalf("GetModel detail = (%s, %s), want (%s, %s) from localmodels owner", got.Name, got.Status, want.Name, want.Status)
 	}
 }

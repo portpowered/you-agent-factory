@@ -12,7 +12,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -36,10 +37,10 @@ func TestListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
 		t.Fatalf("models count = %d, want 1", len(models.Results))
 	}
 	model := models.Results[0]
-	if model.Name != "OMNIVOICE_Q4_K_M" || model.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
+	if model.Name != "OMNIVOICE_Q4_K_M" || model.ProviderLocality != managedruntime.LocalityLocal {
 		t.Fatalf("model summary = %#v, want OMNIVOICE local model", model)
 	}
-	if model.Status != factoryapi.ModelStatusREADY || model.LoadState != factoryapi.UNLOADED {
+	if model.Status != modelcatalog.StatusReady || model.LoadState != modelcatalog.LoadStateUnloaded {
 		t.Fatalf("model readiness = (%s, %s), want (READY, UNLOADED)", model.Status, model.LoadState)
 	}
 	if len(model.Operations) != 1 || model.Operations[0].Name != "TTS" {
@@ -60,7 +61,7 @@ func TestGetModel_ReturnsUnavailableWithoutMatchingLocalModelResource(t *testing
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
-	if model.Status != factoryapi.ModelStatusUNAVAILABLE {
+	if model.Status != modelcatalog.StatusUnavailable {
 		t.Fatalf("status = %s, want UNAVAILABLE", model.Status)
 	}
 	if model.Diagnostics["statusReason"] == "" {

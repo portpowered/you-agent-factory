@@ -596,30 +596,7 @@ func (h *CatalogHost) identityFromCatalog(
 func operationsFromCatalog(entry localmodels.CatalogEntry) []managedruntime.Operation {
 	operations := make([]managedruntime.Operation, 0, len(entry.Summary.Operations))
 	for _, operation := range entry.Summary.Operations {
-		converted := managedruntime.Operation{Name: operation.Name}
-		if operation.Inputs != nil {
-			for _, slot := range *operation.Inputs {
-				contentTypes := make([]string, 0, len(slot.ContentTypes))
-				for _, contentType := range slot.ContentTypes {
-					contentTypes = append(contentTypes, string(contentType))
-				}
-				converted.Inputs = append(converted.Inputs, managedruntime.OperationSlot{
-					Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required,
-				})
-			}
-		}
-		if operation.Outputs != nil {
-			for _, slot := range *operation.Outputs {
-				contentTypes := make([]string, 0, len(slot.ContentTypes))
-				for _, contentType := range slot.ContentTypes {
-					contentTypes = append(contentTypes, string(contentType))
-				}
-				converted.Outputs = append(converted.Outputs, managedruntime.OperationSlot{
-					Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required,
-				})
-			}
-		}
-		operations = append(operations, converted)
+		operations = append(operations, operation)
 	}
 	return operations
 }

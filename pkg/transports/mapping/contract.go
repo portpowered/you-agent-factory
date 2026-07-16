@@ -9,6 +9,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -921,7 +922,7 @@ var ErrModelInvocationUnsupportedMode = errors.New("model invocation response mo
 
 // ErrModelInvocationUnsupportedOperation reports that the targeted model does
 // not expose the requested provider-agnostic operation.
-var ErrModelInvocationUnsupportedOperation = errors.New("model invocation operation is not supported")
+var ErrModelInvocationUnsupportedOperation = modelcatalog.ErrUnsupportedOperation
 
 // ModelInvocationResult carries the backend-owned direct invocation result used
 // by the API transport for either JSON metadata or streamed audio responses.

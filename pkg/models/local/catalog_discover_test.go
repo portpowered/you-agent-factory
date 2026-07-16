@@ -13,7 +13,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 type stubRuntimeCacheInspector struct {
@@ -54,10 +55,10 @@ func TestListAndInspect_ShareStableManagedRuntimeContract(t *testing.T) {
 		t.Fatalf("models count = %d, want 1", len(models.Results))
 	}
 	listRuntime := models.Results[0].ManagedRuntime
-	if listRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if listRuntime.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("list readiness = %s, want READY", listRuntime.ReadinessState)
 	}
-	if listRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if listRuntime.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("list lifecycle = %s, want INSTALLED", listRuntime.LifecycleState)
 	}
 
@@ -98,16 +99,16 @@ func TestListModels_MultipleRuntimesReportIndependentReadiness(t *testing.T) {
 	if len(models.Results) != 2 {
 		t.Fatalf("models count = %d, want 2", len(models.Results))
 	}
-	byName := map[string]factoryapi.ModelSummary{}
+	byName := map[string]modelcatalog.Summary{}
 	for _, model := range models.Results {
 		byName[model.Name] = model
 	}
 	ready := byName["OMNIVOICE_Q4_K_M"].ManagedRuntime
 	missing := byName["SECOND_RUNTIME"].ManagedRuntime
-	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY || ready.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if ready.ReadinessState != managedruntime.ReadinessStateReady || ready.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("ready runtime = (%s, %s), want READY/INSTALLED", ready.ReadinessState, ready.LifecycleState)
 	}
-	if missing.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING || missing.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+	if missing.ReadinessState != managedruntime.ReadinessStateMissing || missing.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("missing runtime = (%s, %s), want MISSING/NOT_INSTALLED", missing.ReadinessState, missing.LifecycleState)
 	}
 
@@ -115,7 +116,7 @@ func TestListModels_MultipleRuntimesReportIndependentReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetModelWithOptions SECOND_RUNTIME: %v", err)
 	}
-	if detail.ManagedRuntime.Diagnostics == nil || (*detail.ManagedRuntime.Diagnostics)["sourceKind"] != ManagedRuntimeSourceKindManagedMirror {
+	if detail.ManagedRuntime.Diagnostics == nil || detail.ManagedRuntime.Diagnostics["sourceKind"] != ManagedRuntimeSourceKindManagedMirror {
 		t.Fatalf("mirror runtime source diagnostics = %#v, want MANAGED_MIRROR", detail.ManagedRuntime.Diagnostics)
 	}
 }

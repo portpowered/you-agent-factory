@@ -9,6 +9,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	modelcatalogmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/modelcatalog"
 )
 
 // ListModels returns configured model summaries with managed-runtime readiness projection.
@@ -19,13 +20,14 @@ func (s *Service) ListModels(ctx context.Context) (factoryapi.ListModelsResponse
 	}
 	host := s.modelHost()
 	if host == nil {
-		return localmodels.ListModelsWithOptions(runtimeCfg, catalogDiscoveryOptions())
+		models, err := localmodels.ListModelsWithOptions(runtimeCfg, catalogDiscoveryOptions())
+		return modelcatalogmapping.ListToGenerated(models), err
 	}
 
 	catalog := localmodels.BuildCatalogWithOptions(runtimeCfg, catalogDiscoveryOptions())
 	results := make([]factoryapi.ModelSummary, 0, len(catalog))
 	for _, entry := range catalog {
-		summary := entry.Summary
+		summary := modelcatalogmapping.SummaryToGenerated(entry.Summary)
 		snapshot, err := host.InspectReadiness(ctx, runtimeCfg, summary.Name)
 		if err != nil {
 			return factoryapi.ListModelsResponse{}, err
@@ -47,7 +49,8 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	}
 	host := s.modelHost()
 	if host == nil {
-		return localmodels.GetModelWithOptions(runtimeCfg, modelName, catalogDiscoveryOptions())
+		detail, err := localmodels.GetModelWithOptions(runtimeCfg, modelName, catalogDiscoveryOptions())
+		return modelcatalogmapping.DetailToGenerated(detail), err
 	}
 
 	catalog := localmodels.BuildCatalogWithOptions(runtimeCfg, catalogDiscoveryOptions())
@@ -63,7 +66,7 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	if err != nil {
 		return factoryapi.ModelDetail{}, err
 	}
-	detail := entry.Detail
+	detail := modelcatalogmapping.DetailToGenerated(entry.Detail)
 	detail.ManagedRuntime = overlayCatalogManagedRuntime(detail.ManagedRuntime, snapshot)
 	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime)
 	return detail, nil

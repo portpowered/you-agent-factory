@@ -65,11 +65,17 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/models/local/catalog.go", "local", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	writeGoImportFile(t, repoRoot, "pkg/models/service/api.go", "service", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want exact migration files allowed; stderr=%q", err, stderr.String())
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/models/local/catalog.go", "local", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	stderr.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
+		t.Fatal("run() error = nil, want migrated model catalog import rejected")
 	}
 
 	for _, path := range []string{

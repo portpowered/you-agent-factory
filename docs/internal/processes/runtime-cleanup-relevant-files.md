@@ -272,6 +272,11 @@ operation, readiness, lifecycle, and pull-outcome values. Only the outward
 transport mapping layer projects that host state into generated `ManagedRuntime`
 contracts; local asset integration exchanges `pkg/models/assets.PullResult`
 without routing through transport aliases.
+Model discovery summaries, details, capabilities, resources, compatibility
+status, and load-state vocabulary belong in `pkg/models/catalog`. The local
+catalog builder returns those contracts, and
+`pkg/transports/mapping/modelcatalog` alone converts them to generated model
+list and detail values.
 
 The same check rejects recreation or import of converged roots and reports the
 canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,
