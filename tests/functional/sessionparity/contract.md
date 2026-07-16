@@ -83,11 +83,14 @@ Session state:
   session. `CallToolResult` framing is decoded, while the typed value serialized
   through `content[0].text` remains fully retained.
 
-Focused tests mutate each of these exclusions on its real capture shape and
-require an unchanged projection. The same tests mutate the retained session
-status inside each interface's real customer value and require a
-`lifecycle.status` difference, preventing envelope exclusion from hiding
-Factory Session drift.
+Focused tests mutate representative exclusions on each real capture shape and
+require an unchanged projection. In particular, REST coverage adds HTTP
+exchange metadata and valid SSE comment, `id`, `event`, and `retry` fields to
+the handler-shaped stream, while MCP coverage replaces every real JSON-RPC
+request ID around its `CallToolResult`. Paired mutations change a retained REST
+Factory Event type and the retained CLI/MCP session status inside the real
+customer values, preventing framing exclusion from hiding Factory Session
+drift.
 
 ## Difference reports
 

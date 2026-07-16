@@ -3,6 +3,7 @@ package sessionparity
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -81,10 +82,11 @@ func TestNormalizers_ExcludeTransportDetailsAndRetainSessionFacts(t *testing.T) 
 		normalize func([]byte) (Projection, error)
 		metadata  func(*testing.T, []byte) []byte
 		fact      func(*testing.T, []byte) []byte
+		factPath  string
 	}{
-		{"REST", observations.REST, NormalizeREST, addRESTTransportMetadata, changeDirectSessionStatus},
-		{"CLI JSON", observations.CLIJSON, NormalizeCLIJSON, addCLITransportMetadata, changeDirectSessionStatus},
-		{"MCP", observations.MCP, NormalizeMCP, changeMCPTransportMetadata, changeMCPSessionStatus},
+		{"REST", observations.REST, NormalizeREST, changeRESTTransportFraming, changeRESTEventType, "eventCursors[0].eventType"},
+		{"CLI JSON", observations.CLIJSON, NormalizeCLIJSON, addCLITransportMetadata, changeDirectSessionStatus, "lifecycle.status"},
+		{"MCP", observations.MCP, NormalizeMCP, changeMCPTransportMetadata, changeMCPSessionStatus, "lifecycle.status"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			expected := normalizeObservation(t, test.normalize, test.input)
@@ -95,8 +97,8 @@ func TestNormalizers_ExcludeTransportDetailsAndRetainSessionFacts(t *testing.T) 
 
 			retainedFact := normalizeObservation(t, test.normalize, test.fact(t, test.input))
 			differences := Compare(expected, retainedFact)
-			if !containsDifference(differences, "lifecycle.status") {
-				t.Fatalf("retained status mutation was not reported: %#v", differences)
+			if !containsDifference(differences, test.factPath) {
+				t.Fatalf("retained fact mutation was not reported at %s: %#v", test.factPath, differences)
 			}
 			first := mustMarshal(t, differences)
 			second := mustMarshal(t, Compare(expected, retainedFact))
@@ -116,13 +118,16 @@ func normalizeObservation(t *testing.T, normalize func([]byte) (Projection, erro
 	return projection
 }
 
-func addRESTTransportMetadata(t *testing.T, observation []byte) []byte {
+func changeRESTTransportFraming(t *testing.T, observation []byte) []byte {
 	t.Helper()
 	bundle := observationObject(t, observation)
 	bundle["http"] = map[string]any{
 		"status": 200, "headers": map[string]any{"x-request-id": "rest-request-2"},
 		"request": map[string]any{"method": "GET", "path": "/factory-sessions/example"},
 	}
+	body := bundle["events"].(string)
+	bundle["events"] = strings.ReplaceAll(body, "data: ",
+		": ignored keepalive\nid: ignored-frame\nevent: factory-event\nretry: 1500\ndata: ")
 	return mustMarshal(t, bundle)
 }
 
@@ -139,10 +144,20 @@ func changeMCPTransportMetadata(t *testing.T, observation []byte) []byte {
 	bundle := observationObject(t, observation)
 	for _, field := range []string{"session", "dispatches", "artifacts", "result", "events"} {
 		response := bundle[field].(map[string]any)
-		response["jsonrpc"] = "2.0"
 		response["id"] = "replacement-" + field
-		response["requestCorrelation"] = map[string]any{"traceId": "trace-" + field}
 	}
+	return mustMarshal(t, bundle)
+}
+
+func changeRESTEventType(t *testing.T, observation []byte) []byte {
+	t.Helper()
+	bundle := observationObject(t, observation)
+	body := bundle["events"].(string)
+	changed := strings.Replace(body, `"type":"FACTORY_SESSION_STARTED"`, `"type":"FACTORY_SESSION_RESTARTED"`, 1)
+	if changed == body {
+		t.Fatal("REST fixture did not contain the retained event type")
+	}
+	bundle["events"] = changed
 	return mustMarshal(t, bundle)
 }
 
