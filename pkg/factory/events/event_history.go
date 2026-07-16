@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	eventsnapshot "github.com/portpowered/infinite-you/pkg/factory/events/snapshot"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
@@ -238,7 +239,7 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	}
 	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
-	factory := factorySnapshotFromInitialStructure(payload)
+	factory := eventsnapshot.FromInitialStructure(payload)
 	h.mu.RLock()
 	if h.initialFactory != nil {
 		factory = h.initialFactory.Clone()
@@ -290,7 +291,7 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 		interfaces.FactoryEventContext{Tick: 0, EventTime: recordedAt},
 		interfaces.RunRequestEventPayload{
 			RecordedAt: recordedAt,
-			Factory:    factorySnapshotFromInitialStructure(payload),
+			Factory:    eventsnapshot.FromInitialStructure(payload),
 		},
 	))
 }

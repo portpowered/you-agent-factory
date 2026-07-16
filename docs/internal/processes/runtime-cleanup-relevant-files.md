@@ -315,6 +315,11 @@ Provider, script, and agent-run executors emit worker-owned facts from
 event vocabulary, schema version, ordering, correlation context, and UTC time.
 Generated OpenAPI event unions are decoded only at transport-facing or explicit
 public-compatibility test boundaries, not passed back into worker execution.
+Initial topology snapshots follow the same rule: `pkg/factory/events/snapshot`
+constructs the detached canonical Factory document from owner-defined topology,
+and transport adapters decode that snapshot only when a generated Factory is
+required. Do not construct canonical event snapshots through generated HTTP
+models.
 Factory world-state reducers likewise decode `pkg/factory/contracts.FactoryEvent`
 payloads from their semantic owners. Canonical runtime and history callers use
 `ReconstructCanonicalFactoryWorldState`; generated-event callers cross
