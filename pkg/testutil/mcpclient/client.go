@@ -125,6 +125,14 @@ func (c *Client) CallTool(ctx context.Context, name string, arguments any) (*mcp
 	return result, nil
 }
 
+// SetLoggingLevel asks the attached server to change its MCP logging level.
+func (c *Client) SetLoggingLevel(ctx context.Context, level mcp.LoggingLevel) error {
+	if err := c.session.SetLoggingLevel(ctx, &mcp.SetLoggingLevelParams{Level: level}); err != nil {
+		return clientError(StageProtocolExchange, "set logging level", err)
+	}
+	return nil
+}
+
 // DecodeTextResult decodes the single text item used by the current server.
 func DecodeTextResult(result *mcp.CallToolResult, target any) error {
 	if result == nil {
