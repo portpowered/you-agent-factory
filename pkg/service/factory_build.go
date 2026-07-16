@@ -33,7 +33,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -200,23 +199,14 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 	service := NewFactoryServiceFromCore(core)
 	shell := FactoryServiceShell{Service: service}
-	if service.currentRuntimeConfig() == nil && cfg != nil && cfg.ReplayPath != "" {
-		// Portable durable-session recordings intentionally contain no Factory
-		// runtime configuration. Attach an explicit read-only model boundary so
-		// the replay service remains usable without a lazy construction path.
-		service = AttachModelServiceCollaborator(shell, unavailableModelService{})
-	} else if cfg != nil && cfg.ModelAPI != nil {
+	if cfg != nil && cfg.ModelAPI != nil {
 		service = AttachModelServiceCollaborator(shell, cfg.ModelAPI)
 	} else {
-		deps, modelErr := ModelServiceDependencies(shell)
-		if modelErr != nil {
-			return nil, modelErr
-		}
-		models, modelErr := modelsservice.NewService(deps)
-		if modelErr != nil {
-			return nil, fmt.Errorf("construct model service: %w", modelErr)
-		}
-		service = AttachModelServiceCollaborator(shell, models)
+		// Portable durable-session recordings intentionally contain no Factory
+		// runtime configuration, and direct compatibility construction no longer
+		// owns model-service assembly. Attach an explicit unavailable boundary so
+		// every service facade remains a consumer of an already-built ModelAPI.
+		service = AttachModelServiceCollaborator(shell, unavailableModelService{})
 	}
 	service = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: service},

@@ -25,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
@@ -1231,6 +1230,27 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
+	models := &stubModelService{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		ModelAPI:          models,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	assertExplicitFactoryServiceCollaborators(t, svc, alphaDir, models)
+}
+
+func TestBuildFactoryServiceWithoutModelAPIDoesNotConstructFallback(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               rootDir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -1240,10 +1260,17 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	assertExplicitFactoryServiceCollaborators(t, svc, alphaDir)
+	if _, err := svc.ListModels(context.Background()); !errors.Is(err, errModelServiceUnavailable) {
+		t.Fatalf("ListModels error = %v, want explicit unavailable model boundary", err)
+	}
 }
 
-func assertExplicitFactoryServiceCollaborators(t *testing.T, svc *FactoryService, alphaDir string) {
+func assertExplicitFactoryServiceCollaborators(
+	t *testing.T,
+	svc *FactoryService,
+	alphaDir string,
+	models apisurface.ModelAPI,
+) {
 	t.Helper()
 
 	if svc.sessions == nil {
@@ -1255,11 +1282,11 @@ func assertExplicitFactoryServiceCollaborators(t *testing.T, svc *FactoryService
 	if svc.modelService == nil {
 		t.Fatal("expected explicit model service collaborator")
 	}
-	if _, ok := svc.modelService.(*modelsservice.Service); !ok {
-		t.Fatalf("modelService type = %T, want canonical *models/service.Service", svc.modelService)
+	if svc.modelService != models {
+		t.Fatalf("modelService = %T, want exact injected collaborator %T", svc.modelService, models)
 	}
 	if _, err := svc.ListModels(context.Background()); err != nil {
-		t.Fatalf("ListModels through default compatibility service: %v", err)
+		t.Fatalf("ListModels through injected compatibility service: %v", err)
 	}
 	if svc.factorySave == nil {
 		t.Fatal("expected explicit factorysave collaborator")

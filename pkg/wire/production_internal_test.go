@@ -55,24 +55,7 @@ func TestRuntimeHostConfigFromFactoryServiceIsCopied(t *testing.T) {
 func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	factoryCfg := factoryfixtures.MinimalFactoryConfig()
-	factoryCfg["workers"] = []map[string]any{
-		{"name": "worker-a", "type": "SCRIPT_WORKER", "command": "test", "body": "Process work."},
-		{
-			"name": "model-worker", "type": "INFERENCE_WORKER", "modelProvider": "CODEX",
-			"model": "OMNIVOICE_Q4_K_M", "modelLocality": interfaces.ModelLocalityLocal,
-			"resources": []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
-		},
-	}
-	factoryCfg["workstations"].([]map[string]any)[0]["type"] = "SCRIPT_RUN"
-	factoryCfg["workstations"].([]map[string]any)[0]["body"] = "Run the worker."
-	factoryCfg["resources"] = []map[string]any{{
-		"name": "omnivoice-cache", "type": "MODEL", "capacity": 1,
-		"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND",
-	}}
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryCfg)
-	assets := &recordingModelAssets{AssetPuller: localmodels.NewAssetPuller(t.TempDir())}
+	dir, assets := modelCatalogFixture(t)
 	graph, err := Build(context.Background(), Inputs{
 		Config: &runtimehost.Config{
 			Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
@@ -100,6 +83,54 @@ func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testin
 	if len(models.Results) != 1 || assets.inspectCalls != 1 {
 		t.Fatalf("catalog results/asset inspections = (%d, %d), want (1, 1)", len(models.Results), assets.inspectCalls)
 	}
+}
+
+func TestFactoryServiceCompatibilityFacadeUsesWireModelProviderAndInjectedAssetEdge(t *testing.T) {
+	t.Parallel()
+
+	dir, assets := modelCatalogFixture(t)
+	svc, err := InjectFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
+		Clock: productionInternalClock{}, ModelAssets: assets,
+		DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+		RuntimeFileLoggingPolicy:                service.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:                    service.RuntimeMetricsPolicyDisabled,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("InjectFactoryService() error = %v", err)
+	}
+
+	models, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("compatibility model catalog call error = %v", err)
+	}
+	if !svc.ComposeCollaboratorSnapshot().ModelServiceInitialized || len(models.Results) != 1 || assets.inspectCalls != 1 {
+		t.Fatalf("model service/catalog results/asset inspections = (%t, %d, %d), want (true, 1, 1)",
+			svc.ComposeCollaboratorSnapshot().ModelServiceInitialized, len(models.Results), assets.inspectCalls)
+	}
+}
+
+func modelCatalogFixture(t *testing.T) (string, *recordingModelAssets) {
+	t.Helper()
+	dir := t.TempDir()
+	factoryCfg := factoryfixtures.MinimalFactoryConfig()
+	factoryCfg["workers"] = []map[string]any{
+		{"name": "worker-a", "type": "SCRIPT_WORKER", "command": "test", "body": "Process work."},
+		{
+			"name": "model-worker", "type": "INFERENCE_WORKER", "modelProvider": "CODEX",
+			"model": "OMNIVOICE_Q4_K_M", "modelLocality": interfaces.ModelLocalityLocal,
+			"resources": []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
+		},
+	}
+	factoryCfg["workstations"].([]map[string]any)[0]["type"] = "SCRIPT_RUN"
+	factoryCfg["workstations"].([]map[string]any)[0]["body"] = "Run the worker."
+	factoryCfg["resources"] = []map[string]any{{
+		"name": "omnivoice-cache", "type": "MODEL", "capacity": 1,
+		"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND",
+	}}
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryCfg)
+	return dir, &recordingModelAssets{AssetPuller: localmodels.NewAssetPuller(t.TempDir())}
 }
 
 type recordingModelAssets struct {
