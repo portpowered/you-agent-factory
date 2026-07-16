@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
@@ -51,8 +50,8 @@ func TestClassifyInvocationWait_GenerationFailure(t *testing.T) {
 	}
 }
 
-func TestIsModelNotReadyFailure_DetectsWrappedContractError(t *testing.T) {
-	message := apisurface.ErrModelNotAvailable.Error() + ": required assets missing"
+func TestIsModelNotReadyFailure_DetectsStableModelFailureEvidence(t *testing.T) {
+	message := "model not available: required assets missing"
 	if !isModelNotReadyFailure(message) {
 		t.Fatalf("expected model-not-ready detection for %q", message)
 	}

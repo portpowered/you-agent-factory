@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
@@ -150,9 +149,6 @@ func isModelNotReadyFailure(message string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(message))
 	if trimmed == "" {
 		return false
-	}
-	if strings.Contains(trimmed, strings.ToLower(apisurface.ErrModelNotAvailable.Error())) {
-		return true
 	}
 	return strings.Contains(trimmed, "model not available") ||
 		strings.Contains(trimmed, "required assets missing")

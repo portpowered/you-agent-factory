@@ -48,3 +48,19 @@ func TestRunAllowsFactoryTransportImportsOnlyForDocumentedMigrationFilesAndTests
 		t.Fatal("run() error = nil, want unlisted Factory definition transport import rejected")
 	}
 }
+
+func TestRunRejectsRetiredPackagedFactoryTransportImport(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/packages/tts/observability.go", "tts", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want migrated packaged Factory transport import rejected")
+	}
+	if want := "prohibited Factory domain transport import: github.com/portpowered/infinite-you/pkg/transports/mapping (pkg/factory/packages/tts/observability.go)"; !strings.Contains(stderr.String(), want) {
+		t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+	}
+}

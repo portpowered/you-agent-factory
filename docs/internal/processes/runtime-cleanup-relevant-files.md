@@ -223,6 +223,9 @@ return owner-defined contracts. The exact migration-file inventory in
 `cmd/pkgboundarycheck/main.go` is deletion-only: remove entries as the remaining
 definition and compatibility adapters move outward, and never add a new entry
 to make a reverse dependency pass.
+Packaged Factory observability classifies stable domain failure evidence and
+must not import transport-mapping error sentinels merely to recognize their
+customer-safe text.
 
 The same check rejects recreation or import of converged roots and reports the
 canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,
