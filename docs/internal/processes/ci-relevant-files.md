@@ -37,6 +37,11 @@
   manifest entries unless the branch has independently regenerated and proven
   a stricter floor. Reintroducing a stale branch floor can turn a passing
   profile into a coverage-policy failure without any source behavior change.
+  Factory-service command-runner overrides are resolved while composing the
+  runtime worker application, including through `wire.InjectFactoryService`.
+  Functional API tests should set the service-level provider and script
+  overrides directly and assert the runner is invoked, rather than supplying
+  a prebuilt worker application that bypasses this composition boundary.
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
   not put background commands behind live `while`/`tee` pipelines: on Windows,
