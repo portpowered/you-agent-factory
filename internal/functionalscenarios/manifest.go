@@ -1,6 +1,7 @@
 package functionalscenarios
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -64,6 +65,15 @@ type SSEDisposition struct {
 	Required    bool   `json:"required"`
 	Disposition string `json:"disposition"`
 	Scope       string `json:"scope"`
+}
+
+// DecodeManifest decodes a checked-in reviewed manifest without changing it.
+func DecodeManifest(data []byte) (*Manifest, error) {
+	manifest := &Manifest{}
+	if err := json.Unmarshal(data, manifest); err != nil {
+		return nil, fmt.Errorf("decode functional scenario manifest: %w", err)
+	}
+	return manifest, nil
 }
 
 // BuildReviewedManifest applies the reviewed coverage decisions to a projection.
@@ -164,6 +174,67 @@ func ValidateManifest(manifest *Manifest) error {
 		}
 	}
 	return nil
+}
+
+// CheckManifest verifies that reviewed scenarios exactly cover the current
+// canonical projection and still carry its public identity metadata.
+func CheckManifest(projection *Projection, manifest *Manifest) error {
+	if projection == nil {
+		return fmt.Errorf("check functional scenario manifest: component projection is nil")
+	}
+	if err := ValidateManifest(manifest); err != nil {
+		return withManifestRemediation(err)
+	}
+
+	components := make(map[string]Component, len(projection.Components))
+	for _, component := range projection.Components {
+		components[component.StableID] = component
+	}
+	scenarios := make(map[string]Scenario, len(manifest.Scenarios))
+	for index, scenario := range manifest.Scenarios {
+		if index > 0 && manifest.Scenarios[index-1].StableID > scenario.StableID {
+			return manifestCheckError(scenario.Interface, scenario.StableID, "manifest records are not sorted by stable ID")
+		}
+		if first, exists := scenarios[scenario.StableID]; exists {
+			return manifestCheckError(scenario.Interface, scenario.StableID,
+				"duplicate manifest record (first declared for interface %q)", first.Interface)
+		}
+		scenarios[scenario.StableID] = scenario
+	}
+
+	for _, component := range projection.Components {
+		scenario, exists := scenarios[component.StableID]
+		if !exists {
+			return manifestCheckError(component.Interface, component.StableID, "canonical component is unmapped")
+		}
+		if scenario.Interface != component.Interface {
+			return manifestCheckError(component.Interface, component.StableID,
+				"interface is %q, want canonical value %q", scenario.Interface, component.Interface)
+		}
+		if scenario.Name != component.Name {
+			return manifestCheckError(component.Interface, component.StableID,
+				"name is %q, want canonical value %q", scenario.Name, component.Name)
+		}
+		if scenario.Classification != component.Classification {
+			return manifestCheckError(component.Interface, component.StableID,
+				"classification is %q, want canonical value %q", scenario.Classification, component.Classification)
+		}
+	}
+	for _, scenario := range manifest.Scenarios {
+		if _, exists := components[scenario.StableID]; !exists {
+			return manifestCheckError(scenario.Interface, scenario.StableID, "manifest record is no longer canonical")
+		}
+	}
+	return nil
+}
+
+func manifestCheckError(customerInterface, stableID, format string, args ...any) error {
+	detail := fmt.Sprintf(format, args...)
+	return fmt.Errorf("check %s interface scenario %q: %s; add or correct the reviewed manifest record", customerInterface, stableID, detail)
+}
+
+func withManifestRemediation(err error) error {
+	return fmt.Errorf("%w; add or correct the reviewed manifest record", err)
 }
 
 func validateScenario(scenario Scenario) error {

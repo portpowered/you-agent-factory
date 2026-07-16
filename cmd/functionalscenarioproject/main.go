@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ type config struct {
 	mcpPath     string
 	outputPath  string
 	manifest    bool
+	checkPath   string
 }
 
 func main() {
@@ -32,6 +34,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.mcpPath, "mcp", "contracts/mcp/tools.json", "canonical MCP tool inventory")
 	flag.StringVar(&cfg.outputPath, "output", "-", "projection JSON output path or - for stdout")
 	flag.BoolVar(&cfg.manifest, "manifest", false, "render the reviewed functional scenario manifest")
+	flag.StringVar(&cfg.checkPath, "check", "", "validate a reviewed manifest against current canonical inventories")
 	flag.Parse()
 	return cfg
 }
@@ -53,6 +56,9 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("project functional scenario components: %w", err)
 	}
+	if cfg.checkPath != "" {
+		return checkManifest(cfg.checkPath, projection, stdout)
+	}
 	payload, err := renderProjection(projection, cfg.manifest)
 	if err != nil {
 		return err
@@ -66,6 +72,29 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	}
 	_, _ = fmt.Fprintf(stderr, "[agent-factory:functional-scenario-project] wrote %d components to %s\n", len(projection.Components), cfg.outputPath)
 	return nil
+}
+
+func checkManifest(path string, projection *functionalscenarios.Projection, stdout io.Writer) error {
+	data, err := readInput("functional scenario manifest", path)
+	if err != nil {
+		return err
+	}
+	manifest, err := functionalscenarios.DecodeManifest(data)
+	if err != nil {
+		return err
+	}
+	if err := functionalscenarios.CheckManifest(projection, manifest); err != nil {
+		return err
+	}
+	canonical, err := functionalscenarios.MarshalCanonicalManifestJSON(manifest)
+	if err != nil {
+		return err
+	}
+	if !bytes.Equal(data, canonical) {
+		return fmt.Errorf("check functional scenario manifest %s: bytes are not canonically sorted and serialized; regenerate the reviewed manifest", path)
+	}
+	_, err = fmt.Fprintf(stdout, "[agent-factory:functional-scenario-check] %d reviewed scenarios are current\n", len(manifest.Scenarios))
+	return err
 }
 
 func renderProjection(projection *functionalscenarios.Projection, manifest bool) ([]byte, error) {

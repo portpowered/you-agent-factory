@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,6 +65,40 @@ func TestRunWritesReviewedManifest(t *testing.T) {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("manifest does not contain %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestRunChecksManifestWithoutChangingFiles(t *testing.T) {
+	t.Parallel()
+
+	cfg := commandFixture(t)
+	cfg.manifest = true
+	generated := &bytes.Buffer{}
+	if err := run(cfg, generated, io.Discard); err != nil {
+		t.Fatalf("generate manifest: %v", err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "functional-scenarios.json")
+	writeFixture(t, manifestPath, generated.String())
+	before, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest before check: %v", err)
+	}
+
+	cfg.manifest = false
+	cfg.checkPath = manifestPath
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	if err := run(cfg, stdout, stderr); err != nil {
+		t.Fatalf("check manifest: %v", err)
+	}
+	if want := "3 reviewed scenarios are current"; !strings.Contains(stdout.String(), want) || stderr.Len() != 0 {
+		t.Fatalf("stdout = %q, stderr = %q, want %q", stdout, stderr, want)
+	}
+	after, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatalf("read manifest after check: %v", err)
+	}
+	if !bytes.Equal(after, before) {
+		t.Fatal("manifest check changed the checked file")
 	}
 }
 

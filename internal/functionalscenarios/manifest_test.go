@@ -1,6 +1,8 @@
 package functionalscenarios
 
 import (
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -66,6 +68,102 @@ func TestValidateManifestRejectsInvalidEvidenceAndSSEDispositions(t *testing.T) 
 			}
 		})
 	}
+}
+
+func TestCheckManifestRejectsUnmappedCanonicalComponentsForEveryInterface(t *testing.T) {
+	t.Parallel()
+
+	baseProjection := repositoryProjection(t)
+	baseManifest, err := BuildReviewedManifest(baseProjection)
+	if err != nil {
+		t.Fatalf("BuildReviewedManifest() error = %v", err)
+	}
+	components := []Component{
+		newComponent(InterfaceCLI, "you.future", "you future", ClassificationRunnable),
+		newComponent(InterfaceREST, "getFuture", "getFuture", ClassificationOperation),
+		newComponent(InterfaceMCP, "mcp.future", "future", ClassificationTool),
+		newComponent(InterfaceSSE, "getFutureEvents", "getFutureEvents", ClassificationEventStream),
+	}
+	for _, component := range components {
+		component := component
+		t.Run(component.Interface, func(t *testing.T) {
+			t.Parallel()
+			projection := cloneProjection(baseProjection)
+			projection.Components = append(projection.Components, component)
+			slices.SortFunc(projection.Components, func(left, right Component) int {
+				return strings.Compare(left.StableID, right.StableID)
+			})
+			err := CheckManifest(projection, baseManifest)
+			want := `scenario "` + component.StableID + `": canonical component is unmapped`
+			if err == nil || !strings.Contains(err.Error(), want) || !strings.Contains(err.Error(), "add or correct") {
+				t.Fatalf("CheckManifest() error = %v, want %q and remediation", err, want)
+			}
+		})
+	}
+}
+
+func TestCheckManifestRejectsInventoryAndEvidenceDrift(t *testing.T) {
+	t.Parallel()
+
+	projection := repositoryProjection(t)
+	base, err := BuildReviewedManifest(projection)
+	if err != nil {
+		t.Fatalf("BuildReviewedManifest() error = %v", err)
+	}
+	tests := []struct {
+		name string
+		edit func(*Manifest)
+		want string
+	}{
+		{name: "duplicate stable ID", edit: func(m *Manifest) { m.Scenarios = append(m.Scenarios, m.Scenarios[len(m.Scenarios)-1]) }, want: "duplicate manifest record"},
+		{name: "no longer canonical", edit: func(m *Manifest) {
+			m.Scenarios = append(m.Scenarios, Scenario{StableID: "rest/removedOperation", Name: "removedOperation", Interface: InterfaceREST, Classification: ClassificationOperation, Status: StatusMissing, Lane: LaneShort, ExecutionClass: ExecutionDeterministic, ReviewedReason: "No qualifying evidence exists."})
+			slices.SortFunc(m.Scenarios, func(left, right Scenario) int { return strings.Compare(left.StableID, right.StableID) })
+		}, want: "manifest record is no longer canonical"},
+		{name: "unknown status", edit: func(m *Manifest) { m.Scenarios[0].Status = "unknown" }, want: `unknown status "unknown"`},
+		{name: "unknown lane", edit: func(m *Manifest) { m.Scenarios[0].Lane = "unknown" }, want: `unknown lane "unknown"`},
+		{name: "unknown execution class", edit: func(m *Manifest) { m.Scenarios[0].ExecutionClass = "unknown" }, want: `unknown executionClass "unknown"`},
+		{name: "invalid status evidence", edit: func(m *Manifest) { m.Scenarios[0].Status = StatusCovered }, want: "covered status requires named customer-boundary evidence"},
+		{name: "incorrect SSE disposition", edit: func(m *Manifest) {
+			for index := range m.Scenarios {
+				if m.Scenarios[index].StableID == sessionEventsStableID {
+					m.Scenarios[index].SSE.Required = false
+					return
+				}
+			}
+		}, want: "SSE disposition must be required=true"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			manifest := cloneManifest(t, base)
+			test.edit(manifest)
+			err := CheckManifest(projection, manifest)
+			if err == nil || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "add or correct") {
+				t.Fatalf("CheckManifest() error = %v, want %q and remediation", err, test.want)
+			}
+		})
+	}
+}
+
+func cloneProjection(value *Projection) *Projection {
+	result := *value
+	result.Components = append([]Component(nil), value.Components...)
+	return &result
+}
+
+func cloneManifest(t *testing.T, value *Manifest) *Manifest {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal manifest clone: %v", err)
+	}
+	result, err := DecodeManifest(payload)
+	if err != nil {
+		t.Fatalf("decode manifest clone: %v", err)
+	}
+	return result
 }
 
 func repositoryProjection(t *testing.T) *Projection {
