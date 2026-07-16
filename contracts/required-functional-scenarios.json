@@ -1,0 +1,27 @@
+{
+  "formatVersion": "required-functional-scenarios/v1",
+  "scenarios": [
+    {
+      "stableId": "cli/you.run",
+      "test": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
+      "interface": "cli",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "customerBoundary": true
+    }
+  ],
+  "nonRequiredScenarios": [
+    {
+      "stableId": "sse/getEvents",
+      "interface": "sse",
+      "disposition": "deprecated-later-removal",
+      "reviewedReason": "Deprecated global Factory Event compatibility stream is non-required and retained only until later removal."
+    },
+    {
+      "stableId": "sse/getFactoryResponseEventsBySessionId",
+      "interface": "sse",
+      "disposition": "currently-deferred",
+      "reviewedReason": "Factory response-event stream functional coverage is non-required and currently deferred."
+    }
+  ]
+}
