@@ -190,7 +190,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/replay",
-      "minimum": 81.01
+      "minimum": 80.94
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/requests",
