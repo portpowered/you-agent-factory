@@ -121,6 +121,50 @@ func direct(value holder) { value.service.Run(nil) }
 	}
 }
 
+func TestCheckFunctionalTestBoundariesRejectsTypeResolvedImplementationForms(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "type alias receiver",
+			content: `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+type serviceAlias = service.FactoryService
+func direct(svc *serviceAlias) { svc.Run(nil) }
+`,
+		},
+		{
+			name: "indexed receiver",
+			content: `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+func direct(services map[string]*service.FactoryService) { services["primary"].Run(nil) }
+`,
+		},
+		{
+			name: "method expression",
+			content: `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+func direct(svc *service.FactoryService) { run := service.FactoryService.Run; run(svc, nil) }
+`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			writeBoundaryFixture(t, root, test.content)
+			err := CheckFunctionalTestBoundaries(root)
+			want := `directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.FactoryService.Run"`
+			if err == nil || !strings.Contains(err.Error(), want) {
+				t.Fatalf("CheckFunctionalTestBoundaries() error = %v, want %q", err, want)
+			}
+		})
+	}
+}
+
 func TestCheckFunctionalTestBoundariesIgnoresFilesOutsideFunctionalTree(t *testing.T) {
 	t.Parallel()
 
