@@ -43,7 +43,10 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 			Tags:                     map[string]string{"scope": "alpha"},
 			TargetState:              "queued",
 			ExecutionID:              "exec-1",
-			Relations:                []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
+			InvocationArguments: &interfaces.InvocationArguments{Arguments: map[string]interfaces.InvocationArgument{
+				"worktree": {Values: []string{"release-dashboard"}},
+			}},
+			Relations: []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
 		},
 		{
 			RequestID:   "request-shared",
@@ -108,6 +111,9 @@ func assertCanonicalFirstWork(t *testing.T, first interfaces.Work) {
 	}
 	if len(first.RuntimeRelations) != 1 || first.RuntimeRelations[0].TargetWorkID != "work-2" {
 		t.Fatalf("first runtime relations = %#v", first.RuntimeRelations)
+	}
+	if first.InvocationArguments == nil || first.InvocationArguments.Arguments["worktree"].Values[0] != "release-dashboard" {
+		t.Fatalf("first invocation arguments = %#v, want preserved worktree", first.InvocationArguments)
 	}
 }
 

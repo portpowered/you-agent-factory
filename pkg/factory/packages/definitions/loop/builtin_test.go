@@ -18,9 +18,23 @@ func TestBuiltInLoopFactoryJSON_DeclaresStartupAndSessionRecurringTopology(t *te
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
+	assertLoopStructure(t, cfg)
+}
+
+func assertLoopStructure(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	if findings := factoryconfig.CanonicalStructuralFindings(cfg); len(findings) != 0 {
 		t.Fatalf("structural findings = %#v", findings)
 	}
+	assertLoopInvocationSignature(t, cfg)
+	assertLoopSchedule(t, workstation(t, cfg, "schedule-loop-iteration"))
+	if run := workstation(t, cfg, "run-loop-iteration"); run.Worktree != "${worktree}" {
+		t.Fatalf("run worktree = %q, want invocation worktree interpolation", run.Worktree)
+	}
+}
+
+func assertLoopInvocationSignature(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	if cfg.Name != "@you/loop" || cfg.Project != "builtin-loop" {
 		t.Fatalf("identity = %q/%q, want @you/loop/builtin-loop", cfg.Name, cfg.Project)
 	}
@@ -31,7 +45,10 @@ func TestBuiltInLoopFactoryJSON_DeclaresStartupAndSessionRecurringTopology(t *te
 	if request.Name != "request" || !request.Required {
 		t.Fatalf("request parameter = %#v, want required request", request)
 	}
-	schedule := workstation(t, cfg, "schedule-loop-iteration")
+}
+
+func assertLoopSchedule(t *testing.T, schedule interfaces.FactoryWorkstationConfig) {
+	t.Helper()
 	if schedule.Kind != interfaces.WorkstationKindCron || schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 12 *" || !schedule.Cron.TriggerAtStart {
 		t.Fatalf("schedule workstation = %#v, want one-time trigger-at-start cron", schedule)
 	}
@@ -40,10 +57,6 @@ func TestBuiltInLoopFactoryJSON_DeclaresStartupAndSessionRecurringTopology(t *te
 	}
 	if len(schedule.Outputs) != 2 || schedule.Outputs[0].WorkTypeName != "loop-control" || schedule.Outputs[1].WorkTypeName != "iteration" {
 		t.Fatalf("schedule outputs = %#v, want retained control and new iteration", schedule.Outputs)
-	}
-	run := workstation(t, cfg, "run-loop-iteration")
-	if run.Worktree != "${worktree}" {
-		t.Fatalf("run worktree = %q, want invocation worktree interpolation", run.Worktree)
 	}
 }
 

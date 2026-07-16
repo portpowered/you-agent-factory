@@ -14,6 +14,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -40,6 +41,7 @@ func TestNamedLoopCLI_RemainsScheduledAndDispatchesOncePerFakeClockBoundary(t *t
 	start := time.Date(2028, time.January, 1, 12, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 	projectDir := t.TempDir()
+	provider := testutil.NewMockProvider()
 	support.SetWorkingDirectory(t, projectDir)
 	dir, err := factoryconfig.PersistNamedFactory(filepath.Join(projectDir, "factory"), "@you/loop", builtinloop.BuiltInLoopFactoryJSON)
 	if err != nil {
@@ -48,13 +50,17 @@ func TestNamedLoopCLI_RemainsScheduledAndDispatchesOncePerFakeClockBoundary(t *t
 	var captured *service.FactoryService
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		UseMockWorkers:            true,
 		WaitForServiceModeRuntime: true,
 		CaptureService:            func(svc *service.FactoryService) { captured = svc },
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
 			cfg.Clock = fakeClock
 			cfg.Logger = zap.NewNop()
+			cfg.ProviderOverride = provider
+			cfg.OperatorDefaults = operatorconfig.ResolvedDefaults{
+				WorkerModelProvider: "CURSOR",
+				WorkerModel:         "loop-functional-model",
+			}
 		},
 	})
 
@@ -86,6 +92,7 @@ func TestNamedLoopCLI_RemainsScheduledAndDispatchesOncePerFakeClockBoundary(t *t
 		invocationDone <- err
 	}()
 	waitForLoopDispatchResponses(t, captured, 2)
+	assertLoopProviderRequests(t, provider, 1)
 	input := BasicCliInputWithArgs(t, []string{"you", "session", "list", "--server", server.URL()})
 	input.Stdout = &output
 	input.Stderr = &stderr
@@ -99,16 +106,37 @@ func TestNamedLoopCLI_RemainsScheduledAndDispatchesOncePerFakeClockBoundary(t *t
 	assertLoopDispatchResponseCount(t, captured, 2)
 	fakeClock.Advance(time.Second)
 	waitForLoopDispatchResponses(t, captured, 4)
+	assertLoopProviderRequests(t, provider, 2)
 
 	waitForLoopFakeClockWaiter(t, fakeClock)
 	fakeClock.Advance(time.Hour)
 	waitForLoopDispatchResponses(t, captured, 6)
+	assertLoopProviderRequests(t, provider, 3)
 	assertLoopSessionRunning(t, captured)
 	cancelInvocation()
 	select {
 	case <-invocationDone:
 	case <-time.After(time.Second):
 		t.Fatal("@you/loop invocation did not stop after cancellation")
+	}
+}
+
+func assertLoopProviderRequests(t *testing.T, provider *testutil.MockProvider, want int) {
+	t.Helper()
+	requests := provider.Calls()
+	if len(requests) != want {
+		t.Fatalf("loop provider request count = %d, want %d", len(requests), want)
+	}
+	for index, request := range requests {
+		if request.Worktree != "loop-functional-worktree" {
+			t.Fatalf("loop provider request %d worktree = %q, want configured worktree; input tokens = %#v", index, request.Worktree, request.InputTokens)
+		}
+		if request.ModelProvider != string(interfaces.ModelProviderCursor) || request.Model != "loop-functional-model" {
+			t.Fatalf("loop provider request %d model = %q/%q, want CURSOR/loop-functional-model", index, request.ModelProvider, request.Model)
+		}
+		if request.Dispatch.WorkstationName != "run-loop-iteration" {
+			t.Fatalf("loop provider request %d dispatch = %#v, want iteration worker dispatch", index, request.Dispatch)
+		}
 	}
 }
 

@@ -83,6 +83,7 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			Tags:                     tags,
 			TargetState:              work.State,
 			ExecutionID:              work.ExecutionID,
+			InvocationArguments:      interfaces.CloneInvocationArguments(work.InvocationArguments),
 			Relations: appendUniquePetriRelations(
 				factory.CloneRuntimeRelations(relIndex[work.Name]),
 				work.RuntimeRelations,
@@ -219,6 +220,7 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			Tags:                     factory.CloneRuntimeTags(req.Tags),
 			ExecutionID:              req.ExecutionID,
 			RuntimeRelations:         factory.CloneRuntimeRelations(req.Relations),
+			InvocationArguments:      interfaces.CloneInvocationArguments(req.InvocationArguments),
 		})
 	}
 

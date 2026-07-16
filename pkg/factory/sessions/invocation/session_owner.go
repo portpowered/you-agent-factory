@@ -95,63 +95,13 @@ func (o *SessionOwner) InvokeFactorySession(
 	if o == nil || o.deps.FactoryConfig == nil || o.deps.SubmitWork == nil || o.deps.Observe == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
 	}
-	factoryCfg, err := o.deps.FactoryConfig(sessionID)
+	factoryCfg, resolved, err := o.prepareInvocation(ctx, sessionID, request)
 	if err != nil {
 		return FactoryInvocationResult{}, err
 	}
-	if factoryCfg == nil {
-		return FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
-	}
-
-	sourceHint := SessionInvocationSourceHint(request)
-	o.normalizationAttempt(factoryCfg, sourceHint)
-	resolved, err := ResolveSessionInvocationInput(factoryCfg, request)
+	submitResult, err := o.submitInvocation(ctx, sessionID, request, factoryCfg, resolved)
 	if err != nil {
-		o.normalizationFailure(sessionID, factoryCfg, sourceHint, err)
 		return FactoryInvocationResult{}, err
-	}
-	o.normalizationSuccess(factoryCfg, resolved.Source)
-	if err := workinvocation.ValidateInvocationInterpolation(factoryCfg, workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), os.ReadFile); err != nil {
-		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
-		return FactoryInvocationResult{}, normalizeSessionInvocationError(err)
-	}
-	if o.deps.BeforeSubmit != nil {
-		if err := o.deps.BeforeSubmit(ctx, sessionID, factoryCfg, resolved.NormalizedArguments); err != nil {
-			o.interpolationFailure(sessionID, factoryCfg, resolved, err)
-			return FactoryInvocationResult{}, err
-		}
-	}
-
-	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(factoryCfg)
-	if err != nil {
-		err = fmt.Errorf("resolve invocation work type: %w", err)
-		if o.deps.Telemetry != nil {
-			o.deps.Telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
-			o.deps.Telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
-		}
-		return FactoryInvocationResult{}, err
-	}
-	submitResult, err := o.deps.SubmitWork(ctx, sessionID, interfaces.SubmitRequest{
-		RequestID:           trimmedStringValue(request.RequestId),
-		WorkTypeID:          workTypeName,
-		Content:             resolved.Content,
-		InvocationArguments: workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
-	})
-	if err != nil {
-		if o.deps.Telemetry != nil {
-			o.deps.Telemetry.SubmissionFailure(factoryCfg, resolved.Source, err)
-			o.deps.Telemetry.LogSubmissionFailure(sessionID, resolved.Source, factoryCfg, err)
-		}
-		return FactoryInvocationResult{}, err
-	}
-	if o.deps.Telemetry != nil {
-		o.deps.Telemetry.InvocationSubmitted(factoryCfg, resolved.Source)
-		o.deps.Telemetry.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
-	}
-	if o.deps.AfterSubmit != nil {
-		if err := o.deps.AfterSubmit(ctx, sessionID, factoryCfg, resolved.NormalizedArguments); err != nil {
-			return FactoryInvocationResult{}, err
-		}
 	}
 	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
 		RequestID:        submitResult.RequestID,
@@ -161,6 +111,67 @@ func (o *SessionOwner) InvokeFactorySession(
 		FactoryConfig:    factoryCfg,
 		TimeoutMillis:    request.TimeoutMillis,
 	})
+}
+
+func (o *SessionOwner) prepareInvocation(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (*interfaces.FactoryConfig, ResolvedSessionInvocationInput, error) {
+	factoryCfg, err := o.deps.FactoryConfig(sessionID)
+	if err != nil {
+		return nil, ResolvedSessionInvocationInput{}, err
+	}
+	if factoryCfg == nil {
+		return nil, ResolvedSessionInvocationInput{}, fmt.Errorf("factory session runtime config is unavailable")
+	}
+	sourceHint := SessionInvocationSourceHint(request)
+	o.normalizationAttempt(factoryCfg, sourceHint)
+	resolved, err := ResolveSessionInvocationInput(factoryCfg, request)
+	if err != nil {
+		o.normalizationFailure(sessionID, factoryCfg, sourceHint, err)
+		return nil, ResolvedSessionInvocationInput{}, err
+	}
+	o.normalizationSuccess(factoryCfg, resolved.Source)
+	if err := workinvocation.ValidateInvocationInterpolation(factoryCfg, workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), os.ReadFile); err != nil {
+		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
+		return nil, ResolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
+	}
+	if o.deps.BeforeSubmit != nil {
+		if err := o.deps.BeforeSubmit(ctx, sessionID, factoryCfg, resolved.NormalizedArguments); err != nil {
+			o.interpolationFailure(sessionID, factoryCfg, resolved, err)
+			return nil, ResolvedSessionInvocationInput{}, err
+		}
+	}
+	return factoryCfg, resolved, nil
+}
+
+func (o *SessionOwner) submitInvocation(ctx context.Context, sessionID string, request factoryapi.InvocationRequest, factoryCfg *interfaces.FactoryConfig, resolved ResolvedSessionInvocationInput) (interfaces.WorkRequestSubmitResult, error) {
+	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(factoryCfg)
+	if err != nil {
+		return interfaces.WorkRequestSubmitResult{}, o.submissionError(sessionID, factoryCfg, resolved.Source, fmt.Errorf("resolve invocation work type: %w", err))
+	}
+	submitResult, err := o.deps.SubmitWork(ctx, sessionID, interfaces.SubmitRequest{
+		RequestID: trimmedStringValue(request.RequestId), WorkTypeID: workTypeName, Content: resolved.Content,
+		InvocationArguments: workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
+	})
+	if err != nil {
+		return interfaces.WorkRequestSubmitResult{}, o.submissionError(sessionID, factoryCfg, resolved.Source, err)
+	}
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.InvocationSubmitted(factoryCfg, resolved.Source)
+		o.deps.Telemetry.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
+	}
+	if o.deps.AfterSubmit != nil {
+		if err := o.deps.AfterSubmit(ctx, sessionID, factoryCfg, resolved.NormalizedArguments); err != nil {
+			return interfaces.WorkRequestSubmitResult{}, err
+		}
+	}
+	return submitResult, nil
+}
+
+func (o *SessionOwner) submissionError(sessionID string, factoryCfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, err error) error {
+	if o.deps.Telemetry != nil {
+		o.deps.Telemetry.SubmissionFailure(factoryCfg, source, err)
+		o.deps.Telemetry.LogSubmissionFailure(sessionID, source, factoryCfg, err)
+	}
+	return err
 }
 
 // ResolvedSessionInvocationInput is the normalized input carried into Work submission.

@@ -2208,50 +2208,33 @@ func (fs *FactoryService) configureLoopInterval(
 	if _, loaded := fs.loopIntervalSessions.LoadOrStore(sessionID, struct{}{}); loaded {
 		return nil
 	}
-	period, err := loopInvocationPeriod(arguments)
-	if err != nil {
+	if err := fs.startLoopInterval(sessionID, cfg, arguments); err != nil {
 		fs.loopIntervalSessions.Delete(sessionID)
 		return err
 	}
-	session := fs.sessionByID(sessionID)
-	handle := liveSessionHandle(session)
-	if handle == nil || handle.Bundle == nil {
-		fs.loopIntervalSessions.Delete(sessionID)
-		return fmt.Errorf("loop period: Factory Session runtime is unavailable")
+	return nil
+}
+
+func (fs *FactoryService) startLoopInterval(
+	sessionID string,
+	cfg *interfaces.FactoryConfig,
+	arguments *workinvocation.NormalizedArguments,
+) error {
+	period, err := loopInvocationPeriod(arguments)
+	if err != nil {
+		return err
 	}
-	handle.SidecarMu.Lock()
-	sidecarCtx := handle.SidecarContext
-	handle.SidecarMu.Unlock()
-	if sidecarCtx == nil {
-		fs.loopIntervalSessions.Delete(sessionID)
-		return fmt.Errorf("loop period: Factory Session sidecars are unavailable")
+	handle, sidecarCtx, err := fs.loopIntervalRuntime(sessionID)
+	if err != nil {
+		return err
 	}
 	workersScheduler, err := fs.requireWorkersScheduler()
 	if err != nil {
-		fs.loopIntervalSessions.Delete(sessionID)
 		return err
 	}
-	var workstation interfaces.FactoryWorkstationConfig
-	for _, candidate := range cfg.Workstations {
-		if candidate.Name == "repeat-loop-iteration" {
-			workstation = candidate
-			break
-		}
-	}
-	if workstation.Name == "" {
-		fs.loopIntervalSessions.Delete(sessionID)
-		return fmt.Errorf("loop period: repeat-loop-iteration workstation is missing")
-	}
-	var startupWorkstation interfaces.FactoryWorkstationConfig
-	for _, candidate := range cfg.Workstations {
-		if candidate.Name == "schedule-loop-iteration" {
-			startupWorkstation = candidate
-			break
-		}
-	}
-	if startupWorkstation.Name == "" {
-		fs.loopIntervalSessions.Delete(sessionID)
-		return fmt.Errorf("loop period: schedule-loop-iteration workstation is missing")
+	workstation, err := loopWorkstation(cfg, "repeat-loop-iteration")
+	if err != nil {
+		return err
 	}
 	workflowIdentity := workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir())
 	submitter := workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory))
@@ -2264,10 +2247,32 @@ func (fs *FactoryService) configureLoopInterval(
 		workstation,
 		period,
 	); err != nil {
-		fs.loopIntervalSessions.Delete(sessionID)
 		return fmt.Errorf("loop period: %w", err)
 	}
 	return nil
+}
+
+func (fs *FactoryService) loopIntervalRuntime(sessionID string) (*liveRuntimeHandle, context.Context, error) {
+	handle := liveSessionHandle(fs.sessionByID(sessionID))
+	if handle == nil || handle.Bundle == nil {
+		return nil, nil, fmt.Errorf("loop period: Factory Session runtime is unavailable")
+	}
+	handle.SidecarMu.Lock()
+	sidecarCtx := handle.SidecarContext
+	handle.SidecarMu.Unlock()
+	if sidecarCtx == nil {
+		return nil, nil, fmt.Errorf("loop period: Factory Session sidecars are unavailable")
+	}
+	return handle, sidecarCtx, nil
+}
+
+func loopWorkstation(cfg *interfaces.FactoryConfig, name string) (interfaces.FactoryWorkstationConfig, error) {
+	for _, workstation := range cfg.Workstations {
+		if workstation.Name == name {
+			return workstation, nil
+		}
+	}
+	return interfaces.FactoryWorkstationConfig{}, fmt.Errorf("loop period: %s workstation is missing", name)
 }
 
 func (fs *FactoryService) triggerLoopStartup(

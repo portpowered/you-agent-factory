@@ -14,6 +14,11 @@ primary-result behavior.
   its post-submission startup tick. Keep both attached to the Factory Session
   sidecar context so stop and replacement cancel and join them with the
   session lifecycle.
+- Runtime-only invocation arguments must survive both directions of the
+  canonical submit bridge: `pkg/factory/requests/work_request.go` copies them
+  between `interfaces.SubmitRequest` and `interfaces.Work`. Otherwise a
+  session-scoped scheduler can retain a literal `${parameter}` in later worker
+  dispatches even though pre-submission interpolation validation passed.
 
 ## CLI run and submit command contracts
 
