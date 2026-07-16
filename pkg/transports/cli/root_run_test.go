@@ -1412,6 +1412,50 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsForInstalledGoal(t *testi
 	assertInstalledGoalResolution(t, got, env.homeDir)
 }
 
+func TestRunCommand_NamedLoopAppliesModelFlagsAndKeepsInvocationConfiguration(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	env := setupNamedGoalCLIEnv(t)
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	env.root.SetArgs([]string{
+		"run",
+		"--default-worker-model-provider", "cursor",
+		"--default-worker-model", "loop-cursor-model",
+		"--named", "@you/loop",
+		"--no-record",
+		"Check the release dashboard",
+		"--period", "24h",
+		"--worktree", "release-dashboard",
+	})
+	if err := env.root.Execute(); err != nil {
+		t.Fatalf("execute run --named @you/loop with model flags: %v", err)
+	}
+
+	if got.NamedFactoryResolution == nil || got.NamedFactoryResolution.Name != "@you/loop" {
+		t.Fatalf("named factory resolution = %#v, want @you/loop", got.NamedFactoryResolution)
+	}
+	if got.OperatorDefaults.WorkerModelProvider != "CURSOR" || got.OperatorDefaults.WorkerModel != "loop-cursor-model" {
+		t.Fatalf("operator defaults = %+v, want cursor loop model from flags", got.OperatorDefaults)
+	}
+	if got.InvocationNormalizedArguments == nil {
+		t.Fatal("expected normalized loop invocation arguments")
+	}
+	if values := got.InvocationNormalizedArguments.Arguments["period"].Values; !reflect.DeepEqual(values, []string{"24h"}) {
+		t.Fatalf("period = %#v, want configured cadence", values)
+	}
+	if values := got.InvocationNormalizedArguments.Arguments["worktree"].Values; !reflect.DeepEqual(values, []string{"release-dashboard"}) {
+		t.Fatalf("worktree = %#v, want configured isolation", values)
+	}
+}
+
 func TestRunCommand_RepeatedInstalledGoalRunReusesDiskCopy(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
@@ -119,6 +121,60 @@ func TestBuiltInLoopFactory_NormalizesHourlyPeriodAndWorktree(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `parameter "worktree" path value must not be empty`) {
 		t.Fatalf("NormalizeArguments empty worktree error = %v", err)
+	}
+}
+
+func TestBuiltInLoopFactory_AppliesOperatorModelOverridesWithoutChangingLoopConfiguration(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtinloop.BuiltInLoopFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), cfg, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "CURSOR",
+		WorkerModel:         "loop-cursor-model",
+	}); err != nil {
+		t.Fatalf("ApplyToLoadedConfig: %v", err)
+	}
+
+	worker, ok := loaded.Worker("loop-worker")
+	if !ok {
+		t.Fatal("expected loop worker")
+	}
+	if worker.ModelProvider != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("loop worker model provider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCursor)
+	}
+	if worker.Model != "loop-cursor-model" {
+		t.Fatalf("loop worker model = %q, want loop-cursor-model", worker.Model)
+	}
+	if schedule := workstation(t, loaded.FactoryConfig(), "schedule-loop-iteration"); schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 2 *" {
+		t.Fatalf("schedule = %#v, want unchanged startup cron", schedule.Cron)
+	}
+	if run := workstation(t, loaded.FactoryConfig(), "run-loop-iteration"); run.Worktree != "${worktree}" {
+		t.Fatalf("run worktree = %q, want unchanged invocation interpolation", run.Worktree)
+	}
+}
+
+func TestBuiltInLoopFactory_RejectsUnsupportedOperatorModelProviderBeforeRuntimeDispatch(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtinloop.BuiltInLoopFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), cfg, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	err = operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		WorkerModelProvider: "not-a-provider",
+	})
+	if err == nil {
+		t.Fatal("ApplyToLoadedConfig error = nil, want unsupported provider rejection")
+	}
+	if !strings.Contains(err.Error(), `unsupported worker model provider "not-a-provider"`) {
+		t.Fatalf("ApplyToLoadedConfig error = %v, want actionable provider rejection", err)
 	}
 }
 
