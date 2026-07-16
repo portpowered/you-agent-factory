@@ -126,7 +126,7 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 		sessionID,
 		sessionRootDir,
 		factoryDir,
-		request.Name,
+		string(request.Name),
 		string(request.Name),
 	); err != nil {
 		return factoryapi.Factory{}, err

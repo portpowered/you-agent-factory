@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
@@ -22,7 +21,7 @@ type Host interface {
 	SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error)
 	SessionFactoryPersistRoot(session *factorysessions.LiveSession) string
 
-	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+	GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorycontracts.FactorySnapshot, error)
 	WithActivationLock(fn func() error) error
 	RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error
 	ActivateSessionEditableFactory(
@@ -31,7 +30,7 @@ type Host interface {
 		sessionID string,
 		sessionRootDir string,
 		factoryDir string,
-		name factoryapi.FactoryName,
+		name string,
 		runtimeName string,
 	) error
 	ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error)

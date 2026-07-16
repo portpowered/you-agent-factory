@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -27,12 +28,16 @@ func (s *Service) SaveReplaceCurrentForSession(
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	current, err := s.host.GetCurrentFactoryForSession(ctx, sessionID)
+	currentSnapshot, err := s.host.GetCurrentFactorySnapshotForSession(ctx, sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
+	current, err := factorysnapshot.ToAPI(currentSnapshot)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("map current factory snapshot: %w", err)
+	}
 	sessionRootDir := factorysessions.SessionFactoryRootDir(s.host.PersistRootDir(), session)
-	sessionRootDir, sanitized, err := s.prepareEditableFactoryDefinitionSave(sessionRootDir, current, request)
+	sessionRootDir, sanitized, err := s.prepareEditableFactoryDefinitionSave(sessionRootDir, *current, request)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -45,7 +50,7 @@ func (s *Service) SaveReplaceCurrentForSession(
 		ctx,
 		sessionID,
 		session,
-		current,
+		*current,
 		request,
 		sessionRootDir,
 		targetDir,
@@ -118,7 +123,7 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 			sessionID,
 			sessionRootDir,
 			activateFactoryDir,
-			current.Name,
+			string(current.Name),
 			string(current.Name),
 		); err != nil {
 			if replaceResult != nil && replaceResult.Restore != nil {
@@ -131,8 +136,16 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		}
 
 		var readbackErr error
-		saved, readbackErr = s.host.GetCurrentFactoryForSession(ctx, sessionID)
-		return readbackErr
+		savedSnapshot, readbackErr := s.host.GetCurrentFactorySnapshotForSession(ctx, sessionID)
+		if readbackErr != nil {
+			return readbackErr
+		}
+		mapped, readbackErr := factorysnapshot.ToAPI(savedSnapshot)
+		if readbackErr != nil {
+			return fmt.Errorf("map saved factory snapshot: %w", readbackErr)
+		}
+		saved = *mapped
+		return nil
 	})
 	if err != nil {
 		return factoryapi.Factory{}, err

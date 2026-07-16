@@ -141,7 +141,6 @@ func defaultBoundaryPolicy() boundaryPolicy {
 // New reverse dependencies are rejected even while these files migrate to
 // domain-owned inputs and transport mapping moves outward.
 var documentedFactoryTransportExceptions = []string{
-	"pkg/factory/definition/host.go",
 	"pkg/factory/definition/save.go",
 	"pkg/factory/definition/service.go",
 	"pkg/factory/definition/upsert.go",

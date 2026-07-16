@@ -235,6 +235,10 @@ Factory definition serialization returns a detached
 identity changes use snapshot operations that preserve unknown JSON fields;
 generated Factory decoding and hybrid-timestamp formatting happen only in the
 outer definition service or transport mapping boundary.
+Factory definition hosts exchange detached `FactorySnapshot` values and plain
+domain names with the definition owner. Composition adapters capture generated
+Factory values before invoking that host seam and cast names back to generated
+types only when calling transport-compatible runtime activation code.
 Repository-scanning Factory Session removal gates read canonical sources such as
 `docs/reference` directly from their explicit repository root; they must not
 import CLI or HTTP packages merely to inspect those source artifacts.

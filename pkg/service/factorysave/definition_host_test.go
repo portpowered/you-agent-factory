@@ -36,8 +36,8 @@ func (stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession
 	return ""
 }
 
-func (stubDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (stubDefinitionHost) WithActivationLock(fn func() error) error {
@@ -48,7 +48,7 @@ func (stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string) 
 	return nil
 }
 
-func (stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return nil
 }
 
@@ -76,6 +76,14 @@ func (stubDefinitionHost) RequireIdleBeforeNamedFactoryActivation(context.Contex
 
 func (stubDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context, string, *factorysessions.LiveSession, string, string, string, string) error {
 	return nil
+}
+
+func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot {
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		panic(err)
+	}
+	return snapshot
 }
 
 func requireFreshEditableFactoryVersion(
@@ -187,8 +195,12 @@ func (h saveDefinitionHostAdapter) SessionFactoryPersistRoot(session *factoryses
 	return factorydefinition.SessionFactoryPersistRoot(h.rootDir, session)
 }
 
-func (h saveDefinitionHostAdapter) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	return h.saveHost.GetCurrentFactoryForSession(ctx, sessionID)
+func (h saveDefinitionHostAdapter) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
+	current, err := h.saveHost.GetCurrentFactoryForSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	return mustFactorySnapshot(current), nil
 }
 
 func (h saveDefinitionHostAdapter) WithActivationLock(fn func() error) error {
@@ -205,10 +217,10 @@ func (h saveDefinitionHostAdapter) ActivateSessionEditableFactory(
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
-	name factoryapi.FactoryName,
+	name string,
 	runtimeName string,
 ) error {
-	return h.saveHost.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+	return h.saveHost.ActivateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, factoryapi.FactoryName(name), runtimeName)
 }
 
 func (h saveDefinitionHostAdapter) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {

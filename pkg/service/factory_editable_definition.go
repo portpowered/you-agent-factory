@@ -9,6 +9,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -114,11 +115,19 @@ func (h factoryDefinitionHost) SessionFactoryPersistRoot(session *factorysession
 	return sessionFactoryPersistRoot(h.FactoryService.factoryRootDir, session)
 }
 
-func (h factoryDefinitionHost) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+func (h factoryDefinitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
 	if h.FactoryService == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+		return nil, fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+	current, err := h.FactoryService.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(current)
+	if err != nil {
+		return nil, fmt.Errorf("capture current factory snapshot: %w", err)
+	}
+	return snapshot, nil
 }
 
 func (h factoryDefinitionHost) WithActivationLock(fn func() error) error {
@@ -141,13 +150,13 @@ func (h factoryDefinitionHost) ActivateSessionEditableFactory(
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
-	name factoryapi.FactoryName,
+	name string,
 	runtimeName string,
 ) error {
 	if h.FactoryService == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, factoryapi.FactoryName(name), runtimeName)
 }
 
 func (h factoryDefinitionHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {

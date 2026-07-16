@@ -462,8 +462,8 @@ func (h *splitLayoutSaveHost) SessionFactoryPersistRoot(*factorysessions.LiveSes
 	return h.sessionRootDir
 }
 
-func (h *splitLayoutSaveHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return h.current, nil
+func (h *splitLayoutSaveHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(h.current), nil
 }
 
 func (h *splitLayoutSaveHost) WithActivationLock(fn func() error) error { return fn() }
@@ -472,7 +472,7 @@ func (h *splitLayoutSaveHost) RequireIdleRuntimeForSession(context.Context, stri
 	return nil
 }
 
-func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return h.activateErr
 }
 

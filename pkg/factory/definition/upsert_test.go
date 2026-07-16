@@ -194,8 +194,8 @@ func (h *upsertDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSe
 	return h.sessionRootDir
 }
 
-func (h *upsertDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (h *upsertDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (h *upsertDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
@@ -210,11 +210,11 @@ func (h *upsertDefinitionHost) ActivateSessionEditableFactory(
 	_ string,
 	_ string,
 	_ string,
-	name factoryapi.FactoryName,
+	name string,
 	runtimeName string,
 ) error {
-	h.activatedName = string(name)
-	if runtimeName != string(name) {
+	h.activatedName = name
+	if runtimeName != name {
 		return nil
 	}
 	return nil

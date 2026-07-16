@@ -7,6 +7,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
@@ -39,8 +40,8 @@ func (validationDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveS
 	return ""
 }
 
-func (validationDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (validationDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (validationDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
@@ -49,7 +50,7 @@ func (validationDefinitionHost) RequireIdleRuntimeForSession(context.Context, st
 	return nil
 }
 
-func (validationDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (validationDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return nil
 }
 

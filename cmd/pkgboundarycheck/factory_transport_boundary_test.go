@@ -65,6 +65,23 @@ func TestRunRejectsRetiredPackagedFactoryTransportImport(t *testing.T) {
 	}
 }
 
+func TestRunRejectsRetiredFactoryDefinitionHostTransportImport(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	path := "pkg/factory/definition/host.go"
+	writeGoImportFile(t, repoRoot, path, "factorydefinition", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want migrated Factory definition host import rejected")
+	}
+	if want := "prohibited Factory domain transport import: github.com/portpowered/infinite-you/pkg/transports/http/generated (" + path + ")"; !strings.Contains(stderr.String(), want) {
+		t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+	}
+}
+
 func TestRunRejectsRetiredResponseStreamRemovalGateTransportImport(t *testing.T) {
 	t.Parallel()
 

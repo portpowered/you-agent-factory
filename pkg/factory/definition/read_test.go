@@ -54,8 +54,8 @@ func (h stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSessi
 	return h.sessionPersistRoot
 }
 
-func (h stubDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (h stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (h stubDefinitionHost) WithActivationLock(fn func() error) error {
@@ -66,8 +66,16 @@ func (h stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string
 	return nil
 }
 
-func (h stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (h stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return nil
+}
+
+func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot {
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		panic(err)
+	}
+	return snapshot
 }
 
 func (h stubDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
