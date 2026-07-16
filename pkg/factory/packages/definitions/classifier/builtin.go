@@ -24,29 +24,25 @@ var BuiltInFactoryJSON = []byte(`{
     {
       "name": "classify-complexity",
       "type": "AGENT_WORKER",
-      "modelProvider": "CODEX",
-      "model": "gpt-5-mini",
+      "preset": "small",
       "body": "Classify the request complexity. Reply with exactly one plain label: small, medium, or large."
     },
     {
       "name": "run-small",
       "type": "AGENT_WORKER",
-      "modelProvider": "CODEX",
-      "model": "gpt-5-mini",
+      "preset": "small",
       "body": "Complete the request directly and concisely."
     },
     {
       "name": "run-medium",
       "type": "AGENT_WORKER",
-      "modelProvider": "CODEX",
-      "model": "gpt-5",
+      "preset": "medium",
       "body": "Complete the request with the appropriate analysis and detail."
     },
     {
       "name": "run-large",
       "type": "AGENT_WORKER",
-      "modelProvider": "CODEX",
-      "model": "gpt-5.4",
+      "preset": "large",
       "body": "Complete the complex request carefully and thoroughly."
     }
   ],

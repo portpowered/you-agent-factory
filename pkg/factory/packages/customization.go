@@ -72,8 +72,11 @@ func validateClassifierRouteTarget(cfg *interfaces.FactoryConfig, routeIndex int
 	if !ok {
 		return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets workstation %q with unknown worker %q", routeIndex, label, targets[0].Name, targets[0].WorkerTypeName)
 	}
-	if strings.TrimSpace(worker.Model) == "" {
-		return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets worker %q without a model selection", routeIndex, label, worker.Name)
+	if strings.TrimSpace(worker.Model) == "" && strings.TrimSpace(worker.Preset) == "" {
+		return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets worker %q without a model selection or preset", routeIndex, label, worker.Name)
+	}
+	if strings.TrimSpace(worker.Preset) != "" {
+		return nil
 	}
 	if !supportedClassifierModelProvider(worker.ModelProvider) {
 		return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets worker %q with unsupported modelProvider %q: %s", routeIndex, label, worker.Name, worker.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary())

@@ -1036,6 +1036,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, work
 		Type:             workerTypePtrForFactoryUsage(def, workstations),
 		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
+		Preset:           stringPtrIfNotEmpty(def.Preset),
 		Args:             stringSlicePtr(def.Args),
 		Auth:             hostedWorkerAuthAPIFromInternal(def.Auth),
 		Body:             stringPtrIfNotEmpty(def.Body),

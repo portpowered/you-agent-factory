@@ -322,6 +322,7 @@ func hasNonEmptyWorkerRuntimeStrings(worker interfaces.WorkerConfig) bool {
 	for _, value := range []string{
 		string(worker.Type),
 		worker.Provider,
+		worker.Preset,
 		worker.Model,
 		worker.ModelProvider,
 		worker.ExecutorProvider,

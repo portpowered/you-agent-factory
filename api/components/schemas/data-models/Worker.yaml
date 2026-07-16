@@ -20,6 +20,9 @@ properties:
     allOf:
       - $ref: './HostedWorkerProvider.yaml'
     description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
+  preset:
+    type: string
+    description: Operator-owned worker preset ID resolved before model dispatch. A preset supplies modelProvider, model, and reasoningEffort unless a worker explicitly overrides a field.
   model:
     type: string
     description: Model identifier to request from the configured model provider when this worker uses model execution.

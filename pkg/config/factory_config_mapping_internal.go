@@ -424,6 +424,7 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		Name:             worker.Name,
 		Type:             internalFactoryWorkerTypeFromPublic(valueOrEmpty(worker.Type)),
 		Provider:         internalFactoryHostedWorkerProviderFromPublic(string(valueOrEmpty(worker.Provider))),
+		Preset:           stringValue(worker.Preset),
 		Model:            stringValue(worker.Model),
 		ModelProvider:    internalFactoryWorkerModelProviderFromPublic(worker.ModelProvider),
 		ModelLocality:    internalFactoryWorkerModelLocalityFromPublic(worker.ModelLocality),

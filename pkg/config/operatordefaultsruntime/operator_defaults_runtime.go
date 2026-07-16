@@ -26,10 +26,55 @@ func ApplyToLoadedConfig(loaded *config.LoadedFactoryConfig, defaults operatorco
 		return err
 	}
 	defaultModel := strings.TrimSpace(defaults.WorkerModel)
+	presets, err := loadWorkerPresets(defaults.ConfigPath)
+	if err != nil {
+		return err
+	}
 
 	return loaded.MutateWorkers(func(worker *interfaces.WorkerConfig) error {
+		if err := applyWorkerPreset(worker, presets); err != nil {
+			return err
+		}
 		return applyOperatorDefaultsToWorker(worker, defaultProvider, defaultModel)
 	})
+}
+
+func loadWorkerPresets(path string) (map[string]operatorconfig.WorkerPreset, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+	cfg, err := operatorconfig.LoadFileConfig(path)
+	if err != nil {
+		return nil, fmt.Errorf("load operator worker presets: %w", err)
+	}
+	presets := make(map[string]operatorconfig.WorkerPreset, len(cfg.WorkerPresets))
+	for _, preset := range cfg.WorkerPresets {
+		presets[preset.ID] = preset
+	}
+	return presets, nil
+}
+
+func applyWorkerPreset(worker *interfaces.WorkerConfig, presets map[string]operatorconfig.WorkerPreset) error {
+	if worker == nil || !isModelWorkerType(worker.Type) || strings.TrimSpace(worker.Preset) == "" {
+		return nil
+	}
+	presetID := strings.TrimSpace(worker.Preset)
+	preset, ok := presets[presetID]
+	if !ok {
+		return fmt.Errorf("model worker %q references unknown operator worker preset %q", worker.Name, presetID)
+	}
+	worker.ModelProvider = firstNonEmptyWorkerValue(worker.ModelProvider, preset.ModelProvider)
+	worker.Model = firstNonEmptyWorkerValue(worker.Model, preset.Model)
+	return nil
+}
+
+func firstNonEmptyWorkerValue(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // ValidateModelWorkerRuntimeProviders rejects unresolved DEFAULT and unsupported

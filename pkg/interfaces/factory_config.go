@@ -605,6 +605,7 @@ type WorkerConfig struct {
 	Name             string                    `json:"name" yaml:"name,omitempty"`
 	Type             string                    `json:"type" yaml:"type"`
 	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Preset           string                    `json:"preset,omitempty" yaml:"preset,omitempty"`
 	Model            string                    `json:"model,omitempty" yaml:"model,omitempty"`
 	ModelProvider    string                    `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
 	ModelLocality    string                    `json:"modelLocality,omitempty" yaml:"modelLocality,omitempty"`

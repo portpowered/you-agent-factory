@@ -4337,6 +4337,8 @@ export interface components {
       type?: components["schemas"]["WorkerType"];
       /** @description Built-in hosted provider identity when this worker uses repository-owned hosted execution. */
       provider?: components["schemas"]["HostedWorkerProvider"];
+      /** @description Operator-owned worker preset ID resolved before model dispatch. A preset supplies modelProvider, model, and reasoningEffort unless a worker explicitly overrides a field. */
+      preset?: string;
       /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
       model?: string;
       /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */

@@ -2,7 +2,8 @@ package classifier
 
 import (
 	"context"
-	"strings"
+	"os"
+	"path/filepath"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -25,7 +26,7 @@ func TestBuiltInFactoryJSON_MapsComplexityLabelsToOnlyTheirTargetWorkstations(t 
 	if classifier.Type != interfaces.WorkstationTypeClassify || len(classifier.Outputs) != 0 {
 		t.Fatalf("classifier routing = %#v, want classificationRoutes without normal outputs", classifier)
 	}
-	assertPresetWorkers(t, cfg)
+	assertPresetReferences(t, cfg)
 
 	net, err := (&factoryconfig.ConfigMapper{}).Map(context.Background(), cfg)
 	if err != nil {
@@ -57,6 +58,7 @@ func TestBuiltInFactory_OperatorModelOverridesPreserveAuthoredTierRoutes(t *test
 	}
 
 	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		ConfigPath:                writeBaselinePresets(t),
 		WorkerModelProvider:       "CLAUDE",
 		WorkerModel:               "claude-sonnet-4-20250514",
 		WorkerModelProviderSource: operatorconfig.SourceFlag,
@@ -66,7 +68,10 @@ func TestBuiltInFactory_OperatorModelOverridesPreserveAuthoredTierRoutes(t *test
 	}
 
 	cfg := loaded.FactoryConfig()
-	assertPresetWorkers(t, cfg)
+	assertPresetReferences(t, cfg)
+	if worker := workerByName(t, cfg, "run-large"); worker.ModelProvider != "CODEX" || worker.Model != "gpt-5.4" {
+		t.Fatalf("resolved large worker = %s/%s, want CODEX/gpt-5.4", worker.ModelProvider, worker.Model)
+	}
 	classifier := workstation(t, cfg, ClassifierWorkstation)
 	for _, route := range classifier.ClassificationRoutes {
 		if len(route.Outputs) != 1 || route.Outputs[0].StateName != route.Label {
@@ -75,12 +80,8 @@ func TestBuiltInFactory_OperatorModelOverridesPreserveAuthoredTierRoutes(t *test
 	}
 }
 
-func assertPresetWorkers(t *testing.T, cfg *interfaces.FactoryConfig) {
+func assertPresetReferences(t *testing.T, cfg *interfaces.FactoryConfig) {
 	t.Helper()
-	presets := map[string]operatorconfig.WorkerPreset{}
-	for _, preset := range operatorconfig.BaselineClassifierWorkerPresets() {
-		presets[preset.ID] = preset
-	}
 	for workerName, presetID := range map[string]string{
 		"classify-complexity": operatorconfig.ClassifierSmallPresetID,
 		"run-small":           operatorconfig.ClassifierSmallPresetID,
@@ -88,11 +89,19 @@ func assertPresetWorkers(t *testing.T, cfg *interfaces.FactoryConfig) {
 		"run-large":           operatorconfig.ClassifierLargePresetID,
 	} {
 		worker := workerByName(t, cfg, workerName)
-		preset := presets[presetID]
-		if !strings.EqualFold(worker.ModelProvider, preset.ModelProvider) || worker.Model != preset.Model {
-			t.Fatalf("worker %q model = %s/%s, want %s/%s from %q preset", workerName, worker.ModelProvider, worker.Model, preset.ModelProvider, preset.Model, presetID)
+		if worker.Preset != presetID {
+			t.Fatalf("worker %q preset = %q, want %q", workerName, worker.Preset, presetID)
 		}
 	}
+}
+
+func writeBaselinePresets(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"workerPresets":[{"id":"small","modelProvider":"CODEX","model":"gpt-5-mini"},{"id":"medium","modelProvider":"CODEX","model":"gpt-5"},{"id":"large","modelProvider":"CODEX","model":"gpt-5.4"}]}`), 0o600); err != nil {
+		t.Fatalf("write operator config: %v", err)
+	}
+	return path
 }
 
 func workerByName(t *testing.T, cfg *interfaces.FactoryConfig, name string) interfaces.WorkerConfig {

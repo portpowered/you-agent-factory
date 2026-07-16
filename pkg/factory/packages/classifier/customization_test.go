@@ -78,6 +78,7 @@ func TestValidateCustomization_RejectsInvalidRoutesAndSelections(t *testing.T) {
 			name: "missing model selection",
 			edit: func(document map[string]any) {
 				document["workers"].([]any)[1].(map[string]any)["model"] = ""
+				delete(document["workers"].([]any)[1].(map[string]any), "preset")
 			},
 			want: []string{"small", "run-small", "model selection"},
 		},
