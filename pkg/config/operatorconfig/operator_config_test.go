@@ -252,6 +252,55 @@ func TestDefaultConfigPathUsesCanonicalDefaultPathsPolicy(t *testing.T) {
 	}
 }
 
+func TestResolveFromHomeWithEnvironmentReportsEffectivePrecedence(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config parent): %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"defaults":{"workerModelProvider":"codex","workerModel":"file-model"}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	resolved, err := ResolveFromHomeWithEnvironment(homeDir, Defaults{WorkerModel: "environment-model"}, FlagOverrides{WorkerModelProvider: "claude"})
+	if err != nil {
+		t.Fatalf("ResolveFromHomeWithEnvironment() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CLAUDE" || resolved.WorkerModel != "environment-model" {
+		t.Fatalf("resolved defaults = %#v, want flag provider and environment model", resolved)
+	}
+	for _, want := range []string{"precedence=file < env < flag", "provider=CLAUDE", "providerSource=flag", "model=environment-model", "modelSource=env", "configPath="} {
+		if !strings.Contains(resolved.DiagnosticsLine(), want) {
+			t.Fatalf("DiagnosticsLine() = %q, want substring %q", resolved.DiagnosticsLine(), want)
+		}
+	}
+}
+
+func TestResolveFromHomeWithEnvironmentRejectsInvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(config parent): %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"workerPresets":[{"id":"bad","modelProvider":"unknown","model":"x"}]}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(config): %v", err)
+	}
+
+	_, err := ResolveFromHomeWithEnvironment(homeDir, Defaults{}, FlagOverrides{})
+	if err == nil {
+		t.Fatal("ResolveFromHomeWithEnvironment() accepted invalid worker presets")
+	}
+	for _, want := range []string{configPath, "unsupported modelProvider"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+}
+
 func TestResolve_FileEnvFlagPrecedenceIsIndependentPerField(t *testing.T) {
 	resolved, err := Resolve(ResolveInput{
 		File: Defaults{

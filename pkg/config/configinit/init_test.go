@@ -112,6 +112,26 @@ func TestInit_ExistingConfigIsSkippedWithoutRewrite(t *testing.T) {
 	}
 }
 
+func TestInit_RejectsExistingConfigDirectory(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	if err := os.MkdirAll(configPath, 0o755); err != nil {
+		t.Fatalf("MkdirAll(config path): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("Init() succeeded with a directory at the operator config path")
+	}
+	for _, want := range []string{"read existing operator config", configPath} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+}
+
 func TestInit_RejectsEmptyHomeDir(t *testing.T) {
 	t.Parallel()
 

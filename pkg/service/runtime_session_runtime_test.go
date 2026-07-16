@@ -52,6 +52,18 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func TestTokenPlaceIDOrdersNilBeforeWorkToken(t *testing.T) {
+	t.Parallel()
+
+	if got := tokenPlaceID(nil); got != "" {
+		t.Fatalf("tokenPlaceID(nil) = %q, want empty place ID", got)
+	}
+	token := &interfaces.Token{PlaceID: "task:blocked"}
+	if got := tokenPlaceID(token); got != token.PlaceID {
+		t.Fatalf("tokenPlaceID(token) = %q, want %q", got, token.PlaceID)
+	}
+}
+
 func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *testing.T) {
 	basePath := filepath.Join(
 		t.TempDir(),

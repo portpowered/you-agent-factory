@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -2842,6 +2843,41 @@ func TestGeneratedFactoryFromRuntimeConfig_CapturesOperatorDefaultedModelWorkerF
 	}
 	if worker.Model == nil || *worker.Model != "gpt-5-codex" {
 		t.Fatalf("generated model = %#v, want gpt-5-codex", worker.Model)
+	}
+}
+
+func TestApplyOperatorDefaultsToLoadedConfig_ResolvesClassifierPresetsBeforeRouteValidation(t *testing.T) {
+	dir := t.TempDir()
+	definition, ok := factorypackages.Lookup("@you/classifier")
+	if !ok {
+		t.Fatal("classifier packaged definition is missing")
+	}
+	writeFactoryJSON(t, dir, map[string]any{})
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), definition.JSON, 0o600); err != nil {
+		t.Fatalf("WriteFile(classifier factory): %v", err)
+	}
+
+	loaded, err := config.LoadRuntimeConfig(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(classifier): %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	presets, err := json.Marshal(map[string]any{"workerPresets": operatorconfig.BaselineClassifierWorkerPresets()})
+	if err != nil {
+		t.Fatalf("Marshal(presets): %v", err)
+	}
+	if err := os.WriteFile(configPath, presets, 0o600); err != nil {
+		t.Fatalf("WriteFile(operator config): %v", err)
+	}
+
+	if err := applyOperatorDefaultsToLoadedConfig(&FactoryServiceConfig{OperatorDefaults: operatorconfig.ResolvedDefaults{ConfigPath: configPath}}, loaded); err != nil {
+		t.Fatalf("applyOperatorDefaultsToLoadedConfig() error = %v", err)
+	}
+	for _, workerName := range []string{"classify-complexity", "run-small", "run-medium", "run-large"} {
+		worker, ok := loaded.Worker(workerName)
+		if !ok || worker.ModelProvider != "CODEX" || worker.Model == "" {
+			t.Fatalf("resolved worker %q = %#v, want CODEX provider and model", workerName, worker)
+		}
 	}
 }
 
