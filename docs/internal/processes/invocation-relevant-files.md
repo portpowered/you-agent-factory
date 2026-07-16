@@ -148,6 +148,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+  Explicit path, file-path, and directory-path values must be non-empty;
+  optional callers omit those parameters instead of supplying an empty value.
   Package invocation tests should assert both the defaulted normalized value
   and explicit invalid-choice diagnostics, so a declared `defaultValue` cannot
   drift independently from the accepted-value contract.

@@ -97,6 +97,18 @@ func TestBuiltInLoopFactory_NormalizesHourlyPeriodAndWorktree(t *testing.T) {
 	if !strings.Contains(err.Error(), `parameter "period" value "5m" is not one of the declared choices`) {
 		t.Fatalf("NormalizeArguments unsupported period error = %v", err)
 	}
+
+	_, err = invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Check the release dashboard"},
+		NamedArgs:      []invocations.NamedArgumentInput{{Key: "worktree", Values: []string{" "}}},
+	})
+	if err == nil {
+		t.Fatal("NormalizeArguments error = nil, want empty worktree failure")
+	}
+	if !strings.Contains(err.Error(), `parameter "worktree" path value must not be empty`) {
+		t.Fatalf("NormalizeArguments empty worktree error = %v", err)
+	}
 }
 
 func workstation(t *testing.T, cfg *interfaces.FactoryConfig, name string) interfaces.FactoryWorkstationConfig {

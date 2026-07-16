@@ -596,7 +596,16 @@ func validateArgumentValue(def parameterDefinition, value string) error {
 		}
 	}
 	switch def.typeHint {
-	case "", typeHintString, typeHintPath, typeHintFilePath, typeHintDirectoryPath:
+	case "", typeHintString:
+		return nil
+	case typeHintPath, typeHintFilePath, typeHintDirectoryPath:
+		if strings.TrimSpace(value) == "" {
+			return &ArgumentError{
+				Code:      ArgumentErrorCodeStringValidationMismatch,
+				Message:   fmt.Sprintf("parameter %q path value must not be empty", def.name),
+				Parameter: def.name,
+			}
+		}
 		return nil
 	case typeHintBooleanString:
 		if _, err := strconv.ParseBool(strings.TrimSpace(value)); err != nil {
