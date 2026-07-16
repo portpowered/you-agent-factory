@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 func TestFunctionalHTTPHost_ExposesReadyStatusAndBoundedShutdown(t *testing.T) {
@@ -46,5 +47,27 @@ func TestFunctionalHTTPHost_IndependentHostsUseDistinctPublicAddresses(t *testin
 
 	if first.URL() == second.URL() {
 		t.Fatalf("independent hosts share URL %q", first.URL())
+	}
+}
+
+func TestFunctionalHTTPHost_ConfiguresConstructionWithoutExposingRuntimeHandles(t *testing.T) {
+	configured := false
+	host := StartFunctionalHTTPHost(t, FunctionalHTTPHostConfig{
+		FactoryDir: ScaffoldFactoryDir(t, &interfaces.FactoryConfig{}),
+		ConfigureService: func(cfg *service.FactoryServiceConfig) {
+			configured = true
+			cfg.RuntimeFileLoggingPolicy = service.RuntimeFileLoggingPolicyDisabled
+		},
+	})
+	if !configured {
+		t.Fatal("functional HTTP host did not apply its construction configuration")
+	}
+	response, err := host.Client().Get(host.URL() + "/status")
+	if err != nil {
+		t.Fatalf("GET /status: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("GET /status status = %s, want 200 OK", response.Status)
 	}
 }

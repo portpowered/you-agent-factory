@@ -28,6 +28,10 @@ type FunctionalHTTPHostConfig struct {
 	UseMockWorkers bool
 	RuntimeMode    interfaces.RuntimeMode
 	ExtraOptions   []factory.FactoryOption
+	// ConfigureService installs deterministic test edges before the composed
+	// service graph is assembled. It is construction-only: callers still
+	// receive only the public HTTP boundary and lifecycle controls.
+	ConfigureService func(*service.FactoryServiceConfig)
 }
 
 // FunctionalHTTPHost starts the production service graph and exposes only the
@@ -62,6 +66,9 @@ func StartFunctionalHTTPHost(t *testing.T, cfg FunctionalHTTPHostConfig) *Functi
 	})
 	if cfg.UseMockWorkers {
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
+	}
+	if cfg.ConfigureService != nil {
+		cfg.ConfigureService(serviceCfg)
 	}
 
 	svc, err := wire.InjectFactoryService(ctx, serviceCfg)
