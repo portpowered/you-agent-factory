@@ -9,3 +9,4 @@ pkg/runtimehost/runtime_sessions.go: unreachable func: Host.inferenceProgressPub
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.openFactorySession
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.sessionResponseStream
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.startBackgroundSession
+tests/internal/functionalhost/legacy_functional_api_server.go: unreachable func: FunctionalAPIServer.Done
