@@ -361,7 +361,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RunsHostedAndScriptPollersConcu
 	stop := startHostedLinearPollerSidecars(t, fixture.hostedLinearPollerServiceFixture)
 	defer stop()
 
-	waitForHostedPollerSubmission(t, fixture.submitted, 2, 2*time.Second)
+	waitForConcurrentHostedAndScriptPollerSubmissions(t, fixture.submitted, 2*time.Second)
 	assertConcurrentHostedAndScriptPollerSubmissions(t, fixture.submitted)
 }
 
@@ -1149,20 +1149,34 @@ func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *a
 	if calls < 2 {
 		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", calls)
 	}
+	if !hasConcurrentHostedAndScriptPollerSubmissions(submissions) {
+		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submissions)
+	}
+}
+
+func waitForConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *aggregateSnapshotFactory, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		_, submissions := submitted.submissionSnapshot()
+		if hasConcurrentHostedAndScriptPollerSubmissions(submissions) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_, submissions := submitted.submissionSnapshot()
+	t.Fatalf("timed out waiting for both hosted linear:issue-hosted and script-issue outputs; submitted works = %#v", submissions)
+}
+
+func hasConcurrentHostedAndScriptPollerSubmissions(submissions []interfaces.WorkRequest) bool {
 	var hostedSubmitted, scriptSubmitted bool
 	for _, request := range submissions {
 		for _, work := range request.Works {
-			if work.WorkID == "linear:issue-hosted" {
-				hostedSubmitted = true
-			}
-			if work.Name == "script-issue" {
-				scriptSubmitted = true
-			}
+			hostedSubmitted = hostedSubmitted || work.WorkID == "linear:issue-hosted"
+			scriptSubmitted = scriptSubmitted || work.Name == "script-issue"
 		}
 	}
-	if !hostedSubmitted || !scriptSubmitted {
-		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submissions)
-	}
+	return hostedSubmitted && scriptSubmitted
 }
 
 func waitForHostedPollerSubmission(t *testing.T, submitted *aggregateSnapshotFactory, want int, timeout time.Duration) {
