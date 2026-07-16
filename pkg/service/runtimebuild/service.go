@@ -95,6 +95,9 @@ func (s *Service) BuildSpec(
 	if s == nil || s.build == nil {
 		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
 	}
+	if !s.cfg.WorkerApplication.Valid() {
+		return SessionBuildSpec{}, fmt.Errorf("runtime build worker application is required")
+	}
 	baseLogger := s.baseLogger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
@@ -129,6 +132,17 @@ func (s *Service) BuildSpec(
 	if runtimeInstanceID == "" {
 		runtimeInstanceID = uuid.NewString()
 	}
+	workerApplication := s.cfg.WorkerApplication
+	if workerApplication.Valid() {
+		var err error
+		workerApplication, err = workerApplication.WithCommandRunners(
+			providerCommandRunnerForMode(&s.cfg, loadedFactoryCfg),
+			commandRunnerOverrideForMode(&s.cfg, loadedFactoryCfg, input.SideEffects),
+		)
+		if err != nil {
+			return SessionBuildSpec{}, fmt.Errorf("construct runtime worker application: %w", err)
+		}
+	}
 	return SessionBuildSpec{
 		Dir:                   input.Dir,
 		FolderPath:            input.FolderPath,
@@ -143,6 +157,7 @@ func (s *Service) BuildSpec(
 		ProviderOverride:      providerOverrideForMode(&s.cfg, input.SideEffects),
 		ProviderCommandRunner: providerCommandRunnerForMode(&s.cfg, loadedFactoryCfg),
 		CommandRunnerOverride: commandRunnerOverrideForMode(&s.cfg, loadedFactoryCfg, input.SideEffects),
+		WorkerApplication:     workerApplication,
 		AdditionalFactoryOpts: input.AdditionalFactoryOpts,
 	}, nil
 }

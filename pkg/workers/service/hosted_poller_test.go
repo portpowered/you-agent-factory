@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -60,9 +61,10 @@ func TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService(t *testing.T
 	runtimeCfg := newHostedPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 
 	svc := workersservice.New(workersservice.Config{
-		Logger:               zap.NewNop(),
-		HostedHTTPClient:     server.Client(),
-		HostedLinearEndpoint: server.URL,
+		Logger: zap.NewNop(),
+		HostedWorkers: hostedworkers.Config{
+			Logger: zap.NewNop(), HTTPClient: server.Client(), LinearEndpoint: server.URL,
+		},
 	})
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -101,9 +103,10 @@ func TestStartHostedLinearPoller_StopsOnContextCancellation(t *testing.T) {
 	runtimeCfg := newHostedPollerLoadedRuntimeConfig(t, factoryDir, poller, worker)
 
 	svc := workersservice.New(workersservice.Config{
-		Logger:               zap.New(logCore),
-		HostedHTTPClient:     server.Client(),
-		HostedLinearEndpoint: server.URL,
+		Logger: zap.New(logCore),
+		HostedWorkers: hostedworkers.Config{
+			Logger: zap.New(logCore), HTTPClient: server.Client(), LinearEndpoint: server.URL,
+		},
 	})
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
@@ -197,11 +200,12 @@ func TestStartPollersForRuntime_StartsScriptAndHostedPollers(t *testing.T) {
 
 	fakeClock := clockwork.NewFakeClock()
 	svc := workersservice.New(workersservice.Config{
-		Logger:               zap.NewNop(),
-		Clock:                fakeClock,
-		CommandRunner:        runner,
-		HostedHTTPClient:     server.Client(),
-		HostedLinearEndpoint: server.URL,
+		Logger:        zap.NewNop(),
+		Clock:         fakeClock,
+		CommandRunner: runner,
+		HostedWorkers: hostedworkers.Config{
+			Logger: zap.NewNop(), Clock: fakeClock, HTTPClient: server.Client(), LinearEndpoint: server.URL,
+		},
 	})
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())

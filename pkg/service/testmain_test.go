@@ -36,6 +36,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -177,13 +178,12 @@ func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
 	resolver := hostedworkers.SecretResolver(func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
 		return "token", nil
 	})
-	cfg := &FactoryServiceConfig{
-		HostedPollerHTTPClient:     client,
-		HostedPollerSecretResolver: resolver,
-		HostedLinearEndpoint:       " https://linear.example/graphql ",
-	}
+	cfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{
+		HostedHTTPClient: client, HostedSecretResolver: resolver,
+		HostedLinearEndpoint: " https://linear.example/graphql ",
+	})
 
-	got := buildHostedWorkersConfig(cfg, zap.NewNop(), nil)
+	got := buildHostedWorkersConfigForServiceTest(cfg, zap.NewNop(), nil)
 	if got.HTTPClient != client {
 		t.Fatal("hosted workers HTTP client was not wired from FactoryServiceConfig")
 	}
@@ -221,6 +221,7 @@ func startLocalModelInferenceTestServer(
 		ModelAssets:                             puller,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	}
+	cfg = serviceTestConfigWithWorkerApplication(t, cfg)
 	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
 		cancel()
@@ -253,7 +254,7 @@ func startLocalModelInferenceTestServer(
 		Sessions:         sessions,
 		LocalModels:      domain,
 		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfig(cfg, root.BaseLogger, clock)),
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(
 		ctx,
@@ -262,7 +263,7 @@ func startLocalModelInferenceTestServer(
 		collaborators,
 		load,
 		clock,
-		buildHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock),
 	)
 	if err != nil {
 		cancel()
@@ -1065,14 +1066,10 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	})
 
 	recordPath := filepath.Join(t.TempDir(), "recording.json")
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:                   dir,
-		RuntimeMode:           interfaces.RuntimeModeService,
-		Logger:                zap.NewNop(),
-		RecordPath:            recordPath,
-		WorkFile:              workFile,
-		CommandRunnerOverride: recordingDiagnosticsCommandRunner{},
-	})
+	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		Dir: dir, RuntimeMode: interfaces.RuntimeModeService, Logger: zap.NewNop(),
+		RecordPath: recordPath, WorkFile: workFile,
+	}, workerapplication.Edges{ScriptCommandRunner: recordingDiagnosticsCommandRunner{}}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}

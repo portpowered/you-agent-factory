@@ -28,6 +28,7 @@ import (
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -71,6 +72,16 @@ func provideFactoryServiceFromRuntimeHostCore(
 }
 
 func provideRuntimeHostRoot(cfg *runtimehost.Config) (composebridge.Root, error) {
+	if cfg == nil {
+		return composebridge.Root{}, fmt.Errorf("runtime host config is required")
+	}
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return composebridge.Root{}, fmt.Errorf("construct production worker application: %w", err)
+		}
+		cfg.WorkerApplication = components
+	}
 	return service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
 }
 
@@ -201,10 +212,10 @@ func loadRuntimeHostOperatorConfig(cfg *runtimehost.Config) (operatorconfig.File
 
 func provideRuntimeHostHostedWorkers(
 	cfg *runtimehost.Config,
-	logger *zap.Logger,
-	clock factory.Clock,
+	_ *zap.Logger,
+	_ factory.Clock,
 ) hostedworkers.Config {
-	return composebridge.HostedWorkers(cfg, logger, clock)
+	return cfg.WorkerApplication.Hosted
 }
 
 func provideRuntimeHostWorkers(

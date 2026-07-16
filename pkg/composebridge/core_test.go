@@ -16,10 +16,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	"go.uber.org/zap"
 )
+
+func composedRuntimeConfig(t *testing.T, cfg *runtimehost.Config) *runtimehost.Config {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
+	return cfg
+}
 
 func TestCompatibilityFacadesShareFakeDurableExecution(t *testing.T) {
 	t.Parallel()
@@ -65,12 +76,12 @@ func TestBuildCore_RejectsRecordAndReplayTogether(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &runtimehost.Config{
+	cfg := composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:        t.TempDir(),
 		RecordPath: "recording.json",
 		ReplayPath: "recording.json",
 		Logger:     zap.NewNop(),
-	}
+	})
 
 	core, err := buildCoreForTest(ctx, cfg)
 	if core != nil {
@@ -85,10 +96,10 @@ func TestBuildCore_RejectsMissingFactoryConfig(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &runtimehost.Config{
+	cfg := composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:    t.TempDir(),
 		Logger: zap.NewNop(),
-	}
+	})
 
 	core, err := buildCoreForTest(ctx, cfg)
 	if core != nil {
@@ -106,12 +117,12 @@ func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	cfg := &runtimehost.Config{
+	cfg := composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:                                     dir,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	}
+	})
 
 	core, err := buildCoreForTest(ctx, cfg)
 	if err != nil {
@@ -190,6 +201,13 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 }
 
 func buildCoreForTest(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return nil, err
+		}
+		cfg.WorkerApplication = components
+	}
 	root, err := service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
 	if err != nil {
 		return nil, err
@@ -237,7 +255,7 @@ func buildCoreForTest(ctx context.Context, cfg *runtimehost.Config) (*runtimehos
 	if err != nil {
 		return nil, err
 	}
-	hostedWorkers := composebridge.HostedWorkers(cfg, root.BaseLogger, clock)
+	hostedWorkers := cfg.WorkerApplication.Hosted
 	return composebridge.ComposeCore(ctx, cfg, root, composebridge.Collaborators{
 		Sessions: sessions, LocalModels: localModels, RuntimeBuild: runtimeBuild,
 		WorkersScheduler: composebridge.NewWorkersScheduler(cfg, clock, root.BaseLogger, hostedWorkers),

@@ -17,6 +17,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -179,7 +180,11 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		}
 		workflowContext = runtime.WorkflowContext(bundle.Factory)
 	}
-	executor := buildWorkerExecutor(
+	workerApplication, err := fs.workerApplication()
+	if err != nil {
+		return nil, err
+	}
+	executor, err := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
 		workerName,
@@ -189,8 +194,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
-		fs.providerCommandRunnerOverride(),
-		fs.commandRunnerOverride(),
+		workerApplication,
 		nil,
 		nil,
 		nil,
@@ -198,11 +202,21 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		time.Now,
 		modelDomain,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("construct model worker %q: %w", workerName, err)
+	}
 	workstationExecutor, ok := executor.(*workerexecutor.WorkstationExecutor)
 	if !ok || workstationExecutor.Executor == nil {
 		return nil, fmt.Errorf("model worker %q does not support direct invocation", workerName)
 	}
 	return workstationExecutor.Executor, nil
+}
+
+func (fs *FactoryService) workerApplication() (workerapplication.Components, error) {
+	if fs != nil && fs.cfg != nil && fs.cfg.WorkerApplication.Valid() {
+		return fs.cfg.WorkerApplication, nil
+	}
+	return workerapplication.Components{}, fmt.Errorf("factory service worker application is required")
 }
 
 func (fs *FactoryService) factoryRunnerID() string {
@@ -217,20 +231,6 @@ func (fs *FactoryService) providerOverride() workers.Provider {
 		return nil
 	}
 	return fs.coordinatorPolicy().providerOverride
-}
-
-func (fs *FactoryService) providerCommandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().providerCommandRunnerOverride
-}
-
-func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
 func (fs *FactoryService) invocationSkipPermissionsOverride() *bool {

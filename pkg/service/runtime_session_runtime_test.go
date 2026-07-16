@@ -44,6 +44,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -297,13 +298,12 @@ func TestFactoryService_OpenFactorySessionFromFolder_KeepsSessionWorkingDirector
 	writeSessionRuntimeLookupWorkstationAgentsMD(t, rootTwo, "run-script", "workspace-beta")
 
 	runner := &sessionCapturingCommandRunner{}
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:                   rootOne,
-		ExecutionBaseDir:      rootOne,
-		RuntimeMode:           interfaces.RuntimeModeService,
-		CommandRunnerOverride: runner,
-		Logger:                zap.NewNop(),
-	})
+	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		Dir:              rootOne,
+		ExecutionBaseDir: rootOne,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		Logger:           zap.NewNop(),
+	}, workerapplication.Edges{ScriptCommandRunner: runner}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
@@ -375,13 +375,12 @@ func TestFactoryService_OpenFactorySessionFromFolder_DefaultsEmptyWorkingDirecto
 	writeSessionRuntimeLookupWorkstationAgentsMDWithoutWorkingDirectory(t, rootTwo, "run-script")
 
 	runner := &sessionCapturingCommandRunner{}
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:                   rootOne,
-		ExecutionBaseDir:      rootOne,
-		RuntimeMode:           interfaces.RuntimeModeService,
-		CommandRunnerOverride: runner,
-		Logger:                zap.NewNop(),
-	})
+	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		Dir:              rootOne,
+		ExecutionBaseDir: rootOne,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		Logger:           zap.NewNop(),
+	}, workerapplication.Edges{ScriptCommandRunner: runner}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}

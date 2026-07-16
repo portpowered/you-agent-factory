@@ -3,6 +3,7 @@ package factorysessionsse
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -47,8 +48,25 @@ func TestTryReadNextSSEFrame_ParsesCommentFrame(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("comment frame: ok=%v err=%v", ok, err)
 	}
-	if commentFrame.kind != factorySessionSSEFrameComment || commentFrame.comment != "heartbeat" {
+	if commentFrame.kind != factorySessionSSEFrameComment || commentFrame.Comment != "heartbeat" {
 		t.Fatalf("comment frame = %#v, want heartbeat comment", commentFrame)
+	}
+}
+
+func TestTryReadNextSSEFrame_PreservesEmptyProtocolFields(t *testing.T) {
+	t.Parallel()
+
+	for name, input := range map[string]string{
+		"comment": ":\n\n",
+		"id":      "id:\n\n",
+		"event":   "event:\n\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			frame, ok, err := tryReadNextSSEFrame(bufio.NewReader(strings.NewReader(input)))
+			if err != nil || !ok {
+				t.Fatalf("empty %s frame = %#v ok=%v err=%v, want preserved frame", name, frame, ok, err)
+			}
+		})
 	}
 }
 
@@ -60,7 +78,7 @@ func TestTryReadNextSSEFrame_ParsesEventAndDataFrames(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("event frame: ok=%v err=%v", ok, err)
 	}
-	if eventFrame.kind != factorySessionSSEFrameOther || eventFrame.comment != "ping" {
+	if eventFrame.kind != factorySessionSSEFrameOther || eventFrame.Event != "ping" {
 		t.Fatalf("event frame = %#v, want ping other frame", eventFrame)
 	}
 
@@ -71,17 +89,61 @@ func TestTryReadNextSSEFrame_ParsesEventAndDataFrames(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("data frame: ok=%v err=%v", ok, err)
 	}
-	if dataFrame.kind != factorySessionSSEFrameData || dataFrame.event.Id != "evt-1" {
+	if dataFrame.kind != factorySessionSSEFrameData || dataFrame.FactoryEvent == nil || dataFrame.FactoryEvent.Id != "evt-1" {
 		t.Fatalf("data frame = %#v, want RUN_REQUEST event", dataFrame)
 	}
 
 	invalidReader := bufio.NewReader(strings.NewReader("data: not-json\n\n"))
 	invalidFrame, ok, err := tryReadNextSSEFrame(invalidReader)
-	if err != nil || !ok {
+	if err == nil || !ok {
 		t.Fatalf("invalid data frame: ok=%v err=%v", ok, err)
 	}
-	if invalidFrame.kind != factorySessionSSEFrameOther || invalidFrame.comment != "not-json" {
-		t.Fatalf("invalid data frame = %#v, want other kind with raw data", invalidFrame)
+	var parseErr *FactorySessionSSEParseError
+	if !errors.As(err, &parseErr) || parseErr.Frame.Data != "not-json" || invalidFrame.Data != "not-json" {
+		t.Fatalf("invalid data frame = %#v err=%v, want parse error retaining raw frame", invalidFrame, err)
+	}
+}
+
+func TestTryReadNextSSEFrame_PreservesAllProtocolFields(t *testing.T) {
+	t.Parallel()
+
+	reader := bufio.NewReader(strings.NewReader(
+		": retained\nid: frame-17\nevent: factory-event\ndata: {\"schemaVersion\":\"agent-factory.event.v1\",\"id\":\"evt-17\",\"type\":\"RUN_REQUEST\",\"context\":{\"sequence\":17},\"payload\":{}}\n\n",
+	))
+	frame, ok, err := tryReadNextSSEFrame(reader)
+	if err != nil || !ok {
+		t.Fatalf("parse complete protocol frame: ok=%v err=%v", ok, err)
+	}
+	if frame.ID != "frame-17" || frame.Event != "factory-event" || frame.Comment != "retained" {
+		t.Fatalf("protocol fields = %#v, want id/event/comment preserved", frame)
+	}
+	if frame.FactoryEvent == nil || frame.FactoryEvent.Id != "evt-17" || !strings.Contains(frame.Data, "evt-17") {
+		t.Fatalf("data fields = %#v, want raw and generated FactoryEvent", frame)
+	}
+}
+
+func TestFactorySessionSSEStream_CanceledContextWinsOverPendingEOF(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	pending := make(chan factorySessionSSEReadResult, 1)
+	pending <- factorySessionSSEReadResult{}
+	stream := &FactorySessionSSEStream{
+		t:         t,
+		timeout:   time.Second,
+		ctx:       ctx,
+		pending:   pending,
+		sessionID: "factory-session-canceled",
+	}
+
+	_, err := stream.TryReadNextFrame(time.Second)
+	var readErr *FactorySessionSSEReadError
+	if !errors.As(err, &readErr) {
+		t.Fatalf("error = %T %v, want FactorySessionSSEReadError", err, err)
+	}
+	if readErr.Outcome != FactorySessionSSEReadOutcomeCallerCanceled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want CALLER_CANCELED wrapping context.Canceled", err)
 	}
 }
 
@@ -101,33 +163,61 @@ func TestFactorySessionSSEKeepaliveSignalFromFrame_ClassifiesFrameKinds(t *testi
 
 	base := FactorySessionSSEKeepaliveSignal{ConnectionKeepAlive: true}
 
-	commentSignal, err := factorySessionSSEKeepaliveSignalFromFrame(base, factorySessionSSEFrame{
+	commentSignal, err := factorySessionSSEKeepaliveSignalFromFrame(base, FactorySessionSSEFrame{
 		kind:    factorySessionSSEFrameComment,
-		comment: "heartbeat",
+		Comment: "heartbeat",
 	})
 	if err != nil || commentSignal.SSEComment != "heartbeat" {
 		t.Fatalf("comment signal = %#v err=%v", commentSignal, err)
 	}
 
-	otherSignal, err := factorySessionSSEKeepaliveSignalFromFrame(base, factorySessionSSEFrame{
-		kind:    factorySessionSSEFrameOther,
-		comment: "ping",
+	otherSignal, err := factorySessionSSEKeepaliveSignalFromFrame(base, FactorySessionSSEFrame{
+		kind:  factorySessionSSEFrameOther,
+		Event: "ping",
 	})
 	if err != nil || otherSignal.SSEComment != "ping" {
 		t.Fatalf("other signal = %#v err=%v", otherSignal, err)
 	}
 
-	_, err = factorySessionSSEKeepaliveSignalFromFrame(base, factorySessionSSEFrame{
-		kind:  factorySessionSSEFrameData,
-		event: factoryapi.FactoryEvent{Id: "evt-live"},
+	event := factoryapi.FactoryEvent{Id: "evt-live"}
+	_, err = factorySessionSSEKeepaliveSignalFromFrame(base, FactorySessionSSEFrame{
+		kind:         factorySessionSSEFrameData,
+		FactoryEvent: &event,
 	})
 	if err == nil || !strings.Contains(err.Error(), "evt-live") {
 		t.Fatalf("data frame error = %v, want factory event id in message", err)
 	}
 
-	_, err = factorySessionSSEKeepaliveSignalFromFrame(base, factorySessionSSEFrame{kind: factorySessionSSEFrameKind(99)})
+	_, err = factorySessionSSEKeepaliveSignalFromFrame(base, FactorySessionSSEFrame{kind: factorySessionSSEFrameKind(99)})
 	if err == nil || !strings.Contains(err.Error(), "unexpected idle keepalive frame kind") {
 		t.Fatalf("unknown frame error = %v, want unexpected kind message", err)
+	}
+}
+
+func TestFactorySessionSSEStream_LastValidFrameSurvivesMalformedData(t *testing.T) {
+	t.Parallel()
+
+	body := io.NopCloser(strings.NewReader(
+		": heartbeat\n\n" +
+			"id: bad-frame\ndata: not-json\n\n",
+	))
+	stream := &FactorySessionSSEStream{
+		t:        t,
+		timeout:  time.Second,
+		Response: &http.Response{Body: body},
+		reader:   bufio.NewReader(body),
+	}
+	first, err := stream.TryReadNextFrame(time.Second)
+	if err != nil || first.Comment != "heartbeat" {
+		t.Fatalf("first frame = %#v err=%v", first, err)
+	}
+	bad, err := stream.TryReadNextFrame(time.Second)
+	if err == nil || bad.ID != "bad-frame" || bad.Data != "not-json" {
+		t.Fatalf("malformed frame = %#v err=%v", bad, err)
+	}
+	last, ok := stream.LastValidFrame()
+	if !ok || last.Comment != "heartbeat" {
+		t.Fatalf("last valid frame = %#v ok=%v, want heartbeat", last, ok)
 	}
 }
 
@@ -232,26 +322,6 @@ func TestFactorySessionSSEStream_SetReadDeadline_RequiresSupportedBody(t *testin
 	}
 	if err := stream.setReadDeadline(time.Now().Add(time.Second)); err == nil {
 		t.Fatal("expected error when body lacks SetReadDeadline")
-	}
-}
-
-func TestTryReadSSEFactoryEvent_RejectsInvalidJSONPayload(t *testing.T) {
-	t.Parallel()
-
-	reader := bufio.NewReader(strings.NewReader("data: not-json\n\n"))
-	_, ok, err := tryReadSSEFactoryEvent(reader)
-	if err == nil || ok {
-		t.Fatalf("invalid json: ok=%v err=%v", ok, err)
-	}
-}
-
-func TestTryReadSSEFactoryEvent_ReturnsFalseWhenFrameHasNoDataLine(t *testing.T) {
-	t.Parallel()
-
-	reader := bufio.NewReader(strings.NewReader(": heartbeat\n\n"))
-	_, ok, err := tryReadSSEFactoryEvent(reader)
-	if err != nil || ok {
-		t.Fatalf("comment-only frame: ok=%v err=%v", ok, err)
 	}
 }
 

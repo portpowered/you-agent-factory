@@ -219,6 +219,18 @@ func TestPackageCoverageBaselinePathDefaultsBySuite(t *testing.T) {
 	}
 }
 
+func TestValidateConfigRejectsConflictingManifestOperations(t *testing.T) {
+	t.Parallel()
+
+	err := validateConfig(config{generateManifest: "candidate.json", updateManifest: "minimums.json"})
+	if err == nil || !strings.Contains(err.Error(), "choose only one") {
+		t.Fatalf("validateConfig() error = %v, want conflicting operation diagnostic", err)
+	}
+	if err := validateConfig(config{updateManifest: "minimums.json"}); err != nil {
+		t.Fatalf("validateConfig() single update error = %v", err)
+	}
+}
+
 func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 	t.Parallel()
 

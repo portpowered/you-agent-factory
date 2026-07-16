@@ -37,11 +37,6 @@ func ClockForCompose(cfg *runtimehost.Config, load ConfigLoad) factory.Clock {
 	return service.ClockForCompose(cfg, load)
 }
 
-// HostedWorkers builds the hosted-workers collaborator from config.
-func HostedWorkers(cfg *runtimehost.Config, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
-	return service.HostedWorkersForCompose(cfg, logger, clock)
-}
-
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
 func NewLocalModelDomain(cfg *runtimehost.Config) LocalModelDomain {
 	return service.NewLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(cfg))

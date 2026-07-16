@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
+const ptyCaptureDrainTimeout = 250 * time.Millisecond
+
 // platformSession holds an allocated platform PTY for one supervised Agy child.
 // Story 002 implements Run with capture, timeout, and cleanup.
 type platformSession struct {
@@ -239,13 +241,27 @@ func finishSessionRun(
 	proc *sessionProcess,
 	runErr error,
 ) (SessionResult, error) {
-	closePTYReader(reader)
-	<-readDone
+	drainPTYCapture(reader, readDone)
 	mu.Lock()
 	resultBuf := append([]byte(nil), (*buf)...)
 	hit := *capacityHit
 	mu.Unlock()
 	return finalizeSessionResult(resultBuf, hit, timedOut, waitErr, proc), runErr
+}
+
+// drainPTYCapture lets terminal bytes already buffered by the OS reach the
+// capture goroutine after the child exits. The bounded fallback still closes
+// readers that do not report EOF on their own.
+func drainPTYCapture(reader io.ReadCloser, readDone <-chan struct{}) {
+	timer := time.NewTimer(ptyCaptureDrainTimeout)
+	defer timer.Stop()
+	select {
+	case <-readDone:
+		return
+	case <-timer.C:
+		closePTYReader(reader)
+		<-readDone
+	}
 }
 
 func closePTYReader(reader io.ReadCloser) {

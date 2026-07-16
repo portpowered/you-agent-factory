@@ -40,6 +40,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
@@ -137,21 +138,19 @@ func NewWorkersSchedulerService(
 	workflowID := ""
 	defaultFactoryDir := ""
 	if cfg != nil {
-		if cfg.CommandRunnerOverride != nil {
-			runner = cfg.CommandRunnerOverride
+		if cfg.WorkerApplication.ScriptCommandRunner != nil {
+			runner = cfg.WorkerApplication.ScriptCommandRunner
 		}
 		workflowID = cfg.WorkflowID
 		defaultFactoryDir = cfg.Dir
 	}
 	return workersservice.New(workersservice.Config{
-		Logger:               logger,
-		Clock:                supervisorClock,
-		CommandRunner:        runner,
-		WorkflowID:           workflowID,
-		DefaultFactoryDir:    defaultFactoryDir,
-		HostedHTTPClient:     hostedWorkers.HTTPClient,
-		HostedSecretResolver: hostedWorkers.SecretResolver,
-		HostedLinearEndpoint: hostedWorkers.LinearEndpoint,
+		Logger:            logger,
+		Clock:             supervisorClock,
+		CommandRunner:     runner,
+		WorkflowID:        workflowID,
+		DefaultFactoryDir: defaultFactoryDir,
+		HostedWorkers:     hostedWorkers,
 	})
 }
 
@@ -169,6 +168,7 @@ type runtimeBundleBuildInput struct {
 	providerOverride              workers.Provider
 	providerCommandRunner         workers.CommandRunner
 	commandRunnerOverride         workers.CommandRunner
+	workerApplication             workerapplication.Components
 	additionalFactoryOpts         []factory.FactoryOption
 	prefetchedLocalModels         LocalModelDomain
 	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
@@ -188,6 +188,11 @@ type liveSessionState struct {
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
 func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
+	configured, err := ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfg = configured
 	core, err := BuildFactoryCore(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -205,6 +210,25 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	), nil
 }
 
+// ConfigWithWorkerApplication adapts the direct-service entrypoint into the
+// production worker application consumed by FactoryCore. Functional callers
+// must provide a preconstructed WorkerApplication instead.
+func ConfigWithWorkerApplication(cfg *FactoryServiceConfig) (*FactoryServiceConfig, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("factory service config is required")
+	}
+	if cfg.WorkerApplication.Valid() {
+		return cfg, nil
+	}
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	if err != nil {
+		return nil, fmt.Errorf("construct factory service worker application: %w", err)
+	}
+	configured := *cfg
+	configured.WorkerApplication = components
+	return &configured, nil
+}
+
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
 	if cfg != nil && cfg.ModelAssets != nil {
 		return cfg.ModelAssets
@@ -213,24 +237,22 @@ func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller
 }
 
 type serviceCoordinatorPolicy struct {
-	dir                           string
-	executionBaseDir              string
-	runtimeMode                   interfaces.RuntimeMode
-	port                          int
-	verbose                       bool
-	runtimeInstanceID             string
-	workFile                      string
-	workflowID                    string
-	mockWorkersConfig             *factoryconfig.MockWorkersConfig
-	simpleDashboardRenderer       SimpleDashboardRenderer
-	apiServerStarter              APIServerStarter
-	apiServerReady                <-chan struct{}
-	workstationLoader             factoryconfig.WorkstationLoader
-	modelCacheDir                 string
-	runnerID                      string
-	providerOverride              workers.Provider
-	providerCommandRunnerOverride workers.CommandRunner
-	commandRunnerOverride         workers.CommandRunner
+	dir                     string
+	executionBaseDir        string
+	runtimeMode             interfaces.RuntimeMode
+	port                    int
+	verbose                 bool
+	runtimeInstanceID       string
+	workFile                string
+	workflowID              string
+	mockWorkersConfig       *factoryconfig.MockWorkersConfig
+	simpleDashboardRenderer SimpleDashboardRenderer
+	apiServerStarter        APIServerStarter
+	apiServerReady          <-chan struct{}
+	workstationLoader       factoryconfig.WorkstationLoader
+	modelCacheDir           string
+	runnerID                string
+	providerOverride        workers.Provider
 }
 
 const (
@@ -293,9 +315,7 @@ func hasExplicitServiceCoordinatorReferencePolicy(policy serviceCoordinatorPolic
 		policy.apiServerStarter != nil ||
 		policy.apiServerReady != nil ||
 		policy.workstationLoader != nil ||
-		policy.providerOverride != nil ||
-		policy.providerCommandRunnerOverride != nil ||
-		policy.commandRunnerOverride != nil
+		policy.providerOverride != nil
 }
 
 func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordinatorPolicy {
@@ -303,24 +323,22 @@ func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordi
 		return serviceCoordinatorPolicy{}
 	}
 	return serviceCoordinatorPolicy{
-		dir:                           cfg.Dir,
-		executionBaseDir:              cfg.ExecutionBaseDir,
-		runtimeMode:                   cfg.RuntimeMode,
-		port:                          cfg.Port,
-		verbose:                       cfg.Verbose,
-		runtimeInstanceID:             cfg.RuntimeInstanceID,
-		workFile:                      cfg.WorkFile,
-		workflowID:                    cfg.WorkflowID,
-		mockWorkersConfig:             cfg.MockWorkersConfig,
-		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
-		apiServerStarter:              cfg.APIServerStarter,
-		apiServerReady:                cfg.APIServerReady,
-		workstationLoader:             cfg.WorkstationLoader,
-		modelCacheDir:                 cfg.ModelCacheDir,
-		runnerID:                      cfg.RunnerID,
-		providerOverride:              cfg.ProviderOverride,
-		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
-		commandRunnerOverride:         cfg.CommandRunnerOverride,
+		dir:                     cfg.Dir,
+		executionBaseDir:        cfg.ExecutionBaseDir,
+		runtimeMode:             cfg.RuntimeMode,
+		port:                    cfg.Port,
+		verbose:                 cfg.Verbose,
+		runtimeInstanceID:       cfg.RuntimeInstanceID,
+		workFile:                cfg.WorkFile,
+		workflowID:              cfg.WorkflowID,
+		mockWorkersConfig:       cfg.MockWorkersConfig,
+		simpleDashboardRenderer: cfg.SimpleDashboardRenderer,
+		apiServerStarter:        cfg.APIServerStarter,
+		apiServerReady:          cfg.APIServerReady,
+		workstationLoader:       cfg.WorkstationLoader,
+		modelCacheDir:           cfg.ModelCacheDir,
+		runnerID:                cfg.RunnerID,
+		providerOverride:        cfg.ProviderOverride,
 	}
 }
 
@@ -523,8 +541,6 @@ func hostConfigFromService(cfg *FactoryServiceConfig) factoryservice.Config {
 		SkipBuiltInRunnerPrerequisiteValidation: cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		WorkstationLoader:                       cfg.WorkstationLoader,
 		ProviderOverride:                        cfg.ProviderOverride,
-		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
-		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
 		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
 		ModelAssetsOverride:                     cfg.ModelAssets,
 		ModelHostOverride:                       cfg.ModelHostOverride,
@@ -556,7 +572,7 @@ func loadRuntimeBundleWorkerOptions(
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels LocalModelDomain,
 ) ([]factory.FactoryOption, error) {
-	workerOpts, err := loadWorkersFromConfig(
+	workerOpts, err := loadWorkersFromApplication(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
@@ -567,8 +583,7 @@ func loadRuntimeBundleWorkerOptions(
 		input.cfg.InvocationSkipPermissionsOverride,
 		input.providerOverride,
 		input.inferenceProgressPublisher,
-		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
-		input.commandRunnerOverride,
+		input.workerApplication,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
 		eventHistory.RecordModelEvent,
@@ -633,16 +648,14 @@ func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *loggi
 }
 
 func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
+	if cfg != nil && cfg.WorkerApplication.Valid() {
+		return cfg.WorkerApplication.Hosted
+	}
 	hostedCfg := hostedworkers.Config{Logger: logger}
 	if supervisorClock, ok := clock.(clockwork.Clock); ok && supervisorClock != nil {
 		hostedCfg.Clock = supervisorClock
 	}
-	if cfg != nil {
-		hostedCfg.HTTPClient = cfg.HostedPollerHTTPClient
-		hostedCfg.SecretResolver = cfg.HostedPollerSecretResolver
-		hostedCfg.LinearEndpoint = strings.TrimSpace(cfg.HostedLinearEndpoint)
-	}
-	return hostedCfg
+	return hostedworkers.NewConfig(hostedCfg)
 }
 
 func (fs *FactoryService) dashboardLoop(ctx context.Context) {
@@ -717,7 +730,7 @@ func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryCon
 
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
 // Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
-func loadWorkersFromConfig(
+func loadWorkersFromApplication(
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
 	factoryRunnerID string,
@@ -728,8 +741,7 @@ func loadWorkersFromConfig(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	cmdRunner workers.CommandRunner,
+	workerApplication workerapplication.Components,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
@@ -739,13 +751,12 @@ func loadWorkersFromConfig(
 ) ([]factory.FactoryOption, error) {
 	var opts []factory.FactoryOption
 	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
-	if factoryCfg == nil {
-		return nil, fmt.Errorf("factory config is required")
-	}
 	preflight := runnerSelectionPreflight{
-		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
+		skipCommandAvailability: providerOverride != nil || workerApplication.ProviderCommandInjected || skipBuiltInRunnerPrerequisiteValidation,
 	}
-	if err := validateWorkerLoadPreflight(factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride); err != nil {
+	if err := validateWorkerConstructionInputs(
+		factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride, workerApplication,
+	); err != nil {
 		return nil, err
 	}
 	for _, workerCfg := range factoryCfg.Workers {
@@ -756,7 +767,10 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
+		executor, err := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, workerApplication, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
+		if err != nil {
+			return nil, fmt.Errorf("construct worker %q: %w", workerCfg.Name, err)
+		}
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -783,6 +797,26 @@ func loadWorkersFromConfig(
 		}))
 	}
 	return opts, nil
+}
+
+func validateWorkerConstructionInputs(
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	preflight runnerSelectionPreflight,
+	invocationSkipPermissionsOverride *bool,
+	workerApplication workerapplication.Components,
+) error {
+	if factoryCfg == nil {
+		return fmt.Errorf("factory config is required")
+	}
+	if err := validateWorkerLoadPreflight(factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride); err != nil {
+		return err
+	}
+	if !workerApplication.Valid() {
+		return fmt.Errorf("worker application components are required")
+	}
+	return nil
 }
 
 func validateWorkerLoadPreflight(
@@ -827,18 +861,17 @@ func buildWorkerExecutor(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	cmdRunner workers.CommandRunner,
+	workerApplication workerapplication.Components,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
-) workers.WorkerExecutor {
+) (workers.WorkerExecutor, error) {
 	def, ok := runtimeCfg.Worker(workerName)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	switch def.Type {
@@ -853,7 +886,7 @@ func buildWorkerExecutor(
 			invocationSkipPermissionsOverride,
 			providerOverride,
 			inferenceProgressPublisher,
-			providerCommandRunner,
+			workerApplication.Provider,
 			inferenceRecorder,
 			modelRecorder,
 			agentRunRecorder,
@@ -861,7 +894,7 @@ func buildWorkerExecutor(
 			modelDomain,
 		)
 	case interfaces.WorkstationTypeLogical:
-		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, nil, logger)
+		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, nil, logger), nil
 	case interfaces.WorkerTypeScript:
 		return buildScriptWorkerExecutor(
 			runtimeCfg,
@@ -869,11 +902,11 @@ func buildWorkerExecutor(
 			factoryRunnerID,
 			workflowContext,
 			logger,
-			cmdRunner,
+			workerApplication.Script,
 			scriptRecorder,
 		)
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
@@ -887,24 +920,27 @@ func buildProviderBackedWorkerExecutor(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
+	providerFactory *workerprovider.Factory,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
-) workers.WorkerExecutor {
-	runner := providerBackedRunner(
+) (workers.WorkerExecutor, error) {
+	runner, err := providerBackedRunner(
 		runtimeCfg,
 		def,
 		logger,
 		invocationSkipPermissionsOverride,
 		providerOverride,
 		inferenceProgressPublisher,
-		providerCommandRunner,
+		providerFactory,
 		inferenceRecorder,
 		now,
 	)
+	if err != nil {
+		return nil, err
+	}
 	runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
 	runner = modelDomain.Resources.WrapRunner(runner, factoryCfg, def)
 	runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
@@ -925,7 +961,7 @@ func buildProviderBackedWorkerExecutor(
 		InferenceExecutor: inferenceExecutor,
 		AgentRunExecutor:  agentRunExecutor,
 	}
-	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, inner, logger)
+	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, inner, logger), nil
 }
 
 func providerBackedRunner(
@@ -935,15 +971,18 @@ func providerBackedRunner(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
+	providerFactory *workerprovider.Factory,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	now func() time.Time,
-) workers.Runner {
-	runner := newProviderRunner(runtimeCfg, def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner)
-	if inferenceRecorder == nil {
-		return runner
+) (workers.Runner, error) {
+	runner, err := newProviderRunner(runtimeCfg, def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerFactory)
+	if err != nil {
+		return nil, err
 	}
-	return wrapRecordingProviderRunner(runner, providerOverride, inferenceRecorder, now)
+	if inferenceRecorder == nil {
+		return runner, nil
+	}
+	return wrapRecordingProviderRunner(runner, providerOverride, inferenceRecorder, now), nil
 }
 
 func newProviderRunner(
@@ -953,19 +992,22 @@ func newProviderRunner(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-) workers.Runner {
+	providerFactory *workerprovider.Factory,
+) (workers.Runner, error) {
 	if providerOverride != nil {
-		return workers.RunnerFromProvider(providerOverride)
+		return workers.RunnerFromProvider(providerOverride), nil
 	}
-	return workerprovider.NewScriptWrapProvider(providerRunnerOptions(
+	if providerFactory == nil {
+		return nil, fmt.Errorf("provider worker factory is required")
+	}
+	opts := providerRunnerOptions(
 		runtimeCfg,
 		def,
 		logger,
 		invocationSkipPermissionsOverride,
 		inferenceProgressPublisher,
-		providerCommandRunner,
-	)...)
+	)
+	return providerFactory.New(opts...)
 }
 
 func providerRunnerOptions(
@@ -974,7 +1016,6 @@ func providerRunnerOptions(
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
 ) []workerprovider.ScriptWrapProviderOption {
 	opts := []workerprovider.ScriptWrapProviderOption{
 		workerprovider.WithSkipPermissions(skippermissions.EffectiveSkipPermissions(
@@ -994,9 +1035,6 @@ func providerRunnerOptions(
 			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
 			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
 		)
-	}
-	if providerCommandRunner != nil {
-		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
 	}
 	return opts
 }
@@ -1028,17 +1066,18 @@ func buildScriptWorkerExecutor(
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
-	cmdRunner workers.CommandRunner,
+	scriptFactory *workerexecutor.ScriptFactory,
 	scriptRecorder workers.ScriptEventRecorder,
-) workers.WorkerExecutor {
+) (workers.WorkerExecutor, error) {
 	scriptOpts := scriptExecutorOptions(runtimeCfg, scriptRecorder)
-	var scriptExec workers.WorkstationRequestExecutor
-	if cmdRunner != nil {
-		scriptExec = workerexecutor.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
-	} else {
-		scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
+	if scriptFactory == nil {
+		return nil, fmt.Errorf("script worker factory is required")
 	}
-	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, scriptExec, logger)
+	scriptExec, err := scriptFactory.New(def, logger, scriptOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, scriptExec, logger), nil
 }
 
 func scriptExecutorOptions(
@@ -1141,8 +1180,7 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 		SkipBuiltInRunnerPrerequisiteValidation: cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		WorkstationLoader:                       cfg.WorkstationLoader,
 		ProviderOverride:                        cfg.ProviderOverride,
-		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
-		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
+		WorkerApplication:                       cfg.WorkerApplication,
 		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
 		ExtraOptions:                            cfg.ExtraOptions,
 	}
@@ -1176,12 +1214,18 @@ func newRuntimeBuildService(
 				providerOverride:      input.ProviderOverride,
 				providerCommandRunner: input.ProviderCommandRunner,
 				commandRunnerOverride: input.CommandRunnerOverride,
+				workerApplication:     input.WorkerApplication,
 				additionalFactoryOpts: input.AdditionalFactoryOpts,
 			}
 			if progressPublisherFactory != nil {
 				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
 				bundleInput.inferenceProgressPublisherSet = true
 			}
+			workerApplication, err := workerApplicationWithProgress(bundleInput)
+			if err != nil {
+				return nil, fmt.Errorf("construct runtime worker application: %w", err)
+			}
+			bundleInput.workerApplication = workerApplication
 			if dispatchCompletionFactory != nil {
 				bundleInput.dispatchCompleted = dispatchCompletionFactory(bundleInput.sessionID)
 			}
@@ -1192,6 +1236,17 @@ func newRuntimeBuildService(
 			return buildRuntimeBundle(ctx, bundleInput)
 		},
 	)
+}
+
+func workerApplicationWithProgress(input runtimeBundleBuildInput) (workerapplication.Components, error) {
+	if input.workerApplication.ProviderCommandInjected {
+		return input.workerApplication, nil
+	}
+	runner := wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner)
+	if runner == nil {
+		return input.workerApplication, nil
+	}
+	return input.workerApplication.WithCommandRunners(runner, nil)
 }
 
 func wrapProviderCommandRunnerForProgress(
@@ -1469,15 +1524,6 @@ func LoadFactoryConfigForStartup(
 // ClockForCompose selects the factory clock for the loaded replay artifact.
 func ClockForCompose(cfg *runtimehost.Config, load FactoryConfigLoadResult) factory.Clock {
 	return ServiceClockForCompose(FactoryServiceConfigFromRuntimeHost(cfg), load)
-}
-
-// HostedWorkersForCompose builds the hosted-workers collaborator from config.
-func HostedWorkersForCompose(
-	cfg *runtimehost.Config,
-	logger *zap.Logger,
-	clock factory.Clock,
-) hostedworkers.Config {
-	return NewHostedWorkersConfig(FactoryServiceConfigFromRuntimeHost(cfg), logger, clock)
 }
 
 // CloseRuntimeBundleSinksForCompose closes startup bundle sinks when compose fails.

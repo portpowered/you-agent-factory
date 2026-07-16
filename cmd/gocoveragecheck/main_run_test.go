@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -184,6 +186,80 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	if stderr.Len() != 0 {
 		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
 	}
+}
+
+func TestExecuteEnforcesAggregateAndManifestMinimumsIndependently(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	tests := []struct {
+		name         string
+		minimum      string
+		aggregateMin float64
+		command      func(string, ...string) *exec.Cmd
+		wantFailure  string
+		rejectText   string
+	}{
+		{
+			name:         "aggregate pass cannot mask package regression",
+			minimum:      "1.00",
+			aggregateMin: 0,
+			command:      fakeGoCoverageCommand,
+			wantFailure:  "package coverage regression: package=" + modulePath + "/pkg/config lane=unit expected-minimum=1.00%",
+		},
+		{
+			name:         "package pass cannot mask aggregate regression",
+			minimum:      "100.00",
+			aggregateMin: 100.1,
+			command:      fakeGoCoverageCommandPassing,
+			wantFailure:  "go coverage 100.0% is below minimum 100.1%",
+			rejectText:   "package coverage regression",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manifestPath := writePackageMinimumManifest(t, "unit", modulePath+"/pkg/config", tc.minimum)
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			execCommand = tc.command
+			stdoutWriter = &stdout
+			stderrWriter = &stderr
+
+			err := execute(config{
+				suite:           "unit",
+				min:             tc.aggregateMin,
+				coverpkg:        modulePath + "/pkg/config",
+				packages:        "./pkg/config",
+				packageManifest: manifestPath,
+			})
+			if err == nil || !strings.Contains(err.Error(), tc.wantFailure) {
+				t.Fatalf("execute() error = %v, want failure containing %q", err, tc.wantFailure)
+			}
+			if tc.rejectText != "" && strings.Contains(err.Error(), tc.rejectText) {
+				t.Fatalf("execute() error = %q, did not expect %q", err.Error(), tc.rejectText)
+			}
+			if stderr.Len() != 0 {
+				t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+			}
+		})
+	}
+}
+
+func writePackageMinimumManifest(t *testing.T, lane string, importPath string, minimum string) string {
+	t.Helper()
+	manifestPath := filepath.Join(t.TempDir(), lane+"-minimums.json")
+	data := fmt.Sprintf("{\n  \"version\": 1,\n  \"lane\": %q,\n  \"packages\": [\n    {\n      \"package\": %q,\n      \"minimum\": %s\n    }\n  ]\n}\n", lane, importPath, minimum)
+	if err := os.WriteFile(manifestPath, []byte(data), 0o600); err != nil {
+		t.Fatalf("write package minimum manifest: %v", err)
+	}
+	return manifestPath
 }
 
 func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T) {

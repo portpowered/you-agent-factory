@@ -17,6 +17,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -143,6 +144,11 @@ func TestRuntimeHostModelServicePreservesFactoryRunnerIdentityForInvocation(t *t
 	runtimeCfg := runtimeHostModelConfig(t)
 	provider := &runtimeHostInvocationProvider{}
 	cfg := &Config{RunnerID: "factory-runner", ProviderOverride: provider}
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
 	host := runtimeHostModelFacade(runtimeCfg, &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
 		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
 		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
