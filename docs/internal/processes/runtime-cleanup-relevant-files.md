@@ -412,3 +412,11 @@ request normalization and generated response assembly belong in
 `pkg/transports/mapping/factorysession` or the service/runtime compatibility
 adapter that invokes it; `pkg/factory/sessions/service` must not import either
 generated HTTP contracts or transport mapping for lifecycle control.
+
+Factory Session open and live-read service entrypoints follow the same rule.
+`pkg/factory/sessions/service` accepts `OpenRequest` and returns `OpenResult`,
+`ReadProjection`, `ProjectionContext`, `SyncPreflightResult`, or JavaScript
+result-owner values. The outer service/runtime-host compatibility adapter maps
+generated open input before calling the gateway and assembles generated open,
+list, detail, reconnect, terminal-result, and partial-result responses only
+after the domain call returns.

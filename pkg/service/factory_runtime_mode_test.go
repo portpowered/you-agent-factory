@@ -29,6 +29,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -1574,10 +1575,10 @@ func (s *stubModelService) InvokeModel(ctx context.Context, modelName string, re
 }
 
 type stubSessionGateway struct {
-	openResult          factoryapi.OpenFactorySessionResponse
+	openResult          *FactorySessionOpenResult
 	openFromFolder      *FactorySessionOpenResult
-	listSessionsResult  factoryapi.ListFactorySessionsResponse
-	getSessionResult    factoryapi.FactorySession
+	listSessionsResult  []factorysessions.ReadProjection
+	getSessionResult    factorysessions.ProjectionContext
 	pauseResult         factorysessionexecution.LifecycleControlResult
 	resumeResult        factorysessionexecution.LifecycleControlResult
 	durablePauseResult  factorysessionexecution.LifecycleControlResult
@@ -1587,7 +1588,7 @@ type stubSessionGateway struct {
 	sessionIDs          []string
 }
 
-func (s *stubSessionGateway) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+func (s *stubSessionGateway) OpenFactorySession(_ context.Context, request factorysessions.OpenRequest) (*FactorySessionOpenResult, error) {
 	s.calls = append(s.calls, "open-session")
 	if request.FolderPath != "" {
 		s.folderPaths = append(s.folderPaths, request.FolderPath)
@@ -1604,12 +1605,12 @@ func (s *stubSessionGateway) OpenFactorySessionFromFolder(_ context.Context, fol
 	return &FactorySessionOpenResult{SessionID: "session-from-folder"}, nil
 }
 
-func (s *stubSessionGateway) ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+func (s *stubSessionGateway) ListFactorySessions(context.Context) ([]factorysessions.ReadProjection, error) {
 	s.calls = append(s.calls, "list-sessions")
 	return s.listSessionsResult, nil
 }
 
-func (s *stubSessionGateway) GetFactorySession(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (s *stubSessionGateway) GetFactorySession(_ context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 	s.calls = append(s.calls, "get-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.getSessionResult, nil
@@ -1620,22 +1621,22 @@ func (s *stubSessionGateway) GetFactorySessionSyncPreflight(
 	sessionID string,
 	_ *interfaces.FactoryEventReconnectCursor,
 	_ *interfaces.FactorySessionLogicalResolveHint,
-) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+) (factorysessions.SyncPreflightResult, error) {
 	s.calls = append(s.calls, "get-session-sync-preflight")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
-	return factoryapi.FactorySessionSyncPreflightResponse{}, nil
+	return factorysessions.SyncPreflightResult{}, nil
 }
 
-func (s *stubSessionGateway) GetFactorySessionResult(_ context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+func (s *stubSessionGateway) GetFactorySessionResult(_ context.Context, sessionID string) (workflowresult.LiveSessionResult, error) {
 	s.calls = append(s.calls, "get-session-result")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
-	return factoryapi.FactorySessionLiveResult{}, nil
+	return workflowresult.LiveSessionResult{}, nil
 }
 
-func (s *stubSessionGateway) GetFactorySessionPartialResult(_ context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+func (s *stubSessionGateway) GetFactorySessionPartialResult(_ context.Context, sessionID string) (workflowresult.PartialSessionResult, error) {
 	s.calls = append(s.calls, "get-session-partial-result")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
-	return factoryapi.FactorySessionPartialResult{}, nil
+	return workflowresult.PartialSessionResult{}, nil
 }
 
 func (s *stubSessionGateway) PauseLiveFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
@@ -2022,9 +2023,9 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 		engineSnapshot:   &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle},
 	}
 	gatewayStub := &stubSessionGateway{
-		listSessionsResult: factoryapi.ListFactorySessionsResponse{
-			Sessions: []factoryapi.FactorySessionSummary{{Id: "session-a"}},
-		},
+		listSessionsResult: []factorysessions.ReadProjection{{
+			Context: factorysessions.ProjectionContext{Session: &factorysessions.LiveSession{ID: "session-a"}},
+		}},
 	}
 	definitions := &recordingFactoryDefinitions{
 		sessionFactory: factoryapi.Factory{Name: "beta"},

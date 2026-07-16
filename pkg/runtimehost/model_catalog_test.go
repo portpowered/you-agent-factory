@@ -12,6 +12,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
@@ -405,10 +406,10 @@ func (s *catalogModelServiceStub) InvokeModel(ctx context.Context, modelName str
 
 type compatibilitySessionGateway struct {
 	SessionGateway
-	getFactorySession func(context.Context, string) (factoryapi.FactorySession, error)
+	getFactorySession func(context.Context, string) (factorysessions.ProjectionContext, error)
 }
 
-func (f compatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (f compatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 	return f.getFactorySession(ctx, sessionID)
 }
 
@@ -460,12 +461,12 @@ func TestHostCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
 	calls := map[string]int{}
 
 	host := &Host{}
-	host.sessionGateway = compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	host.sessionGateway = compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 		calls["session"]++
 		if gotCtx != ctx || sessionID != "missing-session" {
 			t.Fatalf("session args = (%v, %q)", gotCtx, sessionID)
 		}
-		return factoryapi.FactorySession{}, sentinel
+		return factorysessions.ProjectionContext{}, sentinel
 	}}
 	host.modelService = compatibilityModelAPI{getModel: func(gotCtx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 		calls["model"]++
@@ -525,10 +526,10 @@ func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	calls := map[string]int{}
 
 	host := &Host{
-		sessionGateway: compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		sessionGateway: compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 			calls["not-found"]++
 			requireHostCompatibility(t, gotCtx == ctx && sessionID == "missing", "session args = (%v, %q)", gotCtx, sessionID)
-			return factoryapi.FactorySession{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
+			return factorysessions.ProjectionContext{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
 		}},
 		factorySave: compatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
 			calls["validation"]++

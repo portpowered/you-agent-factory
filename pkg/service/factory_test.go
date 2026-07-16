@@ -4566,10 +4566,10 @@ func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
 
 type serviceCompatibilitySessionGateway struct {
 	sessionGateway
-	getFactorySession func(context.Context, string) (factoryapi.FactorySession, error)
+	getFactorySession func(context.Context, string) (factorysessions.ProjectionContext, error)
 }
 
-func (f serviceCompatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (f serviceCompatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 	return f.getFactorySession(ctx, sessionID)
 }
 
@@ -4621,12 +4621,12 @@ func TestFactoryServiceCompatibilityFacadeForwardsToCanonicalCollaborators(t *te
 	calls := map[string]int{}
 
 	service := &FactoryService{}
-	service.sessionGateway = serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	service.sessionGateway = serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 		calls["session"]++
 		if gotCtx != ctx || sessionID != "missing-session" {
 			t.Fatalf("session args = (%v, %q)", gotCtx, sessionID)
 		}
-		return factoryapi.FactorySession{}, sentinel
+		return factorysessions.ProjectionContext{}, sentinel
 	}}
 	service.modelService = serviceCompatibilityModelAPI{getModel: func(gotCtx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 		calls["model"]++
@@ -4686,10 +4686,10 @@ func TestFactoryServiceCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	calls := map[string]int{}
 
 	svc := &FactoryService{
-		sessionGateway: serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		sessionGateway: serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 			calls["not-found"]++
 			requireServiceCompatibility(t, gotCtx == ctx && sessionID == "missing", "session args = (%v, %q)", gotCtx, sessionID)
-			return factoryapi.FactorySession{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
+			return factorysessions.ProjectionContext{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
 		}},
 		factorySave: serviceCompatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
 			calls["validation"]++

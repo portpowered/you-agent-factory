@@ -13,6 +13,15 @@ import (
 // CurrentFactoryName is the domain identifier for the current Factory selector.
 const CurrentFactoryName = "UNDEFINED"
 
+// OpenRequest is the transport-independent request to discover, validate, or
+// open a Factory Session from a folder.
+type OpenRequest struct {
+	FolderPath     string
+	Target         *TargetRef
+	ValidateOnly   bool
+	InitNewFactory bool
+}
+
 // NewLiveSession constructs a registry entry for a started session.
 func NewLiveSession(
 	sessionID string,

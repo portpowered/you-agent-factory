@@ -54,6 +54,58 @@ func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 	}
 }
 
+func TestOpenRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.T) {
+	t.Parallel()
+
+	name := " beta "
+	validateOnly := true
+	request := factoryapi.OpenFactorySessionRequest{
+		FolderPath:   "/workspace",
+		Target:       &factoryapi.FactorySessionTargetRef{Kind: factoryapi.FactorySessionTargetRefKindNamed, Name: &name},
+		ValidateOnly: &validateOnly,
+	}
+
+	mapped := factorysession.OpenRequestFromAPI(request)
+	name = "changed"
+	validateOnly = false
+
+	if mapped.FolderPath != "/workspace" || !mapped.ValidateOnly || mapped.InitNewFactory {
+		t.Fatalf("open request = %#v, want detached validate-only request", mapped)
+	}
+	if mapped.Target == nil || mapped.Target.Kind != factorysessions.TargetKindNamed || mapped.Target.Name != "beta" {
+		t.Fatalf("open target = %#v, want trimmed named target", mapped.Target)
+	}
+}
+
+func TestOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
+	t.Parallel()
+
+	result := &factorysessions.OpenResult{
+		FolderPath:      " /workspace ",
+		InitsNewFactory: true,
+		SessionID:       "session-beta",
+		Targets: []factorysessions.Target{{
+			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
+		}},
+	}
+	session := factorysessions.NewLiveSession(
+		"session-beta", "/workspace/factory/beta", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}, nil, false, "demo",
+	)
+
+	response := factorysession.OpenResultToAPI(result, session)
+	if response.InitsNewFactory == nil || !*response.InitsNewFactory ||
+		response.FolderPath == nil || *response.FolderPath != "/workspace" {
+		t.Fatalf("open hints = %#v, want init hint and trimmed folder", response)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Ref.Name == nil || *(*response.Targets)[0].Ref.Name != "beta" {
+		t.Fatalf("targets = %#v, want named beta", response.Targets)
+	}
+	if response.Session == nil || response.Session.Id != "session-beta" || response.Session.Project != "demo" {
+		t.Fatalf("session = %#v, want mapped session-beta", response.Session)
+	}
+}
+
 func TestSyncPreflightResultToAPI_PreservesReconnectDecisionAndIdentity(t *testing.T) {
 	t.Parallel()
 

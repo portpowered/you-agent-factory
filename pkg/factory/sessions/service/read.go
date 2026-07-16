@@ -5,34 +5,25 @@ import (
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 // ListFactorySessions returns live workspace session summaries through control-plane read policy.
-func (s *Service) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+func (s *Service) ListFactorySessions(ctx context.Context) ([]factorysessions.ReadProjection, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("factory session gateway is required")
+		return nil, fmt.Errorf("factory session gateway is required")
 	}
-	reads, err := controlplane.ListLiveFactorySessions(ctx, s.host)
-	if err != nil {
-		return factoryapi.ListFactorySessionsResponse{}, err
-	}
-	return factorysession.ReadProjectionsToAPI(reads), nil
+	return controlplane.ListLiveFactorySessions(ctx, s.host)
 }
 
 // GetFactorySession returns one live session detail through control-plane read routing.
-func (s *Service) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (s *Service) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySession{}, fmt.Errorf("factory session gateway is required")
+		return factorysessions.ProjectionContext{}, fmt.Errorf("factory session gateway is required")
 	}
-	projection, err := controlplane.GetLiveFactorySession(ctx, s.host, sessionID)
-	if err != nil {
-		return factoryapi.FactorySession{}, err
-	}
-	return factorysession.SessionResponseToAPI(projection), nil
+	return controlplane.GetLiveFactorySession(ctx, s.host, sessionID)
 }
 
 // GetFactorySessionSyncPreflight validates reconnect cursors before live event recovery.
@@ -41,40 +32,28 @@ func (s *Service) GetFactorySessionSyncPreflight(
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
-) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+) (factorysessions.SyncPreflightResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionSyncPreflightResponse{}, fmt.Errorf("factory session gateway is required")
+		return factorysessions.SyncPreflightResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	result, err := controlplane.GetLiveFactorySessionSyncPreflight(ctx, s.host, sessionID, reconnect, logicalResolve)
-	if err != nil {
-		return factoryapi.FactorySessionSyncPreflightResponse{}, err
-	}
-	return factorysession.SyncPreflightResultToAPI(result), nil
+	return controlplane.GetLiveFactorySessionSyncPreflight(ctx, s.host, sessionID, reconnect, logicalResolve)
 }
 
 // GetFactorySessionResult returns the terminal JavaScript session result read shape.
-func (s *Service) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+func (s *Service) GetFactorySessionResult(ctx context.Context, sessionID string) (workflowresult.LiveSessionResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("factory session gateway is required")
+		return workflowresult.LiveSessionResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	result, err := controlplane.GetLiveFactorySessionResult(ctx, s.host, sessionID)
-	if err != nil {
-		return factoryapi.FactorySessionLiveResult{}, err
-	}
-	return apisurface.WorkflowSessionLiveResultToAPI(result), nil
+	return controlplane.GetLiveFactorySessionResult(ctx, s.host, sessionID)
 }
 
 // GetFactorySessionPartialResult returns checkpoint-backed partial JavaScript results.
 func (s *Service) GetFactorySessionPartialResult(
 	ctx context.Context,
 	sessionID string,
-) (factoryapi.FactorySessionPartialResult, error) {
+) (workflowresult.PartialSessionResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("factory session gateway is required")
+		return workflowresult.PartialSessionResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	result, err := controlplane.GetLiveFactorySessionPartialResult(ctx, s.host, sessionID)
-	if err != nil {
-		return factoryapi.FactorySessionPartialResult{}, err
-	}
-	return apisurface.WorkflowSessionPartialResultToAPI(result), nil
+	return controlplane.GetLiveFactorySessionPartialResult(ctx, s.host, sessionID)
 }

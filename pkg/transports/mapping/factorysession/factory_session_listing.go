@@ -11,6 +11,56 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+// OpenRequestFromAPI detaches a generated open request before Factory Session
+// policy executes.
+func OpenRequestFromAPI(request factoryapi.OpenFactorySessionRequest) factorysessions.OpenRequest {
+	var target *factorysessions.TargetRef
+	if request.Target != nil {
+		targetName := ""
+		if request.Target.Name != nil {
+			targetName = strings.TrimSpace(*request.Target.Name)
+		}
+		target = &factorysessions.TargetRef{
+			Kind: factorysessions.TargetKind(request.Target.Kind),
+			Name: targetName,
+		}
+	}
+	return factorysessions.OpenRequest{
+		FolderPath:     request.FolderPath,
+		Target:         target,
+		ValidateOnly:   request.ValidateOnly != nil && *request.ValidateOnly,
+		InitNewFactory: request.InitNewFactory != nil && *request.InitNewFactory,
+	}
+}
+
+// OpenResultToAPI maps an owner-defined open result and its optional live
+// session to the generated public response.
+func OpenResultToAPI(
+	result *factorysessions.OpenResult,
+	session *factorysessions.LiveSession,
+) factoryapi.OpenFactorySessionResponse {
+	response := factoryapi.OpenFactorySessionResponse{}
+	if result == nil {
+		return response
+	}
+	if result.InitsNewFactory {
+		initsNewFactory := true
+		response.InitsNewFactory = &initsNewFactory
+		if folderPath := strings.TrimSpace(result.FolderPath); folderPath != "" {
+			response.FolderPath = &folderPath
+		}
+	}
+	if len(result.Targets) > 0 {
+		targets := TargetsToAPI(result.Targets)
+		response.Targets = &targets
+	}
+	if session != nil {
+		summary := SessionSummaryToAPI(session)
+		response.Session = &summary
+	}
+	return response
+}
+
 // SessionSummaryToAPI maps one live Factory Session to its public summary.
 func SessionSummaryToAPI(session *factorysessions.LiveSession) factoryapi.FactorySessionSummary {
 	if session == nil {
