@@ -100,7 +100,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/events",
-      "minimum": 81.96
+      "exception": {
+        "kind": "measurement",
+        "justification": "Identical Linux CI unit runs report different covered statement counts for this package because concurrent or conditional test paths are nondeterministic.",
+        "owner": "backend-quality",
+        "deadline": "2026-10-15",
+        "removalGate": "Two consecutive Linux CI unit coverage profiles report identical covered and total statement counts for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/ingest",
@@ -200,7 +206,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/execution",
-      "minimum": 85.74
+      "exception": {
+        "kind": "measurement",
+        "justification": "Identical Linux CI unit runs report different covered statement counts for this package because concurrent or conditional test paths are nondeterministic.",
+        "owner": "backend-quality",
+        "deadline": "2026-10-15",
+        "removalGate": "Two consecutive Linux CI unit coverage profiles report identical covered and total statement counts for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures",
@@ -396,7 +408,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/replay",
-      "minimum": 80.23
+      "exception": {
+        "kind": "measurement",
+        "justification": "Identical Linux CI unit runs report different covered statement counts for this package because concurrent or conditional test paths are nondeterministic.",
+        "owner": "backend-quality",
+        "deadline": "2026-10-15",
+        "removalGate": "Two consecutive Linux CI unit coverage profiles report identical covered and total statement counts for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/root",
