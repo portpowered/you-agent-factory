@@ -82,14 +82,52 @@ func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t
 	}
 }
 
+func TestProjectRuntimeContract_OwnsDetachedJavaScriptStatusAndPublicMapping(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 16, 3, 30, 0, 0, time.UTC)
+	state := &interfaces.FactorySessionJavaScriptRuntimeState{
+		Phase:               "review",
+		Phases:              []string{"plan", "review"},
+		ScriptStatus:        "RUNNING",
+		CompletedDispatches: 2,
+	}
+	ctx := ProjectionContext{
+		Session: &LiveSession{ID: "session-domain-projection"},
+		FactoryCfg: &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind:       interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{},
+		}},
+		JavaScript: state,
+		Now:        now,
+	}
+
+	domain := ProjectRuntimeContract(ctx)
+	state.Phases[0] = "mutated"
+	if domain.Status != string(interfaces.RuntimeStatusIdle) || domain.JavaScript == nil {
+		t.Fatalf("domain runtime = %#v, want idle JavaScript projection", domain)
+	}
+	if domain.JavaScript.ScriptStatus != interfaces.FactorySessionJavaScriptScriptStatusRunning ||
+		domain.JavaScript.Phases[0] != "plan" || domain.JavaScript.ChildDispatchCounts.Completed != 2 {
+		t.Fatalf("domain JavaScript projection = %#v, want detached owner-defined values", domain.JavaScript)
+	}
+
+	public := ProjectRuntime(ctx)
+	if public.Status != factoryapi.FactorySessionStatusIDLE || public.Javascript == nil ||
+		public.Javascript.ScriptStatus != factoryapi.FactorySessionJavaScriptScriptStatusRUNNING ||
+		public.Javascript.ChildDispatchCounts.Completed != 2 {
+		t.Fatalf("public runtime = %#v, want compatible mapped values", public)
+	}
+}
+
 func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	startedAt := now.Add(-5 * time.Minute)
 	argsSchema := json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}}}`)
 	defaultPolicy := json.RawMessage(`{"maxAgents":3}`)
 	folderPath := t.TempDir()
-	logicalTarget := factoryapi.FactorySessionLogicalTarget{
-		Kind:       factoryapi.FactorySessionLogicalTargetKindDefault,
+	logicalTarget := RuntimeLogicalTarget{
+		Kind:       "default",
 		FolderPath: folderPath,
 	}
 	runtime := ProjectRuntime(ProjectionContext{
@@ -157,8 +195,8 @@ func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGeneration
 	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
 	startedAt := now.Add(-10 * time.Minute)
 	folderPath := t.TempDir()
-	logicalTarget := factoryapi.FactorySessionLogicalTarget{
-		Kind:       factoryapi.FactorySessionLogicalTargetKindDefault,
+	logicalTarget := RuntimeLogicalTarget{
+		Kind:       "default",
 		FolderPath: folderPath,
 	}
 	runtime := ProjectRuntime(ProjectionContext{

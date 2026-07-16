@@ -109,17 +109,44 @@ func TestWorkflowArtifactsToAPIPreservesSessionProjection(t *testing.T) {
 		t.Fatalf("mapped artifacts = %#v, want one", mapped)
 	}
 	artifact := (*mapped)[0]
+	assertWorkflowArtifactIdentity(t, artifact)
+	assertWorkflowArtifactCaptureMetadata(t, artifact, capturedAt, sourceDispatchID, mimeType)
+	assertWorkflowArtifactRedactionCounts(t, artifact, paths, secrets, tokens)
+}
+
+func assertWorkflowArtifactIdentity(t *testing.T, artifact factoryapi.FactoryArtifact) {
+	t.Helper()
 	if artifact.Id != "artifact-1" || artifact.Kind != factoryapi.FactoryArtifactKindCHILDRESULT ||
 		artifact.Visibility != factoryapi.FactoryArtifactVisibilityPUBLIC || artifact.AuditMode == nil ||
 		*artifact.AuditMode != factoryapi.FactoryArtifactAuditModeFULL {
 		t.Fatalf("artifact identity = %#v", artifact)
 	}
+}
+
+func assertWorkflowArtifactCaptureMetadata(
+	t *testing.T,
+	artifact factoryapi.FactoryArtifact,
+	capturedAt time.Time,
+	sourceDispatchID string,
+	mimeType string,
+) {
+	t.Helper()
 	if artifact.CaptureMetadata == nil || artifact.CaptureMetadata.CapturedAt == nil ||
 		!artifact.CaptureMetadata.CapturedAt.Equal(capturedAt) || artifact.CaptureMetadata.SourceDispatchId == nil ||
 		*artifact.CaptureMetadata.SourceDispatchId != sourceDispatchID || artifact.CaptureMetadata.MimeType == nil ||
 		*artifact.CaptureMetadata.MimeType != mimeType {
 		t.Fatalf("capture metadata = %#v", artifact.CaptureMetadata)
 	}
+}
+
+func assertWorkflowArtifactRedactionCounts(
+	t *testing.T,
+	artifact factoryapi.FactoryArtifact,
+	paths int32,
+	secrets int32,
+	tokens int32,
+) {
+	t.Helper()
 	if artifact.RedactionCounts == nil || artifact.RedactionCounts.Paths == nil ||
 		*artifact.RedactionCounts.Paths != paths || artifact.RedactionCounts.Secrets == nil ||
 		*artifact.RedactionCounts.Secrets != secrets || artifact.RedactionCounts.Tokens == nil ||

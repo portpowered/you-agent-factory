@@ -21,7 +21,7 @@ func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backen
 		return ctx
 	}
 	ctx.LogicalSessionKeyID = logicaltarget.DeriveLogicalSessionKeyID(ref)
-	target := logicaltarget.APILogicalTarget(ref)
+	target := logicaltarget.RuntimeLogicalTarget(ref)
 	ctx.NormalizedTarget = &target
 	return ctx
 }

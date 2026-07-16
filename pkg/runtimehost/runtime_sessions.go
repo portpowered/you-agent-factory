@@ -1729,7 +1729,7 @@ func (fs *Host) sessionPersistenceScopeFromSession(
 	if err != nil {
 		return factorysessioncursors.IdentityScope{}, err
 	}
-	runtime := factorysessions.ProjectRuntime(projectionCtx)
+	runtime := factorysessions.ProjectRuntimeContract(projectionCtx)
 	scope := factorysessioncursors.IdentityScope{
 		BackendScopeID:      factorySessionBackendScopeID(fs, session),
 		LogicalSessionKeyID: controlplane.LogicalSessionKeyID(session),

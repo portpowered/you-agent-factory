@@ -26,6 +26,27 @@ func APILogicalTarget(ref CanonicalReference) factoryapi.FactorySessionLogicalTa
 	return target
 }
 
+// RuntimeLogicalTarget maps one canonical reference to the Factory
+// Session-owned live runtime projection contract.
+func RuntimeLogicalTarget(ref CanonicalReference) factorysessions.RuntimeLogicalTarget {
+	target := factorysessions.RuntimeLogicalTarget{
+		Kind:       string(ref.Kind),
+		FolderPath: ref.FolderPath,
+	}
+	if ref.Kind == KindNamed {
+		namedTarget := ref.NamedTarget
+		target.NamedTarget = &namedTarget
+	}
+	if ref.Kind == KindProvider && ref.Provider != nil {
+		target.ProviderBoundary = &factorysessions.RuntimeLogicalProviderBoundary{
+			Provider: ref.Provider.Provider,
+			Kind:     ref.Provider.Kind,
+			Boundary: ref.Provider.Boundary,
+		}
+	}
+	return target
+}
+
 // APILogicalTargetFromSession derives the public normalized target metadata for
 // one live session within backendScopeID.
 func APILogicalTargetFromSession(

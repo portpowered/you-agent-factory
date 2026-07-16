@@ -1158,7 +1158,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	}
 	projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
 	projectionCtx.LogicalSessionKeyID = factorySessionLogicalSessionKeyID(fs, session)
-	projectionCtx.NormalizedTarget = factorySessionNormalizedLogicalTarget(fs, session)
+	projectionCtx.NormalizedTarget = factorySessionRuntimeLogicalTarget(fs, session)
 	return projectionCtx, nil
 }
 
@@ -1375,6 +1375,23 @@ func factorySessionNormalizedLogicalTarget(
 		return nil
 	}
 	return target
+}
+
+func factorySessionRuntimeLogicalTarget(
+	fs *FactoryService,
+	session *factorysessions.LiveSession,
+) *factorysessions.RuntimeLogicalTarget {
+	if session == nil {
+		return nil
+	}
+	ref, err := logicaltarget.NormalizeTargetRef(
+		factorySessionBackendScopeID(fs, session), session.FolderPath, session.Target,
+	)
+	if err != nil {
+		return nil
+	}
+	target := logicaltarget.RuntimeLogicalTarget(ref)
+	return &target
 }
 
 func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {

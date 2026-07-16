@@ -335,3 +335,11 @@ Live Factory Session artifact projection follows that placement rule as well.
 Factory-owned `FactoryArtifact` metadata, including capture and redaction
 details. `pkg/transports/mapping.WorkflowArtifactsToAPI` performs the generated
 OpenAPI conversion only when assembling the public runtime response.
+
+Live Factory Session runtime derivation starts with
+`factorysessions.ProjectRuntimeContract`, which returns the session-owned
+status, lifecycle, stream identity, progress, usage, Petri, JavaScript,
+checkpoint, and artifact projection. Domain callers such as cursor identity and
+result shaping consume that value directly. The legacy `ProjectRuntime`
+compatibility entrypoint maps it to the generated response and adds the public
+stop summary; do not add new runtime derivation to that compatibility adapter.

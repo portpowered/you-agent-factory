@@ -142,7 +142,7 @@ func ProjectSessionResult(
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
 ) factoryapi.FactorySessionLiveResult {
-	runtime := ProjectRuntime(ctx)
+	runtime := ProjectRuntimeContract(ctx)
 	input := workflowresult.SessionResultInput{
 		SessionID: sessionID,
 		Status:    interfaces.RuntimeStatus(runtime.Status),
@@ -227,10 +227,10 @@ func ProjectSessionPartialResult(
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
 ) factoryapi.FactorySessionPartialResult {
-	runtime := ProjectRuntime(ctx)
+	runtime := ProjectRuntimeContract(ctx)
 	phase := ""
-	if runtime.Javascript != nil && runtime.Javascript.Phase != nil {
-		phase = strings.TrimSpace(*runtime.Javascript.Phase)
+	if runtime.JavaScript != nil && runtime.JavaScript.Phase != nil {
+		phase = strings.TrimSpace(*runtime.JavaScript.Phase)
 	}
 	result := factoryapi.FactorySessionPartialResult{
 		SessionId: sessionID,

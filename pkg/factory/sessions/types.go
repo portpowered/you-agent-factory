@@ -2,6 +2,7 @@ package factorysessions
 
 import (
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -201,3 +202,107 @@ func NewSessionResponseStreamSetWithFactory(
 // SessionResponseStreamSubscription is an internal live-session response-stream
 // cursor that can read retained and live dispatch progress.
 type SessionResponseStreamSubscription = responsestream.Subscription
+
+// RuntimeProjection is the Factory Session-owned live runtime read model.
+// Transport packages map this detached value to their public contract.
+type RuntimeProjection struct {
+	Artifacts              *[]interfaces.FactoryArtifact
+	Budgets                *RuntimeBudgets
+	Dialect                *string
+	JavaScript             *JavaScriptRuntimeProjection
+	Lifecycle              RuntimeLifecycle
+	LifecycleControlStatus *string
+	OrchestratorKind       string
+	Petri                  *PetriRuntimeProjection
+	PolicyHash             *string
+	Progress               RuntimeProgress
+	SourceHash             *string
+	SourceRef              *string
+	Status                 string
+	StreamIdentity         *RuntimeStreamIdentity
+	Usage                  RuntimeUsage
+}
+
+type RuntimeBudgets struct{ MaxAgents *int }
+
+type RuntimeLifecycle struct {
+	FinishedAt *time.Time
+	StartedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type RuntimeStreamIdentity struct {
+	BackendScopeID      string
+	FactorySessionID    string
+	LogicalSessionKeyID string
+	StreamGenerationID  string
+}
+
+type RuntimeLogicalTarget struct {
+	FolderPath       string
+	Kind             string
+	NamedTarget      *string
+	ProviderBoundary *RuntimeLogicalProviderBoundary
+}
+
+type RuntimeLogicalProviderBoundary struct {
+	Boundary string
+	Kind     string
+	Provider string
+}
+
+type RuntimeProgress struct {
+	Categories    RuntimeStatusCategories
+	FactoryState  string
+	InFlightCount int
+	TotalTokens   int
+}
+
+type RuntimeStatusCategories struct {
+	Failed     int
+	Initial    int
+	Processing int
+	Terminal   int
+}
+
+type RuntimeUsage struct{ Resources []RuntimeResourceUsage }
+
+type RuntimeResourceUsage struct {
+	Available int
+	Name      string
+	Total     int
+}
+
+type PetriRuntimeProjection struct {
+	EnabledTransitions []PetriEnabledTransition
+	Marking            []RuntimeToken
+}
+
+type PetriEnabledTransition struct {
+	TransitionID string
+	WorkerType   string
+}
+
+type RuntimeToken struct {
+	ChainingTraceDepth       *int
+	CreatedAt                time.Time
+	CurrentChainingTraceID   *string
+	EnteredAt                time.Time
+	ID                       string
+	Name                     *string
+	PlaceID                  string
+	PreviousChainingTraceIDs *[]string
+	Tags                     *map[string]string
+	TraceID                  string
+	WorkID                   string
+	WorkType                 string
+}
+
+type JavaScriptRuntimeProjection struct {
+	ArgsDigest          *string
+	Checkpoints         *[]interfaces.FactorySessionJavaScriptCheckpointEventRef
+	ChildDispatchCounts interfaces.FactorySessionChildDispatchCounts
+	Phase               *string
+	Phases              []string
+	ScriptStatus        interfaces.FactorySessionJavaScriptScriptStatus
+}
