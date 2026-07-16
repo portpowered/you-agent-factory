@@ -4,6 +4,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -138,7 +139,7 @@ func buildWorkflowExecutionService(
 	backend sessionexecutioncli.ExecutionBackendConfig,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-) (fse.Service, error) {
+) (sessionexecutioncli.ServiceOwner, error) {
 	if options.BuildSessionExecution == nil {
 		return nil, fmt.Errorf("construct workflow execution: durable execution builder is required")
 	}
@@ -154,6 +155,26 @@ func buildWorkflowExecutionService(
 		return nil, fmt.Errorf("construct workflow execution: builder returned nil service")
 	}
 	return service, nil
+}
+
+func withWorkflowExecutionService(
+	ctx context.Context,
+	options RootCommandOptions,
+	backend sessionexecutioncli.ExecutionBackendConfig,
+	fixtureCatalogPath string,
+	childExecutorMode string,
+	run func(fse.Service) error,
+) (err error) {
+	owner, err := buildWorkflowExecutionService(ctx, options, backend, fixtureCatalogPath, childExecutorMode)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := owner.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workflow execution: %w", closeErr))
+		}
+	}()
+	return run(owner)
 }
 
 func addWorkflowExecutionBackendFlags(

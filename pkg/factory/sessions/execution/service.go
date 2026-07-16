@@ -304,6 +304,19 @@ func EnabledPersistence(store runtimepersist.Store) PersistenceChoice {
 	return PersistenceChoice{store: store}
 }
 
+// Store returns the enabled persistence collaborator. Disabled persistence has
+// no store and returns nil.
+func (choice PersistenceChoice) Store() runtimepersist.Store {
+	return choice.store
+}
+
+// Validate reports whether composition explicitly selected enabled or disabled
+// persistence without performing snapshot IO.
+func (choice PersistenceChoice) Validate() error {
+	_, err := choice.resolve()
+	return err
+}
+
 // DisabledPersistence explicitly selects in-memory-only session execution.
 func DisabledPersistence() PersistenceChoice {
 	return PersistenceChoice{disabled: true}
@@ -315,7 +328,7 @@ func ProjectPersistence(projectRoot string) (PersistenceChoice, error) {
 	if root == "" {
 		return PersistenceChoice{}, NewValidationError("persistence.projectRoot", "project root is required for persistence")
 	}
-	store, err := runtimepersist.NewDirectoryStore(runtimepersist.DirForProjectRoot(root))
+	store, err := runtimepersist.NewProjectStore(root)
 	if err != nil {
 		return PersistenceChoice{}, NewValidationError("persistence", "initialize durable session persistence: "+err.Error())
 	}
@@ -345,6 +358,9 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		projectRoot := strings.TrimSpace(config.ProjectRoot)
 		if projectRoot == "" {
 			return nil, NewValidationError("projectRoot", "projectRoot is required")
+		}
+		if config.Clock == nil {
+			return nil, NewValidationError("clock", "clock is required")
 		}
 		childExecutorMode := normalizeChildExecutorMode(config.ChildExecutorMode)
 		executor := config.ProviderExecutor

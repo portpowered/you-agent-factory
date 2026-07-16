@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
@@ -34,6 +35,101 @@ func resultSummaryTextFromParts(parts []work.WorkContentPart) string {
 		}
 	}
 	return ""
+}
+
+// PetriSessionCompletion is the terminal invocation outcome recorded by the
+// canonical Factory Session owner after a Petri runtime finishes.
+type PetriSessionCompletion struct {
+	Status        LifecycleStatus
+	PrimaryResult []work.WorkContentPart
+	Failure       *FailureSummary
+}
+
+// RecordPetriSessionCompletion advances a Petri-backed durable session to its
+// terminal projection. Persistence succeeds before the result becomes visible
+// to live readers or the invocation caller.
+func (s *JavaScriptRuntimeService) RecordPetriSessionCompletion(
+	sessionID string,
+	completion PetriSessionCompletion,
+) error {
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return err
+	}
+	if completion.Status != LifecycleStatusSucceeded && completion.Status != LifecycleStatusFailed {
+		return NewValidationError("status", "Petri session completion status must be SUCCEEDED or FAILED")
+	}
+	_, err = s.snapshotSessionState(id)
+	if err != nil && !errors.Is(err, ErrSessionNotFound) {
+		return err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[id]
+	if !ok {
+		initial := projectPetriRunningSessionState(id, s.now())
+		state = &initial
+	}
+	if state.session.OrchestratorKind != interfaces.OrchestratorKindPetri {
+		return fmt.Errorf("record Petri session completion: session %q uses orchestrator %q", id, state.session.OrchestratorKind)
+	}
+	if IsTerminalLifecycleStatus(state.session.Status) {
+		if state.session.Status == completion.Status {
+			return nil
+		}
+		return fmt.Errorf("record Petri session completion: session %q is already %s", id, state.session.Status)
+	}
+
+	candidate := projectPetriTerminalSessionState(*state, completion, s.now())
+	if err := s.persistSessionSnapshot(candidate); err != nil {
+		return err
+	}
+	if ok {
+		*state = candidate
+	} else {
+		s.sessions[id] = &candidate
+	}
+	return nil
+}
+
+func projectPetriTerminalSessionState(
+	state runtimeSessionState,
+	completion PetriSessionCompletion,
+	completedAt time.Time,
+) runtimeSessionState {
+	candidate := cloneRuntimeSessionState(&state)
+	candidate.session.Status = completion.Status
+	if candidate.session.Lifecycle == nil {
+		candidate.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	candidate.session.Lifecycle.FinishedAt = &completedAt
+	candidate.session.Lifecycle.UpdatedAt = &completedAt
+	candidate.session.Failure = cloneFailureSummary(completion.Failure)
+	resultStatus := ResultStatusFinal
+	if completion.Status == LifecycleStatusFailed {
+		resultStatus = ResultStatusUnavailable
+		if len(completion.PrimaryResult) > 0 {
+			resultStatus = ResultStatusFailedWithPartial
+		}
+	}
+	candidate.session.ResultSummary = &ResultSummary{
+		ResultStatus: string(resultStatus),
+		Summary:      resultSummaryTextFromParts(completion.PrimaryResult),
+	}
+	candidate.result = ResultReadResult{
+		SessionID:     candidate.session.SessionID,
+		ResultStatus:  resultStatus,
+		SessionStatus: completion.Status,
+		Mode:          ResultModeFinal,
+		PrimaryResult: workContentJSONFromParts(completion.PrimaryResult),
+		Failure:       cloneFailureSummary(completion.Failure),
+	}
+	if resultStatus == ResultStatusUnavailable {
+		candidate.result.Availability = defaultUnavailableAvailability()
+	}
+	candidate.events = BuildCanonicalRuntimeSessionEvents(candidate.session, candidate.result)
+	return candidate
 }
 
 func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {

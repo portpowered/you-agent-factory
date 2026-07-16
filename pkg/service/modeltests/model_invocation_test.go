@@ -138,7 +138,7 @@ func buildModelCatalogServiceWithOptions(t *testing.T, cfg map[string]any, optio
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	return svc
+	return attachModelService(t, svc)
 }
 
 func cloudModelInvocationConfig() map[string]any {

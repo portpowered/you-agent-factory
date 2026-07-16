@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.T) {
@@ -112,6 +113,7 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 	if !markingContainsWorkAtPlace(&snapshot.Marking, parentWorkID, "task:complete") {
 		t.Fatalf("marking = %#v, want parent at task:complete", snapshot.Marking.Tokens)
 	}
+	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
 }
 
 func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) factoryapi.Work {

@@ -28,6 +28,7 @@ import (
 )
 
 func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *testing.T) {
+	const sessionID = "~default"
 	store, err := runtimepersist.NewDirectoryStore(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewDirectoryStore: %v", err)
@@ -35,17 +36,13 @@ func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *tes
 	owner := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: t.TempDir(), Persistence: store,
 	})
-	started, err := owner.StartSync(context.Background(), simpleFinalSyncStartRequest())
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
 
 	runtime, err := factoryruntime.New(
 		factory.WithNet(petriRecordingNet()),
 		factory.WithInlineDispatch(),
 		factory.WithWorkerExecutor("mock", &acceptedPetriExecutor{}),
 		factory.WithLogger(logging.NoopLogger{}),
-		factory.WithWorkflowContext(&factorycontext.FactoryContext{SessionID: started.SessionID}),
+		factory.WithWorkflowContext(&factorycontext.FactoryContext{SessionID: sessionID}),
 		factory.WithPetriMutationRecorder(owner.RecordPetriTokenMutations),
 	)
 	if err != nil {
@@ -60,14 +57,33 @@ func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *tes
 	if err := runtime.Run(context.Background()); err != nil {
 		t.Fatalf("Run Petri runtime: %v", err)
 	}
+	primaryResult := []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText, Text: "persisted Petri completion",
+	}}
+	if err := owner.RecordPetriSessionCompletion(sessionID, fse.PetriSessionCompletion{
+		Status: fse.LifecycleStatusSucceeded, PrimaryResult: primaryResult,
+	}); err != nil {
+		t.Fatalf("RecordPetriSessionCompletion: %v", err)
+	}
 
 	reloaded := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: t.TempDir(), Persistence: store,
 	})
-	if _, err := reloaded.GetSession(context.Background(), started.SessionID); err != nil {
+	session, err := reloaded.GetSession(context.Background(), sessionID)
+	if err != nil {
 		t.Fatalf("GetSession after owner restart: %v", err)
 	}
-	assertPersistedPetriMutationAndCanonicalProjection(t, store, started.SessionID)
+	if session.Status != fse.LifecycleStatusSucceeded || session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(fse.ResultStatusFinal) {
+		t.Fatalf("reloaded session = %#v, want SUCCEEDED with FINAL result", session)
+	}
+	result, err := reloaded.GetResult(context.Background(), sessionID, fse.ResultRequest{Mode: fse.ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult after owner restart: %v", err)
+	}
+	if result.ResultStatus != fse.ResultStatusFinal || !strings.Contains(string(result.PrimaryResult), "persisted Petri completion") {
+		t.Fatalf("reloaded result = %#v, want persisted FINAL primary result", result)
+	}
+	assertPersistedPetriMutationAndCanonicalProjection(t, store, sessionID)
 }
 
 func TestPersistedRuntimeSessionState_MixedTypedHistoryRoundTripsAndReplays(t *testing.T) {

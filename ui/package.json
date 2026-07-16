@@ -33,6 +33,9 @@
     "storybook:checkbox-consistency-check": "node scripts/run-checkbox-consistency-browser-check.mjs",
     "storybook:current-selection-save-notifications-check": "node scripts/run-current-selection-save-notifications-browser-check.mjs",
     "storybook:factory-graph-toolbar-jitter-check": "bun run build-storybook && node scripts/run-factory-graph-toolbar-jitter-browser-check.mjs",
+    "storybook:factory-graph-touch-check": "node scripts/verify-factory-graph-touch-browser.mjs",
+    "storybook:header-responsive-check": "node scripts/verify-dashboard-header-responsive-browser.mjs",
+    "storybook:dashboard-viewport-check": "node scripts/verify-dashboard-viewport-browser.mjs",
     "storybook:factory-graph-visual-group-save-check": "bun run build-storybook && node scripts/run-factory-graph-visual-group-save-browser-check.mjs",
     "storybook:responsive-check": "node scripts/run-storybook-responsive-check.mjs",
     "storybook:serve-static": "http-server storybook-static -p 6008 -a 127.0.0.1 -s",
@@ -46,6 +49,7 @@
     "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --maxWorkers=2 --retry=2",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
+    "test-storybook:browser-checks": "bun scripts/run-storybook-ci.mjs --browser-checks-only",
     "tsc": "tsc -b --noEmit --pretty false",
     "typecheck": "tsc -b --noEmit --pretty false",
     "verify:fresh-npm-install": "node scripts/verify-fresh-npm-install.mjs"
@@ -76,7 +80,7 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.14",
+    "@biomejs/biome": "^2.5.4",
     "@storybook/addon-vitest": "^10.3.5",
     "@storybook/react-vite": "^10.3.5",
     "@tailwindcss/vite": "^4.2.2",

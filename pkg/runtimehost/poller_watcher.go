@@ -14,7 +14,7 @@ import (
 type workRequestSubmitter func(context.Context, work.WorkRequest) error
 
 type workerSidecarOwner interface {
-	StartSchedulerSidecarsForRuntime(context.Context, *sync.WaitGroup, workersservice.RuntimeSidecarsInput)
+	StartSchedulerSidecarsForRuntime(context.Context, *sync.WaitGroup, workersservice.RuntimeSidecarsInput) error
 	WorkflowIdentityForFactoryDir(string) string
 	SubmitCronTick(context.Context, interfaces.RuntimeWorkstationLookup, string, workersservice.WorkRequestSubmitter, interfaces.FactoryWorkstationConfig, time.Time) error
 }
@@ -35,7 +35,7 @@ func (fs *Host) startSchedulerSidecarsForRuntime(
 	if err != nil {
 		return err
 	}
-	workersScheduler.StartSchedulerSidecarsForRuntime(
+	return workersScheduler.StartSchedulerSidecarsForRuntime(
 		ctx,
 		sidecars,
 		workersservice.RuntimeSidecarsInput{
@@ -45,7 +45,6 @@ func (fs *Host) startSchedulerSidecarsForRuntime(
 			Submitter:  workersservice.WorkRequestSubmitter(submitter),
 		},
 	)
-	return nil
 }
 
 func (fs *Host) requireWorkersScheduler() (workerSidecarOwner, error) {

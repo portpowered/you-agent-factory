@@ -36,11 +36,15 @@ const throwErrorWorkflowSource = `// Fixture that throws during workflow executi
 throw new Error("workflow execution failed: " + args.subject);
 `
 
+type fixtureClock struct{ now time.Time }
+
+func (c fixtureClock) Now() time.Time { return c.now }
+
 func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryResult(t *testing.T) {
 	projectRoot := writeSimpleFinalWorkflowProject(t)
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence(), Clock: fixtureClock{now: time.Now()}},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)
@@ -408,7 +412,7 @@ func TestNewExecutionService_SelectsFakeAndJavaScriptRuntimeProviders(t *testing
 	projectRoot := t.TempDir()
 	runtimeService, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence(), Clock: fixtureClock{now: time.Now()}},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService(runtime): %v", err)
@@ -462,7 +466,7 @@ func newJavaScriptRuntimeService(t *testing.T) fse.Service {
 	}
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
+		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence(), Clock: fixtureClock{now: time.Now()}},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)

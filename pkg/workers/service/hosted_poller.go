@@ -18,11 +18,11 @@ func (s *Service) StartHostedLinearPoller(
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *workerconfig.Config,
 	submitter WorkRequestSubmitter,
-) {
-	if sidecars == nil || submitter == nil {
-		return
+) error {
+	if submitter == nil {
+		return nil
 	}
-	hostedworkers.StartLinearPoller(
+	return hostedworkers.StartLinearPoller(
 		ctx,
 		sidecars,
 		s.hostedWorkersConfig(),
@@ -33,15 +33,23 @@ func (s *Service) StartHostedLinearPoller(
 	)
 }
 
+func (s *Service) validateHostedLinearPoller(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	workstation interfaces.FactoryWorkstationConfig,
+	workerDef *workerconfig.Config,
+	submitter WorkRequestSubmitter,
+) error {
+	_, err := hostedworkers.NewLinearPoller(hostedworkers.LinearPollerDependencies{
+		Config: s.hostedWorkersConfig(), RuntimeConfig: runtimeCfg,
+		Workstation: workstation, Worker: workerDef,
+		Submitter: hostedworkers.Submitter(submitter),
+	})
+	return err
+}
+
 func (s *Service) hostedWorkersConfig() hostedworkers.Config {
 	if s == nil {
 		return hostedworkers.Config{}
 	}
-	return hostedworkers.Config{
-		Logger:         s.cfg.Logger,
-		Clock:          s.cfg.Clock,
-		HTTPClient:     s.cfg.HostedHTTPClient,
-		SecretResolver: s.cfg.HostedSecretResolver,
-		LinearEndpoint: s.cfg.HostedLinearEndpoint,
-	}
+	return s.cfg.HostedWorkers
 }

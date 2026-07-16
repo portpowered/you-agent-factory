@@ -1,8 +1,6 @@
 package service
 
 import (
-	"net/http"
-
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
@@ -18,10 +16,7 @@ type Config struct {
 	WorkflowID string
 	// DefaultFactoryDir is the coordinator factory directory used when runtime factoryDir is empty.
 	DefaultFactoryDir string
-	// HostedHTTPClient overrides the default HTTP client for repository-owned hosted pollers.
-	HostedHTTPClient *http.Client
-	// HostedSecretResolver resolves hosted-worker auth.secretRef values at runtime.
-	HostedSecretResolver hostedworkers.SecretResolver
-	// HostedLinearEndpoint overrides the default Linear API endpoint for hosted pollers.
-	HostedLinearEndpoint string
+	// HostedWorkers is the already-constructed hosted-worker component selected
+	// by composition. Scheduler lifecycle code passes it through unchanged.
+	HostedWorkers hostedworkers.Config
 }

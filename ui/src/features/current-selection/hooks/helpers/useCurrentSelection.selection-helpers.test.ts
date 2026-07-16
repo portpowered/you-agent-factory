@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing selection-helper coverage stayed intact during feature-family migration.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/style/noExcessiveLinesPerFile: existing selection-helper coverage stayed intact during feature-family migration.
 import { describe, expect, it } from "vitest";
 
 import type {

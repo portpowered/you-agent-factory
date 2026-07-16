@@ -1,10 +1,12 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: viewport coverage keeps related mocked React Flow click paths together.
+// biome-ignore lint/style/noExcessiveLinesPerFile: viewport coverage keeps related mocked React Flow click paths together.
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
-import { type ReactNode, useEffect } from "react";
+import { type PointerEventHandler, type ReactNode, useEffect } from "react";
 
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
+
+const setViewport = vi.fn().mockResolvedValue(true);
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -24,6 +26,10 @@ vi.mock("@xyflow/react", async () => {
       onEdgeClick,
       onInit,
       onNodeClick,
+      onPointerCancelCapture,
+      onPointerDownCapture,
+      onPointerMoveCapture,
+      onPointerUpCapture,
       onPaneClick: _onPaneClick,
       onSelectionChange: _onSelectionChange,
       onSelectionStart: _onSelectionStart,
@@ -47,11 +53,12 @@ vi.mock("@xyflow/react", async () => {
       }) => void;
       onKeyDown?: (event: KeyboardEvent) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
+      onPointerCancelCapture?: PointerEventHandler<HTMLDivElement>;
+      onPointerDownCapture?: PointerEventHandler<HTMLDivElement>;
+      onPointerMoveCapture?: PointerEventHandler<HTMLDivElement>;
+      onPointerUpCapture?: PointerEventHandler<HTMLDivElement>;
       onPaneClick?: () => void;
-      onSelectionChange?: (params: {
-        edges: Edge[];
-        nodes: Node[];
-      }) => void;
+      onSelectionChange?: (params: { edges: Edge[]; nodes: Node[] }) => void;
       onSelectionStart?: (event: { shiftKey: boolean }) => void;
       panOnDrag?: boolean | number[];
       panOnScroll?: boolean;
@@ -62,7 +69,7 @@ vi.mock("@xyflow/react", async () => {
         onInit?.({
           fitView: async () => true,
           getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
-          setViewport: async () => true,
+          setViewport,
         });
       }, [onInit]);
 
@@ -83,7 +90,15 @@ vi.mock("@xyflow/react", async () => {
           data-selection-on-drag={String(selectionOnDrag ?? "unset")}
           data-testid="mock-react-flow"
           data-zoom-on-scroll={String(zoomOnScroll ?? "unset")}
+          onPointerCancelCapture={onPointerCancelCapture}
+          onPointerDownCapture={onPointerDownCapture}
+          onPointerMoveCapture={onPointerMoveCapture}
+          onPointerUpCapture={onPointerUpCapture}
         >
+          <div
+            className="react-flow__pane"
+            data-testid="mock-react-flow-pane"
+          />
           {(nodes ?? []).map((node) => (
             <button
               key={node.id}
@@ -142,6 +157,7 @@ describe("CurrentActivityGraphViewport", () => {
   const originalResizeObserver = globalThis.ResizeObserver;
 
   beforeEach(() => {
+    setViewport.mockClear();
     HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
     globalThis.ResizeObserver = class {
       public constructor(private readonly callback: ResizeObserverCallback) {}
@@ -430,7 +446,7 @@ describe("CurrentActivityGraphViewport", () => {
 
     const reactFlow = await screen.findByTestId("mock-react-flow");
     expect(reactFlow.getAttribute("data-selection-on-drag")).toBe("true");
-    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("false");
+    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("");
     expect(reactFlow.getAttribute("data-pan-on-scroll")).toBe("true");
     expect(reactFlow.getAttribute("data-zoom-on-scroll")).toBe("false");
     expect(reactFlow.getAttribute("data-delete-key-code")).toBe("null");
@@ -442,6 +458,35 @@ describe("CurrentActivityGraphViewport", () => {
     expect(clearGraphSelection).toHaveBeenCalledTimes(1);
   });
 
+  it("moves the viewport for a primary touch drag that begins on the pane", () => {
+    renderViewport();
+    const pane = screen.getByTestId("mock-react-flow-pane");
+
+    fireEvent.pointerDown(pane, {
+      clientX: 20,
+      clientY: 30,
+      isPrimary: true,
+      pointerId: 7,
+      pointerType: "touch",
+    });
+    fireEvent.pointerMove(pane, {
+      clientX: 70,
+      clientY: 60,
+      isPrimary: true,
+      pointerId: 7,
+      pointerType: "touch",
+    });
+    fireEvent.pointerUp(pane, {
+      clientX: 70,
+      clientY: 60,
+      isPrimary: true,
+      pointerId: 7,
+      pointerType: "touch",
+    });
+
+    expect(setViewport).toHaveBeenCalledWith({ x: 50, y: 30, zoom: 1 });
+  });
+
   it("dispatches batch delete from Delete and Backspace when graph selection is deletable", async () => {
     const deleteGraphSelection = vi.fn();
 
@@ -451,7 +496,9 @@ describe("CurrentActivityGraphViewport", () => {
       editorMode: true,
     });
 
-    const viewport = screen.getByRole("region", { name: "Work graph viewport" });
+    const viewport = screen.getByRole("region", {
+      name: "Work graph viewport",
+    });
 
     fireEvent.keyDown(viewport, { key: "Delete" });
     fireEvent.keyDown(viewport, { key: "Backspace" });

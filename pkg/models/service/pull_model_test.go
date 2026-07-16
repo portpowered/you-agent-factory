@@ -25,7 +25,7 @@ func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) 
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	recorder := &capturingPullMetricsRecorder{}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelAssetPuller: &stubPullAssetPuller{
 			result: apisurface.ModelPullResult{
@@ -70,7 +70,7 @@ func TestService_PullModel_ReportsStillLoadingWhenAssetsRemainMissing(t *testing
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelAssetPuller: &stubPullAssetPuller{
 			result: apisurface.ModelPullResult{ModelName: "OMNIVOICE_Q4_K_M", Outcome: "PULLED"},
@@ -96,7 +96,7 @@ func TestService_PullModel_RecordsSourceFailureMetric(t *testing.T) {
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	recorder := &capturingPullMetricsRecorder{}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelAssetPuller: &stubPullAssetPuller{err: apisurface.ErrManagedRuntimeSourceFetchFailed},
 		ModelPullMetrics: recorder,
@@ -131,7 +131,7 @@ func TestService_PullModel_ReturnsCanceledWhenContextCanceled(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelAssetPuller: &cancelBlockingPullAssetPuller{},
 	})
@@ -168,7 +168,7 @@ func TestService_PullModel_ProjectsModelHostResult(t *testing.T) {
 			Path: "model.gguf", Bytes: 42, SHA256: "abc",
 		}},
 	}}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     host,
 	})
@@ -191,7 +191,7 @@ func TestService_PullModel_ClassifiesModelHostTimeout(t *testing.T) {
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	recorder := &capturingPullMetricsRecorder{}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:        &stubPullModelHost{err: context.DeadlineExceeded},
 		ModelPullMetrics: recorder,
@@ -217,7 +217,7 @@ func TestService_PullModel_PropagatesCancellationToModelHost(t *testing.T) {
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	host := &stubPullModelHost{waitForContext: true}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     host,
 	})
@@ -237,7 +237,7 @@ func TestService_PullModel_MapsUnsupportedModelHostResult(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     &stubPullModelHost{err: modelhost.ErrUnsupportedRuntime},
 	})
@@ -254,7 +254,7 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	core, observed := observer.New(zap.InfoLevel)
 	logger := zap.New(core)
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		Logger:        logger,
 		ModelAssetPuller: &stubPullAssetPuller{
@@ -272,7 +272,7 @@ func TestService_PullModel_LogsSuccessAndFailureOutcomes(t *testing.T) {
 		t.Fatalf("PullModel success path: %v", err)
 	}
 
-	svc = modelsservice.New(modelsservice.Dependencies{
+	svc = mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig:    func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		Logger:           logger,
 		ModelAssetPuller: &stubPullAssetPuller{err: errors.New("pull failed")},
@@ -297,7 +297,7 @@ func TestService_PullModel_UsesInjectedClockForDuration(t *testing.T) {
 		time.Date(2026, time.July, 10, 12, 0, 0, 0, time.UTC),
 		time.Date(2026, time.July, 10, 12, 0, 2, 500_000_000, time.UTC),
 	}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		Clock: func() time.Time {
 			now := times[0]

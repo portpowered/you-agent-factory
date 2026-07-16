@@ -1,3 +1,4 @@
+import { Dialog } from "@you-agent-factory/components/overlays";
 import {
   type DragEvent as ReactDragEvent,
   useEffect,
@@ -8,12 +9,7 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { Dialog } from "@you-agent-factory/components/overlays";
-import {
-  AlertPanel,
-  Button,
-  Text,
-} from "../../../components/ui";
+import { AlertPanel, Button, Text } from "../../../components/ui";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
   type DashboardSessionTabsState,
@@ -93,8 +89,8 @@ function DashboardSessionTabsView({
 
   return (
     <>
-      <div className="grid min-w-0 max-w-full gap-2 overflow-hidden">
-        <div className="inline-flex min-w-0 max-w-full items-stretch gap-1 overflow-visible">
+      <div className="grid min-w-0 max-w-full gap-2">
+        <div className="flex min-w-0 max-w-full items-stretch gap-1">
           <SessionTabsContent
             activeSession={activeSession}
             closingSessionID={
@@ -250,11 +246,11 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 max-w-full overflow-hidden"
+        className="min-w-0 max-w-full overflow-x-auto overscroll-x-contain"
       >
         <div
           aria-orientation="horizontal"
-          className="inline-flex h-full min-w-0 max-w-full items-stretch gap-1 overflow-hidden"
+          className="inline-flex h-full min-w-max items-stretch gap-1 pr-1"
           role="tablist"
         >
           {sessions.map((session, index) => (

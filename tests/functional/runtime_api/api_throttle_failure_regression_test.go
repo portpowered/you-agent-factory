@@ -25,7 +25,7 @@ func TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork(t
 
 	runner := testutil.NewProviderCommandRunner(repeatedThrottleCommandResults(12)...)
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.ProviderCommandRunnerOverride = runner
+		support.ConfigureWorkerCommands(t, cfg, runner, nil)
 	}, factory.WithServiceMode())
 
 	server.SubmitRuntimeWork(t, work.SubmitRequest{

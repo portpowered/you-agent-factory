@@ -177,10 +177,10 @@ Fail the cron task.
 	fs := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
-		cfg.ProviderCommandRunnerOverride = testutil.NewProviderCommandRunner(workers.CommandResult{
+		support.ConfigureWorkerCommands(t, cfg, testutil.NewProviderCommandRunner(workers.CommandResult{
 			Stderr:   []byte("cron worker unavailable"),
 			ExitCode: 1,
-		})
+		}), nil)
 	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))

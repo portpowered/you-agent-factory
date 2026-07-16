@@ -2,8 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { expect, within } from "storybook/test";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { formatDateTime } from "../../../i18n/formatters";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
+import { verifyMixedTranscriptStory } from "./storybook/provider-session-detail-panel-story-play";
 
 const providerSessionVerificationSessionID =
   "019e44f4-580e-7f32-981e-1e54ec6907d6";
@@ -347,66 +347,7 @@ export const MixedTranscript = {
       snapshot: semanticWorkflowDashboardSnapshot,
     },
   },
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await canvas.findByRole("heading", { name: "Transcript" });
-    const expectedTranscriptTimestamp = formatDateTime("2026-05-20T17:35:27Z");
-    const headingNames = (await canvas.findAllByRole("heading")).map(
-      (heading) => heading.textContent ?? "",
-    );
-    const transcriptIndex = headingNames.indexOf("Transcript");
-
-    expect(transcriptIndex).toBeGreaterThan(-1);
-
-    for (const headingName of [
-      "Session Analysis",
-      "Token Usage",
-      "Turns",
-      "Function Calls",
-      "Reasoning",
-      "Maintainer Diagnostics",
-    ]) {
-      const headingIndex = headingNames.indexOf(headingName);
-      if (headingIndex !== -1) {
-        expect(transcriptIndex).toBeLessThan(headingIndex);
-      }
-    }
-
-    expect(
-      canvas.getAllByText('{"path":"pkg/api/provider_session_details.go"}'),
-    ).toHaveLength(1);
-    expect(
-      canvas.getAllByText("Inspect the parser branch before retrying."),
-    ).toHaveLength(1);
-    expect(canvas.getAllByText("Encrypted Reasoning").length).toBeGreaterThan(
-      0,
-    );
-    const panel = canvas.getByLabelText("Selected Session Details");
-    expect(panel.className).toContain("af-provider-session-sans");
-
-    expect(canvas.getByText("Command Result")).toBeTruthy();
-    expect(canvas.getByText("Exit Code")).toBeTruthy();
-    expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
-    expect(
-      canvas.getByText("provider-session parsing verified successfully"),
-    ).toBeTruthy();
-    const rawToolOutputToggle = canvas.getByRole("button", {
-      name: "Expand Raw exec_command Output",
-    });
-    expect(rawToolOutputToggle).toBeTruthy();
-    expect(
-      canvas.getByText(
-        "Reasoning occurred for this step, but plaintext content is intentionally unavailable.",
-      ),
-    ).toBeTruthy();
-    expect(canvas.getByText("unexpected end of JSON input")).toBeTruthy();
-    expect(canvas.getByText("Unknown event on line 8")).toBeTruthy();
-    expect(
-      canvas
-        .getAllByTitle("2026-05-20T17:35:27Z")
-        .some((element) => element.textContent === expectedTranscriptTimestamp),
-    ).toBe(true);
-  },
+  play: ({ canvasElement }) => verifyMixedTranscriptStory(canvasElement),
   render: TimestampPrefixedSessionSuccess.render,
 };
 

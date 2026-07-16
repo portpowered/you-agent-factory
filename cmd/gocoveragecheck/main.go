@@ -39,25 +39,30 @@ var (
 )
 
 type config struct {
-	covermode       string
-	coverpkg        string
-	jobs            int
-	min             float64
-	packageBaseline string
-	packageMin      float64
-	packages        string
-	profile         string
-	short           bool
-	suite           string
-	timeout         time.Duration
-	totalOnly       bool
+	covermode        string
+	coverpkg         string
+	jobs             int
+	generateManifest string
+	updateManifest   string
+	packageManifest  string
+	min              float64
+	packageBaseline  string
+	packageMin       float64
+	packages         string
+	profile          string
+	short            bool
+	suite            string
+	timeout          time.Duration
+	totalOnly        bool
 }
 
 type coverageResult struct {
 	actual                       float64
 	insufficientCoveragePackages []packageCoverageSummary
+	packageTotals                map[string]packageCoverageTotals
 	packageSummaries             []packageCoverageSummary
 	zeroCoveragePackages         []string
+	packageMinimumFailures       []string
 }
 
 type packageCoverageTotals struct {
@@ -84,6 +89,9 @@ func main() {
 }
 
 func execute(cfg config) error {
+	if err := validateConfig(cfg); err != nil {
+		return err
+	}
 	result, err := run(cfg)
 	if err != nil {
 		return err
@@ -96,9 +104,25 @@ func execute(cfg config) error {
 	if len(result.insufficientCoveragePackages) > 0 {
 		failures = append(failures, formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin()))
 	}
+	failures = append(failures, result.packageMinimumFailures...)
 
 	for _, summary := range result.packageSummaries {
 		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
+	}
+	if cfg.generateManifest != "" {
+		if err := createCoverageManifest(cfg.generateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries)); err != nil {
+			return err
+		}
+		fmt.Fprintf(stdoutWriter, "Created %s coverage manifest at %s.\n", cfg.suite, cfg.generateManifest)
+	}
+	if cfg.updateManifest != "" {
+		updates, err := updateCoverageManifestFile(cfg.updateManifest, cfg.suite, result.packageTotals, packageImportPaths(result.packageSummaries))
+		for _, update := range updates {
+			fmt.Fprintln(stdoutWriter, update.String())
+		}
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(failures) > 0 {
@@ -113,6 +137,9 @@ func parseConfig() config {
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "go test -p value; functional coverage defaults to 2 and unit coverage uses the Go default")
+	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
+	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
+	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
@@ -124,6 +151,19 @@ func parseConfig() config {
 	flag.BoolVar(&cfg.totalOnly, "total-only", false, "disable package-local coverage gates while retaining per-package reporting")
 	flag.Parse()
 	return cfg
+}
+
+func validateConfig(cfg config) error {
+	manifestOperations := 0
+	for _, value := range []string{cfg.generateManifest, cfg.updateManifest, cfg.packageManifest} {
+		if strings.TrimSpace(value) != "" {
+			manifestOperations++
+		}
+	}
+	if manifestOperations > 1 {
+		return errors.New("configure go coverage: choose only one of -generate-manifest, -update-manifest, or -package-manifest")
+	}
+	return nil
 }
 
 func (cfg config) packageCoverageBaselinePath() string {
@@ -210,18 +250,29 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
-	packageGateEnabled := !cfg.totalOnly
+	legacyPackageGateEnabled := !cfg.totalOnly && cfg.generateManifest == "" && cfg.updateManifest == "" && strings.TrimSpace(cfg.packageManifest) == ""
 	baselinePackages := map[string]struct{}{}
-	if packageGateEnabled {
+	if legacyPackageGateEnabled {
 		baselinePackages, err = packageCoverageBaselinePackages(cfg, repoRoot)
 		if err != nil {
 			return coverageResult{}, err
 		}
 	}
 
-	result, totalLine, err := evaluateCoverage(stdout.String(), "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, packageGateEnabled)
+	result, totalLine, err := evaluateCoverage(stdout.String(), "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
 	if err != nil {
 		return coverageResult{}, err
+	}
+	if !cfg.totalOnly && strings.TrimSpace(cfg.packageManifest) != "" {
+		manifestPath := cfg.packageManifest
+		if !filepath.IsAbs(manifestPath) {
+			manifestPath = filepath.Join(repoRoot, manifestPath)
+		}
+		manifest, err := readCoverageManifestFile(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries))
+		if err != nil {
+			return coverageResult{}, err
+		}
+		result.packageMinimumFailures = checkCoverageManifest(manifest, result.packageTotals, cfg.packageManifest)
 	}
 	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil
@@ -463,6 +514,7 @@ func evaluateCoverage(_ string, _ string, profilePath string, repoRoot string, c
 	return coverageResult{
 		actual:                       actual,
 		insufficientCoveragePackages: insufficientCoveragePackages,
+		packageTotals:                packageTotals,
 		packageSummaries:             packageSummaries,
 		zeroCoveragePackages:         zeroCoveragePackages,
 	}, totalLine, nil

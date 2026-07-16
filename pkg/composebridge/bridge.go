@@ -1,5 +1,5 @@
-// Package composebridge exposes runtime-build seams for pkg/initializer startup
-// composition without creating an import cycle between initializer and service.
+// Package composebridge exposes narrow runtime-build adapters consumed by the
+// pkg/wire application graph without creating a runtimehost/service import cycle.
 package composebridge
 
 import (
@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -15,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -29,19 +29,9 @@ type (
 	FactoryDefinitionService = service.FactoryDefinitionService
 )
 
-// resolveRoot absolutizes cfg.Dir, assigns cfg.Logger, and mints cfg.RuntimeInstanceID when empty.
-func resolveRoot(cfg *runtimehost.Config) (Root, error) {
-	return service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
-}
-
 // ensurebackendScope resolves backend scope before core composition.
 func ensurebackendScope(cfg *runtimehost.Config, logger *zap.Logger) error {
 	return service.EnsureBackendScopeForCompose(cfg, logger)
-}
-
-// loadConfig loads factory.json and replay metadata for compose.
-func loadConfig(cfg *runtimehost.Config, root Root) (ConfigLoad, error) {
-	return service.LoadFactoryConfigForStartup(cfg, root)
 }
 
 // ClockForCompose selects the factory clock for the loaded replay artifact.
@@ -49,14 +39,9 @@ func ClockForCompose(cfg *runtimehost.Config, load ConfigLoad) factory.Clock {
 	return service.ClockForCompose(cfg, load)
 }
 
-// HostedWorkers builds the hosted-workers collaborator from config.
-func HostedWorkers(cfg *runtimehost.Config, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
-	return service.HostedWorkersForCompose(cfg, logger, clock)
-}
-
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *runtimehost.Config) LocalModelDomain {
-	return service.NewLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(cfg))
+func NewLocalModelDomain(cfg *runtimehost.Config) (LocalModelDomain, error) {
+	return modelhost.NewLocalDomain(service.LocalModelDomainDependencies(service.FactoryServiceConfigFromRuntimeHost(cfg)))
 }
 
 // NewRuntimeBuildService constructs the runtimebuild collaborator for core composition.
@@ -66,7 +51,7 @@ func NewRuntimeBuildService(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	return service.NewRuntimeBuildServiceForCompose(cfg, clock, baseLogger, localModels, sessions)
 }
 
@@ -112,11 +97,6 @@ func WireModelAssetPuller(cfg *runtimehost.Config, production LocalModelDomain) 
 	return service.WireModelAssetPullerForCompose(cfg, production.Assets)
 }
 
-// NewSessionsRegistry constructs the live session registry collaborator.
-func NewSessionsRegistry() *factorysessions.Registry {
-	return service.NewFactorySessionsRegistry()
-}
-
 // NewModelServiceFromCore constructs a model service from a composed core.
 func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
 	return service.NewModelServiceFromCore(core)
@@ -125,9 +105,4 @@ func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
 // NewFactoryDefinitionServiceFromCore constructs a factory definition service from a core.
 func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefinitionService {
 	return service.NewFactoryDefinitionServiceFromCore(core)
-}
-
-// StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*workerconfig.Config, bool) {
-	return service.StartupWorkerConfigFromCore(core, name)
 }

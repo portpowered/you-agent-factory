@@ -23,6 +23,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
@@ -53,6 +54,8 @@ type harnessConfig struct {
 	applyFullWorkerPoolAndScriptWrapExecutor bool
 	asyncMode                                bool
 	serviceConfig                            service.FactoryServiceConfig
+	providerCommandRunner                    workers.CommandRunner
+	scriptCommandRunner                      workers.CommandRunner
 }
 
 // ServiceTestHarnessOption configures a ServiceTestHarness.
@@ -71,7 +74,7 @@ func WithProvider(p workers.Provider) ServiceTestHarnessOption {
 // replacement at the higher-level Infer API.
 func WithProviderCommandRunner(runner workers.CommandRunner) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
-		cfg.serviceConfig.ProviderCommandRunnerOverride = runner
+		cfg.providerCommandRunner = runner
 	}
 }
 
@@ -88,7 +91,7 @@ func WithExtraOptions(opts ...factory.FactoryOption) ServiceTestHarnessOption {
 // pipeline (arg templates, env merging, exit-code routing).
 func WithCommandRunner(runner workers.CommandRunner) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
-		cfg.serviceConfig.CommandRunnerOverride = runner
+		cfg.scriptCommandRunner = runner
 	}
 }
 
@@ -223,6 +226,14 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 		opt(cfg)
 	}
 	testdeps.Default().ApplyFactoryServiceConfig(&cfg.serviceConfig)
+	components, err := workerapplication.New(cfg.serviceConfig.Logger, workerapplication.Edges{
+		ProviderCommandRunner: cfg.providerCommandRunner,
+		ScriptCommandRunner:   cfg.scriptCommandRunner,
+	})
+	if err != nil {
+		t.Fatalf("NewServiceTestHarness: construct worker application: %v", err)
+	}
+	cfg.serviceConfig.WorkerApplication = components
 
 	if cfg.asyncMode {
 		// Async mode: wrap all registered executors with the mock/custom

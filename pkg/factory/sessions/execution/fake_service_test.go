@@ -1119,6 +1119,21 @@ func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {
 		t.Fatalf("after sequence events = %d, want 1", len(afterSequence))
 	}
 
+	eventsWithoutSessionSequence := append([]json.RawMessage(nil), events...)
+	eventsWithoutSessionSequence[1] = json.RawMessage(
+		`{"id":"session-result-updated/s1","context":{"sequence":42}}`,
+	)
+	canonicalSequence := 42
+	afterCanonicalSequence, err := FilterEventsAfterReconnect(eventsWithoutSessionSequence, EventReconnectRequest{
+		AfterSequence: &canonicalSequence,
+	}, "s1")
+	if err != nil {
+		t.Fatalf("FilterEventsAfterReconnect canonical sequence fallback: %v", err)
+	}
+	if len(afterCanonicalSequence) != 1 {
+		t.Fatalf("after canonical sequence events = %d, want 1", len(afterCanonicalSequence))
+	}
+
 	_, err = FilterEventsAfterReconnect(events, EventReconnectRequest{
 		AfterEventID: "missing-event",
 	}, "s1")

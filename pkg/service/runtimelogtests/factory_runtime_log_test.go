@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -585,15 +586,19 @@ func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) 
 	if logger == nil {
 		logger = zap.NewNop()
 	}
+	components, err := workerapplication.New(logger, workerapplication.Edges{ScriptCommandRunner: opts.commandRunnerOverride})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
 	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:                   dir,
-		Logger:                logger,
-		Verbose:               opts.verbose,
-		RuntimeInstanceID:     opts.runtimeInstanceID,
-		RuntimeLogDir:         logDir,
-		RecordPath:            recordPath,
-		WorkFile:              workFile,
-		CommandRunnerOverride: opts.commandRunnerOverride,
+		Dir:               dir,
+		Logger:            logger,
+		Verbose:           opts.verbose,
+		RuntimeInstanceID: opts.runtimeInstanceID,
+		RuntimeLogDir:     logDir,
+		RecordPath:        recordPath,
+		WorkFile:          workFile,
+		WorkerApplication: components,
 	})
 	if err != nil {
 		t.Fatalf("service.BuildFactoryService: %v", err)

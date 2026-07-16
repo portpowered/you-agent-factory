@@ -212,7 +212,7 @@ make ui-lint
 
 `make ui-components-verify` runs the full component package harness with labeled
 failure output for typecheck, tests, Storybook build, boundary checks, and
-dependency-direction checks. CI runs the same harness in the Build, Lint, and API
+dependency-direction checks. CI runs the same harness in the Lint
 workflow after dashboard lint.
 
 From the `ui` workspace root:

@@ -29,7 +29,7 @@ func (fs *FactoryService) startSchedulerSidecarsForRuntime(
 	if err != nil {
 		return err
 	}
-	workersScheduler.StartSchedulerSidecarsForRuntime(
+	return workersScheduler.StartSchedulerSidecarsForRuntime(
 		ctx,
 		sidecars,
 		workersservice.RuntimeSidecarsInput{
@@ -39,7 +39,6 @@ func (fs *FactoryService) startSchedulerSidecarsForRuntime(
 			Submitter:  workersservice.WorkRequestSubmitter(submitter),
 		},
 	)
-	return nil
 }
 
 func (fs *FactoryService) requireWorkersScheduler() (*workersservice.Service, error) {

@@ -5,9 +5,11 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -48,7 +50,9 @@ type Core struct {
 	startupBundle    *factoryRuntimeBundle
 	logger           *zap.Logger
 	modelAssets      modelAssetPuller
+	modelService     apisurface.ModelAPI
 	durableExecution factorysessionexecution.Service
+	persistence      runtimepersist.Store
 }
 
 // ServiceConfig returns the normalized service config used to compose the core.
@@ -156,6 +160,23 @@ func (core *Core) ModelAssetPuller() localmodels.AssetPuller {
 	return core.modelAssets
 }
 
+// ModelService returns the explicitly composed model-domain collaborator.
+func (core *Core) ModelService() apisurface.ModelAPI {
+	if core == nil {
+		return nil
+	}
+	return core.modelService
+}
+
+// AttachModelService records the already-constructed model collaborator on the
+// inert graph so later transport facades only delegate to it.
+func AttachModelService(core *Core, modelAPI apisurface.ModelAPI) *Core {
+	if core != nil {
+		core.modelService = modelAPI
+	}
+	return core
+}
+
 // DurableExecution returns the single durable execution collaborator owned by
 // this composed application graph.
 func (core *Core) DurableExecution() factorysessionexecution.Service {
@@ -163,6 +184,15 @@ func (core *Core) DurableExecution() factorysessionexecution.Service {
 		return nil
 	}
 	return core.durableExecution
+}
+
+// Persistence returns the durable snapshot store constructed for this graph.
+// Explicitly disabled persistence returns nil.
+func (core *Core) Persistence() runtimepersist.Store {
+	if core == nil {
+		return nil
+	}
+	return core.persistence
 }
 
 // ComposeCollaboratorSnapshot reports initialized core collaborators for
@@ -178,6 +208,7 @@ func (core *Core) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
 		WorkersSchedulerInitialized: core.WorkersScheduler() != nil,
 		LocalModelsInitialized:      core.LocalModels().Manager != nil,
 		ModelAssetsInitialized:      core.ModelAssetPuller() != nil,
+		ModelServiceInitialized:     core.ModelService() != nil,
 		DefinitionsInitialized:      true,
 		HostedWorkersLoggerReady:    core.HostedWorkers().Logger != nil,
 	}
@@ -203,6 +234,7 @@ func NewCore(
 	logger *zap.Logger,
 	modelAssets modelAssetPuller,
 	durableExecution factorysessionexecution.Service,
+	persistence runtimepersist.Store,
 ) *Core {
 	return &Core{
 		cfg:              cfg,
@@ -218,5 +250,6 @@ func NewCore(
 		logger:           logger,
 		modelAssets:      modelAssets,
 		durableExecution: durableExecution,
+		persistence:      persistence,
 	}
 }

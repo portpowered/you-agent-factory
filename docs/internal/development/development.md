@@ -41,8 +41,15 @@ make verify-fast
 make verify-pr
 make verify-extended
 make test
+make test-unit
+make test-functional
+make test-stress
+make test-release
 make test-full
 make typecheck
+make verify-build
+make verify-lint
+make verify-api
 make verify-build-contracts
 make verify-tests
 make verify
@@ -88,14 +95,23 @@ Expensive specialty verification that is useful for maintainer confidence but no
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
-The workflow currently executes these repository-owned commands through one prerequisite lane and three required verification lanes:
+The workflow schedules focused verification jobs independently wherever they do
+not share a genuine prerequisite. `Build`, `Lint`, and `API` run `make
+verify-build`, `make verify-lint`, and `make verify-api` respectively, with no
+dependencies on one another. `Release Surface Smoke`, `PR Inference Approval`,
+and the four focused Windows Go suites also schedule independently. After
+`Classify PR Impact`, the UI coverage, browser integration, backend unit
+coverage, and backend functional coverage jobs either run or report an
+intentional skip according to the classifier result. `make
+verify-build-contracts` remains the sequential local aggregate for the focused
+Build, Lint, and API commands; it is not itself a CI verification job.
 
-1. `cd ui && bun install --frozen-lockfile`
-2. `cd ui && bun run tsc`
-3. `make verify-build-contracts`
-4. `make run-sharded-ui-coverage` and `make ui-integration-test` in parallel GitHub Actions jobs (local `make verify-tests` runs the same two lanes concurrently through `make run-concurrent-ui-verification-lanes`)
-5. `cd ui && bunx playwright install chromium` (browser integration job only; local `make release-surface-smoke` installs browsers before the concurrent UI lanes)
-6. `make test-unit-coverage` and `make test-functional-coverage` as independent GitHub Actions matrix checks
+Use `make run-sharded-ui-coverage` and `make ui-integration-test` to reproduce
+the parallel UI jobs (`make verify-tests` runs both locally through `make
+run-concurrent-ui-verification-lanes`). Use `make test-unit-coverage` and `make
+test-functional-coverage` for the independent backend coverage checks. The
+browser integration job installs Chromium in its own setup; local `make
+release-surface-smoke` installs the browser needed by its smoke path.
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -108,6 +124,14 @@ Use these canonical verification tiers on the root command surface before reachi
 The older aggregate names remain available as compatibility aliases while docs, workflows, and active review branches converge on the clearer tiered surface. In particular, `make verify` still works, but it now points contributors at `make verify-pr` as the canonical pull-request rerun command.
 
 Treat the matrix below as the canonical suite-ownership and rerun guide for the tiered test surface:
+
+The focused Go suite commands are `make test-unit`, `make test-functional`,
+`make test-stress`, and `make test-release`. The unit command discovers the
+repository's ordinary package tests while excluding all three specialized
+suite roots. The unit and functional runners keep bounded two-package
+concurrency, and all four focused commands retain the default short-mode and timeout policy.
+`make test` is the compatibility entrypoint for `make test-unit`; `make
+test-full` remains the broad unshortened aggregate across every Go package.
 
 | Surface | Runs | Intentionally excludes | Failure rerun path |
 | --- | --- | --- | --- |
@@ -128,7 +152,7 @@ Compatibility aliases that still remain on the root command surface:
 
 The pull-request workflow restores the supported built-in Go module and build cache through `actions/setup-go` keyed by `go.sum`, and restores Bun's global package cache from `~/.bun/install/cache` keyed by the hosted-runner OS, the pinned `BUN_VERSION`, and `ui/bun.lock`. Keep those invalidation inputs aligned with the real dependency surfaces instead of introducing static cache keys. The workflow intentionally does not cache Playwright browser binaries in the PR lanes because Playwright's CI guidance says restore cost is usually comparable to a fresh download on hosted runners; if that assumption changes, document the measured reason before adding a browser cache layer.
 
-The `UI Browser Integration` lane also intentionally does not reuse a prebuilt `ui/dist` artifact from `verify-build-contracts`. The owned browser harness in `ui/integration/event-stream-replay.integration.test.mjs` rebuilds the dashboard with a lane-scoped `VITE_AGENT_FACTORY_API_ORIGIN` and then starts its own `vite preview` server inside `beforeAll`, so downloading an upstream artifact would add upload/download coupling without removing the lane's own build-and-preview responsibility or making independent retries easier to reason about.
+The `UI Browser Integration` lane intentionally does not reuse a prebuilt `ui/dist` artifact from the `Build` lane. The owned browser harness in `ui/integration/event-stream-replay.integration.test.mjs` rebuilds the dashboard with a lane-scoped `VITE_AGENT_FACTORY_API_ORIGIN` and then starts its own `vite preview` server inside `beforeAll`, so downloading an upstream artifact would add upload/download coupling without removing the lane's own build-and-preview responsibility or making independent retries easier to reason about.
 
 Use `make dashboard-verify` for dashboard review readiness after UI source changes that affect embedded assets. It runs `ui-build`, `lint`, and the short Go test suite sequentially so Vite asset rotation does not race with Go embed scanning.
 
@@ -144,17 +168,17 @@ Burn down an exemption by removing both the inline directive and its matching `b
 
 Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for handwritten frontend code, not as a prompt to add new suppressions. Generated API artifacts under `ui/src/api/generated/` may keep generated-code-specific exceptions, but handwritten app code, tests, stories, and fixtures should stay under the standard limits by decomposing the surface into smaller feature components, story modules, shared fixtures, or named test helpers. Review-ready proof for that decomposition is the normal `make typecheck`, `make lint`, and behavior-specific test or Storybook evidence for the touched surface, not a separate source-inventory audit.
 
-`make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
+`make verify-build-contracts` is the repository-owned aggregate for local full build-contract verification. It runs `make typecheck`, then `make verify-build`, `make verify-lint`, and `make verify-api`. CI runs those three focused commands in independent `Build`, `Lint`, and `API` jobs after each job's own setup.
 
 `make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make release-surface-smoke`, then `make test-built-cli-acceptance`, then starts `make run-sharded-ui-coverage` and `make ui-integration-test` concurrently through `make run-concurrent-ui-verification-lanes`, and finishes with independent `make test-unit-coverage` and `make test-functional-coverage` lanes. The concurrent orchestrator prefixes each UI lane's stdout with `[UI Coverage]` or `[UI Browser Integration]`, writes per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`, and emits the exact `make <target>` rerun command for any failed lane. GitHub Actions publishes backend unit and functional coverage as separate matrix checks and retains distinct `coverage.out`, `coverage.txt`, and `command.log` artifacts for each. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` use the same shard-and-merge contract through `make run-sharded-ui-coverage` (default `UI_COVERAGE_SHARD_TOTAL=10`). `make test-ui-coverage` remains the monolithic compatibility path for ad hoc comparison runs.
 
 `make test-built-cli-acceptance` is the focused rerun command for the hermetic built-CLI S24 acceptance package under `tests/functional/acceptance`. It builds `./cmd/factory`, runs the full behavioral acceptance corpus (including named-goal, stream, subagent, and local-model scenarios that skip under `-short`), and fails with scenario subtest names such as `s24-fresh-install` when the scenario matrix drifts from its documented customer-outcome mapping in `internal/builtcliacceptance/scenarios.go`.
 
-Every pull request still runs the same prerequisite path before any lane-specific skips happen:
+Every pull request schedules these early verification lanes before the lane-specific skip decisions:
 
 1. `Classify PR Impact`
 2. `Typecheck`
-3. `Build, Lint, and API`
+3. `Build`, `Lint`, and `API`
 
 The classifier is what decides whether the three downstream required test lanes run or skip. Treat its four classifications as the maintained routing contract:
 
@@ -186,7 +210,39 @@ The UI Coverage contract also includes the Bun lcov merge/threshold pass (`merge
 
 Covered UI and browser integration lanes emit stable slow-file summaries through `ui/scripts/ui-test-cost-report.mjs`. Each main covered shard writes `ui/.vitest-report-timings/main-shard-<index>-timings.json` (kept outside `.vitest-reports` so `vitest --mergeReports` only ingests Vitest blob reports); `UI_COVERAGE_MERGE=1` merge mode prints a merged `[ui-coverage] Merged main covered pass slowest test files` summary after thresholds complete. Browser integration uses `ui/scripts/ui-integration-runner.mjs` behind `test:integration` and prints `[ui-browser-integration] Browser integration slowest test files` with per-file cost categories (`app-shell-integration`, `react-flow-graph`, `replay-timeline`, `import-export`, `script-style`, `uncategorized`). Copy those lines into closeout notes to compare runs without scraping source topology.
 
-Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and preserves the repository's aggregate and per-package coverage gates. `make test-functional-coverage` discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and reports total and per-package coverage directly from that functional-only profile over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. The functional aggregate floor is `GO_FUNCTIONAL_COVERAGE_MIN=33.1`, while every non-baselined package must meet `GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN=80.0`. Existing packages below that target are listed in `go-functional-coverage-package-baseline.txt`; new packages are intentionally absent and therefore must reach 80% instead of being added to the baseline by default. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both reports in sequence. Stress, built-CLI release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
+Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and enforces both the aggregate unit floor and `go-unit-coverage-package-minimums.json`. `make test-functional-coverage` discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and enforces both the aggregate functional floor and `go-functional-coverage-package-minimums.json` over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. Ordinary low coverage is represented by the lane manifest's numeric current floor, so the required lanes no longer depend on newline-delimited package exception lists or a shared 80% package target. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both blocking reports in sequence. Stress, built-CLI release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
+
+The deterministic current package floors are recorded in
+`go-unit-coverage-package-minimums.json` and
+`go-functional-coverage-package-minimums.json`. Each manifest uses schema
+version `1`, names its `unit` or `functional` lane, and contains an import-path-
+sorted `packages` array. A measured entry has exactly `package` and a numeric
+`minimum` written with two decimal places. A package with no measurable
+statements uses `exception` instead of `minimum`; the exception must identify a
+`measurement` or `migration` defect and include `justification`, `owner`, a
+`deadline` in `YYYY-MM-DD` form, and an objective `removalGate`. Ordinary low
+coverage is represented by a numeric floor, not an exception.
+
+Bootstrap a new lane manifest from the lane's integer statement counts with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -generate-manifest <new-file>`. Generation is create-only: it refuses to overwrite reviewed policy.
+
+Enforce a reviewed lane manifest with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -package-manifest <manifest-file>`.
+The check fails closed when a measured package is missing, an exception is
+expired, or the exact integer statement ratio is below its package floor.
+Regression diagnostics include the lane, package, expected minimum, actual
+coverage, signed delta, and the monotonic update command for ratcheting the
+reviewed manifest after coverage is restored. Aggregate `-min` enforcement
+remains independent and blocking.
+The renderer sorts entries and truncates each exact ratio downward to two
+decimal percentage points, so identical profiles produce identical bytes and a
+generated floor never exceeds its measurement. Ratchet an existing reviewed
+manifest explicitly with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file>`.
+The command reports every package as `added`, `raised`, `unchanged`, or
+`rejected` in import-path order. Any rejected decrease prevents the entire
+write; repeating the command without an added package or qualifying increase
+leaves the manifest byte-for-byte unchanged.
 
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 
@@ -204,7 +260,7 @@ Backend verification failure summaries are rendered by `go run ./cmd/backendveri
 
 ### PR Inference Approval
 
-Required pull-request CI runs one explicit inference approval lane named `PR Inference Approval`. It is **not** folded into Backend Verification and is **not** gated by `Classify PR Impact`; every pull request and main push runs it after `verify-build-contracts`.
+Required pull-request CI runs one explicit inference approval lane named `PR Inference Approval`. It is **not** folded into Backend Verification and is **not** gated by `Classify PR Impact`; every pull request and main push schedules it independently of Build, Lint, and API.
 
 **Local rerun commands**
 

@@ -130,7 +130,12 @@ func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingC
 	})
 
 	logDir := t.TempDir()
-	recordPath := filepath.Join(t.TempDir(), "runtime-logging-smoke.replay.json")
+	recordDir, err := os.MkdirTemp("", "runtime-logging-smoke-record-")
+	if err != nil {
+		t.Fatalf("create replay directory: %v", err)
+	}
+	t.Cleanup(func() { removeRuntimeLoggingSmokeDir(t, recordDir) })
+	recordPath := filepath.Join(recordDir, "runtime-logging-smoke.replay.json")
 	runtimeInstanceID := "runtime-logging-smoke"
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -150,6 +155,24 @@ func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingC
 		records:  readRuntimeLoggingSmokeRecords(t, logPath),
 		artifact: testutil.LoadReplayArtifact(t, recordPath),
 		logPath:  logPath,
+	}
+}
+
+func removeRuntimeLoggingSmokeDir(t *testing.T, dir string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		err := os.RemoveAll(dir)
+		if err == nil {
+			if _, statErr := os.Stat(dir); os.IsNotExist(statErr) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Errorf("remove replay directory %s: %v", dir, err)
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

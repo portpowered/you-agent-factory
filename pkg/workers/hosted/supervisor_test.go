@@ -13,17 +13,15 @@ import (
 	"testing"
 	"time"
 
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
-
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-
 	"github.com/jonboulle/clockwork"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
-
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
@@ -194,9 +192,7 @@ func TestStartLinearPoller_StopsAndLogsLifecycle(t *testing.T) {
 	}
 }
 
-func TestStartLinearPoller_RestartsOnMissingAuthConfig(t *testing.T) {
-	fakeClock := clockwork.NewFakeClock()
-	logCore, observedLogs := observer.New(zap.InfoLevel)
+func TestStartLinearPoller_RejectsMissingAuthBeforeStarting(t *testing.T) {
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
 		Kind:           workertaxonomy.WorkstationKindPoller,
@@ -219,27 +215,69 @@ func TestStartLinearPoller_RestartsOnMissingAuthConfig(t *testing.T) {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	pollerCfg := Config{
-		Logger: zap.New(logCore),
-		Clock:  fakeClock,
-	}
-
-	sidecarCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	var sidecars sync.WaitGroup
-	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
+	err = StartLinearPoller(context.Background(), &sidecars, Config{}, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
+	if err == nil || !strings.Contains(err.Error(), "auth.secretRef is required") {
+		t.Fatalf("StartLinearPoller() error = %v, want auth dependency validation", err)
+	}
+	sidecars.Wait()
+}
 
-	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
-	restartEntry := observedLogs.FilterMessage("hosted linear poller restarting").All()[0]
-	if got := restartEntry.ContextMap()["error"]; got == nil || !strings.Contains(fieldString(got), "missing auth.secretRef") {
-		t.Fatalf("restart error = %#v, want missing auth.secretRef context", got)
+func TestNewLinearPoller_AppliesProductionDefaults(t *testing.T) {
+	runtimeCfg, err := config.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{}, nil)
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+	worker := &workerconfig.Config{
+		Name: "linear-poller", Auth: &workerconfig.HostedWorkerAuthConfig{SecretRef: "linear-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{},
+	}
+	poller, err := NewLinearPoller(LinearPollerDependencies{
+		RuntimeConfig: runtimeCfg, Worker: worker,
+		Submitter: func(context.Context, work.WorkRequest) error { return nil },
+	})
+	if err != nil {
+		t.Fatalf("NewLinearPoller() error = %v", err)
+	}
+	if poller.config.HTTPClient == nil || poller.config.HTTPClient.Timeout != hostedlinear.DefaultRequestTimeout {
+		t.Fatalf("HTTP client = %#v, want production timeout", poller.config.HTTPClient)
+	}
+	if poller.config.LinearEndpoint != hostedlinear.DefaultEndpoint || poller.config.SecretResolver == nil || poller.config.Clock == nil || poller.config.Logger == nil {
+		t.Fatalf("normalized production edges = %+v", poller.config)
+	}
+}
+
+func TestStartLinearPoller_RedactsResolvedSecretFromProviderErrors(t *testing.T) {
+	const secret = "resolved-linear-secret"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = fmt.Fprintf(w, `{"errors":[{"message":"provider echoed %s"}]}`, secret)
+	}))
+	defer server.Close()
+
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	factoryDir := t.TempDir()
+	pollerCfg, runtimeCfg, workstation, worker := hostedLinearPollerFixtureForTest(t, factoryDir, server, nil)
+	pollerCfg.Logger = zap.New(logCore)
+	pollerCfg.Clock = clockwork.NewFakeClock()
+	pollerCfg.SecretResolver = func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
+		return secret, nil
 	}
 
-	waitForFakeClockWaiters(t, fakeClock, 1)
-	fakeClock.Advance(restartBackoffMin)
-	waitForObservedLogCount(t, observedLogs, "hosted linear poller restarting", 2, time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := StartLinearPoller(ctx, &sidecars, pollerCfg, runtimeCfg, workstation, worker, func(context.Context, work.WorkRequest) error { return nil }); err != nil {
+		t.Fatalf("StartLinearPoller() error = %v", err)
+	}
+	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
+	cancel()
+	sidecars.Wait()
+	logged := fieldString(observedLogs.FilterMessage("hosted linear poller restarting").All()[0].ContextMap()["error"])
+	if strings.Contains(logged, secret) || !strings.Contains(logged, "[REDACTED]") {
+		t.Fatalf("logged provider error = %q, want resolved secret redacted", logged)
+	}
 }
 
 func TestStartLinearPoller_KeepsPollingOverTime(t *testing.T) {

@@ -64,6 +64,17 @@ func NewAdapter(factoryRoot string, opts ...Option) *Adapter {
 	return adapterValue
 }
 
+// NewAdapterWithAllocator constructs an Agy adapter with its required native
+// PTY edge made explicit. Provider CommandRunner injection is deliberately not
+// part of this contract.
+func NewAdapterWithAllocator(factoryRoot string, allocator agypty.PTYAllocator, opts ...Option) (*Adapter, error) {
+	if allocator == nil {
+		return nil, fmt.Errorf("construct Agy provider: PTY allocator is required")
+	}
+	opts = append(opts, WithAllocator(allocator))
+	return NewAdapter(factoryRoot, opts...), nil
+}
+
 func (a *Adapter) Identity() adapter.Identity {
 	return adapter.Identity(modelprovider.Agy)
 }

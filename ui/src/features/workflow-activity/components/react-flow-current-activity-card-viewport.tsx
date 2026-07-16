@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes React Flow canvas wiring with editor toolbar overlays.
+// biome-ignore lint/style/noExcessiveLinesPerFile: composes React Flow canvas wiring with editor toolbar overlays.
 import {
   type Connection,
   type Edge,
@@ -46,14 +46,15 @@ import type {
   FactoryLayoutViewport,
 } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
-  isFactoryGraphEditorRedoKeyboardEvent,
   isFactoryGraphEditorDeleteSelectionKeyboardEvent,
+  isFactoryGraphEditorRedoKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
 import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/public";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
@@ -426,6 +427,9 @@ export function CurrentActivityGraphViewport({
     factoryGraphNodeIds: readonly string[];
     startPositionsByNodeId: Map<string, XYPosition>;
   } | null>(null);
+  const internalFlowInstanceRef = useRef<ReactFlowInstance | null>(null);
+  const activeFlowInstanceRef = flowInstanceRef ?? internalFlowInstanceRef;
+  const touchPanePanProps = useFactoryGraphTouchPanePan(activeFlowInstanceRef);
   const isValidConnection = buildCurrentActivityIsValidConnection({
     activeTool: editorControls.activeTool,
     editorMode: editorControls.isEditing,
@@ -469,12 +473,12 @@ export function CurrentActivityGraphViewport({
   useCanonicalLayoutViewportSync({
     canonicalLayoutViewport,
     fitViewOptions: layoutControls.initialFitViewOptions,
-    flowInstanceRef,
+    flowInstanceRef: activeFlowInstanceRef,
     skipNextViewportMoveEndRef,
     viewportResetKey: layoutControls.initialFitViewKey,
   });
   useEffect(() => {
-    const flowInstance = flowInstanceRef?.current;
+    const flowInstance = activeFlowInstanceRef.current;
     if (!flowInstance) {
       if (canonicalLayoutViewport) {
         reportPlacementViewport(canonicalLayoutViewport);
@@ -483,7 +487,7 @@ export function CurrentActivityGraphViewport({
     }
 
     reportPlacementViewport(flowInstance.getViewport());
-  }, [canonicalLayoutViewport, flowInstanceRef, reportPlacementViewport]);
+  }, [activeFlowInstanceRef, canonicalLayoutViewport, reportPlacementViewport]);
   const handleConnect = useCallback(
     (connection: Connection) => {
       onConnect?.({
@@ -539,7 +543,13 @@ export function CurrentActivityGraphViewport({
         layoutControls.redo?.();
       }
     },
-    [canDeleteGraphSelection, clearGraphSelection, deleteGraphSelection, editorControls.isEditing, layoutControls],
+    [
+      canDeleteGraphSelection,
+      clearGraphSelection,
+      deleteGraphSelection,
+      editorControls.isEditing,
+      layoutControls,
+    ],
   );
 
   return (
@@ -594,6 +604,7 @@ export function CurrentActivityGraphViewport({
           >
             <ReactFlow
               {...FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS}
+              {...touchPanePanProps}
               className="shadow-none"
               connectionLineStyle={{
                 stroke: "var(--color-primary)",
@@ -617,9 +628,7 @@ export function CurrentActivityGraphViewport({
               }
               onConnect={handleConnect}
               onInit={(instance) => {
-                if (flowInstanceRef) {
-                  flowInstanceRef.current = instance;
-                }
+                activeFlowInstanceRef.current = instance;
                 reportPlacementViewport(instance.getViewport());
               }}
               onError={handleCurrentActivityReactFlowError}
@@ -645,7 +654,7 @@ export function CurrentActivityGraphViewport({
                   return;
                 }
 
-                const flowInstance = flowInstanceRef?.current;
+                const flowInstance = activeFlowInstanceRef.current;
                 if (!flowInstance) {
                   return;
                 }

@@ -3,24 +3,17 @@ package composebridge
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
-	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
 )
 
 // Collaborators groups explicit composition collaborators.
@@ -29,23 +22,8 @@ type Collaborators struct {
 	LocalModels      LocalModelDomain
 	RuntimeBuild     *runtimebuild.Service
 	WorkersScheduler *workersservice.Service
-}
-
-// NewCollaborators builds composition collaborators for startup.
-func NewCollaborators(
-	cfg *runtimehost.Config,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	sessions *factorysessions.Registry,
-) Collaborators {
-	startupLocalModels := NewLocalModelDomain(cfg)
-	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
-	return Collaborators{
-		Sessions:         sessions,
-		LocalModels:      startupLocalModels,
-		RuntimeBuild:     NewRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, sessions),
-		WorkersScheduler: NewWorkersScheduler(cfg, clock, baseLogger, hostedWorkers),
-	}
+	DurableExecution factorysessionexecution.Service
+	Persistence      factorysessionexecution.PersistenceChoice
 }
 
 // ComposeCore constructs a runtimehost.Core using explicit composition collaborators.
@@ -58,8 +36,8 @@ func ComposeCore(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (*runtimehost.Core, error) {
-	if collaborators.WorkersScheduler == nil {
-		return nil, fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	if err := validateCoreCollaborators(collaborators); err != nil {
+		return nil, err
 	}
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
@@ -85,11 +63,6 @@ func ComposeCore(
 		}
 		cfg.Dir = resolvedDir
 	}
-	durableExecution, err := composeDurableExecution(cfg, root, clock)
-	if err != nil {
-		return nil, err
-	}
-
 	replaySideEffects, replayFactoryOpts, err := ReplayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
 		return nil, err
@@ -144,92 +117,25 @@ func ComposeCore(
 		runtimeBundle,
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
-		durableExecution,
+		collaborators.DurableExecution,
+		collaborators.Persistence.Store(),
 	), nil
 }
 
-func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
-	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
-		if root := strings.TrimSpace(candidate); root != "" {
-			return root
+func validateCoreCollaborators(collaborators Collaborators) error {
+	switch {
+	case collaborators.Sessions == nil:
+		return fmt.Errorf("compose runtime host core: Factory Session registry is required")
+	case collaborators.RuntimeBuild == nil:
+		return fmt.Errorf("compose runtime host core: runtime build service is required")
+	case collaborators.WorkersScheduler == nil:
+		return fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	case collaborators.DurableExecution == nil:
+		return fmt.Errorf("compose runtime host core: durable execution service is required")
+	default:
+		if err := collaborators.Persistence.Validate(); err != nil {
+			return fmt.Errorf("compose runtime host core: %w", err)
 		}
+		return nil
 	}
-	return ""
-}
-
-func composeDurableExecution(
-	cfg *runtimehost.Config,
-	root Root,
-	clock factory.Clock,
-) (factorysessionexecution.Service, error) {
-	projectRoot := durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
-	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
-		cfg.DurableSessionPersistencePolicy,
-		projectRoot,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("compose durable session persistence: %w", err)
-	}
-	configPath := strings.TrimSpace(cfg.SystemConfigPath)
-	if configPath == "" {
-		homeDir := strings.TrimSpace(cfg.SystemConfigHomeDir)
-		if homeDir == "" {
-			homeDir, err = os.UserHomeDir()
-			if err != nil {
-				return nil, fmt.Errorf("resolve operator config home: %w", err)
-			}
-		}
-		configPath = defaultpaths.OperatorConfigPath(homeDir)
-	}
-	operatorConfig, err := operatorconfig.LoadFileConfig(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
-	}
-	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
-	workerPresets := make(map[string]workflowruntime.WorkerPreset, len(operatorConfig.WorkerPresets))
-	for _, preset := range operatorConfig.WorkerPresets {
-		workerPresetIDs[preset.ID] = struct{}{}
-		workerPresets[preset.ID] = workflowruntime.WorkerPreset{ModelProvider: preset.ModelProvider, Model: preset.Model, ReasoningEffort: preset.ReasoningEffort}
-	}
-	return factorysessionexecution.NewExecutionService(
-		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-		factorysessionexecution.ServiceConfig{
-			ProjectRoot:      projectRoot,
-			Provider:         cfg.ProviderOverride,
-			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
-			Persistence:      persistence,
-			Clock:            clock,
-			WorkerPresetIDs:  workerPresetIDs,
-			WorkerSettings:   workflowruntime.WorkerSettingsConfig{Presets: workerPresets, DefaultModelProvider: operatorConfig.Defaults.WorkerModelProvider, DefaultModel: operatorConfig.Defaults.WorkerModel},
-		},
-	)
-}
-
-// BuildCore constructs the normalized runtime graph without attaching a transport host.
-func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
-	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
-		return nil, err
-	}
-	root, err := resolveRoot(cfg)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensurebackendScope(cfg, root.BaseLogger); err != nil {
-		return nil, err
-	}
-	load, err := loadConfig(cfg, root)
-	if err != nil {
-		return nil, err
-	}
-	clock := ClockForCompose(cfg, load)
-	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry())
-	return ComposeCore(
-		ctx,
-		cfg,
-		root,
-		collaborators,
-		load,
-		clock,
-		HostedWorkers(cfg, root.BaseLogger, clock),
-	)
 }

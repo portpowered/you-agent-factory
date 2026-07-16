@@ -39,24 +39,37 @@ type Service struct {
 }
 
 // New constructs a runtime-build collaborator with explicit dependencies.
-func New(cfg Config, clock factory.Clock, baseLogger *zap.Logger, build BundleBuilder) *Service {
+// Construction validates process-owned dependencies before any runtime bundle
+// or lifecycle can be started.
+func New(cfg Config, clock factory.Clock, baseLogger *zap.Logger, build BundleBuilder) (*Service, error) {
+	switch {
+	case clock == nil:
+		return nil, fmt.Errorf("construct runtime build service: clock is required")
+	case baseLogger == nil:
+		return nil, fmt.Errorf("construct runtime build service: logger is required")
+	case build == nil:
+		return nil, fmt.Errorf("construct runtime build service: runtime builder is required")
+	}
 	return &Service{
 		cfg:        cfg,
 		clock:      clock,
 		baseLogger: baseLogger,
 		build:      build,
-	}
+	}, nil
 }
 
 // WithPetriMutationRecorder returns a runtime-build service that installs the
 // canonical Factory Session recorder on every factory it constructs.
-func (s *Service) WithPetriMutationRecorder(recorder factory.PetriMutationRecorder) *Service {
+func (s *Service) WithPetriMutationRecorder(recorder factory.PetriMutationRecorder) (*Service, error) {
 	if s == nil {
-		return nil
+		return nil, fmt.Errorf("construct runtime build service: service is required")
+	}
+	if recorder == nil {
+		return nil, fmt.Errorf("construct runtime build service: Petri mutation recorder is required")
 	}
 	configured := *s
 	configured.petriMutationRecorder = recorder
-	return &configured
+	return &configured, nil
 }
 
 // Build builds a runtime bundle from an immutable session build spec.
@@ -81,6 +94,9 @@ func (s *Service) BuildSpec(
 ) (SessionBuildSpec, error) {
 	if s == nil || s.build == nil {
 		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
+	}
+	if !s.cfg.WorkerApplication.Valid() {
+		return SessionBuildSpec{}, fmt.Errorf("runtime build worker application is required")
 	}
 	baseLogger := s.baseLogger
 	if baseLogger == nil {
@@ -116,6 +132,17 @@ func (s *Service) BuildSpec(
 	if runtimeInstanceID == "" {
 		runtimeInstanceID = uuid.NewString()
 	}
+	workerApplication := s.cfg.WorkerApplication
+	if workerApplication.Valid() {
+		var err error
+		workerApplication, err = workerApplication.WithCommandRunners(
+			providerCommandRunnerForMode(&s.cfg, loadedFactoryCfg),
+			commandRunnerOverrideForMode(&s.cfg, loadedFactoryCfg, input.SideEffects),
+		)
+		if err != nil {
+			return SessionBuildSpec{}, fmt.Errorf("construct runtime worker application: %w", err)
+		}
+	}
 	return SessionBuildSpec{
 		Dir:                   input.Dir,
 		FolderPath:            input.FolderPath,
@@ -130,6 +157,7 @@ func (s *Service) BuildSpec(
 		ProviderOverride:      providerOverrideForMode(&s.cfg, input.SideEffects),
 		ProviderCommandRunner: providerCommandRunnerForMode(&s.cfg, loadedFactoryCfg),
 		CommandRunnerOverride: commandRunnerOverrideForMode(&s.cfg, loadedFactoryCfg, input.SideEffects),
+		WorkerApplication:     workerApplication,
 		AdditionalFactoryOpts: input.AdditionalFactoryOpts,
 	}, nil
 }

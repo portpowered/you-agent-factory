@@ -232,6 +232,17 @@ func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.Fact
 	}
 }
 
+// AppendRecordedEvent appends one already-shaped canonical domain event so
+// runtime owners can bridge their events into this history without depending
+// on a transport representation.
+func (h *FactoryEventHistory) AppendRecordedEvent(event interfaces.FactoryEvent) {
+	if h == nil {
+		return
+	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
+	h.appendEvent(event)
+}
+
 // RecordInitialStructure records the static topology before work events.
 func (h *FactoryEventHistory) RecordInitialStructure() {
 	if h == nil {

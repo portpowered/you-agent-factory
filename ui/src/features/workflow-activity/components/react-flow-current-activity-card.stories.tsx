@@ -1111,6 +1111,26 @@ export const NarrowViewport = {
   },
 };
 
+export const TouchPanePanning = {
+  render: () => (
+    <div style={{ maxWidth: "100%", width: "360px" }}>
+      <CurrentActivityStory snapshot={twentyNodeDashboardSnapshot} />
+    </div>
+  ),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    await findGraphElement(
+      canvasElement,
+      ".react-flow__pane",
+      "Expected React Flow pane to render",
+    );
+    await findGraphElement(
+      canvasElement,
+      ".react-flow__viewport",
+      "Expected React Flow viewport to render",
+    );
+  },
+};
+
 export const LocalizedZhCN = {
   render: () => (
     <div style={{ maxWidth: "100%", width: "360px" }}>

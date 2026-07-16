@@ -12,10 +12,65 @@ import (
 	"strings"
 	"testing"
 
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 )
+
+func TestWorkflowCommandClosesRuntimeExecutionOwnerExactlyOnce(t *testing.T) {
+	service, err := fse.NewFakeServiceFromContractFixtures(contractFixtureCatalogPathForTerminology(t))
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		args      []string
+		wantError bool
+	}{
+		{name: "success", args: []string{"workflow", "run", "--request-id", "req-petri-success-001", "--factory", "customer-support-triage"}},
+		{name: "command error", args: []string{"workflow", "status", "missing-session"}, wantError: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			closeCount := 0
+			root := NewRootCommandWithOptions(RootCommandOptions{
+				BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
+					if request.Provider != string(fse.ExecutionProviderJavaScriptRuntime) {
+						t.Fatalf("provider = %q, want runtime provider", request.Provider)
+					}
+					return commandLifecycleExecutionOwner{Service: service, closeCount: &closeCount}, nil
+				},
+			})
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(append(test.args, "--execution-provider", "javascript-runtime"))
+
+			err := root.Execute()
+			if test.wantError && err == nil {
+				t.Fatal("Execute() error = nil, want command error")
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("Execute() error = %v", err)
+			}
+			if closeCount != 1 {
+				t.Fatalf("owner close count = %d, want 1", closeCount)
+			}
+		})
+	}
+}
+
+type commandLifecycleExecutionOwner struct {
+	fse.Service
+	closeCount *int
+}
+
+func (owner commandLifecycleExecutionOwner) Close() error {
+	*owner.closeCount++
+	return nil
+}
 
 const (
 	terminalPolicySecretPrompt = "SECRET_PROMPT_BODY_do-not-emit-712407"

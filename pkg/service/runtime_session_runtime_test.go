@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
@@ -47,6 +48,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -301,13 +303,12 @@ func TestFactoryService_OpenFactorySessionFromFolder_KeepsSessionWorkingDirector
 	writeSessionRuntimeLookupWorkstationAgentsMD(t, rootTwo, "run-script", "workspace-beta")
 
 	runner := &sessionCapturingCommandRunner{}
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:                   rootOne,
-		ExecutionBaseDir:      rootOne,
-		RuntimeMode:           interfaces.RuntimeModeService,
-		CommandRunnerOverride: runner,
-		Logger:                zap.NewNop(),
-	})
+	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		Dir:              rootOne,
+		ExecutionBaseDir: rootOne,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		Logger:           zap.NewNop(),
+	}, workerapplication.Edges{ScriptCommandRunner: runner}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
@@ -379,13 +380,12 @@ func TestFactoryService_OpenFactorySessionFromFolder_DefaultsEmptyWorkingDirecto
 	writeSessionRuntimeLookupWorkstationAgentsMDWithoutWorkingDirectory(t, rootTwo, "run-script")
 
 	runner := &sessionCapturingCommandRunner{}
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:                   rootOne,
-		ExecutionBaseDir:      rootOne,
-		RuntimeMode:           interfaces.RuntimeModeService,
-		CommandRunnerOverride: runner,
-		Logger:                zap.NewNop(),
-	})
+	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		Dir:              rootOne,
+		ExecutionBaseDir: rootOne,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		Logger:           zap.NewNop(),
+	}, workerapplication.Edges{ScriptCommandRunner: runner}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
@@ -2730,7 +2730,7 @@ func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflo
 	projectRoot := setupDurableLifecycleWorkflowFixture(t, fixtureName, workflowName)
 	execution, err := factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: factorysessionexecution.DisabledPersistence()},
+		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: factorysessionexecution.DisabledPersistence(), Clock: factory.EnsureClock(nil)},
 	)
 	if err != nil {
 		t.Fatalf("compose durable execution: %v", err)
@@ -5007,5 +5007,55 @@ func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.
 	}
 	if invoker.request.RequestID == nil || *invoker.request.RequestID != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
 		t.Fatalf("forwarded request = %#v", invoker.request)
+	}
+}
+
+func TestFactoryService_InvokeFactorySessionRecordsDurablePetriCompletion(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		result     sessioninvocation.FactoryInvocationResult
+		wantStatus factorysessionexecution.LifecycleStatus
+	}{
+		{
+			name: "completed",
+			result: sessioninvocation.FactoryInvocationResult{
+				Status: interfaces.InvocationTerminalStatusCompleted,
+				PrimaryResult: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText, Text: "durable result",
+				}},
+			},
+			wantStatus: factorysessionexecution.LifecycleStatusSucceeded,
+		},
+		{
+			name: "failed",
+			result: sessioninvocation.FactoryInvocationResult{
+				Status:    interfaces.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_FAILED", Message: "worker failed",
+			},
+			wantStatus: factorysessionexecution.LifecycleStatusFailed,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			execution := factorysessionexecution.NewJavaScriptRuntimeService(
+				factorysessionexecution.JavaScriptRuntimeServiceConfig{
+					ProjectRoot: t.TempDir(),
+				},
+			)
+			svc := &FactoryService{
+				sessionInvoker:   &forwardingSessionInvoker{result: test.result},
+				durableExecution: execution,
+			}
+
+			if _, err := svc.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{}); err != nil {
+				t.Fatalf("InvokeFactorySession: %v", err)
+			}
+			read, err := execution.GetSession(context.Background(), "session-1")
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			if read.Status != test.wantStatus {
+				t.Fatalf("durable status = %q, want %q", read.Status, test.wantStatus)
+			}
+		})
 	}
 }

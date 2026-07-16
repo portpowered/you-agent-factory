@@ -12,6 +12,7 @@ import (
 const (
 	factorySessionSSEFixtureSessionID          = "b08-sse-fixture-session"
 	factorySessionSSEFixtureStreamGenerationID = "b08-sse-fixture-stream-gen-001"
+	factorySessionSSEFixtureNextGenerationID   = "b08-sse-fixture-stream-gen-002"
 	factorySessionSSEFixtureBackendScopeID     = "b08-sse-fixture-backend-scope"
 	factorySessionSSEFixtureLogicalSessionKey  = "b08-sse-fixture-logical-key"
 
@@ -19,6 +20,7 @@ const (
 	factorySessionSSEFixtureRetainedEventTwoID   = "b08-sse-fixture/initial-structure"
 	factorySessionSSEFixtureRetainedEventThreeID = "b08-sse-fixture/work-request"
 	factorySessionSSEFixtureLiveEventID          = "b08-sse-fixture/dispatch-live"
+	factorySessionSSEFixtureNextRetainedEventID  = "b08-sse-fixture-next/run-started"
 )
 
 var factorySessionSSEFixtureEventTime = time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
@@ -63,6 +65,24 @@ func (f *FactorySessionSSEFixture) RootMockFactory() *testutil.MockFactory {
 			},
 		},
 	}
+}
+
+// ReplaceStreamGeneration keeps the logical and Factory Session identities but
+// installs a new stream generation with its own retained-history boundary.
+func (f *FactorySessionSSEFixture) ReplaceStreamGeneration(t *testing.T, root *testutil.MockFactory) []factoryapi.FactoryEvent {
+	t.Helper()
+	replacement := factorySessionSSEFixtureReplacementRetainedEvents(t)
+	root.SessionFactories[f.SessionID] = &testutil.MockFactory{
+		FactoryEventStream: &interfaces.FactoryEventStream{
+			StreamGenerationID:  factorySessionSSEFixtureNextGenerationID,
+			BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
+			LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
+			FactorySessionID:    f.SessionID,
+			History:             testutil.FactoryEvents(t, replacement),
+			Events:              make(chan interfaces.FactoryEvent, 4),
+		},
+	}
+	return replacement
 }
 
 // PublishLive enqueues one live FactoryEvent on the fixture stream channel.
@@ -158,6 +178,27 @@ func factorySessionSSEFixtureRetainedEvents(t *testing.T) []factoryapi.FactoryEv
 			},
 		),
 	}
+}
+
+func factorySessionSSEFixtureReplacementRetainedEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	sessionID := factorySessionSSEFixtureSessionID
+	return []factoryapi.FactoryEvent{testAPIFactoryEvent(
+		t,
+		factoryapi.FactoryEventTypeRunRequest,
+		factorySessionSSEFixtureNextRetainedEventID,
+		factoryapi.FactoryEventContext{
+			Tick:            0,
+			Sequence:        0,
+			SessionSequence: factorySessionSSESessionSequencePointer(0),
+			EventTime:       factorySessionSSEFixtureEventTime.Add(time.Minute),
+			SessionId:       &sessionID,
+		},
+		factoryapi.RunRequestEventPayload{
+			RecordedAt: factorySessionSSEFixtureEventTime.Add(time.Minute),
+			Factory:    factoryapi.Factory{Name: "b08-sse-fixture-replacement-factory"},
+		},
+	)}
 }
 
 func factorySessionSSESessionSequencePointer(sequence int) *int {

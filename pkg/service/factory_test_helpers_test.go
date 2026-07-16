@@ -18,27 +18,113 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
+
+func buildHostedWorkersConfigForServiceTest(
+	cfg *FactoryServiceConfig,
+	logger *zap.Logger,
+	clock factory.Clock,
+) hostedworkers.Config {
+	if cfg != nil && cfg.WorkerApplication.Valid() {
+		return cfg.WorkerApplication.Hosted
+	}
+	hostedClock, _ := clock.(clockwork.Clock)
+	components, _ := workerapplication.New(logger, workerapplication.Edges{
+		HostedClock: hostedClock,
+	})
+	return components.Hosted
+}
+
+func serviceTestConfigWithWorkerApplication(t *testing.T, cfg *FactoryServiceConfig) *FactoryServiceConfig {
+	t.Helper()
+	configured, err := ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	return configured
+}
+
+func serviceTestConfigWithWorkerEdges(t *testing.T, cfg *FactoryServiceConfig, edges workerapplication.Edges) *FactoryServiceConfig {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, edges)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
+	return cfg
+}
+
+// loadWorkersFromConfig preserves the package-test helper shape while
+// production construction consumes the composed worker application directly.
+func loadWorkersFromConfig(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	workflowContext *factory_context.FactoryContext,
+	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+	commandRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
+	now func() time.Time,
+	modelDomain localModelDomain,
+	agyPTYAllocators ...agypty.PTYAllocator,
+) ([]factory.FactoryOption, error) {
+	var allocator agypty.PTYAllocator
+	if len(agyPTYAllocators) > 0 {
+		allocator = agyPTYAllocators[0]
+	}
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+		ProviderCommandRunner: providerCommandRunner,
+		ScriptCommandRunner:   commandRunner,
+		AgyPTYAllocator:       allocator,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return loadWorkersFromApplication(
+		factoryDir, factoryCfg, factoryRunnerID, runtimeCfg, workflowContext, logger,
+		skipBuiltInRunnerPrerequisiteValidation, invocationSkipPermissionsOverride,
+		providerOverride, inferenceProgressPublisher, components, scriptRecorder,
+		inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain,
+	)
+}
 
 func minimalFactoryConfig() map[string]any {
 	return factoryfixtures.MinimalFactoryConfig()
@@ -70,6 +156,55 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	}
 	svc.registerLiveSession(defaultFactorySessionID, handle, target, true)
 	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
+}
+
+func newLocalModelResourceLimiter() *localModelResourceLimiter {
+	return localmodels.NewResourceLimiter(localModelHooks())
+}
+
+func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
+	manager, err := localmodels.NewManagedRuntime(localmodels.ManagedRuntimeDependencies{
+		AssetPuller: assetPuller, Runtime: runtime, Hooks: localModelHooks(),
+	})
+	if err != nil {
+		return nil
+	}
+	return manager
+}
+
+func attachModelServiceForTest(t *testing.T, svc *FactoryService) {
+	t.Helper()
+	if svc == nil {
+		t.Fatal("attach model service: factory service is required")
+	}
+	puller := svc.modelAssets
+	if puller == nil {
+		puller = localmodels.NewAssetPuller(t.TempDir())
+		svc.modelAssets = puller
+	}
+	host := svc.modelHost()
+	if host == nil {
+		gateway := modelhost.NewLocalAssetGateway(puller)
+		var err error
+		host, err = modelhost.NewHost(modelhost.Dependencies{
+			AssetPuller: gateway, CacheInspector: gateway,
+			ProcessLauncher: modelhost.DefaultProcessLauncher(),
+		})
+		if err != nil {
+			t.Fatalf("NewHost: %v", err)
+		}
+	}
+	modelAPI, err := modelsservice.NewService(modelsservice.Dependencies{
+		RuntimeConfig: svc.currentRuntimeConfig, ModelHost: host,
+		ModelAssetPuller: puller, Logger: svc.logger,
+		ModelPullMetrics:        modelPullMetricsRecorderForService(svc.modelPullMetricsRecorder()),
+		ModelInvocationExecutor: svc.modelInvocationExecutor,
+		FactoryRunnerID:         svc.factoryRunnerID(),
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	svc.modelService = modelAPI
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -1115,17 +1250,19 @@ func cleanResolvedPath(path string) string {
 
 func newServiceTestSupervisedModelHost(t *testing.T, puller modelAssetPuller, launcher modelhost.ProcessLauncher) modelhost.Host {
 	t.Helper()
-	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-		Supervisor: modelhost.SupervisorConfig{
-			ReadinessTimeout:    500 * time.Millisecond,
-			HealthCheckInterval: 10 * time.Millisecond,
-			ProcessLauncher:     launcher,
-			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
-		},
-	})
-	if host == nil {
-		t.Fatal("model host = nil")
+	gateway := modelhost.NewLocalAssetGateway(puller)
+	host, err := modelhost.NewHost(modelhost.Dependencies{
+		AssetPuller: gateway, CacheInspector: gateway, ProcessLauncher: launcher,
+		Options: modelhost.Options{
+			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+			Supervisor: modelhost.SupervisorConfig{
+				ReadinessTimeout:    500 * time.Millisecond,
+				HealthCheckInterval: 10 * time.Millisecond,
+				HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+			},
+		}})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
 	}
 	return host
 }
@@ -1293,6 +1430,14 @@ func TestNormalizeInvocationBootstrapConfig_ForcesNoServerShape(t *testing.T) {
 	if got.WorkFile != "" {
 		t.Fatalf("WorkFile = %q, want empty", got.WorkFile)
 	}
+}
+
+func BuildInvocationBootstrap(ctx context.Context, cfg *FactoryServiceConfig) (*InvocationBootstrap, error) {
+	svc, err := BuildFactoryService(ctx, NormalizeInvocationBootstrapConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return NewInvocationBootstrap(svc)
 }
 
 func TestBuildInvocationBootstrap_LeavesNoFactoryAPIServerListener(t *testing.T) {
@@ -2214,4 +2359,46 @@ You are a helpful agent.
 	if len(runner.Requests()) != 0 {
 		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
 	}
+}
+
+func TestWorkerApplicationWithProgressPreservesCompositionSelection(t *testing.T) {
+	t.Run("production graph installs progress runner", func(t *testing.T) {
+		components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+		if err != nil {
+			t.Fatalf("construct production worker application: %v", err)
+		}
+		got, err := workerApplicationWithProgress(runtimeBundleBuildInput{
+			workerApplication:             components,
+			inferenceProgressPublisherSet: true,
+			inferenceProgressPublisher:    func(workerprovider.InferenceProgressFragment) {},
+		})
+		if err != nil {
+			t.Fatalf("workerApplicationWithProgress() error = %v", err)
+		}
+		if !got.ProviderCommandInjected {
+			t.Fatal("runtime progress runner was not installed on the composed provider factory")
+		}
+	})
+
+	t.Run("functional provider edge is not replaced", func(t *testing.T) {
+		runner := &providerCommandRunnerRecorder{}
+		components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+			ProviderCommandRunner: runner,
+			AgyPTYAllocator:       &agypty.MockAllocator{},
+		})
+		if err != nil {
+			t.Fatalf("construct functional worker application: %v", err)
+		}
+		got, err := workerApplicationWithProgress(runtimeBundleBuildInput{
+			workerApplication:             components,
+			inferenceProgressPublisherSet: true,
+			inferenceProgressPublisher:    func(workerprovider.InferenceProgressFragment) {},
+		})
+		if err != nil {
+			t.Fatalf("workerApplicationWithProgress() error = %v", err)
+		}
+		if got.Provider != components.Provider {
+			t.Fatal("runtime progress setup replaced the composition-selected provider factory")
+		}
+	})
 }

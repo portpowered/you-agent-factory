@@ -16,7 +16,9 @@ import {
   DashboardSessionProvider,
 } from "../session/dashboard-session-provider";
 
-const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
+// Phone gutters stay within the four-CSS-pixel viewport budget. Desktop spacing
+// resumes with the dashboard's established medium breakpoint.
+const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-1 md:p-2";
 
 export interface DashboardScreenProps {
   locale?: string;

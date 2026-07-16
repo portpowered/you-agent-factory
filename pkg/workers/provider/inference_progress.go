@@ -202,11 +202,14 @@ func (p *ScriptWrapProvider) executeAgy(
 	if factoryRoot == "" {
 		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
 	}
-	opts := []agyadapter.Option{}
+	providerAdapter := agyadapter.NewAdapter(factoryRoot)
 	if p.agyAllocator != nil {
-		opts = append(opts, agyadapter.WithAllocator(p.agyAllocator))
+		var err error
+		providerAdapter, err = agyadapter.NewAdapterWithAllocator(factoryRoot, p.agyAllocator)
+		if err != nil {
+			return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)
+		}
 	}
-	providerAdapter := agyadapter.NewAdapter(factoryRoot, opts...)
 	registry, err := adapter.NewRegistry(providerAdapter)
 	if err != nil {
 		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)

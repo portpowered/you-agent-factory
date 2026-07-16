@@ -205,8 +205,7 @@ func startRuntimeConfigAlignmentSmokeServer(
 	providerRunner := newRuntimeConfigAlignmentProviderRunner()
 	scriptRunner := newRuntimeConfigAlignmentScriptRunner()
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.ProviderCommandRunnerOverride = providerRunner
-		cfg.CommandRunnerOverride = scriptRunner
+		support.ConfigureWorkerCommands(t, cfg, providerRunner, scriptRunner)
 	}, factory.WithScheduler(scheduler.NewWorkInQueueScheduler(1)))
 
 	return server, providerRunner, scriptRunner

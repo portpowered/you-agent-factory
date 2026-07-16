@@ -34,6 +34,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -41,6 +42,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -215,13 +217,12 @@ func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
 	resolver := hostedworkers.SecretResolver(func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
 		return "token", nil
 	})
-	cfg := &FactoryServiceConfig{
-		HostedPollerHTTPClient:     client,
-		HostedPollerSecretResolver: resolver,
-		HostedLinearEndpoint:       " https://linear.example/graphql ",
-	}
+	cfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{
+		HostedHTTPClient: client, HostedSecretResolver: resolver,
+		HostedLinearEndpoint: " https://linear.example/graphql ",
+	})
 
-	got := buildHostedWorkersConfig(cfg, zap.NewNop(), nil)
+	got := buildHostedWorkersConfigForServiceTest(cfg, zap.NewNop(), nil)
 	if got.HTTPClient != client {
 		t.Fatal("hosted workers HTTP client was not wired from FactoryServiceConfig")
 	}
@@ -259,33 +260,37 @@ func startLocalModelInferenceTestServer(
 		ModelAssets:                             puller,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	}
+	cfg = serviceTestConfigWithWorkerApplication(t, cfg)
 	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
-		cancel()
-		healthServer.Close()
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
 		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
 	load, err := LoadFactoryConfigForCompose(cfg, root)
 	if err != nil {
-		cancel()
-		healthServer.Close()
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := ServiceClockForCompose(cfg, load)
 	sessions := NewFactorySessionsRegistry()
 	startupLocalModels := domain
+	runtimeBuild, err := newRuntimeBuildService(
+		cfg,
+		clock,
+		root.BaseLogger,
+		&startupLocalModels,
+		newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
+		newSessionDispatchCompletionObserverFactory(sessions),
+	)
+	if err != nil {
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
+		t.Fatalf("newRuntimeBuildService: %v", err)
+	}
 	collaborators := FactoryServiceCollaborators{
-		Sessions:    sessions,
-		LocalModels: domain,
-		RuntimeBuild: newRuntimeBuildService(
-			cfg,
-			clock,
-			root.BaseLogger,
-			&startupLocalModels,
-			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
-			newSessionDispatchCompletionObserverFactory(sessions),
-		),
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfig(cfg, root.BaseLogger, clock)),
+		Sessions:         sessions,
+		LocalModels:      domain,
+		RuntimeBuild:     runtimeBuild,
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(
 		ctx,
@@ -294,14 +299,19 @@ func startLocalModelInferenceTestServer(
 		collaborators,
 		load,
 		clock,
-		buildHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock),
 	)
+	if err != nil {
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
+		t.Fatalf("ComposeFactoryService: %v", err)
+	}
+	modelAPI, err := newTestModelService(shell)
 	if err != nil {
 		cancel()
 		healthServer.Close()
-		t.Fatalf("ComposeFactoryService: %v", err)
+		t.Fatalf("construct model service: %v", err)
 	}
-	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	svc := AttachModelServiceCollaborator(shell, modelAPI)
 	svc = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: svc},
 		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
@@ -320,6 +330,19 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 	}
 	return server, launcher, svc, shutdown
+}
+
+func cleanupLocalModelInferenceSetup(cancel context.CancelFunc, healthServer *httptest.Server) {
+	cancel()
+	healthServer.Close()
+}
+
+func newTestModelService(shell FactoryServiceShell) (*modelsservice.Service, error) {
+	modelDeps, err := ModelServiceDependencies(shell)
+	if err != nil {
+		return nil, err
+	}
+	return modelsservice.NewService(modelDeps)
 }
 
 func invokeLocalModelHTTP(t *testing.T, server *httptest.Server, body []byte) factoryapi.ModelInvocationResponse {
@@ -1108,14 +1131,10 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	})
 
 	recordPath := filepath.Join(t.TempDir(), "recording.json")
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:                   dir,
-		RuntimeMode:           interfaces.RuntimeModeService,
-		Logger:                zap.NewNop(),
-		RecordPath:            recordPath,
-		WorkFile:              workFile,
-		CommandRunnerOverride: recordingDiagnosticsCommandRunner{},
-	})
+	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		Dir: dir, RuntimeMode: interfaces.RuntimeModeService, Logger: zap.NewNop(),
+		RecordPath: recordPath, WorkFile: workFile,
+	}, workerapplication.Edges{ScriptCommandRunner: recordingDiagnosticsCommandRunner{}}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}

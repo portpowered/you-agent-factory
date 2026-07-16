@@ -26,7 +26,7 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunne
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = runner
+			support.ConfigureWorkerCommands(t, cfg, runner, nil)
 		},
 	)
 
@@ -50,7 +50,7 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.CommandRunnerOverride = runner
+			support.ConfigureWorkerCommands(t, cfg, nil, runner)
 		},
 	)
 

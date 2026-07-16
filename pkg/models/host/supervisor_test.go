@@ -260,7 +260,7 @@ func newSupervisedTestHost(t *testing.T, launcher *fakeProcessLauncher) *Catalog
 	if launcher == nil {
 		launcher = &fakeProcessLauncher{}
 	}
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {
 				Supported:          true,

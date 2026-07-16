@@ -8,15 +8,11 @@ import (
 	"sync"
 	"time"
 
-	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
-
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-
-	"github.com/jonboulle/clockwork"
-	"go.uber.org/zap"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+	"go.uber.org/zap"
 )
 
 const (
@@ -34,27 +30,31 @@ func StartLinearPoller(
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *workerconfig.Config,
 	submitter Submitter,
-) {
-	if sidecars == nil || submitter == nil {
-		return
+) error {
+	if ctx == nil {
+		return fmt.Errorf("start hosted linear poller: context is required")
+	}
+	if sidecars == nil {
+		return fmt.Errorf("start hosted linear poller: sidecar wait group is required")
+	}
+	poller, err := NewLinearPoller(LinearPollerDependencies{
+		Config: cfg, RuntimeConfig: runtimeCfg, Workstation: workstation,
+		Worker: workerDef, Submitter: submitter,
+	})
+	if err != nil {
+		return err
 	}
 	sidecars.Add(1)
 	go func() {
 		defer sidecars.Done()
-		superviseLinearPoller(ctx, cfg, runtimeCfg, workstation, workerDef, submitter)
+		poller.supervise(ctx)
 	}()
+	return nil
 }
 
-func superviseLinearPoller(
-	ctx context.Context,
-	cfg Config,
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *workerconfig.Config,
-	submitter Submitter,
-) {
-	logger := pollerLogger(cfg, workstation, workerDef).With(zap.String("provider", workertaxonomy.HostedWorkerProviderLinear))
-	backoffClock := cfg.supervisorClock()
+func (p *LinearPoller) supervise(ctx context.Context) {
+	logger := pollerLogger(p.config, p.workstation, p.worker).With(zap.String("provider", workertaxonomy.HostedWorkerProviderLinear))
+	backoffClock := p.config.Clock
 	attempt := 0
 	logger.Info("hosted linear poller started")
 	defer func() {
@@ -67,7 +67,7 @@ func superviseLinearPoller(
 		}
 
 		attempt++
-		runErr := runLinearPoller(ctx, cfg, runtimeCfg, workstation, workerDef, submitter, logger, backoffClock)
+		runErr := p.run(ctx, logger)
 		if ctx.Err() != nil {
 			return
 		}
@@ -87,56 +87,31 @@ func superviseLinearPoller(
 	}
 }
 
-func runLinearPoller(
-	ctx context.Context,
-	cfg Config,
-	runtimeCfg interfaces.RuntimeConfigLookup,
-	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *workerconfig.Config,
-	submitter Submitter,
-	logger *zap.Logger,
-	clock clockwork.Clock,
-) error {
-	if runtimeCfg == nil {
-		return fmt.Errorf("runtime config is required")
-	}
-	if workerDef == nil {
-		return fmt.Errorf("hosted linear poller worker is required")
-	}
-	if workerDef.Auth == nil || strings.TrimSpace(workerDef.Auth.SecretRef) == "" {
-		return fmt.Errorf("hosted linear poller worker %q is missing auth.secretRef", workerDef.Name)
-	}
-	if workerDef.Linear == nil {
-		return fmt.Errorf("hosted linear poller worker %q is missing linear config", workerDef.Name)
-	}
-	if submitter == nil {
-		return fmt.Errorf("hosted linear poller submitter is required")
-	}
-	interval, err := hostedlinear.PollInterval(workerDef.Linear)
+func (p *LinearPoller) run(ctx context.Context, logger *zap.Logger) error {
+	interval, err := hostedlinear.PollInterval(p.worker.Linear)
 	if err != nil {
 		return err
 	}
 
-	resolver := cfg.secretResolver()
-	apiKey, err := resolver(ctx, runtimeCfg, workerDef.Auth.SecretRef)
+	apiKey, err := p.config.SecretResolver(ctx, p.runtimeConfig, p.worker.Auth.SecretRef)
 	if err != nil {
-		return fmt.Errorf("resolve hosted linear auth %q: %w", workerDef.Auth.SecretRef, err)
+		return fmt.Errorf("resolve hosted linear auth %q: %w", p.worker.Auth.SecretRef, err)
 	}
 
 	pollerClient := hostedlinear.Client{
-		Endpoint:   cfg.linearEndpoint(),
-		HTTPClient: cfg.httpClient(),
+		Endpoint:   p.config.LinearEndpoint,
+		HTTPClient: p.config.HTTPClient,
 		Logger:     logger,
 	}
-	checkpointPath := hostedlinear.CheckpointPath(runtimeCfg, workstation, workerDef)
+	checkpointPath := hostedlinear.CheckpointPath(p.runtimeConfig, p.workstation, p.worker)
 
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		result, err := hostedlinear.RunPollCycle(ctx, pollerClient, runtimeCfg, workstation, workerDef, hostedlinear.Submitter(submitter), checkpointPath, apiKey, logger)
+		result, err := hostedlinear.RunPollCycle(ctx, pollerClient, p.runtimeConfig, p.workstation, p.worker, hostedlinear.Submitter(p.submitter), checkpointPath, apiKey, logger)
 		if err != nil {
-			return err
+			return redactResolvedSecret(err, apiKey)
 		}
 		if result.FoundNewer {
 			logger.Info("hosted linear poller cycle completed",
@@ -149,9 +124,16 @@ func runLinearPoller(
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-clock.After(interval):
+		case <-p.config.Clock.After(interval):
 		}
 	}
+}
+
+func redactResolvedSecret(err error, secret string) error {
+	if err == nil || secret == "" || !strings.Contains(err.Error(), secret) {
+		return err
+	}
+	return errors.New(strings.ReplaceAll(err.Error(), secret, "[REDACTED]"))
 }
 
 func pollerLogger(cfg Config, workstation interfaces.FactoryWorkstationConfig, workerDef *workerconfig.Config) *zap.Logger {

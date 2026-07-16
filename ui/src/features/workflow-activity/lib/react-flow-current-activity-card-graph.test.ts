@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/style/noExcessiveLinesPerFile: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -47,10 +48,24 @@ func testModelInvocationBuilder(ctx context.Context, request InvocationRequest) 
 }
 
 func buildRealTestModelInvocationBootstrap(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
-	bootstrap, err := service.BuildInvocationBootstrap(ctx, cfg)
+	svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
+	bootstrap, err := service.NewInvocationBootstrap(svc)
+	if err != nil {
+		return nil, err
+	}
+	shell := service.FactoryServiceShell{Service: bootstrap.Service}
+	deps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		return nil, err
+	}
+	models, err := modelsservice.NewService(deps)
+	if err != nil {
+		return nil, err
+	}
+	bootstrap.Service = service.AttachModelServiceCollaborator(shell, models)
 	return &testBootstrapModelRunner{bootstrap: bootstrap}, nil
 }
 

@@ -67,7 +67,11 @@ func preserveRunGlobals(t *testing.T) {
 	originalServeFactoryAPIServer := serveFactoryAPIServer
 	if buildInvocationBootstrap == nil {
 		buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
-			return service.BuildInvocationBootstrap(ctx, cfg)
+			svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+			if err != nil {
+				return nil, err
+			}
+			return service.NewInvocationBootstrap(svc)
 		}
 	}
 	t.Cleanup(func() {
@@ -872,7 +876,7 @@ func TestFactoryServiceBuilderFromService_AdaptsConcreteBuilder(t *testing.T) {
 	}
 }
 
-func TestBuildFactoryService_DefaultMatchesServiceBuilder(t *testing.T) {
+func TestBuildFactoryService_DefaultRequiresInjectedBuilder(t *testing.T) {
 	original := buildFactoryService
 	t.Cleanup(func() {
 		buildFactoryService = original
@@ -880,12 +884,8 @@ func TestBuildFactoryService_DefaultMatchesServiceBuilder(t *testing.T) {
 	buildFactoryService = defaultBuildFactoryService
 
 	_, err := buildFactoryService(context.Background(), nil)
-	_, defaultErr := service.BuildFactoryService(context.Background(), nil)
-	if (err == nil) != (defaultErr == nil) {
-		t.Fatalf("default builder error presence = %v, service.BuildFactoryService = %v", err, defaultErr)
-	}
-	if err != nil && defaultErr != nil && err.Error() != defaultErr.Error() {
-		t.Fatalf("default builder err = %q, service.BuildFactoryService err = %q", err, defaultErr)
+	if err == nil || !strings.Contains(err.Error(), "dependency-injected builder is required") {
+		t.Fatalf("default builder err = %v, want dependency-injected builder requirement", err)
 	}
 }
 

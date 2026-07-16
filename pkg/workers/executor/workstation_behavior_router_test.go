@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
@@ -13,6 +14,21 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
+
+func TestNewScriptExecutorFromInputValidatesAndUsesSelectedCommandEdge(t *testing.T) {
+	runner := &capturingCommandRunner{}
+	definition := &workerconfig.Config{Command: "selected-script", Args: []string{"arg"}}
+	if _, err := NewScriptExecutorFromInput(ScriptConstructionInput{CommandRunner: runner}); err == nil || !strings.Contains(err.Error(), "definition is required") {
+		t.Fatalf("missing definition error = %v", err)
+	}
+	if _, err := NewScriptExecutorFromInput(ScriptConstructionInput{Definition: definition}); err == nil || !strings.Contains(err.Error(), "command runner is required") {
+		t.Fatalf("missing command runner error = %v", err)
+	}
+	built, err := NewScriptExecutorFromInput(ScriptConstructionInput{Definition: definition, CommandRunner: runner})
+	if err != nil || built.CommandRunner != runner {
+		t.Fatalf("constructed executor = %+v, error = %v", built, err)
+	}
+}
 
 type routingStubExecutor struct {
 	name string

@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"go.uber.org/zap"
@@ -15,6 +17,18 @@ import (
 
 type recordingCommandRunner struct {
 	requests []workerprocess.CommandRequest
+}
+
+func configWithCommandEdges(t *testing.T, provider, script workers.CommandRunner) Config {
+	t.Helper()
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+		ProviderCommandRunner: provider,
+		ScriptCommandRunner:   script,
+	})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	return Config{WorkerApplication: components}
 }
 
 func (r *recordingCommandRunner) Run(_ context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
@@ -26,6 +40,7 @@ func TestCommandRunnerOverrideForMode_UnmatchedPassthroughDelegatesToNextRunner(
 	t.Parallel()
 
 	next := &recordingCommandRunner{}
+	configured := configWithCommandEdges(t, nil, next)
 	cfg := &Config{
 		MockWorkersConfig: &factoryconfig.MockWorkersConfig{
 			UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
@@ -34,7 +49,7 @@ func TestCommandRunnerOverrideForMode_UnmatchedPassthroughDelegatesToNextRunner(
 				RunType:    factoryconfig.MockWorkerRunTypeReject,
 			}},
 		},
-		CommandRunnerOverride: next,
+		WorkerApplication: configured.WorkerApplication,
 	}
 
 	runner := commandRunnerOverrideForMode(cfg, nil, nil)
@@ -62,10 +77,29 @@ func TestCommandRunnerOverrideForMode_UnmatchedPassthroughDelegatesToNextRunner(
 	}
 }
 
+func TestRuntimeBuildDefensiveConstructionBoundaries(t *testing.T) {
+	t.Parallel()
+
+	if err := applyOperatorDefaultsToLoadedConfig(operatorconfig.ResolvedDefaults{}, nil); err != nil {
+		t.Fatalf("applyOperatorDefaultsToLoadedConfig(nil) error = %v", err)
+	}
+	var svc *Service
+	if configured, err := svc.WithPetriMutationRecorder(nil); configured != nil || err == nil {
+		t.Fatalf("nil service WithPetriMutationRecorder() = (%v, %v), want construction error", configured, err)
+	}
+	if _, err := svc.Build(context.Background(), SessionBuildSpec{}); err == nil {
+		t.Fatal("nil service Build() succeeded")
+	}
+	if _, err := svc.BuildSpec(context.Background(), SessionSpecInput{}); err == nil {
+		t.Fatal("nil service BuildSpec() succeeded")
+	}
+}
+
 func TestCommandRunnerOverrideForMode_UnmatchedDefaultAcceptSkipsNextRunner(t *testing.T) {
 	t.Parallel()
 
 	next := &recordingCommandRunner{}
+	configured := configWithCommandEdges(t, nil, next)
 	cfg := &Config{
 		MockWorkersConfig: &factoryconfig.MockWorkersConfig{
 			MockWorkers: []factoryconfig.MockWorkerConfig{{
@@ -73,7 +107,7 @@ func TestCommandRunnerOverrideForMode_UnmatchedDefaultAcceptSkipsNextRunner(t *t
 				RunType:    factoryconfig.MockWorkerRunTypeReject,
 			}},
 		},
-		CommandRunnerOverride: next,
+		WorkerApplication: configured.WorkerApplication,
 	}
 
 	runner := commandRunnerOverrideForMode(cfg, nil, nil)
@@ -92,6 +126,22 @@ func TestCommandRunnerOverrideForMode_UnmatchedDefaultAcceptSkipsNextRunner(t *t
 	}
 	if string(result.Stdout) != "mock worker accepted" {
 		t.Fatalf("Stdout = %q, want default accepted mock output", result.Stdout)
+	}
+}
+
+func TestCommandRunnerOverrideForMode_ReplayReplacesOnlyProductionEdge(t *testing.T) {
+	t.Parallel()
+
+	sideEffects := &replay.SideEffects{}
+	production := configWithCommandEdges(t, nil, nil)
+	if got := commandRunnerOverrideForMode(&production, nil, sideEffects); got != sideEffects {
+		t.Fatalf("production replay runner = %T, want replay side effects", got)
+	}
+
+	injected := &recordingCommandRunner{}
+	functional := configWithCommandEdges(t, nil, injected)
+	if got := commandRunnerOverrideForMode(&functional, nil, sideEffects); got != injected {
+		t.Fatalf("functional replay runner = %T, want composition-selected runner", got)
 	}
 }
 
@@ -169,10 +219,8 @@ func TestProviderCommandRunnerForMode_WrapsOverrideWhenMockWorkersEnabled(t *tes
 	t.Parallel()
 
 	next := &recordingCommandRunner{}
-	cfg := &Config{
-		MockWorkersConfig:             &factoryconfig.MockWorkersConfig{},
-		ProviderCommandRunnerOverride: next,
-	}
+	configured := configWithCommandEdges(t, next, nil)
+	cfg := &Config{MockWorkersConfig: &factoryconfig.MockWorkersConfig{}, WorkerApplication: configured.WorkerApplication}
 
 	runner := providerCommandRunnerForMode(cfg, nil)
 	wrapped, ok := runner.(*workers.MockWorkerCommandRunner)

@@ -174,7 +174,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 		pauseHarness.Dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = runner
+			support.ConfigureWorkerCommands(t, cfg, runner, nil)
 		},
 		factory.WithServiceMode(),
 	)

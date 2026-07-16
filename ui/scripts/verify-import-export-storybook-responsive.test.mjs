@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+
 import {
   expectDialogWithinViewport,
   expectNoHorizontalOverflow,
@@ -11,7 +12,6 @@ import {
   waitForStoryRegion,
   waitForStoryRender,
 } from "./verify-import-export-storybook-responsive.mjs";
-import { verifyProviderSessionDetailSuccess } from "./verify-provider-session-storybook-responsive.mjs";
 
 describe("waitForStoryRender", () => {
   test("waits for the Storybook root selector and rendered children", async () => {
@@ -418,69 +418,6 @@ describe("import story assertions", () => {
     expect(dialog.getByText).toHaveBeenCalledWith("factory-import.png");
     expect(dialog.getByRole).toHaveBeenCalledWith("button", {
       name: "Confirm import",
-    });
-  });
-});
-
-describe("provider-session story assertions", () => {
-  test("verifyProviderSessionDetailSuccess checks the provider-session success panel", async () => {
-    const selectedSessionHeading = {
-      waitFor: vi.fn().mockResolvedValue(undefined),
-    };
-    const sourceHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
-    const sourcePath = { waitFor: vi.fn().mockResolvedValue(undefined) };
-    const tokenUsageHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
-    const page = {
-      evaluate: vi
-        .fn()
-        .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
-      getByRole: vi.fn((role, options) => {
-        if (role !== "heading") {
-          throw new Error(
-            `unexpected page role lookup ${role} ${options?.name ?? ""}`,
-          );
-        }
-        if (options?.name === "Selected session details") {
-          return selectedSessionHeading;
-        }
-        if (options?.name === "Source file") {
-          return sourceHeading;
-        }
-        if (options?.name === "Token usage") {
-          return tokenUsageHeading;
-        }
-        throw new Error(`unexpected heading lookup ${options?.name ?? ""}`);
-      }),
-      getByText: vi.fn((text) => {
-        if (
-          text ===
-          "2026/05/20/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl"
-        ) {
-          return sourcePath;
-        }
-        throw new Error(`unexpected current selection text lookup ${text}`);
-      }),
-    };
-
-    await verifyProviderSessionDetailSuccess({
-      expectNoHorizontalOverflow,
-      expectVisible,
-      page,
-      viewport: {
-        height: 844,
-        label: "mobile",
-        width: 390,
-      },
-    });
-
-    expect(page.getByRole).toHaveBeenCalledWith("heading", {
-      name: "Selected session details",
-    });
-    expect(page.getByRole).toHaveBeenCalledWith("heading", {
-      name: "Source file",
-    });
-    expect(page.getByRole).toHaveBeenCalledWith("heading", {
-      name: "Token usage",
     });
   });
 });

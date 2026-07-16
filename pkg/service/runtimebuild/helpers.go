@@ -48,8 +48,8 @@ func commandRunnerOverrideForMode(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	sideEffects *replay.SideEffects,
 ) workers.CommandRunner {
-	next := cfg.CommandRunnerOverride
-	if next == nil && sideEffects != nil {
+	next := cfg.WorkerApplication.ScriptCommandRunner
+	if sideEffects != nil && !cfg.WorkerApplication.ScriptCommandInjected {
 		next = sideEffects
 	}
 	if cfg.MockWorkersConfig == nil {
@@ -64,11 +64,11 @@ func commandRunnerOverrideForMode(
 
 func providerCommandRunnerForMode(cfg *Config, runtimeCfg interfaces.RuntimeConfigLookup) workers.CommandRunner {
 	if cfg.MockWorkersConfig == nil {
-		return cfg.ProviderCommandRunnerOverride
+		return nil
 	}
 	return &workers.MockWorkerCommandRunner{
 		Config:        cfg.MockWorkersConfig,
 		RuntimeConfig: runtimeCfg,
-		Next:          cfg.ProviderCommandRunnerOverride,
+		Next:          cfg.WorkerApplication.ProviderCommandRunner,
 	}
 }

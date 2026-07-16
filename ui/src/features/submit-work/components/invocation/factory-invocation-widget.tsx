@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: invocation widget keeps the generated form controls colocated with the widget shell.
+// biome-ignore lint/style/noExcessiveLinesPerFile: invocation widget keeps the generated form controls colocated with the widget shell.
 import { Plus, X } from "lucide-react";
 import type { ReactNode } from "react";
 

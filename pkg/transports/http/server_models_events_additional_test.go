@@ -18,9 +18,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
-	"github.com/portpowered/infinite-you/pkg/initializer"
-	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -459,42 +456,30 @@ func assertJSONErrorResponse(t *testing.T, gotStatus int, header http.Header, bo
 	assertJSONError(t, rec, wantStatus, wantCode, wantMessage)
 }
 
-type listModelsWiringAssetPuller struct{}
+type listModelsAPI struct{ apisurface.ModelAPI }
 
-func (listModelsWiringAssetPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
-	return apisurface.ModelPullResult{}, nil
-}
-
-func (listModelsWiringAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
-	return nil
-}
-
-func (listModelsWiringAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
-	return localmodels.CacheLayout{}, nil
-}
-
-func (listModelsWiringAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
-	return localmodels.RuntimeCacheInspection{Supported: true, Installed: true}, nil
+func (listModelsAPI) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	return factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "OMNIVOICE_Q4_K_M"}}}, nil
 }
 
 func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
-	transport, err := initializer.InitializeAPITransport(context.Background(), &initializer.Config{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:                      dir,
 		MockWorkersConfig:        factoryconfig.NewEmptyMockWorkersConfig(),
 		Logger:                   zap.NewNop(),
 		SystemConfigHomeDir:      dir,
-		RuntimeFileLoggingPolicy: runtimehost.RuntimeFileLoggingPolicyDisabled,
-		RuntimeMetricsPolicy:     runtimehost.RuntimeMetricsPolicyDisabled,
-		ModelAssets:              listModelsWiringAssetPuller{},
+		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:     service.RuntimeMetricsPolicyDisabled,
+		ModelAPI:                 listModelsAPI{},
 	})
 	if err != nil {
-		t.Fatalf("InitializeAPITransport: %v", err)
+		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	srv := NewServer(transport.SessionAPISurface(), 0, zap.NewNop())
+	srv := NewServer(svc, 0, zap.NewNop())
 	req := httptest.NewRequest(http.MethodGet, "/models", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -508,23 +493,16 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	}
 }
 
-func TestInjectAPITransport_RejectsInvalidFactoryBeforeServing(t *testing.T) {
+func TestServerCompositionRejectsInvalidFactoryBeforeServing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	cfg := &service.FactoryServiceConfig{Dir: t.TempDir()}
 
-	_, errInit := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: cfg.Dir})
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
-	if errInit == nil {
-		t.Fatal("expected InitializeAPITransport to fail without factory.json")
-	}
 	if errService == nil {
-		t.Fatal("expected BuildFactoryService to fail without factory.json")
-	}
-	if errService.Error() != errInit.Error() {
-		t.Fatalf("InitializeAPITransport error = %q, want %q", errInit, errService)
+		t.Fatal("expected server dependency construction to fail without factory.json")
 	}
 }
 

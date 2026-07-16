@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service"
 )
 
@@ -24,22 +25,28 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	root, err := service.ResolveFactoryServiceRoot(&service.FactoryServiceConfig{Dir: dir})
+	composeCfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	root, err := service.ResolveFactoryServiceRoot(composeCfg)
 	if err != nil {
 		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
-	load, err := service.LoadFactoryConfigForCompose(&service.FactoryServiceConfig{Dir: dir}, root)
+	load, err := service.LoadFactoryConfigForCompose(composeCfg, root)
 	if err != nil {
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
-	clock := service.ServiceClockForCompose(&service.FactoryServiceConfig{Dir: dir}, load)
-	collaborators := service.NewFactoryServiceCollaborators(
-		&service.FactoryServiceConfig{Dir: dir},
+	clock := service.ServiceClockForCompose(composeCfg, load)
+	collaborators, err := service.NewFactoryServiceCollaborators(
+		composeCfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
-	composeCfg := &service.FactoryServiceConfig{Dir: dir}
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators: %v", err)
+	}
 	shell, err := service.ComposeFactoryService(
 		ctx,
 		composeCfg,
@@ -52,7 +59,15 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	modelDeps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		t.Fatalf("ModelServiceDependencies: %v", err)
+	}
+	models, err := modelsservice.NewService(modelDeps)
+	if err != nil {
+		t.Fatalf("modelsservice.NewService: %v", err)
+	}
+	composed := service.AttachModelServiceCollaborator(shell, models)
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
@@ -70,36 +85,46 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := t.Context()
-	cfg := &service.FactoryServiceConfig{Dir: dir}
+	cfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
 
 	built, err := service.BuildFactoryCore(ctx, cfg)
 	if err != nil {
 		t.Fatalf("BuildFactoryCore: %v", err)
 	}
 
-	root, err := service.ResolveFactoryServiceRoot(&service.FactoryServiceConfig{Dir: dir})
+	composeCfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	root, err := service.ResolveFactoryServiceRoot(composeCfg)
 	if err != nil {
 		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
-	load, err := service.LoadFactoryConfigForCompose(&service.FactoryServiceConfig{Dir: dir}, root)
+	load, err := service.LoadFactoryConfigForCompose(composeCfg, root)
 	if err != nil {
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
-	clock := service.ServiceClockForCompose(&service.FactoryServiceConfig{Dir: dir}, load)
-	collaborators := service.NewFactoryServiceCollaborators(
-		&service.FactoryServiceConfig{Dir: dir},
+	clock := service.ServiceClockForCompose(composeCfg, load)
+	collaborators, err := service.NewFactoryServiceCollaborators(
+		composeCfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators: %v", err)
+	}
 	composed, err := service.ComposeFactoryCore(
 		ctx,
-		&service.FactoryServiceConfig{Dir: dir},
+		composeCfg,
 		root,
 		collaborators,
 		load,
 		clock,
-		service.NewHostedWorkersConfig(&service.FactoryServiceConfig{Dir: dir}, root.BaseLogger, clock),
+		service.NewHostedWorkersConfig(composeCfg, root.BaseLogger, clock),
 	)
 	if err != nil {
 		t.Fatalf("ComposeFactoryCore: %v", err)
@@ -137,37 +162,52 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	root, err := service.ResolveFactoryServiceRoot(cfg)
+	composeCfg, err := service.ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	root, err := service.ResolveFactoryServiceRoot(composeCfg)
 	if err != nil {
 		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
-	load, err := service.LoadFactoryConfigForCompose(cfg, root)
+	load, err := service.LoadFactoryConfigForCompose(composeCfg, root)
 	if err != nil {
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
-	clock := service.ServiceClockForCompose(cfg, load)
-	collaborators := service.NewFactoryServiceCollaborators(
-		cfg,
+	clock := service.ServiceClockForCompose(composeCfg, load)
+	collaborators, err := service.NewFactoryServiceCollaborators(
+		composeCfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
 	)
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators: %v", err)
+	}
 	shell, err := service.ComposeFactoryService(
 		ctx,
-		cfg,
+		composeCfg,
 		root,
 		collaborators,
 		load,
 		clock,
-		service.NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		service.NewHostedWorkersConfig(composeCfg, root.BaseLogger, clock),
 	)
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
+	modelDeps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		t.Fatalf("ModelServiceDependencies: %v", err)
+	}
+	models, err := modelsservice.NewService(modelDeps)
+	if err != nil {
+		t.Fatalf("modelsservice.NewService: %v", err)
+	}
+	composed := service.AttachModelServiceCollaborator(shell, models)
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
-		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, cfg),
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
 	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {

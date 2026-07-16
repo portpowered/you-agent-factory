@@ -12,48 +12,24 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
-// LocalModelDomain wires local-model runtime dependencies constructed at host
-// build time and copied onto each Bundle.
-type LocalModelDomain struct {
-	Resources      *localmodels.ResourceLimiter
-	Assets         localmodels.AssetPuller
-	Runtime        localmodels.Runtime
-	Manager        *localmodels.Manager
-	Host           modelhost.Host
-	LeaseExecution *modelhost.LeaseExecution
-}
+// LocalModelDomain is the model-owned collaborator group copied onto each Bundle.
+type LocalModelDomain = modelhost.LocalDomain
 
-// NewLocalModelDomain constructs local-model collaborators for one bundle build.
-func NewLocalModelDomain(cfg Config) LocalModelDomain {
+// LocalModelDomainDependencies adapts service configuration to the canonical
+// model-package construction contract without selecting model defaults.
+func LocalModelDomainDependencies(cfg Config) modelhost.LocalDomainDependencies {
 	hooks := cfg.LocalModelHooks
 	if hooks.MarkResourceWaitStarted == nil {
 		hooks = LocalModelHooks()
 	}
-	modelResources := localmodels.NewResourceLimiter(hooks)
-	modelAssets := localmodels.NewAssetPuller(cfg.ModelCacheDir)
-	if cfg.ModelAssetsOverride != nil {
-		modelAssets = cfg.ModelAssetsOverride
+	return modelhost.LocalDomainDependencies{
+		CacheDir:    cfg.ModelCacheDir,
+		AssetPuller: cfg.ModelAssetsOverride,
+		Runtime:     cfg.LocalModelRuntimeOverride,
+		Host:        cfg.ModelHostOverride,
+		Hooks:       hooks,
+		Diagnostics: ModelHostDiagnostics(cfg),
 	}
-	localModelRuntime := cfg.LocalModelRuntimeOverride
-	if localModelRuntime == nil {
-		localModelRuntime = localmodels.NewOmniVoiceRuntime(nil)
-	}
-	host := cfg.ModelHostOverride
-	if host == nil {
-		host = modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
-			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-			Diagnostics:    ModelHostDiagnostics(cfg),
-		})
-	}
-	domain := LocalModelDomain{
-		Resources: modelResources,
-		Assets:    modelAssets,
-		Runtime:   localModelRuntime,
-		Manager:   localmodels.NewManager(modelAssets, localModelRuntime, hooks),
-		Host:      host,
-	}
-	domain.LeaseExecution = modelhost.NewLeaseExecution(host, modelAssets, localModelRuntime, hooks)
-	return domain
 }
 
 func localModelHooks() localmodels.Hooks {

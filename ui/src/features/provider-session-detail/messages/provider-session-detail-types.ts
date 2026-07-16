@@ -3,7 +3,7 @@ export interface ProviderSessionDetailMessages {
   argumentsLabel: string;
   bytesLabel: string;
   callIdLabel: string;
-  cachedInputLabel: string;
+  cachedTokensLabel: string;
   collapseAction: string;
   dispatchLabel: string;
   emptyState: string;
@@ -25,6 +25,7 @@ export interface ProviderSessionDetailMessages {
   functionCallsHeading: string;
   functionCallsUnavailable: string;
   inputLabel: string;
+  inputTokensLabel: string;
   lineLabel: (params: { lineNumber: number }) => string;
   lineCountLabel: string;
   loadingState: string;
@@ -40,6 +41,7 @@ export interface ProviderSessionDetailMessages {
   noTimestamp: string;
   orderLabel: (params: { order: number; turnIndex?: number | null }) => string;
   outputLabel: string;
+  outputTokensLabel: string;
   parseDiagnosticsHeading: string;
   parseErrorsHeading: string;
   parseErrorState: string;
@@ -47,7 +49,6 @@ export interface ProviderSessionDetailMessages {
   reasoningCountLabel: string;
   reasoningHeading: string;
   reasoningUnavailable: string;
-  relativePathLabel: string;
   responseItemsLabel: string;
   sessionAnalysisDescription: string;
   sessionAnalysisHeading: string;
@@ -58,6 +59,7 @@ export interface ProviderSessionDetailMessages {
   sessionStatusLabel: string;
   sizeBytesLabel: string;
   sourceHeading: string;
+  sourceMetadataHeading: string;
   systemEventLabel: string;
   tokenUsageHeading: string;
   tokenUsageUnavailable: string;

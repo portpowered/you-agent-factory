@@ -106,16 +106,13 @@ func TestEnsureManagedRuntimeReadyForInvocation_PackagedAndAuthoredFactoriesMatc
 
 func TestManager_BlocksInvocationWhenManagedRuntimeMissing(t *testing.T) {
 	runtime := &countingLocalRuntime{}
-	manager := NewManager(stubInvocationReadinessAssetPuller{
+	manager := mustNewManagedRuntime(t, stubInvocationReadinessAssetPuller{
 		inspection: RuntimeCacheInspection{
 			Supported:     true,
 			Installed:     false,
 			MissingAssets: []string{"omnivoice-base-Q4_K_M.gguf"},
 		},
 	}, runtime, Hooks{})
-	if manager == nil {
-		t.Fatal("NewManager returned nil")
-	}
 
 	factoryCfg := managerTestFactoryConfig()
 	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), factoryCfg, nil)

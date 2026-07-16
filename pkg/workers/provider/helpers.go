@@ -15,11 +15,78 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
+
+// ConstructionInput contains the process boundaries required by a provider-backed worker.
+// CommandRunner intentionally does not control Agy's separate native PTY boundary.
+type ConstructionInput struct {
+	CommandRunner   CommandRunner
+	AgyPTYAllocator agypty.PTYAllocator
+	Options         []ScriptWrapProviderOption
+}
+
+// Factory is a validated, reusable provider-worker construction component.
+// Process composition selects its command and PTY edges once; runtime loading
+// supplies only worker-specific options.
+type Factory struct {
+	commandRunner   CommandRunner
+	agyPTYAllocator agypty.PTYAllocator
+}
+
+// NewFactory validates the process edges used by every provider-backed worker.
+func NewFactory(input ConstructionInput) (*Factory, error) {
+	if input.CommandRunner == nil {
+		return nil, errors.New("construct provider-backed worker factory: command runner is required")
+	}
+	if input.AgyPTYAllocator == nil {
+		return nil, errors.New("construct provider-backed worker factory: Agy PTY allocator is required")
+	}
+	return &Factory{commandRunner: input.CommandRunner, agyPTYAllocator: input.AgyPTYAllocator}, nil
+}
+
+// NewProductionFactory applies the package-owned production process edges.
+func NewProductionFactory() (*Factory, error) {
+	allocator, err := agypty.NewDefaultPlatformAllocatorFactory().NewAllocator()
+	if err != nil {
+		return nil, fmt.Errorf("construct provider-backed worker factory: create Agy PTY allocator: %w", err)
+	}
+	return NewFactory(ConstructionInput{CommandRunner: workerprocess.ExecCommandRunner{}, AgyPTYAllocator: allocator})
+}
+
+// New constructs one provider-backed worker from the factory's validated edges.
+func (f *Factory) New(opts ...ScriptWrapProviderOption) (*ScriptWrapProvider, error) {
+	if f == nil {
+		return nil, errors.New("construct provider-backed worker: factory is required")
+	}
+	configured := append([]ScriptWrapProviderOption(nil), opts...)
+	configured = append(configured, WithProviderCommandRunner(f.commandRunner), WithAgyPTYAllocator(f.agyPTYAllocator))
+	return NewScriptWrapProvider(configured...), nil
+}
+
+// WithCommandRunner returns a validated copy with a per-runtime wrapper edge.
+func (f *Factory) WithCommandRunner(runner CommandRunner) (*Factory, error) {
+	if f == nil {
+		return nil, errors.New("construct provider-backed worker factory: base factory is required")
+	}
+	if runner == nil {
+		return f, nil
+	}
+	return NewFactory(ConstructionInput{CommandRunner: runner, AgyPTYAllocator: f.agyPTYAllocator})
+}
+
+// NewFromInput rejects incomplete graphs before a provider dispatch can start.
+func NewFromInput(input ConstructionInput) (*ScriptWrapProvider, error) {
+	factory, err := NewFactory(input)
+	if err != nil {
+		return nil, err
+	}
+	return factory.New(input.Options...)
+}
 
 type CommandRunner = workerprocess.CommandRunner
 type CommandRequest = workerprocess.CommandRequest

@@ -386,7 +386,11 @@ func findAcknowledgedEventIndex(
 			if !eventBelongsToSession(event, scope.SessionID) {
 				continue
 			}
-			if event.Context.SessionSequence != nil && *event.Context.SessionSequence == ackSequence {
+			sequence := event.Context.Sequence
+			if event.Context.SessionSequence != nil {
+				sequence = *event.Context.SessionSequence
+			}
+			if sequence == ackSequence {
 				return index, nil
 			}
 		}

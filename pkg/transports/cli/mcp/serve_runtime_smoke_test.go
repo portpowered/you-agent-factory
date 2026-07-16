@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
@@ -59,7 +60,9 @@ func startRunServeRuntimeSmokeServer(
 	}
 	service, err := factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot, Persistence: persistence, Clock: factory.EnsureClock(nil),
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)

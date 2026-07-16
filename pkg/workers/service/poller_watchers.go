@@ -19,11 +19,23 @@ func (s *Service) StartPollersForRuntime(
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	submitter WorkRequestSubmitter,
-) {
+) error {
 	if factoryCfg == nil || runtimeCfg == nil || sidecars == nil || submitter == nil {
-		return
+		return nil
 	}
+	if err := s.ValidatePollersForRuntime(factoryCfg, runtimeCfg, submitter); err != nil {
+		return err
+	}
+	return s.startPollersForRuntime(ctx, sidecars, factoryCfg, runtimeCfg, submitter)
+}
 
+func (s *Service) startPollersForRuntime(
+	ctx context.Context,
+	sidecars *sync.WaitGroup,
+	factoryCfg *interfaces.FactoryConfig,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	submitter WorkRequestSubmitter,
+) error {
 	for _, workstation := range factoryCfg.Workstations {
 		ws := workstation
 		if ws.Kind != workertaxonomy.WorkstationKindPoller {
@@ -61,9 +73,37 @@ func (s *Service) StartPollersForRuntime(
 				)
 				continue
 			}
-			s.StartHostedLinearPoller(ctx, sidecars, runtimeCfg, ws, workerDef, submitter)
+			if err := s.StartHostedLinearPoller(ctx, sidecars, runtimeCfg, ws, workerDef, submitter); err != nil {
+				return err
+			}
 		default:
 			continue
 		}
 	}
+	return nil
+}
+
+// ValidatePollersForRuntime rejects invalid hosted poller construction before
+// the scheduler starts any worker lifecycle.
+func (s *Service) ValidatePollersForRuntime(
+	factoryCfg *interfaces.FactoryConfig,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	submitter WorkRequestSubmitter,
+) error {
+	if factoryCfg == nil || runtimeCfg == nil || submitter == nil {
+		return nil
+	}
+	for _, workstation := range factoryCfg.Workstations {
+		if workstation.Kind != interfaces.WorkstationKindPoller {
+			continue
+		}
+		workerDef, ok := runtimeCfg.Worker(strings.TrimSpace(workstation.WorkerTypeName))
+		if !ok || workerDef == nil || !interfaces.IsPollerWorkerType(workerDef.Type) || workerDef.Provider != interfaces.HostedWorkerProviderLinear {
+			continue
+		}
+		if err := s.validateHostedLinearPoller(runtimeCfg, workstation, workerDef, submitter); err != nil {
+			return err
+		}
+	}
+	return nil
 }

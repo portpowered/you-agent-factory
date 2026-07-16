@@ -11,10 +11,12 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 )
 
@@ -154,21 +156,29 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
 	}
+	workerApplication, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
 
-	builder := runtimebuild.New(
+	builder, err := runtimebuild.New(
 		runtimebuild.Config{
 			ApplyOperatorDefaults: true,
+			WorkerApplication:     workerApplication,
 			OperatorDefaults: operatorconfig.ResolvedDefaults{
 				WorkerModelProvider: "CODEX",
 				WorkerModel:         "gpt-5",
 			},
 		},
-		nil,
+		factory.EnsureClock(nil),
 		zap.NewNop(),
 		func(context.Context, runtimebuild.SessionBuildSpec) (any, error) {
 			return struct{}{}, nil
 		},
 	)
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
 	spec, err := builder.BuildSpec(context.Background(), runtimebuild.SessionSpecInput{
 		Dir:              resolution.FactoryDir,
 		FolderPath:       resolution.FactoryDir,

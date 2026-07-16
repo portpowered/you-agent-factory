@@ -3,7 +3,9 @@ package modelhost
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 
@@ -15,6 +17,176 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+func mustNewCatalogHost(t *testing.T, assets AssetGateway, opts Options) *CatalogHost {
+	t.Helper()
+	launcher := opts.Supervisor.ProcessLauncher
+	if launcher == nil {
+		launcher = DefaultProcessLauncher()
+	}
+	host, err := NewHost(Dependencies{
+		AssetPuller: assets, CacheInspector: assets,
+		ProcessLauncher: launcher, Options: opts,
+	})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	return host
+}
+
+func TestNewLocalDomainAppliesModelOwnedDefaultsWithoutStartingLifecycle(t *testing.T) {
+	t.Parallel()
+
+	domain, err := NewLocalDomain(LocalDomainDependencies{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewLocalDomain() error = %v", err)
+	}
+	if domain.Resources == nil || domain.Assets == nil || domain.Runtime == nil || domain.Manager == nil || domain.LeaseExecution == nil {
+		t.Fatalf("NewLocalDomain() = %+v, want complete package-default collaborators", domain)
+	}
+	if _, ok := domain.Host.(*CatalogHost); !ok {
+		t.Fatalf("NewLocalDomain() host = %T, want *CatalogHost", domain.Host)
+	}
+}
+
+func TestNewHost_ValidatesRequiredDependenciesWithoutLaunchingProcess(t *testing.T) {
+	assets := stubAssetGateway{}
+	launcher := &fakeProcessLauncher{}
+
+	tests := []struct {
+		name string
+		deps Dependencies
+		want string
+	}{
+		{
+			name: "asset puller",
+			deps: Dependencies{CacheInspector: assets, ProcessLauncher: launcher},
+			want: "asset puller is required",
+		},
+		{
+			name: "cache inspector",
+			deps: Dependencies{AssetPuller: assets, ProcessLauncher: launcher},
+			want: "cache inspector is required",
+		},
+		{
+			name: "process launcher",
+			deps: Dependencies{AssetPuller: assets, CacheInspector: assets},
+			want: "process launcher is required",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			host, err := NewHost(tc.deps)
+			if host != nil {
+				t.Fatal("host constructed with a missing required dependency")
+			}
+			if !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want classified error containing %q", err, tc.want)
+			}
+		})
+	}
+
+	if len(launcher.starts) != 0 {
+		t.Fatalf("process starts during validation = %d, want 0", len(launcher.starts))
+	}
+}
+
+func TestNewHost_UsesExplicitPullCacheAndProcessEdges(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, supervisedCatalogFactoryConfig())
+	assets := &recordingConstructorAssets{
+		inspection: CacheInspection{
+			Supported:          true,
+			Installed:          true,
+			InstalledFileCount: 2,
+			CachePath:          t.TempDir(),
+		},
+	}
+	launcher := &fakeProcessLauncher{
+		newProcess: func(spec ProcessStartSpec) *fakeManagedProcess {
+			return newFakeManagedProcess(spec.HealthEndpoint, nil)
+		},
+	}
+	host, err := NewHost(Dependencies{
+		AssetPuller:     assets,
+		CacheInspector:  assets,
+		ProcessLauncher: launcher,
+		Options: Options{Supervisor: SupervisorConfig{
+			ReadinessTimeout:    100 * time.Millisecond,
+			HealthCheckInterval: time.Millisecond,
+			HealthChecker:       alwaysHealthyChecker{},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	if len(launcher.starts) != 0 {
+		t.Fatalf("process starts during construction = %d, want 0", len(launcher.starts))
+	}
+
+	if _, err := host.Pull(context.Background(), loaded, "OMNIVOICE_Q4_K_M"); err != nil {
+		t.Fatalf("Pull: %v", err)
+	}
+	lease, err := host.AcquireLease(context.Background(), loaded, "OMNIVOICE_Q4_K_M", LeaseOptions{})
+	if err != nil {
+		t.Fatalf("AcquireLease: %v", err)
+	}
+	if assets.pulls != 1 || assets.inspections == 0 {
+		t.Fatalf("edge calls = pulls:%d inspections:%d, want supplied pull and cache edges", assets.pulls, assets.inspections)
+	}
+	if len(launcher.starts) != 1 {
+		t.Fatalf("process starts after lease = %d, want 1", len(launcher.starts))
+	}
+	if err := host.ReleaseLease(context.Background(), lease.ID); err != nil {
+		t.Fatalf("ReleaseLease: %v", err)
+	}
+	if err := host.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+}
+
+func TestNewHost_ClassifiesSuppliedProcessLaunchFailure(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, supervisedCatalogFactoryConfig())
+	assets := stubAssetGateway{byModel: map[string]CacheInspection{
+		"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true, InstalledFileCount: 2, CachePath: t.TempDir()},
+	}}
+	host, err := NewHost(Dependencies{
+		AssetPuller:     assets,
+		CacheInspector:  assets,
+		ProcessLauncher: &fakeProcessLauncher{},
+	})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+
+	_, err = host.AcquireLease(context.Background(), loaded, "OMNIVOICE_Q4_K_M", LeaseOptions{})
+	if !errors.Is(err, ErrProcessCrash) || FailureClassFromError(err) != FailureClassProcessCrash {
+		t.Fatalf("AcquireLease error = %v, want process_crash classification", err)
+	}
+}
+
+type recordingConstructorAssets struct {
+	pulls       int
+	inspections int
+	inspection  CacheInspection
+}
+
+func (a *recordingConstructorAssets) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (AssetPullResult, error) {
+	a.pulls++
+	return AssetPullResult{
+		PullOutcome: factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		Snapshot: ReadinessSnapshot{
+			Identity:       Identity{Name: "OMNIVOICE_Q4_K_M", Locality: factoryapi.WorkerModelLocalityLocal},
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+		},
+	}, nil
+}
+
+func (a *recordingConstructorAssets) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (CacheInspection, error) {
+	a.inspections++
+	return a.inspection, nil
+}
 
 func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing.T) {
 	identity := Identity{
@@ -102,6 +274,31 @@ func TestFailureClassFromError_ClassifiesCancelled(t *testing.T) {
 	}
 }
 
+func TestFailureClassForReadinessState_MapsPublicContractStates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		readiness factoryapi.ManagedRuntimeReadinessState
+		want      FailureClass
+	}{
+		{name: "ready", readiness: factoryapi.ManagedRuntimeReadinessStateREADY, want: FailureClassNone},
+		{name: "missing", readiness: factoryapi.ManagedRuntimeReadinessStateMISSING, want: FailureClassMissingAssets},
+		{name: "loading", readiness: factoryapi.ManagedRuntimeReadinessStateLOADING, want: FailureClassLoadingTimeout},
+		{name: "failed", readiness: factoryapi.ManagedRuntimeReadinessStateFAILED, want: FailureClassProcessCrash},
+		{name: "unsupported", readiness: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED, want: FailureClassUnsupportedRuntime},
+		{name: "unknown", readiness: factoryapi.ManagedRuntimeReadinessState("UNKNOWN"), want: FailureClassUnsupportedRuntime},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := FailureClassForReadinessState(test.readiness); got != test.want {
+				t.Fatalf("failure class = %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
 func TestManagedRuntimeFromSnapshot_PreservesPublicVocabulary(t *testing.T) {
 	snapshot := ReadinessSnapshot{
 		Identity: Identity{
@@ -138,7 +335,7 @@ func TestManagedRuntimeFromSnapshot_PreservesPublicVocabulary(t *testing.T) {
 
 func TestCatalogHost_InspectReadinessAndLeaseLifecycle(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {
 				Supported:          true,
@@ -177,7 +374,7 @@ func TestCatalogHost_InspectReadinessAndLeaseLifecycle(t *testing.T) {
 
 func TestCatalogHost_BlocksLeaseForNonReadyStates(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {Supported: true, InstalledFileCount: 1},
 		},
@@ -198,7 +395,7 @@ func TestCatalogHost_BlocksLeaseForNonReadyStates(t *testing.T) {
 
 func TestCatalogHost_InspectReadinessHonoursCancellation(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{}, Options{})
+	host := mustNewCatalogHost(t, stubAssetGateway{}, Options{})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 

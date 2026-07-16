@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: editable work-state hook regressions share one mocked factory-document seam.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: editable work-state hook regressions share one mocked factory-document seam.
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";

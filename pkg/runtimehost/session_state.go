@@ -28,24 +28,22 @@ type liveSessionState struct {
 }
 
 type hostCoordinatorPolicy struct {
-	dir                           string
-	executionBaseDir              string
-	runtimeMode                   interfaces.RuntimeMode
-	port                          int
-	verbose                       bool
-	runtimeInstanceID             string
-	workFile                      string
-	workflowID                    string
-	mockWorkersConfig             *factoryconfig.MockWorkersConfig
-	simpleDashboardRenderer       SimpleDashboardRenderer
-	apiServerStarter              APIServerStarter
-	apiServerReady                <-chan struct{}
-	workstationLoader             factoryconfig.WorkstationLoader
-	modelCacheDir                 string
-	runnerID                      string
-	providerOverride              workers.Provider
-	providerCommandRunnerOverride workers.CommandRunner
-	commandRunnerOverride         workers.CommandRunner
+	dir                     string
+	executionBaseDir        string
+	runtimeMode             interfaces.RuntimeMode
+	port                    int
+	verbose                 bool
+	runtimeInstanceID       string
+	workFile                string
+	workflowID              string
+	mockWorkersConfig       *factoryconfig.MockWorkersConfig
+	simpleDashboardRenderer SimpleDashboardRenderer
+	apiServerStarter        APIServerStarter
+	apiServerReady          <-chan struct{}
+	workstationLoader       factoryconfig.WorkstationLoader
+	modelCacheDir           string
+	runnerID                string
+	providerOverride        workers.Provider
 }
 
 // CoordinatorPolicy captures normalized host coordinator settings derived from Config.
@@ -94,9 +92,7 @@ func hasExplicitHostCoordinatorReferencePolicy(policy hostCoordinatorPolicy) boo
 		policy.apiServerStarter != nil ||
 		policy.apiServerReady != nil ||
 		policy.workstationLoader != nil ||
-		policy.providerOverride != nil ||
-		policy.providerCommandRunnerOverride != nil ||
-		policy.commandRunnerOverride != nil
+		policy.providerOverride != nil
 }
 
 func CoordinatorPolicyFromConfig(cfg *Config) hostCoordinatorPolicy {
@@ -104,24 +100,22 @@ func CoordinatorPolicyFromConfig(cfg *Config) hostCoordinatorPolicy {
 		return hostCoordinatorPolicy{}
 	}
 	return hostCoordinatorPolicy{
-		dir:                           cfg.Dir,
-		executionBaseDir:              cfg.ExecutionBaseDir,
-		runtimeMode:                   cfg.RuntimeMode,
-		port:                          cfg.Port,
-		verbose:                       cfg.Verbose,
-		runtimeInstanceID:             cfg.RuntimeInstanceID,
-		workFile:                      cfg.WorkFile,
-		workflowID:                    cfg.WorkflowID,
-		mockWorkersConfig:             cfg.MockWorkersConfig,
-		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
-		apiServerStarter:              cfg.APIServerStarter,
-		apiServerReady:                cfg.APIServerReady,
-		workstationLoader:             cfg.WorkstationLoader,
-		modelCacheDir:                 cfg.ModelCacheDir,
-		runnerID:                      cfg.RunnerID,
-		providerOverride:              cfg.ProviderOverride,
-		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
-		commandRunnerOverride:         cfg.CommandRunnerOverride,
+		dir:                     cfg.Dir,
+		executionBaseDir:        cfg.ExecutionBaseDir,
+		runtimeMode:             cfg.RuntimeMode,
+		port:                    cfg.Port,
+		verbose:                 cfg.Verbose,
+		runtimeInstanceID:       cfg.RuntimeInstanceID,
+		workFile:                cfg.WorkFile,
+		workflowID:              cfg.WorkflowID,
+		mockWorkersConfig:       cfg.MockWorkersConfig,
+		simpleDashboardRenderer: cfg.SimpleDashboardRenderer,
+		apiServerStarter:        cfg.APIServerStarter,
+		apiServerReady:          cfg.APIServerReady,
+		workstationLoader:       cfg.WorkstationLoader,
+		modelCacheDir:           cfg.ModelCacheDir,
+		runnerID:                cfg.RunnerID,
+		providerOverride:        cfg.ProviderOverride,
 	}
 }
 
@@ -203,11 +197,4 @@ func (h *Host) handleDefaultRuntimeStartFailure(
 		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
 	}
 	return fmt.Errorf("start runtime: %w", startErr)
-}
-
-func (h *Host) modelPullMetricsRecorder() ModelPullMetricsRecorder {
-	if h == nil || h.cfg == nil {
-		return nil
-	}
-	return h.cfg.ModelPullMetricsRecorder
 }

@@ -35,7 +35,7 @@ func basicServer(t *testing.T, dir string) *support.FunctionalAPIServer {
 		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 			cfg.Logger = zap.NewNop()
 		},
 	})

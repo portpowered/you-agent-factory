@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 )
 
 // Config carries service-level settings required to build runnable runtimes.
@@ -34,8 +35,7 @@ type Config struct {
 	SkipBuiltInRunnerPrerequisiteValidation bool
 	WorkstationLoader                       factoryconfig.WorkstationLoader
 	ProviderOverride                        workers.Provider
-	ProviderCommandRunnerOverride           workers.CommandRunner
-	CommandRunnerOverride                   workers.CommandRunner
+	WorkerApplication                       workerapplication.Components
 	LocalModelRuntimeOverride               localmodels.Runtime
 	ExtraOptions                            []factory.FactoryOption
 }

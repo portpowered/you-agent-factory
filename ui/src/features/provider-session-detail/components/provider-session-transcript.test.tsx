@@ -4,7 +4,7 @@ import type { ProviderSessionDetailResponse } from "../../../api/provider-sessio
 import { TranscriptSection } from "./provider-session-transcript";
 
 describe("TranscriptSection", () => {
-  it("expands assistant transcript text from the entry header", () => {
+  it("opens assistant transcript text by default and remains collapsible", () => {
     const longAssistantText = `${"assistant transcript detail ".repeat(18)}final-visible-marker`;
 
     render(
@@ -21,10 +21,15 @@ describe("TranscriptSection", () => {
       />,
     );
 
+    expect(screen.getByText(/final-visible-marker/)).toBeTruthy();
+    const toggle = screen.getByRole("button", { name: "Collapse Assistant" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByText(/final-visible-marker/)).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Expand Assistant" }));
-
     expect(screen.getByText(/final-visible-marker/)).toBeTruthy();
   });
 
@@ -44,8 +49,6 @@ describe("TranscriptSection", () => {
         })}
       />,
     );
-
-    fireEvent.click(screen.getByRole("button", { name: "Expand Reasoning" }));
 
     expect(screen.getAllByText("Encrypted Reasoning").length).toBeGreaterThan(
       0,
@@ -76,6 +79,25 @@ describe("TranscriptSection", () => {
     );
 
     expect(screen.getByText("completed").className).toContain("min-h-6");
+  });
+
+  it("does not render disclosure controls for entries without body content", () => {
+    render(
+      <TranscriptSection
+        detail={buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              order: 1,
+              status: "completed",
+              type: "tool_output",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("completed")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });
 

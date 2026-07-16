@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: the materializer fixture keeps every reducer boundary visible in one focused behavioral suite.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: the materializer fixture keeps every reducer boundary visible in one focused behavioral suite.
 import { describe, expect, it } from "vitest";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../../api/events";

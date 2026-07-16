@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -99,7 +100,9 @@ func TestRunSync_JavaScriptRuntimeFakeChildCLIInspectionRegression(t *testing.T)
 	projectRoot := setupCLIAgentRunWorkflowFixture(t)
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence()},
+		fse.ServiceConfig{
+			ProjectRoot: projectRoot, Persistence: fse.DisabledPersistence(), Clock: factory.EnsureClock(nil),
+		},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)
@@ -366,6 +369,7 @@ func newLiveChildCLIJavaScriptRuntimeService(t *testing.T) (fse.Service, string)
 			ChildExecutorMode: fse.ChildExecutorModeLive,
 			Provider:          fse.SmokeLiveChildProvider(),
 			Persistence:       fse.DisabledPersistence(),
+			Clock:             factory.EnsureClock(nil),
 		},
 	)
 	if err != nil {

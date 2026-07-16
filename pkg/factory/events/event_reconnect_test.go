@@ -145,6 +145,22 @@ func TestBuildReconnectReplay_AfterSessionSequenceReturnsOnlyNewerSessionEvents(
 	}
 }
 
+func TestBuildReconnectReplay_AfterSequenceFallsBackWhenSessionSequenceIsAbsent(t *testing.T) {
+	events := reconnectFixtureEvents(t)
+	events[1].Context.SessionSequence = nil
+	sequence := events[1].Context.Sequence
+
+	replay, err := BuildCanonicalReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
+		AfterSequence: &sequence,
+	}, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
+	if err != nil {
+		t.Fatalf("BuildReconnectReplay: %v", err)
+	}
+	if len(replay) != 1 || replay[0].Id != events[2].Id {
+		t.Fatalf("replay = %#v, want only event %q", replay, events[2].Id)
+	}
+}
+
 func TestBuildReconnectReplay_ReconstructsDispatchStateWithoutSessionCompleted(t *testing.T) {
 	events := reconnectFixtureEvents(t)
 	replay, err := BuildCanonicalReconnectReplay(events, interfaces.FactoryEventReconnectCursor{

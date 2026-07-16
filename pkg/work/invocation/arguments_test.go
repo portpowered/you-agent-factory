@@ -10,6 +10,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
+func TestInvocationErrorsAreNilSafeAndPreserveConstructedMessage(t *testing.T) {
+	t.Parallel()
+
+	var argumentErr *ArgumentError
+	var contentErr *TextContentValidationError
+	var primaryErr *PrimaryResultError
+	if argumentErr.Error() != "" || contentErr.Error() != "" || primaryErr.Error() != "" {
+		t.Fatal("nil invocation errors returned non-empty messages")
+	}
+	constructed := newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invalid signature", "input", "value")
+	if constructed.Error() != "invalid signature" || constructed.Parameter != "input" || constructed.Argument != "value" {
+		t.Fatalf("newArgumentError() = %+v, want preserved diagnostic fields", constructed)
+	}
+}
+
 func TestNormalizeArguments_SignatureCanonicalizesNamedKeysAndDefaults(t *testing.T) {
 	stdin := "true"
 	got, err := NormalizeArguments(NormalizeArgumentsInput{

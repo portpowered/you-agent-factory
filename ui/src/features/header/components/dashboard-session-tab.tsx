@@ -14,11 +14,11 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_TAB_ITEM_CLASS =
-  "group relative flex h-full min-h-0 min-w-0 flex-1 basis-0 items-stretch self-stretch overflow-hidden transition-[opacity,colors,box-shadow]";
+  "group relative flex h-12 min-w-40 max-w-72 flex-none items-stretch self-stretch overflow-hidden transition-[opacity,colors,box-shadow]";
 const SESSION_TAB_BUTTON_CLASS =
   "min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
-  "shrink-0 px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+  "min-h-10 min-w-10 shrink-0 px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_ACTIVE_CLASS = cn(
   "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-surface-container-low text-on-surface",
   "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-surface-container-low)_1rem)]",
@@ -52,7 +52,7 @@ export function OpenSessionButton({
       aria-haspopup="dialog"
       aria-label={label}
       className={cn(
-        "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
+        "flex min-h-10 min-w-10 shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
         "hover:bg-af-overlay-subtle hover:text-on-surface",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
       )}
@@ -194,7 +194,8 @@ function SessionTabStatusIndicator({
         className={cn(
           "absolute inset-0 rounded-full",
           status === "live" && "bg-success",
-          (status === "connecting" || status === "reconnecting") && "bg-primary",
+          (status === "connecting" || status === "reconnecting") &&
+            "bg-primary",
           (status === "offline" || status === "recovery_failed") && "bg-error",
         )}
       />

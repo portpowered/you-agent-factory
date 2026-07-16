@@ -109,6 +109,24 @@ func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
 	return corpus
 }
 
+func TestProviderErrorCorpusReturnsStableCopiesAndRepeatedResults(t *testing.T) {
+	t.Parallel()
+
+	corpus := loadProviderErrorCorpusForTest(t)
+	entries := corpus.Entries()
+	if len(entries) == 0 {
+		t.Fatal("provider error corpus is empty")
+	}
+	repeated := entries[0].RepeatedCommandResults(2)
+	if len(repeated) != 2 || repeated[0].ExitCode != entries[0].ExitCode || repeated[1].ExitCode != entries[0].ExitCode {
+		t.Fatalf("repeated command results = %#v, want two copies of first corpus entry", repeated)
+	}
+	entries[0].Name = "mutated"
+	if corpus.Entries()[0].Name == "mutated" {
+		t.Fatal("Entries() exposed the corpus backing slice")
+	}
+}
+
 func providerErrorCorpusEntryForTest(t *testing.T, name string) ProviderErrorCorpusEntry {
 	t.Helper()
 

@@ -2,7 +2,6 @@ package factorysessionsse
 
 import (
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -20,8 +19,9 @@ func TestFactorySessionSSEReconnect_AfterEventIDSkipsAcknowledgedRetainedHistory
 	wantSuffix := []string{fixture.Retained[2].Id}
 
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
-	query := "after_event_id=" + url.QueryEscape(acknowledged.Id)
-	stream := harness.Open(server.URL, fixture.SessionID, query)
+	stream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, FactorySessionSSECheckpoint{
+		AfterEventID: acknowledged.Id,
+	})
 	defer stream.Close()
 
 	assertFactorySessionSSEReconnectSuffix(t, stream, wantSuffix, []string{
@@ -39,7 +39,9 @@ func TestFactorySessionSSEReconnect_AfterSequenceSkipsAcknowledgedRetainedHistor
 	wantSuffix := []string{fixture.Retained[2].Id}
 
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
-	stream := harness.Open(server.URL, fixture.SessionID, "after_sequence=1")
+	stream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, FactorySessionSSECheckpoint{
+		AfterSequence: &acknowledgedSequence,
+	})
 	defer stream.Close()
 
 	assertFactorySessionSSEReconnectSuffix(t, stream, wantSuffix, []string{
@@ -51,16 +53,54 @@ func TestFactorySessionSSEReconnect_AfterSequenceSkipsAcknowledgedRetainedHistor
 	}
 }
 
+func TestFactorySessionSSEReconnect_AfterSequenceFallsBackToCanonicalSequence(t *testing.T) {
+	fixture := NewFactorySessionSSEFixture(t)
+	fixture.Retained[1].Context.SessionSequence = nil
+	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	defer server.Close()
+
+	acknowledgedSequence := fixture.Retained[1].Context.Sequence
+	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	stream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, FactorySessionSSECheckpoint{
+		AfterSequence: &acknowledgedSequence,
+	})
+	defer stream.Close()
+
+	assertFactorySessionSSEReconnectSuffix(t, stream, []string{fixture.Retained[2].Id}, []string{
+		fixture.Retained[0].Id,
+		fixture.Retained[1].Id,
+	})
+}
+
+func TestFactorySessionSSEReconnect_AfterEventIDTakesPrecedenceOverSequence(t *testing.T) {
+	fixture := NewFactorySessionSSEFixture(t)
+	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	defer server.Close()
+
+	conflictingSequence := *fixture.Retained[1].Context.SessionSequence
+	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	stream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, FactorySessionSSECheckpoint{
+		AfterEventID:  fixture.Retained[0].Id,
+		AfterSequence: &conflictingSequence,
+	})
+	defer stream.Close()
+
+	assertFactorySessionSSEReconnectSuffix(t, stream, []string{
+		fixture.Retained[1].Id,
+		fixture.Retained[2].Id,
+	}, []string{fixture.Retained[0].Id})
+}
+
 func TestFactorySessionSSEReconnect_SecondConnectFromSameCursorYieldsDeterministicSuffix(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
 	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
 	defer server.Close()
 
-	query := "after_event_id=" + url.QueryEscape(fixture.Retained[1].Id)
 	wantSuffix := []string{fixture.Retained[2].Id}
+	checkpoint := FactorySessionSSECheckpoint{AfterEventID: fixture.Retained[1].Id}
 
-	firstSuffix := readFactorySessionSSEReconnectSuffix(t, server.URL, fixture.SessionID, query)
-	secondSuffix := readFactorySessionSSEReconnectSuffix(t, server.URL, fixture.SessionID, query)
+	firstSuffix := readFactorySessionSSEReconnectSuffix(t, server.URL, fixture.SessionID, checkpoint)
+	secondSuffix := readFactorySessionSSEReconnectSuffix(t, server.URL, fixture.SessionID, checkpoint)
 	if len(firstSuffix) != len(wantSuffix) || len(secondSuffix) != len(wantSuffix) {
 		t.Fatalf(
 			"reconnect suffix lengths = [%d %d], want %d each",
@@ -116,9 +156,10 @@ func TestFactorySessionSSEReconnect_KeepsEventStreamFramingAndTargetSession(t *t
 	server := httptest.NewServer(newAPITestServer(root).Handler())
 	defer server.Close()
 
-	query := "after_event_id=" + url.QueryEscape(fixture.Retained[0].Id)
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
-	stream := harness.Open(server.URL, fixture.SessionID, query)
+	stream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, FactorySessionSSECheckpoint{
+		AfterEventID: fixture.Retained[0].Id,
+	})
 	defer stream.Close()
 
 	assertFactorySessionSSEHandshakeHeader(
@@ -140,12 +181,13 @@ func TestFactorySessionSSEReconnect_KeepsEventStreamFramingAndTargetSession(t *t
 
 func readFactorySessionSSEReconnectSuffix(
 	t *testing.T,
-	serverURL, sessionID, query string,
+	serverURL, sessionID string,
+	checkpoint FactorySessionSSECheckpoint,
 ) []factoryapi.FactoryEvent {
 	t.Helper()
 
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
-	stream := harness.Open(serverURL, sessionID, query)
+	stream := harness.OpenFromCheckpoint(serverURL, sessionID, checkpoint)
 	defer stream.Close()
 
 	events := make([]factoryapi.FactoryEvent, 0, 4)

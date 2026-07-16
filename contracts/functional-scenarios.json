@@ -1,0 +1,1052 @@
+{
+  "formatVersion": "functional-scenario-manifest/v1",
+  "scenarios": [
+    {
+      "stableId": "cli/you",
+      "name": "you",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.config",
+      "name": "you config",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.config.init",
+      "name": "you config init",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.docs",
+      "name": "you docs",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.factory",
+      "name": "you factory",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.factory.config",
+      "name": "you factory config",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.factory.config.expand",
+      "name": "you factory config expand",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.config.flatten",
+      "name": "you factory config flatten",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.config.validate",
+      "name": "you factory config validate",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.create",
+      "name": "you factory create",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.delete",
+      "name": "you factory delete",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.list",
+      "name": "you factory list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.query",
+      "name": "you factory query",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.replace-current",
+      "name": "you factory replace-current",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.factory.update",
+      "name": "you factory update",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.init",
+      "name": "you init",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.mcp",
+      "name": "you mcp",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.mcp.serve",
+      "name": "you mcp serve",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.models",
+      "name": "you models",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.models.inspect",
+      "name": "you models inspect",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.models.invoke",
+      "name": "you models invoke",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.models.list",
+      "name": "you models list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.models.pull",
+      "name": "you models pull",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.run",
+      "name": "you run",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.session",
+      "name": "you session",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.session.create",
+      "name": "you session create",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.delete",
+      "name": "you session delete",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.dispatches",
+      "name": "you session dispatches",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.list",
+      "name": "you session list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.pause",
+      "name": "you session pause",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.resume",
+      "name": "you session resume",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.session.show",
+      "name": "you session show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.submit",
+      "name": "you submit",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.submit.batch",
+      "name": "you submit batch",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.work",
+      "name": "you work",
+      "interface": "cli",
+      "classification": "grouping",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "CLI grouping node has no independently runnable customer behavior; its child commands remain separately inventoried."
+    },
+    {
+      "stableId": "cli/you.work.list",
+      "name": "you work list",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.work.move",
+      "name": "you work move",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/smoke/cli_work_move_smoke_test.go::TestWorkMove_RealCLIMovesSubmittedWork",
+          "boundary": "cli"
+        }
+      ]
+    },
+    {
+      "stableId": "cli/you.work.show",
+      "name": "you work show",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "cli/you.work.visualize",
+      "name": "you work visualize",
+      "interface": "cli",
+      "classification": "runnable",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.control",
+      "name": "you.factory_session.control",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.get",
+      "name": "you.factory_session.get",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.get_result",
+      "name": "you.factory_session.get_result",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.list",
+      "name": "you.factory_session.list",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.list_artifacts",
+      "name": "you.factory_session.list_artifacts",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.list_dispatches",
+      "name": "you.factory_session.list_dispatches",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.read_events",
+      "name": "you.factory_session.read_events",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.start_async",
+      "name": "you.factory_session.start_async",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.start_sync",
+      "name": "you.factory_session.start_sync",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "mcp/mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
+      "interface": "mcp",
+      "classification": "tool",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/approveFactorySession",
+      "name": "approveFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/cancelFactorySession",
+      "name": "cancelFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/closeFactorySession",
+      "name": "closeFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getCurrentFactoryBySessionId",
+      "name": "getCurrentFactoryBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getCurrentFactoryWorkstationPromptTemplateContractBySessionId",
+      "name": "getCurrentFactoryWorkstationPromptTemplateContractBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getEvents",
+      "name": "getEvents",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getEventsBySessionId",
+      "name": "getEventsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "partial",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "boundary": "rest"
+        }
+      ],
+      "gap": "The generated REST boundary opens and observes canonical session Factory Events, but malformed-JSON recovery is not proven."
+    },
+    {
+      "stableId": "rest/getFactoryResponseEventsBySessionId",
+      "name": "getFactoryResponseEventsBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySession",
+      "name": "getFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySessionArtifact",
+      "name": "getFactorySessionArtifact",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySessionDispatch",
+      "name": "getFactorySessionDispatch",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySessionPartialResult",
+      "name": "getFactorySessionPartialResult",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySessionResult",
+      "name": "getFactorySessionResult",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySessionResults",
+      "name": "getFactorySessionResults",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getFactorySessionSyncPreflightBySessionId",
+      "name": "getFactorySessionSyncPreflightBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getModel",
+      "name": "getModel",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getProviderSessionDetails",
+      "name": "getProviderSessionDetails",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getStatus",
+      "name": "getStatus",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/getStatusBySessionId",
+      "name": "getStatusBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/getWorkBySessionId",
+      "name": "getWorkBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/interruptFactorySessionDispatch",
+      "name": "interruptFactorySessionDispatch",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/invokeFactorySessionBySessionId",
+      "name": "invokeFactorySessionBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_session_invocation_test.go::TestSessionInvocationAPI_ReturnsPrimaryResult",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/invokeModel",
+      "name": "invokeModel",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listFactorySessionArtifacts",
+      "name": "listFactorySessionArtifacts",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listFactorySessionDispatches",
+      "name": "listFactorySessionDispatches",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listFactorySessions",
+      "name": "listFactorySessions",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listModels",
+      "name": "listModels",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/listWorkBySessionId",
+      "name": "listWorkBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/moveWorkBySessionId",
+      "name": "moveWorkBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_manual_work_recovery_test.go::TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/openFactorySession",
+      "name": "openFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/pauseFactorySession",
+      "name": "pauseFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/previewFactory",
+      "name": "previewFactory",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/previewWorkflow",
+      "name": "previewWorkflow",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/pullModel",
+      "name": "pullModel",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/resumeFactorySession",
+      "name": "resumeFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/retryFactorySessionDispatch",
+      "name": "retryFactorySessionDispatch",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/saveCurrentFactoryBySessionId",
+      "name": "saveCurrentFactoryBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/stageSubmitWorkFileBySessionId",
+      "name": "stageSubmitWorkFileBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/startDurableFactorySessionAsync",
+      "name": "startDurableFactorySessionAsync",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/startDurableFactorySessionSync",
+      "name": "startDurableFactorySessionSync",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/submitWorkBySessionId",
+      "name": "submitWorkBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/terminateFactorySession",
+      "name": "terminateFactorySession",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/upsertWorkRequestBySessionId",
+      "name": "upsertWorkRequestBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "covered",
+      "lane": "long",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent",
+          "boundary": "rest"
+        }
+      ]
+    },
+    {
+      "stableId": "rest/validateCurrentFactoryWorkstationPromptTemplateBySessionId",
+      "name": "validateCurrentFactoryWorkstationPromptTemplateBySessionId",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "rest/validateFactory",
+      "name": "validateFactory",
+      "interface": "rest",
+      "classification": "operation",
+      "status": "missing",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
+    },
+    {
+      "stableId": "sse/getEvents",
+      "name": "getEvents",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "Deprecated global Factory Event compatibility stream is non-required and retained only until later removal.",
+      "sse": {
+        "required": false,
+        "disposition": "deprecated-later-removal",
+        "scope": "deprecated global Factory Event compatibility stream"
+      }
+    },
+    {
+      "stableId": "sse/getEventsBySessionId",
+      "name": "getEventsBySessionId",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "partial",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "evidence": [
+        {
+          "test": "tests/release/release_smoke_test.go::TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture",
+          "boundary": "sse"
+        }
+      ],
+      "gap": "The customer SSE client decodes and observes session Factory Events, but no qualifying functional test proves that it recovers and continues after malformed JSON data.",
+      "sse": {
+        "required": true,
+        "disposition": "required",
+        "scope": "session Factory Event stream, including recovery after malformed JSON data"
+      }
+    },
+    {
+      "stableId": "sse/getFactoryResponseEventsBySessionId",
+      "name": "getFactoryResponseEventsBySessionId",
+      "interface": "sse",
+      "classification": "event-stream",
+      "status": "not-applicable",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "reviewedReason": "Factory response-event stream functional coverage is non-required and currently deferred.",
+      "sse": {
+        "required": false,
+        "disposition": "currently-deferred",
+        "scope": "session Factory response-event stream"
+      }
+    }
+  ]
+}

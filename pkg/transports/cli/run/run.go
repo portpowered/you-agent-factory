@@ -191,17 +191,17 @@ func FactoryServiceBuilderFromService(build FactoryServiceBuildFunc) FactoryServ
 }
 
 func defaultBuildFactoryService(
-	ctx context.Context,
-	cfg *service.FactoryServiceConfig,
+	context.Context,
+	*service.FactoryServiceConfig,
 ) (factoryServiceRunner, error) {
-	return service.BuildFactoryService(ctx, cfg)
+	return nil, errors.New("construct local runtime: dependency-injected builder is required")
 }
 
 var buildFactoryService FactoryServiceBuilder = defaultBuildFactoryService
 
 // SetBuildFactoryService registers the factory service builder used by Run.
-// Legacy callers may use this compatibility hook; process-root executions use
-// BuildApplication with an invocation-scoped builder.
+// This compatibility hook does not select a construction path by default;
+// process-root executions use BuildApplication with a Wire-owned builder.
 func SetBuildFactoryService(builder FactoryServiceBuilder) {
 	if builder == nil {
 		buildFactoryService = defaultBuildFactoryService

@@ -16,7 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -42,10 +41,13 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 
 	"go.uber.org/zap"
 )
+
+type secretResolver = hostedworkers.SecretResolver
 
 // SimpleDashboardRenderInput carries the low-level engine snapshot that powers
 // runtime diagnostics together with the dedicated event-first render DTO used
@@ -65,8 +67,6 @@ type SimpleDashboardRenderer func(input SimpleDashboardRenderInput)
 // cancelled. Callers (e.g. CLI) provide their own implementation to avoid
 // import cycles between service and api packages.
 type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, port int, logger *zap.Logger) error
-
-type secretResolver = hostedworkers.SecretResolver
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
@@ -142,7 +142,6 @@ type Host struct {
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
-	modelInitOnce            sync.Once
 	durableExecution         factorysessionexecution.Service
 }
 
@@ -302,12 +301,6 @@ type Config struct {
 	// (prompt rendering, AgentExecutor, stop-token evaluation) without
 	// shelling out to a real CLI tool.
 	ProviderOverride workers.Provider
-	// ProviderCommandRunnerOverride, when non-nil, is injected into the
-	// ScriptWrapProvider used by MODEL_WORKER executors. This preserves the
-	// real provider request construction while letting tests fake the CLI
-	// subprocess boundary and assert command details, env, stdin, stdout,
-	// stderr, and exit failures.
-	ProviderCommandRunnerOverride workers.CommandRunner
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
 	// runner prerequisite checks during startup. Tests that replace execution
 	// with mocks or custom executors use this to exercise service wiring
@@ -319,23 +312,9 @@ type Config struct {
 	// workstation is skipped. Tests use this to inject workstation
 	// definitions without requiring files on disk.
 	WorkstationLoader factoryconfig.WorkstationLoader
-	// CommandRunnerOverride, when non-nil, is injected into SCRIPT_WORKER
-	// executors instead of the default ExecCommandRunner. This allows
-	// tests to mock os/exec at the CommandRunner level while still
-	// exercising the full ScriptExecutor pipeline (arg templates, env
-	// merging, exit-code routing).
-	CommandRunnerOverride workers.CommandRunner
-	// HostedPollerHTTPClient, when non-nil, overrides the default HTTP client
-	// used by repository-owned hosted pollers such as the built-in Linear
-	// integration.
-	HostedPollerHTTPClient *http.Client
-	// HostedPollerSecretResolver, when non-nil, resolves hosted-worker
-	// auth.secretRef values at runtime instead of using the default env/file
-	// lookup behavior.
-	HostedPollerSecretResolver secretResolver
-	// HostedLinearEndpoint overrides the Linear GraphQL endpoint for tests.
-	// Empty uses the official default endpoint.
-	HostedLinearEndpoint string
+	// WorkerApplication is the process-composed worker/provider, script, and
+	// hosted-worker component shared by every runtime session.
+	WorkerApplication workerapplication.Components
 	// ModelCacheDir optionally overrides the default managed local-model cache
 	// directory under ~/.agent-factory/models.
 	ModelCacheDir string

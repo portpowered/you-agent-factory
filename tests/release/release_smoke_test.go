@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/releasesmoke"
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T) {
@@ -79,6 +80,7 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 			t.Fatalf("visible texts = %#v, should retire %q", result.DashboardRenderEvidence.VisibleTexts, retired)
 		}
 	}
+	functionalevidence.Covers(t, "sse/getEventsBySessionId")
 }
 
 func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructuredFailure(t *testing.T) {
@@ -126,6 +128,7 @@ func TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN(t *testing.T) {
 
 	binaryPath := runGoInstallSmoke(t, "./cmd/factory", testutil.MustRepoRoot(t))
 	assertInstalledDocsSmoke(t, binaryPath)
+	functionalevidence.Covers(t, "cli/you.docs")
 }
 
 func TestGoInstallSmoke_InstallsPublishedModulePathIntoCleanGOBIN(t *testing.T) {

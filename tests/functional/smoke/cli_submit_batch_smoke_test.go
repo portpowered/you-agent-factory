@@ -15,6 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const (
@@ -113,6 +114,7 @@ func TestSubmitBatch_RealCLIUpsertsToRunningFactory(t *testing.T) {
 
 	cancel()
 	_ = <-runWait
+	functionalevidence.Covers(t, "cli/you.submit.batch")
 }
 
 func submitBatchSmokeFactoryConfig() map[string]any {

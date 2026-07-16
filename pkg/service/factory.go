@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -33,12 +32,15 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
+
+type secretResolver = hostedworkers.SecretResolver
 
 func portableRecordingArtifacts(artifacts []factoryapi.FactoryArtifact, checkpoint *recording.CanonicalCheckpoint) []recording.CanonicalArtifact {
 	result := make([]recording.CanonicalArtifact, 0, len(artifacts))
@@ -90,8 +92,6 @@ type SimpleDashboardRenderer func(input SimpleDashboardRenderInput)
 // cancelled. Callers (e.g. CLI) provide their own implementation to avoid
 // import cycles between service and api packages.
 type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, port int, logger *zap.Logger) error
-
-type secretResolver = hostedworkers.SecretResolver
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
@@ -165,7 +165,6 @@ type FactoryService struct {
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
-	modelInitOnce            sync.Once
 	durableExecution         factorysessionexecution.Service
 }
 
@@ -229,7 +228,7 @@ func composePetriRecordingRuntimeBuild(
 	if !ok {
 		return nil, fmt.Errorf("compose factory core: durable execution owner does not record Petri mutations")
 	}
-	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations), nil
+	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -379,12 +378,6 @@ type FactoryServiceConfig struct {
 	// (prompt rendering, AgentExecutor, stop-token evaluation) without
 	// shelling out to a real CLI tool.
 	ProviderOverride workers.Provider
-	// ProviderCommandRunnerOverride, when non-nil, is injected into the
-	// ScriptWrapProvider used by MODEL_WORKER executors. This preserves the
-	// real provider request construction while letting tests fake the CLI
-	// subprocess boundary and assert command details, env, stdin, stdout,
-	// stderr, and exit failures.
-	ProviderCommandRunnerOverride workers.CommandRunner
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
 	// runner prerequisite checks during startup. Tests that replace execution
 	// with mocks or custom executors use this to exercise service wiring
@@ -396,23 +389,9 @@ type FactoryServiceConfig struct {
 	// workstation is skipped. Tests use this to inject workstation
 	// definitions without requiring files on disk.
 	WorkstationLoader factoryconfig.WorkstationLoader
-	// CommandRunnerOverride, when non-nil, is injected into SCRIPT_WORKER
-	// executors instead of the default ExecCommandRunner. This allows
-	// tests to mock os/exec at the CommandRunner level while still
-	// exercising the full ScriptExecutor pipeline (arg templates, env
-	// merging, exit-code routing).
-	CommandRunnerOverride workers.CommandRunner
-	// HostedPollerHTTPClient, when non-nil, overrides the default HTTP client
-	// used by repository-owned hosted pollers such as the built-in Linear
-	// integration.
-	HostedPollerHTTPClient *http.Client
-	// HostedPollerSecretResolver, when non-nil, resolves hosted-worker
-	// auth.secretRef values at runtime instead of using the default env/file
-	// lookup behavior.
-	HostedPollerSecretResolver secretResolver
-	// HostedLinearEndpoint overrides the Linear GraphQL endpoint for tests.
-	// Empty uses the official default endpoint.
-	HostedLinearEndpoint string
+	// WorkerApplication is the process-composed worker/provider, script, and
+	// hosted-worker component shared by every runtime session.
+	WorkerApplication workerapplication.Components
 	// ModelCacheDir optionally overrides the default managed local-model cache
 	// directory under ~/.agent-factory/models.
 	ModelCacheDir string
@@ -432,9 +411,9 @@ type FactoryServiceConfig struct {
 	// factory/sessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
 	SessionGateway sessionGateway
-	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.
-	// Tests use this to assert model transport methods delegate without running
-	// the full managed-runtime pipeline.
+	// ModelAPI supplies the model collaborator for direct compatibility builds.
+	// The canonical Wire graph constructs the production model service; direct
+	// service callers may inject an already-built boundary for focused tests.
 	ModelAPI apisurface.ModelAPI
 	// ModelAssets, when non-nil, replaces the default localmodels.AssetPuller
 	// collaborator wired at service construction. Tests use this to assert

@@ -37,6 +37,20 @@ type stubAllocator struct {
 	result   agypty.SessionResult
 }
 
+func TestNewAdapterWithAllocatorRequiresAndUsesPTYEdge(t *testing.T) {
+	if _, err := agy.NewAdapterWithAllocator(t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "PTY allocator is required") {
+		t.Fatalf("missing allocator error = %v", err)
+	}
+	allocator := &stubAllocator{}
+	built, err := agy.NewAdapterWithAllocator(t.TempDir(), allocator)
+	if err != nil {
+		t.Fatalf("NewAdapterWithAllocator() error = %v", err)
+	}
+	if built.Allocator != allocator {
+		t.Fatalf("allocator = %T, want selected %T", built.Allocator, allocator)
+	}
+}
+
 func (a *stubAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, _ agypty.SessionConfig) (agypty.PTYSession, error) {
 	session := &stubPTYSession{launch: launch, result: a.result}
 	a.sessions = append(a.sessions, session)

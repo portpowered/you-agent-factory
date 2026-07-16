@@ -10,7 +10,8 @@ import {
 } from "../state/dashboardSessionStore";
 import { DashboardScreen } from "./index";
 
-const EXPECTED_DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
+const EXPECTED_DASHBOARD_SHELL_CLASS =
+  "min-h-screen overflow-x-hidden p-1 md:p-2";
 
 function renderDashboardScreen() {
   const queryClient = new QueryClient({

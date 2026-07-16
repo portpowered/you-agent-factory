@@ -2,8 +2,8 @@ package runtimehost
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -22,14 +21,9 @@ import (
 )
 
 func (fs *Host) requireModelService() apisurface.ModelAPI {
-	if fs == nil {
-		return wireModelServiceCollaborator(nil, nil)
+	if fs == nil || fs.modelService == nil {
+		return unavailableModelService{}
 	}
-	fs.modelInitOnce.Do(func() {
-		if fs.modelService == nil {
-			fs.modelService = wireModelServiceCollaborator(fs, fs.cfg)
-		}
-	})
 	return fs.modelService
 }
 
@@ -43,89 +37,38 @@ func (fs *Host) GetModel(ctx context.Context, modelName string) (factoryapi.Mode
 
 type modelAssetPuller = localmodels.AssetPuller
 
-func newModelAssetPuller(cacheDir string) modelAssetPuller {
-	return localmodels.NewAssetPuller(cacheDir)
-}
-
 func (fs *Host) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
 	return fs.requireModelService().PullModel(ctx, modelName)
-}
-
-func (fs *Host) modelAssetPuller() modelAssetPuller {
-	if fs != nil && fs.modelAssets != nil {
-		return fs.modelAssets
-	}
-	cacheDir := ""
-	if fs != nil {
-		cacheDir = strings.TrimSpace(fs.coordinatorPolicy().modelCacheDir)
-	}
-	puller := newModelAssetPuller(cacheDir)
-	if fs != nil {
-		fs.modelAssets = puller
-	}
-	return puller
 }
 
 func (fs *Host) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
-type modelPullMetricsHostAdapter struct {
-	inner ModelPullMetricsRecorder
+var errModelServiceUnavailable = errors.New("model service is not attached to the runtime host")
+
+type unavailableModelService struct{}
+
+func (unavailableModelService) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	return factoryapi.ListModelsResponse{}, errModelServiceUnavailable
 }
 
-func (a modelPullMetricsHostAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(InvocationMetric{
-		Name:   metric.Name,
-		Labels: metric.Labels,
-	})
+func (unavailableModelService) GetModel(context.Context, string) (factoryapi.ModelDetail, error) {
+	return factoryapi.ModelDetail{}, errModelServiceUnavailable
 }
 
-func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
-	if cfg != nil && cfg.ModelAPI != nil {
-		return cfg.ModelAPI
-	}
-	if fs == nil {
-		return modelsservice.New(modelsservice.Dependencies{})
-	}
-	return modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig:           fs.currentRuntimeConfig,
-		ModelHost:               fs.modelHost(),
-		ModelAssetPuller:        fs.modelAssetPuller(),
-		Logger:                  fs.logger,
-		Clock:                   fs.modelServiceClock,
-		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
-		ModelInvocationExecutor: fs.modelInvocationExecutor,
-		FactoryRunnerID:         fs.factoryRunnerID(),
-	})
+func (unavailableModelService) PullModel(context.Context, string) (apisurface.ModelPullResult, error) {
+	return apisurface.ModelPullResult{}, errModelServiceUnavailable
 }
 
-func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
-	if recorder == nil {
-		return nil
-	}
-	return modelPullMetricsHostAdapter{inner: recorder}
-}
-
-func (fs *Host) modelServiceClock() time.Time {
-	if fs == nil || fs.clock == nil {
-		return time.Now()
-	}
-	return fs.clock.Now()
+func (unavailableModelService) InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	return apisurface.ModelInvocationResult{}, errModelServiceUnavailable
 }
 
 // ModelService returns the canonical model-domain collaborator used by the
 // compatibility methods on Host.
 func (fs *Host) ModelService() apisurface.ModelAPI {
 	return fs.requireModelService()
-}
-
-// AttachModelServiceCollaborator assigns the explicitly composed model-domain collaborator.
-func AttachModelServiceCollaborator(shell HostShell, modelAPI apisurface.ModelAPI) *Host {
-	if shell.Host != nil {
-		shell.Host.modelService = modelAPI
-	}
-	return shell.Host
 }
 
 // CurrentModelRuntimeConfig returns the active runtime configuration used by
@@ -186,6 +129,9 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		}
 		workflowContext = runtime.WorkflowContext(bundle.Factory)
 	}
+	if fs == nil || fs.cfg == nil || !fs.cfg.WorkerApplication.Valid() {
+		return nil, fmt.Errorf("runtime host worker application is required")
+	}
 	executor := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
@@ -196,8 +142,8 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
-		fs.providerCommandRunnerOverride(),
-		fs.commandRunnerOverride(),
+		fs.cfg.WorkerApplication.ProviderCommandRunner,
+		fs.cfg.WorkerApplication.ScriptCommandRunner,
 		nil,
 		nil,
 		nil,
@@ -224,20 +170,6 @@ func (fs *Host) providerOverride() workers.Provider {
 		return nil
 	}
 	return fs.coordinatorPolicy().providerOverride
-}
-
-func (fs *Host) providerCommandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().providerCommandRunnerOverride
-}
-
-func (fs *Host) commandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
 func (fs *Host) invocationSkipPermissionsOverride() *bool {

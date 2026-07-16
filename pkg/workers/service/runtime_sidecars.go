@@ -22,9 +22,12 @@ func (s *Service) StartSchedulerSidecarsForRuntime(
 	ctx context.Context,
 	sidecars *sync.WaitGroup,
 	input RuntimeSidecarsInput,
-) {
+) error {
 	if input.FactoryCfg == nil || input.RuntimeCfg == nil || sidecars == nil || input.Submitter == nil {
-		return
+		return nil
+	}
+	if err := s.ValidatePollersForRuntime(input.FactoryCfg, input.RuntimeCfg, input.Submitter); err != nil {
+		return err
 	}
 
 	s.StartCronWatchersForRuntime(
@@ -35,7 +38,7 @@ func (s *Service) StartSchedulerSidecarsForRuntime(
 		input.RuntimeCfg,
 		input.Submitter,
 	)
-	s.StartPollersForRuntime(
+	return s.StartPollersForRuntime(
 		ctx,
 		sidecars,
 		input.FactoryCfg,

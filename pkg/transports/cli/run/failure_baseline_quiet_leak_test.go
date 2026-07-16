@@ -406,7 +406,7 @@ func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string
 	go readPipeIntoChannel(stdoutRead, stdoutCh)
 	go readPipeIntoChannel(stderrRead, stderrCh)
 
-	runErr := Run(context.Background(), cfg)
+	runErr := runWithFactoryServiceBuilder(context.Background(), cfg, FactoryServiceBuilderFromService(service.BuildFactoryService))
 
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr

@@ -58,7 +58,7 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 			dir,
 			false,
 			func(cfg *service.FactoryServiceConfig) {
-				cfg.ProviderCommandRunnerOverride = runner
+				support.ConfigureWorkerCommands(t, cfg, runner, nil)
 			},
 			factory.WithServiceMode(),
 		)

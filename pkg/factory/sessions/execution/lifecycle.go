@@ -936,7 +936,11 @@ func filterEventsAfterSequence(events []json.RawMessage, parsed []parsedCanonica
 	if sessionID != "" {
 		for index := len(parsed) - 1; index >= 0; index-- {
 			event := parsed[index]
-			if event.SessionSequence != nil && *event.SessionSequence == ackSequence {
+			sequence := event.Sequence
+			if event.SessionSequence != nil {
+				sequence = *event.SessionSequence
+			}
+			if sequence == ackSequence {
 				return append([]json.RawMessage(nil), events[index+1:]...), nil
 			}
 		}

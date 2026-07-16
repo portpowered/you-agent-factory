@@ -51,8 +51,6 @@ type Config struct {
 	SkipBuiltInRunnerPrerequisiteValidation bool
 	WorkstationLoader                       factoryconfig.WorkstationLoader
 	ProviderOverride                        workers.Provider
-	ProviderCommandRunnerOverride           workers.CommandRunner
-	CommandRunnerOverride                   workers.CommandRunner
 	LocalModelRuntimeOverride               localmodels.Runtime
 	LocalModelHooks                         localmodels.Hooks
 	ModelAssetsOverride                     localmodels.AssetPuller
@@ -167,8 +165,6 @@ type HostConfigInput struct {
 	SkipBuiltInRunnerPrerequisiteValidation bool
 	WorkstationLoader                       factoryconfig.WorkstationLoader
 	ProviderOverride                        workers.Provider
-	ProviderCommandRunnerOverride           workers.CommandRunner
-	CommandRunnerOverride                   workers.CommandRunner
 	LocalModelRuntimeOverride               localmodels.Runtime
 	LocalModelHooks                         localmodels.Hooks
 	ModelAssetsOverride                     localmodels.AssetPuller
@@ -199,8 +195,6 @@ func ConfigFromHostInput(input HostConfigInput) Config {
 		SkipBuiltInRunnerPrerequisiteValidation: input.SkipBuiltInRunnerPrerequisiteValidation,
 		WorkstationLoader:                       input.WorkstationLoader,
 		ProviderOverride:                        input.ProviderOverride,
-		ProviderCommandRunnerOverride:           input.ProviderCommandRunnerOverride,
-		CommandRunnerOverride:                   input.CommandRunnerOverride,
 		LocalModelRuntimeOverride:               input.LocalModelRuntimeOverride,
 		LocalModelHooks:                         input.LocalModelHooks,
 		ModelAssetsOverride:                     input.ModelAssetsOverride,

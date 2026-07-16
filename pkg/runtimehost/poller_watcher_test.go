@@ -23,11 +23,12 @@ func (o *recordingWorkerSidecarOwner) StartSchedulerSidecarsForRuntime(
 	ctx context.Context,
 	group *sync.WaitGroup,
 	input workersservice.RuntimeSidecarsInput,
-) {
+) error {
 	o.calls++
 	o.ctx = ctx
 	o.group = group
 	o.input = input
+	return nil
 }
 
 func (*recordingWorkerSidecarOwner) WorkflowIdentityForFactoryDir(string) string { return "" }

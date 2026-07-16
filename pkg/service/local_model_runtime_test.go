@@ -139,6 +139,7 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 	svc := &FactoryService{
 		policy:      serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{}),
 		modelAssets: puller,
+		cfg:         serviceTestConfigWithWorkerApplication(t, &FactoryServiceConfig{}),
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeCfg:        runtimeCfg,
@@ -149,6 +150,7 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 		ModelResources:    newLocalModelResourceLimiter(),
 		LocalModels:       newManagedLocalModelManager(puller, runtime),
 	})
+	attachModelServiceForTest(t, svc)
 
 	mode := factoryapi.AUDIOSTREAM
 	request := factoryapi.ModelInvocationRequest{

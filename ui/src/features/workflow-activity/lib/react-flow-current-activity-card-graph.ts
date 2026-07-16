@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: current activity graph projection helpers remain grouped around shared node and edge fixtures.
+// biome-ignore lint/style/noExcessiveLinesPerFile: current activity graph projection helpers remain grouped around shared node and edge fixtures.
 import type {
   DashboardActiveExecution,
   DashboardSnapshot,
