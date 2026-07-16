@@ -95,14 +95,23 @@ Expensive specialty verification that is useful for maintainer confidence but no
 
 The maintainer-owned CLI release policy lives in [CLI release policy](cli-release-policy.md). Keep future release automation aligned with that guide: release publication should come from manual semver tags on `main`, not from developer-machine publishing or manually created GitHub Release events.
 
-The workflow currently executes these repository-owned commands through one prerequisite lane and three required verification lanes:
+The workflow schedules focused verification jobs independently wherever they do
+not share a genuine prerequisite. `Build`, `Lint`, and `API` run `make
+verify-build`, `make verify-lint`, and `make verify-api` respectively, with no
+dependencies on one another. `Release Surface Smoke`, `PR Inference Approval`,
+and the four focused Windows Go suites also schedule independently. After
+`Classify PR Impact`, the UI coverage, browser integration, backend unit
+coverage, and backend functional coverage jobs either run or report an
+intentional skip according to the classifier result. `make
+verify-build-contracts` remains the sequential local aggregate for the focused
+Build, Lint, and API commands; it is not itself a CI verification job.
 
-1. `cd ui && bun install --frozen-lockfile`
-2. `cd ui && bun run tsc`
-3. `make verify-build-contracts`
-4. `make run-sharded-ui-coverage` and `make ui-integration-test` in parallel GitHub Actions jobs (local `make verify-tests` runs the same two lanes concurrently through `make run-concurrent-ui-verification-lanes`)
-5. `cd ui && bunx playwright install chromium` (browser integration job only; local `make release-surface-smoke` installs browsers before the concurrent UI lanes)
-6. `make test-unit-coverage` and `make test-functional-coverage` as independent GitHub Actions matrix checks
+Use `make run-sharded-ui-coverage` and `make ui-integration-test` to reproduce
+the parallel UI jobs (`make verify-tests` runs both locally through `make
+run-concurrent-ui-verification-lanes`). Use `make test-unit-coverage` and `make
+test-functional-coverage` for the independent backend coverage checks. The
+browser integration job installs Chromium in its own setup; local `make
+release-surface-smoke` installs the browser needed by its smoke path.
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
