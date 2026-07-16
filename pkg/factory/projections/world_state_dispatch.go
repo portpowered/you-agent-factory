@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
@@ -599,8 +598,8 @@ func (r *factoryWorldReducer) latestAgentRunResponseForDispatch(dispatchID strin
 	return latest
 }
 
-func (r *factoryWorldReducer) recordWorkStateChange(event factoryapi.FactoryEvent, payload factoryapi.WorkStateChangeEventPayload) {
-	workID := payload.WorkId
+func (r *factoryWorldReducer) recordWorkStateChange(event interfaces.FactoryEvent, payload interfaces.WorkStateChangeEventPayload) {
+	workID := payload.WorkID
 	if workID == "" {
 		return
 	}
@@ -609,10 +608,10 @@ func (r *factoryWorldReducer) recordWorkStateChange(event factoryapi.FactoryEven
 		WorkTypeName: payload.WorkTypeName,
 		FromState:    payload.FromState,
 		ToState:      payload.ToState,
-		FromPlaceID:  payload.FromPlaceId,
-		ToPlaceID:    payload.ToPlaceId,
+		FromPlaceID:  payload.FromPlaceID,
+		ToPlaceID:    payload.ToPlaceID,
 		Source:       work.WorkStateChangeSource(payload.Source),
-		RequestID:    stringValue(event.Context.RequestId),
+		RequestID:    stringValue(event.Context.RequestID),
 		Tick:         event.Context.Tick,
 		Sequence:     event.Context.Sequence,
 		EventTime:    event.Context.EventTime,
@@ -623,8 +622,8 @@ func (r *factoryWorldReducer) recordWorkStateChange(event factoryapi.FactoryEven
 	)
 }
 
-func (r *factoryWorldReducer) applyWorkStateChange(payload factoryapi.WorkStateChangeEventPayload) {
-	workID := payload.WorkId
+func (r *factoryWorldReducer) applyWorkStateChange(payload interfaces.WorkStateChangeEventPayload) {
+	workID := payload.WorkID
 	if workID == "" {
 		return
 	}
@@ -639,12 +638,12 @@ func (r *factoryWorldReducer) applyWorkStateChange(payload factoryapi.WorkStateC
 	if payload.ToState != "" {
 		item.State = payload.ToState
 	}
-	toPlaceID := payload.ToPlaceId
+	toPlaceID := payload.ToPlaceID
 	if toPlaceID != "" {
 		item.PlaceID = toPlaceID
 	}
 
-	fromPlaceID := payload.FromPlaceId
+	fromPlaceID := payload.FromPlaceID
 	if fromPlaceID != "" && fromPlaceID != toPlaceID {
 		if r.isFailedPlace(fromPlaceID) {
 			delete(r.stateValue.FailedWorkItemsByID, workID)

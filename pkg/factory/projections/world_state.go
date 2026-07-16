@@ -101,7 +101,11 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	case factoryapi.FactoryEventTypeRunRequest,
 		factoryapi.FactoryEventTypeInitialStructureRequest,
 		factoryapi.FactoryEventTypeFactoryChange:
-		return r.applyStructureEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyStructureEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeWorkRequest:
 		canonicalEvent, err := interfaces.NewFactoryEvent(event)
 		if err != nil {
@@ -127,9 +131,17 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		}
 		return r.applyDispatchResponseEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeFactoryStateResponse:
-		return r.applyFactoryStateResponseEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyFactoryStateResponseEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeWorkStateChange:
-		return r.applyWorkStateChangeEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyWorkStateChangeEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeRunResponse:
 		return nil
 	}
@@ -175,9 +187,9 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	return nil
 }
 
-func (r *factoryWorldReducer) applyWorkStateChangeEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsWorkStateChangeEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyWorkStateChangeEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.WorkStateChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.recordWorkStateChange(event, payload)
@@ -185,39 +197,34 @@ func (r *factoryWorldReducer) applyWorkStateChangeEvent(event factoryapi.Factory
 	return nil
 }
 
-func (r *factoryWorldReducer) applyStructureEvent(event factoryapi.FactoryEvent) error {
+func (r *factoryWorldReducer) applyStructureEvent(event interfaces.FactoryEvent) error {
 	switch event.Type {
-	case factoryapi.FactoryEventTypeRunRequest:
-		payload, err := event.Payload.AsRunRequestEventPayload()
-		if err != nil {
+	case interfaces.FactoryEventTypeRunRequest:
+		var payload interfaces.RunRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
 			return err
 		}
 		if !r.hasTopology() {
 			if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 				return err
 			}
-			r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{
-				Factory: payload.Factory,
-			}))
 		}
-	case factoryapi.FactoryEventTypeInitialStructureRequest:
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
+	case interfaces.FactoryEventTypeInitialStructureRequest:
+		var payload interfaces.InitialStructureRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
 			return err
 		}
 		if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 			return err
 		}
-		r.applyInitialStructure(initialStructureFromGenerated(payload))
-	case factoryapi.FactoryEventTypeFactoryChange:
-		payload, err := event.Payload.AsFactoryChangeEventPayload()
-		if err != nil {
+	case interfaces.FactoryEventTypeFactoryChange:
+		var payload interfaces.FactoryChangeEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
 			return err
 		}
 		if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 			return err
 		}
-		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload(payload)))
 	}
 	return nil
 }
@@ -264,9 +271,9 @@ func (r *factoryWorldReducer) applyDispatchResponseEvent(event interfaces.Factor
 	return nil
 }
 
-func (r *factoryWorldReducer) applyFactoryStateResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsFactoryStateResponseEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyFactoryStateResponseEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactoryStateResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.applyFactoryStateChange(payload)
@@ -290,12 +297,16 @@ func (r *factoryWorldReducer) applyInitialStructure(payload interfaces.InitialSt
 	}
 }
 
-func (r *factoryWorldReducer) applyCanonicalFactory(factory factoryapi.Factory) error {
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
-	if err != nil {
+func (r *factoryWorldReducer) applyCanonicalFactory(snapshot *interfaces.FactorySnapshot) error {
+	if snapshot == nil {
+		return fmt.Errorf("decode Factory snapshot for world projection: snapshot is required")
+	}
+	var factory factoryapi.Factory
+	if err := snapshot.Decode(&factory); err != nil {
 		return err
 	}
-	r.stateValue.Factory = snapshot
+	r.stateValue.Factory = snapshot.Clone()
+	r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{Factory: factory}))
 	return nil
 }
 
@@ -341,8 +352,11 @@ func (r *factoryWorldReducer) applyRelationshipChange(context interfaces.Factory
 	r.addRelation(r.factoryRelationFromRequest(payload.Relation, context))
 }
 
-func (r *factoryWorldReducer) applyFactoryStateChange(payload factoryapi.FactoryStateResponseEventPayload) {
-	r.stateValue.FactoryStatePrevious = factoryStateString(payload.PreviousState)
+func (r *factoryWorldReducer) applyFactoryStateChange(payload interfaces.FactoryStateResponseEventPayload) {
+	r.stateValue.FactoryStatePrevious = ""
+	if payload.PreviousState != nil {
+		r.stateValue.FactoryStatePrevious = string(*payload.PreviousState)
+	}
 	r.stateValue.FactoryState = string(payload.State)
 	r.stateValue.FactoryStateReason = stringValue(payload.Reason)
 }

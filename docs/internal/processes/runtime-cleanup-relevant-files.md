@@ -88,6 +88,14 @@ owner, and reject malformed diagnostics before mutating the projection;
 generated event conversion remains only at the temporary outer compatibility
 entrypoint.
 
+Initial-structure, run-request, Factory-change, Factory-state, and Work-state
+world-state reduction follows the same rule: decode the Factory-owned event and
+owner-defined payload first, retain a detached `FactorySnapshot`, and apply
+state or topology changes from those domain values. Generated event unions may
+enter only through the temporary outer projection compatibility path; decoding
+the snapshot's public topology shape remains an explicit compatibility helper
+until that final transport-shaped projection adapter migrates.
+
 Initial-structure and run-request producers carry the Factory-owned detached
 `FactorySnapshot` inside Factory-owned payloads. Runtime composition should
 hand the editable snapshot to event history without decoding it through a

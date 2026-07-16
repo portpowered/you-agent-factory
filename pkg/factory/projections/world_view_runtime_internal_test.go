@@ -22,6 +22,43 @@ type projectionRuntimeLookupFixture struct {
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
+func TestFactoryWorldReducerAppliesCanonicalStructureAndStateEvents(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 2, 0, 0, 0, time.UTC)
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name": "canonical-factory",
+		"workTypes": []any{map[string]any{"name": "task", "states": []any{
+			map[string]any{"name": "ready", "type": "INITIAL"},
+			map[string]any{"name": "done", "type": "TERMINAL"},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	reducer := newFactoryWorldReducer(3)
+	structure := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeInitialStructureRequest, interfaces.FactoryEventContext{EventTime: eventTime}, interfaces.InitialStructureRequestEventPayload{Factory: snapshot})
+	if err := reducer.applyStructureEvent(structure); err != nil {
+		t.Fatalf("applyStructureEvent: %v", err)
+	}
+	reducer.stateValue.WorkItemsByID["work-1"] = work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", State: "ready", PlaceID: "task:ready"}
+	reducer.addWorkToken("work-1", "task:ready", reducer.stateValue.WorkItemsByID["work-1"])
+	workState := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkStateChange, interfaces.FactoryEventContext{EventTime: eventTime.Add(time.Second), Sequence: 2, Tick: 2}, interfaces.WorkStateChangeEventPayload{FromPlaceID: "task:ready", FromState: "ready", Source: work.WorkStateChangeSourceAPI, ToPlaceID: "task:done", ToState: "done", WorkID: "work-1", WorkTypeName: "task"})
+	if err := reducer.applyWorkStateChangeEvent(workState); err != nil {
+		t.Fatalf("applyWorkStateChangeEvent: %v", err)
+	}
+	previousState := interfaces.FactoryStateRunning
+	factoryState := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeFactoryStateResponse, interfaces.FactoryEventContext{EventTime: eventTime.Add(2 * time.Second)}, interfaces.FactoryStateResponseEventPayload{PreviousState: &previousState, State: interfaces.FactoryStateCompleted})
+	if err := reducer.applyFactoryStateResponseEvent(factoryState); err != nil {
+		t.Fatalf("applyFactoryStateResponseEvent: %v", err)
+	}
+	if reducer.stateValue.Factory == snapshot || reducer.stateValue.Topology.Name != "canonical-factory" || reducer.stateValue.TerminalWorkByID["work-1"].WorkItem.State != "done" {
+		t.Fatalf("canonical structure/work projection = %#v", reducer.stateValue)
+	}
+	if reducer.stateValue.FactoryStatePrevious != string(previousState) || reducer.stateValue.FactoryState != string(interfaces.FactoryStateCompleted) || len(reducer.stateValue.WorkStateChangesByWorkID["work-1"]) != 1 {
+		t.Fatalf("canonical Factory/work state projection = %#v", reducer.stateValue)
+	}
+}
+
 func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *testing.T) {
 	t.Parallel()
 	eventTime := time.Date(2026, time.July, 16, 5, 0, 0, 0, time.UTC)

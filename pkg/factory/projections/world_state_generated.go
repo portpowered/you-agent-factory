@@ -79,13 +79,6 @@ func enumStringValue[T ~string](value *T) string {
 	return string(*value)
 }
 
-func factoryStateString(value *factoryapi.FactoryState) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
-}
-
 func workstationKindString(value *factoryapi.WorkstationKind) string {
 	if value == nil {
 		return ""
