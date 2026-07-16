@@ -87,15 +87,18 @@ func TestClientNegotiatesDiscoversAndCorrelatesToolTrafficOverRealStdio(t *testi
 func connectRecordingClient(t *testing.T, ctx context.Context) (*Client, *frameRecorder, *frameRecorder, <-chan error) {
 	t.Helper()
 	serverInput, pipeWriter := io.Pipe()
-	pipeReader, serverOutput := io.Pipe()
-	requests := newFrameRecorder(0)
+	proxyInput, serverOutput := io.Pipe()
+	pipeReader, proxyOutput := io.Pipe()
+	requests := newFrameRecorder(2)
 	responses := newFrameRecorder(0)
 	serverErr := make(chan error, 1)
 	go func() {
 		serverErr <- newRealServer(t).ServeStdio(ctx, serverInput, serverOutput)
+		_ = serverOutput.Close()
 	}()
+	go forwardResponsesAfterInitialize(proxyInput, proxyOutput, requests.ready)
 	client, err := Connect(ctx, Pipes{
-		Reader: &recordingReader{source: pipeReader, recorder: responses},
+		Reader: &recordingReader{source: pipeReader, recorder: responses, gate: requests.ready},
 		Writer: &recordingWriter{destination: pipeWriter, recorder: requests},
 	}, Options{Name: "sdk-conversation-test", Version: "1.0.0"})
 	if err != nil {
