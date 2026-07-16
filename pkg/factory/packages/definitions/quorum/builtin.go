@@ -5,6 +5,7 @@ package quorum
 var BuiltInFactoryJSON = []byte(`{
   "name": "@you/quorum",
   "id": "builtin-quorum",
+  "invocationReturn": {"policy":"EXPLICIT","workTypeName":"quorum-merge","terminalState":"complete"},
   "invocationSignature": {
     "parameters": [
       {"name":"input","description":"Text request evaluated by the quorum workers.","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"}]},
