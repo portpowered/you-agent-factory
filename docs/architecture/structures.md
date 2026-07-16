@@ -196,7 +196,6 @@ flowchart LR
     subgraph currentCompatibility[Migration-only composition roots]
         currentService[[pkg/service compatibility facade]]
         currentRuntimeHost[[pkg/runtimehost]]
-        currentComposeBridge[[pkg/composebridge]]
     end
 
     subgraph currentUI[Dashboard event projection]
@@ -285,7 +284,6 @@ flowchart LR
 
     currentService -.->|legacy facade and composition| currentSessionGateway
     currentRuntimeHost -.->|legacy runtime hosting| currentFactoryRuntime
-    currentComposeBridge -.->|legacy composition adapter| currentWire
 
     classDef currentExternal fill:#f3f4f6,stroke:#4b5563,color:#111827,stroke-width:1.5px
     classDef currentClient fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:1.5px
@@ -307,7 +305,7 @@ flowchart LR
     class currentConfig,currentLogging,currentReplay,currentSessionPersistence,currentInternalPlatform,currentUIAPI,currentEventHook,currentTimelineStore,currentReplayWorld,currentProjectSnapshot currentPlatform
     class currentGraph,currentFactoryFiles,currentSessionRegistry,currentSubmissionBuffer,currentResultBuffer,currentSessionRecordings,currentArtifacts,currentMetrics,currentLogs currentStore
     class currentGenerated,currentOpenAPI,currentGeneratedContracts,currentAPIPackage currentContract
-    class currentService,currentRuntimeHost,currentComposeBridge currentMigration
+    class currentService,currentRuntimeHost currentMigration
 
     style currentStartup fill:#f5f3ff,stroke:#c4b5fd,color:#4c1d95
     style currentTransports fill:#ecfeff,stroke:#67e8f9,color:#164e63
