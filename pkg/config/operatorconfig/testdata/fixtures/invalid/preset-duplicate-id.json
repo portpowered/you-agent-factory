@@ -2,11 +2,13 @@
   "workerPresets": [
     {
       "id": "build",
-      "modelProvider": "codex"
+    "modelProvider": "codex",
+    "model": "gpt-5"
     },
     {
       "id": " build ",
-      "modelProvider": "claude"
+    "modelProvider": "claude",
+    "model": "claude-sonnet"
     }
   ]
 }

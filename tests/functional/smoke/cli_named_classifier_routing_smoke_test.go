@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -81,6 +82,22 @@ func TestNamedClassifierRouting_UnknownLabelFailsWithoutTargetDispatch(t *testin
 	}
 }
 
+func TestNamedClassifierRouting_CustomizedRouteUsesConfiguredTargetPreset(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow named @you/classifier customization smoke")
+	}
+
+	server := startNamedClassifierRoutingServerWithCustomization(t, "small", customizeMediumClassifierRoute)
+	response := postNamedClassifierRoutingInvocation(t, server, "custom classifier routing")
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("status = %q, want COMPLETED", response.Status)
+	}
+	if got := invocationPrimaryResultText(t, response); got != "medium result" {
+		t.Fatalf("primaryResult = %q, want medium result", got)
+	}
+	assertNamedClassifierDispatchRoute(t, server, "run-medium")
+}
+
 func TestNamedClassifierRouting_RealCLIUsesNamedFactoryForEachTier(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow named @you/classifier CLI routing smoke")
@@ -111,6 +128,10 @@ func TestNamedClassifierRouting_RealCLIUsesNamedFactoryForEachTier(t *testing.T)
 }
 
 func startNamedClassifierRoutingServer(t *testing.T, classification string) *support.FunctionalAPIServer {
+	return startNamedClassifierRoutingServerWithCustomization(t, classification, nil)
+}
+
+func startNamedClassifierRoutingServerWithCustomization(t *testing.T, classification string, customize func(homeDir, factoryDir string) error) *support.FunctionalAPIServer {
 	t.Helper()
 
 	homeDir := t.TempDir()
@@ -121,6 +142,11 @@ func startNamedClassifierRoutingServer(t *testing.T, classification string) *sup
 	factoryDir, err := factoryconfig.MapNamedFactoryDir(initialized.NamedFactoriesRoot, classifier.PackagedFactoryName)
 	if err != nil {
 		t.Fatalf("MapNamedFactoryDir(@you/classifier): %v", err)
+	}
+	if customize != nil {
+		if err := customize(homeDir, factoryDir); err != nil {
+			t.Fatalf("customize @you/classifier: %v", err)
+		}
 	}
 	mockWorkersPath := writeClassifierRoutingMockWorkers(t, classification)
 	mockWorkers, err := factoryconfig.LoadMockWorkersConfig(mockWorkersPath)
@@ -142,6 +168,45 @@ func startNamedClassifierRoutingServer(t *testing.T, classification string) *sup
 			cfg.MockWorkersConfig = mockWorkers
 		},
 	})
+}
+
+func customizeMediumClassifierRoute(homeDir, factoryDir string) error {
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	factoryData, err := os.ReadFile(factoryPath)
+	if err != nil {
+		return err
+	}
+	var factoryDocument map[string]any
+	if err := json.Unmarshal(factoryData, &factoryDocument); err != nil {
+		return err
+	}
+	routes := factoryDocument["workstations"].([]any)[0].(map[string]any)["classificationRoutes"].([]any)
+	routes[0].(map[string]any)["outputs"] = []any{map[string]any{"workType": "task", "state": "medium"}}
+	factoryDocument["workers"].([]any)[2].(map[string]any)["preset"] = "custom-medium"
+	updatedFactory, err := json.Marshal(factoryDocument)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(factoryPath, updatedFactory, 0o600); err != nil {
+		return err
+	}
+
+	configPath := operatorconfig.DefaultConfigPath(homeDir)
+	configData, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	var configDocument map[string]any
+	if err := json.Unmarshal(configData, &configDocument); err != nil {
+		return err
+	}
+	presets := configDocument["workerPresets"].([]any)
+	configDocument["workerPresets"] = append(presets, map[string]any{"id": "custom-medium", "modelProvider": "CODEX", "model": "gpt-5.4"})
+	updatedConfig, err := json.Marshal(configDocument)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, updatedConfig, 0o600)
 }
 
 func writeClassifierRoutingMockWorkers(t *testing.T, classification string) string {

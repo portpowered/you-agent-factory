@@ -162,11 +162,12 @@ func TestParseFileConfig_RejectsInvalidWorkerPresets(t *testing.T) {
 		want []string
 	}{
 		{name: "empty id", json: `{"workerPresets":[{"id":"  ","modelProvider":"codex"}]}`, want: []string{`workerPresets[0].id`, `"  "`, "non-empty"}},
-		{name: "duplicate id", json: `{"workerPresets":[{"id":"build","modelProvider":"codex"},{"id":" build ","modelProvider":"claude"}]}`, want: []string{`workerPresets[1].id`, `"build"`, "duplicated"}},
+		{name: "duplicate id", json: `{"workerPresets":[{"id":"build","modelProvider":"codex","model":"gpt-5"},{"id":" build ","modelProvider":"claude","model":"claude-sonnet"}]}`, want: []string{`workerPresets[1].id`, `"build"`, "duplicated"}},
 		{name: "missing provider", json: `{"workerPresets":[{"id":"build"}]}`, want: []string{`workerPresets[0]`, `"build"`, "modelProvider"}},
 		{name: "symbolic provider", json: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`, want: []string{`"build"`, `"DEFAULT"`, "unsupported modelProvider"}},
 		{name: "unsupported provider", json: `{"workerPresets":[{"id":"build","modelProvider":"other"}]}`, want: []string{`"build"`, `"other"`, "unsupported modelProvider"}},
-		{name: "unsupported reasoning", json: `{"workerPresets":[{"id":"build","modelProvider":"codex","reasoningEffort":"extreme"}]}`, want: []string{`"build"`, `"extreme"`, "unsupported reasoningEffort"}},
+		{name: "missing model", json: `{"workerPresets":[{"id":"build","modelProvider":"codex","model":" "}]}`, want: []string{`workerPresets[0]`, `"build"`, "non-empty model"}},
+		{name: "unsupported reasoning", json: `{"workerPresets":[{"id":"build","modelProvider":"codex","model":"gpt-5","reasoningEffort":"extreme"}]}`, want: []string{`"build"`, `"extreme"`, "unsupported reasoningEffort"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

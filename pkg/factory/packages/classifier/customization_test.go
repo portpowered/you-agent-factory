@@ -2,10 +2,14 @@ package classifier
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -100,6 +104,24 @@ func TestValidateCustomization_RejectsInvalidRoutesAndSelections(t *testing.T) {
 	}
 }
 
+func TestCustomization_RejectsUnsupportedProviderBeforeSessionBuild(t *testing.T) {
+	data := customizedClassifierJSON(t, func(document map[string]any) {
+		worker := document["workers"].([]any)[1].(map[string]any)
+		delete(worker, "preset")
+		worker["modelProvider"] = "unknown"
+		worker["model"] = "gpt-5"
+	})
+	_, err := factoryconfig.FactoryConfigFromOpenAPIJSON(data)
+	if err == nil {
+		t.Fatal("FactoryConfigFromOpenAPIJSON succeeded")
+	}
+	for _, fragment := range []string{"workers[1].modelProvider", "unknown", "unsupported"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error = %q, want %q", err, fragment)
+		}
+	}
+}
+
 func TestPersistNamedFactory_RejectsInvalidClassifierCustomizationBeforeSessionBuild(t *testing.T) {
 	data := customizedClassifierJSON(t, func(document map[string]any) {
 		document["workstations"].([]any)[0].(map[string]any)["classificationRoutes"].([]any)[0].(map[string]any)["label"] = "tiny"
@@ -109,6 +131,56 @@ func TestPersistNamedFactory_RejectsInvalidClassifierCustomizationBeforeSessionB
 		t.Fatal("PersistNamedFactory succeeded")
 	}
 	for _, fragment := range []string{"validate packaged factory customization", "tiny", "small, medium, or large"} {
+		if !strings.Contains(err.Error(), fragment) {
+			t.Fatalf("error = %q, want %q", err, fragment)
+		}
+	}
+}
+
+func TestResolvedCustomization_UsesConfiguredPresetBeforeSessionBuild(t *testing.T) {
+	data := customizedClassifierJSON(t, func(document map[string]any) {
+		document["workers"].([]any)[2].(map[string]any)["preset"] = "custom-medium"
+	})
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, data)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(configPath, []byte(`{"workerPresets":[{"id":"small","modelProvider":"CODEX","model":"gpt-5-mini"},{"id":"medium","modelProvider":"CODEX","model":"gpt-5"},{"id":"custom-medium","modelProvider":"CODEX","model":"gpt-5.4"},{"id":"large","modelProvider":"CODEX","model":"gpt-5.4"}]}`), 0o600); err != nil {
+		t.Fatalf("write operator config: %v", err)
+	}
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{ConfigPath: configPath}); err != nil {
+		t.Fatalf("ApplyToLoadedConfig: %v", err)
+	}
+	if err := packages.ValidateResolvedCustomization(loaded.FactoryConfig()); err != nil {
+		t.Fatalf("ValidateResolvedCustomization: %v", err)
+	}
+	if got := workerByName(t, loaded.FactoryConfig(), "run-medium").Model; got != "gpt-5.4" {
+		t.Fatalf("resolved medium model = %q, want gpt-5.4", got)
+	}
+}
+
+func TestResolvedCustomization_RejectsUnknownPresetBeforeSessionBuild(t *testing.T) {
+	data := customizedClassifierJSON(t, func(document map[string]any) {
+		document["workers"].([]any)[1].(map[string]any)["preset"] = "missing"
+	})
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, data)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	err = operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{ConfigPath: writeBaselinePresets(t)})
+	if err == nil {
+		t.Fatal("ApplyToLoadedConfig succeeded")
+	}
+	for _, fragment := range []string{"run-small", "missing", "unknown operator worker preset"} {
 		if !strings.Contains(err.Error(), fragment) {
 			t.Fatalf("error = %q, want %q", err, fragment)
 		}

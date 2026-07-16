@@ -321,7 +321,7 @@ The installed factory remains editable at
 policy, edit its `factory.json` so `classify-complexity.classificationRoutes`
 still contains exactly one `small`, `medium`, and `large` route, each consumed
 by one target workstation. You may point a label at a different target
-workstation and select a supported provider/model on that target worker:
+workstation and select an operator-configured preset on that target worker:
 
 ```json
 {
@@ -337,14 +337,17 @@ you factory config validate ~/.you-agent-factory/you-agent-factories/@you/classi
 ```
 
 Validation rejects unknown or duplicate labels, a missing target, a target
-without a model selection, and unsupported provider/model selections. The
-error identifies the offending `classificationRoutes` field or worker value,
-and no Factory Session is created.
+without a model selection, an unknown preset, an empty preset model, or an
+unsupported preset provider. The error identifies the offending
+`classificationRoutes` field or worker value, and no Factory Session is
+created. Model names are provider-defined, so the selected provider validates
+the model name when it dispatches.
 
 Global model flags keep their ordinary `file < env < flag` precedence, but they
 only fill workers that omit a selection. Since all built-in classifier workers
-declare a provider and model, these supported overrides do not change the
-selected classification route or the built-in tier models:
+declare presets that resolve to provider and model values, these supported
+overrides do not change the selected classification route or the built-in tier
+models:
 
 ```bash
 you --default-worker-model-provider CODEX --default-worker-model gpt-5 \

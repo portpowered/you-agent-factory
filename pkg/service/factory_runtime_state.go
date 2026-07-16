@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -755,7 +756,10 @@ func applyOperatorDefaultsToLoadedConfig(cfg *FactoryServiceConfig, loaded *fact
 	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, cfg.OperatorDefaults); err != nil {
 		return fmt.Errorf("apply operator defaults: %w", err)
 	}
-	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
+	if err := operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded); err != nil {
+		return err
+	}
+	return packages.ValidateResolvedCustomization(loaded.FactoryConfig())
 }
 
 func validateReplayModeConfig(cfg *FactoryServiceConfig) error {

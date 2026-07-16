@@ -7,8 +7,11 @@ primary-result behavior.
 
 - `pkg/factory/packages/customization.go` owns packaged-factory-specific
   configuration validation and config loading calls it before a named factory
-  can be persisted or built into a Factory Session. Keep this boundary free of
-  `pkg/config` imports to avoid config and packaged-factory import cycles.
+  can be persisted or built into a Factory Session. Runtime construction calls
+  its resolved-selection validation after operator presets/defaults are applied,
+  so unknown presets and empty effective target models fail before a session is
+  created. Keep this boundary free of `pkg/config` imports to avoid config and
+  packaged-factory import cycles.
 
 ## Packaged classifier model override behavior
 

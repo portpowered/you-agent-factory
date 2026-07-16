@@ -179,11 +179,15 @@ func validateWorkerPresets(presets []WorkerPreset) ([]WorkerPreset, error) {
 		if strings.TrimSpace(preset.ModelProvider) == "" || !ok || interfaces.IsSymbolicWorkerModelProviderDefault(provider) {
 			return nil, fmt.Errorf("workerPresets[%d] %q has unsupported modelProvider %q: %s", i, id, preset.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary())
 		}
+		model := strings.TrimSpace(preset.Model)
+		if model == "" {
+			return nil, fmt.Errorf("workerPresets[%d] %q must declare a non-empty model", i, id)
+		}
 		effort, ok := interfaces.CanonicalizeReasoningEffort(preset.ReasoningEffort)
 		if !ok {
 			return nil, fmt.Errorf("workerPresets[%d] %q has unsupported reasoningEffort %q: accepted values are minimal, low, medium, high", i, id, preset.ReasoningEffort)
 		}
-		validated[i] = WorkerPreset{ID: id, ModelProvider: provider, Model: strings.TrimSpace(preset.Model), ReasoningEffort: effort}
+		validated[i] = WorkerPreset{ID: id, ModelProvider: provider, Model: model, ReasoningEffort: effort}
 	}
 	return validated, nil
 }

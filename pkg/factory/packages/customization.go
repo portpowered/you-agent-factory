@@ -47,6 +47,38 @@ func ValidateCustomization(cfg *interfaces.FactoryConfig) error {
 	return nil
 }
 
+// ValidateResolvedCustomization validates classifier target selections after
+// operator presets and defaults have been applied, before a session is built.
+func ValidateResolvedCustomization(cfg *interfaces.FactoryConfig) error {
+	if cfg == nil || (strings.TrimSpace(cfg.Name) != "@you/classifier" && strings.TrimSpace(cfg.Project) != "builtin-classifier") {
+		return nil
+	}
+	classifier, ok := classifierWorkstation(cfg)
+	if !ok {
+		return nil
+	}
+	for routeIndex, route := range classifier.ClassificationRoutes {
+		if len(route.Outputs) != 1 {
+			continue
+		}
+		targets := classifierRouteTargets(cfg, route.Outputs[0])
+		if len(targets) != 1 {
+			continue
+		}
+		worker, ok := classifierWorkerByName(cfg, targets[0].WorkerTypeName)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(worker.Model) == "" {
+			return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets worker %q whose resolved model selection is empty", routeIndex, strings.TrimSpace(route.Label), worker.Name)
+		}
+		if !supportedClassifierModelProvider(worker.ModelProvider) {
+			return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets worker %q with unsupported resolved modelProvider %q: %s", routeIndex, strings.TrimSpace(route.Label), worker.Name, worker.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary())
+		}
+	}
+	return nil
+}
+
 var requiredClassifierLabels = map[string]struct{}{"small": {}, "medium": {}, "large": {}}
 
 func classifierWorkstation(cfg *interfaces.FactoryConfig) (interfaces.FactoryWorkstationConfig, bool) {
@@ -59,12 +91,7 @@ func classifierWorkstation(cfg *interfaces.FactoryConfig) (interfaces.FactoryWor
 }
 
 func validateClassifierRouteTarget(cfg *interfaces.FactoryConfig, routeIndex int, label string, output interfaces.IOConfig) error {
-	targets := make([]interfaces.FactoryWorkstationConfig, 0, 1)
-	for _, workstation := range cfg.Workstations {
-		if workstation.Name != "classify-complexity" && classifierRouteHasInput(workstation, output) {
-			targets = append(targets, workstation)
-		}
-	}
+	targets := classifierRouteTargets(cfg, output)
 	if len(targets) != 1 {
 		return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets %q/%q, which must be consumed by exactly one target workstation", routeIndex, label, output.WorkTypeName, output.StateName)
 	}
@@ -82,6 +109,16 @@ func validateClassifierRouteTarget(cfg *interfaces.FactoryConfig, routeIndex int
 		return fmt.Errorf("@you/classifier classificationRoutes[%d] for label %q targets worker %q with unsupported modelProvider %q: %s", routeIndex, label, worker.Name, worker.ModelProvider, interfaces.AcceptedPublicWorkerModelProviderSummary())
 	}
 	return nil
+}
+
+func classifierRouteTargets(cfg *interfaces.FactoryConfig, output interfaces.IOConfig) []interfaces.FactoryWorkstationConfig {
+	targets := make([]interfaces.FactoryWorkstationConfig, 0, 1)
+	for _, workstation := range cfg.Workstations {
+		if workstation.Name != "classify-complexity" && classifierRouteHasInput(workstation, output) {
+			targets = append(targets, workstation)
+		}
+	}
+	return targets
 }
 
 func classifierRouteHasInput(workstation interfaces.FactoryWorkstationConfig, output interfaces.IOConfig) bool {

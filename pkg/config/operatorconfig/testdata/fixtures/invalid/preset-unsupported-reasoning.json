@@ -2,7 +2,8 @@
   "workerPresets": [
     {
       "id": "build",
-      "modelProvider": "codex",
+    "modelProvider": "codex",
+    "model": "gpt-5",
       "reasoningEffort": "extreme"
     }
   ]
