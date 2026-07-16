@@ -10,10 +10,36 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+func TestNewFromInputRejectsMissingRequiredEdges(t *testing.T) {
+	allocator := &agypty.MockAllocator{}
+	sequence := []string{}
+	runner := &preparedInvocationTestRunner{sequence: &sequence}
+	if _, err := NewFromInput(ConstructionInput{AgyPTYAllocator: allocator}); err == nil || !strings.Contains(err.Error(), "command runner is required") {
+		t.Fatalf("missing command runner error = %v", err)
+	}
+	if _, err := NewFromInput(ConstructionInput{CommandRunner: runner}); err == nil || !strings.Contains(err.Error(), "Agy PTY allocator is required") {
+		t.Fatalf("missing Agy allocator error = %v", err)
+	}
+}
+
+func TestNewFromInputKeepsProviderCommandAndAgyPTYEdgesDistinct(t *testing.T) {
+	allocator := &agypty.MockAllocator{}
+	sequence := []string{}
+	runner := &preparedInvocationTestRunner{sequence: &sequence}
+	built, err := NewFromInput(ConstructionInput{CommandRunner: runner, AgyPTYAllocator: allocator})
+	if err != nil {
+		t.Fatalf("NewFromInput() error = %v", err)
+	}
+	if built.exec != runner || built.agyAllocator != allocator {
+		t.Fatalf("constructed edges = (%T, %T), want selected runner and allocator", built.exec, built.agyAllocator)
+	}
+}
 
 func TestScriptWrapProvider_Infer_GenericNonCodexExitFailuresPreserveMessageAndClassification(t *testing.T) {
 	for _, tc := range genericNonCodexExitFailureTestCases() {

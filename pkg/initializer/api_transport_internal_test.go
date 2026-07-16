@@ -18,8 +18,20 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 )
+
+func composedConfig(t *testing.T, cfg *Config) *Config {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	configured := *cfg
+	configured.WorkerApplication = components
+	return &configured
+}
 
 func TestComposeSessionAPISurfaceRejectsUnavailableCollaborator(t *testing.T) {
 	t.Parallel()
@@ -54,12 +66,24 @@ func TestComposeSessionAPISurfaceRejectsUnavailableCollaborator(t *testing.T) {
 	}
 }
 
+func TestBuildCore_RejectsMissingWorkerApplicationBeforeFactoryLoad(t *testing.T) {
+	t.Parallel()
+
+	core, err := BuildCore(context.Background(), &Config{Dir: t.TempDir()})
+	if core != nil {
+		t.Fatal("expected no core without a worker application")
+	}
+	if err == nil || !strings.Contains(err.Error(), "initializer worker application is required") {
+		t.Fatalf("BuildCore() error = %v, want missing worker application", err)
+	}
+}
+
 func TestComposeSessionAPISurfacePassesBoundedCollaboratorsToConstructor(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	core, err := BuildCore(context.Background(), &Config{Dir: dir})
+	core, err := BuildCore(context.Background(), composedConfig(t, &Config{Dir: dir}))
 	if err != nil {
 		t.Fatalf("BuildCore: %v", err)
 	}
@@ -109,7 +133,7 @@ func TestComposedSessionAPISurfaceReturnsTypedExpiredResponseEventOutcome(t *tes
 
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	cfg := &Config{Dir: dir}
+	cfg := composedConfig(t, &Config{Dir: dir})
 	core, err := BuildCore(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("BuildCore: %v", err)

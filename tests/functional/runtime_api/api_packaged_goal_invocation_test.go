@@ -167,7 +167,7 @@ func startPackagedGoalInvocationServer(t *testing.T, runner workers.CommandRunne
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
 	return startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = runner
+		support.ConfigureWorkerCommands(t, cfg, runner, nil)
 	})
 }
 

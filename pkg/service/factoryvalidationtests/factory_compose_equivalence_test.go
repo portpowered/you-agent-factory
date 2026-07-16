@@ -1,6 +1,7 @@
 package factoryvalidationtests
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -9,6 +10,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 )
+
+func TestBuildFactoryCoreRejectsMissingWorkerApplicationBeforeLoading(t *testing.T) {
+	t.Parallel()
+
+	_, err := service.BuildFactoryCore(t.Context(), &service.FactoryServiceConfig{Dir: t.TempDir()})
+	if err == nil || !strings.Contains(err.Error(), "worker application is required") {
+		t.Fatalf("BuildFactoryCore error = %v, want missing worker application", err)
+	}
+}
 
 func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T) {
 	t.Parallel()
@@ -33,13 +43,18 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := service.ServiceClockForCompose(&service.FactoryServiceConfig{Dir: dir}, load)
+	composeCfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("construct compose worker application: %v", err)
+	}
+	hostedWorkers := service.NewHostedWorkersConfig(composeCfg, root.BaseLogger, clock)
 	collaborators := service.NewFactoryServiceCollaborators(
-		&service.FactoryServiceConfig{Dir: dir},
+		composeCfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
+		hostedWorkers,
 	)
-	composeCfg := &service.FactoryServiceConfig{Dir: dir}
 	shell, err := service.ComposeFactoryService(
 		ctx,
 		composeCfg,
@@ -47,7 +62,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 		collaborators,
 		load,
 		clock,
-		service.NewHostedWorkersConfig(composeCfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
@@ -71,6 +86,10 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 
 	ctx := t.Context()
 	cfg := &service.FactoryServiceConfig{Dir: dir}
+	cfg, err := service.ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
 
 	built, err := service.BuildFactoryCore(ctx, cfg)
 	if err != nil {
@@ -86,20 +105,26 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := service.ServiceClockForCompose(&service.FactoryServiceConfig{Dir: dir}, load)
+	composeCfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{Dir: dir})
+	if err != nil {
+		t.Fatalf("construct compose worker application: %v", err)
+	}
+	hostedWorkers := service.NewHostedWorkersConfig(composeCfg, root.BaseLogger, clock)
 	collaborators := service.NewFactoryServiceCollaborators(
-		&service.FactoryServiceConfig{Dir: dir},
+		composeCfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
+		hostedWorkers,
 	)
 	composed, err := service.ComposeFactoryCore(
 		ctx,
-		&service.FactoryServiceConfig{Dir: dir},
+		composeCfg,
 		root,
 		collaborators,
 		load,
 		clock,
-		service.NewHostedWorkersConfig(&service.FactoryServiceConfig{Dir: dir}, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 	if err != nil {
 		t.Fatalf("ComposeFactoryCore: %v", err)
@@ -131,6 +156,10 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	})
+	cfg, err := service.ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
 
 	built, err := service.BuildFactoryService(ctx, cfg)
 	if err != nil {
@@ -146,11 +175,13 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := service.ServiceClockForCompose(cfg, load)
+	hostedWorkers := service.NewHostedWorkersConfig(cfg, root.BaseLogger, clock)
 	collaborators := service.NewFactoryServiceCollaborators(
 		cfg,
 		clock,
 		root.BaseLogger,
 		service.NewFactorySessionsRegistry(),
+		hostedWorkers,
 	)
 	shell, err := service.ComposeFactoryService(
 		ctx,
@@ -159,7 +190,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 		collaborators,
 		load,
 		clock,
-		service.NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)

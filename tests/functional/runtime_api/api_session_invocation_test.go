@@ -26,7 +26,7 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	recorder := &capturingInvocationMetricsRecorder{}
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 		cfg.Logger = zap.New(core)
 		cfg.InvocationMetricsRecorder = recorder
 	})
@@ -87,7 +87,7 @@ func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 	})
 
 	response := postInvocationExpectStatus(
@@ -105,7 +105,7 @@ func TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 	})
 
 	response := postInvocationExpectStatus(
@@ -125,7 +125,7 @@ func TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape(t *testing.T
 	dir := scaffoldInvocationFactory(t, nil)
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 	})
 
 	response := postInvocationExpectStatus(
@@ -159,7 +159,7 @@ func TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus(t *test
 	})
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("task output COMPLETE")
+		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("task output COMPLETE"), nil)
 	})
 
 	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
@@ -179,7 +179,7 @@ func TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus(t *testing.T) {
 	blocking := newBlockingInvocationRunner()
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = blocking
+		support.ConfigureWorkerCommands(t, cfg, blocking, nil)
 	})
 
 	timeoutMillis := int64(10)
@@ -206,7 +206,7 @@ func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 			cfg.Logger = zap.NewNop()
 		},
 	})
@@ -248,7 +248,7 @@ func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testin
 		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.ProviderCommandRunnerOverride = blocking
+			support.ConfigureWorkerCommands(t, cfg, blocking, nil)
 			cfg.Logger = zap.NewNop()
 		},
 	})
