@@ -41,6 +41,10 @@ make verify-fast
 make verify-pr
 make verify-extended
 make test
+make test-unit
+make test-functional
+make test-stress
+make test-release
 make test-full
 make typecheck
 make verify-build-contracts
@@ -108,6 +112,14 @@ Use these canonical verification tiers on the root command surface before reachi
 The older aggregate names remain available as compatibility aliases while docs, workflows, and active review branches converge on the clearer tiered surface. In particular, `make verify` still works, but it now points contributors at `make verify-pr` as the canonical pull-request rerun command.
 
 Treat the matrix below as the canonical suite-ownership and rerun guide for the tiered test surface:
+
+The focused Go suite commands are `make test-unit`, `make test-functional`,
+`make test-stress`, and `make test-release`. The unit command discovers the
+repository's ordinary package tests while excluding all three specialized
+suite roots. The unit and functional runners keep bounded two-package
+concurrency, and all four focused commands retain the default short-mode and timeout policy.
+`make test` is the compatibility entrypoint for `make test-unit`; `make
+test-full` remains the broad unshortened aggregate across every Go package.
 
 | Surface | Runs | Intentionally excludes | Failure rerun path |
 | --- | --- | --- | --- |

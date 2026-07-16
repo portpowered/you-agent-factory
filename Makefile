@@ -12,8 +12,11 @@ UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
 UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
 FUNCTIONAL_DEFAULT_JOBS ?= 2
+UNIT_DEFAULT_JOBS ?= 2
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
+STRESS_DEFAULT_PACKAGES := ./tests/stress/...
+RELEASE_DEFAULT_PACKAGES := ./tests/release/...
 MODEL_LONG_TEST_TIMEOUT ?= 20m
 PR_INFERENCE_APPROVAL_REGRESSION ?= TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion
@@ -91,7 +94,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: test-unit-coverage test-functional-coverage
+.PHONY: test-unit test-functional test-stress test-release test-unit-coverage test-functional-coverage
 .PHONY: mcp-contract-check
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-contract-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
@@ -205,13 +208,22 @@ readme-check:
 	$(GO) run ./cmd/readmecheck
 
 test:
-	$(GO) test -short ./... -timeout $(GO_TEST_TIMEOUT)
+	$(MAKE) test-unit
 
 test-full:
 	$(GO) test ./... -timeout $(GO_TEST_TIMEOUT)
 
+test-unit:
+	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
 test-functional:
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-stress:
+	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-release:
+	$(GO) test -short $(RELEASE_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
