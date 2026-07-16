@@ -999,6 +999,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   directly-loadable factory payload; `you config init` materializes every
   catalog entry without separate CLI registration. Customer-facing packaged
   invocation guidance belongs in `docs/reference/run.md`.
+- Invocation-interpolated worker `modelProvider` and `model` fields are resolved
+  at dispatch time. A packaged factory that must be runnable without role flags
+  should declare parameter `defaultValue`s in its invocation signature; operator
+  defaults only fill authored empty worker fields before interpolation.
 - `pkg/transports/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared
   `InvocationRequest` payload shape, fail with stable

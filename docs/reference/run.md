@@ -85,9 +85,9 @@ you run --named @you/quorum "Compare the two proposed release plans."
 The branch workers use `branchProvider` and `branchModel`; the final merge
 worker uses `mergeProvider` and `mergeModel`. Pass their supported CLI names as
 `--branch-provider`, `--branch-model`, `--merge-provider`, and `--merge-model`.
-When a value is omitted, the applicable operator worker provider/model default
-is used. Named CLI values take precedence over the materialized factory's
-parameter defaults, without changing the fixed two-branch fan-in order.
+Both roles default to `CODEX` with model `gpt-5`; provider overrides accept
+`CODEX` or `CLAUDE`. Named CLI values take precedence over those packaged
+parameter defaults without changing the fixed two-branch fan-in order.
 
 ```bash
 you run --named @you/quorum \

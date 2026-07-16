@@ -8,10 +8,10 @@ var BuiltInFactoryJSON = []byte(`{
   "invocationSignature": {
     "parameters": [
       {"name":"input","description":"Text request evaluated by the quorum workers.","required":true,"bindings":[{"kind":"POSITIONAL","position":1},{"kind":"STDIN"}]},
-      {"name":"branchProvider","description":"Optional provider for both independent quorum branch workers. When omitted, the operator worker-provider default applies.","externalName":"branch-provider","aliases":["bp"],"bindings":[{"kind":"NAMED"}]},
-      {"name":"branchModel","description":"Optional model for both independent quorum branch workers. When omitted, the operator worker-model default applies.","externalName":"branch-model","aliases":["bm"],"bindings":[{"kind":"NAMED"}]},
-      {"name":"mergeProvider","description":"Optional provider for the final quorum merge worker. When omitted, the operator worker-provider default applies.","externalName":"merge-provider","aliases":["mp"],"bindings":[{"kind":"NAMED"}]},
-      {"name":"mergeModel","description":"Optional model for the final quorum merge worker. When omitted, the operator worker-model default applies.","externalName":"merge-model","aliases":["mm"],"bindings":[{"kind":"NAMED"}]}
+      {"name":"branchProvider","description":"Provider for both independent quorum branch workers. Defaults to CODEX.","externalName":"branch-provider","aliases":["bp"],"choices":["CLAUDE","CODEX"],"defaultValue":"CODEX","bindings":[{"kind":"NAMED"}]},
+      {"name":"branchModel","description":"Model for both independent quorum branch workers. Defaults to gpt-5.","externalName":"branch-model","aliases":["bm"],"defaultValue":"gpt-5","bindings":[{"kind":"NAMED"}]},
+      {"name":"mergeProvider","description":"Provider for the final quorum merge worker. Defaults to CODEX.","externalName":"merge-provider","aliases":["mp"],"choices":["CLAUDE","CODEX"],"defaultValue":"CODEX","bindings":[{"kind":"NAMED"}]},
+      {"name":"mergeModel","description":"Model for the final quorum merge worker. Defaults to gpt-5.","externalName":"merge-model","aliases":["mm"],"defaultValue":"gpt-5","bindings":[{"kind":"NAMED"}]}
     ],
     "examples": [
       {"name":"default-quorum","argv":["Compare the two proposed release plans."]},

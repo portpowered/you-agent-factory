@@ -132,6 +132,68 @@ func TestBuiltInQuorumFactory_DefaultNamedInvocationAcceptsInput(t *testing.T) {
 	if !ok || !reflect.DeepEqual(input.Values, []string{"Compare two release plans."}) {
 		t.Fatalf("input = %#v, want accepted default named invocation input", input)
 	}
+	assertArgumentValues(t, got.Arguments, "branchProvider", []string{"CODEX"})
+	assertArgumentValues(t, got.Arguments, "branchModel", []string{"gpt-5"})
+	assertArgumentValues(t, got.Arguments, "mergeProvider", []string{"CODEX"})
+	assertArgumentValues(t, got.Arguments, "mergeModel", []string{"gpt-5"})
+}
+
+func TestBuiltInQuorumFactory_RoleSpecificInvocationOverridesSelectEffectiveWorkers(t *testing.T) {
+	cfg := loadQuorumConfig(t)
+	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Compare two release plans."},
+		NamedArgs: []invocations.NamedArgumentInput{
+			{Key: "branch-provider", Values: []string{"CLAUDE"}},
+			{Key: "branch-model", Values: []string{"claude-sonnet-4-20250514"}},
+			{Key: "merge-provider", Values: []string{"CODEX"}},
+			{Key: "merge-model", Values: []string{"gpt-5"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments: %v", err)
+	}
+	args := invocations.RuntimeInvocationArguments(cfg.InvocationSignature, &normalized)
+	for _, workerName := range []string{"quorum-branch-a", "quorum-branch-b"} {
+		worker, ok := workerByName(cfg.Workers, workerName)
+		if !ok {
+			t.Fatalf("worker %q missing", workerName)
+		}
+		effective, err := invocations.InterpolateWorkerConfig(*worker, args, nil)
+		if err != nil {
+			t.Fatalf("InterpolateWorkerConfig(%q): %v", workerName, err)
+		}
+		if effective.ModelProvider != "CLAUDE" || effective.Model != "claude-sonnet-4-20250514" {
+			t.Fatalf("effective %s worker = %#v, want configured branch provider/model", workerName, effective)
+		}
+	}
+	merge, ok := workerByName(cfg.Workers, "quorum-merge")
+	if !ok {
+		t.Fatal("merge worker missing")
+	}
+	effectiveMerge, err := invocations.InterpolateWorkerConfig(*merge, args, nil)
+	if err != nil {
+		t.Fatalf("InterpolateWorkerConfig(merge): %v", err)
+	}
+	if effectiveMerge.ModelProvider != "CODEX" || effectiveMerge.Model != "gpt-5" {
+		t.Fatalf("effective merge worker = %#v, want configured merge provider/model", effectiveMerge)
+	}
+	diagnostic := invocations.InvocationDiagnostic(cfg.InvocationSignature, args)
+	if diagnostic == nil || len(diagnostic.Parameters) != 5 {
+		t.Fatalf("invocation diagnostic = %#v, want observable effective invocation parameters", diagnostic)
+	}
+}
+
+func TestBuiltInQuorumFactory_RejectsUnsupportedRoleProvider(t *testing.T) {
+	cfg := loadQuorumConfig(t)
+	_, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Compare two release plans."},
+		NamedArgs:      []invocations.NamedArgumentInput{{Key: "branch-provider", Values: []string{"unsupported"}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "branchProvider") {
+		t.Fatalf("NormalizeArguments error = %v, want actionable branchProvider validation error", err)
+	}
 }
 
 func TestIsPackagedFactory_MatchesBuiltInQuorumIdentity(t *testing.T) {
@@ -141,4 +203,21 @@ func TestIsPackagedFactory_MatchesBuiltInQuorumIdentity(t *testing.T) {
 	if IsPackagedFactory(&interfaces.FactoryConfig{Name: "customer-quorum"}) || IsPackagedFactory(nil) {
 		t.Fatal("unexpected packaged quorum identity match")
 	}
+}
+
+func assertArgumentValues(t *testing.T, arguments map[string]invocations.NormalizedArgument, name string, want []string) {
+	t.Helper()
+	got, ok := arguments[name]
+	if !ok || !reflect.DeepEqual(got.Values, want) {
+		t.Fatalf("argument %q = %#v, want values %#v", name, got, want)
+	}
+}
+
+func workerByName(workers []interfaces.WorkerConfig, name string) (*interfaces.WorkerConfig, bool) {
+	for index := range workers {
+		if workers[index].Name == name {
+			return &workers[index], true
+		}
+	}
+	return nil, false
 }
