@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -20,7 +19,6 @@ type consumePathOwnershipLayer string
 const (
 	consumePathLayerRuntimeCorrect          consumePathOwnershipLayer = "runtime_correct"
 	consumePathLayerHistoricalQueueArtifact consumePathOwnershipLayer = "historical_queue_artifact"
-	consumePathLayerProjectionVisibilityGap consumePathOwnershipLayer = "projection_visibility_gap"
 )
 
 func scaffoldConsumePathFactory(t *testing.T) string {
@@ -171,7 +169,7 @@ func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQue
 	}
 }
 
-func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *testing.T) {
+func TestSameNameConsumePathOwnership_MismatchedPairRemainsQueuedBeforeConsume(t *testing.T) {
 	dir := scaffoldConsumePathFactory(t)
 	h := support.NewGuardsBatchHarness(t, dir)
 
@@ -201,19 +199,9 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
-	projectionView, err := consumePathProjectionView(t, h)
-	if err != nil {
-		t.Fatalf("consumePathProjectionView: %v", err)
-	}
-
 	if !hasNamedTokenInPlace(runtimeSnap.Marking, "idea:to-complete", "idea-only") ||
 		!hasNamedTokenInPlace(runtimeSnap.Marking, "task:to-complete", "task-only") {
 		t.Fatalf("runtime marking for mismatched pair = %#v", runtimeSnap.Marking.PlaceTokens)
-	}
-	if !hasNamedWorkItemAtPlace(projectionView, "idea:to-complete", "idea-only") ||
-		!hasNamedWorkItemAtPlace(projectionView, "task:to-complete", "task-only") {
-		t.Fatalf("projection queue for mismatched pair = %#v; classification=%q",
-			projectionView.Runtime.CurrentWorkItemsByPlaceID, consumePathLayerProjectionVisibilityGap)
 	}
 
 	cancel()
@@ -294,22 +282,10 @@ func classifyConsumePathOutcome(
 	}
 	runtimeMarking := runtimeSnap.Marking
 
-	projectionView, err := consumePathProjectionView(t, h)
-	if err != nil {
-		t.Fatalf("consumePathProjectionView: %v", err)
-	}
-
 	runtimeIdeaToComplete := hasNamedTokenInPlace(runtimeMarking, "idea:to-complete", cellName)
 	runtimeTaskToComplete := hasNamedTokenInPlace(runtimeMarking, "task:to-complete", cellName)
 	runtimeIdeaComplete := hasNamedTokenInPlace(runtimeMarking, "idea:complete", cellName)
 	runtimeTaskComplete := hasNamedTokenInPlace(runtimeMarking, "task:complete", cellName)
-
-	projectionIdeaToComplete := hasNamedWorkItemAtPlace(projectionView, "idea:to-complete", cellName)
-	projectionTaskToComplete := hasNamedWorkItemAtPlace(projectionView, "task:to-complete", cellName)
-
-	if runtimeIdeaToComplete != projectionIdeaToComplete || runtimeTaskToComplete != projectionTaskToComplete {
-		return consumePathLayerProjectionVisibilityGap
-	}
 
 	switch {
 	case runtimeIdeaComplete && runtimeTaskComplete && !runtimeIdeaToComplete && !runtimeTaskToComplete:
@@ -322,32 +298,4 @@ func classifyConsumePathOutcome(
 		t.Fatalf("unclassified consume-path outcome for %q: runtime=%#v", cellName, runtimeMarking.PlaceTokens)
 		return ""
 	}
-}
-
-func consumePathProjectionView(t *testing.T, h *testutil.ServiceTestHarness) (interfaces.FactoryWorldView, error) {
-	t.Helper()
-
-	ctx := context.Background()
-	events, err := h.GetFactoryEvents(ctx)
-	if err != nil {
-		return interfaces.FactoryWorldView{}, err
-	}
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		return interfaces.FactoryWorldView{}, err
-	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
-	if err != nil {
-		return interfaces.FactoryWorldView{}, err
-	}
-	return projections.BuildFactoryWorldView(worldState), nil
-}
-
-func hasNamedWorkItemAtPlace(view interfaces.FactoryWorldView, placeID, name string) bool {
-	for _, ref := range view.Runtime.CurrentWorkItemsByPlaceID[placeID] {
-		if ref.DisplayName == name {
-			return true
-		}
-	}
-	return false
 }

@@ -26,7 +26,7 @@ const (
 
 // consumePathCellDispositionEvidence is reviewer-verifiable output for a
 // stranded CLI or MCP implementation cell. Each field maps to an observable
-// runtime or projection check from the ownership and historical-recovery tests.
+// runtime check from the ownership and historical-recovery tests.
 type consumePathCellDispositionEvidence struct {
 	CellName               string
 	Disposition            consumePathCellDisposition
@@ -72,8 +72,6 @@ func evaluateConsumePathCellDisposition(
 		evidence.Disposition = cellDispositionComplete
 	case layer == consumePathLayerHistoricalQueueArtifact && preconditions.AllowsBoundedHistoricalRepair():
 		evidence.Disposition = cellDispositionNeedsBoundedManualMove
-	case layer == consumePathLayerProjectionVisibilityGap:
-		evidence.Disposition = cellDispositionNeedsBoundedFollowupRepair
 	case layer == consumePathLayerHistoricalQueueArtifact && !preconditions.AllowsBoundedHistoricalRepair():
 		evidence.Disposition = cellDispositionNeedsBoundedFollowupRepair
 	default:

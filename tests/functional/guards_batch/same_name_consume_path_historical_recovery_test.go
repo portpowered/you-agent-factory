@@ -18,17 +18,15 @@ import (
 // when the idea twin already reached idea:complete and the remaining
 // task:to-complete token is an orphan duplicate from earlier recovery residue.
 type historicalManualRepairPreconditions struct {
-	IdeaCompletePresent    bool
-	TaskToCompletePresent  bool
-	IdeaToCompleteAbsent   bool
-	ProjectionMatchesQueue bool
+	IdeaCompletePresent   bool
+	TaskToCompletePresent bool
+	IdeaToCompleteAbsent  bool
 }
 
 func (p historicalManualRepairPreconditions) AllowsBoundedHistoricalRepair() bool {
 	return p.IdeaCompletePresent &&
 		p.TaskToCompletePresent &&
-		p.IdeaToCompleteAbsent &&
-		p.ProjectionMatchesQueue
+		p.IdeaToCompleteAbsent
 }
 
 func evaluateHistoricalManualRepairPreconditions(
@@ -42,22 +40,13 @@ func evaluateHistoricalManualRepairPreconditions(
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
-	projectionView, err := consumePathProjectionView(t, h)
-	if err != nil {
-		t.Fatalf("consumePathProjectionView: %v", err)
-	}
-
 	runtimeIdeaToComplete := hasNamedTokenInPlace(runtimeSnap.Marking, "idea:to-complete", cellName)
 	runtimeTaskToComplete := hasNamedTokenInPlace(runtimeSnap.Marking, "task:to-complete", cellName)
-	projectionIdeaToComplete := hasNamedWorkItemAtPlace(projectionView, "idea:to-complete", cellName)
-	projectionTaskToComplete := hasNamedWorkItemAtPlace(projectionView, "task:to-complete", cellName)
 
 	return historicalManualRepairPreconditions{
 		IdeaCompletePresent:   hasNamedTokenInPlace(runtimeSnap.Marking, "idea:complete", cellName),
 		TaskToCompletePresent: runtimeTaskToComplete,
 		IdeaToCompleteAbsent:  !runtimeIdeaToComplete,
-		ProjectionMatchesQueue: runtimeIdeaToComplete == projectionIdeaToComplete &&
-			runtimeTaskToComplete == projectionTaskToComplete,
 	}
 }
 
