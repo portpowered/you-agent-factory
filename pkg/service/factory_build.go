@@ -1193,7 +1193,7 @@ func newRuntimeBuildService(
 	startupLocalModels *localModelDomain,
 	progressPublisherFactory inferenceProgressPublisherFactory,
 	dispatchCompletionFactory dispatchCompletionObserverFactory,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
 		buildCfg,
@@ -1498,7 +1498,7 @@ func NewRuntimeBuildServiceForCompose(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	return newRuntimeBuildService(
 		FactoryServiceConfigFromRuntimeHost(cfg),
 		clock,
@@ -1576,18 +1576,6 @@ func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefiniti
 	return factoryDefinitionHost{FactoryService: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
 }
 
-// StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*interfaces.WorkerConfig, bool) {
-	if core == nil {
-		return nil, false
-	}
-	runtimeCfg := coreStartupRuntimeConfigFromRuntimeHost(core)
-	if runtimeCfg == nil {
-		return nil, false
-	}
-	return runtimeCfg.Worker(name)
-}
-
 func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
 	if core == nil {
 		return nil
@@ -1623,16 +1611,6 @@ func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryS
 	}
 }
 
-func coreStartupRuntimeConfigFromRuntimeHost(core *runtimehost.Core) *factoryconfig.LoadedFactoryConfig {
-	if core == nil {
-		return nil
-	}
-	if bundle := core.StartupBundle(); bundle != nil {
-		return bundle.RuntimeCfg
-	}
-	return nil
-}
-
 // InvocationBootstrap constructs and runs one-shot factory invocation
 // session/runtime dependencies without binding a listening HTTP server.
 type InvocationBootstrap struct {
@@ -1656,16 +1634,11 @@ func NormalizeInvocationBootstrapConfig(cfg *FactoryServiceConfig) *FactoryServi
 	return &normalized
 }
 
-// BuildInvocationBootstrap constructs FactoryService-owned session/runtime
-// dependencies for one-shot invocation without starting a listening HTTP server.
-func BuildInvocationBootstrap(ctx context.Context, cfg *FactoryServiceConfig) (*InvocationBootstrap, error) {
-	normalized := NormalizeInvocationBootstrapConfig(cfg)
-	if normalized == nil {
-		return nil, fmt.Errorf("build invocation bootstrap: config is required")
-	}
-	service, err := BuildFactoryService(ctx, normalized)
-	if err != nil {
-		return nil, err
+// NewInvocationBootstrap adapts an already-composed service facade for one-shot
+// invocation. Composition remains owned by the shared Wire application graph.
+func NewInvocationBootstrap(service *FactoryService) (*InvocationBootstrap, error) {
+	if service == nil {
+		return nil, fmt.Errorf("build invocation bootstrap: service is required")
 	}
 	return &InvocationBootstrap{Service: service}, nil
 }

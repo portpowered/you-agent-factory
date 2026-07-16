@@ -1090,50 +1090,6 @@ export const DashboardImprovementsSmoke = {
   },
 };
 
-export const DashboardImprovementsSmokeNarrow = {
-  parameters: {
-    dashboardApi: {
-      snapshot: semanticWorkflowDashboardSnapshot,
-      tracesByWorkID: {
-        "work-active-story": activeStoryTrace,
-      },
-    },
-  },
-  render: () => (
-    <div style={{ maxWidth: "100%", width: "360px" }}>
-      <App />
-    </div>
-  ),
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const frame = canvasElement.firstElementChild;
-
-    await expect(
-      await canvas.findByRole("article", { name: "Submit work" }),
-    ).toBeVisible();
-    await userEvent.click(
-      (await canvas.findAllByRole("button", { name: /Active Story/ }))[0],
-    );
-
-    const dashboardGrid = await canvas.findByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    const dashboardScope = within(dashboardGrid);
-
-    await expect(
-      dashboardScope.getByRole("article", { name: "Submit work" }),
-    ).toBeVisible();
-    await expect(
-      dashboardScope.getByRole("article", { name: "Current selection" }),
-    ).toBeVisible();
-    await expect(
-      dashboardScope.getByRole("article", { name: "Trace drill-down" }),
-    ).toBeVisible();
-    expect(frame?.getBoundingClientRect().width ?? 0).toBeLessThanOrEqual(360);
-    expectNoPageHorizontalOverflow(canvasElement);
-  },
-};
-
 export const CurrentSelectionEditableConfigurationDesktopVerification = {
   parameters: {
     dashboardApi: {

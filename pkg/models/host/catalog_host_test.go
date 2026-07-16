@@ -97,6 +97,31 @@ func TestFailureClassFromError_ClassifiesCancelled(t *testing.T) {
 	}
 }
 
+func TestFailureClassForReadinessState_MapsPublicContractStates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		readiness factoryapi.ManagedRuntimeReadinessState
+		want      FailureClass
+	}{
+		{name: "ready", readiness: factoryapi.ManagedRuntimeReadinessStateREADY, want: FailureClassNone},
+		{name: "missing", readiness: factoryapi.ManagedRuntimeReadinessStateMISSING, want: FailureClassMissingAssets},
+		{name: "loading", readiness: factoryapi.ManagedRuntimeReadinessStateLOADING, want: FailureClassLoadingTimeout},
+		{name: "failed", readiness: factoryapi.ManagedRuntimeReadinessStateFAILED, want: FailureClassProcessCrash},
+		{name: "unsupported", readiness: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED, want: FailureClassUnsupportedRuntime},
+		{name: "unknown", readiness: factoryapi.ManagedRuntimeReadinessState("UNKNOWN"), want: FailureClassUnsupportedRuntime},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := FailureClassForReadinessState(test.readiness); got != test.want {
+				t.Fatalf("failure class = %s, want %s", got, test.want)
+			}
+		})
+	}
+}
+
 func TestManagedRuntimeFromSnapshot_PreservesPublicVocabulary(t *testing.T) {
 	snapshot := ReadinessSnapshot{
 		Identity: Identity{

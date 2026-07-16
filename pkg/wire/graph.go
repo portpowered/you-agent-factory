@@ -165,6 +165,7 @@ type Graph struct {
 	Workers           *workersservice.Service
 	WorkerProvider    *runtimebuild.Service
 	SessionRegistry   *factorysessions.Registry
+	Persistence       runtimepersist.Store
 	FactoryDefinition apisurface.FactorySaveAPI
 	FactorySessions   apisurface.SessionAPI
 	DurableExecution  factorysessionexecution.Service

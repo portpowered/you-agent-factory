@@ -11,16 +11,72 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+type recordingRuntimeOwner struct {
+	factorysessionexecution.Service
+	sessionID string
+	records   []interfaces.TokenMutationRecord
+}
+
+func (owner *recordingRuntimeOwner) RecordPetriTokenMutations(
+	sessionID string,
+	records []interfaces.TokenMutationRecord,
+) error {
+	owner.sessionID = sessionID
+	owner.records = append([]interfaces.TokenMutationRecord(nil), records...)
+	return nil
+}
+
+func TestRuntimeHostRecordingBuildUsesGraphOwnedDurableExecution(t *testing.T) {
+	t.Parallel()
+
+	var built runtimebuild.SessionBuildSpec
+	base, err := runtimebuild.New(runtimebuild.Config{}, factory.EnsureClock(nil), zap.NewNop(), func(
+		_ context.Context,
+		spec runtimebuild.SessionBuildSpec,
+	) (any, error) {
+		built = spec
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
+	owner := &recordingRuntimeOwner{Service: factorysessionexecution.NewFakeService()}
+	configured, err := provideRuntimeHostRecordingBuild(runtimeHostBaseBuild{Service: base}, owner)
+	if err != nil {
+		t.Fatalf("provideRuntimeHostRecordingBuild: %v", err)
+	}
+	if _, err := configured.Build(context.Background(), runtimebuild.SessionBuildSpec{SessionID: "root-session"}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cfg := &factory.FactoryConfig{}
+	for _, option := range built.AdditionalFactoryOpts {
+		option(cfg)
+	}
+	want := []interfaces.TokenMutationRecord{{TransitionID: "completed"}}
+	if cfg.PetriMutationRecorder == nil {
+		t.Fatal("configured runtime build omitted the durable execution recorder")
+	}
+	if err := cfg.PetriMutationRecorder("root-session", want); err != nil {
+		t.Fatalf("PetriMutationRecorder: %v", err)
+	}
+	if owner.sessionID != "root-session" || len(owner.records) != 1 || owner.records[0].TransitionID != "completed" {
+		t.Fatalf("recorded mutations = (%q, %#v), want graph-owned root-session completion", owner.sessionID, owner.records)
+	}
+}
 
 func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	dir := t.TempDir()

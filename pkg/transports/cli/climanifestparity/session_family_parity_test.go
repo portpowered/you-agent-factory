@@ -658,11 +658,17 @@ func sessionExecutionOptions(t *testing.T, requests *[]sessionexecutioncli.Servi
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
 	}
-	return cli.RootCommandOptions{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (fse.Service, error) {
+	return cli.RootCommandOptions{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
 		*requests = append(*requests, request)
-		return service, nil
+		return parityExecutionOwner{Service: service}, nil
 	}}
 }
+
+type parityExecutionOwner struct {
+	fse.Service
+}
+
+func (parityExecutionOwner) Close() error { return nil }
 
 func executeSessionFamilyPair(t *testing.T, options cli.RootCommandOptions, argv []string) (sessionCommandResult, sessionCommandResult) {
 	t.Helper()

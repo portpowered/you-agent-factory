@@ -160,24 +160,34 @@ describe("DashboardHeader", () => {
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");
-    expect(toolbar.firstElementChild?.className).toContain("flex-col");
-    expect(toolbar.firstElementChild?.className).toContain("gap-0");
-    expect(toolbar.firstElementChild?.firstElementChild?.className).toContain(
-      "items-stretch",
+    expect(toolbar.firstElementChild?.className).toContain("grid");
+    expect(toolbar.firstElementChild?.className).toContain("md:grid-cols");
+    const topRegion = toolbar.querySelector(
+      "[data-dashboard-header-top-region]",
     );
+    const tabRegion = toolbar.querySelector(
+      "[data-dashboard-header-tab-region]",
+    );
+    const controlRegion = toolbar.querySelector(
+      "[data-dashboard-header-control-region]",
+    );
+    expect(topRegion?.className).toContain("justify-between");
+    expect(topRegion?.className).toContain("md:contents");
+    expect(tabRegion?.className).toContain("md:col-start-2");
+    expect(controlRegion?.className).toContain("min-w-0");
     expect(heading.textContent).toContain("U");
     expect(
       toolbar.firstElementChild?.firstElementChild?.firstElementChild,
     ).toBe(heading);
-    expect(heading.className).toContain("pb-2");
+    expect(heading.className).toContain("md:col-start-1");
     expect(heading.firstElementChild?.className).toContain("items-center");
     expect(globalActions.className).toContain("self-end");
     expect(actionRow?.className).toContain("justify-end");
-    expect(actionRow?.className).toContain("max-md:w-full");
+    expect(actionRow?.className).toContain("md:col-start-3");
     expect(actionRowSections).toHaveLength(1);
-    expect(
-      actionRowSections[0]?.getAttribute("data-action-row-section"),
-    ).toBe("actions");
+    expect(actionRowSections[0]?.getAttribute("data-action-row-section")).toBe(
+      "actions",
+    );
     expect(actionRowSections[0]?.contains(languageButton)).toBe(true);
     expect(actionRowSections[0]?.contains(paletteButton)).toBe(true);
     expect(
@@ -202,8 +212,8 @@ describe("DashboardHeader", () => {
       ),
     );
     expect(controls).toHaveLength(4);
-    expect(controls[0]).toBe(openSessionButton);
-    expect(controls[1]).toBe(languageButton);
+    expect(controls[0]).toBe(languageButton);
+    expect(controls[1]).toBe(openSessionButton);
     expect(controls[2]).toBe(slider);
     expect(controls[3]).toBe(exportButton);
     expect(globalActions.contains(languageButton)).toBe(true);
