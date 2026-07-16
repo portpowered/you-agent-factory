@@ -1,0 +1,62 @@
+{
+  "formatVersion": 1,
+  "declarations": [
+    {
+      "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent",
+      "stableIds": [
+        "rest/upsertWorkRequestBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/runtime_api/api_generated_smoke_test.go::TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned",
+      "stableIds": [
+        "rest/getEventsBySessionId",
+        "rest/getStatusBySessionId",
+        "rest/listWorkBySessionId",
+        "rest/submitWorkBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/runtime_api/api_manual_work_recovery_test.go::TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress",
+      "stableIds": [
+        "rest/moveWorkBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/runtime_api/api_session_invocation_test.go::TestSessionInvocationAPI_ReturnsPrimaryResult",
+      "stableIds": [
+        "rest/invokeFactorySessionBySessionId"
+      ]
+    },
+    {
+      "test": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
+      "stableIds": [
+        "cli/you.run"
+      ]
+    },
+    {
+      "test": "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory",
+      "stableIds": [
+        "cli/you.submit.batch"
+      ]
+    },
+    {
+      "test": "tests/functional/smoke/cli_work_move_smoke_test.go::TestWorkMove_RealCLIMovesSubmittedWork",
+      "stableIds": [
+        "cli/you.work.move"
+      ]
+    },
+    {
+      "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
+      "stableIds": [
+        "cli/you.docs"
+      ]
+    },
+    {
+      "test": "tests/release/release_smoke_test.go::TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture",
+      "stableIds": [
+        "sse/getEventsBySessionId"
+      ]
+    }
+  ]
+}

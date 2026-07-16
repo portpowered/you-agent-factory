@@ -155,6 +155,7 @@ contracts-generate:
 
 contracts-check:
 	$(GO) run ./cmd/contractscheck -root .
+	$(GO) run ./cmd/functionalscenarioproject -check contracts/functional-scenarios.json
 
 contracts-smoke:
 	$(GO) test ./internal/contract... ./cmd/contracts... -count=1 -timeout $(GO_TEST_TIMEOUT)
