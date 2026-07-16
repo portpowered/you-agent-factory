@@ -19,10 +19,10 @@
       },
       {
         "name": "period",
-        "description": "Optional recurrence period. The packaged hourly loop currently accepts 1h.",
+        "description": "Optional recurrence period. Supported values are 1h and 24h.",
         "externalName": "period",
         "defaultValue": "1h",
-        "choices": ["1h"],
+        "choices": ["1h", "24h"],
         "bindings": [
           {"kind": "NAMED"}
         ]
@@ -44,7 +44,7 @@
       },
       {
         "name": "hourly-loop-in-worktree",
-        "argv": ["Check the release dashboard", "--period", "1h", "--worktree", "release-dashboard"]
+        "argv": ["Check the release dashboard", "--period", "24h", "--worktree", "release-dashboard"]
       }
     ]
   },
@@ -96,7 +96,7 @@
       "name": "repeat-loop-iteration",
       "behavior": "CRON",
       "cron": {
-        "schedule": "0 * * * *"
+        "schedule": "0 0 31 2 *"
       },
       "workPropagation": {"mode": "PRESERVE_INPUT"},
       "inputs": [

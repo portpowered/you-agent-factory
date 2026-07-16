@@ -90,6 +90,34 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	}
 }
 
+func TestSessionOwner_BeforeSubmitRunsAfterNormalizationAndBeforeWorkSubmission(t *testing.T) {
+	cfg := sessionOwnerSignatureFactoryConfig()
+	order := make([]string, 0, 2)
+	owner := NewSessionOwner(SessionOwnerDependencies{
+		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
+		BeforeSubmit: func(_ context.Context, _ string, _ *interfaces.FactoryConfig, arguments *workinvocation.NormalizedArguments) error {
+			order = append(order, "before")
+			if got := arguments.Arguments["input"].Values; len(got) != 1 || got[0] != "hello" {
+				t.Fatalf("normalized input = %#v, want [hello]", got)
+			}
+			return nil
+		},
+		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+			order = append(order, "submit")
+			return interfaces.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+		},
+		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
+			return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
+		},
+	})
+	if _, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}}); err != nil {
+		t.Fatalf("InvokeFactorySession: %v", err)
+	}
+	if len(order) != 2 || order[0] != "before" || order[1] != "submit" {
+		t.Fatalf("call order = %#v, want [before submit]", order)
+	}
+}
+
 func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {
 	textKind := factoryapi.InvocationInputSourceKindText
 	fileKind := factoryapi.InvocationInputSourceKindFileRef

@@ -61,6 +61,17 @@ func TestBuiltInLoopFactory_NormalizesHourlyPeriodAndWorktree(t *testing.T) {
 	if got := arguments.Arguments["period"].Values; !reflect.DeepEqual(got, []string{"1h"}) {
 		t.Fatalf("period = %#v, want hourly period", got)
 	}
+	dailyArguments, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Check the release dashboard"},
+		NamedArgs:      []invocations.NamedArgumentInput{{Key: "period", Values: []string{"24h"}}},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments daily period: %v", err)
+	}
+	if got := dailyArguments.Arguments["period"].Values; !reflect.DeepEqual(got, []string{"24h"}) {
+		t.Fatalf("daily period = %#v, want 24h", got)
+	}
 	if got := arguments.Arguments["worktree"].Values; !reflect.DeepEqual(got, []string{"release-dashboard"}) {
 		t.Fatalf("worktree = %#v, want configured worktree", got)
 	}

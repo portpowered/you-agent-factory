@@ -66,6 +66,51 @@ func (s *Service) StartCronWatchersForRuntime(
 	}()
 }
 
+// StartCronIntervalWatcher supervises one session-scoped cron workstation at a
+// validated fixed interval. The caller owns validation and must share the
+// runtime sidecar context so stopping the Factory Session stops this watcher.
+func (s *Service) StartCronIntervalWatcher(
+	ctx context.Context,
+	sidecars *sync.WaitGroup,
+	runtimeCfg interfaces.RuntimeWorkstationLookup,
+	workflowIdentity string,
+	submitter WorkRequestSubmitter,
+	ws interfaces.FactoryWorkstationConfig,
+	interval time.Duration,
+) error {
+	if ctx == nil || sidecars == nil || runtimeCfg == nil || submitter == nil {
+		return fmt.Errorf("cron interval watcher dependencies are required")
+	}
+	if interval <= 0 {
+		return fmt.Errorf("cron interval must be positive")
+	}
+	scheduler, err := gocron.NewScheduler(gocron.WithClock(s.supervisorClock()), gocron.WithLocation(time.UTC))
+	if err != nil {
+		return fmt.Errorf("create cron interval scheduler: %w", err)
+	}
+	_, err = scheduler.NewJob(
+		gocron.DurationJob(interval),
+		gocron.NewTask(func() {
+			s.runCronJob(ctx, runtimeCfg, workflowIdentity, ws, s.supervisorClock().Now().UTC(), submitter)
+		}),
+	)
+	if err != nil {
+		_ = scheduler.Shutdown()
+		return fmt.Errorf("register cron interval %s: %w", interval, err)
+	}
+	scheduler.Start()
+	s.logger().Info("cron interval watcher started", zap.String("workstation", ws.Name), zap.Duration("interval", interval))
+	sidecars.Add(1)
+	go func() {
+		defer sidecars.Done()
+		<-ctx.Done()
+		if err := scheduler.Shutdown(); err != nil {
+			s.logger().Warn("cron interval watcher shutdown failed", zap.Error(err))
+		}
+	}()
+	return nil
+}
+
 // SubmitCronTick submits one cron workstation tick through the injected runtime submitter.
 func (s *Service) SubmitCronTick(
 	ctx context.Context,

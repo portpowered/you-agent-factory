@@ -21,8 +21,11 @@ type Handle struct {
 	RunDone   chan struct{}
 
 	SidecarCancel context.CancelFunc
-	Sidecars      sync.WaitGroup
-	SidecarMu     sync.Mutex
+	// SidecarContext is the cancellation boundary shared by every runtime sidecar.
+	// It is set when sidecars start and cleared before they are joined.
+	SidecarContext context.Context
+	Sidecars       sync.WaitGroup
+	SidecarMu      sync.Mutex
 
 	runErrMu             sync.RWMutex
 	runErr               error

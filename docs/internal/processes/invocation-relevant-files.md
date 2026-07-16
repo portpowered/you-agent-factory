@@ -132,7 +132,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - `pkg/workers/skippermissions/` owns provider-backed worker capability and
   invocation-override policy for skip-permissions.
 - `pkg/factory/sessions/invocation/session_owner.go` owns live-session request normalization,
-  interpolation validation, default-handling Work submission, lifecycle
+  interpolation validation, validated pre-submission session setup, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
   `pkg/factory/sessions/invocation/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
@@ -143,6 +143,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   packaged-factory classification as explicit collaborators; service and
   runtime-host facades should only adapt those dependencies and forward
   `InvokeFactorySession` unchanged.
+- `pkg/service/runtime_sessions.go` adapts the packaged `@you/loop` pre-submission
+  hook to one Factory Session-bound interval watcher. Keep cadence parsing and
+  watcher registration before the initial Work submission, and attach the
+  watcher to the runtime handle's existing sidecar context so stop/replacement
+  cancels and joins it with the rest of the session lifecycle.
 - `pkg/work/invocation/arguments.go` owns signature-backed invocation argument
   normalization for positional, named, stdin, defaulted, repeated, variadic,
   alias-backed, and compatibility fallback inputs. Transport stories should

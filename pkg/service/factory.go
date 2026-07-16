@@ -165,6 +165,7 @@ type FactoryService struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	durableExecution         factorysessionexecution.Service
+	loopIntervalSessions     sync.Map
 }
 
 func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
@@ -883,6 +884,7 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 
 	sidecarCtx, sidecarCancel := context.WithCancel(ctx)
 	handle.SidecarCancel = sidecarCancel
+	handle.SidecarContext = sidecarCtx
 	handle.Sidecars.Add(1)
 	go func() {
 		defer handle.Sidecars.Done()

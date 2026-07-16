@@ -64,8 +64,11 @@ type SessionOwnerDependencies struct {
 	SubmitWork    func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error)
 	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitNext      func(context.Context) error
-	Telemetry     SessionInvocationTelemetry
-	SpecialCase   SessionInvocationSpecialCase
+	// BeforeSubmit performs session-scoped setup after invocation validation and
+	// before the first Work can enter the runtime.
+	BeforeSubmit func(context.Context, string, *interfaces.FactoryConfig, *workinvocation.NormalizedArguments) error
+	Telemetry    SessionInvocationTelemetry
+	SpecialCase  SessionInvocationSpecialCase
 }
 
 // SessionOwner coordinates the complete session invocation lifecycle through
@@ -108,6 +111,12 @@ func (o *SessionOwner) InvokeFactorySession(
 	if err := workinvocation.ValidateInvocationInterpolation(factoryCfg, workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments), os.ReadFile); err != nil {
 		o.interpolationFailure(sessionID, factoryCfg, resolved, err)
 		return FactoryInvocationResult{}, normalizeSessionInvocationError(err)
+	}
+	if o.deps.BeforeSubmit != nil {
+		if err := o.deps.BeforeSubmit(ctx, sessionID, factoryCfg, resolved.NormalizedArguments); err != nil {
+			o.interpolationFailure(sessionID, factoryCfg, resolved, err)
+			return FactoryInvocationResult{}, err
+		}
 	}
 
 	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(factoryCfg)

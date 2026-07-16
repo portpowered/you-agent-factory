@@ -44,6 +44,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
 
@@ -620,6 +621,7 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	}
 
 	fs.unregisterLiveSession(sessionID)
+	fs.loopIntervalSessions.Delete(sessionID)
 	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
@@ -2188,8 +2190,85 @@ func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvo
 		SubmitWork:    fs.submitSessionInvocationWork,
 		Observe:       fs.observeSessionInvocation,
 		Telemetry:     fs.sessionInvocationTelemetry(),
+		BeforeSubmit:  fs.configureLoopInterval,
 		SpecialCase:   serviceSessionInvocationSpecialCase{},
 	})
+}
+
+func (fs *FactoryService) configureLoopInterval(
+	_ context.Context,
+	sessionID string,
+	cfg *interfaces.FactoryConfig,
+	arguments *workinvocation.NormalizedArguments,
+) error {
+	if cfg == nil || cfg.Name != "@you/loop" {
+		return nil
+	}
+	if _, loaded := fs.loopIntervalSessions.LoadOrStore(sessionID, struct{}{}); loaded {
+		return nil
+	}
+	period, err := loopInvocationPeriod(arguments)
+	if err != nil {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return err
+	}
+	session := fs.sessionByID(sessionID)
+	handle := liveSessionHandle(session)
+	if handle == nil || handle.Bundle == nil {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return fmt.Errorf("loop period: Factory Session runtime is unavailable")
+	}
+	handle.SidecarMu.Lock()
+	sidecarCtx := handle.SidecarContext
+	handle.SidecarMu.Unlock()
+	if sidecarCtx == nil {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return fmt.Errorf("loop period: Factory Session sidecars are unavailable")
+	}
+	workersScheduler, err := fs.requireWorkersScheduler()
+	if err != nil {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return err
+	}
+	var workstation interfaces.FactoryWorkstationConfig
+	for _, candidate := range cfg.Workstations {
+		if candidate.Name == "repeat-loop-iteration" {
+			workstation = candidate
+			break
+		}
+	}
+	if workstation.Name == "" {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return fmt.Errorf("loop period: repeat-loop-iteration workstation is missing")
+	}
+	if err := workersScheduler.StartCronIntervalWatcher(
+		sidecarCtx,
+		&handle.Sidecars,
+		handle.Bundle.RuntimeCfg,
+		workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir()),
+		workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory)),
+		workstation,
+		period,
+	); err != nil {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return fmt.Errorf("loop period: %w", err)
+	}
+	return nil
+}
+
+func loopInvocationPeriod(arguments *workinvocation.NormalizedArguments) (time.Duration, error) {
+	if arguments == nil {
+		return 0, fmt.Errorf("period is required")
+	}
+	argument, ok := arguments.Arguments["period"]
+	if !ok || len(argument.Values) != 1 {
+		return 0, fmt.Errorf("period must have exactly one value")
+	}
+	period, err := time.ParseDuration(argument.Values[0])
+	if err != nil || period <= 0 {
+		return 0, fmt.Errorf("period %q must be a positive duration", argument.Values[0])
+	}
+	return period, nil
 }
 
 func (fs *FactoryService) sessionInvocationTelemetry() sessioninvocation.SessionInvocationTelemetry {

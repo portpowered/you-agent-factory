@@ -18,6 +18,7 @@ func StopSidecars(handle *Handle) {
 	handle.SidecarMu.Lock()
 	cancel := handle.SidecarCancel
 	handle.SidecarCancel = nil
+	handle.SidecarContext = nil
 	handle.SidecarMu.Unlock()
 	if cancel == nil {
 		return
