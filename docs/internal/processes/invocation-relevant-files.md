@@ -3,6 +3,13 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## Packaged-factory customization validation
+
+- `pkg/factory/packages/customization.go` owns packaged-factory-specific
+  configuration validation and config loading calls it before a named factory
+  can be persisted or built into a Factory Session. Keep this boundary free of
+  `pkg/config` imports to avoid config and packaged-factory import cycles.
+
 ## Operator worker preset initialization
 
 - `pkg/config/configinit/init.go` creates baseline operator configuration only

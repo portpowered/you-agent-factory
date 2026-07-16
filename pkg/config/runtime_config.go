@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
+	"github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -115,6 +116,9 @@ func loadFactoryConfigFromDisk(
 	}
 	if err := validateBlockingFactoryLoad(factoryCfg); err != nil {
 		return nil, err
+	}
+	if err := packages.ValidateCustomization(factoryCfg); err != nil {
+		return nil, fmt.Errorf("validate packaged factory customization: %w", err)
 	}
 	inlineDefinitionsRequired := hasInlineRuntimeDefinitions(factoryCfg)
 	runtimeDefs, err := loadRuntimeDefinitionLookupMapsFromFactoryConfig(factoryDir, factoryCfg, InlineRuntimeDefinitionOptions{
