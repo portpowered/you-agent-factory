@@ -79,7 +79,7 @@ func TestCoreModelServiceAttachmentIsVisibleToSnapshotsAndHostFacade(t *testing.
 	}
 	stub := &catalogModelServiceStub{}
 	core := NewCore(&Config{}, "", zap.NewNop(), nil, nil, nil,
-		LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, nil)
+		LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, nil, nil)
 	AttachModelService(core, stub)
 	if core.ModelService() != stub || !core.ComposeCollaboratorSnapshot().ModelServiceInitialized {
 		t.Fatal("core did not retain the attached model service in its composition snapshot")

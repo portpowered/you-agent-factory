@@ -40,6 +40,7 @@ var approvedApplicationCompositionFiles = map[string]struct{}{
 	"pkg/wire/process.go":                                   {},
 	"pkg/wire/model_invocation.go":                          {},
 	"pkg/wire/session_execution.go":                         {},
+	"pkg/wire/production.go":                                {},
 	"pkg/factory/sessions/execution/service.go":             {},
 	"pkg/factory/sessions/execution/testharness/harness.go": {},
 	// Batch 008 moves remaining legacy composition roots behind pkg/wire.

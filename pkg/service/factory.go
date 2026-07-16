@@ -227,7 +227,7 @@ func composePetriRecordingRuntimeBuild(
 	if !ok {
 		return nil, fmt.Errorf("compose factory core: durable execution owner does not record Petri mutations")
 	}
-	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations), nil
+	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)

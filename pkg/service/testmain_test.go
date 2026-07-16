@@ -225,30 +225,33 @@ func startLocalModelInferenceTestServer(
 	cfg = serviceTestConfigWithWorkerApplication(t, cfg)
 	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
-		cancel()
-		healthServer.Close()
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
 		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
 	load, err := LoadFactoryConfigForCompose(cfg, root)
 	if err != nil {
-		cancel()
-		healthServer.Close()
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
 		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
 	clock := ServiceClockForCompose(cfg, load)
 	sessions := NewFactorySessionsRegistry()
 	startupLocalModels := domain
+	runtimeBuild, err := newRuntimeBuildService(
+		cfg,
+		clock,
+		root.BaseLogger,
+		&startupLocalModels,
+		newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
+		newSessionDispatchCompletionObserverFactory(sessions),
+	)
+	if err != nil {
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
+		t.Fatalf("newRuntimeBuildService: %v", err)
+	}
 	collaborators := FactoryServiceCollaborators{
-		Sessions:    sessions,
-		LocalModels: domain,
-		RuntimeBuild: newRuntimeBuildService(
-			cfg,
-			clock,
-			root.BaseLogger,
-			&startupLocalModels,
-			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
-			newSessionDispatchCompletionObserverFactory(sessions),
-		),
+		Sessions:         sessions,
+		LocalModels:      domain,
+		RuntimeBuild:     runtimeBuild,
 		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(
@@ -261,8 +264,7 @@ func startLocalModelInferenceTestServer(
 		buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock),
 	)
 	if err != nil {
-		cancel()
-		healthServer.Close()
+		cleanupLocalModelInferenceSetup(cancel, healthServer)
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
 	modelAPI, err := newTestModelService(shell)
@@ -290,6 +292,11 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 	}
 	return server, launcher, svc, shutdown
+}
+
+func cleanupLocalModelInferenceSetup(cancel context.CancelFunc, healthServer *httptest.Server) {
+	cancel()
+	healthServer.Close()
 }
 
 func newTestModelService(shell FactoryServiceShell) (*modelsservice.Service, error) {
@@ -1076,11 +1083,8 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 
 	recordPath := filepath.Join(t.TempDir(), "recording.json")
 	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
-		Dir:         dir,
-		RuntimeMode: interfaces.RuntimeModeService,
-		Logger:      zap.NewNop(),
-		RecordPath:  recordPath,
-		WorkFile:    workFile,
+		Dir: dir, RuntimeMode: interfaces.RuntimeModeService, Logger: zap.NewNop(),
+		RecordPath: recordPath, WorkFile: workFile,
 	}, workerapplication.Edges{ScriptCommandRunner: recordingDiagnosticsCommandRunner{}}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)

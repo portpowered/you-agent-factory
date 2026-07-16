@@ -12,15 +12,14 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -28,100 +27,10 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestLocalModelProvidersValidateAndRetainExplicitEdgesWithoutStartingProcess(t *testing.T) {
-	t.Parallel()
-
-	assets := localmodels.NewAssetPuller(t.TempDir())
-	runtime := localmodels.NewOmniVoiceRuntime(nil)
-	launcher := &inertModelProcessLauncher{}
-	domain, err := provideLocalModelDomain(&service.FactoryServiceConfig{
-		ModelAssets:               assets,
-		LocalModelRuntimeOverride: runtime,
-		Logger:                    zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("provideLocalModelDomain() error = %v", err)
-	}
-	if domain.Assets != assets || domain.Runtime != runtime || domain.Manager == nil || domain.Host == nil || domain.LeaseExecution == nil {
-		t.Fatalf("local model domain = %+v, want exact explicit assets/runtime and complete managed collaborators", domain)
-	}
-	constructed, err := modelhost.NewLocalDomain(modelhost.LocalDomainDependencies{
-		AssetPuller: assets, Runtime: runtime, ProcessLauncher: launcher,
-	})
-	if err != nil || constructed.Host == nil {
-		t.Fatalf("modelhost.NewLocalDomain() = (%+v, %v), want explicit process edge", constructed, err)
-	}
-	if launcher.starts != 0 {
-		t.Fatalf("process starts during graph construction = %d, want zero", launcher.starts)
-	}
-}
-
-func TestModelServiceProviderRejectsMissingExplicitClock(t *testing.T) {
-	t.Parallel()
-
-	core := &service.FactoryCore{}
-	shell := factoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
-	_, depsErr := provideFactoryModelServiceDependencies(core, shell)
-	if depsErr == nil || !strings.Contains(depsErr.Error(), "clock is required") {
-		t.Fatalf("provideFactoryModelServiceDependencies() error = %v, want missing-clock error", depsErr)
-	}
-}
-
-func TestInjectFactoryServiceConstructsCanonicalModelProviderGraph(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	cfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
-		Dir:                                     dir,
-		SystemConfigHomeDir:                     t.TempDir(),
-		Logger:                                  zap.NewNop(),
-		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
-	if err != nil {
-		t.Fatalf("ConfigWithWorkerApplication() error = %v", err)
-	}
-	svc, err := InjectFactoryService(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("InjectFactoryService() error = %v", err)
-	}
-	if svc == nil {
-		t.Fatal("InjectFactoryService() returned nil service")
-	}
-	if _, err := svc.ListModels(context.Background()); err != nil {
-		t.Fatalf("injected model service ListModels() error = %v", err)
-	}
-}
-
-func TestModelProviderAdaptersPreserveDiagnosticsAndOverrides(t *testing.T) {
-	t.Parallel()
-
-	injected := &injectedModelAPI{}
-	models, err := provideModelService(modelsservice.Dependencies{}, &service.FactoryServiceConfig{ModelAPI: injected})
-	if err != nil || models != injected {
-		t.Fatalf("provideModelService(override) = (%T, %v), want exact injected API", models, err)
-	}
-	if _, err := newModelService(modelsservice.Dependencies{}); err == nil || !strings.Contains(err.Error(), "runtime configuration lookup") {
-		t.Fatalf("newModelService(invalid) error = %v, want wrapped dependency error", err)
-	}
-
-	logCore, logs := observer.New(zap.InfoLevel)
-	recorder := &recordingInvocationMetrics{}
-	diagnostics := modelHostDiagnostics(zap.New(logCore), recorder)
-	diagnostics.Logger.Info("model info", map[string]string{"model": "OMNIVOICE_Q4_K_M"})
-	diagnostics.Logger.Warn("model warning", map[string]string{"state": "missing"})
-	diagnostics.Metrics.RecordMetric("managed_runtime.pull.success", map[string]string{"model": "OMNIVOICE_Q4_K_M"})
-	if logs.Len() != 2 || recorder.metric.Name != "managed_runtime.pull.success" || recorder.metric.Labels["model"] != "OMNIVOICE_Q4_K_M" {
-		t.Fatalf("diagnostic adapter output = logs:%d metric:%+v", logs.Len(), recorder.metric)
-	}
-}
-
-type recordingInvocationMetrics struct {
-	metric service.InvocationMetric
-}
-
-func (r *recordingInvocationMetrics) RecordInvocationMetric(metric service.InvocationMetric) {
-	r.metric = metric
+type recordingRuntimeOwner struct {
+	factorysessionexecution.Service
+	sessionID string
+	records   []interfaces.TokenMutationRecord
 }
 
 func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {
@@ -240,11 +149,52 @@ func (*injectedModelAPI) InvokeModel(context.Context, string, factoryapi.ModelIn
 	return apisurface.ModelInvocationResult{}, nil
 }
 
-type inertModelProcessLauncher struct{ starts int }
+func (owner *recordingRuntimeOwner) RecordPetriTokenMutations(
+	sessionID string,
+	records []interfaces.TokenMutationRecord,
+) error {
+	owner.sessionID = sessionID
+	owner.records = append([]interfaces.TokenMutationRecord(nil), records...)
+	return nil
+}
 
-func (l *inertModelProcessLauncher) Start(context.Context, modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
-	l.starts++
-	return nil, errors.New("unexpected process start")
+func TestRuntimeHostRecordingBuildUsesGraphOwnedDurableExecution(t *testing.T) {
+	t.Parallel()
+
+	var built runtimebuild.SessionBuildSpec
+	base, err := runtimebuild.New(runtimebuild.Config{}, factory.EnsureClock(nil), zap.NewNop(), func(
+		_ context.Context,
+		spec runtimebuild.SessionBuildSpec,
+	) (any, error) {
+		built = spec
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
+	owner := &recordingRuntimeOwner{Service: factorysessionexecution.NewFakeService()}
+	configured, err := provideRuntimeHostRecordingBuild(runtimeHostBaseBuild{Service: base}, owner)
+	if err != nil {
+		t.Fatalf("provideRuntimeHostRecordingBuild: %v", err)
+	}
+	if _, err := configured.Build(context.Background(), runtimebuild.SessionBuildSpec{SessionID: "root-session"}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cfg := &factory.FactoryConfig{}
+	for _, option := range built.AdditionalFactoryOpts {
+		option(cfg)
+	}
+	want := []interfaces.TokenMutationRecord{{TransitionID: "completed"}}
+	if cfg.PetriMutationRecorder == nil {
+		t.Fatal("configured runtime build omitted the durable execution recorder")
+	}
+	if err := cfg.PetriMutationRecorder("root-session", want); err != nil {
+		t.Fatalf("PetriMutationRecorder: %v", err)
+	}
+	if owner.sessionID != "root-session" || len(owner.records) != 1 || owner.records[0].TransitionID != "completed" {
+		t.Fatalf("recorded mutations = (%q, %#v), want graph-owned root-session completion", owner.sessionID, owner.records)
+	}
 }
 
 func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {

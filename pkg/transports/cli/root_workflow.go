@@ -250,19 +250,17 @@ func newWorkflowRunCommand(globals *cliGlobalOptions, options RootCommandOptions
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow run --request-id req-petri-success-001 --factory customer-support-triage",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, runCfg.ExecutionBackendConfig, runCfg.FixtureCatalogPath, runCfg.StartConfig.ChildExecutorMode)
-			if err != nil {
-				return err
-			}
-			runCfg.Service = service
-			runCfg.JSON = globals.json
-			runCfg.Output = cmd.OutOrStdout()
-			runCfg.StartConfig.PositionalArgs = args
-			runCfg.StartConfig.Stdin = cmd.InOrStdin()
-			if cmd.Flags().Changed("wait-timeout-millis") {
-				runCfg.StartConfig.WaitTimeoutMillis = &waitTimeoutMillis
-			}
-			return sessionexecutioncli.RunSync(cmd.Context(), runCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, runCfg.ExecutionBackendConfig, runCfg.FixtureCatalogPath, runCfg.StartConfig.ChildExecutorMode, func(service fse.Service) error {
+				runCfg.Service = service
+				runCfg.JSON = globals.json
+				runCfg.Output = cmd.OutOrStdout()
+				runCfg.StartConfig.PositionalArgs = args
+				runCfg.StartConfig.Stdin = cmd.InOrStdin()
+				if cmd.Flags().Changed("wait-timeout-millis") {
+					runCfg.StartConfig.WaitTimeoutMillis = &waitTimeoutMillis
+				}
+				return sessionexecutioncli.RunSync(cmd.Context(), runCfg)
+			})
 		},
 	}
 	cmd.Flags().StringVar(&runCfg.StartConfig.RequestID, "request-id", "", "durable execution request id and idempotency key")
@@ -297,16 +295,14 @@ func newWorkflowStartCommand(globals *cliGlobalOptions, options RootCommandOptio
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow start --request-id req-js-run-n-001 --workflow release-train",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, startCfg.ExecutionBackendConfig, startCfg.FixtureCatalogPath, startCfg.StartConfig.ChildExecutorMode)
-			if err != nil {
-				return err
-			}
-			startCfg.Service = service
-			startCfg.JSON = globals.json
-			startCfg.Output = cmd.OutOrStdout()
-			startCfg.StartConfig.PositionalArgs = args
-			startCfg.StartConfig.Stdin = cmd.InOrStdin()
-			return sessionexecutioncli.RunAsync(cmd.Context(), startCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, startCfg.ExecutionBackendConfig, startCfg.FixtureCatalogPath, startCfg.StartConfig.ChildExecutorMode, func(service fse.Service) error {
+				startCfg.Service = service
+				startCfg.JSON = globals.json
+				startCfg.Output = cmd.OutOrStdout()
+				startCfg.StartConfig.PositionalArgs = args
+				startCfg.StartConfig.Stdin = cmd.InOrStdin()
+				return sessionexecutioncli.RunAsync(cmd.Context(), startCfg)
+			})
 		},
 	}
 	addWorkflowStartFlags(cmd, &startCfg.StartConfig, &startCfg.FixtureCatalogPath)
@@ -327,15 +323,13 @@ func newWorkflowStatusCommand(globals *cliGlobalOptions, options RootCommandOpti
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow status dur-sess-js-run-n-001",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, statusCfg.ExecutionBackendConfig, statusCfg.FixtureCatalogPath, "")
-			if err != nil {
-				return err
-			}
-			statusCfg.Service = service
-			statusCfg.JSON = globals.json
-			statusCfg.Output = cmd.OutOrStdout()
-			statusCfg.SessionID = args[0]
-			return sessionexecutioncli.RunStatus(cmd.Context(), statusCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, statusCfg.ExecutionBackendConfig, statusCfg.FixtureCatalogPath, "", func(service fse.Service) error {
+				statusCfg.Service = service
+				statusCfg.JSON = globals.json
+				statusCfg.Output = cmd.OutOrStdout()
+				statusCfg.SessionID = args[0]
+				return sessionexecutioncli.RunStatus(cmd.Context(), statusCfg)
+			})
 		},
 	}
 	cmd.Flags().StringVar(&statusCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed status reads")
@@ -359,15 +353,13 @@ func newWorkflowResultCommand(globals *cliGlobalOptions, options RootCommandOpti
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow result dur-sess-petri-success-001",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, resultCfg.ExecutionBackendConfig, resultCfg.FixtureCatalogPath, "")
-			if err != nil {
-				return err
-			}
-			resultCfg.Service = service
-			resultCfg.JSON = globals.json
-			resultCfg.Output = cmd.OutOrStdout()
-			resultCfg.SessionID = args[0]
-			return sessionexecutioncli.RunResult(cmd.Context(), resultCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, resultCfg.ExecutionBackendConfig, resultCfg.FixtureCatalogPath, "", func(service fse.Service) error {
+				resultCfg.Service = service
+				resultCfg.JSON = globals.json
+				resultCfg.Output = cmd.OutOrStdout()
+				resultCfg.SessionID = args[0]
+				return sessionexecutioncli.RunResult(cmd.Context(), resultCfg)
+			})
 		},
 	}
 	cmd.Flags().StringVar(&resultCfg.Mode, "mode", "", "result read mode: final or partial")
@@ -390,15 +382,13 @@ func newWorkflowDispatchesCommand(globals *cliGlobalOptions, options RootCommand
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow dispatches dur-sess-petri-success-001",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, dispatchesCfg.ExecutionBackendConfig, dispatchesCfg.FixtureCatalogPath, "")
-			if err != nil {
-				return err
-			}
-			dispatchesCfg.Service = service
-			dispatchesCfg.JSON = globals.json
-			dispatchesCfg.Output = cmd.OutOrStdout()
-			dispatchesCfg.SessionID = args[0]
-			return sessionexecutioncli.RunDispatches(cmd.Context(), dispatchesCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, dispatchesCfg.ExecutionBackendConfig, dispatchesCfg.FixtureCatalogPath, "", func(service fse.Service) error {
+				dispatchesCfg.Service = service
+				dispatchesCfg.JSON = globals.json
+				dispatchesCfg.Output = cmd.OutOrStdout()
+				dispatchesCfg.SessionID = args[0]
+				return sessionexecutioncli.RunDispatches(cmd.Context(), dispatchesCfg)
+			})
 		},
 	}
 	cmd.Flags().StringVar(&dispatchesCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed dispatch reads")
@@ -421,15 +411,13 @@ func newWorkflowArtifactsCommand(globals *cliGlobalOptions, options RootCommandO
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow artifacts dur-sess-petri-success-001",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, artifactsCfg.ExecutionBackendConfig, artifactsCfg.FixtureCatalogPath, "")
-			if err != nil {
-				return err
-			}
-			artifactsCfg.Service = service
-			artifactsCfg.JSON = globals.json
-			artifactsCfg.Output = cmd.OutOrStdout()
-			artifactsCfg.SessionID = args[0]
-			return sessionexecutioncli.RunArtifacts(cmd.Context(), artifactsCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, artifactsCfg.ExecutionBackendConfig, artifactsCfg.FixtureCatalogPath, "", func(service fse.Service) error {
+				artifactsCfg.Service = service
+				artifactsCfg.JSON = globals.json
+				artifactsCfg.Output = cmd.OutOrStdout()
+				artifactsCfg.SessionID = args[0]
+				return sessionexecutioncli.RunArtifacts(cmd.Context(), artifactsCfg)
+			})
 		},
 	}
 	cmd.Flags().StringVar(&artifactsCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed artifact reads")
@@ -454,18 +442,16 @@ func newWorkflowEventsCommand(globals *cliGlobalOptions, options RootCommandOpti
 			"  # Emit deterministic JSON for automation.\n" +
 			"  " + cliBinaryName + " --json workflow events dur-sess-js-run-n-001",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			service, err := buildWorkflowExecutionService(cmd.Context(), options, eventsCfg.ExecutionBackendConfig, eventsCfg.FixtureCatalogPath, "")
-			if err != nil {
-				return err
-			}
-			eventsCfg.Service = service
-			eventsCfg.JSON = globals.json
-			eventsCfg.Output = cmd.OutOrStdout()
-			eventsCfg.SessionID = args[0]
-			if cmd.Flags().Changed("after-sequence") {
-				eventsCfg.AfterSequence = &afterSequence
-			}
-			return sessionexecutioncli.RunEvents(cmd.Context(), eventsCfg)
+			return withWorkflowExecutionService(cmd.Context(), options, eventsCfg.ExecutionBackendConfig, eventsCfg.FixtureCatalogPath, "", func(service fse.Service) error {
+				eventsCfg.Service = service
+				eventsCfg.JSON = globals.json
+				eventsCfg.Output = cmd.OutOrStdout()
+				eventsCfg.SessionID = args[0]
+				if cmd.Flags().Changed("after-sequence") {
+					eventsCfg.AfterSequence = &afterSequence
+				}
+				return sessionexecutioncli.RunEvents(cmd.Context(), eventsCfg)
+			})
 		},
 	}
 	cmd.Flags().StringVar(&eventsCfg.AfterEventID, "after-event-id", "", "reconnect cursor event id")
@@ -594,6 +580,7 @@ func sessionListPrepare(options RootCommandOptions) func(context.Context, *sessi
 			return err
 		}
 		cfg.DurableLister = service.ListSessions
+		cfg.DurableCloser = service
 		return nil
 	}
 }
@@ -838,6 +825,7 @@ func newSessionListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 					return err
 				}
 				cfg.DurableLister = service.ListSessions
+				cfg.DurableCloser = service
 			}
 			if cmd.Root().PersistentFlags().Changed("server") {
 				cfg.Server = globals.server

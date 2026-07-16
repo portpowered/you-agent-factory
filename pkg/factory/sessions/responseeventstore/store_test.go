@@ -223,6 +223,27 @@ func TestSessionResponseEventStore_EventsSnapshotPreservesAscendingOrder(t *test
 	}
 }
 
+func TestSessionResponseEventStore_EventAtSequenceReturnsOnlyRetainedEvent(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	published, err := store.Publish(samplePublishInput())
+	if err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	retained, ok := store.EventAtSequence(published.Sequence)
+	if !ok {
+		t.Fatalf("EventAtSequence(%d) did not find published event", published.Sequence)
+	}
+	if retained.EventID != published.EventID {
+		t.Fatalf("event id = %q, want %q", retained.EventID, published.EventID)
+	}
+	if _, ok := store.EventAtSequence(published.Sequence + 1); ok {
+		t.Fatalf("EventAtSequence(%d) found an unpublished event", published.Sequence+1)
+	}
+}
+
 func TestSessionResponseEventStore_DoesNotDropPublishedEvents(t *testing.T) {
 	t.Parallel()
 

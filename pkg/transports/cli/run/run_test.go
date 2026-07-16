@@ -65,7 +65,11 @@ func preserveRunGlobals(t *testing.T) {
 	originalServeFactoryAPIServer := serveFactoryAPIServer
 	if buildInvocationBootstrap == nil {
 		buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
-			return service.BuildInvocationBootstrap(ctx, cfg)
+			svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+			if err != nil {
+				return nil, err
+			}
+			return service.NewInvocationBootstrap(svc)
 		}
 	}
 	t.Cleanup(func() {

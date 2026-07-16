@@ -73,10 +73,6 @@ func TestModelServiceCompatibilityBoundaryFailsExplicitlyWhenUnattached(t *testi
 	if err != nil || deps.Clock != nil || deps.RuntimeConfig == nil || deps.ModelInvocationExecutor == nil {
 		t.Fatalf("ModelServiceDependencies(empty) = (%+v, %v), want callable required adapters and package-owned optional clock default", deps, err)
 	}
-	parts := NewFactoryServiceCollaboratorsFromParts(nil, LocalModelDomain{}, nil, nil)
-	if parts.Sessions != nil || parts.RuntimeBuild != nil || parts.WorkersScheduler != nil {
-		t.Fatalf("NewFactoryServiceCollaboratorsFromParts(nil) = %+v, want exact nil parts", parts)
-	}
 	if AttachModelServiceCollaborator(FactoryServiceShell{}, unavailableModelService{}) != nil {
 		t.Fatal("AttachModelServiceCollaborator() created a service for a nil shell")
 	}
@@ -92,7 +88,7 @@ func TestExplicitServiceCollaboratorConstructorsAssembleInertGraph(t *testing.T)
 	clock := factory.EnsureClock(nil)
 	logger := zap.NewNop()
 	sessions := NewFactorySessionsRegistry()
-	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, logger, sessions, hostedworkers.Config{})
+	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, logger, sessions)
 	if err != nil {
 		t.Fatalf("NewFactoryServiceCollaborators() error = %v", err)
 	}
@@ -100,16 +96,13 @@ func TestExplicitServiceCollaboratorConstructorsAssembleInertGraph(t *testing.T)
 		collaborators.RuntimeBuild == nil || collaborators.WorkersScheduler == nil {
 		t.Fatalf("constructed collaborators = %+v, want complete inert graph", collaborators)
 	}
-	runtimeBuildWithoutSessions := NewRuntimeBuildService(cfg, clock, logger, &collaborators.LocalModels, nil)
+	runtimeBuildWithoutSessions, err := newRuntimeBuildService(cfg, clock, logger, &collaborators.LocalModels, nil, nil)
+	if err != nil {
+		t.Fatalf("newRuntimeBuildService() error = %v", err)
+	}
 	hosted := NewHostedWorkersConfig(cfg, logger, clock)
-	parts := NewFactoryServiceCollaboratorsFromParts(
-		sessions,
-		collaborators.LocalModels,
-		runtimeBuildWithoutSessions,
-		collaborators.WorkersScheduler,
-	)
-	if parts.RuntimeBuild != runtimeBuildWithoutSessions || parts.Sessions != sessions || hosted.Logger == nil {
-		t.Fatalf("explicit collaborator parts were not retained: parts=%+v hosted=%+v", parts, hosted)
+	if runtimeBuildWithoutSessions == nil || collaborators.Sessions != sessions || hosted.Logger == nil {
+		t.Fatalf("explicit collaborators were not retained: collaborators=%+v hosted=%+v", collaborators, hosted)
 	}
 }
 

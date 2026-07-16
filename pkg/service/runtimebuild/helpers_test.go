@@ -84,8 +84,8 @@ func TestRuntimeBuildDefensiveConstructionBoundaries(t *testing.T) {
 		t.Fatalf("applyOperatorDefaultsToLoadedConfig(nil) error = %v", err)
 	}
 	var svc *Service
-	if svc.WithPetriMutationRecorder(nil) != nil {
-		t.Fatal("nil service WithPetriMutationRecorder() returned a service")
+	if configured, err := svc.WithPetriMutationRecorder(nil); configured != nil || err == nil {
+		t.Fatalf("nil service WithPetriMutationRecorder() = (%v, %v), want construction error", configured, err)
 	}
 	if _, err := svc.Build(context.Background(), SessionBuildSpec{}); err == nil {
 		t.Fatal("nil service Build() succeeded")
