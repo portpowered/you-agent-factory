@@ -7,10 +7,6 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/composebridge",
-      "minimum": 82.45
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/config",
       "minimum": 85.38
     },
@@ -422,11 +418,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/runtimehost",
-      "minimum": 30.32
+      "minimum": 34.64
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service",
-      "minimum": 78.09
+      "minimum": 78.46
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
@@ -434,7 +430,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/runtimebuild",
-      "minimum": 87.91
+      "minimum": 89.61
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/sessionpersistence",
@@ -550,7 +546,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/session",
-      "minimum": 77.57
+      "minimum": 77.58
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution",
@@ -726,7 +722,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider",
-      "minimum": 85.77
+      "minimum": 85.89
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/adapter",
@@ -802,7 +798,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/service",
-      "minimum": 81.89
+      "minimum": 82.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/skippermissions",

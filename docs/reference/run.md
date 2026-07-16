@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-13
+last-modified: 2026-07-16
 doc-id: agent-factory/guides/run
 ---
 
@@ -17,6 +17,7 @@ continuous, and mock-worker run tasks.
 | Run the current `./factory` with initial Work | `you run --work <batch.json>` |
 | Start a Factory directory | `you run --dir <factory-dir> --work <batch.json>` |
 | Invoke one portable or named Factory | `you run --factory <factory.json> <text>` or `you run --named <name> <text>` |
+| Execute a JavaScript workflow as a Factory Session | `you run --factory <workflow.js>` |
 | Keep a local Factory Session alive while idle | Add `--continuously` |
 | Replace live worker dispatch with deterministic outcomes | Add `--with-mock-workers [config.json]` |
 
@@ -82,6 +83,23 @@ It classifies the request as `small`, `medium`, or `large` and follows that
 factory-defined `classificationRoutes` target. See `you docs authoring-factories`
 for its baseline presets, customization, override precedence, and invalid-label
 behavior.
+
+## Run a JavaScript Factory Session
+
+Passing a `.js`, `.mjs`, or `.cjs` workflow file to `--factory` selects the
+JavaScript session runtime and waits for the Factory Session to finish:
+
+```bash
+you run --factory ./factory.js
+```
+
+Child calls such as `agent.run` use the injected live provider execution edge.
+Add `--with-mock-workers` to select deterministic fake child execution without
+calling a provider:
+
+```bash
+you run --factory ./factory.js --with-mock-workers
+```
 
 ## Batch and continuous operation
 

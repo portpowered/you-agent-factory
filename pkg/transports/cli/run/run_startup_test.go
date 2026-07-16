@@ -19,6 +19,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
@@ -209,7 +210,7 @@ func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T)
 		if bundle == nil {
 			return
 		}
-		if err := service.CloseRuntimeBundleSinksForCompose(bundle.LogSink, bundle.MetricsSink); err != nil {
+		if err := factoryservice.CloseBundleSinks(bundle.LogSink, bundle.MetricsSink); err != nil {
 			t.Errorf("close runtime bundle sinks: %v", err)
 		}
 	})
