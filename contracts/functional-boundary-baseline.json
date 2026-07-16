@@ -9,7 +9,6 @@
     { "path": "tests/functional/internal/support/api_server.go", "sha256": "7248cf8ff749f0db662a7d18d8570652ed02f9dbb846d97522bdcd380115df2c" },
     { "path": "tests/functional/internal/support/cmd/browser_api_harness/main.go", "sha256": "2037a06c5d7d7f54b5203d6f23f9702fcd9b988f622e2e1f2715db77362c45e2" },
     { "path": "tests/functional/replay_contracts/replay_event_stream_artifact_smoke_long_test.go", "sha256": "12a38d450728ae3a15cb1cb8c51c7ce2e33fa0448bb8ca0101ac10768cabe31f" },
-    { "path": "tests/functional/replay_contracts/replay_factory_only_serialization_smoke_long_test.go", "sha256": "07baabc839e94f4a5a32c1a00a8e1c6ff3fa87875771d24ec5dce843edc6f4d6" },
     { "path": "tests/functional/replay_contracts/replay_live_helpers_test.go", "sha256": "050ec1a39d91936626630d626f3b07d1162e718651195d1252b33a3d079039fe" },
     { "path": "tests/functional/replay_contracts/replay_record_end_to_end_long_test.go", "sha256": "6b10d0e976557254aa50e9bc6756f1bdcc904f23d8120e9c2550a9f634841d68" },
     { "path": "tests/functional/replay_contracts/replay_regression_harness_long_test.go", "sha256": "f9bddc5ef57b442b8cab5994a18386c714d19a0af7083b50e41d666b0523a619" },

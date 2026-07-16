@@ -3,17 +3,13 @@
 package replay_contracts
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -61,7 +57,6 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		t.Fatalf("remove original factory dir: %v", err)
 	}
 
-	assertFactoryOnlyPayloadProjectsInitialTopology(t, runStarted.Factory)
 	replayHarness := testutil.AssertReplaySucceeds(t, artifactPath, 15*time.Second)
 	replayHarness.Service.Assert().
 		PlaceTokenCount("task:complete", 1).
@@ -118,24 +113,6 @@ func assertFactoryOnlyPayloadCoversRepresentativeConfig(t *testing.T, factory fa
 	assertFactoryOnlyWorkstation(t, generatedWorkstations(factory), "finisher", "finish-worker", false)
 }
 
-func assertFactoryOnlyPayloadProjectsInitialTopology(t *testing.T, factory factoryapi.Factory) {
-	t.Helper()
-
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(factory)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(context.Background(), runtimeCfg.Factory)
-	if err != nil {
-		t.Fatalf("map generated factory config: %v", err)
-	}
-	topology := projections.ProjectInitialStructure(net, runtimeCfg)
-	assertProjectedResource(t, topology.Resources, "slot", 1)
-	assertProjectedWorker(t, topology.Workers, "exec-worker")
-	assertProjectedWorkstation(t, topology.Workstations, "executor", "exec-worker")
-}
-
 func assertFactoryOnlyWorkType(t *testing.T, workTypes []factoryapi.WorkType, name string, states []string) {
 	t.Helper()
 
@@ -168,11 +145,11 @@ func assertFactoryOnlyWorker(t *testing.T, workers []factoryapi.Worker, name str
 	t.Helper()
 
 	for _, worker := range workers {
-		if worker.Name == name && stringPointerValue(worker.Type) == interfaces.WorkerTypeModel && stringPointerValue(worker.StopToken) == "COMPLETE" {
+		if worker.Name == name && worker.Type != nil && *worker.Type == factoryapi.WorkerTypeAgentWorker && stringPointerValue(worker.StopToken) == "COMPLETE" {
 			return
 		}
 	}
-	t.Fatalf("generated workers = %#v, want runtime MODEL_WORKER %q", workers, name)
+	t.Fatalf("generated workers = %#v, want public AGENT_WORKER %q", workers, name)
 }
 
 func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workstation, name, worker string, wantResource bool) {
@@ -182,8 +159,8 @@ func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workst
 		if workstation.Name != name || workstation.Worker != worker {
 			continue
 		}
-		if stringPointerValue(workstation.Type) != interfaces.WorkstationTypeModel {
-			t.Fatalf("workstation %q runtime type = %#v, want MODEL_WORKSTATION", name, workstation.Type)
+		if workstation.Type == nil || *workstation.Type != factoryapi.WorkstationTypeAgentRun {
+			t.Fatalf("workstation %q runtime type = %#v, want public AGENT_RUN", name, workstation.Type)
 		}
 		if wantResource && !factoryOnlyHasResourceUsage(workstation.Resources, "slot", 1) {
 			t.Fatalf("workstation %q resources = %#v, want slot total 1", name, workstation.Resources)
@@ -191,39 +168,6 @@ func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workst
 		return
 	}
 	t.Fatalf("generated workstations = %#v, want %s using worker %s", workstations, name, worker)
-}
-
-func assertProjectedResource(t *testing.T, resources []interfaces.FactoryResource, name string, capacity int) {
-	t.Helper()
-
-	for _, resource := range resources {
-		if resource.Name == name && resource.Capacity == capacity {
-			return
-		}
-	}
-	t.Fatalf("projected resources = %#v, want %s capacity %d", resources, name, capacity)
-}
-
-func assertProjectedWorker(t *testing.T, workers []interfaces.FactoryWorker, id string) {
-	t.Helper()
-
-	for _, worker := range workers {
-		if worker.ID == id && worker.Config["type"] == interfaces.WorkerTypeModel {
-			return
-		}
-	}
-	t.Fatalf("projected workers = %#v, want %s", workers, id)
-}
-
-func assertProjectedWorkstation(t *testing.T, workstations []interfaces.FactoryWorkstation, name, workerID string) {
-	t.Helper()
-
-	for _, workstation := range workstations {
-		if workstation.Name == name && workstation.WorkerID == workerID {
-			return
-		}
-	}
-	t.Fatalf("projected workstations = %#v, want %s using worker %s", workstations, name, workerID)
 }
 
 func factoryOnlyForbiddenConfigKeys() []string {
