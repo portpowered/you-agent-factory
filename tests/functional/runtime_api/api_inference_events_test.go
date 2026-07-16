@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -590,7 +592,7 @@ func (fs *functionalAPIServer) GetDashboard(t *testing.T) DashboardResponse {
 
 	snapshot := fs.GetEngineStateSnapshot(t)
 	events := fs.GetFactoryEvents(t)
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)
 	}

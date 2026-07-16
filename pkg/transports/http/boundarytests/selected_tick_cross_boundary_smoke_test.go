@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -21,7 +23,7 @@ import (
 func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupportedBoundaries(t *testing.T) {
 	t0 := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 
-	worldState, err := projections.ReconstructFactoryWorldState(crossBoundarySelectedTickEvents(t0), 11)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(crossBoundarySelectedTickEvents(t0), 11)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

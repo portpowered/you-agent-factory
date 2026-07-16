@@ -10,9 +10,10 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -611,7 +612,7 @@ func assertWorkerGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryE
 func assertWorkerGeneratedBatchWorldState(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -740,7 +741,7 @@ func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEve
 func assertChainingTraceFanInWorldState(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string, currentChainingTraceID string) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

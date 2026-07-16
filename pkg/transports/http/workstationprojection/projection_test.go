@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testpath"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
@@ -375,7 +376,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ProjectsNilAndDetach
 
 func TestBuildFactoryWorldWorkstationRequestProjectionSlice_ReplayFixtureProjectsHistoricalConsumedPayloads(t *testing.T) {
 	events := loadWorkstationProjectionReplayFixtureEvents(t, "pkg", "factory", "projections", "testdata", "work-payload-lineage-replay.jsonl")
-	state, err := projections.ReconstructFactoryWorldState(events, lastWorkstationProjectionFixtureTick(events))
+	state, err := factoryeventprojection.ReconstructFactoryWorldState(events, lastWorkstationProjectionFixtureTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

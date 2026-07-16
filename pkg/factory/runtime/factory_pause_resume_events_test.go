@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -103,7 +104,7 @@ func TestPauseResume_EmitCanonicalSessionLifecycleEvents(t *testing.T) {
 		t.Fatalf("events missing pause/resume markers: paused=%v resumed=%v", paused, resumed)
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, len(events)-1)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, len(events)-1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -184,7 +185,7 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, len(events)-1)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, len(events)-1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

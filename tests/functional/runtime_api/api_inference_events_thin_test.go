@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -109,7 +111,7 @@ func assertThinEventSmokeActiveSnapshot(t *testing.T, active thinEventSmokeActiv
 	assertRawThinDispatchRequestEvent(t, active.events[active.dispatchReqIdx])
 	assertRawInferenceEventUsesContextDispatchIdentity(t, active.requestEvent, active.requestPayload.InferenceRequestId)
 
-	activeState, err := projections.ReconstructFactoryWorldState(active.events, active.requestEvent.Context.Tick)
+	activeState, err := factoryeventprojection.ReconstructFactoryWorldState(active.events, active.requestEvent.Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState active tick %d: %v", active.requestEvent.Context.Tick, err)
 	}
@@ -178,7 +180,7 @@ func loadThinEventSmokeFinalSnapshot(
 	if err != nil {
 		t.Fatalf("decode final inference response payload: %v", err)
 	}
-	finalState, err := projections.ReconstructFactoryWorldState(generatedArtifactEvents, support.LastFactoryEventTick(generatedArtifactEvents))
+	finalState, err := factoryeventprojection.ReconstructFactoryWorldState(generatedArtifactEvents, support.LastFactoryEventTick(generatedArtifactEvents))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState final tick: %v", err)
 	}

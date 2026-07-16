@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
@@ -26,7 +27,7 @@ func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueIn
 	assertDispatchLifecycleEventType(t, events[3], factoryapi.FactoryEventTypeArtifactCreated)
 	assertDispatchLifecycleOptionalMetadata(t, events)
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 3)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 3)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

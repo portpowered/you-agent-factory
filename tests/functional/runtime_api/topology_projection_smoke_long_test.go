@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"testing"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -72,7 +74,7 @@ Process {{ (index .Inputs 0).WorkID }}.
 	if len(events) == 0 {
 		t.Fatal("expected at least one factory event")
 	}
-	liveWorld, err := projections.ReconstructFactoryWorldState(events, 0)
+	liveWorld, err := factoryeventprojection.ReconstructFactoryWorldState(events, 0)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

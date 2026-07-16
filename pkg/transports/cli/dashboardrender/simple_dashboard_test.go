@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testpath"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -57,7 +58,7 @@ func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustome
 func TestSimpleDashboardRenderDataFromWorldState_ReplaysWeirdNumberSummaryFixture(t *testing.T) {
 	events := loadReplayFixtureEvents(t, "ui", "integration", "fixtures", "weird-number-summary-replay.jsonl")
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 4)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 4)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

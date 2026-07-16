@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -337,7 +339,7 @@ func consumePathProjectionView(t *testing.T, h *testutil.ServiceTestHarness) (in
 	if err != nil {
 		return interfaces.FactoryWorldView{}, err
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		return interfaces.FactoryWorldView{}, err
 	}

@@ -4,9 +4,19 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/portpowered/infinite-you/pkg/factory/projections"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 )
+
+// ReconstructFactoryWorldState keeps generated-event compatibility assertions
+// at the test boundary while production reducers consume canonical events.
+func ReconstructFactoryWorldState(
+	events []factoryapi.FactoryEvent,
+	selectedTick int,
+) (interfaces.FactoryWorldState, error) {
+	return factoryeventprojection.ReconstructFactoryWorldState(events, selectedTick)
+}
 
 func TestReconstructFactoryWorldState_PauseResumeHistoryReconstructsLifecycleControlStatus(t *testing.T) {
 	t0 := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)

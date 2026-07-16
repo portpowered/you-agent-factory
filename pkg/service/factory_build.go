@@ -14,6 +14,8 @@ import (
 	"time"
 	"unsafe"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -701,7 +703,7 @@ func (fs *FactoryService) simpleDashboardRenderData(
 	if err != nil {
 		return dashboardrender.SimpleDashboardRenderData{}, err
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, selectedTick)
 	if err != nil {
 		return dashboardrender.SimpleDashboardRenderData{}, err
 	}

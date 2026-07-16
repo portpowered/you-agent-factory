@@ -9,7 +9,6 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
@@ -18,21 +17,6 @@ const (
 	tokenKindResource = "resource"
 	tokenKindWork     = "work"
 )
-
-// ReconstructFactoryWorldState applies canonical factory events in tick order
-// and returns the reconstructed world state at selectedTick. Events after the
-// selected tick are ignored.
-func ReconstructFactoryWorldState(events []factoryapi.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
-	canonicalEvents := make([]interfaces.FactoryEvent, 0, len(events))
-	for _, event := range events {
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return interfaces.FactoryWorldState{}, err
-		}
-		canonicalEvents = append(canonicalEvents, canonicalEvent)
-	}
-	return ReconstructCanonicalFactoryWorldState(canonicalEvents, selectedTick)
-}
 
 // ReconstructCanonicalFactoryWorldState applies the Factory-owned event
 // envelope directly. Generated event conversion belongs at compatibility and

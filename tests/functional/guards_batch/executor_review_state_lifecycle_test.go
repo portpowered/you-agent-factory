@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -457,7 +459,7 @@ func executorReviewProjectionView(t *testing.T, h *testutil.ServiceTestHarness) 
 	if err != nil {
 		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
 	}
@@ -503,11 +505,11 @@ func assertExecutorReviewReplayProjectionIdempotent(t *testing.T, h *testutil.Se
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
 
-	first, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	first, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState first: %v", err)
 	}
-	second, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	second, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState second: %v", err)
 	}

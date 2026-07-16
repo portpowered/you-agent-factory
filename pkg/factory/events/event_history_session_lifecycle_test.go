@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -53,7 +54,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketS
 		}
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 2)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 2)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -229,7 +230,7 @@ func TestFactoryEventHistory_RecordSessionPauseResume_EmitsReconstructableContro
 	assertSessionLifecycleEventType(t, events[1], factoryapi.FactoryEventTypeSessionPaused, "factory-event/session-paused/1")
 	assertSessionLifecycleEventType(t, events[2], factoryapi.FactoryEventTypeSessionResumed, "factory-event/session-resumed/2")
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 2)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 2)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

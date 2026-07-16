@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -55,7 +57,7 @@ func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *functionalAP
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchRequest)
 	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchResponse)
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, cleanupSmokeMaxTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, cleanupSmokeMaxTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

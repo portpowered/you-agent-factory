@@ -317,6 +317,7 @@ Generated OpenAPI event unions are decoded only at transport-facing or explicit
 public-compatibility test boundaries, not passed back into worker execution.
 Factory world-state reducers likewise decode `pkg/factory/contracts.FactoryEvent`
 payloads from their semantic owners. Canonical runtime and history callers use
-`ReconstructCanonicalFactoryWorldState`; the generated-event entrypoint is a
-compatibility adapter that converts the full envelope before reduction. Keep
-generated union decoding out of the reducer itself.
+`ReconstructCanonicalFactoryWorldState`; generated-event callers cross
+`pkg/transports/mapping/factoryeventprojection`, which converts the full envelope
+before reduction. Keep generated union decoding and generated Work conversion
+helpers out of the Factory projection owner.

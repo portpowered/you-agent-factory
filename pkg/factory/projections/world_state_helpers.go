@@ -1,10 +1,6 @@
 package projections
 
-import (
-	"fmt"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-)
+import "fmt"
 
 func topologyPlaceID(workTypeID string, stateValue string) string {
 	if workTypeID == "" || stateValue == "" {
@@ -22,30 +18,9 @@ func firstString(values *[]string) string {
 	return ""
 }
 
-func stringMapFromGenerated(values *factoryapi.StringMap) map[string]string {
-	if values == nil {
-		return nil
-	}
-	return cloneStringMap(map[string]string(*values))
-}
-
 func stringValue(value *string) string {
 	if value == nil {
 		return ""
-	}
-	return *value
-}
-
-func generatedWorkStateName(value *factoryapi.WorkState) string {
-	if value == nil {
-		return ""
-	}
-	return value.Name
-}
-
-func intValue(value *int) int {
-	if value == nil {
-		return 0
 	}
 	return *value
 }

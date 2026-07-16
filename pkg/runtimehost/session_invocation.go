@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -12,7 +14,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -133,7 +134,7 @@ func (fs *Host) sessionInvocationWorldState(
 	if err != nil {
 		return interfaces.FactoryWorldState{}, err
 	}
-	return projections.ReconstructFactoryWorldState(events, selectedTick)
+	return factoryeventprojection.ReconstructFactoryWorldState(events, selectedTick)
 }
 
 func (fs *Host) recordInvocationMetric(name string, labels map[string]string) {

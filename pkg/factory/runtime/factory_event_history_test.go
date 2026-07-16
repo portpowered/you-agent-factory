@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -424,7 +426,7 @@ func runtimeGeneratedReplayEvents(t *testing.T, events []interfaces.FactoryEvent
 
 func reconstructWorldStateAtFinalTick(t *testing.T, events []factoryapi.FactoryEvent) interfaces.FactoryWorldState {
 	t.Helper()
-	worldState, err := projections.ReconstructFactoryWorldState(events, maxEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, maxEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -581,7 +583,7 @@ func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) 
 
 func assertOrderedEventProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(3)].Context.Tick)
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, events[runtimeEventIndex(3)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -690,7 +692,7 @@ func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEve
 
 func assertBatchRequestReplayProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -784,7 +786,7 @@ func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) 
 
 func assertGeneratedBatchProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -191,7 +193,7 @@ func assertUnifiedEventLogReconstruction(t *testing.T, artifact *interfaces.Repl
 	if _, err := dispatchCreated.Payload.AsDispatchRequestEventPayload(); err != nil {
 		t.Fatalf("decode recorded dispatch event %q: %v", dispatchCreated.Id, err)
 	}
-	activeState, err := projections.ReconstructFactoryWorldState(generatedEvents, dispatchCreated.Context.Tick)
+	activeState, err := factoryeventprojection.ReconstructFactoryWorldState(generatedEvents, dispatchCreated.Context.Tick)
 	if err != nil {
 		t.Fatalf("reconstruct selected tick %d: %v", dispatchCreated.Context.Tick, err)
 	}
@@ -205,7 +207,7 @@ func assertUnifiedEventLogReconstruction(t *testing.T, artifact *interfaces.Repl
 	}
 
 	finalTick := maxUnifiedSmokeTick(generatedEvents)
-	finalState, err := projections.ReconstructFactoryWorldState(generatedEvents, finalTick)
+	finalState, err := factoryeventprojection.ReconstructFactoryWorldState(generatedEvents, finalTick)
 	if err != nil {
 		t.Fatalf("reconstruct final tick %d: %v", finalTick, err)
 	}

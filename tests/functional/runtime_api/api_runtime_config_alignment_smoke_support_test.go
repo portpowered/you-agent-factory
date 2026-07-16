@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -604,7 +606,7 @@ func assertRuntimeConfigAlignmentEventHistory(t *testing.T, server *functionalAP
 		t.Fatalf("DISPATCH_RESPONSE events = %d, want at least 4", got)
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, runtimeConfigAlignmentMaxTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, runtimeConfigAlignmentMaxTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

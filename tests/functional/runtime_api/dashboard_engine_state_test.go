@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -121,7 +123,7 @@ func buildFunctionalWorldView(t *testing.T, h *testutil.ServiceTestHarness) inte
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, es.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, es.TickCount)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -154,7 +155,7 @@ func TestBuildReconnectReplay_ReconstructsDispatchStateWithoutSessionCompleted(t
 		t.Fatalf("BuildReconnectReplay: %v", err)
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(replay, 3)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(replay, 3)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

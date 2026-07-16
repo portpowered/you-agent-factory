@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -27,7 +29,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -1170,7 +1171,7 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	bracket := (*interfaces.FactoryWorldSessionBracketState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
-		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
+		worldState, err := factoryeventprojection.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -2271,7 +2272,7 @@ func (fs *FactoryService) sessionInvocationWorldState(
 	if err != nil {
 		return interfaces.FactoryWorldState{}, err
 	}
-	return projections.ReconstructFactoryWorldState(events, selectedTick)
+	return factoryeventprojection.ReconstructFactoryWorldState(events, selectedTick)
 }
 
 func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]string) {
