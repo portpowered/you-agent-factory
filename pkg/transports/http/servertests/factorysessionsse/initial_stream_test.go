@@ -1,6 +1,8 @@
 package factorysessionsse
 
 import (
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -8,16 +10,14 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const (
-	factorySessionSSEBackendScopeHeader      = "X-Factory-Session-Backend-Scope-Id"
-	factorySessionSSELogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
-	factorySessionSSEFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
-	factorySessionSSEStreamGenerationHeader  = "X-Factory-Session-Stream-Generation-Id"
-)
-
 func TestFactorySessionSSEInitialStream_NoReconnectCursorReturnsEventStream(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	var accept string
+	handler := newAPITestServer(fixture.RootMockFactory()).Handler()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		accept = r.Header.Get("Accept")
+		handler.ServeHTTP(w, r)
+	}))
 	defer server.Close()
 
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
@@ -26,6 +26,9 @@ func TestFactorySessionSSEInitialStream_NoReconnectCursorReturnsEventStream(t *t
 
 	if got := stream.Response.Header.Get("Content-Type"); got == "" {
 		t.Fatal("Content-Type header is empty, want text/event-stream")
+	}
+	if accept != "text/event-stream" {
+		t.Fatalf("Accept header = %q, want text/event-stream", accept)
 	}
 }
 
@@ -102,6 +105,11 @@ func TestFactorySessionSSEInitialStream_ContinuesWithLiveEventWithoutRetainedRep
 		retainedIDs[event.Id] = struct{}{}
 	}
 
+	_, err := stream.TryReadNextEvent(150 * time.Millisecond)
+	if !errors.Is(err, errFactorySessionSSEHarnessTimeout) {
+		t.Fatalf("idle read error = %v, want bounded timeout", err)
+	}
+
 	live := fixture.LiveDispatchEvent(t)
 	fixture.PublishLive(live)
 	gotLive := stream.ReadNextEvent()
@@ -115,9 +123,9 @@ func TestFactorySessionSSEInitialStream_ContinuesWithLiveEventWithoutRetainedRep
 		t.Fatalf("live event id %q was replayed from retained history", gotLive.Id)
 	}
 
-	_, err := stream.TryReadNextEvent(150 * time.Millisecond)
-	if err == nil {
-		t.Fatal("expected timeout after live event, got another SSE frame")
+	_, err = stream.TryReadNextEvent(150 * time.Millisecond)
+	if !errors.Is(err, errFactorySessionSSEHarnessTimeout) {
+		t.Fatalf("post-live idle read error = %v, want bounded timeout", err)
 	}
 }
 
@@ -129,6 +137,16 @@ func TestFactorySessionSSEInitialStream_WritesSessionIdentityHandshakeHeaders(t 
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
+
+	wantIdentity := FactorySessionSSEStreamIdentity{
+		BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
+		LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
+		FactorySessionID:    fixture.SessionID,
+		StreamGenerationID:  factorySessionSSEFixtureStreamGenerationID,
+	}
+	if stream.Identity != wantIdentity {
+		t.Fatalf("stream identity = %#v, want %#v", stream.Identity, wantIdentity)
+	}
 
 	assertFactorySessionSSEHandshakeHeader(
 		t,

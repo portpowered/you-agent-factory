@@ -1,9 +1,6 @@
 package factorysessionsse
 
 import (
-	"bufio"
-	"encoding/json"
-	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -36,34 +33,6 @@ func testAPIFactoryEvent(t *testing.T, eventType factoryapi.FactoryEventType, id
 		Context:       context,
 		Payload:       eventPayload,
 	}
-}
-
-func tryReadSSEFactoryEvent(reader *bufio.Reader) (factoryapi.FactoryEvent, bool, error) {
-	var dataLine string
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if len(dataLine) == 0 {
-				return factoryapi.FactoryEvent{}, false, nil
-			}
-			return factoryapi.FactoryEvent{}, false, err
-		}
-		line = strings.TrimRight(line, "\r\n")
-		if line == "" {
-			break
-		}
-		if strings.HasPrefix(line, "data: ") {
-			dataLine = strings.TrimPrefix(line, "data: ")
-		}
-	}
-	if dataLine == "" {
-		return factoryapi.FactoryEvent{}, false, nil
-	}
-	var event factoryapi.FactoryEvent
-	if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
-		return factoryapi.FactoryEvent{}, false, err
-	}
-	return event, true, nil
 }
 
 func stringPointerForAPIServerTest(value string) *string {
