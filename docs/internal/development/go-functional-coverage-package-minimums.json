@@ -128,7 +128,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/events",
-      "minimum": 60.68
+      "minimum": 60.09
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/events/kinds",
