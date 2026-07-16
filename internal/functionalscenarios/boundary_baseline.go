@@ -1,6 +1,7 @@
 package functionalscenarios
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -80,7 +81,7 @@ func applyFunctionalBoundaryBaseline(repositoryRoot string, violations []Functio
 		if err != nil {
 			return 0, nil, functionalBoundaryBaselineError("read baseline path %q: %v", entry.Path, err)
 		}
-		actualHash := fmt.Sprintf("%x", sha256.Sum256(content))
+		actualHash := functionalBoundaryContentHash(content)
 		if actualHash != entry.SHA256 {
 			return 0, nil, functionalBoundaryBaselineError("baseline path %q changed (SHA-256 %s); migrate its direct product-boundary use or update the reviewed baseline", entry.Path, actualHash)
 		}
@@ -90,6 +91,11 @@ func applyFunctionalBoundaryBaseline(repositoryRoot string, violations []Functio
 		return approved[violation.File]
 	})
 	return len(approved), remaining, nil
+}
+
+func functionalBoundaryContentHash(content []byte) string {
+	canonicalContent := bytes.ReplaceAll(content, []byte("\r\n"), []byte("\n"))
+	return fmt.Sprintf("%x", sha256.Sum256(canonicalContent))
 }
 
 func functionalBoundaryBaselineError(format string, arguments ...any) error {

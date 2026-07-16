@@ -1,7 +1,6 @@
 package functionalscenarios
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -133,6 +132,26 @@ func direct() { service.BuildFactoryService() }
 	}
 }
 
+func TestCheckFunctionalTestBoundariesQuarantinesWindowsCheckoutOfReviewedFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	reviewedContent := "package fixture\n" +
+		"import service \"github.com/portpowered/infinite-you/pkg/service\"\n" +
+		"func direct() { service.BuildFactoryService() }\n"
+	windowsCheckoutContent := strings.ReplaceAll(reviewedContent, "\n", "\r\n")
+	writeBoundaryFixture(t, root, windowsCheckoutContent)
+	writeBoundaryBaselineFixture(t, root, reviewedContent)
+
+	report, err := CheckFunctionalTestBoundariesReport(root)
+	if err != nil {
+		t.Fatalf("CheckFunctionalTestBoundariesReport() error = %v", err)
+	}
+	if report.BaselinedLegacyFiles != 1 {
+		t.Fatalf("BaselinedLegacyFiles = %d, want 1", report.BaselinedLegacyFiles)
+	}
+}
+
 func TestCheckFunctionalTestBoundariesRejectsChangedLegacyFile(t *testing.T) {
 	t.Parallel()
 
@@ -179,8 +198,8 @@ func writeBoundaryFixture(t *testing.T, root, content string) {
 
 func writeBoundaryBaselineFixture(t *testing.T, root, hashedContent string) {
 	t.Helper()
-	hash := sha256.Sum256([]byte(hashedContent))
-	content := fmt.Sprintf(`{"formatVersion":"functional-boundary-baseline/v1","migrationTask":"task.md","files":[{"path":"tests/functional/fixture_test.go","sha256":"%x"}]}`, hash)
+	hash := functionalBoundaryContentHash([]byte(hashedContent))
+	content := fmt.Sprintf(`{"formatVersion":"functional-boundary-baseline/v1","migrationTask":"task.md","files":[{"path":"tests/functional/fixture_test.go","sha256":"%s"}]}`, hash)
 	path := filepath.Join(root, filepath.FromSlash(functionalBoundaryBaselinePath))
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("create boundary baseline directory: %v", err)
