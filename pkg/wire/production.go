@@ -42,12 +42,12 @@ func provideFactoryServiceRoot(cfg *service.FactoryServiceConfig) (service.Facto
 	if cfg == nil {
 		return service.FactoryServiceRoot{}, fmt.Errorf("factory service config is required")
 	}
-	if !cfg.WorkerApplication.Valid() {
-		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
-		if err != nil {
-			return service.FactoryServiceRoot{}, fmt.Errorf("construct production worker application: %w", err)
-		}
-		cfg.WorkerApplication = components
+	configured, err := service.ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		return service.FactoryServiceRoot{}, err
+	}
+	if configured != cfg {
+		*cfg = *configured
 	}
 	return service.ResolveFactoryServiceRoot(cfg)
 }

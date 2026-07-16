@@ -1,6 +1,7 @@
 package factoryvalidationtests
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -9,7 +10,35 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
+
+type commandRunnerProbe struct{}
+
+func (*commandRunnerProbe) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	return workerprocess.CommandResult{}, nil
+}
+
+func TestConfigWithWorkerApplicationPreservesDistinctCommandRunnerOverrides(t *testing.T) {
+	t.Parallel()
+
+	providerRunner := &commandRunnerProbe{}
+	scriptRunner := &commandRunnerProbe{}
+	cfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
+		ProviderCommandRunnerOverride: workers.CommandRunner(providerRunner),
+		CommandRunnerOverride:         workers.CommandRunner(scriptRunner),
+	})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if cfg.WorkerApplication.ProviderCommandRunner != providerRunner {
+		t.Fatal("provider command runner override was not preserved")
+	}
+	if cfg.WorkerApplication.ScriptCommandRunner != scriptRunner {
+		t.Fatal("script command runner override was not preserved")
+	}
+}
 
 func TestBuildFactoryCoreRejectsMissingWorkerApplicationBeforeLoading(t *testing.T) {
 	t.Parallel()
