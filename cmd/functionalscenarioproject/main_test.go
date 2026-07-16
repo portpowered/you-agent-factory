@@ -51,6 +51,22 @@ func TestRunWritesRequestedFile(t *testing.T) {
 	}
 }
 
+func TestRunWritesReviewedManifest(t *testing.T) {
+	t.Parallel()
+
+	cfg := commandFixture(t)
+	cfg.manifest = true
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	if err := run(cfg, stdout, stderr); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	for _, want := range []string{`"formatVersion": "functional-scenario-manifest/v1"`, `"status": "missing"`} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("manifest does not contain %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
 func commandFixture(t *testing.T) config {
 	t.Helper()
 	root := t.TempDir()

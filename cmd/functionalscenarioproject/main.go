@@ -14,6 +14,7 @@ type config struct {
 	openAPIPath string
 	mcpPath     string
 	outputPath  string
+	manifest    bool
 }
 
 func main() {
@@ -30,6 +31,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.openAPIPath, "openapi", "api/openapi.yaml", "bundled OpenAPI contract")
 	flag.StringVar(&cfg.mcpPath, "mcp", "contracts/mcp/tools.json", "canonical MCP tool inventory")
 	flag.StringVar(&cfg.outputPath, "output", "-", "projection JSON output path or - for stdout")
+	flag.BoolVar(&cfg.manifest, "manifest", false, "render the reviewed functional scenario manifest")
 	flag.Parse()
 	return cfg
 }
@@ -51,7 +53,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("project functional scenario components: %w", err)
 	}
-	payload, err := functionalscenarios.MarshalCanonicalJSON(projection)
+	payload, err := renderProjection(projection, cfg.manifest)
 	if err != nil {
 		return err
 	}
@@ -64,6 +66,17 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	}
 	_, _ = fmt.Fprintf(stderr, "[agent-factory:functional-scenario-project] wrote %d components to %s\n", len(projection.Components), cfg.outputPath)
 	return nil
+}
+
+func renderProjection(projection *functionalscenarios.Projection, manifest bool) ([]byte, error) {
+	if !manifest {
+		return functionalscenarios.MarshalCanonicalJSON(projection)
+	}
+	reviewed, err := functionalscenarios.BuildReviewedManifest(projection)
+	if err != nil {
+		return nil, err
+	}
+	return functionalscenarios.MarshalCanonicalManifestJSON(reviewed)
 }
 
 func readInput(label, path string) ([]byte, error) {

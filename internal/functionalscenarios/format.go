@@ -20,3 +20,15 @@ func MarshalCanonicalJSON(projection *Projection) ([]byte, error) {
 	output.WriteByte('\n')
 	return output.Bytes(), nil
 }
+
+// MarshalCanonicalManifestJSON renders a reviewed manifest as stable JSON.
+func MarshalCanonicalManifestJSON(manifest *Manifest) ([]byte, error) {
+	if err := ValidateManifest(manifest); err != nil {
+		return nil, err
+	}
+	payload, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal functional scenario manifest: %w", err)
+	}
+	return append(payload, '\n'), nil
+}
