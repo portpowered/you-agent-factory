@@ -56,6 +56,10 @@
   Replay serialization tests that construct event histories or invoke replay
   save/load APIs are owner-package coverage; keep them in `pkg/replay` rather
   than treating those internal calls as functional customer behavior.
+  When a functional replay test and its dedicated helper only reconstruct
+  internal world or transport projections, remove that pair from the
+  functional suite after preserving customer-visible artifact assertions and
+  confirming the projection owner's tests cover the internal contract.
   When a functional scenario already observes its queue outcome through the
   approved service-test harness, keep that runtime assertion and remove any
   duplicate direct projection reconstruction before deleting the file's
