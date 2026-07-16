@@ -171,10 +171,6 @@
       "minimum": 60.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/review",
-      "minimum": 60.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/quorum",
       "exception": {
         "kind": "measurement",
@@ -183,6 +179,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/review",
+      "minimum": 60.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent",
@@ -221,6 +221,10 @@
       "minimum": 58.73
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/quorum",
+      "minimum": 72.22
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/review",
       "exception": {
         "kind": "measurement",
@@ -229,10 +233,6 @@
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
       }
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/quorum",
-      "minimum": 72.22
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/subagent",
