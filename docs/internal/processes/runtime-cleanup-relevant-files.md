@@ -321,3 +321,11 @@ payloads from their semantic owners. Canonical runtime and history callers use
 `pkg/transports/mapping/factoryeventprojection`, which converts the full envelope
 before reduction. Keep generated union decoding and generated Work conversion
 helpers out of the Factory projection owner.
+
+JavaScript result shaping follows the same boundary. The orchestrator result
+package returns owner-defined runtime status, checkpoint, artifact, primary
+result, and result-update projections. `pkg/transports/mapping` converts those
+values to generated live-session, durable-result, and Factory-event response
+models. Factory Session callers may assemble the domain input, but generated
+status, checkpoint, artifact, and Work content values must not flow back into
+the orchestrator result package.

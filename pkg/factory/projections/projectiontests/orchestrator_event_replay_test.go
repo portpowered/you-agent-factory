@@ -51,18 +51,14 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 	if err != nil {
 		t.Fatalf("marshal primary result: %v", err)
 	}
-	var primaryResult factoryapi.WorkContent
-	if err := json.Unmarshal([]byte(`[{"type":"JSON","json":{"ok":true,"count":2}}]`), &primaryResult); err != nil {
-		t.Fatalf("unmarshal primary result content: %v", err)
-	}
-	resultArtifact := factoryapi.FactoryArtifactRef{
-		Id:         "artifact-result-1",
-		Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
-		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+	resultArtifact := interfaces.FactoryArtifactRef{
+		ID:         "artifact-result-1",
+		Kind:       "FINAL_RESULT",
+		Visibility: "PUBLIC",
 	}
 	input := workflowresult.SessionResultInput{
 		SessionID:      sessionID,
-		Status:         factoryapi.FactorySessionStatusFINISHED,
+		Status:         interfaces.RuntimeStatusFinished,
 		PrimaryValue:   workflowresult.TypedValue{JSON: primaryJSON},
 		ResultArtifact: &resultArtifact,
 		Artifacts: []interfaces.FactorySessionArtifactState{{

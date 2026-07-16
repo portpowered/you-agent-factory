@@ -1,10 +1,12 @@
 package apisurface
 
 import (
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // ResolveWorkflowPolicy is the shared entry point for effective policy resolution.
@@ -14,18 +16,77 @@ func ResolveWorkflowPolicy(request workflowpolicy.Request) workflowpolicy.Resolu
 
 // BuildWorkflowSessionLiveResult projects the live terminal session result read shape.
 func BuildWorkflowSessionLiveResult(input workflowresult.SessionResultInput) factoryapi.FactorySessionLiveResult {
-	return workflowresult.BuildLiveSessionResult(input)
+	result := workflowresult.BuildLiveSessionResult(input)
+	response := factoryapi.FactorySessionLiveResult{
+		SessionId: result.SessionID,
+		Status:    factoryapi.FactorySessionStatus(result.Status),
+	}
+	if refs := WorkflowCheckpointRefsToAPI(result.CheckpointRefs); len(refs) > 0 {
+		response.CheckpointRefs = &refs
+	}
+	response.ResultArtifactRef = WorkflowArtifactRefToAPI(result.ResultArtifactRef)
+	return response
 }
 
 // BuildWorkflowSessionResult projects the durable terminal session result read shape.
 func BuildWorkflowSessionResult(input workflowresult.SessionResultInput) factoryapi.FactorySessionResult {
-	return workflowresult.BuildSessionResult(input)
+	result := workflowresult.BuildSessionResult(input)
+	response := factoryapi.FactorySessionResult{
+		SessionId:    result.SessionID,
+		ResultStatus: factoryapi.FactorySessionResultStatus(result.ResultStatus),
+	}
+	response.PrimaryResult = contentcontract.GeneratedPtrFromParts(result.PrimaryResult)
+	if len(result.ArtifactIDs) > 0 {
+		ids := append([]string(nil), result.ArtifactIDs...)
+		response.ArtifactIds = &ids
+	}
+	if len(result.ArtifactRefs) > 0 {
+		refs := make([]factoryapi.FactoryArtifactRef, 0, len(result.ArtifactRefs))
+		for index := range result.ArtifactRefs {
+			refs = append(refs, *WorkflowArtifactRefToAPI(&result.ArtifactRefs[index]))
+		}
+		response.ArtifactRefs = &refs
+	}
+	return response
 }
 
 // BuildWorkflowSessionResultUpdatedPayload projects the SESSION_RESULT_UPDATED
 // event payload from the shared session result contract.
 func BuildWorkflowSessionResultUpdatedPayload(input workflowresult.SessionResultInput) factoryapi.SessionResultUpdatedEventPayload {
-	return workflowresult.BuildSessionResultUpdatedPayload(input)
+	result := workflowresult.BuildSessionResultUpdatedPayload(input)
+	payload := factoryapi.SessionResultUpdatedEventPayload{
+		ResultStatus:  factoryapi.FactoryEventSessionResultStatus(result.ResultStatus),
+		ResultSummary: contentcontract.GeneratedPtrFromParts(result.ResultSummary),
+	}
+	if len(result.ArtifactIDs) > 0 {
+		ids := append([]string(nil), result.ArtifactIDs...)
+		payload.ArtifactIds = &ids
+	}
+	return payload
+}
+
+// WorkflowCheckpointRefsToAPI maps Factory-owned checkpoint refs at the public boundary.
+func WorkflowCheckpointRefsToAPI(refs []interfaces.FactorySessionJavaScriptCheckpointEventRef) []factoryapi.FactorySessionJavaScriptCheckpointRef {
+	projected := make([]factoryapi.FactorySessionJavaScriptCheckpointRef, 0, len(refs))
+	for _, ref := range refs {
+		projected = append(projected, factoryapi.FactorySessionJavaScriptCheckpointRef{
+			Id: ref.ID, Label: ref.Label, Summary: ref.Summary, Timestamp: ref.Timestamp,
+			ArtifactRef: WorkflowArtifactRefToAPI(ref.ArtifactRef),
+		})
+	}
+	return projected
+}
+
+// WorkflowArtifactRefToAPI maps one Factory-owned artifact ref at the public boundary.
+func WorkflowArtifactRefToAPI(ref *interfaces.FactoryArtifactRef) *factoryapi.FactoryArtifactRef {
+	if ref == nil {
+		return nil
+	}
+	return &factoryapi.FactoryArtifactRef{
+		Id: ref.ID, Kind: factoryapi.FactoryArtifactKind(ref.Kind),
+		Visibility:  factoryapi.FactoryArtifactVisibility(ref.Visibility),
+		ContentHash: ref.ContentHash, SizeBytes: ref.SizeBytes,
+	}
 }
 
 // NormalizeWorkflowSourceRequest is the shared API, CLI, MCP, and website entry

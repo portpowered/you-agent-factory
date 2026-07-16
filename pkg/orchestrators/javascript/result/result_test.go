@@ -5,12 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func TestValidateTypedValue_AcceptsStructuredJSON(t *testing.T) {
@@ -167,7 +165,7 @@ func TestProjectPrimaryResult_RejectsCrossSessionArtifactURI(t *testing.T) {
 
 	sessionResult := workflowresult.BuildSessionResult(workflowresult.SessionResultInput{
 		SessionID:    sessionID,
-		Status:       factoryapi.FactorySessionStatusFINISHED,
+		Status:       interfaces.RuntimeStatusFinished,
 		PrimaryValue: workflowresult.TypedValue{JSON: raw},
 		Artifacts:    artifacts,
 	})
@@ -182,14 +180,14 @@ func TestBuildSessionResultAndEventPayload_ProjectSameResultAndArtifactIDs(t *te
 	if err != nil {
 		t.Fatalf("marshal fixture: %v", err)
 	}
-	resultArtifact := &factoryapi.FactoryArtifactRef{
-		Id:         "artifact-final-1",
-		Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
-		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+	resultArtifact := &interfaces.FactoryArtifactRef{
+		ID:         "artifact-final-1",
+		Kind:       "FINAL_RESULT",
+		Visibility: "PUBLIC",
 	}
 	input := workflowresult.SessionResultInput{
 		SessionID:      sessionID,
-		Status:         factoryapi.FactorySessionStatusFINISHED,
+		Status:         interfaces.RuntimeStatusFinished,
 		PrimaryValue:   workflowresult.TypedValue{JSON: raw},
 		ResultArtifact: resultArtifact,
 		Artifacts: []interfaces.FactorySessionArtifactState{{
@@ -201,21 +199,21 @@ func TestBuildSessionResultAndEventPayload_ProjectSameResultAndArtifactIDs(t *te
 	sessionResult := workflowresult.BuildSessionResult(input)
 	eventPayload := workflowresult.BuildSessionResultUpdatedPayload(input)
 
-	if sessionResult.PrimaryResult == nil {
+	if len(sessionResult.PrimaryResult) == 0 {
 		t.Fatal("expected primaryResult on session result")
 	}
-	if eventPayload.ResultSummary == nil {
+	if len(eventPayload.ResultSummary) == 0 {
 		t.Fatal("expected resultSummary on event payload")
 	}
-	if sessionResult.ArtifactIds == nil || len(*sessionResult.ArtifactIds) == 0 || eventPayload.ArtifactIds == nil || len(*eventPayload.ArtifactIds) == 0 {
+	if len(sessionResult.ArtifactIDs) == 0 || len(eventPayload.ArtifactIDs) == 0 {
 		t.Fatal("expected result artifact ids")
 	}
-	if (*sessionResult.ArtifactIds)[0] != (*eventPayload.ArtifactIds)[0] {
-		t.Fatalf("artifact ids differ: %q vs %q", (*sessionResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
+	if sessionResult.ArtifactIDs[0] != eventPayload.ArtifactIDs[0] {
+		t.Fatalf("artifact ids differ: %q vs %q", sessionResult.ArtifactIDs[0], eventPayload.ArtifactIDs[0])
 	}
 
-	sessionParts := contentcontract.PartsFromGenerated(sessionResult.PrimaryResult)
-	eventParts := contentcontract.PartsFromGenerated(eventPayload.ResultSummary)
+	sessionParts := sessionResult.PrimaryResult
+	eventParts := eventPayload.ResultSummary
 	if len(sessionParts) != len(eventParts) {
 		t.Fatalf("primary result part counts differ: %d vs %d", len(sessionParts), len(eventParts))
 	}
