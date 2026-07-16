@@ -1120,6 +1120,13 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 	t.Helper()
 	projectRoot := t.TempDir()
 	testApplicationPersistencePolicies(t, projectRoot)
+	testExecutionServiceRequiredPersistenceDependencies(t, projectRoot)
+	testExecutionServiceDisabledPersistence(t, projectRoot)
+	testExecutionServiceInvalidPersistenceChoices(t, projectRoot)
+}
+
+func testExecutionServiceRequiredPersistenceDependencies(t *testing.T, projectRoot string) {
+	t.Helper()
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: DisabledPersistence(),
@@ -1131,6 +1138,10 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot}); err == nil {
 		t.Fatal("NewExecutionService(runtime without persistence choice) error = nil, want validation error")
 	}
+}
+
+func testExecutionServiceDisabledPersistence(t *testing.T, projectRoot string) {
+	t.Helper()
 	disabled, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: DisabledPersistence(),
@@ -1152,6 +1163,10 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "runtime.childExecutorMode" {
 		t.Fatalf("live runtime without provider error = %#v, want runtime.childExecutorMode ValidationError", err)
 	}
+}
+
+func testExecutionServiceInvalidPersistenceChoices(t *testing.T, projectRoot string) {
+	t.Helper()
 	contradictory := PersistenceChoice{store: runtimepersist.DirectoryStore{Dir: t.TempDir()}, disabled: true}
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
 		ProjectRoot: projectRoot,
