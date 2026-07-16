@@ -7,6 +7,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // ListFactorySessions returns live workspace session summaries through control-plane read policy.
@@ -35,7 +36,11 @@ func (s *Service) GetFactorySessionSyncPreflight(
 	if s == nil || s.host == nil {
 		return factoryapi.FactorySessionSyncPreflightResponse{}, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.GetLiveFactorySessionSyncPreflight(ctx, s.host, sessionID, reconnect, logicalResolve)
+	result, err := controlplane.GetLiveFactorySessionSyncPreflight(ctx, s.host, sessionID, reconnect, logicalResolve)
+	if err != nil {
+		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+	return factorysession.SyncPreflightResultToAPI(result), nil
 }
 
 // GetFactorySessionResult returns the terminal JavaScript session result read shape.

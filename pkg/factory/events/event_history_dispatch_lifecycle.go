@@ -341,6 +341,16 @@ func BuildReconnectReplay(
 	return generatedFactoryEvents(replay), nil
 }
 
+// BuildCanonicalReconnectReplay returns the historical canonical events a
+// domain consumer should apply after reconnecting from an acknowledged cursor.
+func BuildCanonicalReconnectReplay(
+	events []interfaces.FactoryEvent,
+	cursor interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) ([]interfaces.FactoryEvent, error) {
+	return buildDomainReconnectReplay(cloneFactoryEvents(events), cursor, scope)
+}
+
 func buildDomainReconnectReplay(
 	events []interfaces.FactoryEvent,
 	cursor interfaces.FactoryEventReconnectCursor,

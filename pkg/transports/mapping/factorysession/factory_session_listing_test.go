@@ -54,6 +54,45 @@ func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 	}
 }
 
+func TestSyncPreflightResultToAPI_PreservesReconnectDecisionAndIdentity(t *testing.T) {
+	t.Parallel()
+
+	afterEventID := "event-7"
+	afterSequence := int64(7)
+	backendScopeID := "backend-1"
+	factorySessionID := "session-1"
+	logicalSessionKeyID := "/tmp/demo::default::"
+	streamGenerationID := "backend-1::session-1"
+
+	response := factorysession.SyncPreflightResultToAPI(factorysessions.SyncPreflightResult{
+		BackendScopeID:      &backendScopeID,
+		CheckpointReusable:  true,
+		FactorySessionID:    &factorySessionID,
+		LogicalSessionKeyID: &logicalSessionKeyID,
+		Reason:              factorysessions.SyncPreflightReasonOK,
+		ReconnectCursor: factorysessions.SyncPreflightReconnectCursor{
+			AfterEventID:             &afterEventID,
+			AfterSequence:            &afterSequence,
+			Provided:                 true,
+			ValidForStreamGeneration: true,
+		},
+		RequestedSessionID: "~default",
+		StreamGenerationID: &streamGenerationID,
+	})
+
+	if response.ReasonCode != factoryapi.Ok || !response.CheckpointReusable {
+		t.Fatalf("preflight decision = %#v, want reusable ok", response)
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != factorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, factorySessionID)
+	}
+	if response.ReconnectCursor.AfterEventId == nil || *response.ReconnectCursor.AfterEventId != afterEventID ||
+		response.ReconnectCursor.AfterSequence == nil || *response.ReconnectCursor.AfterSequence != afterSequence ||
+		!response.ReconnectCursor.Provided || !response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("reconnectCursor = %#v, want acknowledged valid cursor", response.ReconnectCursor)
+	}
+}
+
 func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testing.T) {
 	t.Parallel()
 

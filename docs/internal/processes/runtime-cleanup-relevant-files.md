@@ -376,3 +376,11 @@ progress, usage, Petri and JavaScript projections, checkpoints, artifacts,
 stream identity, logical target, and stop-summary compatibility in
 `pkg/transports/mapping/factorysession`. The Factory Session owner should not
 import generated HTTP contracts to expose runtime, summary, or detail helpers.
+
+Reconnect sync preflight follows the canonical event boundary as well. The
+control plane validates cursors against detached `FactoryEvent` values and
+returns the Factory Session-owned `SyncPreflightResult`; only
+`pkg/transports/mapping/factorysession` converts that decision and cursor
+identity to the generated HTTP response. Runtime hosts should expose
+`FactoryEventHistory.CanonicalEvents` to this path rather than round-tripping
+history through a generated event union.

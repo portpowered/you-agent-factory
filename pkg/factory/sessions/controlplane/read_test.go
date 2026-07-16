@@ -43,7 +43,7 @@ func (h *defaultIdentityTestHost) StreamGenerationID(*factorysessions.LiveSessio
 	return "stream-default-identity-test"
 }
 
-func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []factoryapi.FactoryEvent {
+func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []interfaces.FactoryEvent {
 	return nil
 }
 
@@ -226,15 +226,15 @@ func assertDefaultSessionDetailProjection(
 
 func assertDefaultSessionPreflightIdentity(
 	t *testing.T,
-	preflight factoryapi.FactorySessionSyncPreflightResponse,
+	preflight factorysessions.SyncPreflightResult,
 	allocatedSessionID string,
 ) {
 	t.Helper()
-	if preflight.RequestedSessionId != factorysessions.DefaultSessionID {
-		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionId, factorysessions.DefaultSessionID)
+	if preflight.RequestedSessionID != factorysessions.DefaultSessionID {
+		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionID, factorysessions.DefaultSessionID)
 	}
-	if preflight.FactorySessionId == nil || *preflight.FactorySessionId != allocatedSessionID {
-		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionId, allocatedSessionID)
+	if preflight.FactorySessionID == nil || *preflight.FactorySessionID != allocatedSessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionID, allocatedSessionID)
 	}
 }
 
@@ -242,15 +242,15 @@ func assertResolvedSessionIDsAgree(
 	t *testing.T,
 	listed factoryapi.ListFactorySessionsResponse,
 	got factoryapi.FactorySession,
-	preflight factoryapi.FactorySessionSyncPreflightResponse,
+	preflight factorysessions.SyncPreflightResult,
 ) {
 	t.Helper()
-	if listed.Sessions[0].Id != got.Id || got.Id != *preflight.FactorySessionId {
+	if listed.Sessions[0].Id != got.Id || got.Id != *preflight.FactorySessionID {
 		t.Fatalf(
 			"resolved ids differ: list=%q get=%q preflight=%q",
 			listed.Sessions[0].Id,
 			got.Id,
-			*preflight.FactorySessionId,
+			*preflight.FactorySessionID,
 		)
 	}
 }

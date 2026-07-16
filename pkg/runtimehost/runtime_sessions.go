@@ -1888,12 +1888,12 @@ func (h sessionGatewayHost) StreamGenerationID(session *factorysessions.LiveSess
 	return factorySessionStreamGenerationID(h.Host, session)
 }
 
-func (h sessionGatewayHost) LiveSessionEvents(session *factorysessions.LiveSession) []factoryapi.FactoryEvent {
+func (h sessionGatewayHost) LiveSessionEvents(session *factorysessions.LiveSession) []interfaces.FactoryEvent {
 	handle := liveSessionHandle(session)
 	if handle == nil || handle.Bundle == nil || handle.Bundle.EventHistory == nil {
 		return nil
 	}
-	return handle.Bundle.EventHistory.Events()
+	return handle.Bundle.EventHistory.CanonicalEvents()
 }
 
 func (h sessionGatewayHost) SessionFactory(sessionID string) (factory.Factory, error) {

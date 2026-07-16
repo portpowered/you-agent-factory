@@ -306,3 +306,36 @@ type JavaScriptRuntimeProjection struct {
 	Phases              []string
 	ScriptStatus        interfaces.FactorySessionJavaScriptScriptStatus
 }
+
+// SyncPreflightReason identifies the reconnect recovery decision for a live
+// Factory Session. Transports map these stable values to their public enums.
+type SyncPreflightReason string
+
+const (
+	SyncPreflightReasonOK                       SyncPreflightReason = "ok"
+	SyncPreflightReasonCursorStale              SyncPreflightReason = "cursor_stale"
+	SyncPreflightReasonSessionNotFound          SyncPreflightReason = "session_not_found"
+	SyncPreflightReasonLogicalSessionRemap      SyncPreflightReason = "logical_session_remap"
+	SyncPreflightReasonLogicalSessionUnresolved SyncPreflightReason = "logical_session_unresolved"
+)
+
+// SyncPreflightReconnectCursor retains the acknowledged cursor and whether it
+// belongs to the resolved stream generation.
+type SyncPreflightReconnectCursor struct {
+	AfterEventID             *string
+	AfterSequence            *int64
+	Provided                 bool
+	ValidForStreamGeneration bool
+}
+
+// SyncPreflightResult is the Factory Session-owned reconnect validation result.
+type SyncPreflightResult struct {
+	BackendScopeID      *string
+	CheckpointReusable  bool
+	FactorySessionID    *string
+	LogicalSessionKeyID *string
+	Reason              SyncPreflightReason
+	ReconnectCursor     SyncPreflightReconnectCursor
+	RequestedSessionID  string
+	StreamGenerationID  *string
+}

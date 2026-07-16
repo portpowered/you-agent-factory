@@ -399,3 +399,23 @@ func DurableSessionSummaryToAPI(summary factorysessionexecution.DurableSessionLi
 	}
 	return response
 }
+
+// SyncPreflightResultToAPI maps the Factory Session reconnect decision to the
+// generated public response at the transport boundary.
+func SyncPreflightResultToAPI(result factorysessions.SyncPreflightResult) factoryapi.FactorySessionSyncPreflightResponse {
+	return factoryapi.FactorySessionSyncPreflightResponse{
+		BackendScopeId:      result.BackendScopeID,
+		CheckpointReusable:  result.CheckpointReusable,
+		FactorySessionId:    result.FactorySessionID,
+		LogicalSessionKeyId: result.LogicalSessionKeyID,
+		ReasonCode:          factoryapi.FactorySessionSyncPreflightReasonCode(result.Reason),
+		ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+			AfterEventId:             result.ReconnectCursor.AfterEventID,
+			AfterSequence:            result.ReconnectCursor.AfterSequence,
+			Provided:                 result.ReconnectCursor.Provided,
+			ValidForStreamGeneration: result.ReconnectCursor.ValidForStreamGeneration,
+		},
+		RequestedSessionId: result.RequestedSessionID,
+		StreamGenerationId: result.StreamGenerationID,
+	}
+}

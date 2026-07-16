@@ -88,7 +88,7 @@ func (h *openTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string
 	return "runtime-test::sess-1"
 }
 
-func (h *openTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []factoryapi.FactoryEvent {
+func (h *openTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []interfaces.FactoryEvent {
 	return nil
 }
 
