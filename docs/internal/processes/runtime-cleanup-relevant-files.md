@@ -216,6 +216,14 @@ finish the named move, not ownership rationale for new product behavior.
 transport packages should own narrow contracts that startup injects instead of
 depending outward on the application graph.
 
+The guard also rejects new production imports from `pkg/factory/**` into
+`pkg/transports/**`. Generated OpenAPI values must be converted under
+`pkg/transports/mapping`, while Factory and Factory Session packages accept and
+return owner-defined contracts. The exact migration-file inventory in
+`cmd/pkgboundarycheck/main.go` is deletion-only: remove entries as the remaining
+definition and compatibility adapters move outward, and never add a new entry
+to make a reverse dependency pass.
+
 The same check rejects recreation or import of converged roots and reports the
 canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,
 `pkg/factorydefinition` to `pkg/factory/definition`,

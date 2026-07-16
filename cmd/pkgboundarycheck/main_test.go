@@ -64,20 +64,6 @@ func TestRunAllowsOnlyStartupOwnersToImportApplicationGraph(t *testing.T) {
 	}
 }
 
-func TestRunAllowsCanonicalTransportImports(t *testing.T) {
-	t.Parallel()
-
-	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
-	writeGoImportFile(t, repoRoot, "pkg/root/cli.go", "root", "github.com/portpowered/infinite-you/pkg/transports/cli")
-
-	stderr := &bytes.Buffer{}
-	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err != nil {
-		t.Fatalf("run() error = %v, want canonical transport imports allowed; stderr=%q", err, stderr.String())
-	}
-}
-
 func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	t.Parallel()
 
