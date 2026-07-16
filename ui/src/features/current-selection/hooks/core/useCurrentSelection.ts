@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import type {
   DashboardActiveExecution,
   DashboardPlaceRef,
@@ -8,7 +8,6 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import type {
   FactoryResource,
   FactoryWorker,
@@ -18,6 +17,8 @@ import type {
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "../../../terminal-work/lib/types";
+import type { FactoryBundledDocFile } from "../../../workflow-activity/lib/factory-bundled-docs";
+import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
 import type {
   DashboardSelection,
   StatePositionWorkItem,
@@ -25,19 +26,17 @@ import type {
 } from "../../state/selection-types";
 import { useSelectionHistoryStore } from "../../state/selectionHistoryStore";
 import type { SelectedWorkOperationHistoryItem } from "../helpers/selected-work-operation-history";
+import { useSelectionSynchronization } from "../useCurrentSelection.synchronization";
 import type { WorkSelectionHint } from "./useCurrentSelection.actions";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import {
   useCurrentSelectionDerivedState,
   useTerminalWorkDetailCleanup,
 } from "./useCurrentSelection.derived";
-import { useSelectionSynchronization } from "../useCurrentSelection.synchronization";
-import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
 import {
   resolveProjectedWorkstationRequestsByDispatchID,
   type WorkstationRequestLike,
 } from "./useCurrentSelection.helpers";
-import type { FactoryBundledDocFile } from "../../../workflow-activity/lib/factory-bundled-docs";
 
 export interface CurrentSelectionState {
   canRedoSelection: boolean;
@@ -116,6 +115,9 @@ function useCurrentSelectionStoreState() {
       (state) => state.commitSelectionState,
     ),
     redoSelection: useSelectionHistoryStore((state) => state.redo),
+    reconcilePresent: useSelectionHistoryStore(
+      (state) => state.reconcilePresent,
+    ),
     replacePresent: useSelectionHistoryStore((state) => state.replacePresent),
     resetSelectionHistory: useSelectionHistoryStore((state) => state.clear),
     selection: useSelectionHistoryStore((state) => state.present.selection),
@@ -159,11 +161,9 @@ export function useCurrentSelection({
   useSelectionSynchronization({
     pendingFactoryDefinition: pendingFactoryDefinition ?? undefined,
     projectedWorkstationRequestsByDispatchID,
-    replacePresent: store.replacePresent,
+    reconcilePresent: store.reconcilePresent,
     resetSelectionHistory: store.resetSelectionHistory,
-    selection,
     snapshot,
-    terminalWorkDetail,
   });
 
   const derived = useCurrentSelectionDerivedState({

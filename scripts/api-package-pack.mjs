@@ -128,6 +128,11 @@ export async function packAndVerify({ packageDirectory, packDestination }) {
 			"[api-package-pack] npm pack report has no valid package name",
 		);
 	}
+	if (typeof report.version !== "string" || report.version.length === 0) {
+		throw new Error(
+			"[api-package-pack] npm pack report has no valid package version",
+		);
+	}
 	const files = report.files?.map((file) => file.path);
 	if (!Array.isArray(files) || files.some((path) => typeof path !== "string")) {
 		throw new Error(
@@ -141,6 +146,7 @@ export async function packAndVerify({ packageDirectory, packDestination }) {
 	return {
 		files: sortedUnique(files),
 		packageName: report.name,
+		packageVersion: report.version,
 		tarballPath,
 	};
 }

@@ -18,6 +18,9 @@ export const exportTimelineEvents: FactoryEvent[] = [
     payload: {
       factory: {
         id: "semantic-workflow",
+        metadata: {
+          contractSource: "timeline-projection",
+        },
         name: "semantic-workflow",
         factoryDirectory: "/work/factories/semantic-workflow",
         workers: [
@@ -59,7 +62,7 @@ export const currentNamedFactoryExportResponse = {
     contractSource: "current-factory-api",
   },
   id: "authored-current-factory",
-  name: "semantic-workflow",
+  name: "Factory Poster",
   version: defaultSessionFactoryVersion,
   workers: [
     {

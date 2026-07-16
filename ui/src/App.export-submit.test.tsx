@@ -60,6 +60,7 @@ describe("App shell export submission flows", () => {
   it("validates the export fields and accepts the confirmed name plus selected image", async () => {
     const exportProbe = installExportDownloadProbe();
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -158,6 +159,7 @@ describe("App shell export submission flows", () => {
         ok: true,
       });
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -190,9 +192,7 @@ describe("App shell export submission flows", () => {
           ).disabled,
         ).toBe(false);
       });
-      fireEvent.change(within(dialog).getByLabelText("Factory name"), {
-        target: { value: "Factory Poster" },
-      });
+      expect(within(dialog).getByDisplayValue("Factory Poster")).toBeTruthy();
       const imageInput = within(dialog).getByLabelText(
         "Cover image",
       ) as HTMLInputElement;
@@ -210,10 +210,7 @@ describe("App shell export submission flows", () => {
 
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-          factory: {
-            ...exportFactoryWithoutVersion,
-            name: "Factory Poster",
-          },
+          factory: exportFactoryWithoutVersion,
           image: expect.any(File),
         });
       });
@@ -242,6 +239,7 @@ describe("App shell export submission flows", () => {
         return exportResultPromise;
       });
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -308,7 +306,7 @@ describe("App shell export submission flows", () => {
       }
       await waitFor(() => {
         expect(exportProbe.getDownloadedFilename()).toBe(
-          "semantic-workflow.png",
+          "factory-poster.png",
         );
       });
       await settleAppShellDashboardEffects();

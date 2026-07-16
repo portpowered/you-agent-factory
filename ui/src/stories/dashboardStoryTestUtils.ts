@@ -296,10 +296,6 @@ export async function selectWorkstationRequest(
   );
 }
 
-export function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 export async function selectWorkstationRequestByDispatchID(
   canvasElement: HTMLElement,
   dispatchID: string,
@@ -334,7 +330,7 @@ export async function selectWorkstationRequestByDispatchID(
     }
 
     const historyRequestButton = requestHistoryScope.queryByRole("button", {
-      name: new RegExp(`\\(${escapeRegExp(dispatchID)}\\)$`),
+      name: requestButtonLabel,
     });
     if (historyRequestButton) {
       await userEvent.click(historyRequestButton);
@@ -437,7 +433,13 @@ export function selectedWorkDispatchHistoryStoryParameters() {
 
   return {
     dashboardApi: {
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: {
+        ...semanticWorkflowDashboardSnapshot,
+        runtime: {
+          ...semanticWorkflowDashboardSnapshot.runtime,
+          active_executions_by_dispatch_id: {},
+        },
+      },
       tracesByWorkID: {
         "work-active-story": activeStoryTrace,
       },
@@ -457,14 +459,9 @@ export function dispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
 ): HTMLElement {
-  const dispatchBadge = within(container).getAllByText(dispatchId)[0];
-  const card = dispatchBadge.closest("article");
-
-  if (!(card instanceof HTMLElement)) {
-    throw new Error(`expected dispatch history card for ${dispatchId}`);
-  }
-
-  return card;
+  return within(container).getByRole("article", {
+    name: (accessibleName) => accessibleName.includes(dispatchId),
+  });
 }
 
 export function expectWorkOutcomeSeries(outcomeChart: HTMLElement): void {

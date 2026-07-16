@@ -132,7 +132,7 @@ describe("App shell locale and toolbar flows", () => {
     });
     await waitFor(() => {
       expect(
-        within(exportDialog).getByDisplayValue("semantic-workflow"),
+        within(exportDialog).getByDisplayValue("Factory Poster"),
       ).toBeTruthy();
     });
     expect(within(exportDialog).getByLabelText("工厂名称")).toBeTruthy();

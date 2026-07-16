@@ -108,6 +108,7 @@ github.com/portpowered/infinite-you/pkg/service/runtimebuild
 github.com/portpowered/infinite-you/pkg/transports/cli
 github.com/portpowered/infinite-you/pkg/transports/cli/baseline
 github.com/portpowered/infinite-you/pkg/transports/cli/batchload
+github.com/portpowered/infinite-you/pkg/transports/cli/clicontract
 github.com/portpowered/infinite-you/pkg/transports/cli/clidiag
 github.com/portpowered/infinite-you/pkg/transports/cli/clihttp
 github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs

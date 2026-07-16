@@ -15,6 +15,9 @@ interface SelectionHistoryStoreState {
   present: SelectionHistoryEntry;
   clear: () => void;
   commitSelectionState: (entry: SelectionHistoryEntry) => void;
+  reconcilePresent: (
+    reconcile: (present: SelectionHistoryEntry) => SelectionHistoryEntry,
+  ) => void;
   redo: () => void;
   replacePresent: (entry: SelectionHistoryEntry) => void;
   undo: () => void;
@@ -129,6 +132,19 @@ export const useSelectionHistoryStore = create<SelectionHistoryStoreState>()(
         return {
           future: [],
           past: boundedHistory(state.past, state.present),
+          present: entry,
+        };
+      });
+    },
+    reconcilePresent: (reconcile) => {
+      set((state) => {
+        const entry = reconcile(state.present);
+        if (sameSelectionHistoryEntry(state.present, entry)) {
+          return state;
+        }
+
+        return {
+          ...state,
           present: entry,
         };
       });

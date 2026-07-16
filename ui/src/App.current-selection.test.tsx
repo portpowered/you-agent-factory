@@ -156,6 +156,20 @@ const readyDispatchWorkstationRequestsByDispatchID = {
     dashboardWorkstationRequestFixtures.ready,
 } satisfies Record<string, DashboardWorkstationRequest>;
 
+const refreshedDispatchWorkstationRequestsByDispatchID = {
+  [dashboardWorkstationRequestFixtures.ready.dispatch_id]: {
+    ...dashboardWorkstationRequestFixtures.ready,
+    counts: {
+      dispatched_count: 2,
+      errored_count: 1,
+      responded_count: 1,
+    },
+    failure_message: "Projection refresh exposed the terminal failure.",
+    failure_reason: "projection_refresh_failure",
+    outcome: "FAILED",
+  },
+} satisfies Record<string, DashboardWorkstationRequest>;
+
 function getActiveStorySelectionButton(): HTMLElement {
   const explicitSelectionButton = screen.queryByRole("button", {
     name: "Select work item Active Story",
@@ -295,6 +309,26 @@ describe("App current selection", () => {
         name: "Request history",
       }),
     ).toBeNull();
+    expect(getActiveStorySelectionButton().getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+
+    act(() => {
+      seedTimelineSnapshot(
+        {
+          ...semanticWorkflowDashboardSnapshot,
+          tick_count: semanticWorkflowDashboardSnapshot.tick_count + 1,
+        } satisfies DashboardSnapshot,
+        activeStoryTraceFixtures,
+        readyDispatchWorkstationRequestsByDispatchID,
+      );
+    });
+    await waitFor(() => {
+      expect(getActiveStorySelectionButton().getAttribute("aria-pressed")).toBe(
+        "true",
+      );
+    });
+    expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Select Review workstation" }),
@@ -315,11 +349,11 @@ describe("App current selection", () => {
         name: "Expand",
       }),
     );
-    fireEvent.click(
-      within(requestHistorySection).getByRole("button", {
-        name: "Select workstation request dispatch-review-ready",
-      }),
-    );
+    const requestButton = within(requestHistorySection).getByRole("button", {
+      name: "Select workstation request dispatch-review-ready",
+    });
+    expect(requestButton.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(requestButton);
 
     const requestDetail = await screen.findByRole("article", {
       name: "Current selection",
@@ -334,6 +368,38 @@ describe("App current selection", () => {
         name: "Workstation dispatches",
       }),
     ).toBeNull();
+    expect(
+      within(requestDetail).getAllByText("dispatch-review-ready").length,
+    ).toBeGreaterThan(0);
+
+    act(() => {
+      seedTimelineSnapshot(
+        {
+          ...semanticWorkflowDashboardSnapshot,
+          tick_count: semanticWorkflowDashboardSnapshot.tick_count + 2,
+        } satisfies DashboardSnapshot,
+        activeStoryTraceFixtures,
+        refreshedDispatchWorkstationRequestsByDispatchID,
+      );
+    });
+    await waitFor(() => {
+      expect(
+        within(requestDetail).getByRole("heading", {
+          name: "Request details",
+        }),
+      ).toBeTruthy();
+    });
+    expect(
+      within(requestDetail).getAllByText("dispatch-review-ready").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(requestDetail).getByText(
+        "Projection refresh exposed the terminal failure.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(requestDetail).getAllByText("projection_refresh_failure").length,
+    ).toBeGreaterThan(0);
   });
 
   it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
