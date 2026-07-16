@@ -11,6 +11,11 @@
   smoke checks. Do not publish a dashboard artifact unless a downstream lane
   genuinely consumes that exact bundle; the browser integration harness builds
   its own origin-scoped bundle.
+  Release Surface Smoke and PR Inference Approval are also independent jobs:
+  neither may depend on Build, Lint, or API. Release smoke rebuilds the dashboard
+  and CLI and installs Playwright locally; inference approval restores its own
+  managed-model cache and installs its runtime. Keep those self-contained setup
+  steps so an unrelated verification failure cannot suppress either result.
   Focused lint reruns must stay Windows-compatible: do not add standalone
   `printf` recipe lines to targets used by `make verify-lint`.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent

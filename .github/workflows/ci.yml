@@ -314,10 +314,6 @@ jobs:
   release-surface-smoke:
     name: Release Surface Smoke
     runs-on: ubuntu-latest
-    needs:
-      - build
-      - lint
-      - api
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -363,10 +359,6 @@ jobs:
   pr-inference-approval:
     name: PR Inference Approval
     runs-on: ubuntu-latest
-    needs:
-      - build
-      - lint
-      - api
     timeout-minutes: 35
     env:
       INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS: "1"
