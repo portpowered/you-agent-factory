@@ -2,9 +2,9 @@ import { useId, useState } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
   AlertPanel,
+  DashboardStatusPill,
   Heading,
   Label,
-  DashboardStatusPill,
   Text,
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
@@ -35,9 +35,7 @@ export function TranscriptSection({
   return (
     <section className={cn("grid gap-3", className)}>
       {showHeading ? (
-        <Heading as="h5">
-          {messages.transcriptHeading}
-        </Heading>
+        <Heading as="h5">{messages.transcriptHeading}</Heading>
       ) : null}
       <div className="grid gap-3">
         {detail.transcript.map((entry) => (
@@ -93,7 +91,7 @@ function TranscriptEntryCard({
       : null,
   ].filter(Boolean);
   const timestampState = getTranscriptTimestampState(entry.timestamp, locale);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const bodyID = useId();
   const hasBody = hasTranscriptEntryBody(entry);
   const preview = getTranscriptEntryPreview(entry, messages);
@@ -127,9 +125,7 @@ function TranscriptEntryCard({
             </Text>
           ) : null}
           {hasBody && !expanded && preview ? (
-            <Text className="m-0 line-clamp-2">
-              {preview}
-            </Text>
+            <Text className="m-0 line-clamp-2">{preview}</Text>
           ) : null}
         </div>
         {hasBody ? (
@@ -207,10 +203,7 @@ function TranscriptEntryBody({
             />
           ) : null}
           {entry.encrypted && !entry.text && !encryptedContent ? (
-            <Text
-              className="m-0 text-on-surface-subtle"
-              variant="supporting"
-            >
+            <Text className="m-0 text-on-surface-subtle" variant="supporting">
               {messages.encryptedReasoningOnly}
             </Text>
           ) : null}
