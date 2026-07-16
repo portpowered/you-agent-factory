@@ -1672,7 +1672,7 @@
           "type": "array"
         },
         "preset": {
-          "description": "Operator-owned worker preset ID resolved before model dispatch. A preset supplies modelProvider, model, and reasoningEffort unless a worker explicitly overrides a field.",
+          "description": "Operator-owned worker preset ID resolved before model dispatch. A preset supplies modelProvider and model unless a worker explicitly overrides either field.",
           "type": "string"
         },
         "provider": {
