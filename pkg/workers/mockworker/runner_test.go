@@ -139,6 +139,37 @@ func TestMockWorkerCommandRunner_UnmatchedDispatchPassthroughUsesNextRunner(t *t
 	}
 }
 
+func TestMockWorkerCommandRunner_ModelSelectionMatchesResolvedProviderCommand(t *testing.T) {
+	runner := &MockWorkerCommandRunner{
+		Config: &factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{{
+			WorkerName:    "worker",
+			ModelProvider: "codex",
+			Model:         "gpt-5-codex",
+			RunType:       factoryconfig.MockWorkerRunTypeAccept,
+		}}},
+		Next: failCommandRunner{t: t},
+	}
+
+	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+		Command:    "codex",
+		Args:       []string{"exec", "--model", "gpt-5-codex", "-"},
+		WorkerType: "worker",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+}
+
+func TestMockWorkerCommandRunner_ModelSelectionDoesNotMatchDifferentModel(t *testing.T) {
+	entry := factoryconfig.MockWorkerConfig{ModelProvider: "codex", Model: "gpt-5-codex"}
+	if mockWorkerMatches(entry, workerprocess.CommandRequest{Command: "codex", Args: []string{"exec", "--model", "other", "-"}}) {
+		t.Fatal("mock matched a different model")
+	}
+}
+
 func TestMockWorkerCommandRunner_UnmatchedDispatchDefaultAcceptSkipsNextRunner(t *testing.T) {
 	runner := &MockWorkerCommandRunner{
 		Config: &factoryconfig.MockWorkersConfig{

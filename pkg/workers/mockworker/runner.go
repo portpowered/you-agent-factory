@@ -135,12 +135,31 @@ func mockWorkerMatches(candidate factoryconfig.MockWorkerConfig, req workerproce
 	if candidate.WorkstationName != "" && candidate.WorkstationName != req.WorkstationName {
 		return false
 	}
+	if candidate.ModelProvider != "" && candidate.ModelProvider != req.Command {
+		return false
+	}
+	if candidate.Model != "" && !commandArgumentsSelectModel(req.Args, candidate.Model) {
+		return false
+	}
 	for _, selector := range candidate.WorkInputs {
 		if !mockWorkInputSelectorMatches(selector, commandRequestInputTokens(req), req.InputBindings) {
 			return false
 		}
 	}
 	return true
+}
+
+// commandArgumentsSelectModel recognizes the common provider CLI model flag.
+// Mock selection occurs after provider command construction and before the mock
+// script replaces the command, so this keeps functional mocks tied to the
+// resolved provider/model without exposing prompts or transport internals.
+func commandArgumentsSelectModel(args []string, model string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "--model" && args[index+1] == model {
+			return true
+		}
+	}
+	return false
 }
 
 func commandRequestInputTokens(request workerprocess.CommandRequest) []interfaces.Token {

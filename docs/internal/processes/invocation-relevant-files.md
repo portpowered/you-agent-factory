@@ -101,6 +101,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Git-backed factory root: factory-managed checkout preparation happens before
   provider dispatch for every supported provider, and a non-Git root must
   produce the observable failed lifecycle without calling that provider.
+- Mock-worker entries may optionally select the resolved provider command with
+  `modelProvider` and its `--model` argument with `model`. Use those selectors
+  in real-CLI factory smoke tests when a configured operator model/provider
+  must be proven at every worker boundary, rather than merely asserting CLI
+  flag parsing or runtime-build configuration.
 
 - `docs/reference/run.md` (invocation output modes and copyable examples);
   cross-link `you docs config` for return/output policy

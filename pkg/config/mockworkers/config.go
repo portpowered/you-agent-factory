@@ -50,6 +50,8 @@ type MockWorkerConfig struct {
 	ID              string                  `json:"id,omitempty"`
 	WorkerName      string                  `json:"workerName,omitempty"`
 	WorkstationName string                  `json:"workstationName,omitempty"`
+	ModelProvider   string                  `json:"modelProvider,omitempty"`
+	Model           string                  `json:"model,omitempty"`
 	WorkInputs      []MockWorkInputSelector `json:"workInputs,omitempty"`
 	RunType         MockWorkerRunType       `json:"runType"`
 	ScriptConfig    *MockWorkerScriptConfig `json:"scriptConfig,omitempty"`
