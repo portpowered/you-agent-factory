@@ -80,7 +80,7 @@
       "name": "schedule-loop-iteration",
       "behavior": "CRON",
       "cron": {
-        "schedule": "0 * * * *",
+        "schedule": "0 0 31 2 *",
         "triggerAtStart": true
       },
       "workPropagation": {"mode": "PRESERVE_INPUT"},

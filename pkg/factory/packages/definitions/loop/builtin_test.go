@@ -11,7 +11,7 @@ import (
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
-func TestBuiltInLoopFactoryJSON_DeclaresHourlyRecurringTopology(t *testing.T) {
+func TestBuiltInLoopFactoryJSON_DeclaresStartupAndSessionRecurringTopology(t *testing.T) {
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtinloop.BuiltInLoopFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
@@ -30,8 +30,8 @@ func TestBuiltInLoopFactoryJSON_DeclaresHourlyRecurringTopology(t *testing.T) {
 		t.Fatalf("request parameter = %#v, want required request", request)
 	}
 	schedule := workstation(t, cfg, "schedule-loop-iteration")
-	if schedule.Kind != interfaces.WorkstationKindCron || schedule.Cron == nil || schedule.Cron.Schedule != "0 * * * *" || !schedule.Cron.TriggerAtStart {
-		t.Fatalf("schedule workstation = %#v, want hourly trigger-at-start cron", schedule)
+	if schedule.Kind != interfaces.WorkstationKindCron || schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 2 *" || !schedule.Cron.TriggerAtStart {
+		t.Fatalf("schedule workstation = %#v, want one-time trigger-at-start cron", schedule)
 	}
 	if schedule.WorkPropagation == nil || schedule.WorkPropagation.Mode != interfaces.WorkPropagationModePreserveInput {
 		t.Fatalf("schedule propagation = %#v, want preserved request input", schedule.WorkPropagation)

@@ -275,6 +275,41 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 	}
 }
 
+func TestStartCronIntervalWatcher_SubmitsAtConfiguredInterval(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	requests := make(chan interfaces.WorkRequest, 4)
+	workstation := cronWorkstationConfigForTest("repeat-loop-iteration")
+	runtimeCfg := newCronLoadedRuntimeConfig(t, "factory-alpha", &interfaces.FactoryConfig{
+		WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{workstation},
+	}, map[string]*interfaces.FactoryWorkstationConfig{workstation.Name: &workstation})
+	svc := workersservice.New(workersservice.Config{Clock: fakeClock})
+	runCtx, cancel := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	if err := svc.StartCronIntervalWatcher(runCtx, &sidecars, runtimeCfg, "factory-alpha", func(_ context.Context, request interfaces.WorkRequest) error {
+		requests <- request
+		return nil
+	}, workstation, time.Minute); err != nil {
+		t.Fatalf("StartCronIntervalWatcher: %v", err)
+	}
+	t.Cleanup(func() {
+		cancel()
+		sidecars.Wait()
+	})
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(time.Minute - time.Second)
+	assertNoCronWorkRequestQueued(t, requests)
+	fakeClock.Advance(time.Second)
+	assertCronWorkRequestForWorkstation(t, waitForCronWorkRequest(t, requests, time.Second), start.Add(time.Minute), workstation.Name)
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(time.Minute)
+	assertCronWorkRequestForWorkstation(t, waitForCronWorkRequest(t, requests, time.Second), start.Add(2*time.Minute), workstation.Name)
+	assertNoCronWorkRequestQueued(t, requests)
+}
+
 func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
 	t.Helper()
 	select {
