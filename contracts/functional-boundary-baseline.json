@@ -4,7 +4,6 @@
   "files": [
     { "path": "tests/functional/bootstrap_portability/cli_init_agent_slot_regression_test.go", "sha256": "11895a46c805c7845015aa21638bfdf55ce526da1b7379c98a2d378441f22040" },
     { "path": "tests/functional/bootstrap_portability/export_import_fixture_test.go", "sha256": "86ee4f0a18d3d0a12fa14335842f426dee4a5aa7dad9edf2da0e28c78600288e" },
-    { "path": "tests/functional/bootstrap_portability/factory_validation_test.go", "sha256": "ac67113b59f7326f12fe1374ade9f99c7732bb5408e5dda5f94a2b2e4257ed79" },
     { "path": "tests/functional/bootstrap_portability/short_helpers_test.go", "sha256": "ec3ada776d5ba8456fddd4bc52f8822cb0a6f842a0f7cca36fbd86abe83fcea6" },
     { "path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go", "sha256": "0adbdd0406c75b4fac96c89f12e4029cff7100e838b0a731e5a07a8a1d15e3e1" },
     { "path": "tests/functional/guards_batch/executor_review_state_lifecycle_test.go", "sha256": "dabec2c44fa217fd22caabe5b4a8e7a3adb710944b7bff2579c4bc928b13e928" },
