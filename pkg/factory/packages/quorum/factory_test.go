@@ -217,6 +217,44 @@ func TestIsPackagedFactory_MatchesBuiltInQuorumIdentity(t *testing.T) {
 	}
 }
 
+func TestApplyWorkRelations_OnlyEmitsRelationsForEligibleQuorumWork(t *testing.T) {
+	branchInputs := []interfaces.TokenColor{
+		{WorkID: "", WorkTypeID: "quorum-branch-a"},
+		{WorkID: "request-work", WorkTypeID: "task"},
+		{WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"},
+		{WorkID: "branch-b-work", WorkTypeID: "quorum-branch-b"},
+	}
+
+	ApplyWorkRelations(nil, &interfaces.FactoryWorkstationConfig{Name: PackagedSplitWorkstationName}, nil)
+	ApplyWorkRelations(&interfaces.Token{}, nil, nil)
+
+	for _, output := range []*interfaces.Token{
+		{Color: interfaces.TokenColor{WorkTypeID: "task", ParentID: "request-work"}},
+		{Color: interfaces.TokenColor{WorkTypeID: "quorum-branch-a"}},
+	} {
+		ApplyWorkRelations(output, &interfaces.FactoryWorkstationConfig{Name: PackagedSplitWorkstationName}, nil)
+		if len(output.Color.Relations) != 0 {
+			t.Fatalf("split ineligible output relations = %#v, want none", output.Color.Relations)
+		}
+	}
+
+	nonMerge := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "task"}}
+	ApplyWorkRelations(nonMerge, &interfaces.FactoryWorkstationConfig{Name: PackagedMergeWorkstationName}, branchInputs)
+	if len(nonMerge.Color.Relations) != 0 {
+		t.Fatalf("non-merge relations = %#v, want none", nonMerge.Color.Relations)
+	}
+
+	merge := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "quorum-merge"}}
+	ApplyWorkRelations(merge, &interfaces.FactoryWorkstationConfig{Name: PackagedMergeWorkstationName}, branchInputs)
+	want := []interfaces.Relation{
+		{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"},
+		{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"},
+	}
+	if !sameRelations(merge.Color.Relations, want) {
+		t.Fatalf("merge relations = %#v, want %#v", merge.Color.Relations, want)
+	}
+}
+
 func assertArgumentValues(t *testing.T, arguments map[string]invocations.NormalizedArgument, name string, want []string) {
 	t.Helper()
 	got, ok := arguments[name]
