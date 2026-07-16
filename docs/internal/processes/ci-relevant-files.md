@@ -49,3 +49,7 @@
   remove entries as scenarios move to customer interfaces. GitHub issue #1176
   owns the migration while quarantined files remain; keep the baseline's
   `migrationTask` reference aligned with that approved tracker.
+  Construction and state-machine tests that do not exercise a customer
+  interface belong with the owning package rather than in `tests/functional`;
+  move them there before removing their baseline entry, while keeping
+  customer-observable scenarios on approved CLI, REST, MCP, or SSE seams.

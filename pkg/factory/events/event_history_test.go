@@ -560,6 +560,29 @@ func eventHistoryProjectionNetWithOrderedNonSuccessRoutes() *state.Net {
 	}
 }
 
+func TestRecordedEventBridgePreservesCanonicalEvent(t *testing.T) {
+	t.Parallel()
+
+	history := NewFactoryEventHistory(nil, nil)
+	eventTime := time.Date(2026, time.July, 16, 1, 2, 3, 0, time.FixedZone("test", -7*60*60))
+	history.AppendRecordedEvent(factoryapi.FactoryEvent{
+		Id:      "recorded-event-1",
+		Type:    factoryapi.FactoryEventTypeRunRequest,
+		Context: factoryapi.FactoryEventContext{EventTime: eventTime},
+	})
+
+	recorded := history.Events()
+	if len(recorded) != 1 {
+		t.Fatalf("len(Events()) = %d, want 1", len(recorded))
+	}
+	if recorded[0].Id != "recorded-event-1" || recorded[0].SchemaVersion != factoryapi.AgentFactoryEventV1 {
+		t.Fatalf("recorded event identity = (%q, %q), want preserved ID and canonical schema", recorded[0].Id, recorded[0].SchemaVersion)
+	}
+	if got, want := recorded[0].Context.EventTime, eventTime.UTC(); !got.Equal(want) || got.Location() != time.UTC {
+		t.Fatalf("recorded event time = %v (%v), want %v (UTC)", got, got.Location(), want)
+	}
+}
+
 func stringValueForEventHistoryTest[T ~string](value *T) string {
 	if value == nil {
 		return ""
