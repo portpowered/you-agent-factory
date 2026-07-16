@@ -17,11 +17,18 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 type processRunnerFunc func(context.Context) error
 
 func (run processRunnerFunc) Run(ctx context.Context) error { return run(ctx) }
+
+type processCommandRunner struct{}
+
+func (*processCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	return workers.CommandResult{}, nil
+}
 
 func TestBuildProcessGraphConstructsRunBeforeLifecycle(t *testing.T) {
 	t.Parallel()
@@ -44,6 +51,30 @@ func TestBuildProcessGraphConstructsRunBeforeLifecycle(t *testing.T) {
 	}
 }
 
+func TestBuildProcessGraphWithFunctionalEdgesConstructsSharedRunGraph(t *testing.T) {
+	t.Parallel()
+	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	graph, err := BuildProcessGraphWithFunctionalEdges(context.Background(), startupcli.Request{
+		Kind: startupcli.KindRun,
+		RunConfig: &runcli.RunConfig{
+			Dir: factoryDir, Port: 0, DisableDefaultRecording: true,
+			MockWorkersEnabled: true, SuppressDashboardRendering: true,
+		},
+	}, initializer.ProcessPolicy{
+		Mode:     initializer.ProcessModeLocalRun,
+		Sidecars: initializer.SidecarPolicy{WorkerScheduler: true},
+	}, FunctionalEdges{ProviderCommandRunner: &processCommandRunner{}})
+	if err != nil {
+		t.Fatalf("BuildProcessGraphWithFunctionalEdges() error = %v", err)
+	}
+	if graph == nil || graph.Run == nil || graph.MCP != nil {
+		t.Fatalf("functional run graph = %+v, want shared run application", graph)
+	}
+	if err := initializer.RunProcess(context.Background(), graph); err != nil {
+		t.Fatalf("RunProcess() error = %v", err)
+	}
+}
+
 func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 	t.Parallel()
 	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
@@ -57,6 +88,7 @@ func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 	graph, err := buildProcessGraph(context.Background(), startupcli.Request{
 		Kind: startupcli.KindRun, RunConfig: &runConfig,
 	}, initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}},
+		FunctionalEdges{},
 		func(context.Context, *service.FactoryServiceConfig, initializer.Mode) (runcli.RuntimeRunner, error) {
 			t.Fatal("runtime builder called for one-shot invocation")
 			return nil, nil
@@ -72,6 +104,72 @@ func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("invocation builder calls = %d, want 1", calls)
+	}
+}
+
+func TestBuildProcessGraphSelectsOnlySuppliedFunctionalEdge(t *testing.T) {
+	t.Parallel()
+	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	policy := initializer.ProcessPolicy{
+		Mode:     initializer.ProcessModeLocalRun,
+		Sidecars: initializer.SidecarPolicy{WorkerScheduler: true},
+	}
+	injected := &processCommandRunner{}
+
+	tests := []struct {
+		name     string
+		edges    FunctionalEdges
+		wantEdge workers.CommandRunner
+	}{
+		{name: "production defaults", edges: FunctionalEdges{}},
+		{name: "functional provider runner", edges: FunctionalEdges{ProviderCommandRunner: injected}, wantEdge: injected},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var built *service.FactoryServiceConfig
+			graph, err := buildProcessGraph(context.Background(), startupcli.Request{
+				Kind: startupcli.KindRun,
+				RunConfig: &runcli.RunConfig{
+					Dir: factoryDir, DisableDefaultRecording: true, SuppressDashboardRendering: true,
+				},
+			}, policy, test.edges, func(
+				_ context.Context,
+				cfg *service.FactoryServiceConfig,
+				_ initializer.Mode,
+			) (runcli.RuntimeRunner, error) {
+				built = cfg
+				return processRunnerFunc(func(context.Context) error { return nil }), nil
+			}, BuildMCPExecutionService)
+			if err != nil {
+				t.Fatalf("buildProcessGraph() error = %v", err)
+			}
+			if built == nil || built.ProviderCommandRunnerOverride != test.wantEdge {
+				t.Fatalf("provider command runner = %T, want %T", built.ProviderCommandRunnerOverride, test.wantEdge)
+			}
+			if graph == nil || graph.Run == nil {
+				t.Fatalf("run graph = %+v, want constructed application", graph)
+			}
+		})
+	}
+}
+
+func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
+	t.Parallel()
+	configured := &processCommandRunner{}
+	injected := &processCommandRunner{}
+	cfg := &service.FactoryServiceConfig{ProviderCommandRunnerOverride: configured}
+
+	production := configWithFunctionalEdges(cfg, FunctionalEdges{})
+	if production != cfg || production.ProviderCommandRunnerOverride != configured {
+		t.Fatalf("production config = %+v, want original config and provider runner", production)
+	}
+
+	functional := configWithFunctionalEdges(cfg, FunctionalEdges{ProviderCommandRunner: injected})
+	if functional == cfg || functional.ProviderCommandRunnerOverride != injected {
+		t.Fatalf("functional config = %+v, want copied config with injected provider runner", functional)
+	}
+	if cfg.ProviderCommandRunnerOverride != configured {
+		t.Fatal("functional edge selection mutated the caller-owned config")
 	}
 }
 
@@ -284,7 +382,7 @@ func TestBuildProcessGraphAppliesRootPolicyBeforeConstructionAndLifecycle(t *tes
 			var builtMode initializer.Mode
 			graph, err := buildProcessGraph(context.Background(), startupcli.Request{
 				Kind: startupcli.KindRun, RunConfig: &cfg,
-			}, test.policy, func(_ context.Context, cfg *service.FactoryServiceConfig, mode initializer.Mode) (runcli.RuntimeRunner, error) {
+			}, test.policy, FunctionalEdges{}, func(_ context.Context, cfg *service.FactoryServiceConfig, mode initializer.Mode) (runcli.RuntimeRunner, error) {
 				built = cfg
 				builtMode = mode
 				return processRunnerFunc(func(context.Context) error { return nil }), nil

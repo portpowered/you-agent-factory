@@ -29,6 +29,11 @@ Production command runners must remain blocking without taking lifecycle ownersh
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected
 graph-owned transport and perform the same idempotent reverse-order shutdown.
+Production-shaped functional runs replace process side effects through the typed
+`pkg/wire.FunctionalEdges` input. Apply those edges to an invocation-local config
+copy before calling the shared application builders; do not add CLI flags,
+package globals, untyped dependency bags, or test-side service-config mutation.
+The zero-value edge input must retain production defaults.
 Map default/service run policies to initializer's API lifecycle plan and explicit
 local batch policies to its CLI lifecycle plan before constructing the run
 application; runtime mode alone must not silently select the foreground edge.

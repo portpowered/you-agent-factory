@@ -10,7 +10,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+// FunctionalEdges contains the process-owned side-effect boundaries that a
+// production-shaped functional graph may replace. Its zero value preserves
+// every production edge.
+type FunctionalEdges struct {
+	ProviderCommandRunner workers.CommandRunner
+}
 
 // MCPExecutionRequest contains the transport inputs that select the durable
 // Factory Session execution collaborator used by MCP serve.
@@ -63,7 +71,25 @@ func BuildMCPExecutionService(
 // BuildProcessGraph constructs the concrete application graph selected by the
 // process root without starting transports, sidecars, or runtime loops.
 func BuildProcessGraph(ctx context.Context, request startupcli.Request, policy initializer.ProcessPolicy) (*initializer.ProcessGraph, error) {
-	return BuildProcessGraphWithMCPBuilder(ctx, request, policy, BuildMCPExecutionService)
+	return buildProcessGraph(
+		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
+		BuildMCPExecutionService,
+	)
+}
+
+// BuildProcessGraphWithFunctionalEdges constructs the same application graph
+// as BuildProcessGraph while replacing only explicitly supplied process edges.
+// Functional edge selection is applied to a copy of invocation-local config.
+func BuildProcessGraphWithFunctionalEdges(
+	ctx context.Context,
+	request startupcli.Request,
+	policy initializer.ProcessPolicy,
+	edges FunctionalEdges,
+) (*initializer.ProcessGraph, error) {
+	return buildProcessGraph(
+		ctx, request, policy, edges, buildProcessApplicationRunner,
+		BuildMCPExecutionService,
+	)
 }
 
 // BuildProcessGraphWithMCPBuilder constructs a process graph with an explicit
@@ -75,13 +101,10 @@ func BuildProcessGraphWithMCPBuilder(
 	policy initializer.ProcessPolicy,
 	buildMCP MCPExecutionBuilder,
 ) (*initializer.ProcessGraph, error) {
-	return buildProcessGraph(ctx, request, policy, func(
-		buildCtx context.Context,
-		cfg *service.FactoryServiceConfig,
-		mode initializer.Mode,
-	) (runcli.RuntimeRunner, error) {
-		return buildApplicationRunner(buildCtx, cfg, mode)
-	}, buildMCP)
+	return buildProcessGraph(
+		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
+		buildMCP,
+	)
 }
 
 type processRunnerBuilder func(
@@ -90,10 +113,19 @@ type processRunnerBuilder func(
 	initializer.Mode,
 ) (runcli.RuntimeRunner, error)
 
+func buildProcessApplicationRunner(
+	ctx context.Context,
+	cfg *service.FactoryServiceConfig,
+	mode initializer.Mode,
+) (runcli.RuntimeRunner, error) {
+	return buildApplicationRunner(ctx, cfg, mode)
+}
+
 func buildProcessGraph(
 	ctx context.Context,
 	request startupcli.Request,
 	policy initializer.ProcessPolicy,
+	edges FunctionalEdges,
 	buildRunner processRunnerBuilder,
 	buildMCP MCPExecutionBuilder,
 	invocationBuilders ...runcli.InvocationBootstrapBuilder,
@@ -119,8 +151,10 @@ func buildProcessGraph(
 			buildCtx context.Context,
 			cfg *service.FactoryServiceConfig,
 		) (runcli.RuntimeRunner, error) {
-			return buildRunner(buildCtx, cfg, applicationMode)
-		}, invocationBuilder)
+			return buildRunner(buildCtx, configWithFunctionalEdges(cfg, edges), applicationMode)
+		}, func(buildCtx context.Context, cfg *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
+			return invocationBuilder(buildCtx, configWithFunctionalEdges(cfg, edges))
+		})
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
 		}
@@ -130,6 +164,18 @@ func buildProcessGraph(
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
 	}
+}
+
+func configWithFunctionalEdges(
+	cfg *service.FactoryServiceConfig,
+	edges FunctionalEdges,
+) *service.FactoryServiceConfig {
+	if cfg == nil || isNil(edges.ProviderCommandRunner) {
+		return cfg
+	}
+	copied := *cfg
+	copied.ProviderCommandRunnerOverride = edges.ProviderCommandRunner
+	return &copied
 }
 
 func buildMCPProcessGraph(
