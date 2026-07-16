@@ -260,7 +260,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		projectionReducerWorkInputEvent(1, t0.Add(time.Second), "tok-task-1", input),
 		request,
 	} {
-		if err := reducer.apply(event); err != nil {
+		if err := reducer.apply(mustCanonicalProjectionEvent(t, event)); err != nil {
 			t.Fatalf("apply pre-completion event %q: %v", event.Type, err)
 		}
 	}
@@ -270,10 +270,10 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		t.Fatalf("dispatch source inputs = %#v, want one traced work item", dispatchSource.Inputs)
 	}
 
-	if err := reducer.apply(inference); err != nil {
+	if err := reducer.apply(mustCanonicalProjectionEvent(t, inference)); err != nil {
 		t.Fatalf("apply inference event: %v", err)
 	}
-	if err := reducer.apply(response); err != nil {
+	if err := reducer.apply(mustCanonicalProjectionEvent(t, response)); err != nil {
 		t.Fatalf("apply response event: %v", err)
 	}
 
@@ -303,6 +303,15 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 	if providerInput.Tags["priority"] != "high" {
 		t.Fatalf("provider-session consumed input tags = %#v, want priority high", providerInput.Tags)
 	}
+}
+
+func mustCanonicalProjectionEvent(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {
+	t.Helper()
+	canonicalEvent, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		t.Fatalf("convert projection event %q: %v", event.Type, err)
+	}
+	return canonicalEvent
 }
 
 func projectionReducerInitialStructureEvent(eventTime time.Time) factoryapi.FactoryEvent {

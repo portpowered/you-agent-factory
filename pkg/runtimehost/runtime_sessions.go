@@ -1156,7 +1156,7 @@ func (fs *Host) projectJavaScriptRuntimeState(
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
-		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
+		worldState, err := projections.ReconstructCanonicalFactoryWorldState(handle.Bundle.EventHistory.CanonicalEvents(), selectedTick)
 		if err != nil {
 			return nil, err
 		}

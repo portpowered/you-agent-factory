@@ -59,6 +59,21 @@ func TestFactoryWorldReducerAppliesCanonicalStructureAndStateEvents(t *testing.T
 	}
 }
 
+func TestReconstructCanonicalFactoryWorldStateOrdersOwnerEvents(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 7, 0, 0, 0, time.UTC)
+	running := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeFactoryStateResponse, interfaces.FactoryEventContext{EventTime: eventTime, Sequence: 1, Tick: 1}, interfaces.FactoryStateResponseEventPayload{State: interfaces.FactoryStateRunning})
+	completed := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeFactoryStateResponse, interfaces.FactoryEventContext{EventTime: eventTime.Add(time.Second), Sequence: 2, Tick: 2}, interfaces.FactoryStateResponseEventPayload{State: interfaces.FactoryStateCompleted})
+
+	state, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{completed, running}, 2)
+	if err != nil {
+		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
+	}
+	if state.FactoryState != string(interfaces.FactoryStateCompleted) || state.EventTime != eventTime.Add(time.Second) {
+		t.Fatalf("canonical ordered state = %#v, want completed at final event time", state)
+	}
+}
+
 func TestFactoryWorldReducerAppliesCanonicalJavaScriptAndArtifactEvents(t *testing.T) {
 	t.Parallel()
 	eventTime := time.Date(2026, time.July, 16, 6, 0, 0, 0, time.FixedZone("UTC+2", 2*60*60))

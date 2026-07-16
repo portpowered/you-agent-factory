@@ -23,8 +23,26 @@ const (
 // and returns the reconstructed world state at selectedTick. Events after the
 // selected tick are ignored.
 func ReconstructFactoryWorldState(events []factoryapi.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+	canonicalEvents := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return interfaces.FactoryWorldState{}, err
+		}
+		canonicalEvents = append(canonicalEvents, canonicalEvent)
+	}
+	return ReconstructCanonicalFactoryWorldState(canonicalEvents, selectedTick)
+}
+
+// ReconstructCanonicalFactoryWorldState applies the Factory-owned event
+// envelope directly. Generated event conversion belongs at compatibility and
+// transport boundaries, not in the canonical reducer.
+func ReconstructCanonicalFactoryWorldState(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
 	reducer := newFactoryWorldReducer(selectedTick)
-	ordered := append([]factoryapi.FactoryEvent(nil), events...)
+	ordered := make([]interfaces.FactoryEvent, len(events))
+	for index, event := range events {
+		ordered[index] = event.Clone()
+	}
 	sort.SliceStable(ordered, func(i, j int) bool {
 		left := ordered[i]
 		right := ordered[j]
@@ -95,114 +113,54 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity world-state replay keeps canonical event routing on one reducer switch.
-func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
+func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 	r.stateValue.EventTime = event.Context.EventTime
 	switch event.Type {
-	case factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-		factoryapi.FactoryEventTypeFactoryChange:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyStructureEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeWorkRequest:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyWorkRequestEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeRelationshipChangeRequest:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyRelationshipChangeEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeDispatchRequest:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyDispatchRequestEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyDispatchResponseEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeFactoryStateResponse:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyFactoryStateResponseEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeWorkStateChange:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyWorkStateChangeEvent(canonicalEvent)
-	case factoryapi.FactoryEventTypeRunResponse:
+	case interfaces.FactoryEventTypeRunRequest,
+		interfaces.FactoryEventTypeInitialStructureRequest,
+		interfaces.FactoryEventTypeFactoryChange:
+		return r.applyStructureEvent(event)
+	case interfaces.FactoryEventTypeWorkRequest:
+		return r.applyWorkRequestEvent(event)
+	case interfaces.FactoryEventTypeRelationshipChangeRequest:
+		return r.applyRelationshipChangeEvent(event)
+	case interfaces.FactoryEventTypeDispatchRequest:
+		return r.applyDispatchRequestEvent(event)
+	case interfaces.FactoryEventTypeDispatchResponse:
+		return r.applyDispatchResponseEvent(event)
+	case interfaces.FactoryEventTypeFactoryStateResponse:
+		return r.applyFactoryStateResponseEvent(event)
+	case interfaces.FactoryEventTypeWorkStateChange:
+		return r.applyWorkStateChangeEvent(event)
+	case interfaces.FactoryEventTypeRunResponse:
 		return nil
-	}
-	switch interfaces.FactoryEventType(event.Type) {
 	case interfaces.FactoryEventTypeInferenceRequest,
 		interfaces.FactoryEventTypeInferenceResponse,
 		interfaces.FactoryEventTypeScriptRequest,
 		interfaces.FactoryEventTypeScriptResponse,
 		interfaces.FactoryEventTypeAgentRunResponse:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		return r.applyWorkerExecutionEvent(canonicalEvent)
-	}
-	if handled, err := r.applyGeneratedOrchestratorLifecycleEvent(event); handled {
-		return err
-	}
-	switch interfaces.FactoryEventType(event.Type) {
+		return r.applyWorkerExecutionEvent(event)
 	case interfaces.FactoryEventTypeSessionStarted,
 		interfaces.FactoryEventTypeSessionPaused,
 		interfaces.FactoryEventTypeSessionResumed,
 		interfaces.FactoryEventTypeSessionResultUpdated,
 		interfaces.FactoryEventTypeSessionCompleted:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		_, err = r.applySessionLifecycleEvent(canonicalEvent)
+		_, err := r.applySessionLifecycleEvent(event)
 		return err
-	}
-	switch interfaces.FactoryEventType(event.Type) {
 	case interfaces.FactoryEventTypeDispatchQueued,
 		interfaces.FactoryEventTypeDispatchInterrupted,
 		interfaces.FactoryEventTypeDispatchReconciled:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return err
-		}
-		_, err = r.applyDispatchLifecycleEvent(canonicalEvent)
+		_, err := r.applyDispatchLifecycleEvent(event)
 		return err
-	}
-	return nil
-}
-
-func (r *factoryWorldReducer) applyGeneratedOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
-	switch interfaces.FactoryEventType(event.Type) {
 	case interfaces.FactoryEventTypeOrchestratorPhaseChanged,
 		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
 		interfaces.FactoryEventTypeJavaScriptCheckpointRef,
 		interfaces.FactoryEventTypeJavaScriptPhaseChange,
 		interfaces.FactoryEventTypeArtifactCreated:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return true, err
-		}
-		_, err = r.applyOrchestratorLifecycleEvent(canonicalEvent)
-		return true, err
-	default:
-		return false, nil
+		_, err := r.applyOrchestratorLifecycleEvent(event)
+		return err
 	}
+	return nil
 }
 
 func (r *factoryWorldReducer) applyWorkStateChangeEvent(event interfaces.FactoryEvent) error {

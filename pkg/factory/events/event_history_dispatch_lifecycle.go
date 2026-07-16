@@ -431,11 +431,11 @@ func synthesizeDispatchReconciliationEvents(
 	ackTick := maxEventTick(ackEvents)
 	fullTick := maxEventTick(events)
 
-	ackState, err := projections.ReconstructFactoryWorldState(generatedFactoryEvents(ackEvents), ackTick)
+	ackState, err := projections.ReconstructCanonicalFactoryWorldState(ackEvents, ackTick)
 	if err != nil {
 		return nil, err
 	}
-	fullState, err := projections.ReconstructFactoryWorldState(generatedFactoryEvents(events), fullTick)
+	fullState, err := projections.ReconstructCanonicalFactoryWorldState(events, fullTick)
 	if err != nil {
 		return nil, err
 	}
