@@ -41,26 +41,23 @@ type MCPExecutionBuilder func(context.Context, MCPExecutionRequest) (factorysess
 // selected by MCP command inputs. Protocol parsing remains in the transport;
 // persistence and runtime construction remain in wire.
 func BuildMCPExecutionService(
-	_ context.Context,
+	ctx context.Context,
 	request MCPExecutionRequest,
+) (factorysessionexecution.Service, error) {
+	return buildMCPExecutionService(ctx, request, InjectRuntimeCore)
+}
+
+func buildMCPExecutionService(
+	ctx context.Context,
+	request MCPExecutionRequest,
+	buildCore runtimeSessionExecutionCoreBuilder,
 ) (factorysessionexecution.Service, error) {
 	if request.RuntimeBacked {
 		projectRoot, err := resolveSessionExecutionProjectRoot(request.ProjectRoot)
 		if err != nil {
 			return nil, err
 		}
-		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("initialize runtime-backed persistence: %w", err)
-		}
-		service, err := factorysessionexecution.NewExecutionService(
-			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence, Clock: factory.EnsureClock(nil)},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)
-		}
-		return service, nil
+		return buildRuntimeBackedSessionExecutionService(ctx, projectRoot, buildCore)
 	}
 	catalogPath, err := resolveSessionExecutionFixtureCatalog(request.FixtureCatalogPath)
 	if err != nil {

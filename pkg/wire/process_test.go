@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -256,7 +257,7 @@ func TestBuildMCPExecutionServiceSelectsRequestedBackingService(t *testing.T) {
 			)},
 		},
 		{
-			name: "runtime", request: MCPExecutionRequest{RuntimeBacked: true, ProjectRoot: t.TempDir()},
+			name: "runtime", request: MCPExecutionRequest{RuntimeBacked: true, ProjectRoot: copiedSessionExecutionFactory(t)},
 			wantRuntime: true,
 		},
 	}
@@ -292,7 +293,7 @@ func TestBuildSessionExecutionServiceSelectsRequestedBackingService(t *testing.T
 			request: sessionexecutioncli.ServiceRequest{
 				ExecutionBackendConfig: sessionexecutioncli.ExecutionBackendConfig{
 					Provider:    string(factorysessionexecution.ExecutionProviderJavaScriptRuntime),
-					ProjectRoot: t.TempDir(),
+					ProjectRoot: copiedSessionExecutionFactory(t),
 				},
 			},
 			wantRuntime: true,
@@ -313,6 +314,66 @@ func TestBuildSessionExecutionServiceSelectsRequestedBackingService(t *testing.T
 			}
 		})
 	}
+}
+
+func TestRuntimeBackedMCPAndCLIExecutionConsumeOneWireCore(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		build func(context.Context, runtimeSessionExecutionCoreBuilder) (factorysessionexecution.Service, error)
+	}{
+		{
+			name: "MCP runtime serve",
+			build: func(ctx context.Context, buildCore runtimeSessionExecutionCoreBuilder) (factorysessionexecution.Service, error) {
+				return buildMCPExecutionService(ctx, MCPExecutionRequest{
+					RuntimeBacked: true, ProjectRoot: copiedSessionExecutionFactory(t),
+				}, buildCore)
+			},
+		},
+		{
+			name: "CLI session execution",
+			build: func(ctx context.Context, buildCore runtimeSessionExecutionCoreBuilder) (factorysessionexecution.Service, error) {
+				return buildSessionExecutionService(ctx, sessionexecutioncli.ServiceRequest{
+					ExecutionBackendConfig: sessionexecutioncli.ExecutionBackendConfig{
+						Provider:    string(factorysessionexecution.ExecutionProviderJavaScriptRuntime),
+						ProjectRoot: copiedSessionExecutionFactory(t),
+					},
+				}, buildCore)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			calls := 0
+			var core *runtimehost.Core
+			service, err := test.build(context.Background(), func(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+				calls++
+				built, err := InjectRuntimeCore(ctx, cfg)
+				core = built
+				return built, err
+			})
+			if err != nil {
+				t.Fatalf("runtime-backed execution build error = %v", err)
+			}
+			if calls != 1 || core == nil {
+				t.Fatalf("runtime core builds = %d, core = %p, want one completed Wire core", calls, core)
+			}
+			if service != core.DurableExecution() {
+				t.Fatal("runtime-backed compatibility path replaced the Wire-owned durable execution service")
+			}
+			owner, ok := service.(interface{ PersistenceStore() runtimepersist.Store })
+			if !ok || owner.PersistenceStore() == nil || owner.PersistenceStore() != core.Persistence() {
+				t.Fatal("runtime-backed compatibility path did not retain the Wire-owned persistence store")
+			}
+		})
+	}
+}
+
+func copiedSessionExecutionFactory(t *testing.T) string {
+	t.Helper()
+	return testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory"))
 }
 
 func TestBuildSessionExecutionServiceRejectsUnsupportedProvider(t *testing.T) {

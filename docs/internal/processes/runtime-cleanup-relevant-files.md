@@ -195,6 +195,13 @@ typed builder flows through the root-owned production graph builder into
 `pkg/wire/process.go`, and `pkg/transports/cli/mcp` accepts only the resulting
 service. Production-composition tests should execute the real root command and
 also assert that the wire graph retains the exact injected service instance.
+Runtime-backed MCP serve and CLI session-execution adapters share
+`buildRuntimeBackedSessionExecutionService` in `pkg/wire/session_execution.go`:
+they must construct one completed `InjectRuntimeCore` graph and return its exact
+durable execution collaborator, never project persistence or construct a second
+execution service. Keep fixture-backed requests as explicit edge substitutions,
+and prove each runtime-backed adapter's one-core identity plus persistence-store
+identity in `pkg/wire/process_test.go`.
 
 Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not

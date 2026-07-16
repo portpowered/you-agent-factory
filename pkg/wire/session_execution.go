@@ -10,15 +10,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	"go.uber.org/zap"
 )
+
+type runtimeSessionExecutionCoreBuilder func(context.Context, *runtimehost.Config) (*runtimehost.Core, error)
 
 // BuildSessionExecutionService constructs the durable execution collaborator
 // selected by CLI inputs. Transport packages receive only the resulting
 // service and retain parsing and rendering ownership.
 func BuildSessionExecutionService(
-	_ context.Context,
+	ctx context.Context,
 	request sessionexecutioncli.ServiceRequest,
+) (factorysessionexecution.Service, error) {
+	return buildSessionExecutionService(ctx, request, InjectRuntimeCore)
+}
+
+func buildSessionExecutionService(
+	ctx context.Context,
+	request sessionexecutioncli.ServiceRequest,
+	buildCore runtimeSessionExecutionCoreBuilder,
 ) (factorysessionexecution.Service, error) {
 	provider, err := normalizeSessionExecutionProvider(request.Provider)
 	if err != nil {
@@ -29,16 +41,7 @@ func BuildSessionExecutionService(
 		if err != nil {
 			return nil, err
 		}
-		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
-		if err != nil {
-			return nil, err
-		}
-		return factorysessionexecution.NewExecutionService(provider, factorysessionexecution.ServiceConfig{
-			ProjectRoot:       projectRoot,
-			ChildExecutorMode: request.ChildExecutorMode,
-			Persistence:       persistence,
-			Clock:             factory.EnsureClock(nil),
-		})
+		return buildRuntimeBackedSessionExecutionService(ctx, projectRoot, buildCore)
 	}
 	catalogPath, err := resolveSessionExecutionFixtureCatalog(request.FixtureCatalogPath)
 	if err != nil {
@@ -49,6 +52,30 @@ func BuildSessionExecutionService(
 		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
 	}
 	return service, nil
+}
+
+// buildRuntimeBackedSessionExecutionService adapts a completed Wire runtime
+// core to the narrow durable-execution contract used by CLI and MCP. It never
+// constructs persistence or execution independently of that shared graph.
+func buildRuntimeBackedSessionExecutionService(
+	ctx context.Context,
+	projectRoot string,
+	buildCore runtimeSessionExecutionCoreBuilder,
+) (factorysessionexecution.Service, error) {
+	if buildCore == nil {
+		return nil, fmt.Errorf("construct runtime-backed execution service: runtime core builder is required")
+	}
+	core, err := buildCore(ctx, &runtimehost.Config{
+		Dir: projectRoot, ExecutionBaseDir: projectRoot,
+		Logger: zap.NewNop(), Clock: factory.EnsureClock(nil),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct runtime-backed execution service: %w", err)
+	}
+	if core == nil || core.DurableExecution() == nil {
+		return nil, fmt.Errorf("construct runtime-backed execution service: shared runtime core durable execution is required")
+	}
+	return core.DurableExecution(), nil
 }
 
 func normalizeSessionExecutionProvider(value string) (factorysessionexecution.ExecutionProvider, error) {
