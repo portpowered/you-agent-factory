@@ -1,6 +1,7 @@
 package factorysession
 
 import (
+	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -9,6 +10,60 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// SessionSummaryToAPI maps one live Factory Session to its public summary.
+func SessionSummaryToAPI(session *factorysessions.LiveSession) factoryapi.FactorySessionSummary {
+	if session == nil {
+		return factoryapi.FactorySessionSummary{}
+	}
+	return factoryapi.FactorySessionSummary{
+		FactoryDir: session.FactoryDir,
+		FolderPath: session.FolderPath,
+		Id:         factorysessions.CanonicalFactorySessionID(session),
+		IsDefault:  session.IsDefault,
+		Project:    session.Project,
+		Target: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
+			Name: optionalTrimmedString(session.Target.Name),
+		},
+	}
+}
+
+// SortSessionSummaries orders public summaries with default sessions first, then by id.
+func SortSessionSummaries(summaries []factoryapi.FactorySessionSummary) {
+	sort.SliceStable(summaries, func(i, j int) bool {
+		if summaries[i].IsDefault != summaries[j].IsDefault {
+			return summaries[i].IsDefault
+		}
+		return summaries[i].Id < summaries[j].Id
+	})
+}
+
+// TargetToAPI maps one discovered Factory Session target to the public shape.
+func TargetToAPI(target factorysessions.Target) factoryapi.FactorySessionTarget {
+	return factoryapi.FactorySessionTarget{
+		FactoryDir: target.FactoryDir,
+		FolderPath: target.FolderPath,
+		Label:      target.Label,
+		Project:    target.Project,
+		Ref: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKind(target.Ref.Kind),
+			Name: optionalTrimmedString(target.Ref.Name),
+		},
+	}
+}
+
+// TargetsToAPI maps discovered Factory Session targets to the public shape.
+func TargetsToAPI(targets []factorysessions.Target) []factoryapi.FactorySessionTarget {
+	if len(targets) == 0 {
+		return nil
+	}
+	response := make([]factoryapi.FactorySessionTarget, 0, len(targets))
+	for _, target := range targets {
+		response = append(response, TargetToAPI(target))
+	}
+	return response
+}
 
 // ListSessionsRequestFromAPI maps one public session list request into the shared
 // service contract. Scope defaults to live for backward-compatible live workspace

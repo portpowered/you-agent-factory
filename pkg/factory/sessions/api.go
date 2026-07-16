@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -12,75 +11,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
-
-// ListSummaries builds API session summaries from registered live sessions.
-func ListSummaries(registry *Registry) []factoryapi.FactorySessionSummary {
-	if registry == nil {
-		return nil
-	}
-	sessionIDs := registry.IDs()
-	summaries := make([]factoryapi.FactorySessionSummary, 0, len(sessionIDs))
-	for _, sessionID := range sessionIDs {
-		session := registry.Get(sessionID)
-		if session == nil {
-			continue
-		}
-		summaries = append(summaries, SummaryResponse(session))
-	}
-	SortSessionSummaries(summaries)
-	return summaries
-}
-
-// SortSessionSummaries orders session summaries with default sessions first, then by id.
-func SortSessionSummaries(summaries []factoryapi.FactorySessionSummary) {
-	sort.SliceStable(summaries, func(i, j int) bool {
-		if summaries[i].IsDefault != summaries[j].IsDefault {
-			return summaries[i].IsDefault
-		}
-		return summaries[i].Id < summaries[j].Id
-	})
-}
-
-// SummaryResponse maps a live session to the API summary shape.
-func SummaryResponse(session *LiveSession) factoryapi.FactorySessionSummary {
-	return factoryapi.FactorySessionSummary{
-		FactoryDir: session.FactoryDir,
-		FolderPath: session.FolderPath,
-		Id:         CanonicalFactorySessionID(session),
-		IsDefault:  session.IsDefault,
-		Project:    session.Project,
-		Target: factoryapi.FactorySessionTargetRef{
-			Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
-			Name: stringPointerOrNil(session.Target.Name),
-		},
-	}
-}
-
-// TargetResponse maps a discovered target to the API target shape.
-func TargetResponse(target Target) factoryapi.FactorySessionTarget {
-	return factoryapi.FactorySessionTarget{
-		FactoryDir: target.FactoryDir,
-		FolderPath: target.FolderPath,
-		Label:      target.Label,
-		Project:    target.Project,
-		Ref: factoryapi.FactorySessionTargetRef{
-			Kind: factoryapi.FactorySessionTargetRefKind(target.Ref.Kind),
-			Name: stringPointerOrNil(target.Ref.Name),
-		},
-	}
-}
-
-// TargetsResponse maps discovered targets to API targets.
-func TargetsResponse(targets []Target) []factoryapi.FactorySessionTarget {
-	if len(targets) == 0 {
-		return nil
-	}
-	response := make([]factoryapi.FactorySessionTarget, 0, len(targets))
-	for _, target := range targets {
-		response = append(response, TargetResponse(target))
-	}
-	return response
-}
 
 // NewLiveSession constructs a registry entry for a started session.
 func NewLiveSession(
@@ -157,14 +87,6 @@ func FactoryName(rootDir string, runtimeCfg *factoryconfig.LoadedFactoryConfig) 
 	return factoryapi.FactoryName("factory")
 }
 
-func stringPointerOrNil(value string) *string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
-}
-
 // ValidateInitNewFactoryNestedDir rejects init-new-factory when the canonical nested
 // factory directory already exists with content that init cannot populate without
 // overwrite or cleanup.
@@ -216,7 +138,7 @@ func ValidateInitNewFactoryNestedDir(resolvedFolder string) error {
 // SessionResponse maps a live session and its domain runtime projection to the
 // API detail shape. Generated transport values are confined to this adapter.
 func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
-	summary := SummaryResponse(ctx.Session)
+	summary := sessionSummaryToAPI(ctx.Session)
 	runtime := projectSessionReadRuntime(ctx)
 	return factoryapi.FactorySession{
 		FactoryDir: summary.FactoryDir, FolderPath: summary.FolderPath, Id: summary.Id,
@@ -226,10 +148,32 @@ func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
 
 // SummaryWithRuntime maps a live session to the API summary shape with runtime projection.
 func SummaryWithRuntime(ctx ProjectionContext) factoryapi.FactorySessionSummary {
-	summary := SummaryResponse(ctx.Session)
+	summary := sessionSummaryToAPI(ctx.Session)
 	runtime := projectSessionReadRuntime(ctx)
 	summary.Runtime = &runtime
 	return summary
+}
+
+func sessionSummaryToAPI(session *LiveSession) factoryapi.FactorySessionSummary {
+	return factoryapi.FactorySessionSummary{
+		FactoryDir: session.FactoryDir,
+		FolderPath: session.FolderPath,
+		Id:         CanonicalFactorySessionID(session),
+		IsDefault:  session.IsDefault,
+		Project:    session.Project,
+		Target: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
+			Name: stringPointerOrNil(session.Target.Name),
+		},
+	}
+}
+
+func stringPointerOrNil(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func projectSessionReadRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {

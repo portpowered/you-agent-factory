@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/dataplane"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/stream"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
@@ -104,7 +105,7 @@ func openResultToAPI(host Host, result *factorysessions.OpenResult) (factoryapi.
 		}
 	}
 	if len(result.Targets) > 0 {
-		targets := factorysessions.TargetsResponse(result.Targets)
+		targets := factorysession.TargetsToAPI(result.Targets)
 		response.Targets = &targets
 	}
 	if result.SessionID != "" {
@@ -112,7 +113,7 @@ func openResultToAPI(host Host, result *factorysessions.OpenResult) (factoryapi.
 		if err != nil {
 			return factoryapi.OpenFactorySessionResponse{}, err
 		}
-		summary := factorysessions.SummaryResponse(session)
+		summary := factorysession.SessionSummaryToAPI(session)
 		response.Session = &summary
 	}
 	return response, nil

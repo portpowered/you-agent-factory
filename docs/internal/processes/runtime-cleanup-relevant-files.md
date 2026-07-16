@@ -363,3 +363,9 @@ values through service and control-plane boundaries. The HTTP handler maps those
 owner-defined targets to generated `FactoryValidationTarget` values only while
 writing the public error response; do not store generated transport targets in
 Factory Session errors.
+
+Live Factory Session summaries and discovered targets retain `LiveSession`,
+`Target`, and `TargetRef` as their owner-defined values. Convert those values,
+including canonical runtime session identity and optional target names, through
+`pkg/transports/mapping/factorysession` when assembling open or list responses;
+do not export generated summary or target constructors from the session owner.

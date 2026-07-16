@@ -54,6 +54,54 @@ func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
 	}
 }
 
+func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testing.T) {
+	t.Parallel()
+
+	defaultSession := factorysessions.NewLiveSession(
+		factorysessions.DefaultSessionID,
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		nil,
+		true,
+		"default-project",
+	)
+	namedSession := factorysessions.NewLiveSession(
+		"session-beta",
+		"/factories/beta",
+		"/workspace",
+		"/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
+		nil,
+		false,
+		"beta-project",
+	)
+	summaries := []factoryapi.FactorySessionSummary{
+		factorysession.SessionSummaryToAPI(namedSession),
+		factorysession.SessionSummaryToAPI(defaultSession),
+	}
+	factorysession.SortSessionSummaries(summaries)
+	if !summaries[0].IsDefault || summaries[0].Id != factorysessions.CanonicalFactorySessionID(defaultSession) {
+		t.Fatalf("first summary = %#v, want canonical default session first", summaries[0])
+	}
+	if summaries[1].Project != "beta-project" || summaries[1].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
+		summaries[1].Target.Name == nil || *summaries[1].Target.Name != "beta" {
+		t.Fatalf("named summary = %#v, want detached public target fields", summaries[1])
+	}
+
+	targets := factorysession.TargetsToAPI([]factorysessions.Target{{
+		FactoryDir: "/factories/beta",
+		FolderPath: "/workspace",
+		Label:      "Beta",
+		Project:    "beta-project",
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
+	}})
+	if len(targets) != 1 || targets[0].Ref.Name == nil || *targets[0].Ref.Name != "beta" || targets[0].Label != "Beta" {
+		t.Fatalf("targets = %#v, want mapped named target", targets)
+	}
+}
+
 func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
 	t.Parallel()
 
