@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
@@ -243,7 +242,7 @@ type namedGoalResponseStreamJSONInvocationResultRecord struct {
 }
 
 type namedGoalResponseStreamJSONResponseEventRecord struct {
-	RecordType string                            `json:"recordType"`
+	RecordType string                              `json:"recordType"`
 	Event      responseevents.FactoryResponseEvent `json:"event"`
 }
 
@@ -263,7 +262,7 @@ func runNamedGoalPrimaryOnlyInvocationCLI(
 
 	homeDir := t.TempDir()
 	if _, err := factoryconfig.PersistNamedFactory(
-		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
+		defaultpaths.NamedFactoriesRoot(homeDir),
 		goal.PackagedFactoryName,
 		goal.BuiltInFactoryJSON,
 	); err != nil {
@@ -294,7 +293,7 @@ func runNamedGoalPrimaryOnlyInvocationCLI(
 		goalText,
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
@@ -313,7 +312,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 
 	homeDir := t.TempDir()
 	if _, err := factoryconfig.PersistNamedFactory(
-		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
+		defaultpaths.NamedFactoriesRoot(homeDir),
 		goal.PackagedFactoryName,
 		goal.BuiltInFactoryJSON,
 	); err != nil {
@@ -347,7 +346,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -78,7 +79,7 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 	}
 
 	homeDir := t.TempDir()
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
@@ -114,7 +115,7 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 		goalText,
 	)
 	cmd.Dir = unrelatedWorkingDir
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
