@@ -286,15 +286,10 @@
       "name": "you session dispatches",
       "interface": "cli",
       "classification": "runnable",
-      "status": "covered",
-      "lane": "long",
+      "status": "missing",
+      "lane": "short",
       "executionClass": "deterministic",
-      "evidence": [
-        {
-          "test": "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go::TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary",
-          "boundary": "cli"
-        }
-      ]
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "cli/you.session.list",

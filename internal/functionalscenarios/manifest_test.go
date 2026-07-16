@@ -2,6 +2,8 @@ package functionalscenarios
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -27,9 +29,54 @@ func TestBuildReviewedManifestPublishesTruthfulCoverageAndSSEPolicy(t *testing.T
 	if got := byID["cli/you.work.move"]; got.Status != StatusCovered || got.Lane != LaneLong || len(got.Evidence) != 1 {
 		t.Fatalf("covered CLI scenario = %#v", got)
 	}
+	if got := byID["cli/you.session.dispatches"]; got.Status != StatusMissing || len(got.Evidence) != 0 {
+		t.Fatalf("CLI dispatches scenario = %#v, want truthful missing status", got)
+	}
 	assertSSEPolicy(t, byID[sessionEventsStableID], true, SSERequired, StatusPartial)
 	assertSSEPolicy(t, byID[globalEventsStableID], false, SSEDeprecatedLaterRemoval, StatusNotApplicable)
 	assertSSEPolicy(t, byID[responseEventsStableID], false, SSECurrentlyDeferred, StatusNotApplicable)
+}
+
+func TestCheckEvidenceReferencesRejectsStaleAndInternalOnlyCitations(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	functionalPath := filepath.Join(root, "tests", "functional", "api_test.go")
+	if err := os.MkdirAll(filepath.Dir(functionalPath), 0o755); err != nil {
+		t.Fatalf("create functional fixture directory: %v", err)
+	}
+	if err := os.WriteFile(functionalPath, []byte("package functional\n\nimport \"testing\"\n\nfunc TestGetOne(t *testing.T) {}\nfunc TestHelper() {}\n"), 0o644); err != nil {
+		t.Fatalf("write functional fixture: %v", err)
+	}
+
+	base := &Manifest{FormatVersion: ManifestFormatVersion, Scenarios: []Scenario{{
+		StableID: "rest/getOne", Interface: InterfaceREST,
+		Evidence: []Evidence{{Test: "tests/functional/api_test.go::TestGetOne", Boundary: InterfaceREST}},
+	}}}
+	if err := CheckEvidenceReferences(root, base); err != nil {
+		t.Fatalf("CheckEvidenceReferences() error = %v", err)
+	}
+
+	tests := []struct {
+		name      string
+		reference string
+		want      string
+	}{
+		{name: "nonexistent symbol", reference: "tests/functional/api_test.go::TestDeleted", want: `cited executable test symbol "TestDeleted" does not exist`},
+		{name: "non-test helper", reference: "tests/functional/api_test.go::TestHelper", want: `cited executable test symbol "TestHelper" does not exist`},
+		{name: "nonexistent file", reference: "tests/functional/missing_test.go::TestMissing", want: "cited test file does not exist"},
+		{name: "internal package test", reference: "internal/service/service_test.go::TestHandler", want: "not an internal package test"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			manifest := cloneManifest(t, base)
+			manifest.Scenarios[0].Evidence[0].Test = test.reference
+			err := CheckEvidenceReferences(root, manifest)
+			if err == nil || !strings.Contains(err.Error(), `scenario "rest/getOne"`) || !strings.Contains(err.Error(), test.want) || !strings.Contains(err.Error(), "add or correct") {
+				t.Fatalf("CheckEvidenceReferences() error = %v, want stable ID, %q, and remediation", err, test.want)
+			}
+		})
+	}
 }
 
 func TestValidateManifestRejectsInvalidEvidenceAndSSEDispositions(t *testing.T) {

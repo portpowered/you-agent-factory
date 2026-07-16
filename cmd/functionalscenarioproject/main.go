@@ -11,12 +11,13 @@ import (
 )
 
 type config struct {
-	cliPath     string
-	openAPIPath string
-	mcpPath     string
-	outputPath  string
-	manifest    bool
-	checkPath   string
+	repositoryRoot string
+	cliPath        string
+	openAPIPath    string
+	mcpPath        string
+	outputPath     string
+	manifest       bool
+	checkPath      string
 }
 
 func main() {
@@ -29,6 +30,7 @@ func main() {
 
 func parseConfig() config {
 	cfg := config{}
+	flag.StringVar(&cfg.repositoryRoot, "root", ".", "repository root used to resolve functional evidence")
 	flag.StringVar(&cfg.cliPath, "cli", "contracts/cli/commands.json", "canonical CLI command inventory")
 	flag.StringVar(&cfg.openAPIPath, "openapi", "api/openapi.yaml", "bundled OpenAPI contract")
 	flag.StringVar(&cfg.mcpPath, "mcp", "contracts/mcp/tools.json", "canonical MCP tool inventory")
@@ -57,7 +59,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 		return fmt.Errorf("project functional scenario components: %w", err)
 	}
 	if cfg.checkPath != "" {
-		return checkManifest(cfg.checkPath, projection, stdout)
+		return checkManifest(cfg.repositoryRoot, cfg.checkPath, projection, stdout)
 	}
 	payload, err := renderProjection(projection, cfg.manifest)
 	if err != nil {
@@ -74,7 +76,7 @@ func run(cfg config, stdout, stderr io.Writer) error {
 	return nil
 }
 
-func checkManifest(path string, projection *functionalscenarios.Projection, stdout io.Writer) error {
+func checkManifest(repositoryRoot, path string, projection *functionalscenarios.Projection, stdout io.Writer) error {
 	data, err := readInput("functional scenario manifest", path)
 	if err != nil {
 		return err
@@ -84,6 +86,9 @@ func checkManifest(path string, projection *functionalscenarios.Projection, stdo
 		return err
 	}
 	if err := functionalscenarios.CheckManifest(projection, manifest); err != nil {
+		return err
+	}
+	if err := functionalscenarios.CheckEvidenceReferences(repositoryRoot, manifest); err != nil {
 		return err
 	}
 	canonical, err := functionalscenarios.MarshalCanonicalManifestJSON(manifest)

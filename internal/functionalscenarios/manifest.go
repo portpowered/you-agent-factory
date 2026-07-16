@@ -117,7 +117,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory", InterfaceCLI)
 	case "cli/you.session.pause", "cli/you.session.resume":
 		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go::TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder", InterfaceCLI)
-	case "cli/you.session.dispatches", "cli/you.session.show":
+	case "cli/you.session.show":
 		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go::TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary", InterfaceCLI)
 	case "cli/you.work.move":
 		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_work_move_smoke_test.go::TestWorkMove_RealCLIMovesSubmittedWork", InterfaceCLI)

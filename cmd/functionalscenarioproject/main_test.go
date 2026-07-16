@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/internal/functionalscenarios"
 )
 
 func TestRunWritesCanonicalProjectionToStdout(t *testing.T) {
@@ -99,6 +101,46 @@ func TestRunChecksManifestWithoutChangingFiles(t *testing.T) {
 	}
 	if !bytes.Equal(after, before) {
 		t.Fatal("manifest check changed the checked file")
+	}
+}
+
+func TestRunCheckRejectsNonexistentFunctionalEvidence(t *testing.T) {
+	t.Parallel()
+
+	cfg := commandFixture(t)
+	cfg.manifest = true
+	generated := &bytes.Buffer{}
+	if err := run(cfg, generated, io.Discard); err != nil {
+		t.Fatalf("generate manifest: %v", err)
+	}
+	manifest, err := functionalscenarios.DecodeManifest(generated.Bytes())
+	if err != nil {
+		t.Fatalf("decode generated manifest: %v", err)
+	}
+	for index := range manifest.Scenarios {
+		if manifest.Scenarios[index].StableID == "rest/getOne" {
+			manifest.Scenarios[index].Status = functionalscenarios.StatusCovered
+			manifest.Scenarios[index].ReviewedReason = ""
+			manifest.Scenarios[index].Evidence = []functionalscenarios.Evidence{{
+				Test: "tests/functional/missing_test.go::TestMissing", Boundary: functionalscenarios.InterfaceREST,
+			}}
+		}
+	}
+	payload, err := functionalscenarios.MarshalCanonicalManifestJSON(manifest)
+	if err != nil {
+		t.Fatalf("marshal manifest: %v", err)
+	}
+	manifestPath := filepath.Join(t.TempDir(), "functional-scenarios.json")
+	if err := os.WriteFile(manifestPath, payload, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	cfg.manifest = false
+	cfg.checkPath = manifestPath
+	cfg.repositoryRoot = filepath.Dir(cfg.cliPath)
+	err = run(cfg, io.Discard, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), `scenario "rest/getOne"`) || !strings.Contains(err.Error(), "cited test file does not exist") {
+		t.Fatalf("run() error = %v, want stable ID and nonexistent evidence diagnostic", err)
 	}
 }
 
