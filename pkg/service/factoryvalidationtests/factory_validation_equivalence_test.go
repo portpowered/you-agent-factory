@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -21,7 +23,7 @@ import (
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndSavePaths(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -66,7 +68,7 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 		Physical: time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
 	}
 	var validPayload map[string]any
-	if err := json.Unmarshal([]byte(factoryvalidation.CrossPathValidAlphaFactoryJSON), &validPayload); err != nil {
+	if err := json.Unmarshal([]byte(factoryfixtures.CrossPathValidAlphaFactoryJSON), &validPayload); err != nil {
 		t.Fatalf("unmarshal valid alpha fixture: %v", err)
 	}
 	validPayload["version"] = map[string]any{
@@ -135,7 +137,7 @@ func canonicalTargetsFromEditableSaveRejection(t *testing.T, invalid factoryapi.
 	if !errors.As(err, &topologyErr) {
 		t.Fatalf("SaveFactoryForSession error = %v, want topology validation error", err)
 	}
-	return factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+	return validationassert.CanonicalAPITargetSignatures(topologyErr.Targets)
 }
 
 func assertConfigFindingExists(t *testing.T, findings []config.Finding, rule string) {

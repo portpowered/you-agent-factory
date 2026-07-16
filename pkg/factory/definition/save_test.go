@@ -25,7 +25,7 @@ import (
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}

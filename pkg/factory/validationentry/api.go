@@ -72,6 +72,6 @@ func validateFactoryTopology(cfg interfaces.FactoryConfig, opts factoryvalidatio
 
 func validateFactoryTopologyFromAPI(factory factoryapi.Factory, cfg interfaces.FactoryConfig, opts factoryvalidation.Options) factoryvalidation.Result {
 	result := validateFactoryTopology(cfg, opts)
-	result.Targets = append(result.Targets, factoryvalidation.WorkerWorkstationCompatibilityTargetsFromAPI(factory)...)
+	result.Targets = append(result.Targets, workerWorkstationCompatibilityTargetsFromAPI(factory)...)
 	return result
 }

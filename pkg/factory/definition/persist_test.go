@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	generatedapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -109,7 +108,7 @@ func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersis
 func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -145,7 +144,7 @@ func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) 
 func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersion(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}

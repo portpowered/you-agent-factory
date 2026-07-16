@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -21,7 +23,7 @@ import (
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPaths(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -49,7 +51,7 @@ func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPa
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/factory-validations",
-		bytes.NewBufferString(factoryvalidation.CrossPathInvalidFactoryJSON),
+		bytes.NewBufferString(factoryfixtures.CrossPathInvalidFactoryJSON),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -59,7 +61,7 @@ func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPa
 	}
 
 	result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
-	apiSignatures := factoryvalidation.CanonicalAPITargetSignatures(result.Targets)
+	apiSignatures := validationassert.CanonicalAPITargetSignatures(result.Targets)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(packageSignatures, apiSignatures) {
 		t.Fatalf("package signatures = %#v, api signatures = %#v, want equivalent canonical targets",
 			packageSignatures, apiSignatures)
@@ -212,7 +214,7 @@ func TestValidateFactory_PreservesCanonicalStructuralCodesFromCrossPathFixture(t
 	req := httptest.NewRequest(
 		http.MethodPost,
 		"/factory-validations",
-		bytes.NewBufferString(factoryvalidation.CrossPathInvalidFactoryJSON),
+		bytes.NewBufferString(factoryfixtures.CrossPathInvalidFactoryJSON),
 	)
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

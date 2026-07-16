@@ -256,6 +256,43 @@ type InvocationReturnConfig struct {
 	WorkName      string `json:"workName,omitempty"`
 }
 
+// Invocation return policies are authored Factory configuration values. Public
+// transports map these stable domain values to their generated enum types.
+const (
+	InvocationReturnPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
+	InvocationReturnPolicyExplicit              = "EXPLICIT"
+)
+
+// Invocation signature values are authored Factory configuration vocabulary.
+// Keep validation and runtime policy on these values independent of generated
+// transport enum declarations.
+const (
+	InvocationParameterTypeHintString        = "STRING"
+	InvocationParameterTypeHintPath          = "PATH"
+	InvocationParameterTypeHintFilePath      = "FILE_PATH"
+	InvocationParameterTypeHintDirectoryPath = "DIRECTORY_PATH"
+	InvocationParameterTypeHintNumberString  = "NUMBER_STRING"
+	InvocationParameterTypeHintBooleanString = "BOOLEAN_STRING"
+
+	InvocationParameterValueModeExact        = "EXACT"
+	InvocationParameterValueModeRepeated     = "REPEATED"
+	InvocationParameterValueModeVariadic     = "VARIADIC"
+	InvocationParameterValueModeFileContents = "FILE_CONTENTS"
+
+	InvocationParameterBindingKindPositional = "POSITIONAL"
+	InvocationParameterBindingKindNamed      = "NAMED"
+	InvocationParameterBindingKindStdin      = "STDIN"
+	InvocationParameterBindingKindNamedRest  = "NAMED_REST"
+
+	InvocationUnknownNamedArgumentPolicyReject  = "REJECT"
+	InvocationUnknownNamedArgumentPolicyAllow   = "ALLOW"
+	InvocationUnknownNamedArgumentPolicyCollect = "COLLECT"
+
+	InvocationOutputContractModeInline = "INLINE"
+	InvocationOutputContractModeFile   = "FILE"
+	InvocationOutputContractModeJSON   = "JSON"
+)
+
 type InvocationSignatureConfig struct {
 	Parameters                 []InvocationParameterConfig     `json:"parameters,omitempty"`
 	UnknownNamedArgumentPolicy string                          `json:"unknownNamedArgumentPolicy,omitempty"`

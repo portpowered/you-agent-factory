@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -521,7 +522,7 @@ func TestValidate_LogicalMoveOutcomeRouteExemption(t *testing.T) {
 
 func TestValidate_CanonicalFindingsAndStableIdentity(t *testing.T) {
 	t.Run("canonical findings match config validation", func(t *testing.T) {
-		apiFactory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+		apiFactory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 		if err != nil {
 			t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -16,7 +17,7 @@ import (
 func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -45,7 +46,7 @@ func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T
 func TestValidateFactoryAPI_ProfilePrePersist_CrossPathInvalidFixture(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestValidateFactoryAPI_ProfilePrePersist_CrossPathInvalidFixture(t *testing
 func TestValidateFactoryAPI_ProfileTopology_ValidFactory_NoTargets(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -96,7 +97,7 @@ func TestValidateFactoryAPI_ProfileTopology_ValidFactory_NoTargets(t *testing.T)
 func TestValidateFactoryAPI_ProfileTopology_MatchesValidateEndpointPath(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -124,8 +125,8 @@ func TestValidateFactoryAPI_ProfileTopology_MatchesValidateEndpointPath(t *testi
 	validationResult := apisurface.FactoryValidationResultToAPI(apiResult)
 	handlerAPI := apisurface.FactoryValidationResultToAPI(handlerEquivalent)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(
-		factoryvalidation.CanonicalAPITargetSignatures(handlerAPI.Targets),
-		factoryvalidation.CanonicalAPITargetSignatures(validationResult.Targets),
+		validationassert.CanonicalAPITargetSignatures(handlerAPI.Targets),
+		validationassert.CanonicalAPITargetSignatures(validationResult.Targets),
 	) {
 		t.Fatalf("api result targets = %#v, handler api targets = %#v",
 			validationResult.Targets, handlerAPI.Targets)
@@ -135,7 +136,7 @@ func TestValidateFactoryAPI_ProfileTopology_MatchesValidateEndpointPath(t *testi
 func TestValidateFactoryAPI_ProfilePrePersist_ValidFactory_NoTargets(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -118,7 +118,7 @@ func TestOwningPersistence_InvalidUpdateDoesNotCorruptExistingFactory(t *testing
 	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
-	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryfixtures.CrossPathInvalidFactoryJSON))
 
 	err := UpdateFromFile(UpdateFromFileConfig{
 		Name:   "alpha",

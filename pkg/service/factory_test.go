@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -2446,7 +2447,7 @@ func TestFactoryService_SaveFactoryForSession_RejectsDuplicateDefaultHandlingWor
 		t.Fatal("expected current factory version metadata")
 	}
 
-	replacement, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	replacement, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}

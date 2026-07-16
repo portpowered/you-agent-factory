@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -34,7 +35,7 @@ var prePersistDisallowedOutcomeRouteCodes = map[string]struct{}{
 func TestCrossPathInvalidFixture_ProfileTopologyDiffersFromPrePersistDocumentsValidateEndpointGap(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}

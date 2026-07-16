@@ -1,4 +1,4 @@
-package validation
+package factoryfixtures
 
 import (
 	"encoding/json"

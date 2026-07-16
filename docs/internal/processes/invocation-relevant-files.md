@@ -183,7 +183,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   non-success context for `sessionId`, `workId`, `workName`, and `workState`
   also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
-  validation shared by validate-only and save pre-check flows.
+  validation shared by validate-only and save pre-check flows. It validates the
+  authored policy and invocation-signature vocabulary declared by
+  `pkg/factory/contracts/factory_config.go`; generated OpenAPI enums are only
+  converted at config and transport boundaries.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/work` owns canonical `Work`, `WorkRequest`, `WorkContentPart`, invocation

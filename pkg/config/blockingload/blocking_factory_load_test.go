@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 	"github.com/portpowered/infinite-you/pkg/config/load"
@@ -15,11 +16,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 func TestBlockingFactoryLoadError_PreservesCanonicalTargetsOnCanonicalJSONLoad(t *testing.T) {
-	_, err := load.LoadFromCanonicalJSON([]byte(factoryvalidation.CrossPathInvalidFactoryJSON), load.LoadOptions{})
+	_, err := load.LoadFromCanonicalJSON([]byte(factoryfixtures.CrossPathInvalidFactoryJSON), load.LoadOptions{})
 	if err == nil {
 		t.Fatal("expected cross-path invalid factory to fail load")
 	}
@@ -55,7 +55,7 @@ func TestBlockingFactoryLoadError_PreservesCanonicalTargetsOnCanonicalJSONLoad(t
 func TestBlockingFactoryLoadError_PreservesTargetsThroughNamedFactoryMaterialization(t *testing.T) {
 	rootDir := t.TempDir()
 
-	_, err := factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+	_, err := factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(factoryfixtures.CrossPathInvalidFactoryJSON))
 	if err == nil {
 		t.Fatal("expected invalid named factory materialization to fail")
 	}
@@ -116,7 +116,7 @@ func TestWrapBlockingFactoryLoadOperatorError_IncludesFindingsAndRecoveryCommand
 		t.Fatalf("MapDir: %v", err)
 	}
 
-	_, err = factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+	_, err = factoryconfig.PersistNamedFactory(rootDir, "@you/goal", []byte(factoryfixtures.CrossPathInvalidFactoryJSON))
 	if err == nil {
 		t.Fatal("expected invalid named factory materialization to fail")
 	}

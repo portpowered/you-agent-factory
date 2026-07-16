@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
@@ -22,25 +23,25 @@ func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOut
 	}{
 		{
 			name:        "topology_routeless_cron",
-			decode:      factoryvalidation.DecodeRoutelessCronFactory,
+			decode:      factoryfixtures.DecodeRoutelessCronFactory,
 			workstation: "cron",
 			profile:     factoryvalidation.ProfileTopology,
 		},
 		{
 			name:        "pre_persist_routeless_cron",
-			decode:      factoryvalidation.DecodeRoutelessCronFactory,
+			decode:      factoryfixtures.DecodeRoutelessCronFactory,
 			workstation: "cron",
 			profile:     factoryvalidation.ProfilePrePersist,
 		},
 		{
 			name:        "topology_routeless_logical_move",
-			decode:      factoryvalidation.DecodeRoutelessLogicalMoveFactory,
+			decode:      factoryfixtures.DecodeRoutelessLogicalMoveFactory,
 			workstation: "router",
 			profile:     factoryvalidation.ProfileTopology,
 		},
 		{
 			name:        "pre_persist_routeless_logical_move_cron",
-			decode:      factoryvalidation.DecodeRoutelessLogicalMoveCronFactory,
+			decode:      factoryfixtures.DecodeRoutelessLogicalMoveCronFactory,
 			workstation: "trigger-monkey",
 			profile:     factoryvalidation.ProfilePrePersist,
 		},

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -575,7 +576,7 @@ func TestValidateFactory_ReturnsEmptyTargetsForValidFactory(t *testing.T) {
 func TestValidateFactory_ReturnsMultipleTargetsForInvalidFactory(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
-	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(factoryvalidation.CrossPathInvalidFactoryJSON))
+	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(factoryfixtures.CrossPathInvalidFactoryJSON))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
