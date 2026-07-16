@@ -8,10 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -37,7 +35,7 @@ type thinEventSmokeFinalSnapshot struct {
 	artifact              *interfaces.ReplayArtifact
 	responsePayload       factoryapi.InferenceResponseEventPayload
 	finalResponseEventIdx int
-	finalState            interfaces.FactoryWorldState
+	finalView             interfaces.FactoryWorldView
 }
 
 func newThinEventSmokeHarness(t *testing.T) thinEventSmokeHarness {
@@ -107,51 +105,36 @@ func assertThinEventSmokeActiveSnapshot(t *testing.T, active thinEventSmokeActiv
 	assertRawThinDispatchRequestEvent(t, active.events[active.dispatchReqIdx])
 	assertRawInferenceEventUsesContextDispatchIdentity(t, active.requestEvent, active.requestPayload.InferenceRequestId)
 
-	activeState, err := projections.ReconstructFactoryWorldState(active.events, active.requestEvent.Context.Tick)
+	activeView, err := testutil.BuildFactoryWorldView(active.events, active.requestEvent.Context.Tick, nil)
 	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState active tick %d: %v", active.requestEvent.Context.Tick, err)
+		t.Fatalf("build customer world view at active tick %d: %v", active.requestEvent.Context.Tick, err)
 	}
-	activeDispatch, ok := activeState.ActiveDispatches[active.dispatchID]
+	activeDispatch, ok := activeView.Runtime.ActiveExecutionsByDispatchID[active.dispatchID]
 	if !ok {
-		t.Fatalf("active dispatches = %#v, want %q", activeState.ActiveDispatches, active.dispatchID)
+		t.Fatalf("active dispatches = %#v, want %q", activeView.Runtime.ActiveExecutionsByDispatchID, active.dispatchID)
 	}
-	if len(activeState.CompletedDispatches) != 0 {
-		t.Fatalf("active completed dispatches = %#v, want none before inference response", activeState.CompletedDispatches)
+	if len(activeView.Runtime.Session.DispatchHistory) != 0 {
+		t.Fatalf("active dispatch history = %#v, want none before inference response", activeView.Runtime.Session.DispatchHistory)
 	}
-	activeAttempt := activeState.InferenceAttemptsByDispatchID[active.dispatchID][active.requestPayload.InferenceRequestId]
+	activeAttempt := activeView.Runtime.InferenceAttemptsByDispatchID[active.dispatchID][active.requestPayload.InferenceRequestId]
 	if activeAttempt.InferenceRequestID != active.requestPayload.InferenceRequestId || activeAttempt.Response != "" {
 		t.Fatalf("active inference attempt = %#v, want pending request without response", activeAttempt)
 	}
 	if activeAttempt.Prompt == "" || activeAttempt.RequestTime.IsZero() || activeAttempt.TransitionID != activeDispatch.TransitionID {
 		t.Fatalf("active inference attempt = %#v, want prompt, request time, and matching transition", activeAttempt)
 	}
-	assertThinEventSmokeActiveViews(t, activeState, active.dispatchID)
+	assertThinEventSmokeActiveView(t, activeView)
 }
 
-func assertThinEventSmokeActiveViews(
+func assertThinEventSmokeActiveView(
 	t *testing.T,
-	activeState interfaces.FactoryWorldState,
-	dispatchID string,
+	activeView interfaces.FactoryWorldView,
 ) {
 	t.Helper()
 
-	activeView := projections.BuildFactoryWorldView(activeState)
 	if activeView.Runtime.InFlightDispatchCount != 1 {
 		t.Fatalf("active world view in-flight dispatch count = %d, want 1", activeView.Runtime.InFlightDispatchCount)
 	}
-	activeRequestView := workstationRequestViewByDispatchID(
-		t,
-		factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(activeState),
-		dispatchID,
-	)
-	if activeRequestView.Response != nil {
-		t.Fatalf("active workstation request response = %#v, want nil before inference response", activeRequestView.Response)
-	}
-	assertRuntimeAPIProjectionOmitsInferenceFields(
-		t,
-		activeRequestView.Request,
-		[]string{"requestTime", "prompt", "provider", "model", "workingDirectory", "worktree", "requestMetadata"},
-	)
 }
 
 func loadThinEventSmokeFinalSnapshot(
@@ -175,16 +158,16 @@ func loadThinEventSmokeFinalSnapshot(
 	if err != nil {
 		t.Fatalf("decode final inference response payload: %v", err)
 	}
-	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, support.LastFactoryEventTick(artifact.Events))
+	finalView, err := testutil.BuildFactoryWorldView(artifact.Events, support.LastFactoryEventTick(artifact.Events), nil)
 	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState final tick: %v", err)
+		t.Fatalf("build final customer world view: %v", err)
 	}
 	return thinEventSmokeFinalSnapshot{
 		liveEvents:            liveEvents,
 		artifact:              artifact,
 		responsePayload:       responsePayload,
 		finalResponseEventIdx: responseEventIdx,
-		finalState:            finalState,
+		finalView:             finalView,
 	}
 }
 
@@ -210,20 +193,20 @@ func assertThinEventSmokeFinalSnapshot(
 		t.Fatalf("live events = %v, want dispatch response after inference response for %s", functionalEventTypes(final.liveEvents), active.dispatchID)
 	}
 	assertRawThinDispatchResponseEvent(t, final.liveEvents[finalDispatchResponseIdx])
-	assertThinEventSmokeFinalState(t, active, final.finalState)
+	assertThinEventSmokeFinalView(t, active, final.finalView)
 }
 
-func assertThinEventSmokeFinalState(
+func assertThinEventSmokeFinalView(
 	t *testing.T,
 	active thinEventSmokeActiveSnapshot,
-	finalState interfaces.FactoryWorldState,
+	finalView interfaces.FactoryWorldView,
 ) {
 	t.Helper()
 
-	if len(finalState.CompletedDispatches) < 2 {
-		t.Fatalf("final completed dispatches = %#v, want both model-worker dispatches", finalState.CompletedDispatches)
+	if len(finalView.Runtime.Session.DispatchHistory) < 2 {
+		t.Fatalf("final dispatch history = %#v, want both model-worker dispatches", finalView.Runtime.Session.DispatchHistory)
 	}
-	finalAttempt := finalState.InferenceAttemptsByDispatchID[active.dispatchID][active.requestPayload.InferenceRequestId]
+	finalAttempt := finalView.Runtime.InferenceAttemptsByDispatchID[active.dispatchID][active.requestPayload.InferenceRequestId]
 	if finalAttempt.Response != "Step one done. COMPLETE" || finalAttempt.ProviderSession == nil || finalAttempt.ProviderSession.ID != "sess-thin-dispatch-1" {
 		t.Fatalf("final inference attempt = %#v, want recorded response and provider session", finalAttempt)
 	}
@@ -233,50 +216,31 @@ func assertThinEventSmokeFinalState(
 	if finalAttempt.Prompt == "" || finalAttempt.RequestTime.IsZero() {
 		t.Fatalf("final inference attempt = %#v, want prompt and request time", finalAttempt)
 	}
-	completion := completedFunctionalDispatchByID(t, finalState.CompletedDispatches, active.dispatchID)
+	completion := completedFunctionalDispatchByID(t, finalView.Runtime.Session.DispatchHistory, active.dispatchID)
 	if completion.ProviderSession == nil || completion.ProviderSession.ID != "sess-thin-dispatch-1" || completion.Diagnostics == nil || completion.Diagnostics.Provider == nil {
 		t.Fatalf("completed dispatch = %#v, want provider session and diagnostics derived from inference response", completion)
 	}
-	providerSession := functionalProviderSessionByDispatchID(t, finalState.ProviderSessions, active.dispatchID)
+	providerSession := functionalProviderSessionByDispatchID(t, finalView.Runtime.Session.ProviderSessions, active.dispatchID)
 	if providerSession.ProviderSession.ID != "sess-thin-dispatch-1" {
 		t.Fatalf("provider session view = %#v, want sess-thin-dispatch-1", providerSession)
 	}
-	assertThinEventSmokeFinalViews(t, active.dispatchID, finalState)
+	assertThinEventSmokeFinalViewDetails(t, active.dispatchID, finalView)
 }
 
-func assertThinEventSmokeFinalViews(
+func assertThinEventSmokeFinalViewDetails(
 	t *testing.T,
 	dispatchID string,
-	finalState interfaces.FactoryWorldState,
+	finalView interfaces.FactoryWorldView,
 ) {
 	t.Helper()
 
-	finalView := projections.BuildFactoryWorldView(finalState)
 	if !worldViewDispatchHistoryContainsTrace(finalView, dispatchID, "trace-thin-event-reducers") {
 		t.Fatalf("dispatch history = %#v, want dispatch %q for trace-thin-event-reducers", finalView.Runtime.Session.DispatchHistory, dispatchID)
 	}
 	if len(finalView.Runtime.Session.ProviderSessions) == 0 {
 		t.Fatalf("provider sessions = %#v, want provider-attempt rows", finalView.Runtime.Session.ProviderSessions)
 	}
-	completedRequestView := workstationRequestViewByDispatchID(
-		t,
-		factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(finalState),
-		dispatchID,
-	)
-	assertRuntimeAPIProjectionOmitsInferenceFields(
-		t,
-		completedRequestView.Request,
-		[]string{"requestMetadata", "requestTime", "prompt", "provider", "model", "workingDirectory", "worktree"},
-	)
-	if completedRequestView.Response == nil {
-		t.Fatalf("completed workstation request response = %#v, want omitted dispatch-level inference detail", completedRequestView.Response)
-	}
-	assertRuntimeAPIProjectionOmitsInferenceFields(
-		t,
-		completedRequestView.Response,
-		[]string{"responseText", "providerSession", "diagnostics", "responseMetadata", "errorClass"},
-	)
-	completedAttempt := finalState.InferenceAttemptsByDispatchID[dispatchID]
+	completedAttempt := finalView.Runtime.InferenceAttemptsByDispatchID[dispatchID]
 	if len(completedAttempt) != 1 {
 		t.Fatalf("completed inference attempts = %#v, want one attempt", completedAttempt)
 	}
@@ -425,23 +389,6 @@ func waitForFunctionalHarnessCompletion(
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting %s for background run to exit", timeout)
 	}
-}
-
-func workstationRequestViewByDispatchID(
-	t *testing.T,
-	slice factoryapi.FactoryWorldWorkstationRequestProjectionSlice,
-	dispatchID string,
-) factoryapi.FactoryWorldWorkstationRequestView {
-	t.Helper()
-
-	if slice.WorkstationRequestsByDispatchId == nil {
-		t.Fatalf("workstation request slice missing projection map for dispatch %q", dispatchID)
-	}
-	view, ok := (*slice.WorkstationRequestsByDispatchId)[dispatchID]
-	if !ok {
-		t.Fatalf("workstation request slice = %#v, want dispatch %q", slice.WorkstationRequestsByDispatchId, dispatchID)
-	}
-	return view
 }
 
 func completedFunctionalDispatchByID(

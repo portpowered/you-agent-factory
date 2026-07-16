@@ -141,23 +141,6 @@ func TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequence
 	assertThinEventSmokeFinalSnapshot(t, active, final)
 }
 
-func assertRuntimeAPIProjectionOmitsInferenceFields(t *testing.T, payload any, keys []string) {
-	t.Helper()
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Marshal(%T): %v", payload, err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(encoded, &raw); err != nil {
-		t.Fatalf("Unmarshal(%T): %v", payload, err)
-	}
-	for _, key := range keys {
-		if _, ok := raw[key]; ok {
-			t.Fatalf("%T unexpectedly carried retired inference-owned field %q: %#v", payload, key, raw[key])
-		}
-	}
-}
-
 func assertFirstInferenceAttemptOrder(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 

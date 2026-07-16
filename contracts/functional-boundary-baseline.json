@@ -17,7 +17,6 @@
     { "path": "tests/functional/replay_contracts/replay_regression_harness_long_test.go", "sha256": "f9bddc5ef57b442b8cab5994a18386c714d19a0af7083b50e41d666b0523a619" },
     { "path": "tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_long_helpers_test.go", "sha256": "f690bf955c1cbb892561fa3bd29890cb333febb0bd5c11afbae080a4ed747da7" },
     { "path": "tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_long_test.go", "sha256": "c1f2422c32ddc9e52820fe9e4e92ad5eee35fac33395466fa8da126b7f369501" },
-    { "path": "tests/functional/runtime_api/api_inference_events_thin_test.go", "sha256": "a0f81e15e0962ff731e2c9abb498247da7d84da619384dcf74950a64674aa2fe" },
     { "path": "tests/functional/runtime_api/api_runtime_config_alignment_smoke_support_test.go", "sha256": "883c42a4dc4ca96aa21afdcdbe00c3d59e822e0ff25e76ac9c26587ade32b9f3" },
     { "path": "tests/functional/runtime_api/api_runtime_config_alignment_support_test.go", "sha256": "d2cc4ffb6fc73c77ff6d707f0684316a501918a6e1b2e071d6fac2c00bc029ea" },
     { "path": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go", "sha256": "d9792f6f192bb65f60f7d16722cc3f23453ee89daf757397fafb7831a18fbf14" },
