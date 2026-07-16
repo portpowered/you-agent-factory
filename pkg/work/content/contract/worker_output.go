@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -17,25 +16,38 @@ func ContentFromWorkerOutput(raw string) ([]work.WorkContentPart, error) {
 		return nil, nil
 	}
 
-	var content factoryapi.WorkContent
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &content); err == nil && len(content) > 0 {
-		return PartsFromGenerated(&content), nil
+		return SupportedParts(content), nil
 	}
 
 	var envelope struct {
-		Content factoryapi.WorkContent `json:"content"`
+		Content []work.WorkContentPart `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) > 0 {
-		return PartsFromGenerated(&envelope.Content), nil
-	}
-
-	var parts []work.WorkContentPart
-	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil && len(parts) > 0 {
-		return parts, nil
+		return SupportedParts(envelope.Content), nil
 	}
 
 	return []work.WorkContentPart{{
 		Type: work.WorkContentPartTypeText,
 		Text: raw,
 	}}, nil
+}
+
+// SupportedParts returns content with public aliases normalized and unknown
+// part kinds omitted, preserving the established public-contract behavior.
+func SupportedParts(parts []work.WorkContentPart) []work.WorkContentPart {
+	supported := make([]work.WorkContentPart, 0, len(parts))
+	for _, part := range parts {
+		part.Type = part.Type.Normalized()
+		switch part.Type {
+		case work.WorkContentPartTypeText,
+			work.WorkContentPartTypeImage,
+			work.WorkContentPartTypeAudio,
+			work.WorkContentPartTypeJSON,
+			work.WorkContentPartTypeBinary:
+			supported = append(supported, part)
+		}
+	}
+	return supported
 }

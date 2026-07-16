@@ -20,7 +20,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/service"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )

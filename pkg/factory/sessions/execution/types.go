@@ -15,11 +15,11 @@ import (
 )
 
 func workContentJSONFromParts(parts []work.WorkContentPart) json.RawMessage {
-	content := contentcontract.GeneratedPtrFromParts(parts)
-	if content == nil {
+	parts = contentcontract.SupportedParts(parts)
+	if len(parts) == 0 {
 		return nil
 	}
-	encoded, err := json.Marshal(content)
+	encoded, err := json.Marshal(parts)
 	if err != nil {
 		return nil
 	}

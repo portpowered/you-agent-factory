@@ -21,6 +21,11 @@ const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire
 const transportImportPrefix = "github.com/portpowered/infinite-you/pkg/transports/"
 const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
 
+var protectedTransportIndependentDomainRoots = []string{
+	"pkg/factory",
+	"pkg/work",
+}
+
 var factoryRetiredPackageRoots = []retiredPackageRoot{
 	{packagePath: "pkg/packagedfactories", canonicalOwner: "pkg/factory/packages"},
 	{packagePath: "pkg/factorydefinition", canonicalOwner: "pkg/factory/definition"},
@@ -360,53 +365,55 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 }
 
 func scanFactoryTransportImports(repoRoot string, exceptions []string) ([]factoryTransportImportFinding, error) {
-	factoryRoot := filepath.Join(repoRoot, "pkg", "factory")
-	if _, err := os.Stat(factoryRoot); err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("stat Factory domain root: %w", err)
-	}
-
 	var findings []factoryTransportImportFinding
-	err := filepath.WalkDir(factoryRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
-			return nil
-		}
-		filePath, err := filepath.Rel(repoRoot, path)
-		if err != nil {
-			return err
-		}
-		filePath = filepath.ToSlash(filePath)
-		if slices.Contains(exceptions, filePath) {
-			return nil
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
-		if err != nil {
-			return fmt.Errorf("parse Factory package imports %s: %w", filePath, err)
-		}
-		packagePath := filepath.ToSlash(filepath.Dir(filePath))
-		for _, importSpec := range parsedFile.Imports {
-			importPath, err := strconv.Unquote(importSpec.Path.Value)
-			if err == nil && strings.HasPrefix(importPath, transportImportPrefix) {
-				findings = append(findings, factoryTransportImportFinding{
-					packagePath: packagePath,
-					importPath:  importPath,
-					filePath:    filePath,
-				})
+	for _, domainRoot := range protectedTransportIndependentDomainRoots {
+		absoluteRoot := filepath.Join(repoRoot, filepath.FromSlash(domainRoot))
+		if _, err := os.Stat(absoluteRoot); err != nil {
+			if os.IsNotExist(err) {
+				continue
 			}
+			return nil, fmt.Errorf("stat protected domain root %s: %w", domainRoot, err)
 		}
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("scan Factory domain transport imports: %w", err)
+
+		err := filepath.WalkDir(absoluteRoot, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+				return nil
+			}
+			filePath, err := filepath.Rel(repoRoot, path)
+			if err != nil {
+				return err
+			}
+			filePath = filepath.ToSlash(filePath)
+			if slices.Contains(exceptions, filePath) {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
+			if err != nil {
+				return fmt.Errorf("parse Factory package imports %s: %w", filePath, err)
+			}
+			packagePath := filepath.ToSlash(filepath.Dir(filePath))
+			for _, importSpec := range parsedFile.Imports {
+				importPath, err := strconv.Unquote(importSpec.Path.Value)
+				if err == nil && strings.HasPrefix(importPath, transportImportPrefix) {
+					findings = append(findings, factoryTransportImportFinding{
+						packagePath: packagePath,
+						importPath:  importPath,
+						filePath:    filePath,
+					})
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("scan protected domain transport imports under %s: %w", domainRoot, err)
+		}
 	}
 	slices.SortFunc(findings, func(left, right factoryTransportImportFinding) int {
 		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
@@ -809,10 +816,10 @@ func writeApplicationGraphImportFindings(writer io.Writer, findings []applicatio
 
 func writeFactoryTransportImportFindings(writer io.Writer, findings []factoryTransportImportFinding) {
 	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited Factory domain transport import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited domain transport import: %s (%s)\n", finding.importPath, finding.filePath)
 		fmt.Fprintf(writer, "  domain owner: %s\n", finding.packagePath)
-		fmt.Fprintln(writer, "  reason: Factory domain packages must not consume transport contracts or adapters.")
-		fmt.Fprintln(writer, "  remediation: define the input at its Factory or Factory Session owner and map generated values under pkg/transports/mapping.")
+		fmt.Fprintln(writer, "  reason: protected domain packages must not consume transport contracts or adapters.")
+		fmt.Fprintln(writer, "  remediation: define the input at its domain owner and map generated values under pkg/transports/mapping.")
 	}
 }
 

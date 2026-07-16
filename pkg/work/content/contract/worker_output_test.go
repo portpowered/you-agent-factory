@@ -35,6 +35,18 @@ func TestContentFromWorkerOutput_ParsesCanonicalPartArray(t *testing.T) {
 	}
 }
 
+func TestContentFromWorkerOutput_NormalizesAliasesAndOmitsUnknownParts(t *testing.T) {
+	raw := `{"content":[{"type":"TEXT","text":"structured response"},{"type":"unknown","text":"ignored"}]}`
+
+	got, err := ContentFromWorkerOutput(raw)
+	if err != nil {
+		t.Fatalf("ContentFromWorkerOutput: %v", err)
+	}
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeText || got[0].Text != "structured response" {
+		t.Fatalf("content = %#v, want one normalized text response part", got)
+	}
+}
+
 func TestContentFromWorkerOutput_ReturnsNilForEmptyOutput(t *testing.T) {
 	got, err := ContentFromWorkerOutput("   ")
 	if err != nil {

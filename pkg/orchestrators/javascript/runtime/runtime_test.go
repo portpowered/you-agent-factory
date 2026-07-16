@@ -13,8 +13,8 @@ import (
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/pkg/work"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func TestRuntimeRecordJSON_CheckpointRoundTripPreservesTypedResumeData(t *testing.T) {

@@ -1,4 +1,4 @@
-package contentcontract
+package workcontent
 
 import (
 	"encoding/json"

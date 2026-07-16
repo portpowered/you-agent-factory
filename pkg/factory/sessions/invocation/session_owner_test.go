@@ -11,7 +11,7 @@ import (
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 

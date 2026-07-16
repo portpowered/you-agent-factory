@@ -5,8 +5,9 @@ Use this map when changing the public REST contract.
 - Canonical backend `Work`, `WorkRequest`, ordered content, relations, dispatch
   identity, state-change, and payload-lineage contracts live in `pkg/work`.
   Generated OpenAPI conversion remains at transport boundaries such as
-  `pkg/work/content/contract`, `pkg/transports/mapping`, and
-  `pkg/transports/http`; do not make the Work owner import generated clients.
+  `pkg/transports/mapping/workcontent` and `pkg/transports/http`; domain-owned
+  parsing stays under `pkg/work/content/contract`, and the Work owner must not
+  import generated clients or transport adapters.
 - Work-list filtering, ordering, and validation policy belongs in `pkg/work/query`; `pkg/api/handlers_work_read.go` maps generated `ListWorkBySessionIdParams` and `Work` values into that domain projection, while `pkg/cli/work/list.go` maps normalized query options into URL parameters. Keep generated OpenAPI types and URL encoding at those transport boundaries, and prove policy with pure query tests plus route-level API and CLI request tests.
 - Functional-scenario public component projection lives in `internal/functionalscenarios` with the maintenance entrypoint in `cmd/functionalscenarioproject`. Treat `contracts/cli/commands.json`, `contracts/mcp/tools.json`, and bundled `api/openapi.yaml` as its canonical inputs; derive SSE components from OpenAPI operations whose response media types include `text/event-stream` so the SSE inventory cannot drift into a handwritten route list.
 - Test-only durable Factory Session cross-interface captures live in `tests/functional/sessionparity`. Keep REST event observations as the actual `text/event-stream` body (`data:` frames containing Factory Event JSON), CLI event observations as the direct `--json` array, and live MCP observations as complete JSON-RPC `tools/call` responses whose serialized `ToolResponse` is in `result.content[0].text`; do not substitute pre-extracted typed results for the live MCP boundary.
