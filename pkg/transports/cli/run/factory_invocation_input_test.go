@@ -12,6 +12,22 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func TestJavaScriptWorkflowPathRecognizesSupportedExtensions(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{"workflow.js", "WORKFLOW.MJS", " workflow.cjs "} {
+		if !javascriptWorkflowPath(path) {
+			t.Fatalf("javascriptWorkflowPath(%q) = false", path)
+		}
+	}
+	if javascriptWorkflowPath("factory.json") {
+		t.Fatal("javascriptWorkflowPath accepted a factory config")
+	}
+	data, err := loadFactoryInvocationHelpData("you", RunConfig{FactoryConfigPath: "workflow.mjs"})
+	if err != nil || data != nil {
+		t.Fatalf("loadFactoryInvocationHelpData(JavaScript) = (%#v, %v)", data, err)
+	}
+}
+
 func TestResolveFactoryInvocationInput_NoInputReturnsEmptyWithoutError(t *testing.T) {
 	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
 		StdinIsTTY: func() bool {

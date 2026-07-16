@@ -55,6 +55,16 @@ func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
 	}
 }
 
+func TestHomeDirRejectsMissingEnvironment(t *testing.T) {
+	input, err := Normalize(Input{Args: []string{"you"}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if _, err := homeDir(input); err == nil {
+		t.Fatal("homeDir succeeded without a home environment variable")
+	}
+}
+
 func TestExecuteRoutesHelpAndExplicitCommandsToSuppliedStreams(t *testing.T) {
 	t.Parallel()
 

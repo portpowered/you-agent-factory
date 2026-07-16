@@ -1558,6 +1558,25 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 	}
 }
 
+func TestInvocationBootstrap_InvokeModelRequiresService(t *testing.T) {
+	if runtimeMetricsPath(nil) != "" {
+		t.Fatal("runtimeMetricsPath(nil) returned a path")
+	}
+	var bootstrap *InvocationBootstrap
+	if _, err := bootstrap.InvokeModel(context.Background(), "model", factoryapi.ModelInvocationRequest{}); err == nil {
+		t.Fatal("InvokeModel succeeded without an invocation bootstrap")
+	}
+	service := AttachModelServiceCollaborator(
+		FactoryServiceShell{Service: &FactoryService{}},
+		&stubModelService{invokeResult: apisurface.ModelInvocationResult{ModelName: "model"}},
+	)
+	bootstrap = &InvocationBootstrap{Service: service}
+	result, err := bootstrap.InvokeModel(context.Background(), "model", factoryapi.ModelInvocationRequest{})
+	if err != nil || result.ModelName != "model" {
+		t.Fatalf("InvokeModel = (%#v, %v)", result, err)
+	}
+}
+
 func reserveInvocationBootstrapProbePort(t *testing.T) int {
 	t.Helper()
 

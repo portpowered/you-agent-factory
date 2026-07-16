@@ -681,6 +681,10 @@
       "minimum": 82.19
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/workers/application",
+      "minimum": 85.71
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/workers/cliprovider",
       "minimum": 91.56
     },
