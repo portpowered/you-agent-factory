@@ -98,7 +98,7 @@ func newCoverageManifestEntry(lane string, importPath string, totals packageCove
 		Package: importPath,
 		Exception: &coverageManifestException{
 			Kind:          "measurement",
-			Justification: "The Go coverage profile contains no measurable statements for this declaration-only package.",
+			Justification: fmt.Sprintf("The active %s coverage profile contains no measurable statements for this package.", lane),
 			Owner:         "backend-quality",
 			Deadline:      unmeasurablePackageDeadline,
 			RemovalGate:   fmt.Sprintf("The %s coverage profile reports at least one measurable statement for this package.", lane),

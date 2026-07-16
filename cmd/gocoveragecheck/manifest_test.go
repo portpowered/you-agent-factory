@@ -92,7 +92,7 @@ func TestNewCoverageManifestIsSortedAndByteDeterministic(t *testing.T) {
 func TestNewCoverageManifestUsesExplicitExceptionForUnmeasurablePackage(t *testing.T) {
 	t.Parallel()
 
-	importPath := modulePath + "/pkg/declarations"
+	importPath := modulePath + "/cmd/factory"
 	manifest, err := newCoverageManifest("unit", map[string]packageCoverageTotals{}, []string{importPath})
 	if err != nil {
 		t.Fatalf("newCoverageManifest() error = %v", err)
@@ -103,6 +103,12 @@ func TestNewCoverageManifestUsesExplicitExceptionForUnmeasurablePackage(t *testi
 	}
 	if entry.Exception == nil || entry.Exception.Kind != "measurement" || entry.Exception.Deadline != unmeasurablePackageDeadline {
 		t.Fatalf("exception = %+v, want structured measurement exception", entry.Exception)
+	}
+	if got, want := entry.Exception.Justification, "The active unit coverage profile contains no measurable statements for this package."; got != want {
+		t.Fatalf("exception justification = %q, want %q", got, want)
+	}
+	if strings.Contains(entry.Exception.Justification, "declaration-only") {
+		t.Fatalf("exception justification %q invents an uninspected package property", entry.Exception.Justification)
 	}
 	if err := validateCoverageManifest(manifest, "unit", []string{importPath}); err != nil {
 		t.Fatalf("generated manifest does not validate: %v", err)

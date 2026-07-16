@@ -6,7 +6,7 @@
       "package": "github.com/portpowered/infinite-you/cmd/factory",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -44,7 +44,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/config/globalconfiginventory",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -62,7 +62,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/config/maptests",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -80,7 +80,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/config/openapitests",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -138,7 +138,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -156,7 +156,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -166,7 +166,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/fusion",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -262,7 +262,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -356,7 +356,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/interfaces/factoryeventkinds",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -478,7 +478,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/baseline",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -492,7 +492,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/clicontract",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -510,7 +510,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -532,7 +532,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -546,7 +546,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -648,7 +648,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/workflowsource",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -674,7 +674,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/http/servertests/factorysessionsse",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -704,7 +704,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -772,7 +772,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/workers/cliprovider",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
@@ -826,7 +826,7 @@
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit",
       "exception": {
         "kind": "measurement",
-        "justification": "The Go coverage profile contains no measurable statements for this declaration-only package.",
+        "justification": "The active functional coverage profile contains no measurable statements for this package.",
         "owner": "backend-quality",
         "deadline": "2027-07-15",
         "removalGate": "The functional coverage profile reports at least one measurable statement for this package."
