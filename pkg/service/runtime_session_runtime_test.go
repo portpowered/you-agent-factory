@@ -4195,7 +4195,7 @@ func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEv
 	}
 	for i := range before {
 		if after[i].Type != before[i].Type {
-			t.Fatalf("factory event types changed after internal stream publication: before=%v after=%v", serviceFactoryEventTypes(before), serviceFactoryEventTypes(after))
+			t.Fatalf("factory event types changed after internal stream publication: before=%v after=%v", serviceCanonicalFactoryEventTypes(before), serviceCanonicalFactoryEventTypes(after))
 		}
 	}
 
@@ -4203,6 +4203,14 @@ func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEv
 	assertSessionEventsDoNotContain(t, session, "internal-progress-fragment")
 	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindResponseFragment))
 	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindProgressFragment))
+}
+
+func serviceCanonicalFactoryEventTypes(events []interfaces.FactoryEvent) []interfaces.FactoryEventType {
+	types := make([]interfaces.FactoryEventType, len(events))
+	for index, event := range events {
+		types[index] = event.Type
+	}
+	return types
 }
 
 func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareOneSessionStream(t *testing.T) {

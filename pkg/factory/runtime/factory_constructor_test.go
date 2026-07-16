@@ -236,11 +236,12 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		t.Fatalf("events = %#v, want %d startup events", events, runtimePreWorkEventCount)
 	}
 	for i, wantType := range runtimeStartupEventTypes() {
-		if events[i].Type != wantType {
+		if string(events[i].Type) != string(wantType) {
 			t.Fatalf("events[%d].Type = %q, want %q", i, events[i].Type, wantType)
 		}
 	}
-	payload, err := events[1].Payload.AsInitialStructureRequestEventPayload()
+	generatedEvent := runtimeGeneratedFactoryEvent(t, events[1])
+	payload, err := generatedEvent.Payload.AsInitialStructureRequestEventPayload()
 	if err != nil {
 		t.Fatalf("initial structure payload: %v", err)
 	}

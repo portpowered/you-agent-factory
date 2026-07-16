@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -92,10 +92,10 @@ func TestPauseResume_EmitCanonicalSessionLifecycleEvents(t *testing.T) {
 	var paused, resumed bool
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeSessionPaused:
+		case interfaces.FactoryEventTypeSessionPaused:
 			paused = true
 			assertLifecycleEventSessionID(t, event, "session-pause-resume")
-		case factoryapi.FactoryEventTypeSessionResumed:
+		case interfaces.FactoryEventTypeSessionResumed:
 			resumed = true
 			assertLifecycleEventSessionID(t, event, "session-pause-resume")
 		}
@@ -104,7 +104,7 @@ func TestPauseResume_EmitCanonicalSessionLifecycleEvents(t *testing.T) {
 		t.Fatalf("events missing pause/resume markers: paused=%v resumed=%v", paused, resumed)
 	}
 
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, len(events)-1)
+	worldState, err := projections.ReconstructCanonicalFactoryWorldState(events, len(events)-1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -144,9 +144,9 @@ func TestPauseResume_NoOpDoesNotEmitAdditionalLifecycleEvents(t *testing.T) {
 	pauseCount, resumeCount := 0, 0
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeSessionPaused:
+		case interfaces.FactoryEventTypeSessionPaused:
 			pauseCount++
-		case factoryapi.FactoryEventTypeSessionResumed:
+		case interfaces.FactoryEventTypeSessionResumed:
 			resumeCount++
 		}
 	}
@@ -185,7 +185,7 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, len(events)-1)
+	worldState, err := projections.ReconstructCanonicalFactoryWorldState(events, len(events)-1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -194,10 +194,10 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 	}
 }
 
-func assertLifecycleEventSessionID(t *testing.T, event factoryapi.FactoryEvent, wantSessionID string) {
+func assertLifecycleEventSessionID(t *testing.T, event interfaces.FactoryEvent, wantSessionID string) {
 	t.Helper()
-	if event.Context.SessionId == nil || *event.Context.SessionId != wantSessionID {
-		t.Fatalf("%s session id = %#v, want %s", event.Type, event.Context.SessionId, wantSessionID)
+	if event.Context.SessionID == nil || *event.Context.SessionID != wantSessionID {
+		t.Fatalf("%s session id = %#v, want %s", event.Type, event.Context.SessionID, wantSessionID)
 	}
 }
 func TestPauseResume_DiagnosticsLogAcceptedTransitions(t *testing.T) {

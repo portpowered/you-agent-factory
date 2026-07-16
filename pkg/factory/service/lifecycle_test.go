@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/jonboulle/clockwork"
@@ -62,7 +61,7 @@ func (f *lifecycleObserverFactory) GetEngineStateSnapshot(context.Context) (*int
 	defer f.mu.RUnlock()
 	return f.engineState, nil
 }
-func (f *lifecycleObserverFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *lifecycleObserverFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 func (f *lifecycleObserverFactory) WaitToComplete() <-chan struct{} {

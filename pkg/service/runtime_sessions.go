@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -2337,7 +2338,7 @@ func (fs *FactoryService) sessionInvocationWorldState(
 	if err != nil {
 		return interfaces.FactoryWorldState{}, err
 	}
-	return factoryeventprojection.ReconstructFactoryWorldState(events, selectedTick)
+	return projections.ReconstructCanonicalFactoryWorldState(events, selectedTick)
 }
 
 func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]string) {

@@ -322,6 +322,15 @@ payloads from their semantic owners. Canonical runtime and history callers use
 before reduction. Keep generated union decoding and generated Work conversion
 helpers out of the Factory projection owner.
 
+The top-level `factory.Factory` read contract also returns detached canonical
+`FactoryEvent` values. Runtime and session policy should project those values
+directly; service or runtime-host compatibility APIs that still expose the
+generated OpenAPI union convert only through `pkg/transports/mapping/factoryevent`.
+Reconnect selection returns the Factory event owner's cursor sentinel so the
+HTTP boundary can classify it without a transport-owned error flowing back into
+the runtime. Runtime lifecycle recording likewise uses Factory-owned operation
+values rather than generated enum constants.
+
 JavaScript result shaping follows the same boundary. The orchestrator result
 package returns owner-defined runtime status, checkpoint, artifact, primary
 result, and result-update projections. `pkg/transports/mapping` converts those

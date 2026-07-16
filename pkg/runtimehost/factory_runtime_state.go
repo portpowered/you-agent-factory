@@ -10,6 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryevent"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -647,7 +648,11 @@ func (fs *Host) GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent
 	if err != nil {
 		return nil, fmt.Errorf("get factory events: %w", err)
 	}
-	return events, nil
+	mapped, err := factoryevent.SliceToAPI(events)
+	if err != nil {
+		return nil, fmt.Errorf("map factory events to public contract: %w", err)
+	}
+	return mapped, nil
 }
 
 func (fs *Host) submitWorkFile(ctx context.Context) error {

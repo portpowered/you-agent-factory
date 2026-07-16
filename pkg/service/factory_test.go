@@ -339,12 +339,20 @@ func (f *aggregateSnapshotFactory) GetEngineStateSnapshot(context.Context) (*int
 	}
 	return f.engineState, nil
 }
-func (f *aggregateSnapshotFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *aggregateSnapshotFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	f.factoryEventsCalls++
 	if f.factoryEventsErr != nil {
 		return nil, f.factoryEventsErr
 	}
-	return append([]factoryapi.FactoryEvent(nil), f.factoryEvents...), nil
+	events := make([]interfaces.FactoryEvent, 0, len(f.factoryEvents))
+	for _, event := range f.factoryEvents {
+		canonical, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, canonical)
+	}
+	return events, nil
 }
 func (f *aggregateSnapshotFactory) WaitToComplete() <-chan struct{} {
 	if f.waitToComplete != nil {
@@ -375,7 +383,7 @@ func (f *runtimeMetricsObserverFactory) GetEngineStateSnapshot(context.Context) 
 	defer f.mu.RUnlock()
 	return f.engineState, nil
 }
-func (f *runtimeMetricsObserverFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *runtimeMetricsObserverFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 func (f *runtimeMetricsObserverFactory) WaitToComplete() <-chan struct{} {

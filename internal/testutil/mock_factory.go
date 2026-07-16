@@ -643,9 +643,15 @@ func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.Eng
 	return &snap, nil
 }
 
-func (m *MockFactory) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryEvent, error) {
-	events := make([]factoryapi.FactoryEvent, len(m.FactoryEvents))
-	copy(events, m.FactoryEvents)
+func (m *MockFactory) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
+	events := make([]interfaces.FactoryEvent, 0, len(m.FactoryEvents))
+	for _, event := range m.FactoryEvents {
+		canonical, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, canonical)
+	}
 	return events, nil
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -49,7 +48,7 @@ func (f *gatewayLifecycleFactory) Pause(context.Context) error { return nil }
 
 func (f *gatewayLifecycleFactory) Resume(context.Context) error { return nil }
 
-func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 

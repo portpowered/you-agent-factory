@@ -10,8 +10,6 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -477,9 +475,6 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result work.OperatorMoveResu
 func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	stream, err := f.eventHistory.Subscribe(ctx, reconnect, scope)
 	if err != nil {
-		if errors.Is(err, factoryevents.ErrReconnectCursorNotFound) {
-			return nil, fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
-		}
 		return nil, err
 	}
 	return &stream, nil
@@ -501,7 +496,7 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	f.mu.Unlock()
 	reason := "pause requested"
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, reason)
-	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, factoryapi.FactorySessionLifecycleControlKindPause, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, interfaces.FactorySessionLifecycleControlPause, reason)
 	f.recordSessionLifecyclePause()
 	f.logRuntimeLifecycleControl("PAUSE", previousState, interfaces.FactoryStatePaused, "ACCEPTED")
 	return nil
@@ -523,7 +518,7 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	f.mu.Unlock()
 	reason := "resume requested"
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, reason)
-	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStateRunning, factoryapi.FactorySessionLifecycleControlKindResume, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStateRunning, interfaces.FactorySessionLifecycleControlResume, reason)
 	f.recordSessionLifecycleResume()
 	f.markResumeDrainPending()
 	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
@@ -562,8 +557,8 @@ func (f *factoryImpl) GetEngineStateSnapshot(_ context.Context) (*interfaces.Eng
 }
 
 // GetFactoryEvents returns the current-process canonical event history.
-func (f *factoryImpl) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryEvent, error) {
-	return f.eventHistory.Events(), nil
+func (f *factoryImpl) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
+	return f.eventHistory.CanonicalEvents(), nil
 }
 
 // WaitToComplete returns a channel that is closed when Run() returns (either
@@ -603,7 +598,7 @@ func (f *factoryImpl) recordStateChange(previous interfaces.FactoryState, next i
 func (f *factoryImpl) recordSessionLifecycleControl(
 	previous interfaces.FactoryState,
 	next interfaces.FactoryState,
-	operation factoryapi.FactorySessionLifecycleControlKind,
+	operation interfaces.FactorySessionLifecycleControlKind,
 	reason string,
 ) {
 	if f.eventHistory == nil || f.cfg == nil {
@@ -625,7 +620,7 @@ func (f *factoryImpl) recordSessionLifecycleControl(
 		OrchestratorDialect: orchestratorDialect,
 		Source:              "runtime",
 		Tick:                tick,
-		Operation:           interfaces.FactorySessionLifecycleControlKind(operation),
+		Operation:           operation,
 		Outcome:             interfaces.FactorySessionLifecycleControlOutcomeAccepted,
 		PreviousStatus:      factoryevents.FactoryStateToDurableLifecycleStatus(previous),
 		NewStatus:           factoryevents.FactoryStateToDurableLifecycleStatus(next),

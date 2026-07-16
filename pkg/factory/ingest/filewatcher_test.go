@@ -16,7 +16,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
@@ -57,7 +56,7 @@ func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.Wor
 func (m *mockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}, nil
 }
-func (m *mockFactory) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryEvent, error) {
+func (m *mockFactory) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 func (m *mockFactory) WaitToComplete() <-chan struct{} {

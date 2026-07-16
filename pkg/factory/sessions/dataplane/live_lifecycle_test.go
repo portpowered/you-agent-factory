@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -76,7 +75,7 @@ func (f *lifecycleTestFactory) Resume(context.Context) error {
 	return f.resumeErr
 }
 
-func (f *lifecycleTestFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *lifecycleTestFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 
@@ -246,7 +245,7 @@ func (f *snapshotErrorFactory) Pause(context.Context) error {
 func (f *snapshotErrorFactory) Resume(context.Context) error {
 	return f.inner.Resume(context.Background())
 }
-func (f *snapshotErrorFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *snapshotErrorFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return f.inner.GetFactoryEvents(context.Background())
 }
 func (f *snapshotErrorFactory) WaitToComplete() <-chan struct{} { return f.inner.WaitToComplete() }

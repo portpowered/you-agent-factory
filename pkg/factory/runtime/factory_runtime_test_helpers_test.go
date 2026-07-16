@@ -236,7 +236,20 @@ func runtimeGeneratedEvents(t *testing.T, f factory.Factory) []factoryapi.Factor
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	return events
+	mapped := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		mapped[index] = runtimeGeneratedFactoryEvent(t, event)
+	}
+	return mapped
+}
+
+func runtimeGeneratedFactoryEvent(t testing.TB, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	var mapped factoryapi.FactoryEvent
+	if err := event.Decode(&mapped); err != nil {
+		t.Fatalf("map Factory event %q: %v", event.Id, err)
+	}
+	return mapped
 }
 
 func factoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
