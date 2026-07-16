@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -15,17 +16,17 @@ func TestCascadingFailure_DirectChild(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	parentWorkID := "parent-work-id"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID:  "task",
 		WorkID:      parentWorkID,
 		TargetState: "processing",
 		Payload:     []byte("parent"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    []byte("child"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: parentWorkID, RequiredState: "complete"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: parentWorkID, RequiredState: "complete"},
 		},
 	})
 
@@ -70,9 +71,9 @@ func TestCascadingFailure_DirectChild(t *testing.T) {
 	}
 }
 
-func tokenDependsOn(tok *interfaces.Token, workID string) bool {
+func tokenDependsOn(tok *factorytoken.Token, workID string) bool {
 	for _, rel := range tok.Color.Relations {
-		if rel.Type == interfaces.RelationDependsOn && rel.TargetWorkID == workID {
+		if rel.Type == work.RelationDependsOn && rel.TargetWorkID == workID {
 			return true
 		}
 	}
@@ -85,24 +86,24 @@ func TestCascadingFailure_Transitive(t *testing.T) {
 	pWorkID := "P-work-id"
 	c1WorkID := "C1-work-id"
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     pWorkID,
 		Payload:    []byte("P"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     c1WorkID,
 		Payload:    []byte("C1"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: pWorkID, RequiredState: "complete"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: pWorkID, RequiredState: "complete"},
 		},
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    []byte("C2"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: c1WorkID, RequiredState: "complete"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: c1WorkID, RequiredState: "complete"},
 		},
 	})
 
@@ -145,16 +146,16 @@ func TestCascadingFailure_CompletedNotCascaded(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
 
 	aWorkID := "A-work-id"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     aWorkID,
 		Payload:    []byte("A"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    []byte("B"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: aWorkID, RequiredState: "complete"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: aWorkID, RequiredState: "complete"},
 		},
 	})
 

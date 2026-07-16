@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -63,7 +63,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 		}},
 	}
 
-	saved, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session-alpha", imported)
+	saved, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session-alpha", mustEditableFactoryForTest(t, imported))
 	if err != nil {
 		t.Fatalf("SaveUpsertNamedAndActivateForSession: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 		}},
 	}
 
-	saved, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session-alpha", replacement)
+	saved, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session-alpha", mustEditableFactoryForTest(t, replacement))
 	if err != nil {
 		t.Fatalf("SaveUpsertNamedAndActivateForSession: %v", err)
 	}
@@ -194,8 +194,12 @@ func (h *upsertDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSe
 	return h.sessionRootDir
 }
 
-func (h *upsertDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (h *upsertDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validateDefinitionSnapshotForTest(snapshot, h.WorkstationLoader())
+}
+
+func (h *upsertDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (h *upsertDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
@@ -210,11 +214,11 @@ func (h *upsertDefinitionHost) ActivateSessionEditableFactory(
 	_ string,
 	_ string,
 	_ string,
-	name factoryapi.FactoryName,
+	name string,
 	runtimeName string,
 ) error {
-	h.activatedName = string(name)
-	if runtimeName != string(name) {
+	h.activatedName = name
+	if runtimeName != name {
 		return nil
 	}
 	return nil

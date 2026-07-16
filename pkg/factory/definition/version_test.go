@@ -5,14 +5,14 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestService_RequireFreshEditableFactoryVersion_RejectsMissingBaseVersion(t *testing.T) {
 	t.Parallel()
 
-	err := New(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(nil, factoryapi.HybridLogicalTimestamp{
+	err := New(stubDefinitionHost{}).RequireFreshEditableFactoryVersion(nil, interfaces.FactoryVersion{
 		Logical:  1,
 		Physical: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 	})
@@ -24,11 +24,11 @@ func TestService_RequireFreshEditableFactoryVersion_RejectsMissingBaseVersion(t 
 func TestService_RequireFreshEditableFactoryVersion_RejectsStaleVersion(t *testing.T) {
 	t.Parallel()
 
-	current := factoryapi.HybridLogicalTimestamp{
+	current := interfaces.FactoryVersion{
 		Logical:  5,
 		Physical: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
-	stale := factoryapi.HybridLogicalTimestamp{
+	stale := interfaces.FactoryVersion{
 		Logical:  4,
 		Physical: time.Date(2026, 3, 1, 12, 0, 1, 0, time.UTC),
 	}
@@ -41,11 +41,11 @@ func TestService_RequireFreshEditableFactoryVersion_RejectsStaleVersion(t *testi
 func TestService_RequireFreshEditableFactoryVersion_AcceptsAdvancedVersion(t *testing.T) {
 	t.Parallel()
 
-	current := factoryapi.HybridLogicalTimestamp{
+	current := interfaces.FactoryVersion{
 		Logical:  5,
 		Physical: time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC),
 	}
-	advanced := factoryapi.HybridLogicalTimestamp{
+	advanced := interfaces.FactoryVersion{
 		Logical:  6,
 		Physical: time.Date(2026, 3, 1, 12, 0, 1, 0, time.UTC),
 	}
@@ -57,7 +57,7 @@ func TestService_RequireFreshEditableFactoryVersion_AcceptsAdvancedVersion(t *te
 func TestService_NextEditableFactoryVersion_AdvancesLogicalAndPhysical(t *testing.T) {
 	t.Parallel()
 
-	current := factoryapi.HybridLogicalTimestamp{
+	current := interfaces.FactoryVersion{
 		Logical:  7,
 		Physical: time.Date(2026, 4, 1, 8, 0, 0, 0, time.UTC),
 	}

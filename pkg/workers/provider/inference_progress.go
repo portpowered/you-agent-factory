@@ -7,10 +7,13 @@ import (
 	"strings"
 	"time"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
@@ -59,7 +62,7 @@ type InferenceProgressFragment struct {
 	Kind               string
 	Type               string
 	Payload            string
-	ProviderSessionRef *interfaces.ProviderSessionMetadata
+	ProviderSessionRef *workerexecution.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
 	CanonicalDraft     any
@@ -82,43 +85,43 @@ func CanonicalDraftFragment(dispatchID string, draft any) InferenceProgressFragm
 type InferenceProgressPublisher func(fragment InferenceProgressFragment)
 
 // ProgressFragment builds one ordered progress fragment for a dispatch.
-func ProgressFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, payload string) InferenceProgressFragment {
+func ProgressFragment(dispatchID string, providerSession *workerexecution.ProviderSessionMetadata, payload string) InferenceProgressFragment {
 	return InferenceProgressFragment{
 		DispatchID:         strings.TrimSpace(dispatchID),
 		Kind:               ProgressFragmentKind,
 		Type:               NormalizedEventTypeProgress,
 		Payload:            payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(providerSession),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(providerSession),
 	}
 }
 
 // ResponseFragment builds one ordered response fragment for a dispatch.
-func ResponseFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, payload string) InferenceProgressFragment {
+func ResponseFragment(dispatchID string, providerSession *workerexecution.ProviderSessionMetadata, payload string) InferenceProgressFragment {
 	return InferenceProgressFragment{
 		DispatchID:         strings.TrimSpace(dispatchID),
 		Kind:               ResponseFragmentKind,
 		Type:               NormalizedEventTypeTextDelta,
 		Payload:            payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(providerSession),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(providerSession),
 	}
 }
 
 // CompletedFragment builds one terminal completion marker for a dispatch.
-func CompletedFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata) InferenceProgressFragment {
+func CompletedFragment(dispatchID string, providerSession *workerexecution.ProviderSessionMetadata) InferenceProgressFragment {
 	return InferenceProgressFragment{
 		DispatchID:         strings.TrimSpace(dispatchID),
 		Kind:               CompletedFragmentKind,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(providerSession),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(providerSession),
 	}
 }
 
 // FailedFragment builds one terminal failure marker for a dispatch.
-func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, payload string) InferenceProgressFragment {
+func FailedFragment(dispatchID string, providerSession *workerexecution.ProviderSessionMetadata, payload string) InferenceProgressFragment {
 	return InferenceProgressFragment{
 		DispatchID:         strings.TrimSpace(dispatchID),
 		Kind:               FailedFragmentKind,
 		Payload:            payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(providerSession),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(providerSession),
 	}
 }
 
@@ -192,28 +195,28 @@ func NewInferenceProgressPublishingCommandRunner(
 
 func (p *ScriptWrapProvider) executeAgy(
 	ctx context.Context,
-	req interfaces.ProviderInferenceRequest,
+	req workerexecution.ProviderInferenceRequest,
 	logger logging.Logger,
-) (interfaces.InferenceResponse, error) {
+) (workerexecution.InferenceResponse, error) {
 	factoryRoot := strings.TrimSpace(p.agyFactoryRoot)
 	if factoryRoot == "" {
-		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
+		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
 	}
 	providerAdapter := agyadapter.NewAdapter(factoryRoot)
 	if p.agyAllocator != nil {
 		var err error
 		providerAdapter, err = agyadapter.NewAdapterWithAllocator(factoryRoot, p.agyAllocator)
 		if err != nil {
-			return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+			return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)
 		}
 	}
 	registry, err := adapter.NewRegistry(providerAdapter)
 	if err != nil {
-		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)
 	}
 	runner, err := providerAdapter.PTYRunner()
 	if err != nil {
-		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+		return workerexecution.InferenceResponse{}, p.agyRequestValidationError(req, err)
 	}
 	started := time.Now()
 	result, executeErr := adapter.Execute(ctx, registry, runner, adapter.ExecuteInput{
@@ -232,18 +235,18 @@ func (p *ScriptWrapProvider) executeAgy(
 		providerErr := providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics)
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
 		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
-		return interfaces.InferenceResponse{}, providerErr
+		return workerexecution.InferenceResponse{}, providerErr
 	}
 	if executeErr != nil {
 		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
 			providerErr := providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics)
 			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
 			p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
-			return interfaces.InferenceResponse{}, providerErr
+			return workerexecution.InferenceResponse{}, providerErr
 		}
 		providerErr := normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics)
 		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
-		return interfaces.InferenceResponse{}, providerErr
+		return workerexecution.InferenceResponse{}, providerErr
 	}
 	response := result.Response
 	response.Diagnostics = diagnostics
@@ -253,9 +256,9 @@ func (p *ScriptWrapProvider) executeAgy(
 	return response, nil
 }
 
-func (p *ScriptWrapProvider) agyRequestValidationError(req interfaces.ProviderInferenceRequest, err error) *ProviderError {
+func (p *ScriptWrapProvider) agyRequestValidationError(req workerexecution.ProviderInferenceRequest, err error) *ProviderError {
 	providerErr := newProviderErrorWithDiagnostics(
-		interfaces.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		err.Error(),
 		err,
 		nil,
@@ -272,10 +275,10 @@ type progressStreamObserver interface {
 
 func progressStreamIdentity(command string) adapter.Identity {
 	if cursorprogress.IsCommand(command) {
-		return adapter.Identity(interfaces.ModelProviderCursor)
+		return adapter.Identity(modelprovider.Cursor)
 	}
 	if codexprogress.IsCommand(command) {
-		return adapter.Identity(interfaces.ModelProviderCodex)
+		return adapter.Identity(modelprovider.Codex)
 	}
 	return adapter.NormalizeIdentity(adapter.Identity(command))
 }
@@ -287,13 +290,13 @@ func newProgressStreamObserver(
 ) progressStreamObserver {
 	dispatchID := strings.TrimSpace(req.DispatchID)
 	switch progressStreamIdentity(req.Command) {
-	case adapter.Identity(interfaces.ModelProviderCursor):
+	case adapter.Identity(modelprovider.Cursor):
 		return &cursorProgressObserver{
 			stream: cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
 				publisher(inferenceProgressFragmentFromCursor(fragment))
 			}, logger),
 		}
-	case adapter.Identity(interfaces.ModelProviderCodex):
+	case adapter.Identity(modelprovider.Codex):
 		return &codexProgressObserver{
 			stream: codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
 				publisher(inferenceProgressFragmentFromCodex(fragment))
@@ -347,7 +350,7 @@ func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment)
 		Kind:               fragment.Kind,
 		Type:               fragment.Type,
 		Payload:            fragment.Payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
 		ExternalEventType:  fragment.ExternalEventType,
 		Metadata:           fragment.Metadata,
 	}

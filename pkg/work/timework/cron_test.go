@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestBuildCronTimeMetadata_DeterministicForSameWorkflowWorkstationAndNominalTime(t *testing.T) {
@@ -158,8 +159,8 @@ func TestCronTimeWorkRequest_UsesCanonicalInternalTimeWorkContract(t *testing.T)
 		t.Fatalf("CronTimeWorkRequest: %v", err)
 	}
 
-	if req.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("request type = %q, want %q", req.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if req.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("request type = %q, want %q", req.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if req.RequestID == "" {
 		t.Fatal("expected deterministic cron request ID")

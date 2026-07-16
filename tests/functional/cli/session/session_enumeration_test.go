@@ -13,14 +13,16 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	cli "github.com/portpowered/infinite-you/pkg/transports/cli"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -298,7 +300,7 @@ func assertFlaggedLoopProviderRequests(t *testing.T, provider *testutil.MockProv
 		t.Fatalf("flagged loop provider request count = %d, want %d", len(requests), want)
 	}
 	for index, request := range requests {
-		if request.Worktree != "loop-flag-worktree" || request.ModelProvider != string(interfaces.ModelProviderCursor) || request.Model != "loop-flag-model" {
+		if request.Worktree != "loop-flag-worktree" || request.ModelProvider != string(modelprovider.Cursor) || request.Model != "loop-flag-model" {
 			t.Fatalf("flagged loop provider request %d = %#v, want CLI-selected model and configured worktree", index, request)
 		}
 		if request.Dispatch.WorkstationName != "run-loop-iteration" {
@@ -312,7 +314,7 @@ func assertFlaggedLoopProviderRequests(t *testing.T, provider *testutil.MockProv
 
 func hasLoopRequestLineage(inputTokens []any, want string) bool {
 	for _, inputToken := range inputTokens {
-		token, ok := inputToken.(interfaces.Token)
+		token, ok := inputToken.(factorytoken.Token)
 		if !ok || token.Color.InvocationArguments == nil {
 			continue
 		}
@@ -334,7 +336,7 @@ func assertLoopProviderRequests(t *testing.T, provider *testutil.MockProvider, w
 		if request.Worktree != "loop-functional-worktree" {
 			t.Fatalf("loop provider request %d worktree = %q, want configured worktree; input tokens = %#v", index, request.Worktree, request.InputTokens)
 		}
-		if request.ModelProvider != string(interfaces.ModelProviderCursor) || request.Model != "loop-functional-model" {
+		if request.ModelProvider != string(modelprovider.Cursor) || request.Model != "loop-functional-model" {
 			t.Fatalf("loop provider request %d model = %q/%q, want CURSOR/loop-functional-model", index, request.ModelProvider, request.Model)
 		}
 		if request.Dispatch.WorkstationName != "run-loop-iteration" {

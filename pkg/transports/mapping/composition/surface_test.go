@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type SessionAPI = apisurface.SessionAPI
@@ -22,7 +22,7 @@ type FactoryInvocationResult = apisurface.FactoryInvocationResult
 type sessionCollaboratorFake struct {
 	SessionAPI
 	getCurrentFactory           func(context.Context) (factoryapi.Factory, error)
-	submitWorkRequestForSession func(context.Context, string, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
+	submitWorkRequestForSession func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
 }
 
 func (f *sessionCollaboratorFake) GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error) {
@@ -32,8 +32,8 @@ func (f *sessionCollaboratorFake) GetCurrentFactory(ctx context.Context) (factor
 func (f *sessionCollaboratorFake) SubmitWorkRequestForSession(
 	ctx context.Context,
 	sessionID string,
-	request interfaces.WorkRequest,
-) (interfaces.WorkRequestSubmitResult, error) {
+	request work.WorkRequest,
+) (work.WorkRequestSubmitResult, error) {
 	return f.submitWorkRequestForSession(ctx, sessionID, request)
 }
 
@@ -154,7 +154,7 @@ func TestComposedSessionAPISurfaceDelegatesSessionOperations(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKey, "preserved"))
 	cancel()
 	wantFactory := factoryapi.Factory{Name: "current"}
-	wantResult := interfaces.WorkRequestSubmitResult{RequestID: "request-1", Accepted: true}
+	wantResult := work.WorkRequestSubmitResult{RequestID: "request-1", Accepted: true}
 	wantErr := errors.New("session failure")
 	currentCalls := 0
 	submitCalls := 0
@@ -168,8 +168,8 @@ func TestComposedSessionAPISurfaceDelegatesSessionOperations(t *testing.T) {
 	session.submitWorkRequestForSession = func(
 		got context.Context,
 		sessionID string,
-		_ interfaces.WorkRequest,
-	) (interfaces.WorkRequestSubmitResult, error) {
+		_ work.WorkRequest,
+	) (work.WorkRequestSubmitResult, error) {
 		submitCalls++
 		if sessionID != "session-1" {
 			t.Fatalf("session ID = %q, want session-1", sessionID)
@@ -185,7 +185,7 @@ func TestComposedSessionAPISurfaceDelegatesSessionOperations(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(gotFactory, wantFactory) {
 		t.Fatalf("GetCurrentFactory() = (%+v, %v), want (%+v, nil)", gotFactory, err, wantFactory)
 	}
-	gotResult, err := surface.SubmitWorkRequestForSession(ctx, "session-1", interfaces.WorkRequest{})
+	gotResult, err := surface.SubmitWorkRequestForSession(ctx, "session-1", work.WorkRequest{})
 	if !errors.Is(err, wantErr) || !reflect.DeepEqual(gotResult, wantResult) {
 		t.Fatalf("SubmitWorkRequestForSession() = (%+v, %v), want (%+v, %v)", gotResult, err, wantResult, wantErr)
 	}

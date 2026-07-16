@@ -15,24 +15,33 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -334,15 +343,15 @@ func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.
 	return updated
 }
 
-func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {
+func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []work.SubmitRequest) error {
 	workRequest := requests.WorkRequestFromSubmitRequests(reqs)
 	_, err := svc.SubmitWorkRequest(ctx, workRequest)
 	return err
 }
 
-func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitRequest) {
+func writeWorkRequestFile(t *testing.T, path string, req work.SubmitRequest) {
 	t.Helper()
-	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
+	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{req}))
 	if err != nil {
 		t.Fatalf("marshal work request file: %v", err)
 	}
@@ -374,19 +383,19 @@ type aggregateSnapshotFactory struct {
 	factoryEventsErr         error
 	factoryEventsCalls       int
 	pauseErr                 error
-	submitFunc               func(context.Context, interfaces.WorkRequest) error
+	submitFunc               func(context.Context, work.WorkRequest) error
 	submitCalls              int
-	submissions              []interfaces.WorkRequest
+	submissions              []work.WorkRequest
 	waitToComplete           chan struct{}
 }
 
 func (f *aggregateSnapshotFactory) Run(context.Context) error { return nil }
-func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
-	result := interfaces.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
+	result := work.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
 	if len(normalized) > 0 {
 		result.TraceID = normalized[0].TraceID
 	}
@@ -399,10 +408,10 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	}
 	return result, nil
 }
-func (f *aggregateSnapshotFactory) submissionSnapshot() (int, []interfaces.WorkRequest) {
+func (f *aggregateSnapshotFactory) submissionSnapshot() (int, []work.WorkRequest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.submitCalls, append([]interfaces.WorkRequest(nil), f.submissions...)
+	return f.submitCalls, append([]work.WorkRequest(nil), f.submissions...)
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
@@ -411,13 +420,13 @@ func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *inte
 	}
 	return &interfaces.FactoryEventStream{
 		StreamGenerationID: streamGenerationID,
-		Events:             make(chan factoryapi.FactoryEvent),
+		Events:             make(chan interfaces.FactoryEvent),
 	}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
 func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }
-func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
+func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
 }
 func (f *aggregateSnapshotFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.engineStateSnapshotCalls++
@@ -426,12 +435,20 @@ func (f *aggregateSnapshotFactory) GetEngineStateSnapshot(context.Context) (*int
 	}
 	return f.engineState, nil
 }
-func (f *aggregateSnapshotFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *aggregateSnapshotFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	f.factoryEventsCalls++
 	if f.factoryEventsErr != nil {
 		return nil, f.factoryEventsErr
 	}
-	return append([]factoryapi.FactoryEvent(nil), f.factoryEvents...), nil
+	events := make([]interfaces.FactoryEvent, 0, len(f.factoryEvents))
+	for _, event := range f.factoryEvents {
+		canonical, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, canonical)
+	}
+	return events, nil
 }
 func (f *aggregateSnapshotFactory) WaitToComplete() <-chan struct{} {
 	if f.waitToComplete != nil {
@@ -446,23 +463,23 @@ type runtimeMetricsObserverFactory struct {
 }
 
 func (f *runtimeMetricsObserverFactory) Run(context.Context) error { return nil }
-func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return interfaces.WorkRequestSubmitResult{}, nil
+func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
 }
 func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
 }
 func (f *runtimeMetricsObserverFactory) Pause(context.Context) error  { return nil }
 func (f *runtimeMetricsObserverFactory) Resume(context.Context) error { return nil }
-func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, nil
+func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, nil
 }
 func (f *runtimeMetricsObserverFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.engineState, nil
 }
-func (f *runtimeMetricsObserverFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *runtimeMetricsObserverFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 func (f *runtimeMetricsObserverFactory) WaitToComplete() <-chan struct{} {
@@ -502,13 +519,13 @@ func TestFactoryService_WaitToComplete_DelegatesToActiveRuntime(t *testing.T) {
 }
 
 func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *testing.T) {
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-failed",
 		"runtime-failed",
 		"/factory",
 		"/factory/current",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
@@ -586,13 +603,13 @@ func startRuntimeMetricsShutdownTestHandle(
 ) (*FactoryService, *liveRuntimeHandle, *runtimeMetricsObserverFactory, string) {
 	t.Helper()
 
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-shutdown",
 		"runtime-shutdown",
 		"/factory",
 		"/factory/current",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
@@ -958,7 +975,7 @@ func removeRunningSessionServiceRoot(t *testing.T, rootDir string) {
 func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 	t.Helper()
 	closed := make(map[*logging.RuntimeLogSink]struct{})
-	closedMetrics := make(map[*logging.RuntimeMetricsSink]struct{})
+	closedMetrics := make(map[*platformmetrics.RuntimeMetricsSink]struct{})
 	closeBundle := func(bundle *factoryRuntimeBundle) {
 		if bundle == nil {
 			return
@@ -1332,7 +1349,7 @@ func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workTy
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("live session runtime is required")
 	}
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
 		WorkTypeID: workType,
@@ -1347,7 +1364,7 @@ func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workTy
 func submitCompatWork(t *testing.T, svc *FactoryService, workID, traceID string) {
 	t.Helper()
 
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
 		WorkTypeID: "task",
@@ -2525,7 +2542,7 @@ func TestFactoryService_SaveFactoryForSession_RejectsDuplicateDefaultHandlingWor
 		t.Fatal("expected current factory version metadata")
 	}
 
-	replacement, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	replacement, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -4097,7 +4114,7 @@ func TestFactoryService_SaveFactoryForSession_UpsertReplaceDoesNotReturnAlreadyE
 func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -4105,7 +4122,7 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 	puller := &managedPullMetricsAssetPuller{
 		result: apisurface.ModelPullResult{
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Outcome:          "PULLED",
 			CachePath:        cache.CachePath,
 			Revision:         cache.Revision,
@@ -4165,16 +4182,16 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	runtimeCfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
-			Type:     interfaces.ResourceTypeModel,
+			Type:     factoryresource.TypeModel,
 			Capacity: 1,
 			Model:    "OMNIVOICE_Q4_K_M",
 		}},
@@ -4225,16 +4242,16 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 	logCore, observedLogs := observer.New(zap.WarnLevel)
 	runtimeCfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
-			Type:     interfaces.ResourceTypeModel,
+			Type:     factoryresource.TypeModel,
 			Capacity: 1,
 			Model:    "OMNIVOICE_Q4_K_M",
 		}},
@@ -4329,11 +4346,11 @@ func (p *managedPullMetricsAssetPuller) PullModel(context.Context, *factoryconfi
 	return p.result, p.err
 }
 
-func (p *managedPullMetricsAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *managedPullMetricsAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *managedPullMetricsAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p *managedPullMetricsAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return p.cache, nil
 }
 
@@ -4495,7 +4512,7 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 			t.Fatalf("close log sink: %v", closeErr)
 		}
 	}()
-	metricsSink, err := logging.BuildRuntimeMetricsSink("session-1", "runtime-1", "/tmp/folder", "/tmp/factory", metricsDir, logging.RuntimeMetricsConfig{})
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink("session-1", "runtime-1", "/tmp/folder", "/tmp/factory", metricsDir, platformmetrics.RuntimeMetricsConfig{})
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
 	}
@@ -4560,37 +4577,44 @@ func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 func testModelEventDiagnosticsBranches(t *testing.T) {
 	t.Helper()
 
-	successDiagnostics := &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	successDiagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "req-1"},
 		},
 	}
-	if got := modelEventDiagnostics(successDiagnostics, nil); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-1" {
-		t.Fatalf("success diagnostics = %#v", got)
-	}
+	assertModelEventDiagnosticsRequestID(t, modelEventDiagnostics(successDiagnostics, nil), "req-1")
 
-	providerDiagnostics := &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	providerDiagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "req-2"},
 		},
 	}
-	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
+	providerErr := workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
 	providerErr.Diagnostics = providerDiagnostics
-	if got := modelEventDiagnostics(nil, providerErr); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-2" {
-		t.Fatalf("provider diagnostics = %#v", got)
+	assertModelEventDiagnosticsRequestID(t, modelEventDiagnostics(nil, providerErr), "req-2")
+}
+
+func assertModelEventDiagnosticsRequestID(t *testing.T, payload json.RawMessage, want string) {
+	t.Helper()
+	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload)
+	if err != nil {
+		t.Fatalf("decode model event diagnostics: %v", err)
+	}
+	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata["request_id"] != want {
+		t.Fatalf("model event diagnostics = %#v, want request_id %q", diagnostics, want)
 	}
 }
 
 func testModelEventErrorClassBranches(t *testing.T) {
 	t.Helper()
 
-	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
-	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING}
+	providerErr := workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
+	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: managedruntime.ReadinessStateLoading}
 	if got := modelEventErrorClass(readinessErr); got != "MANAGED_RUNTIME_LOADING" {
 		t.Fatalf("managed runtime error class = %q, want MANAGED_RUNTIME_LOADING", got)
 	}
-	if got := modelEventErrorClass(providerErr); got != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("provider error class = %q, want %q", got, interfaces.WorkFailureTypeTimeout)
+	if got := modelEventErrorClass(providerErr); got != string(workerexecution.WorkFailureTypeTimeout) {
+		t.Fatalf("provider error class = %q, want %q", got, workerexecution.WorkFailureTypeTimeout)
 	}
 	if got := modelEventErrorClass(errors.New("plain failure")); got != "MODEL_EXECUTION_FAILED" {
 		t.Fatalf("plain error class = %q, want MODEL_EXECUTION_FAILED", got)
@@ -4650,10 +4674,10 @@ func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
 
 type serviceCompatibilitySessionGateway struct {
 	sessionGateway
-	getFactorySession func(context.Context, string) (factoryapi.FactorySession, error)
+	getFactorySession func(context.Context, string) (factorysessions.ProjectionContext, error)
 }
 
-func (f serviceCompatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (f serviceCompatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 	return f.getFactorySession(ctx, sessionID)
 }
 
@@ -4675,10 +4699,10 @@ func (f serviceCompatibilityFactorySave) Save(ctx context.Context, sessionID str
 }
 
 type serviceCompatibilityInvocationAPI struct {
-	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+	invoke func(context.Context, string, sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error)
 }
 
-func (f serviceCompatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+func (f serviceCompatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return f.invoke(ctx, sessionID, request)
 }
 
@@ -4705,12 +4729,12 @@ func TestFactoryServiceCompatibilityFacadeForwardsToCanonicalCollaborators(t *te
 	calls := map[string]int{}
 
 	service := &FactoryService{}
-	service.sessionGateway = serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	service.sessionGateway = serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 		calls["session"]++
 		if gotCtx != ctx || sessionID != "missing-session" {
 			t.Fatalf("session args = (%v, %q)", gotCtx, sessionID)
 		}
-		return factoryapi.FactorySession{}, sentinel
+		return factorysessions.ProjectionContext{}, sentinel
 	}}
 	service.modelService = serviceCompatibilityModelAPI{getModel: func(gotCtx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 		calls["model"]++
@@ -4726,7 +4750,7 @@ func TestFactoryServiceCompatibilityFacadeForwardsToCanonicalCollaborators(t *te
 		}
 		return factoryapi.Factory{}, sentinel
 	}}
-	service.sessionInvoker = serviceCompatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	service.sessionInvoker = serviceCompatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 		calls["invocation"]++
 		if gotCtx != ctx || sessionID != "session-1" {
 			t.Fatalf("invocation args = (%v, %q, %#v)", gotCtx, sessionID, request)
@@ -4761,7 +4785,7 @@ func TestFactoryServiceCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	validation := &apisurface.RequestValidationError{Message: "invalid factory definition"}
 	wantInvocation := apisurface.FactoryInvocationResult{
 		RequestID: "request-typed", TraceID: "trace-typed",
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: "COMPLETED",
 	}
 	wantLifecycle := factoryapi.FactorySessionLifecycleControlResponse{
 		SessionId: "durable-1", Operation: factoryapi.FactorySessionLifecycleControlKindPause,
@@ -4770,17 +4794,17 @@ func TestFactoryServiceCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	calls := map[string]int{}
 
 	svc := &FactoryService{
-		sessionGateway: serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		sessionGateway: serviceCompatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 			calls["not-found"]++
 			requireServiceCompatibility(t, gotCtx == ctx && sessionID == "missing", "session args = (%v, %q)", gotCtx, sessionID)
-			return factoryapi.FactorySession{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
+			return factorysessions.ProjectionContext{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
 		}},
 		factorySave: serviceCompatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
 			calls["validation"]++
 			requireServiceCompatibility(t, gotCtx == ctx && sessionID == "session-1" && mode == factoryapi.FactorySaveModeReplaceCurrent, "factory-definition args = (%v, %q, %q)", gotCtx, sessionID, mode)
 			return factoryapi.Factory{}, validation
 		}},
-		sessionInvoker: serviceCompatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		sessionInvoker: serviceCompatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 			calls["invocation"]++
 			requireServiceCompatibility(t, gotCtx == ctx && sessionID == "session-1", "invocation args = (%v, %q)", gotCtx, sessionID)
 			return wantInvocation, nil

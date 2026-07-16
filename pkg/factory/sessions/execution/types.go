@@ -7,27 +7,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
-func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
-	content := contentcontract.GeneratedPtrFromParts(parts)
-	if content == nil {
+func workContentJSONFromParts(parts []work.WorkContentPart) json.RawMessage {
+	parts = contentcontract.SupportedParts(parts)
+	if len(parts) == 0 {
 		return nil
 	}
-	encoded, err := json.Marshal(content)
+	encoded, err := json.Marshal(parts)
 	if err != nil {
 		return nil
 	}
 	return encoded
 }
 
-func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
+func resultSummaryTextFromParts(parts []work.WorkContentPart) string {
 	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
 			if text := strings.TrimSpace(part.Text); text != "" {
 				return text
 			}
@@ -40,7 +41,7 @@ func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
 // canonical Factory Session owner after a Petri runtime finishes.
 type PetriSessionCompletion struct {
 	Status        LifecycleStatus
-	PrimaryResult []interfaces.WorkContentPart
+	PrimaryResult []work.WorkContentPart
 	Failure       *FailureSummary
 }
 

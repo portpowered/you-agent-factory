@@ -17,9 +17,10 @@ import (
 	"strings"
 	"time"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
@@ -125,29 +126,29 @@ func (p *Puller) SetEndpointsForTest(baseURL string, apiBaseURL string, client *
 	p.client = client
 }
 
-func (p *Puller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+func (p *Puller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (PullResult, error) {
 	spec, err := p.resolveSpec(runtimeCfg, modelName)
 	if err != nil {
-		return apisurface.ModelPullResult{}, err
+		return PullResult{}, err
 	}
 	manifest, err := p.fetchManifest(ctx, spec)
 	if err != nil {
-		return apisurface.ModelPullResult{}, err
+		return PullResult{}, err
 	}
 	cachePath, err := p.cachePath(spec, manifest.Revision)
 	if err != nil {
-		return apisurface.ModelPullResult{}, err
+		return PullResult{}, err
 	}
 	if err := os.MkdirAll(cachePath, 0o755); err != nil {
-		return apisurface.ModelPullResult{}, fmt.Errorf("prepare model cache %q: %w", cachePath, err)
+		return PullResult{}, fmt.Errorf("prepare model cache %q: %w", cachePath, err)
 	}
 
 	outcome := PullOutcomeAlreadyPresent
-	downloaded := make([]apisurface.ModelPullDownloadedFile, 0, len(manifest.Files))
+	downloaded := make([]DownloadedFile, 0, len(manifest.Files))
 	for _, file := range manifest.Files {
 		current, fileOutcome, err := p.ensureCachedFile(ctx, cachePath, file)
 		if err != nil {
-			return apisurface.ModelPullResult{}, err
+			return PullResult{}, err
 		}
 		if fileOutcome == PullOutcomePulled {
 			outcome = PullOutcomePulled
@@ -158,10 +159,10 @@ func (p *Puller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.Loaded
 		return downloaded[i].Path < downloaded[j].Path
 	})
 	if err := p.writeLocalMetadata(spec, manifest); err != nil {
-		return apisurface.ModelPullResult{}, err
+		return PullResult{}, err
 	}
 
-	return apisurface.ModelPullResult{
+	return PullResult{
 		ModelName:        spec.ModelName,
 		ProviderLocality: spec.ProviderLocality,
 		Outcome:          outcome,
@@ -171,12 +172,12 @@ func (p *Puller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.Loaded
 	}, nil
 }
 
-func (p *Puller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
+func (p *Puller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) error {
 	_, err := p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 	return err
 }
 
-func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
+func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error) {
 	return p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 }
 
@@ -184,7 +185,7 @@ func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfi
 func (p *Puller) InspectRuntimeCache(_ context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error) {
 	spec, err := p.resolveSpec(runtimeCfg, modelName)
 	if err != nil {
-		if errors.Is(err, apisurface.ErrModelPullUnsupported) {
+		if errors.Is(err, ErrPullUnsupported) {
 			return RuntimeCacheInspection{}, nil
 		}
 		return RuntimeCacheInspection{}, err
@@ -232,20 +233,20 @@ func (p *Puller) InspectRuntimeCache(_ context.Context, runtimeCfg *factoryconfi
 	return result, nil
 }
 
-func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
-	if worker == nil || strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
+func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error) {
+	if worker == nil || strings.TrimSpace(worker.ModelLocality) != workerconfig.ModelLocalityLocal {
 		return CacheLayout{}, nil
 	}
 	spec, err := p.resolveSpec(runtimeCfg, worker.Model)
 	if err != nil {
-		if errors.Is(err, apisurface.ErrModelPullUnsupported) {
-			return CacheLayout{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotAvailable, strings.TrimSpace(worker.Model))
+		if errors.Is(err, ErrPullUnsupported) {
+			return CacheLayout{}, fmt.Errorf("%w: %s", ErrNotAvailable, strings.TrimSpace(worker.Model))
 		}
 		return CacheLayout{}, err
 	}
 	manifest, err := p.resolveManifest(ctx, spec)
 	if err != nil {
-		return CacheLayout{}, fmt.Errorf("%w: %v", apisurface.ErrModelNotAvailable, err)
+		return CacheLayout{}, fmt.Errorf("%w: %v", ErrNotAvailable, err)
 	}
 	cachePath, err := p.cachePath(spec, manifest.Revision)
 	if err != nil {
@@ -268,7 +269,7 @@ func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factor
 		}
 	}
 	if len(missing) > 0 {
-		return CacheLayout{}, fmt.Errorf("%w: required assets missing in managed cache %q (%s)", apisurface.ErrModelNotAvailable, cachePath, strings.Join(missing, ", "))
+		return CacheLayout{}, fmt.Errorf("%w: required assets missing in managed cache %q (%s)", ErrNotAvailable, cachePath, strings.Join(missing, ", "))
 	}
 	return CacheLayout{
 		ModelName: spec.ModelName,
@@ -296,30 +297,30 @@ func (p *Puller) resolveSpec(runtimeCfg *factoryconfig.LoadedFactoryConfig, mode
 	key := canonicalModelName(modelName)
 	spec, ok := builtInModelAssetSpecs()[key]
 	if !ok {
-		return modelAssetSpec{}, fmt.Errorf("%w: no managed asset source for model %q", apisurface.ErrModelPullUnsupported, modelName)
+		return modelAssetSpec{}, fmt.Errorf("%w: no managed asset source for model %q", ErrPullUnsupported, modelName)
 	}
 	if _, ok := spec.AllowedOSArch[p.goos+"/"+p.goarch]; !ok {
-		return modelAssetSpec{}, fmt.Errorf("%w: model %q is not supported on %s/%s", apisurface.ErrModelPullUnsupported, modelName, p.goos, p.goarch)
+		return modelAssetSpec{}, fmt.Errorf("%w: model %q is not supported on %s/%s", ErrPullUnsupported, modelName, p.goos, p.goarch)
 	}
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
 		return modelAssetSpec{}, fmt.Errorf("runtime config is not available")
 	}
 	for _, resource := range runtimeCfg.FactoryConfig().Resources {
-		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		if canonicalModelName(resource.Model) == key {
 			return spec, nil
 		}
 	}
-	return modelAssetSpec{}, fmt.Errorf("%w: model %q has no matching MODEL resource declaration", apisurface.ErrModelPullUnsupported, modelName)
+	return modelAssetSpec{}, fmt.Errorf("%w: model %q has no matching MODEL resource declaration", ErrPullUnsupported, modelName)
 }
 
 func builtInModelAssetSpecs() map[string]modelAssetSpec {
 	return map[string]modelAssetSpec{
 		canonicalModelName("OMNIVOICE_Q4_K_M"): {
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Repository:       "Serveurperso/OmniVoice-GGUF",
 			RequiredFilenames: []string{
 				"omnivoice-base-Q4_K_M.gguf",
@@ -349,12 +350,12 @@ func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelA
 	}
 	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
-		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q: %v", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, err)
+		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q: %v", ErrSourceFetchFailed, spec.ModelName, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q failed (%d): %s", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
+		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q failed (%d): %s", ErrSourceFetchFailed, spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var payload huggingFaceModelResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -373,7 +374,7 @@ func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelA
 	for _, filename := range spec.RequiredFilenames {
 		sibling, ok := siblingByPath[filename]
 		if !ok {
-			return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q is missing required file %q", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, filename)
+			return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q is missing required file %q", ErrSourceFetchFailed, spec.ModelName, filename)
 		}
 		size := sibling.Size
 		sha := ""
@@ -556,37 +557,37 @@ func manifestMatchesRequiredFiles(manifest modelAssetManifest, required []string
 	return true
 }
 
-func (p *Puller) ensureCachedFile(ctx context.Context, cachePath string, remote modelAssetRemoteFile) (apisurface.ModelPullDownloadedFile, string, error) {
+func (p *Puller) ensureCachedFile(ctx context.Context, cachePath string, remote modelAssetRemoteFile) (DownloadedFile, string, error) {
 	targetPath := filepath.Join(cachePath, filepath.FromSlash(remote.Path))
 	if info, err := os.Stat(targetPath); err == nil && !info.IsDir() {
 		if remote.SHA256 == "" {
-			return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size()}, PullOutcomeAlreadyPresent, nil
+			return DownloadedFile{Path: remote.Path, Bytes: info.Size()}, PullOutcomeAlreadyPresent, nil
 		}
 		existingSHA, shaErr := fileSHA256(targetPath)
 		if shaErr != nil {
-			return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("checksum cached model file %q: %w", targetPath, shaErr)
+			return DownloadedFile{}, "", fmt.Errorf("checksum cached model file %q: %w", targetPath, shaErr)
 		}
 		if existingSHA == remote.SHA256 {
-			return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: existingSHA}, PullOutcomeAlreadyPresent, nil
+			return DownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: existingSHA}, PullOutcomeAlreadyPresent, nil
 		}
 		if removeErr := os.Remove(targetPath); removeErr != nil {
-			return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("remove stale cached model file %q: %w", targetPath, removeErr)
+			return DownloadedFile{}, "", fmt.Errorf("remove stale cached model file %q: %w", targetPath, removeErr)
 		}
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("inspect model cache file %q: %w", targetPath, err)
+		return DownloadedFile{}, "", fmt.Errorf("inspect model cache file %q: %w", targetPath, err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-		return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("prepare model cache directory for %q: %w", targetPath, err)
+		return DownloadedFile{}, "", fmt.Errorf("prepare model cache directory for %q: %w", targetPath, err)
 	}
 	if err := p.downloadFile(ctx, remote, targetPath); err != nil {
-		return apisurface.ModelPullDownloadedFile{}, "", err
+		return DownloadedFile{}, "", err
 	}
 	info, err := os.Stat(targetPath)
 	if err != nil {
-		return apisurface.ModelPullDownloadedFile{}, "", fmt.Errorf("stat downloaded model file %q: %w", targetPath, err)
+		return DownloadedFile{}, "", fmt.Errorf("stat downloaded model file %q: %w", targetPath, err)
 	}
-	return apisurface.ModelPullDownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: remote.SHA256}, PullOutcomePulled, nil
+	return DownloadedFile{Path: remote.Path, Bytes: info.Size(), SHA256: remote.SHA256}, PullOutcomePulled, nil
 }
 
 func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, targetPath string) error {
@@ -596,12 +597,12 @@ func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, 
 	}
 	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
-		return fmt.Errorf("%w: download model asset %q: %v", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, err)
+		return fmt.Errorf("%w: download model asset %q: %v", ErrSourceFetchFailed, remote.Path, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("%w: download model asset %q failed (%d): %s", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("%w: download model asset %q failed (%d): %s", ErrSourceFetchFailed, remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	tmpPath := targetPath + ".partial"
@@ -624,7 +625,7 @@ func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, 
 	gotSHA := hex.EncodeToString(hasher.Sum(nil))
 	if remote.SHA256 != "" && !strings.EqualFold(gotSHA, remote.SHA256) {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%w: download model asset %q failed checksum verification: expected %s, got %s", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, remote.SHA256, gotSHA)
+		return fmt.Errorf("%w: download model asset %q failed checksum verification: expected %s, got %s", ErrSourceFetchFailed, remote.Path, remote.SHA256, gotSHA)
 	}
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		_ = os.Remove(tmpPath)

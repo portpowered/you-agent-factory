@@ -10,15 +10,21 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService(t *testing.T) {
@@ -111,7 +117,7 @@ func TestStartHostedLinearPoller_StopsOnContextCancellation(t *testing.T) {
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	svc.StartHostedLinearPoller(sidecarCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	svc.StartHostedLinearPoller(sidecarCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 
@@ -178,14 +184,14 @@ func TestStartPollersForRuntime_StartsScriptAndHostedPollers(t *testing.T) {
 	hostedWorker := hostedLinearPollerWorker()
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: scriptWorker.Name},
 			{Name: hostedWorker.Name},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{scriptPoller, hostedPoller},
 	}
 	loaded, err := config.NewLoadedFactoryConfig(factoryDir, factoryCfg, runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			scriptWorker.Name: scriptWorker,
 			hostedWorker.Name: hostedWorker,
 		},
@@ -226,20 +232,20 @@ func TestStartPollersForRuntime_StartsScriptAndHostedPollers(t *testing.T) {
 func hostedLinearPollerWorkstation() interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "linear-poller",
 	}
 }
 
-func hostedLinearPollerWorker() *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func hostedLinearPollerWorker() *workerconfig.Config {
+	return &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			PollInterval: "1h",
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{
+			Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 				WorkType: "story",
 				State:    "init",
 			},
@@ -251,14 +257,14 @@ func newHostedPollerLoadedRuntimeConfig(
 	t *testing.T,
 	factoryDir string,
 	poller interfaces.FactoryWorkstationConfig,
-	worker *interfaces.WorkerConfig,
+	worker *workerconfig.Config,
 ) *config.LoadedFactoryConfig {
 	t.Helper()
 	loaded, err := config.NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
-		Workers:      []interfaces.WorkerConfig{{Name: worker.Name}},
+		Workers:      []workerconfig.Config{{Name: worker.Name}},
 		Workstations: []interfaces.FactoryWorkstationConfig{poller},
 	}, runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers:      map[string]*interfaces.WorkerConfig{worker.Name: worker},
+		Workers:      map[string]*workerconfig.Config{worker.Name: worker},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
 	})
 	if err != nil {

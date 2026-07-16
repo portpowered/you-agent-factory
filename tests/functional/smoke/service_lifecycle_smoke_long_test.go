@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -60,7 +61,7 @@ func TestServiceLifecycle_WorkFileSubmissionCompletesTwoStagePipeline(t *testing
 	}
 
 	workFilePath := filepath.Join(dir, "initial-work.json")
-	support.WriteWorkRequestFile(t, workFilePath, interfaces.SubmitRequest{
+	support.WriteWorkRequestFile(t, workFilePath, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    json.RawMessage(`{"title": "work-file test"}`),
 	})

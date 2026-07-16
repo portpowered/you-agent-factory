@@ -7,45 +7,47 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type panicExecutor struct {
 	message string
 }
 
-func (e *panicExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *panicExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
 	panic(e.message)
 }
 
 type recordingExecutor struct {
-	calls []interfaces.WorkDispatch
+	calls []work.WorkDispatch
 }
 
-func (e *recordingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *recordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.calls = append(e.calls, dispatch)
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "executor-output",
 	}, nil
 }
 
 type immediateCompletionPlanner struct{}
 
-func (immediateCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+func (immediateCompletionPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return 0, false, nil
 }
 
 type plannedCompletionPlanner struct {
 	deliveryTick     int
 	hasDeliveryTick  bool
-	plannedResult    interfaces.WorkResult
+	plannedResult    workerexecution.WorkResult
 	hasPlannedResult bool
 }
 
@@ -55,22 +57,22 @@ type validatingCompletionPlanner struct {
 }
 
 type asyncRecordingExecutor struct {
-	started chan interfaces.WorkDispatch
+	started chan work.WorkDispatch
 	release chan struct{}
 }
 
-func (e *asyncRecordingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *asyncRecordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.started <- dispatch
 	<-e.release
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "async-executor-output",
 	}, nil
 }
 
-func (p *validatingCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+func (p *validatingCompletionPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return 0, false, nil
 }
 
@@ -79,13 +81,13 @@ func (p *validatingCompletionPlanner) ValidateReplayTick(currentTick int) error 
 	return p.validateErr
 }
 
-func (p plannedCompletionPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+func (p plannedCompletionPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return p.deliveryTick, p.hasDeliveryTick, nil
 }
 
-func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error) {
 	if !p.hasPlannedResult {
-		return interfaces.WorkResult{}, false, nil
+		return workerexecution.WorkResult{}, false, nil
 	}
 	result := p.plannedResult
 	result.DispatchID = dispatch.DispatchID
@@ -94,7 +96,7 @@ func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch interfaces.W
 }
 
 func TestExecuteDispatchSynchronously_ExecutorPanicReturnsFailedResult(t *testing.T) {
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-panic",
 		TransitionID: "t-process",
 	}
@@ -107,8 +109,8 @@ func TestExecuteDispatchSynchronously_ExecutorPanicReturnsFailedResult(t *testin
 	if result.DispatchID != dispatch.DispatchID || result.TransitionID != dispatch.TransitionID {
 		t.Fatalf("panic result lost dispatch identity: %+v", result)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(result.Error, "executor panic:") || !strings.Contains(result.Error, "simulated executor panic") {
 		t.Fatalf("panic result error = %q, want panic-derived failure message", result.Error)
@@ -125,7 +127,7 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerExecutesSynchrono
 		1,
 		immediateCompletionPlanner{},
 	)
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-sync",
 		TransitionID: "t-process",
 	}
@@ -162,7 +164,7 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerDelaysDeliveryUnt
 		1,
 		plannedCompletionPlanner{deliveryTick: 3, hasDeliveryTick: true},
 	)
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-delayed",
 		TransitionID: "t-process",
 	}
@@ -200,14 +202,14 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerUsesPlannedResult
 		logging.NoopLogger{},
 		1,
 		plannedCompletionPlanner{
-			plannedResult: interfaces.WorkResult{
-				Outcome: interfaces.OutcomeAccepted,
+			plannedResult: workerexecution.WorkResult{
+				Outcome: workerexecution.OutcomeAccepted,
 				Output:  "planned-output",
 			},
 			hasPlannedResult: true,
 		},
 	)
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-planned-result",
 		TransitionID: "t-process",
 	}
@@ -263,7 +265,7 @@ func TestWorkerPoolDispatchResultHook_OnTickValidatesReplayTick(t *testing.T) {
 
 func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPoolAsyncFlow(t *testing.T) {
 	executor := &asyncRecordingExecutor{
-		started: make(chan interfaces.WorkDispatch, 1),
+		started: make(chan work.WorkDispatch, 1),
 		release: make(chan struct{}),
 	}
 	pool := workers.NewWorkerPool(logging.NoopLogger{})
@@ -284,7 +286,7 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPool
 	)
 	hook.Start(ctx)
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-async",
 		TransitionID: "t-process",
 	}
@@ -331,7 +333,7 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPool
 
 func TestDispatchRunnerKey_PrefersTransitionWorkerType(t *testing.T) {
 	tr := &petri.Transition{WorkerType: "cron-worker"}
-	dispatch := interfaces.WorkDispatch{WorkstationName: "scheduled-route", TransitionID: "scheduled-route"}
+	dispatch := work.WorkDispatch{WorkstationName: "scheduled-route", TransitionID: "scheduled-route"}
 
 	if got := dispatchRunnerKey(tr, dispatch); got != "cron-worker" {
 		t.Fatalf("runner key = %q, want cron-worker", got)
@@ -340,7 +342,7 @@ func TestDispatchRunnerKey_PrefersTransitionWorkerType(t *testing.T) {
 
 func TestDispatchRunnerKey_UsesWorkstationNameWhenTransitionWorkerTypeEmpty(t *testing.T) {
 	tr := &petri.Transition{Name: "scheduled-route"}
-	dispatch := interfaces.WorkDispatch{WorkstationName: "scheduled-route", TransitionID: "scheduled-route"}
+	dispatch := work.WorkDispatch{WorkstationName: "scheduled-route", TransitionID: "scheduled-route"}
 
 	if got := dispatchRunnerKey(tr, dispatch); got != "scheduled-route" {
 		t.Fatalf("runner key = %q, want scheduled-route", got)
@@ -349,7 +351,7 @@ func TestDispatchRunnerKey_UsesWorkstationNameWhenTransitionWorkerTypeEmpty(t *t
 
 func TestDispatchRunnerKey_FallsBackToTransitionIDWhenWorkstationNameMissing(t *testing.T) {
 	tr := &petri.Transition{Name: "scheduled-route"}
-	dispatch := interfaces.WorkDispatch{TransitionID: "scheduled-route"}
+	dispatch := work.WorkDispatch{TransitionID: "scheduled-route"}
 
 	if got := dispatchRunnerKey(tr, dispatch); got != "scheduled-route" {
 		t.Fatalf("runner key = %q, want scheduled-route", got)
@@ -366,7 +368,7 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerReturnsMissing
 		nil,
 	)
 
-	err := hook.SubmitDispatch(context.Background(), interfaces.WorkDispatch{
+	err := hook.SubmitDispatch(context.Background(), work.WorkDispatch{
 		DispatchID:   "dispatch-missing-runner",
 		TransitionID: "t-process",
 	})

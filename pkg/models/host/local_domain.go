@@ -39,7 +39,7 @@ func NewLocalDomain(deps LocalDomainDependencies) (LocalDomain, error) {
 	}
 	runtime := deps.Runtime
 	if isNilDependency(runtime) {
-		runtime = localmodels.DefaultRuntime()
+		runtime = localmodels.NewOmniVoiceRuntime(nil)
 	}
 	manager, err := localmodels.NewManagedRuntime(localmodels.ManagedRuntimeDependencies{
 		AssetPuller: assets,

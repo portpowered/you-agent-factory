@@ -9,14 +9,15 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
-func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitRequest) {
+func writeWorkRequestFile(t *testing.T, path string, req work.SubmitRequest) {
 	t.Helper()
-	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
+	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{req}))
 	if err != nil {
 		t.Fatalf("marshal work request file: %v", err)
 	}
@@ -58,7 +59,8 @@ func writeWorkstationAgentsMD(t *testing.T, factoryDir, workstationName string) 
 func serviceReplayWorkRequestEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayWorkRequestRecord {
 	t.Helper()
 	var out []serviceReplayWorkRequestRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
 			continue
 		}
@@ -79,7 +81,8 @@ type serviceReplayWorkRequestRecord struct {
 func serviceReplayDispatchCreatedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayDispatchCreatedRecord {
 	t.Helper()
 	var out []serviceReplayDispatchCreatedRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
 		}
@@ -100,7 +103,8 @@ type serviceReplayDispatchCreatedRecord struct {
 func serviceReplayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayDispatchCompletedRecord {
 	t.Helper()
 	var out []serviceReplayDispatchCompletedRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}
@@ -116,6 +120,15 @@ func serviceReplayDispatchCompletedEvents(t *testing.T, artifact *interfaces.Rep
 type serviceReplayDispatchCompletedRecord struct {
 	Event   factoryapi.FactoryEvent
 	Payload factoryapi.DispatchResponseEventPayload
+}
+
+func serviceGeneratedReplayEvent(t *testing.T, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	var generated factoryapi.FactoryEvent
+	if err := event.Decode(&generated); err != nil {
+		t.Fatalf("decode canonical replay event %q: %v", event.Id, err)
+	}
+	return generated
 }
 
 func serviceStringValue(value *string) string {

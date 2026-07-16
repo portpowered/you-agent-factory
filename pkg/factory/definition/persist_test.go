@@ -6,13 +6,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	generatedapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func mustEditableFactorySnapshot(t testing.TB, factory generatedapi.Factory) *interfaces.FactorySnapshot {
+	t.Helper()
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	return snapshot
+}
 
 func workerTypeModel() *generatedapi.WorkerType {
 	value := generatedapi.WorkerTypeModelWorker
@@ -36,12 +43,12 @@ func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanon
 			Body: &body,
 		}},
 	}
-	version := generatedapi.HybridLogicalTimestamp{
-		Logical:  factoryapi.Int64String(3),
+	version := interfaces.FactoryVersion{
+		Logical:  3,
 		Physical: time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC),
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", factory, version)
+	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), version)
 	if err != nil {
 		t.Fatalf("PreparePersistedFactoryPayload: %v", err)
 	}
@@ -94,7 +101,7 @@ func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersis
 		}},
 	}
 
-	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("factory", factory)
+	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("factory", mustEditableFactorySnapshot(t, factory))
 	if err != nil {
 		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
 	}
@@ -109,7 +116,7 @@ func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersis
 func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -127,8 +134,8 @@ func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) 
 		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", factory, generatedapi.HybridLogicalTimestamp{
-		Logical:  factoryapi.Int64String(2),
+	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), interfaces.FactoryVersion{
+		Logical:  2,
 		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
@@ -145,7 +152,7 @@ func TestService_PreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) 
 func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersion(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -159,8 +166,8 @@ func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersio
 		Viewport: &generatedapi.FactoryLayoutViewport{Zoom: 1},
 	}
 
-	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", factory, generatedapi.HybridLogicalTimestamp{
-		Logical:  factoryapi.Int64String(2),
+	prepared, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", mustEditableFactorySnapshot(t, factory), interfaces.FactoryVersion{
+		Logical:  2,
 		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
@@ -186,12 +193,12 @@ func TestService_PersistPayloadFromView_StampsVersionMetadata(t *testing.T) {
 			Body: &body,
 		}},
 	}
-	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("alpha", factory)
+	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("alpha", mustEditableFactorySnapshot(t, factory))
 	if err != nil {
 		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
 	}
-	version := generatedapi.HybridLogicalTimestamp{
-		Logical:  factoryapi.Int64String(9),
+	version := interfaces.FactoryVersion{
+		Logical:  9,
 		Physical: time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC),
 	}
 
@@ -218,16 +225,20 @@ func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SerializeNamedFactory: %v", err)
 	}
-	if got.Name != "alpha" {
-		t.Fatalf("factory name = %q, want alpha", got.Name)
+	mapped, err := factorySnapshotForCompatibilityTest(got)
+	if err != nil {
+		t.Fatalf("map SerializeNamedFactory result: %v", err)
+	}
+	if mapped.Name != "alpha" {
+		t.Fatalf("factory name = %q, want alpha", mapped.Name)
 	}
 }
 
 func TestService_PersistPayloadFromView_RejectsNilView(t *testing.T) {
 	t.Parallel()
 
-	_, err := New(stubDefinitionHost{}).PersistPayloadFromView(nil, generatedapi.HybridLogicalTimestamp{
-		Logical:  factoryapi.Int64String(1),
+	_, err := New(stubDefinitionHost{}).PersistPayloadFromView(nil, interfaces.FactoryVersion{
+		Logical:  1,
 		Physical: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC),
 	})
 	if err == nil {

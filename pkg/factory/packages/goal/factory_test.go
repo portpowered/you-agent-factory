@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 var packagedGoalLifecycleStates = []string{
@@ -122,7 +123,7 @@ func TestMaterializedPackagedGoalFactory_ExposesCurrentPublicPrimitiveVocabulary
 	assertGoalPublicPrimitiveVocabulary(t, loaded.FactoryConfig().Workers, loaded.FactoryConfig().Workstations)
 }
 
-func assertGoalPublicPrimitiveVocabulary(t *testing.T, workers []interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) {
+func assertGoalPublicPrimitiveVocabulary(t *testing.T, workers []workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) {
 	t.Helper()
 
 	if len(workstations) != 1 {
@@ -176,7 +177,7 @@ func assertGoalLifecycleStates(t *testing.T, states []interfaces.StateConfig) {
 	}
 }
 
-func assertGoalRepeaterTopology(t *testing.T, workstations []interfaces.FactoryWorkstationConfig, workers []interfaces.WorkerConfig) {
+func assertGoalRepeaterTopology(t *testing.T, workstations []interfaces.FactoryWorkstationConfig, workers []workerconfig.Config) {
 	t.Helper()
 
 	if len(workstations) != 1 {
@@ -240,15 +241,15 @@ func assertSingleGoalRoute(t *testing.T, workstationName string, routes []interf
 	}
 }
 
-func indexWorkerConfigsByName(workers []interfaces.WorkerConfig) map[string]interfaces.WorkerConfig {
-	byName := make(map[string]interfaces.WorkerConfig, len(workers))
+func indexWorkerConfigsByName(workers []workerconfig.Config) map[string]workerconfig.Config {
+	byName := make(map[string]workerconfig.Config, len(workers))
 	for _, worker := range workers {
 		byName[worker.Name] = worker
 	}
 	return byName
 }
 
-func indexWorkerTypesByName(workers []interfaces.WorkerConfig) map[string]string {
+func indexWorkerTypesByName(workers []workerconfig.Config) map[string]string {
 	byName := make(map[string]string, len(workers))
 	for _, worker := range workers {
 		byName[worker.Name] = worker.Type

@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 func TestRuntimeAPI_CompilesWithFunctionalLongTag(t *testing.T) {

@@ -10,10 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,17 +26,17 @@ func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
 	support.SkipLongFunctional(t, "slow request-batch token-creation sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-batch-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "alpha", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 			{Name: "beta", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 			{Name: "gamma", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 		},
 	}
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"finisher":  {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -59,13 +62,13 @@ func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	checker := &capturingExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	}
 	h.SetCustomExecutor("checker", checker)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-tags-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "story-1",
 			WorkTypeID: "task",
 			TraceID:    "trace-tags-1",
@@ -114,17 +117,17 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 	support.SetWorkingDirectory(t, dir)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"checker": {{Content: "checked COMPLETE"}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-project-override-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "story-project-override",
 			WorkID:     "work-project-override",
 			WorkTypeID: "task",
@@ -181,17 +184,17 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 	support.SetWorkingDirectory(t, dir)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"checker": {{Content: "checked COMPLETE"}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-project-config-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "story-project-config",
 			WorkID:     "work-project-config",
 			WorkTypeID: "task",
@@ -249,23 +252,23 @@ func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
 	support.SkipLongFunctional(t, "slow request-batch dependency sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-deps-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "A", WorkID: "work-A", WorkTypeID: "task", Payload: "A"},
 			{Name: "B", WorkID: "work-B", WorkTypeID: "task", Payload: "B"},
 		},
-		Relations: []interfaces.WorkRelation{
+		Relations: []work.WorkRelation{
 			{
-				Type:           interfaces.WorkRelationDependsOn,
+				Type:           work.WorkRelationDependsOn,
 				SourceWorkName: "B",
 				TargetWorkName: "A",
 			},
 		},
 	}
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"finisher":  {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -294,21 +297,21 @@ func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T)
 	support.SkipLongFunctional(t, "slow request-batch snapshot sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-snapshot-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "first", WorkID: "work-snapshot-first", WorkTypeID: "task", TraceID: "trace-snapshot-1", Payload: "first"},
 			{Name: "second", WorkID: "work-snapshot-second", WorkTypeID: "task", TraceID: "trace-snapshot-1", Payload: "second"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
 			SourceWorkName: "second",
 			TargetWorkName: "first",
 		}},
 	}
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"finisher":  {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -378,7 +381,7 @@ Finish the input task.
 `)
 
 	generatedBatchOutput := `{"request":{"requestId":"request-e2e-generated-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-e2e-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-e2e-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha"}]},"metadata":{"source":"generator:e2e-smoke","relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}],"parentLineage":["request-e2e-batch-smoke","work-e2e-second"]},"submissions":[{"name":"generated-alpha","workId":"work-e2e-generated-alpha","tags":{"runtime":"alpha"}},{"name":"generated-beta","workId":"work-e2e-generated-beta","tags":{"runtime":"beta"}}]}`
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "external first complete COMPLETE"},
 			{Content: generatedBatchOutput},
@@ -396,15 +399,15 @@ Finish the input task.
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-e2e-batch-smoke",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "first", WorkID: "work-e2e-first", WorkTypeID: "task", TraceID: "trace-e2e-batch-smoke", Payload: "first"},
 			{Name: "second", WorkID: "work-e2e-second", WorkTypeID: "task", TraceID: "trace-e2e-batch-smoke", Payload: "second"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
 			SourceWorkName: "second",
 			TargetWorkName: "first",
 		}},
@@ -427,8 +430,8 @@ Finish the input task.
 
 // capturingExecutor captures the last dispatch and returns a fixed result.
 type capturingExecutor struct {
-	result       interfaces.WorkResult
-	lastDispatch interfaces.WorkDispatch
+	result       workerexecution.WorkResult
+	lastDispatch work.WorkDispatch
 	callCount    int
 }
 
@@ -436,7 +439,7 @@ type generatedBatchExecutor struct {
 	output string
 }
 
-func newGeneratedBatchExecutor(t *testing.T, batch interfaces.GeneratedSubmissionBatch) *generatedBatchExecutor {
+func newGeneratedBatchExecutor(t *testing.T, batch work.GeneratedSubmissionBatch) *generatedBatchExecutor {
 	t.Helper()
 
 	data, err := json.Marshal(batch)
@@ -446,16 +449,16 @@ func newGeneratedBatchExecutor(t *testing.T, batch interfaces.GeneratedSubmissio
 	return &generatedBatchExecutor{output: string(data)}
 }
 
-func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       e.output,
 	}, nil
 }
 
-func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.lastDispatch = dispatch
 	e.callCount++
 	result := e.result
@@ -609,7 +612,7 @@ func assertWorkerGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryE
 func assertWorkerGeneratedBatchWorldState(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -738,7 +741,7 @@ func assertChainingTraceFanInEvents(t *testing.T, events []factoryapi.FactoryEve
 func assertChainingTraceFanInWorldState(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string, currentChainingTraceID string) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

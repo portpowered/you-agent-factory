@@ -3,10 +3,11 @@ package codex
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 )
 
 // ResponseAdapter exposes the production Codex JSONL decoder, final parser,
@@ -31,7 +32,7 @@ func (ResponseAdapter) ParseFinal(_ context.Context, input adapter.FinalParseCon
 	if err != nil {
 		return adapter.FinalParseResult{}, err
 	}
-	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{
+	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{
 		Content: parsed.Content, ProviderSession: parsed.ProviderSession,
 	}}, nil
 }
@@ -66,7 +67,7 @@ func (ResponseAdapter) ClassifyFailure(_ context.Context, input adapter.FailureC
 		}
 		return normalizedFailureResult(codexexitfailure.FailureResolution{
 			Result: codexexitfailure.ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeUnknown,
+				Reason:  workerexecution.WorkFailureTypeUnknown,
 				Message: "Codex did not produce a valid completed response.",
 			},
 		}, nil)
@@ -79,7 +80,7 @@ func (ResponseAdapter) ClassifyFailure(_ context.Context, input adapter.FailureC
 	return normalizedFailureResult(resolved, session)
 }
 
-func codexProviderSessionFromStdout(stdout []byte, resolved codexexitfailure.ExitFailureResult) *interfaces.ProviderSessionMetadata {
+func codexProviderSessionFromStdout(stdout []byte, resolved codexexitfailure.ExitFailureResult) *workerexecution.ProviderSessionMetadata {
 	if terminal, ok := ParseTerminalFailure(stdout); ok &&
 		terminal.Type == resolved.Reason && terminal.Message == resolved.Message {
 		return terminal.ProviderSession
@@ -87,7 +88,7 @@ func codexProviderSessionFromStdout(stdout []byte, resolved codexexitfailure.Exi
 	return nil
 }
 
-func normalizedFailureResult(resolution codexexitfailure.FailureResolution, session *interfaces.ProviderSessionMetadata) adapter.FailureResult {
+func normalizedFailureResult(resolution codexexitfailure.FailureResolution, session *workerexecution.ProviderSessionMetadata) adapter.FailureResult {
 	providerError := provider.NewProviderErrorFromResult(provider.ProviderFailureResult{
 		Reason: resolution.Result.Reason, Message: resolution.Result.Message,
 	}, provider.ProviderFailureInternalCauseError(resolution.InternalCause))

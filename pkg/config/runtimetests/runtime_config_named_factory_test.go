@@ -3,15 +3,16 @@ package runtimetests
 import (
 	"encoding/json"
 	"errors"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	. "github.com/portpowered/infinite-you/pkg/config"
+
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {

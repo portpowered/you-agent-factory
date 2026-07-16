@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type RecordingCommandRunner struct {
@@ -35,7 +36,7 @@ func (r *RecordingCommandRunner) Run(_ context.Context, req workers.CommandReque
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
 	return workers.CommandResult{Stdout: append([]byte(nil), r.stdout...)}, nil
 }
 
@@ -51,10 +52,10 @@ func (r *RecordingCommandRunner) LastRequest() workers.CommandRequest {
 	if len(r.requests) == 0 {
 		panic("support.RecordingCommandRunner: LastRequest() called with no requests")
 	}
-	return workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(r.requests[len(r.requests)-1]))
+	return workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(r.requests[len(r.requests)-1]))
 }
 
-func BuildModelWorkerConfig(provider interfaces.ModelProvider, model string) string {
+func BuildModelWorkerConfig(provider modelprovider.ID, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s

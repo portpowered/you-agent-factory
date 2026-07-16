@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkstationTaxonomyAndProjectsLegacyRuntimeTypes(t *testing.T) {
@@ -121,7 +123,7 @@ func TestMarshalCanonicalFactoryConfig_PrefersPollerRunOnRoundTrip(t *testing.T)
 				{Name: "queued", Type: interfaces.StateTypeProcessing},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:     "linear-poller",
 			Type:     interfaces.WorkerTypeHosted,
 			Provider: interfaces.HostedWorkerProviderLinear,
@@ -244,11 +246,11 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkstationTaxonomyOnRoundTrip(
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "executor",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "omnivoice",
-			ModelProvider: string(interfaces.ModelProviderClaude),
+			ModelProvider: string(modelprovider.Claude),
 		}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",

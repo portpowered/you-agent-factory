@@ -9,16 +9,16 @@ import (
 	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspection(t *testing.T) {
-	provider := newFixtureMockProvider(interfaces.InferenceResponse{
+	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",
@@ -117,15 +117,15 @@ func sharedDispatchContract(dispatch fse.DispatchSummary) sharedDispatchProjecti
 }
 
 type fixtureMockProvider struct {
-	response  interfaces.InferenceResponse
+	response  workerexecution.InferenceResponse
 	callCount int
 }
 
-func newFixtureMockProvider(response interfaces.InferenceResponse) *fixtureMockProvider {
+func newFixtureMockProvider(response workerexecution.InferenceResponse) *fixtureMockProvider {
 	return &fixtureMockProvider{response: response}
 }
 
-func (m *fixtureMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *fixtureMockProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.callCount++
 	return m.response, nil
 }
@@ -272,7 +272,7 @@ func newBlockingFixtureProvider() *blockingFixtureProvider {
 	}
 }
 
-func (m *blockingFixtureProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *blockingFixtureProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.mu.Lock()
 	if !m.inferStartedSet {
 		m.inferStartedSet = true
@@ -284,7 +284,7 @@ func (m *blockingFixtureProvider) Infer(ctx context.Context, _ interfaces.Provid
 	m.mu.Lock()
 	m.contextCanceled++
 	m.mu.Unlock()
-	return interfaces.InferenceResponse{}, ctx.Err()
+	return workerexecution.InferenceResponse{}, ctx.Err()
 }
 
 func (m *blockingFixtureProvider) inferContextsHonored() int {
@@ -371,7 +371,7 @@ func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureA
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime fixture keeps terminal provider failure inspection in one end-to-end scenario.
 func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure(t *testing.T) {
 	provider := newFailingFixtureMockProvider(provider.NewProviderError(
-		interfaces.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		"simulated live child error",
 		nil,
 	))
@@ -420,13 +420,13 @@ func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatc
 	if dispatchDetail.Status != fse.DispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", dispatchDetail.Status)
 	}
-	if dispatchDetail.FailureDetail == nil || dispatchDetail.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
+	if dispatchDetail.FailureDetail == nil || dispatchDetail.FailureDetail.Reason != string(workerexecution.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("dispatch failureDetail = %#v", dispatchDetail.FailureDetail)
 	}
 	if dispatchDetail.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("dispatch failure message = %q", dispatchDetail.FailureDetail.Message)
 	}
-	if dispatchDetail.Attempt != 1 || dispatchDetail.Retryable == nil || *dispatchDetail.Retryable || dispatchDetail.FailureClassification != string(interfaces.WorkFailureTypePermanentBadRequest) {
+	if dispatchDetail.Attempt != 1 || dispatchDetail.Retryable == nil || *dispatchDetail.Retryable || dispatchDetail.FailureClassification != string(workerexecution.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("dispatch retry diagnostics = %#v", dispatchDetail.DispatchSummary)
 	}
 	if provider.inferCallCount != 1 {
@@ -443,9 +443,9 @@ func newFailingFixtureMockProvider(err error) *failingFixtureMockProvider {
 	return &failingFixtureMockProvider{err: err}
 }
 
-func (m *failingFixtureMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *failingFixtureMockProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.inferCallCount++
-	return interfaces.InferenceResponse{}, m.err
+	return workerexecution.InferenceResponse{}, m.err
 }
 
 type parallelLiveChildMockProvider struct {
@@ -456,18 +456,18 @@ func newParallelLiveChildMockProvider() *parallelLiveChildMockProvider {
 	return &parallelLiveChildMockProvider{}
 }
 
-func (m *parallelLiveChildMockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *parallelLiveChildMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.callCount++
 	if strings.Contains(req.UserMessage, "force provider failure") {
-		return interfaces.InferenceResponse{}, provider.NewProviderError(
-			interfaces.WorkFailureTypePermanentBadRequest,
+		return workerexecution.InferenceResponse{}, provider.NewProviderError(
+			workerexecution.WorkFailureTypePermanentBadRequest,
 			"simulated child error",
 			nil,
 		)
 	}
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content: `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-" + req.Dispatch.DispatchID,
@@ -713,13 +713,13 @@ func assertParallelFailureFailedDispatch(
 	if failed.FailureDetail == nil {
 		t.Fatal("failed dispatch missing failureDetail")
 	}
-	if failed.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
-		t.Fatalf("failure reason = %q, want %q", failed.FailureDetail.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	if failed.FailureDetail.Reason != string(workerexecution.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("failure reason = %q, want %q", failed.FailureDetail.Reason, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	if failed.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("failure message = %q, want sanitized provider detail", failed.FailureDetail.Message)
 	}
-	if failed.Attempt != 1 || failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != string(interfaces.WorkFailureTypePermanentBadRequest) {
+	if failed.Attempt != 1 || failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != string(workerexecution.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("retry diagnostics = %#v", failed)
 	}
 	if len(failed.OutputArtifactIDs) != 0 {
@@ -738,7 +738,7 @@ func assertParallelFailureFailedDispatch(
 		fse.DispatchStatusRunning,
 		fse.DispatchStatusFailed,
 	})
-	if failedDetail.FailureDetail == nil || failedDetail.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
+	if failedDetail.FailureDetail == nil || failedDetail.FailureDetail.Reason != string(workerexecution.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("failed dispatch detail failure = %#v", failedDetail.FailureDetail)
 	}
 
@@ -801,9 +801,9 @@ func assertDispatchStatusTransitions(t *testing.T, got []fse.DispatchStatus, wan
 
 func TestJavaScriptRuntimeService_ChildExecutorModes_CoexistOnSameWorkflowSource(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	provider := newFixtureMockProvider(interfaces.InferenceResponse{
+	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
 		Content: `{"text":"live child output"}`,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",
@@ -838,7 +838,7 @@ func TestJavaScriptRuntimeService_ChildExecutorModes_CoexistOnSameWorkflowSource
 
 func TestJavaScriptRuntimeService_ExplicitFakeMode_OverridesLiveServiceConfig(t *testing.T) {
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	provider := newFixtureMockProvider(interfaces.InferenceResponse{
+	provider := newFixtureMockProvider(workerexecution.InferenceResponse{
 		Content: `{"text":"unused live output"}`,
 	})
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{

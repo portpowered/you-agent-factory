@@ -5,12 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestNewScriptExecutorFromInputValidatesAndUsesSelectedCommandEdge(t *testing.T) {
 	runner := &capturingCommandRunner{}
-	definition := &interfaces.WorkerConfig{Command: "selected-script", Args: []string{"arg"}}
+	definition := &workerconfig.Config{Command: "selected-script", Args: []string{"arg"}}
 	if _, err := NewScriptExecutorFromInput(ScriptConstructionInput{CommandRunner: runner}); err == nil || !strings.Contains(err.Error(), "definition is required") {
 		t.Fatalf("missing definition error = %v", err)
 	}
@@ -27,9 +34,9 @@ type routingStubExecutor struct {
 	name string
 }
 
-func (executor *routingStubExecutor) Execute(_ context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+func (executor *routingStubExecutor) Execute(_ context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  executor.name,
 	}, nil
 }
@@ -39,19 +46,19 @@ func TestWorkstationBehaviorRouter_RoutesAgentRunToHarnessExecutor(t *testing.T)
 
 	router := &WorkstationBehaviorRouter{
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			Workers: map[string]*workerconfig.Config{
+				"agent-worker": {Type: workertaxonomy.WorkerTypeAgent},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"execute-story": {Type: interfaces.WorkstationTypeAgent},
+				"execute-story": {Type: workertaxonomy.WorkstationTypeAgent},
 			},
 		},
 		InferenceExecutor: &routingStubExecutor{name: "inference"},
 		AgentRunExecutor:  &routingStubExecutor{name: "agent-run"},
 	}
 
-	result, err := router.Execute(context.Background(), interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+	result, err := router.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-1",
 			TransitionID:    "transition-1",
 			WorkerType:      "agent-worker",
@@ -72,19 +79,19 @@ func TestWorkstationBehaviorRouter_RoutesInferenceRunToInferenceExecutor(t *test
 
 	router := &WorkstationBehaviorRouter{
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"infer-worker": {Type: interfaces.WorkerTypeInference},
+			Workers: map[string]*workerconfig.Config{
+				"infer-worker": {Type: workertaxonomy.WorkerTypeInference},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"invoke-story": {Type: interfaces.WorkstationTypeInference},
+				"invoke-story": {Type: workertaxonomy.WorkstationTypeInference},
 			},
 		},
 		InferenceExecutor: &routingStubExecutor{name: "inference"},
 		AgentRunExecutor:  &routingStubExecutor{name: "agent-run"},
 	}
 
-	result, err := router.Execute(context.Background(), interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+	result, err := router.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-2",
 			TransitionID:    "transition-2",
 			WorkerType:      "infer-worker",

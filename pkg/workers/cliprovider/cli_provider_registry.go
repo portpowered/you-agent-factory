@@ -5,7 +5,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // CLIProviderAvailability reports whether one registered CLI provider command is
@@ -49,44 +51,44 @@ type CLIProviderRegistration struct {
 var registeredCLIProviders = []CLIProviderRegistration{
 	{
 		Identity:       CLIProviderIdentityCodex,
-		Command:        string(interfaces.ModelProviderCodex),
+		Command:        string(modelprovider.Codex),
 		PreferenceRank: 10,
 	},
 	{
 		Identity:       CLIProviderIdentityClaude,
-		Command:        string(interfaces.ModelProviderClaude),
+		Command:        string(modelprovider.Claude),
 		PreferenceRank: 20,
 	},
 	{
 		Identity:       CLIProviderIdentityCursor,
-		Command:        string(interfaces.ModelProviderCursor),
+		Command:        string(modelprovider.Cursor),
 		PreferenceRank: 30,
 	},
 	{
 		Identity:       CLIProviderIdentityOpenCode,
-		Command:        string(interfaces.ModelProviderOpenCode),
+		Command:        string(modelprovider.OpenCode),
 		PreferenceRank: 40,
 	},
 	{
 		Identity:       CLIProviderIdentityGemini,
-		Command:        string(interfaces.ModelProviderGemini),
+		Command:        string(modelprovider.Gemini),
 		PreferenceRank: 50,
 	},
 	{
 		Identity:       CLIProviderIdentityKiro,
-		Command:        string(interfaces.ModelProviderKiro),
+		Command:        string(modelprovider.Kiro),
 		PreferenceRank: 60,
 	},
 	{
 		Identity:       CLIProviderIdentityPi,
-		Command:        string(interfaces.ModelProviderPi),
+		Command:        string(modelprovider.Pi),
 		PreferenceRank: 65,
 	},
 }
 
 var (
 	cliProvidersByIdentity = buildCLIProvidersByIdentity(registeredCLIProviders)
-	cliProvidersByCommand    = buildCLIProvidersByCommand(registeredCLIProviders)
+	cliProvidersByCommand  = buildCLIProvidersByCommand(registeredCLIProviders)
 )
 
 func buildCLIProvidersByIdentity(registrations []CLIProviderRegistration) map[CLIProviderIdentity]CLIProviderRegistration {
@@ -153,7 +155,7 @@ func ProbeCLIProviderAvailability(registration CLIProviderRegistration) CLIProvi
 		return CLIProviderAvailability{
 			Registration:      registration,
 			Available:         false,
-			UnavailableReason: string(interfaces.WorkFailureTypeMissingExecutable),
+			UnavailableReason: string(workerexecution.WorkFailureTypeMissingExecutable),
 		}
 	}
 	return CLIProviderAvailability{

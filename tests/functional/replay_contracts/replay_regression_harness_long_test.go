@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -108,7 +110,7 @@ func recordReplayHarnessFixtureArtifact(t *testing.T) string {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "service-simple-replay.json")
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "replay-fixture-work",
 		TraceID:    "replay-fixture-trace",
@@ -116,8 +118,8 @@ func recordReplayHarnessFixtureArtifact(t *testing.T) string {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),

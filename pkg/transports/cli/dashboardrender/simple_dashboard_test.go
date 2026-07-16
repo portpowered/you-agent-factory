@@ -7,10 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/internal/testpath"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustomerSummary(t *testing.T) {
@@ -19,16 +22,16 @@ func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustome
 		TransitionID: "review",
 		WorkItemIDs:  []string{"work-1", "work-2", "work-3"},
 		Workstation:  interfaces.FactoryWorkstationRef{Name: "Review"},
-		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed)},
+		Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)},
 	}
 	worldState := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
 			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
 			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{failedDispatch},
-		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
 			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
 			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
@@ -55,7 +58,7 @@ func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustome
 func TestSimpleDashboardRenderDataFromWorldState_ReplaysWeirdNumberSummaryFixture(t *testing.T) {
 	events := loadReplayFixtureEvents(t, "ui", "integration", "fixtures", "weird-number-summary-replay.jsonl")
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 4)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 4)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -71,7 +74,7 @@ func TestSimpleDashboardRenderDataFromWorldState_ReplaysWeirdNumberSummaryFixtur
 	if renderData.Session.FailedCount != 3 {
 		t.Fatalf("FailedCount = %d, want 3 failed work items", renderData.Session.FailedCount)
 	}
-	if len(renderData.Session.DispatchHistory) != 1 || renderData.Session.DispatchHistory[0].Result.Outcome != string(interfaces.OutcomeFailed) {
+	if len(renderData.Session.DispatchHistory) != 1 || renderData.Session.DispatchHistory[0].Result.Outcome != string(workerexecution.OutcomeFailed) {
 		t.Fatalf("DispatchHistory = %#v, want retained failed dispatch", renderData.Session.DispatchHistory)
 	}
 }

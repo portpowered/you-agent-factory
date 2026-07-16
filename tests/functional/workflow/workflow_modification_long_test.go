@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -25,7 +25,7 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 	v1Dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, v1Dir, "task", []byte("v1 work item"))
 
-	providerV1 := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	providerV1 := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Processed. COMPLETE"}},
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})
@@ -53,7 +53,7 @@ func TestWorkflowModificationAndReload(t *testing.T) {
 	v2Dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v2_dir"))
 	testutil.WriteSeedFile(t, v2Dir, "task", []byte("v2 work item"))
 
-	providerV2 := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	providerV2 := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Processed. COMPLETE"}},
 		"reviewer":  {{Content: "Reviewed. COMPLETE"}},
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
@@ -98,12 +98,12 @@ func TestWorkflowModificationRejectionLoop(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	drafterMock := h.MockWorker("drafter",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	approverMock := h.MockWorker("approver",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "needs revision"},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "needs revision"},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -136,7 +136,7 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 	dirA := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	testutil.WriteSeedFile(t, dirA, "task", []byte("item for A"))
 
-	providerA := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	providerA := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}},
 	})
 
@@ -151,7 +151,7 @@ func TestWorkflowModificationPreservesIndependentWorkflows(t *testing.T) {
 	dirB := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "workflow_v1_dir"))
 	testutil.WriteSeedFile(t, dirB, "task", []byte("task for B"))
 
-	providerB := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	providerB := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Processed. COMPLETE"}},
 		"finalizer": {{Content: "Finalized. COMPLETE"}},
 	})

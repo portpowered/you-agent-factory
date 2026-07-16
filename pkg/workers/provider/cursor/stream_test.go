@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 )
 
 func TestStreamParser_EmitsKnownFragmentsInOrder(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -38,7 +38,7 @@ func TestStreamParser_EmitsKnownFragmentsInOrder(t *testing.T) {
 
 func TestStreamParser_EmitsTrailingAssistantDeltaOnFlush(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -53,7 +53,7 @@ func TestStreamParser_EmitsTrailingAssistantDeltaOnFlush(t *testing.T) {
 
 func TestStreamParser_BoundsLargeAssistantDeltaWithoutTrimmingSpacing(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -77,7 +77,7 @@ func TestStreamParser_BoundsLargeAssistantDeltaWithoutTrimmingSpacing(t *testing
 
 func TestStreamParser_OmitsProviderSessionForInvalidSessionID(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -94,7 +94,7 @@ func TestStreamParser_OmitsProviderSessionForInvalidSessionID(t *testing.T) {
 
 func TestStreamParser_EmitsBoundedDiagnosticsForMalformedAndUnknownRecordsWithoutBlockingLaterEvents(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -126,7 +126,7 @@ func TestStreamParser_EmitsBoundedDiagnosticsForMalformedAndUnknownRecordsWithou
 
 func TestStreamParser_EmitsResultSubtypeDiagnosticsForFailureAndCancel(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -145,7 +145,7 @@ func TestStreamParser_EmitsResultSubtypeDiagnosticsForFailureAndCancel(t *testin
 
 func TestStreamParser_DoesNotEmitErrorFlaggedSuccessResultAsResponse(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -162,7 +162,7 @@ func TestStreamParser_DoesNotEmitErrorFlaggedSuccessResultAsResponse(t *testing.
 
 func TestStreamParser_EmitsCompletionDiagnosticWhenResultDoesNotExtendEarlierDelta(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 
@@ -191,7 +191,7 @@ func TestUnknownStreamEventMessage_BoundsEventTypePreview(t *testing.T) {
 
 func TestStreamParser_BoundsToolCallNameInProgressDiagnostics(t *testing.T) {
 	var fragments []StreamFragment
-	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+	parser := NewStreamParser(string(modelprovider.Cursor), func(fragment StreamFragment) {
 		fragments = append(fragments, fragment)
 	})
 

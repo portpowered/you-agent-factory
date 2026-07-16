@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/agentloop"
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
-
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // HarnessInput is the factory-owned input for one agent-run harness execution.
@@ -45,11 +45,11 @@ func (a *LibraryHarnessAdapter) Execute(ctx context.Context, input HarnessInput)
 		return HarnessResult{}, fmt.Errorf("agent run harness requires an inferencer")
 	}
 
-	policy := interfaces.NormalizeAgentWorkerToolPolicy(input.ToolPolicy)
+	policy := workerconfig.NormalizeAgentToolPolicy(input.ToolPolicy)
 	opts := []agentloop.Option{
 		agentloop.WithInferencer(input.Inferencer),
 	}
-	if interfaces.AgentWorkerToolsAllowExecution(policy) {
+	if workerconfig.AgentToolsAllowExecution(policy) {
 		recorder := input.ToolRecorder
 		if recorder == nil {
 			recorder = NewToolDiagnosticRecorder()

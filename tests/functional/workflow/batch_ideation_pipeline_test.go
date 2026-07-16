@@ -7,8 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,7 +21,7 @@ func seedBatchIdeas(t *testing.T, dir string, count int) []string {
 	traceIDs := make([]string, count)
 	for i := range count {
 		traceIDs[i] = fmt.Sprintf("trace-batch-idea-%03d", i+1)
-		testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 			WorkTypeID: "idea",
 			TraceID:    traceIDs[i],
 			Payload:    fmt.Appendf(nil, `{"title":"batch idea %d"}`, i+1),
@@ -41,9 +43,9 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 
 	// Every response contains ALL stop tokens (COMPLETE + ACCEPTED) since
 	// execution order is non-deterministic across concurrent pipelines.
-	var responses []interfaces.InferenceResponse
+	var responses []workerexecution.InferenceResponse
 	for range 15 {
-		responses = append(responses, interfaces.InferenceResponse{
+		responses = append(responses, workerexecution.InferenceResponse{
 			Content: "Done. COMPLETE ACCEPTED",
 		})
 	}
@@ -78,7 +80,7 @@ func TestBatchIdeationPipeline_ConcurrencyLimit2(t *testing.T) {
 	// Each completed story Work item preserves one of the seeded trace IDs.
 	foundTraces := make(map[string]bool)
 	for _, tok := range storyCompleteTokens {
-		if tok.Color.DataType != interfaces.DataTypeWork {
+		if tok.Color.DataType != factorytoken.DataTypeWork {
 			t.Errorf("story:complete token %s: expected work DataType, got %q", tok.ID, tok.Color.DataType)
 			continue
 		}
@@ -122,9 +124,9 @@ func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
 
 	// Every response contains ALL stop tokens since execution order is
 	// non-deterministic across serialized pipelines.
-	var responses []interfaces.InferenceResponse
+	var responses []workerexecution.InferenceResponse
 	for range 15 {
-		responses = append(responses, interfaces.InferenceResponse{
+		responses = append(responses, workerexecution.InferenceResponse{
 			Content: "Done. COMPLETE ACCEPTED",
 		})
 	}
@@ -158,7 +160,7 @@ func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
 	// Each idea lineage (TraceID) is independent and traceable through work tokens.
 	foundTraces := make(map[string]bool)
 	for _, tok := range storyCompleteTokens {
-		if tok.Color.DataType == interfaces.DataTypeWork && tok.Color.TraceID != "" {
+		if tok.Color.DataType == factorytoken.DataTypeWork && tok.Color.TraceID != "" {
 			foundTraces[tok.Color.TraceID] = true
 		}
 	}
@@ -181,7 +183,7 @@ func TestSerialIdeationPipeline_ConcurrencyLimit1(t *testing.T) {
 	}
 }
 
-func assertSerialPipelineProviderCallsUseAgentsMD(t *testing.T, calls []interfaces.ProviderInferenceRequest) {
+func assertSerialPipelineProviderCallsUseAgentsMD(t *testing.T, calls []workerexecution.ProviderInferenceRequest) {
 	t.Helper()
 
 	expectedPromptsByWorker := map[string]string{

@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,11 +26,11 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := support.ScaffoldFactory(t, cronSmokeFactoryConfig("* * * * *"))
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -94,7 +96,7 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	assertNoCronDispatchForWorkstation(t, fs.GetEngineStateSnapshot(t), "poll-with-input")
 	assertExpiredCronTimeWorkHandled(t, fs, requiredInputRecord.Request.WorkID, "poll-with-input")
 
-	submittedSignals := fs.SubmitRuntimeWork(t, interfaces.SubmitRequest{
+	submittedSignals := fs.SubmitRuntimeWork(t, work.SubmitRequest{
 		WorkTypeID: "signal",
 		WorkID:     "signal-for-cron-smoke",
 		Name:       "Cron smoke signal",
@@ -121,11 +123,11 @@ func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutpu
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := support.ScaffoldFactory(t, cronDefaultExpiryTerminalOutputConfig("* * * * *"))
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -171,7 +173,7 @@ stopToken: COMPLETE
 Fail the cron task.
 `)
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
@@ -179,7 +181,7 @@ Fail the cron task.
 			Stderr:   []byte("cron worker unavailable"),
 			ExitCode: 1,
 		}), nil)
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -329,29 +331,29 @@ func cronImplicitFailureFactoryConfig(schedule string) map[string]any {
 
 func waitForCronSubmissionFromWorkstation(
 	t *testing.T,
-	submissions <-chan interfaces.FactorySubmissionRecord,
+	submissions <-chan work.FactorySubmissionRecord,
 	workstation string,
 	nominalAt time.Time,
 	timeout time.Duration,
-) interfaces.FactorySubmissionRecord {
+) work.FactorySubmissionRecord {
 	t.Helper()
 	return waitForCronSubmissions(t, submissions, []string{workstation}, nominalAt, timeout)[workstation]
 }
 
 func waitForCronSubmissions(
 	t *testing.T,
-	submissions <-chan interfaces.FactorySubmissionRecord,
+	submissions <-chan work.FactorySubmissionRecord,
 	workstations []string,
 	nominalAt time.Time,
 	timeout time.Duration,
-) map[string]interfaces.FactorySubmissionRecord {
+) map[string]work.FactorySubmissionRecord {
 	t.Helper()
 
 	want := make(map[string]bool, len(workstations))
 	for _, workstation := range workstations {
 		want[workstation] = true
 	}
-	found := make(map[string]interfaces.FactorySubmissionRecord, len(workstations))
+	found := make(map[string]work.FactorySubmissionRecord, len(workstations))
 	wantNominalAt := nominalAt.UTC().Format(time.RFC3339Nano)
 	deadline := time.After(timeout)
 	for len(found) < len(want) {
@@ -375,7 +377,7 @@ func waitForCronSubmissions(
 	return found
 }
 
-func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissionRecord, workstation string, nominalAt time.Time) {
+func assertCronSubmissionRecord(t *testing.T, record work.FactorySubmissionRecord, workstation string, nominalAt time.Time) {
 	t.Helper()
 
 	if record.Source != "external-submit" {
@@ -395,7 +397,7 @@ func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissio
 	}
 }
 
-func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string, workID string, timeout time.Duration) interfaces.Token {
+func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string, workID string, timeout time.Duration) factorytoken.Token {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -410,7 +412,7 @@ func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string,
 	}
 
 	t.Fatalf("timed out waiting for cron token from %q", workstation)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
 func waitForCronTimeWorkGone(t *testing.T, fs *functionalAPIServer, workID string, timeout time.Duration) {
@@ -484,7 +486,7 @@ func waitForRequiredInputCronDispatch(t *testing.T, fs *functionalAPIServer, wor
 	return interfaces.CompletedDispatch{}
 }
 
-func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, workID string) interfaces.Token {
+func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, workID string) factorytoken.Token {
 	t.Helper()
 	for _, token := range dispatch.ConsumedTokens {
 		if token.Color.WorkID == workID && token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
@@ -492,10 +494,10 @@ func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, 
 		}
 	}
 	t.Fatalf("dispatch %q did not consume cron time token %q: %#v", dispatch.DispatchID, workID, dispatch.ConsumedTokens)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
-func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID string, parentID string, timeout time.Duration) interfaces.Token {
+func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID string, parentID string, timeout time.Duration) factorytoken.Token {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -510,10 +512,10 @@ func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID 
 	}
 
 	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
-func assertCronDefaultExpiryWindow(t *testing.T, token interfaces.Token, expected time.Duration) {
+func assertCronDefaultExpiryWindow(t *testing.T, token factorytoken.Token, expected time.Duration) {
 	t.Helper()
 
 	dueAt := parseCronTimeTag(t, token, interfaces.TimeWorkTagKeyDueAt)
@@ -523,7 +525,7 @@ func assertCronDefaultExpiryWindow(t *testing.T, token interfaces.Token, expecte
 	}
 }
 
-func parseCronTimeTag(t *testing.T, token interfaces.Token, key string) time.Time {
+func parseCronTimeTag(t *testing.T, token factorytoken.Token, key string) time.Time {
 	t.Helper()
 
 	value := token.Color.Tags[key]
@@ -565,7 +567,7 @@ func assertNoCronDispatchForWorkstation(t *testing.T, snap *interfaces.EngineSta
 	}
 }
 
-func assertCronPayload(t *testing.T, token interfaces.Token, workstation string) {
+func assertCronPayload(t *testing.T, token factorytoken.Token, workstation string) {
 	t.Helper()
 
 	if token.Color.WorkTypeID != interfaces.SystemTimeWorkTypeID {

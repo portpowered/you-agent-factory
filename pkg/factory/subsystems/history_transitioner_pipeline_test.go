@@ -5,26 +5,28 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type testPipeline struct {
 	transitioner *TransitionerSubsystem
-	results      *buffers.TypedBuffer[interfaces.WorkResult]
+	results      *buffers.TypedBuffer[workerexecution.WorkResult]
 }
 
 func newTestPipeline(n *state.Net, opts ...TransitionerOption) *testPipeline {
 	return &testPipeline{
 		transitioner: NewTransitioner(n, nil, opts...),
-		results:      buffers.NewTypedBuffer[interfaces.WorkResult](16),
+		results:      buffers.NewTypedBuffer[workerexecution.WorkResult](16),
 	}
 }
 
-func (tp *testPipeline) WriteResult(r interfaces.WorkResult) {
+func (tp *testPipeline) WriteResult(r workerexecution.WorkResult) {
 	tp.results.Write(context.Background(), r)
 }
 
@@ -43,13 +45,13 @@ func (tp *testPipeline) Execute(ctx context.Context, snapshot *interfaces.Engine
 func TestHistoryTransitionerPipeline_AcceptedRoutesUsingConsumedDispatchTokens(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeAccepted})
+	tp.WriteResult(workerexecution.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted})
 
 	snapshot := pipelineSnapshot(
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w1", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w1", WorkTypeID: "wt-code"},
 		time.Time{},
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -70,13 +72,13 @@ func TestHistoryTransitionerPipeline_AcceptedRoutesUsingConsumedDispatchTokens(t
 func TestHistoryTransitionerPipeline_FailedRoutesUsingConsumedDispatchTokens(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeFailed, Error: "agent crashed"})
+	tp.WriteResult(workerexecution.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: workerexecution.OutcomeFailed, Error: "agent crashed"})
 
 	snapshot := pipelineSnapshot(
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w1", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w1", WorkTypeID: "wt-code"},
 		time.Time{},
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -96,14 +98,14 @@ func TestHistoryTransitionerPipeline_FailedWithoutFailureArcs_UsesConsumedDispat
 	n.Transitions["t1"].FailureArcs = nil
 	state.NormalizeTransitionTopology(n, nil)
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeFailed, Error: "agent crashed"})
+	tp.WriteResult(workerexecution.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: workerexecution.OutcomeFailed, Error: "agent crashed"})
 	createdAt := time.Date(2026, time.April, 6, 9, 0, 0, 0, time.UTC)
 
 	snapshot := pipelineSnapshot(
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w-fallback", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w-fallback", WorkTypeID: "wt-code"},
 		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -127,10 +129,10 @@ func TestHistoryTransitionerPipeline_FailedWithoutFailureArcs_UsesConsumedDispat
 func TestHistoryTransitionerPipeline_RepeaterRejectedReturnsToInputPlace(t *testing.T) {
 	n := buildRepeaterPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{
+	tp.WriteResult(workerexecution.WorkResult{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 		Feedback:     "try again",
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 0, 0, 0, time.UTC)
@@ -139,7 +141,7 @@ func TestHistoryTransitionerPipeline_RepeaterRejectedReturnsToInputPlace(t *test
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w1", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w1", WorkTypeID: "wt-code"},
 		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -163,14 +165,14 @@ func TestHistoryTransitionerPipeline_RepeaterRejectedReturnsToInputPlace(t *test
 func TestHistoryTransitionerPipeline_ThrottledFailureRequeuesConsumedWorkToOriginalPlace(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{
+	tp.WriteResult(workerexecution.WorkResult{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "provider error: claude rate limit exceeded",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 0, 0, 0, time.UTC)
@@ -179,7 +181,7 @@ func TestHistoryTransitionerPipeline_ThrottledFailureRequeuesConsumedWorkToOrigi
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w-throttle", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w-throttle", WorkTypeID: "wt-code"},
 		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -218,14 +220,14 @@ func TestHistoryTransitionerPipeline_ThrottledFailureRequeuesConsumedWorkToOrigi
 func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOriginalPlace(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{
+	tp.WriteResult(workerexecution.WorkResult{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "execution timeout",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
 		},
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 30, 0, 0, time.UTC)
@@ -234,7 +236,7 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesConsumedWorkToOrigina
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w-timeout", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w-timeout", WorkTypeID: "wt-code"},
 		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -280,25 +282,25 @@ func assertTimeoutFailureRequeueResult(t *testing.T, result *interfaces.TickResu
 	if completed.FailureMetadata == nil {
 		t.Fatal("completed dispatch FailureMetadata = nil, want timeout metadata")
 	}
-	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("completed dispatch FailureMetadata.Type = %q, want %q", completed.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	if completed.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("completed dispatch FailureMetadata.Type = %q, want %q", completed.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
 	}
-	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("completed dispatch FailureMetadata.Family = %q, want %q", completed.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if completed.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch FailureMetadata.Family = %q, want %q", completed.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 }
 
 func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesDespiteRenderedErrorText(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{
+	tp.WriteResult(workerexecution.WorkResult{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "provider error: timeout: context deadline exceeded",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
 		},
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 45, 0, 0, time.UTC)
@@ -307,7 +309,7 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesDespiteRenderedErrorT
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w-timeout-rendered", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w-timeout-rendered", WorkTypeID: "wt-code"},
 		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -334,14 +336,14 @@ func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesDespiteRenderedErrorT
 func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesConsumedWorkToOriginalPlace(t *testing.T) {
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{
+	tp.WriteResult(workerexecution.WorkResult{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "provider error: internal_server_error",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
 		},
 	})
 
@@ -349,7 +351,7 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesConsumedWorkTo
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w-retryable", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w-retryable", WorkTypeID: "wt-code"},
 		time.Date(2026, time.April, 6, 10, 50, 0, 0, time.UTC),
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -370,21 +372,21 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesConsumedWorkTo
 func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesFromNormalizedTypeWhenFamilyIsMissingOrStale(t *testing.T) {
 	testCases := []struct {
 		name     string
-		metadata *interfaces.WorkFailureMetadata
+		metadata *workerexecution.WorkFailureMetadata
 		workID   string
 	}{
 		{
 			name: "MissingFamily",
-			metadata: &interfaces.WorkFailureMetadata{
-				Type: interfaces.WorkFailureTypeInternalServerError,
+			metadata: &workerexecution.WorkFailureMetadata{
+				Type: workerexecution.WorkFailureTypeInternalServerError,
 			},
 			workID: "w-retryable-missing-family",
 		},
 		{
 			name: "StaleTerminalFamily",
-			metadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyTerminal,
-				Type:   interfaces.WorkFailureTypeInternalServerError,
+			metadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyTerminal,
+				Type:   workerexecution.WorkFailureTypeInternalServerError,
 			},
 			workID: "w-retryable-stale-family",
 		},
@@ -394,19 +396,19 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesFromNormalized
 		t.Run(tc.name, func(t *testing.T) {
 			n := buildPipelineNet()
 			tp := newTestPipeline(n)
-			tp.WriteResult(interfaces.WorkResult{
+			tp.WriteResult(workerexecution.WorkResult{
 				DispatchID:      "d-1",
 				TransitionID:    "t1",
-				Outcome:         interfaces.OutcomeFailed,
+				Outcome:         workerexecution.OutcomeFailed,
 				Error:           "provider error: internal_server_error",
-				FailureMetadata: (*interfaces.WorkFailureMetadata)(tc.metadata),
+				FailureMetadata: (*workerexecution.WorkFailureMetadata)(tc.metadata),
 			})
 
 			snapshot := pipelineSnapshot(
 				"wt-code:init",
 				"t1",
 				"d-1",
-				interfaces.TokenColor{WorkID: tc.workID, WorkTypeID: "wt-code"},
+				factorytoken.Color{WorkID: tc.workID, WorkTypeID: "wt-code"},
 				time.Date(2026, time.April, 6, 10, 55, 0, 0, time.UTC),
 			)
 			result, err := tp.Execute(context.Background(), &snapshot)
@@ -430,15 +432,15 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	const errorText = "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
 	createdAt := time.Date(2026, time.April, 6, 11, 5, 0, 0, time.UTC)
 	failedAt := createdAt.Add(5 * time.Minute)
-	providerFailure := &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyRetryable,
-		Type:   interfaces.WorkFailureTypeInternalServerError,
+	providerFailure := &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyRetryable,
+		Type:   workerexecution.WorkFailureTypeInternalServerError,
 	}
 	tp := newTestPipeline(buildPipelineNet(), WithTransitionerClock(func() time.Time { return failedAt }))
-	tp.WriteResult(interfaces.WorkResult{
+	tp.WriteResult(workerexecution.WorkResult{
 		DispatchID:      "d-1",
 		TransitionID:    "t1",
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Error:           errorText,
 		FailureMetadata: providerFailure,
 	})
@@ -447,7 +449,7 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 		"wt-code:init",
 		"t1",
 		"d-1",
-		interfaces.TokenColor{WorkID: "w-codex-windows-4294967295", WorkTypeID: "wt-code"},
+		factorytoken.Color{WorkID: "w-codex-windows-4294967295", WorkTypeID: "wt-code"},
 		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
@@ -460,8 +462,8 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	assertWindowsProviderFailureRequeue(t, result.Mutations[0], createdAt, failedAt, errorText)
 	completedMetadata := assertWindowsProviderFailedDispatch(t, result, errorText)
 
-	providerFailure.Type = interfaces.WorkFailureTypeAuthFailure
-	providerFailure.Family = interfaces.WorkFailureFamilyTerminal
+	providerFailure.Type = workerexecution.WorkFailureTypeAuthFailure
+	providerFailure.Family = workerexecution.WorkFailureFamilyTerminal
 	assertRetryableInternalServerMetadata(t, completedMetadata)
 }
 
@@ -486,7 +488,7 @@ func assertWindowsProviderFailureRequeue(
 	assertWindowsProviderFailureHistory(t, token.History, failedAt, errorText)
 }
 
-func assertWindowsProviderFailureHistory(t *testing.T, history interfaces.TokenHistory, failedAt time.Time, errorText string) {
+func assertWindowsProviderFailureHistory(t *testing.T, history factorytoken.History, failedAt time.Time, errorText string) {
 	t.Helper()
 	if got := history.TotalVisits["t1"]; got != 1 {
 		t.Fatalf("TotalVisits[t1] = %d, want 1", got)
@@ -509,14 +511,14 @@ func assertWindowsProviderFailureHistory(t *testing.T, history interfaces.TokenH
 	}
 }
 
-func assertWindowsProviderFailedDispatch(t *testing.T, result *interfaces.TickResult, errorText string) *interfaces.WorkFailureMetadata {
+func assertWindowsProviderFailedDispatch(t *testing.T, result *interfaces.TickResult, errorText string) *workerexecution.WorkFailureMetadata {
 	t.Helper()
 	if len(result.CompletedDispatches) != 1 {
 		t.Fatalf("completed dispatch count = %d, want 1", len(result.CompletedDispatches))
 	}
 	completed := result.CompletedDispatches[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("completed dispatch outcome = %q, want %q", completed.Outcome, interfaces.OutcomeFailed)
+	if completed.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("completed dispatch outcome = %q, want %q", completed.Outcome, workerexecution.OutcomeFailed)
 	}
 	if completed.Reason != errorText {
 		t.Fatalf("completed dispatch reason = %q, want %q", completed.Reason, errorText)
@@ -527,13 +529,13 @@ func assertWindowsProviderFailedDispatch(t *testing.T, result *interfaces.TickRe
 	return completed.FailureMetadata
 }
 
-func assertRetryableInternalServerMetadata(t *testing.T, metadata *interfaces.WorkFailureMetadata) {
+func assertRetryableInternalServerMetadata(t *testing.T, metadata *workerexecution.WorkFailureMetadata) {
 	t.Helper()
-	if metadata.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("completed dispatch failure type after source mutation = %q, want %q", metadata.Type, interfaces.WorkFailureTypeInternalServerError)
+	if metadata.Type != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("completed dispatch failure type after source mutation = %q, want %q", metadata.Type, workerexecution.WorkFailureTypeInternalServerError)
 	}
-	if metadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("completed dispatch failure family after source mutation = %q, want %q", metadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if metadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch failure family after source mutation = %q, want %q", metadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 	decision := workerprovider.WorkFailureDecisionFromMetadata(metadata)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
@@ -572,7 +574,7 @@ func TestHistoryTransitionerPipeline_FailureReleasesConsumedResourceRegardlessOf
 	}
 }
 
-func newFailureReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.Token) {
+func newFailureReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], factorytoken.Token) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"wt-code:init":       {ID: "wt-code:init", TypeID: "wt-code", State: "init"},
@@ -604,48 +606,48 @@ func newFailureReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *
 		},
 	}
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeFailed, Error: "agent crashed"})
+	tp.WriteResult(workerexecution.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: workerexecution.OutcomeFailed, Error: "agent crashed"})
 
 	now := time.Date(2026, time.April, 6, 11, 0, 0, 0, time.UTC)
-	resourceConsumed := interfaces.Token{
+	resourceConsumed := factorytoken.Token{
 		ID:        "executor:resource:0",
 		PlaceID:   "executor:available",
 		CreatedAt: now.Add(-3 * time.Hour),
 		EnteredAt: now.Add(-3 * time.Hour),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "executor:0",
 			WorkTypeID: "executor",
-			DataType:   interfaces.DataTypeResource,
+			DataType:   factorytoken.DataTypeResource,
 			Tags:       map[string]string{"pool": "shared"},
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			PlaceVisits: map[string]int{"executor:available": 4},
 		},
 	}
-	workConsumed := interfaces.Token{
+	workConsumed := factorytoken.Token{
 		ID:        "tok-1",
 		PlaceID:   "wt-code:init",
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "w-resource-failure",
 			WorkTypeID: "wt-code",
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
 		},
 	}
 
-	consumedTokens := []interfaces.Token{resourceConsumed, workConsumed}
+	consumedTokens := []factorytoken.Token{resourceConsumed, workConsumed}
 	if workFirst {
-		consumedTokens = []interfaces.Token{workConsumed, resourceConsumed}
+		consumedTokens = []factorytoken.Token{workConsumed, resourceConsumed}
 	}
 
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				workConsumed.ID:     &workConsumed,
 				resourceConsumed.ID: &resourceConsumed,
 			},
@@ -665,7 +667,7 @@ func newFailureReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *
 	return tp, snapshot, resourceConsumed
 }
 
-func assertFailedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
+func assertFailedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed factorytoken.Token) {
 	t.Helper()
 	if result == nil || len(result.Mutations) != 2 {
 		t.Fatalf("expected 2 mutations, got %+v", result)
@@ -678,9 +680,9 @@ func assertFailedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickR
 			continue
 		}
 		switch result.Mutations[i].NewToken.Color.DataType {
-		case interfaces.DataTypeWork:
+		case factorytoken.DataTypeWork:
 			failedWork = &result.Mutations[i]
-		case interfaces.DataTypeResource:
+		case factorytoken.DataTypeResource:
 			releasedResource = &result.Mutations[i]
 		}
 	}
@@ -699,7 +701,7 @@ func assertFailedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickR
 	assertReleasedResourceMutation(t, releasedResource, resourceConsumed)
 }
 
-func assertReleasedResourceMutation(t *testing.T, released *interfaces.MarkingMutation, resourceConsumed interfaces.Token) {
+func assertReleasedResourceMutation(t *testing.T, released *interfaces.MarkingMutation, resourceConsumed factorytoken.Token) {
 	t.Helper()
 	if released == nil {
 		t.Fatal("expected released resource mutation")
@@ -724,7 +726,7 @@ func assertReleasedResourceMutation(t *testing.T, released *interfaces.MarkingMu
 func TestHistoryTransitionerPipeline_AcceptedReleasesConsumedResourceTokenIdentityRegardlessOfInputOrder(t *testing.T) {
 	orderings := []struct {
 		name           string
-		consumedTokens []interfaces.Token
+		consumedTokens []factorytoken.Token
 	}{
 		{name: "resource-first"},
 		{name: "work-first"},
@@ -742,7 +744,7 @@ func TestHistoryTransitionerPipeline_AcceptedReleasesConsumedResourceTokenIdenti
 	}
 }
 
-func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.Token) {
+func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], factorytoken.Token) {
 	n := &state.Net{
 		Places: map[string]*petri.Place{
 			"story:in-review":      {ID: "story:in-review", TypeID: "story", State: "in-review"},
@@ -775,49 +777,49 @@ func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, 
 		},
 	}
 	tp := newTestPipeline(n)
-	tp.WriteResult(interfaces.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: interfaces.OutcomeAccepted, Output: "Done. COMPLETE ACCEPTED"})
+	tp.WriteResult(workerexecution.WorkResult{DispatchID: "d-1", TransitionID: "t1", Outcome: workerexecution.OutcomeAccepted, Output: "Done. COMPLETE ACCEPTED"})
 
 	now := time.Date(2026, time.April, 7, 14, 0, 0, 0, time.UTC)
-	resourceConsumed := interfaces.Token{
+	resourceConsumed := factorytoken.Token{
 		ID:        "agent-slot:resource:0",
 		PlaceID:   "agent-slot:available",
 		CreatedAt: now.Add(-3 * time.Hour),
 		EnteredAt: now.Add(-3 * time.Hour),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "agent-slot:0",
 			WorkTypeID: "agent-slot",
-			DataType:   interfaces.DataTypeResource,
+			DataType:   factorytoken.DataTypeResource,
 			Tags:       map[string]string{"pool": "shared"},
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			PlaceVisits: map[string]int{"agent-slot:available": 4},
 		},
 	}
-	workConsumed := interfaces.Token{
+	workConsumed := factorytoken.Token{
 		ID:        "tok-1",
 		PlaceID:   "story:in-review",
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-story-1",
 			WorkTypeID: "story",
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			TraceID:    "trace-batch-idea-001",
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
 		},
 	}
-	consumedTokens := []interfaces.Token{resourceConsumed, workConsumed}
+	consumedTokens := []factorytoken.Token{resourceConsumed, workConsumed}
 	if workFirst {
-		consumedTokens = []interfaces.Token{workConsumed, resourceConsumed}
+		consumedTokens = []factorytoken.Token{workConsumed, resourceConsumed}
 	}
 
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				workConsumed.ID:     &workConsumed,
 				resourceConsumed.ID: &resourceConsumed,
 			},
@@ -837,7 +839,7 @@ func newAcceptedReleasesConsumedResourceFixture(workFirst bool) (*testPipeline, 
 	return tp, snapshot, resourceConsumed
 }
 
-func assertReleasedResourcePipelineHistory(t *testing.T, released *interfaces.Token, resourceConsumed interfaces.Token) {
+func assertReleasedResourcePipelineHistory(t *testing.T, released *factorytoken.Token, resourceConsumed factorytoken.Token) {
 	t.Helper()
 	if released.ID != resourceConsumed.ID || released.Color.WorkID != resourceConsumed.Color.WorkID {
 		t.Fatalf("released resource token = %#v, want preserved identity from %#v", released, resourceConsumed)
@@ -853,7 +855,7 @@ func assertReleasedResourcePipelineHistory(t *testing.T, released *interfaces.To
 	}
 }
 
-func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed interfaces.Token) {
+func assertAcceptedMixedWorkResourceRelease(t *testing.T, result *interfaces.TickResult, resourceConsumed factorytoken.Token) {
 	t.Helper()
 	if result == nil || len(result.Mutations) != 2 {
 		t.Fatalf("expected 2 mutations, got %+v", result)
@@ -869,16 +871,16 @@ func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransition
 	transitioner := NewTransitioner(n, nil)
 	now := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:        "tok-1",
 		PlaceID:   "wt-code:init",
 		CreatedAt: createdAt,
 		EnteredAt: createdAt,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "w1",
 			WorkTypeID: "wt-code",
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -890,9 +892,9 @@ func TestTransitioner_CalculateMutations_PreservesCreatedAtForSameTypeTransition
 			transition:  n.Transitions["t1"],
 			arcs:        n.Transitions["t1"].OutputArcs,
 			consumed:    consumed,
-			result:      resolvedWorkResult{dispatchID: "d-1", transitionID: "t1", outcome: interfaces.OutcomeAccepted},
+			result:      resolvedWorkResult{dispatchID: "d-1", transitionID: "t1", outcome: workerexecution.OutcomeAccepted},
 			now:         now,
-			history:     interfaces.TokenHistory{TotalVisits: map[string]int{}, ConsecutiveFailures: map[string]int{}, PlaceVisits: map[string]int{}},
+			history:     factorytoken.History{TotalVisits: map[string]int{}, ConsecutiveFailures: map[string]int{}, PlaceVisits: map[string]int{}},
 			inputColors: tokenColorsFromTokens(consumed),
 			transformer: transitioner.transformer,
 		},
@@ -959,17 +961,17 @@ func buildRepeaterPipelineNet() *state.Net {
 	return n
 }
 
-func pipelineSnapshot(placeID, transitionID, dispatchID string, color interfaces.TokenColor, createdAt time.Time) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+func pipelineSnapshot(placeID, transitionID, dispatchID string, color factorytoken.Color, createdAt time.Time) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	if createdAt.IsZero() {
 		createdAt = time.Date(2026, time.April, 6, 8, 0, 0, 0, time.UTC)
 	}
-	token := interfaces.Token{
+	token := factorytoken.Token{
 		ID:        "tok-1",
 		PlaceID:   placeID,
 		CreatedAt: createdAt,
 		EnteredAt: createdAt,
 		Color:     color,
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -978,14 +980,14 @@ func pipelineSnapshot(placeID, transitionID, dispatchID string, color interfaces
 
 	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: petri.MarkingSnapshot{
-			Tokens:      map[string]*interfaces.Token{"tok-1": &token},
+			Tokens:      map[string]*factorytoken.Token{"tok-1": &token},
 			PlaceTokens: map[string][]string{placeID: {"tok-1"}},
 		},
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			dispatchID: {
 				DispatchID:     dispatchID,
 				TransitionID:   transitionID,
-				ConsumedTokens: []interfaces.Token{token},
+				ConsumedTokens: []factorytoken.Token{token},
 			},
 		},
 	}

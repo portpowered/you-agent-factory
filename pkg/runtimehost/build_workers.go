@@ -4,10 +4,11 @@ import (
 	"time"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -20,7 +21,7 @@ func wrapLocalModelRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	modelDomain LocalModelDomain,
 ) workers.Runner {
 	return factoryservice.WrapLocalModelRunner(inner, runtimeCfg, factoryCfg, workerDef, modelDomain)
@@ -108,7 +109,7 @@ func buildWorkerExecutor(
 func buildProviderBackedWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
@@ -156,7 +157,7 @@ func buildProviderBackedWorkerExecutor(
 }
 
 func providerBackedRunner(
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
@@ -173,7 +174,7 @@ func providerBackedRunner(
 }
 
 func newProviderRunner(
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
@@ -193,7 +194,7 @@ func newProviderRunner(
 }
 
 func providerRunnerOptions(
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
@@ -242,7 +243,7 @@ func wrapRecordingProviderRunner(
 
 func buildScriptWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,

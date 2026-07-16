@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -70,7 +72,7 @@ func TestAdapterFinalOnlyConformance(t *testing.T) {
 	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithAllocator(mock), agy.WithExecutable("agy"), agy.WithSessionConfig(agypty.DefaultSessionConfig()))
 	testkit.RunFinalOnly(t, testkit.FinalOnlyFixture{
 		NewAdapter: func() adapter.Adapter { return providerAdapter },
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Model: "gemini-pro", UserMessage: privatePrompt,
 		},
 		Success: workerprocess.CommandResult{Stdout: []byte("Complete response\n")},
@@ -97,8 +99,8 @@ func TestAdapterBuildCommandUsesTypedArgvWorkspaceAndEnvironment(t *testing.T) {
 	}
 	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithExecutable(executable))
 	built, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{
-		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy"},
+		Request: workerexecution.ProviderInferenceRequest{
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy"},
 			Model:            "gemini-pro",
 			SessionID:        "session-1",
 			WorkingDirectory: filepath.Join("workspaces", "a"),
@@ -138,8 +140,8 @@ func TestAdapterExecutePreservesPromptMetacharactersInArgv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PTYRunner() error = %v", err)
 	}
-	request := interfaces.ProviderInferenceRequest{
-		Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-42"},
+	request := workerexecution.ProviderInferenceRequest{
+		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-42"},
 		WorkingDirectory: ".",
 		UserMessage:      privatePrompt,
 	}

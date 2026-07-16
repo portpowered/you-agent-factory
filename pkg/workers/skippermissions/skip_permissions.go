@@ -6,7 +6,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // EffectiveSkipPermissions resolves the invocation-time skip-permissions policy for
@@ -21,7 +26,7 @@ func EffectiveSkipPermissions(
 	if persisted {
 		return true
 	}
-	if invocationOverride != nil && *invocationOverride && interfaces.IsAgentWorkerType(workerType) {
+	if invocationOverride != nil && *invocationOverride && workertaxonomy.IsAgentWorkerType(workerType) {
 		return true
 	}
 	return false
@@ -29,18 +34,18 @@ func EffectiveSkipPermissions(
 
 // AgentWorkerSupportsSkipPermissions reports whether an agent worker can honor
 // skip-permissions through a supported CLI provider adapter.
-func AgentWorkerSupportsSkipPermissions(worker *interfaces.WorkerConfig) bool {
-	if worker == nil || !interfaces.IsAgentWorkerType(worker.Type) {
+func AgentWorkerSupportsSkipPermissions(worker *workerconfig.Config) bool {
+	if worker == nil || !workertaxonomy.IsAgentWorkerType(worker.Type) {
 		return true
 	}
-	if interfaces.UsesModelhostLease(worker.Type, worker.ModelLocality) {
+	if workertaxonomy.UsesModelhostLease(worker.Type, worker.ModelLocality) {
 		return false
 	}
 	provider := strings.TrimSpace(worker.ModelProvider)
 	if provider == "" {
 		return true
 	}
-	for _, supported := range interfaces.SupportedModelProviders() {
+	for _, supported := range modelprovider.Supported() {
 		if provider == string(supported) {
 			return true
 		}
@@ -51,13 +56,13 @@ func AgentWorkerSupportsSkipPermissions(worker *interfaces.WorkerConfig) bool {
 // ValidateInvocationSkipPermissionsForWorker fails closed when an invocation
 // requests --skip-permissions but the agent worker cannot honor it.
 func ValidateInvocationSkipPermissionsForWorker(
-	worker *interfaces.WorkerConfig,
+	worker *workerconfig.Config,
 	invocationOverride *bool,
 ) error {
 	if invocationOverride == nil || !*invocationOverride {
 		return nil
 	}
-	if worker == nil || !interfaces.IsAgentWorkerType(worker.Type) {
+	if worker == nil || !workertaxonomy.IsAgentWorkerType(worker.Type) {
 		return nil
 	}
 	if AgentWorkerSupportsSkipPermissions(worker) {
@@ -94,11 +99,11 @@ func ValidateInvocationSkipPermissionsWorkers(
 	return nil
 }
 
-func agentWorkerSkipPermissionsUnsupportedDetail(worker *interfaces.WorkerConfig) string {
+func agentWorkerSkipPermissionsUnsupportedDetail(worker *workerconfig.Config) string {
 	if worker == nil {
 		return "agent worker cannot honor unsafe permission bypass"
 	}
-	if interfaces.UsesModelhostLease(worker.Type, worker.ModelLocality) {
+	if workertaxonomy.UsesModelhostLease(worker.Type, worker.ModelLocality) {
 		return "local managed model workers cannot honor CLI skip-permissions"
 	}
 	if provider := strings.TrimSpace(worker.ModelProvider); provider != "" {

@@ -10,11 +10,13 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
@@ -205,13 +207,13 @@ func assertReplayWorldStateMatchesRuntime(
 	t.Helper()
 
 	streamedTick := maxUnifiedSmokeTick(streamedEvents)
-	streamedState, err := projections.ReconstructFactoryWorldState(streamedEvents, streamedTick)
+	streamedState, err := factoryeventprojection.ReconstructFactoryWorldState(streamedEvents, streamedTick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState streamed events: %v", err)
 	}
 
 	runtimeTick := maxUnifiedSmokeTick(runtimeEvents)
-	runtimeState, err := projections.ReconstructFactoryWorldState(runtimeEvents, runtimeTick)
+	runtimeState, err := factoryeventprojection.ReconstructFactoryWorldState(runtimeEvents, runtimeTick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState runtime events: %v", err)
 	}

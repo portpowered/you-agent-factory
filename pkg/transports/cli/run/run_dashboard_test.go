@@ -14,11 +14,14 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -782,9 +785,9 @@ Run the script.
 `)
 
 	workFile := filepath.Join(t.TempDir(), "work.json")
-	req := interfaces.WorkRequest{
-		Type: interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+	req := work.WorkRequest{
+		Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "dashboard-render-test-work",
 			WorkID:     "dashboard-render-test-work",
 			WorkTypeID: "task",
@@ -893,12 +896,12 @@ func runWithCapturedStdout(
 func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{{
-			Outcome: interfaces.OutcomeFailed,
+			Outcome: workerexecution.OutcomeFailed,
 			Reason:  reason,
-			ConsumedTokens: []interfaces.Token{{
+			ConsumedTokens: []factorytoken.Token{{
 				ID:      "failed-token",
 				PlaceID: "task:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "dashboard-render-test-work",
 					WorkTypeID: "task",
 					TraceID:    "dashboard-render-test-trace",
@@ -911,19 +914,19 @@ func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapsho
 func timedOutCleanInvocationSnapshot() *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		DispatchHistory: []interfaces.CompletedDispatch{{
-			Outcome: interfaces.OutcomeFailed,
-			ConsumedTokens: []interfaces.Token{{
+			Outcome: workerexecution.OutcomeFailed,
+			ConsumedTokens: []factorytoken.Token{{
 				ID:      "timeout-token",
 				PlaceID: "task:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "dashboard-render-test-work",
 					WorkTypeID: "task",
 					TraceID:    "dashboard-render-test-trace",
 				},
 			}},
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyRetryable,
-				Type:   interfaces.WorkFailureTypeTimeout,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeTimeout,
 			},
 		}},
 	}

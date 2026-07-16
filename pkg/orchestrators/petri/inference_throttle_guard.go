@@ -4,8 +4,10 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorythrottle "github.com/portpowered/infinite-you/pkg/factory/throttle"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type RuntimeGuardContext struct {
@@ -18,7 +20,7 @@ type RuntimeGuardContext struct {
 
 type RuntimeGuard interface {
 	Guard
-	EvaluateRuntime(ctx RuntimeGuardContext, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) (matched []interfaces.Token, ok bool)
+	EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) (matched []factorytoken.Token, ok bool)
 }
 
 type ActivePauseProvider interface {
@@ -37,11 +39,11 @@ type InferenceThrottleGuard struct {
 var _ RuntimeGuard = (*InferenceThrottleGuard)(nil)
 var _ ActivePauseProvider = (*InferenceThrottleGuard)(nil)
 
-func (g *InferenceThrottleGuard) Evaluate(_ []interfaces.Token, _ map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *InferenceThrottleGuard) Evaluate(_ []factorytoken.Token, _ map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	return nil, false
 }
 
-func (g *InferenceThrottleGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []interfaces.Token, _ map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *InferenceThrottleGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, _ map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	if !g.appliesToCurrentTransition(ctx) {
 		return candidates, len(candidates) > 0
 	}
@@ -59,7 +61,7 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 	for i := range ctx.DispatchHistory {
 		record := ctx.DispatchHistory[i]
 		failureMetadata := record.FailureMetadata
-		if failureMetadata == nil || failureMetadata.Family != interfaces.WorkFailureFamilyThrottle {
+		if failureMetadata == nil || failureMetadata.Family != workerexecution.WorkFailureFamilyThrottle {
 			continue
 		}
 		if !g.historyDispatchMatchesLane(ctx, record.TransitionID) {
@@ -69,7 +71,7 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 			Provider:        g.Provider,
 			Model:           g.Model,
 			OccurredAt:      record.EndTime,
-			FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+			FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadata),
 		})
 	}
 	return factorythrottle.DeriveActiveThrottlePauses(history, g.RefreshWindow, ctx.Now)

@@ -8,11 +8,14 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // FactoryDefinitionService owns current-factory read models for the phase-one
@@ -141,11 +144,23 @@ func (dh factoryDefinitionHost) SessionFactoryPersistRoot(session *factorysessio
 	return sessionFactoryPersistRoot(dh.Host.factoryRootDir, session)
 }
 
-func (dh factoryDefinitionHost) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+func (dh factoryDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, dh.WorkstationLoader())
+}
+
+func (dh factoryDefinitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
 	if dh.Host == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+		return nil, fmt.Errorf("factory service is required")
 	}
-	return dh.Host.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+	current, err := dh.Host.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(current)
+	if err != nil {
+		return nil, fmt.Errorf("capture current factory snapshot: %w", err)
+	}
+	return snapshot, nil
 }
 
 func (dh factoryDefinitionHost) WithActivationLock(fn func() error) error {
@@ -168,13 +183,13 @@ func (dh factoryDefinitionHost) ActivateSessionEditableFactory(
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
-	name factoryapi.FactoryName,
+	name string,
 	runtimeName string,
 ) error {
 	if dh.Host == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return dh.Host.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+	return dh.Host.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, factoryapi.FactoryName(name), runtimeName)
 }
 
 func (dh factoryDefinitionHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
@@ -242,15 +257,15 @@ func (dh factoryDefinitionHost) SwapPersistedNamedFactoryRuntime(
 	return dh.Host.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
 }
 
-var _ FactoryDefinitionService = (*factorydefinition.Service)(nil)
+var _ FactoryDefinitionService = (*factorydefinitionmapping.Service)(nil)
 
 func newFactoryDefinitionService(h *Host) FactoryDefinitionService {
-	return factorydefinition.New(factoryDefinitionHost{Host: h})
+	return factorydefinitionmapping.New(factorydefinition.New(factoryDefinitionHost{Host: h}))
 }
 
 func (h *Host) requireDefinitions() FactoryDefinitionService {
 	if h == nil {
-		return factorydefinition.New(factoryDefinitionHost{})
+		return factorydefinitionmapping.New(factorydefinition.New(factoryDefinitionHost{}))
 	}
 	if h.definitions == nil {
 		h.definitions = newFactoryDefinitionService(h)
@@ -258,8 +273,8 @@ func (h *Host) requireDefinitions() FactoryDefinitionService {
 	return h.definitions
 }
 
-func (h *Host) definitionService() *factorydefinition.Service {
-	if svc, ok := h.requireDefinitions().(*factorydefinition.Service); ok {
+func (h *Host) definitionService() *factorydefinitionmapping.Service {
+	if svc, ok := h.requireDefinitions().(*factorydefinitionmapping.Service); ok {
 		return svc
 	}
 	return nil

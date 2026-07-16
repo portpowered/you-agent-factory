@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 	"go.uber.org/zap"
 )
@@ -30,8 +31,8 @@ func TestRuntimeBuildConstructionRejectsMissingOwnedDependencies(t *testing.T) {
 		want   string
 	}{
 		{name: "clock", logger: zap.NewNop(), build: build, want: "clock is required"},
-		{name: "logger", clock: factory.RealClock{}, build: build, want: "logger is required"},
-		{name: "builder", clock: factory.RealClock{}, logger: zap.NewNop(), want: "runtime builder is required"},
+		{name: "logger", clock: platformclock.Real{}, build: build, want: "logger is required"},
+		{name: "builder", clock: platformclock.Real{}, logger: zap.NewNop(), want: "runtime builder is required"},
 	}
 
 	for _, test := range tests {
@@ -57,22 +58,38 @@ func TestRecordedEventBridgePreservesCanonicalEvent(t *testing.T) {
 	t.Parallel()
 
 	history := factoryevents.NewFactoryEventHistory(nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
 	eventTime := time.Date(2026, time.July, 16, 1, 2, 3, 0, time.FixedZone("test", -7*60*60))
-	history.AppendRecordedEvent(factoryapi.FactoryEvent{
+	history.AppendRecordedEvent(interfaces.FactoryEvent{
 		Id:      "recorded-event-1",
-		Type:    factoryapi.FactoryEventTypeRunRequest,
-		Context: factoryapi.FactoryEventContext{EventTime: eventTime},
+		Type:    interfaces.FactoryEventTypeRunRequest,
+		Context: interfaces.FactoryEventContext{EventTime: eventTime},
 	})
 
-	recorded := history.Events()
+	recorded := history.CanonicalEvents()
 	if len(recorded) != 1 {
 		t.Fatalf("len(Events()) = %d, want 1", len(recorded))
 	}
-	if recorded[0].Id != "recorded-event-1" || recorded[0].SchemaVersion != factoryapi.AgentFactoryEventV1 {
+	if recorded[0].Id != "recorded-event-1" || recorded[0].SchemaVersion != interfaces.FactoryEventSchemaVersionV1 {
 		t.Fatalf("recorded event identity = (%q, %q), want preserved ID and canonical schema", recorded[0].Id, recorded[0].SchemaVersion)
 	}
 	if got, want := recorded[0].Context.EventTime, eventTime.UTC(); !got.Equal(want) || got.Location() != time.UTC {
 		t.Fatalf("recorded event time = %v (%v), want %v (UTC)", got, got.Location(), want)
+	}
+
+	select {
+	case live := <-stream.Events:
+		if live.Id != recorded[0].Id || live.SchemaVersion != recorded[0].SchemaVersion || !live.Context.EventTime.Equal(recorded[0].Context.EventTime) {
+			t.Fatalf("live recorded event = %#v, want canonical history event %#v", live, recorded[0])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for recorded event bridge live delivery")
 	}
 }
 

@@ -5,9 +5,11 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func dashboardQueueCountViewsFromRenderData(renderData dashboardrender.SimpleDashboardRenderData) []dashboardQueueCountView {
@@ -224,7 +226,7 @@ func worldViewFallbackWorkItems(
 	case worldViewFallbackCompletedWorkItemLane:
 		return collectWorldViewFallbackWorkItems(
 			completions,
-			interfaces.OutcomeAccepted,
+			workerexecution.OutcomeAccepted,
 			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
 				if collector.addTerminalWork(completion.TerminalWork, func(status string) bool {
 					return status != "FAILED"
@@ -237,7 +239,7 @@ func worldViewFallbackWorkItems(
 	case worldViewFallbackFailedWorkItemLane:
 		return collectWorldViewFallbackWorkItems(
 			completions,
-			interfaces.OutcomeFailed,
+			workerexecution.OutcomeFailed,
 			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
 				if collector.addTerminalWork(completion.TerminalWork, func(string) bool {
 					return true
@@ -259,14 +261,14 @@ type worldViewFallbackWorkItemCollector struct {
 
 func collectWorldViewFallbackWorkItems(
 	completions []interfaces.FactoryWorldDispatchCompletion,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	collect func(*worldViewFallbackWorkItemCollector, interfaces.FactoryWorldDispatchCompletion),
 ) []interfaces.FactoryWorldWorkItemRef {
 	collector := worldViewFallbackWorkItemCollector{
 		workItemsByID: make(map[string]interfaces.FactoryWorldWorkItemRef),
 	}
 	for _, completion := range completions {
-		if interfaces.WorkOutcome(completion.Result.Outcome) != outcome {
+		if workerexecution.WorkOutcome(completion.Result.Outcome) != outcome {
 			continue
 		}
 		collect(&collector, completion)
@@ -285,7 +287,7 @@ func (collector *worldViewFallbackWorkItemCollector) addTerminalWork(
 	return true
 }
 
-func (collector *worldViewFallbackWorkItemCollector) addWorkItems(items []interfaces.FactoryWorkItem) {
+func (collector *worldViewFallbackWorkItemCollector) addWorkItems(items []work.FactoryWorkItem) {
 	for _, item := range items {
 		if item.ID == "" {
 			continue
@@ -294,7 +296,7 @@ func (collector *worldViewFallbackWorkItemCollector) addWorkItems(items []interf
 	}
 }
 
-func (collector *worldViewFallbackWorkItemCollector) addMissingWorkItems(items []interfaces.FactoryWorkItem) {
+func (collector *worldViewFallbackWorkItemCollector) addMissingWorkItems(items []work.FactoryWorkItem) {
 	for _, item := range items {
 		if item.ID == "" {
 			continue
@@ -319,7 +321,7 @@ func dashboardFailedWorkDetailsFromRenderData(
 	}
 	completionByWorkID := make(map[string]interfaces.FactoryWorldDispatchCompletion)
 	for _, completion := range completions {
-		if interfaces.WorkOutcome(completion.Result.Outcome) != interfaces.OutcomeFailed {
+		if workerexecution.WorkOutcome(completion.Result.Outcome) != workerexecution.OutcomeFailed {
 			continue
 		}
 		for _, workID := range worldFailedWorkIDsForDispatch(completion) {
@@ -338,7 +340,7 @@ func dashboardFailedWorkDetailsFromRenderData(
 			DispatchID:      completion.DispatchID,
 			TransitionID:    dashboardCompatibilityTransitionID(completion.TransitionID),
 			WorkstationName: dashboardCompatibilityWorkstationName(completion.Workstation.Name, completion.TransitionID),
-			FailureDetail:   interfaces.CloneFailureDetail(completion.Result.FailureDetail),
+			FailureDetail:   workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
 		})
 	}
 	return out
@@ -377,7 +379,7 @@ func sortedWorldWorkItemRefs(
 	return workItems
 }
 
-func cloneProviderSessionMetadata(session *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
+func cloneProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
 	if session == nil || session.ID == "" {
 		return nil
 	}

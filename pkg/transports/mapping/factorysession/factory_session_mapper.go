@@ -6,10 +6,38 @@ import (
 	"time"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
+
+// InvocationRequestFromAPI maps the public invocation carrier into the Factory
+// Session-owned request before domain normalization and submission.
+func InvocationRequestFromAPI(request factoryapi.InvocationRequest) sessioninvocation.InvocationRequest {
+	result := sessioninvocation.InvocationRequest{
+		Content:         contentcontract.PartsFromGenerated(request.Content),
+		ContentProvided: request.Content != nil,
+	}
+	if request.Args != nil {
+		args := cloneAnyMap(*request.Args)
+		result.Args = &args
+	}
+	if request.RequestId != nil {
+		requestID := *request.RequestId
+		result.RequestID = &requestID
+	}
+	if request.SourceKind != nil {
+		sourceKind := sessioninvocation.InvocationInputSourceKind(*request.SourceKind)
+		result.SourceKind = &sourceKind
+	}
+	if request.TimeoutMillis != nil {
+		timeoutMillis := *request.TimeoutMillis
+		result.TimeoutMillis = &timeoutMillis
+	}
+	return result
+}
 
 // OrchestratorOverrideFromAPI maps one public orchestrator override into the shared
 // service contract.

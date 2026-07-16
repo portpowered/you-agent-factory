@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -68,7 +70,7 @@ func (fs *replayFunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 		t.Fatalf("get factory events: %v", err)
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)
 	}

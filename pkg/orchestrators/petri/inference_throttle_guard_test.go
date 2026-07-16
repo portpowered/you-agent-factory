@@ -4,8 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestInferenceThrottleGuard_ActivePausesResolveFailureMetadataOnlyDispatch(t *testing.T) {
@@ -23,7 +26,7 @@ func TestInferenceThrottleGuard_ActivePausesResolveFailureMetadataOnlyDispatch(t
 			completedThrottleFailure("dispatch-match", "t-claude", now.Add(-4*time.Minute)),
 		},
 		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"writer": {Name: "writer", ModelProvider: "claude", Model: "claude-sonnet"},
 			},
 		},
@@ -57,7 +60,7 @@ func TestInferenceThrottleGuard_ActivePausesDeriveFromCompletedDispatchHistoryAn
 			completedNonThrottleFailure("dispatch-nonthrottle", "t-claude", now.Add(-time.Minute)),
 		},
 		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"writer": {Name: "writer", ModelProvider: "claude", Model: "claude-sonnet"},
 				"codex":  {Name: "codex", ModelProvider: "openai", Model: "gpt-5.4"},
 			},
@@ -91,9 +94,9 @@ func TestInferenceThrottleGuard_EvaluateRuntimeBlocksOnlyWhilePauseWindowIsActiv
 		WorkerName:    "writer",
 		RefreshWindow: 5 * time.Minute,
 	}
-	candidates := []interfaces.Token{{ID: "tok-1"}}
+	candidates := []factorytoken.Token{{ID: "tok-1"}}
 	runtimeConfig := runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"writer": {Name: "writer", ModelProvider: "claude", Model: "claude-sonnet"},
 		},
 	}
@@ -136,7 +139,7 @@ func TestInferenceThrottleGuard_DoesNotBlockWhenCurrentTransitionRuntimeLookupMi
 		WorkerName:    "writer",
 		RefreshWindow: 5 * time.Minute,
 	}
-	candidates := []interfaces.Token{{ID: "tok-1"}}
+	candidates := []factorytoken.Token{{ID: "tok-1"}}
 
 	matched, ok := guard.EvaluateRuntime(RuntimeGuardContext{
 		Now:                 pausedAt.Add(2 * time.Minute),
@@ -145,7 +148,7 @@ func TestInferenceThrottleGuard_DoesNotBlockWhenCurrentTransitionRuntimeLookupMi
 			completedThrottleFailure("dispatch-match", "t-claude", pausedAt),
 		},
 		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{},
+			Workers: map[string]*workerconfig.Config{},
 		},
 		TransitionWorkers: map[string]string{
 			"t-claude": "missing-worker",
@@ -174,7 +177,7 @@ func TestInferenceThrottleGuard_ActivePausesIgnoreUnresolvedHistoryTransitions(t
 			completedThrottleFailure("dispatch-match", "t-claude", now.Add(-2*time.Minute)),
 		},
 		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{},
+			Workers: map[string]*workerconfig.Config{},
 		},
 		TransitionWorkers: map[string]string{
 			"t-claude": "missing-worker",
@@ -190,9 +193,9 @@ func completedThrottleFailure(dispatchID, transitionID string, endedAt time.Time
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 	}
 }
@@ -202,8 +205,8 @@ func completedNonThrottleFailure(dispatchID, transitionID string, endedAt time.T
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
 		},
 	}
 }

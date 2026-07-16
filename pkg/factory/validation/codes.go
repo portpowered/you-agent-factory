@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 const (
@@ -79,38 +79,38 @@ const (
 var invocationSignatureReferencePattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}`)
 
 var supportedInvocationTypeHints = []string{
-	string(factoryapi.FactoryInvocationParameterTypeHintString),
-	string(factoryapi.FactoryInvocationParameterTypeHintPath),
-	string(factoryapi.FactoryInvocationParameterTypeHintFilePath),
-	string(factoryapi.FactoryInvocationParameterTypeHintDirectoryPath),
-	string(factoryapi.FactoryInvocationParameterTypeHintNumberString),
-	string(factoryapi.FactoryInvocationParameterTypeHintBooleanString),
+	interfaces.InvocationParameterTypeHintString,
+	interfaces.InvocationParameterTypeHintPath,
+	interfaces.InvocationParameterTypeHintFilePath,
+	interfaces.InvocationParameterTypeHintDirectoryPath,
+	interfaces.InvocationParameterTypeHintNumberString,
+	interfaces.InvocationParameterTypeHintBooleanString,
 }
 
 var supportedInvocationValueModes = []string{
-	string(factoryapi.FactoryInvocationParameterValueModeExact),
-	string(factoryapi.FactoryInvocationParameterValueModeRepeated),
-	string(factoryapi.FactoryInvocationParameterValueModeVariadic),
-	string(factoryapi.FactoryInvocationParameterValueModeFileContents),
+	interfaces.InvocationParameterValueModeExact,
+	interfaces.InvocationParameterValueModeRepeated,
+	interfaces.InvocationParameterValueModeVariadic,
+	interfaces.InvocationParameterValueModeFileContents,
 }
 
 var supportedInvocationBindingKinds = []string{
-	string(factoryapi.FactoryInvocationParameterBindingKindPositional),
-	string(factoryapi.FactoryInvocationParameterBindingKindNamed),
-	string(factoryapi.FactoryInvocationParameterBindingKindStdin),
-	string(factoryapi.FactoryInvocationParameterBindingKindNamedRest),
+	interfaces.InvocationParameterBindingKindPositional,
+	interfaces.InvocationParameterBindingKindNamed,
+	interfaces.InvocationParameterBindingKindStdin,
+	interfaces.InvocationParameterBindingKindNamedRest,
 }
 
 var supportedUnknownNamedArgumentPolicies = []string{
-	string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject),
-	string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyAllow),
-	string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect),
+	interfaces.InvocationUnknownNamedArgumentPolicyReject,
+	interfaces.InvocationUnknownNamedArgumentPolicyAllow,
+	interfaces.InvocationUnknownNamedArgumentPolicyCollect,
 }
 
 var supportedOutputContractModes = []string{
-	string(factoryapi.FactoryInvocationOutputContractModeInline),
-	string(factoryapi.FactoryInvocationOutputContractModeFile),
-	string(factoryapi.FactoryInvocationOutputContractModeJson),
+	interfaces.InvocationOutputContractModeInline,
+	interfaces.InvocationOutputContractModeFile,
+	interfaces.InvocationOutputContractModeJSON,
 }
 
 type invocationParameterSummary struct {
@@ -251,11 +251,11 @@ func registerInvocationAggregateBindings(parameter interfaces.InvocationParamete
 	var targets []Target
 	for bindingIndex, binding := range parameter.Bindings {
 		switch strings.TrimSpace(binding.Kind) {
-		case string(factoryapi.FactoryInvocationParameterBindingKindPositional):
+		case interfaces.InvocationParameterBindingKindPositional:
 			targets = append(targets, registerInvocationPositionalBinding(parameter, index, bindingIndex, binding.Position, name, state)...)
-		case string(factoryapi.FactoryInvocationParameterBindingKindStdin):
+		case interfaces.InvocationParameterBindingKindStdin:
 			state.stdinParameters = append(state.stdinParameters, name)
-		case string(factoryapi.FactoryInvocationParameterBindingKindNamedRest):
+		case interfaces.InvocationParameterBindingKindNamedRest:
 			state.namedRestParameters = append(state.namedRestParameters, name)
 		}
 	}
@@ -264,7 +264,7 @@ func registerInvocationAggregateBindings(parameter interfaces.InvocationParamete
 
 func registerInvocationPositionalBinding(parameter interfaces.InvocationParameterConfig, index int, bindingIndex int, position int, name string, state *invocationSignatureAggregateState) []Target {
 	state.positionalSlots = append(state.positionalSlots, position)
-	if strings.TrimSpace(parameter.ValueMode) == string(factoryapi.FactoryInvocationParameterValueModeVariadic) {
+	if strings.TrimSpace(parameter.ValueMode) == interfaces.InvocationParameterValueModeVariadic {
 		state.variadicPositionalNames = append(state.variadicPositionalNames, name)
 	}
 	if previousName, exists := state.positionalNames[position]; exists {
@@ -339,14 +339,14 @@ func invocationSignatureNamedRestTargets(policy string, namedRestParameters []st
 		))
 	}
 	trimmedPolicy := strings.TrimSpace(policy)
-	if trimmedPolicy == string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect) && len(namedRestParameters) != 1 {
+	if trimmedPolicy == interfaces.InvocationUnknownNamedArgumentPolicyCollect && len(namedRestParameters) != 1 {
 		targets = append(targets, invocationSignatureTarget(
 			CodeInvocationSignatureInvalidNamedRestShape,
 			"unknownNamedArgumentPolicy",
 			"invocationSignature.unknownNamedArgumentPolicy COLLECT requires exactly one parameter with a NAMED_REST binding",
 		))
 	}
-	if trimmedPolicy != string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect) && len(namedRestParameters) > 0 {
+	if trimmedPolicy != interfaces.InvocationUnknownNamedArgumentPolicyCollect && len(namedRestParameters) > 0 {
 		targets = append(targets, invocationSignatureTarget(
 			CodeInvocationSignatureInvalidNamedRestShape,
 			"unknownNamedArgumentPolicy",
@@ -426,7 +426,7 @@ func invocationSignatureParameterDefaultTargets(parameter interfaces.InvocationP
 
 func invocationParameterSupportsListDefaults(valueMode string) bool {
 	switch valueMode {
-	case string(factoryapi.FactoryInvocationParameterValueModeRepeated), string(factoryapi.FactoryInvocationParameterValueModeVariadic):
+	case interfaces.InvocationParameterValueModeRepeated, interfaces.InvocationParameterValueModeVariadic:
 		return true
 	default:
 		return false
@@ -480,7 +480,7 @@ func invocationSignatureParameterBindingTargets(parameter interfaces.InvocationP
 			continue
 		}
 		switch kind {
-		case string(factoryapi.FactoryInvocationParameterBindingKindPositional):
+		case interfaces.InvocationParameterBindingKindPositional:
 			state.hasPositionalBinding = true
 			if binding.Position < 1 {
 				targets = append(targets, invocationSignatureParameterBindingTarget(
@@ -491,11 +491,11 @@ func invocationSignatureParameterBindingTargets(parameter interfaces.InvocationP
 					fmt.Sprintf("invocationSignature parameter %q positional bindings must use positions starting at 1", name),
 				))
 			}
-		case string(factoryapi.FactoryInvocationParameterBindingKindNamed):
+		case interfaces.InvocationParameterBindingKindNamed:
 			state.hasNamedBinding = true
-		case string(factoryapi.FactoryInvocationParameterBindingKindStdin):
+		case interfaces.InvocationParameterBindingKindStdin:
 			state.hasStdinBinding = true
-		case string(factoryapi.FactoryInvocationParameterBindingKindNamedRest):
+		case interfaces.InvocationParameterBindingKindNamedRest:
 			state.hasNamedRestBinding = true
 		}
 	}
@@ -525,7 +525,7 @@ func invocationSignatureNamedRestBindingTargets(parameter interfaces.InvocationP
 		return nil
 	}
 	var targets []Target
-	if valueMode != string(factoryapi.FactoryInvocationParameterValueModeRepeated) {
+	if valueMode != interfaces.InvocationParameterValueModeRepeated {
 		targets = append(targets, invocationSignatureParameterTarget(CodeInvocationSignatureInvalidNamedRestShape, index, "bindings", name, fmt.Sprintf("invocationSignature parameter %q must use valueMode REPEATED when it declares a NAMED_REST binding", name)))
 	}
 	if state.hasPositionalBinding || state.hasNamedBinding || state.hasStdinBinding || len(parameter.Bindings) != 1 {
@@ -535,7 +535,7 @@ func invocationSignatureNamedRestBindingTargets(parameter interfaces.InvocationP
 }
 
 func invocationSignatureRepeatedBindingTargets(index int, name string, valueMode string, state invocationSignatureBindingState) []Target {
-	if valueMode != string(factoryapi.FactoryInvocationParameterValueModeRepeated) || (!state.hasPositionalBinding && !state.hasStdinBinding) {
+	if valueMode != interfaces.InvocationParameterValueModeRepeated || (!state.hasPositionalBinding && !state.hasStdinBinding) {
 		return nil
 	}
 	return []Target{invocationSignatureParameterTarget(
@@ -548,7 +548,7 @@ func invocationSignatureRepeatedBindingTargets(index int, name string, valueMode
 }
 
 func invocationSignatureVariadicBindingTargets(index int, name string, valueMode string, state invocationSignatureBindingState) []Target {
-	if valueMode != string(factoryapi.FactoryInvocationParameterValueModeVariadic) {
+	if valueMode != interfaces.InvocationParameterValueModeVariadic {
 		return nil
 	}
 	if state.hasPositionalBinding && !state.hasNamedBinding && !state.hasStdinBinding && !state.hasNamedRestBinding {
@@ -645,7 +645,7 @@ func invocationInterpolationFieldTargets(cfg *interfaces.FactoryConfig) []interp
 	return append(fields, invocationWorkstationInterpolationFieldTargets(cfg.Workstations)...)
 }
 
-func invocationWorkerInterpolationFieldTargets(workers []interfaces.WorkerConfig) []interpolationFieldTarget {
+func invocationWorkerInterpolationFieldTargets(workers []workerconfig.Config) []interpolationFieldTarget {
 	var fields []interpolationFieldTarget
 	for workerIndex, worker := range workers {
 		subjectID := worker.Name
@@ -705,7 +705,7 @@ func appendInterpolationField(fields []interpolationFieldTarget, subjectType Sub
 
 func invocationParameterSupportsScalarInterpolation(valueMode string) bool {
 	switch valueMode {
-	case string(factoryapi.FactoryInvocationParameterValueModeRepeated), string(factoryapi.FactoryInvocationParameterValueModeVariadic):
+	case interfaces.InvocationParameterValueModeRepeated, interfaces.InvocationParameterValueModeVariadic:
 		return false
 	default:
 		return true

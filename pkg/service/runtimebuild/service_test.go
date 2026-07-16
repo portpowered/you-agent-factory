@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"go.uber.org/zap"
 )

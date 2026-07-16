@@ -2,12 +2,14 @@ package openapitests
 
 import (
 	"encoding/json"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_MapsWorkPropagation(t *testing.T) {
@@ -45,7 +47,7 @@ func TestFactoryConfigToOpenAPI_PreservesWorkPropagation(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",
@@ -87,7 +89,7 @@ func TestFactoryConfigToOpenAPI_OmitsUnsetWorkPropagation(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",
@@ -127,7 +129,7 @@ func TestFactoryConfigMapper_FlattenRoundTripsWorkPropagation(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",

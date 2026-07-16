@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestResolveTextInput_PositionalOnly(t *testing.T) {
@@ -81,8 +81,8 @@ func TestResolveTextInput_RejectsWhitespaceOnlyStdin(t *testing.T) {
 }
 
 func TestResolveAPITextInputContent_RejectsWhitespaceOnlyText(t *testing.T) {
-	_, err := ResolveAPITextInputContent([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	_, err := ResolveAPITextInputContent([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "   ",
 	}})
 
@@ -90,9 +90,9 @@ func TestResolveAPITextInputContent_RejectsWhitespaceOnlyText(t *testing.T) {
 }
 
 func TestResolveAPITextInputContent_RejectsWhitespaceOnlyJoinedParts(t *testing.T) {
-	_, err := ResolveAPITextInputContent([]interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "  "},
-		{Type: interfaces.WorkContentPartTypeText, Text: "\t"},
+	_, err := ResolveAPITextInputContent([]work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "  "},
+		{Type: work.WorkContentPartTypeText, Text: "\t"},
 	})
 
 	assertInputEmptyError(t, err, InputSourcePositionalText)
@@ -125,8 +125,8 @@ func assertResolvedTextInput(t *testing.T, got ResolvedInput, wantSource InputSo
 	if len(got.Content) != 1 {
 		t.Fatalf("content = %#v, want one text part", got.Content)
 	}
-	if got.Content[0].Type != interfaces.WorkContentPartTypeText {
-		t.Fatalf("content[0].type = %q, want %q", got.Content[0].Type, interfaces.WorkContentPartTypeText)
+	if got.Content[0].Type != work.WorkContentPartTypeText {
+		t.Fatalf("content[0].type = %q, want %q", got.Content[0].Type, work.WorkContentPartTypeText)
 	}
 	if got.Content[0].Text != wantText {
 		t.Fatalf("content[0].text = %q, want %q", got.Content[0].Text, wantText)

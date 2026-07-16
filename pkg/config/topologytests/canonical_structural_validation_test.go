@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func topologyTestBaseConfig() *interfaces.FactoryConfig {
@@ -18,7 +20,7 @@ func topologyTestBaseConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w1"}},
+		Workers: []workerconfig.Config{{Name: "w1"}},
 	}
 }
 
@@ -139,7 +141,7 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 				Type: interfaces.StateTypeInitial,
 			}},
 		}},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "w1"},
 			{Name: "planner", Type: interfaces.WorkerTypeModel},
 		},
@@ -176,9 +178,9 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name: "quota",
-			Type: interfaces.ResourceTypeProviderQuota,
+			Type: factoryresource.TypeProviderQuota,
 		}},
 		ResourceManifest: &interfaces.PortableResourceManifestConfig{
 			RequiredTools: []interfaces.RequiredToolConfig{{Name: "", Command: ""}},
@@ -210,9 +212,9 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 
 func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factoryresource.Config{{
 		Name:       "unknown-cache",
-		Type:       interfaces.ResourceTypeModel,
+		Type:       factoryresource.TypeModel,
 		Capacity:   1,
 		Model:      "UNKNOWN_RUNTIME",
 		Backend:    "LLAMACPP",
@@ -225,11 +227,11 @@ func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t 
 
 func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *testing.T) {
 	cfg := topologyTestBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:          "voice-local",
 		Type:          interfaces.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelLocality: workerconfig.ModelLocalityLocal,
 	}}
 
 	findings := factoryconfig.CanonicalStructuralFindings(cfg)

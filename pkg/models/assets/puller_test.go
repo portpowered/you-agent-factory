@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -15,10 +16,36 @@ import (
 	"sync"
 	"testing"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
+
+func TestPullErrorPreservesResultAndCause(t *testing.T) {
+	cause := errors.Join(context.DeadlineExceeded, ErrSourceFetchFailed)
+	err := &PullError{
+		Result: PullResult{
+			ModelName:          "voice-model",
+			ManagedPullOutcome: "TIMED_OUT",
+			ReadinessState:     "FAILED",
+		},
+		Cause: cause,
+	}
+
+	got, ok := AsPullError(err)
+	if !ok || got != err {
+		t.Fatalf("AsPullError() = (%v, %v), want original error", got, ok)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrSourceFetchFailed) {
+		t.Fatalf("PullError does not preserve cause: %v", err)
+	}
+	want := `managed runtime pull for "voice-model" failed with outcome TIMED_OUT (readiness FAILED)`
+	if err.Error() != want {
+		t.Fatalf("PullError.Error() = %q, want %q", err.Error(), want)
+	}
+}
 
 func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	baseBytes := []byte("base-gguf")
@@ -43,9 +70,9 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
@@ -68,9 +95,9 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 			t.Fatalf("expected cached file %q: %v", path, err)
 		}
 	}
-	if err := puller.EnsureModelAvailable(context.Background(), runtimeCfg, &interfaces.WorkerConfig{
+	if err := puller.EnsureModelAvailable(context.Background(), runtimeCfg, &workerconfig.Config{
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelLocality: workerconfig.ModelLocalityLocal,
 	}); err != nil {
 		t.Fatalf("EnsureModelAvailable: %v", err)
 	}
@@ -101,18 +128,18 @@ func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
 	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
 			LoadPolicy: "ON_DEMAND",
 		}},
 	})
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelLocality: workerconfig.ModelLocalityLocal,
 	}
 
 	result, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
@@ -163,9 +190,9 @@ func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
 	})
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
@@ -186,7 +213,7 @@ func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *te
 	puller := newModelAssetPullerForTest(t.TempDir())
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{})
 	_, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
-	if err == nil || !strings.Contains(err.Error(), apisurface.ErrModelPullUnsupported.Error()) {
+	if err == nil || !strings.Contains(err.Error(), ErrPullUnsupported.Error()) {
 		t.Fatalf("PullModel error = %v, want unsupported", err)
 	}
 }

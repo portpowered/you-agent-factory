@@ -9,9 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,7 +23,7 @@ func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.Provider
 
 type panickingExecutor struct{}
 
-func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *panickingExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
 	panic("intentional executor panic for testing")
 }
 
@@ -34,18 +35,18 @@ type failOnNthPageExecutor struct {
 	failOn int
 }
 
-func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	call := e.calls
 	e.mu.Unlock()
 
-	outcome := interfaces.OutcomeAccepted
+	outcome := workerexecution.OutcomeAccepted
 	if call == e.failOn {
-		outcome = interfaces.OutcomeFailed
+		outcome = workerexecution.OutcomeFailed
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      outcome,

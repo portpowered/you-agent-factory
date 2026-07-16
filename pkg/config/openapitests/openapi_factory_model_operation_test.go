@@ -1,10 +1,13 @@
 package openapitests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
@@ -55,7 +58,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {
 	if binding.Slot != "text" {
 		t.Fatalf("binding slot = %q, want text", binding.Slot)
 	}
-	if binding.Selector == nil || binding.Selector.Type != interfaces.ModelOperationContentTypeText {
+	if binding.Selector == nil || binding.Selector.Type != workerconfig.ModelOperationContentTypeText {
 		t.Fatalf("binding selector = %#v, want TEXT selector", binding.Selector)
 	}
 	if len(binding.DefaultContent) != 1 || binding.DefaultContent[0].Slot != "text" || binding.DefaultContent[0].Text != "fallback" {
@@ -93,7 +96,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsTypedModelResources(t *testing.T) {
 		t.Fatalf("expected one resource, got %#v", cfg.Resources)
 	}
 	resource := cfg.Resources[0]
-	if resource.Type != interfaces.ResourceTypeModel {
+	if resource.Type != factoryresource.TypeModel {
 		t.Fatalf("resource type = %q, want MODEL", resource.Type)
 	}
 	if resource.Model != "OMNIVOICE_Q4_K_M" || resource.Backend != "LLAMACPP" || resource.LoadPolicy != "ON_DEMAND" {

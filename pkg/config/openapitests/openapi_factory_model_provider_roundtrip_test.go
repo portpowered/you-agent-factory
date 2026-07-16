@@ -5,22 +5,22 @@ import (
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPublicValues(t *testing.T) {
 	cases := []struct {
 		public   factoryapi.WorkerModelProvider
-		internal interfaces.ModelProvider
+		internal modelprovider.ID
 	}{
-		{factoryapi.WorkerModelProviderClaude, interfaces.ModelProviderClaude},
-		{factoryapi.WorkerModelProviderCodex, interfaces.ModelProviderCodex},
-		{factoryapi.WorkerModelProviderCursor, interfaces.ModelProviderCursor},
-		{factoryapi.WorkerModelProviderGemini, interfaces.ModelProviderGemini},
-		{factoryapi.WorkerModelProviderKiro, interfaces.ModelProviderKiro},
-		{factoryapi.WorkerModelProviderOpenCode, interfaces.ModelProviderOpenCode},
-		{factoryapi.WorkerModelProviderPi, interfaces.ModelProviderPi},
+		{factoryapi.WorkerModelProviderClaude, modelprovider.Claude},
+		{factoryapi.WorkerModelProviderCodex, modelprovider.Codex},
+		{factoryapi.WorkerModelProviderCursor, modelprovider.Cursor},
+		{factoryapi.WorkerModelProviderGemini, modelprovider.Gemini},
+		{factoryapi.WorkerModelProviderKiro, modelprovider.Kiro},
+		{factoryapi.WorkerModelProviderOpenCode, modelprovider.OpenCode},
+		{factoryapi.WorkerModelProviderPi, modelprovider.Pi},
 	}
 
 	for _, tc := range cases {

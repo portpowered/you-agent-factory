@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
 	factoryresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
@@ -33,9 +34,9 @@ type ProgressPublisher func(fragment ProgressFragment)
 // IsCommand reports whether command names the Cursor CLI executable.
 func IsCommand(command string) bool {
 	base := strings.ToLower(filepath.Base(strings.ReplaceAll(strings.TrimSpace(command), `\`, "/")))
-	return base == string(interfaces.ModelProviderCursor) ||
-		base == string(interfaces.ModelProviderCursor)+".exe" ||
-		base == string(interfaces.ModelProviderCursor)+".cmd"
+	return base == string(modelprovider.Cursor) ||
+		base == string(modelprovider.Cursor)+".exe" ||
+		base == string(modelprovider.Cursor)+".cmd"
 }
 
 // ResponseEventStream observes Cursor subprocess stdout/stderr and publishes

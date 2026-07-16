@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -15,11 +15,11 @@ const (
 )
 
 const (
-	authFailureMessage    = "Gemini authentication failed."
-	badRequestMessage     = "Gemini rejected the request."
+	authFailureMessage     = "Gemini authentication failed."
+	badRequestMessage      = "Gemini rejected the request."
 	throttleFailureMessage = "The provider is rate limited; retry after capacity becomes available."
 	TimeoutFailureMessage  = "Gemini request timed out."
-	timeoutFailureMessage    = TimeoutFailureMessage
+	timeoutFailureMessage  = TimeoutFailureMessage
 	serverFailureMessage   = "Gemini encountered a temporary server error."
 )
 
@@ -37,7 +37,7 @@ type FailureInput struct {
 }
 
 type FailureResult struct {
-	Reason  interfaces.WorkFailureType
+	Reason  workerexecution.WorkFailureType
 	Message string
 }
 
@@ -71,7 +71,7 @@ func parseProviderFailure(input FailureInput) FailureResult {
 		return failure
 	}
 	if result.ExitCode == 124 {
-		return geminiFailureResult(interfaces.WorkFailureTypeTimeout, "")
+		return geminiFailureResult(workerexecution.WorkFailureTypeTimeout, "")
 	}
 	stderr := tailForFailureScan(result.Stderr)
 	if failure, ok := lastGeminiTextFailure(stderr); ok {
@@ -82,13 +82,13 @@ func parseProviderFailure(input FailureInput) FailureResult {
 		return failure
 	}
 	if message := lastGeminiUnknownMessage(stderr); message != "" {
-		return FailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: message}
+		return FailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: message}
 	}
 	if message := lastGeminiUnknownMessage(stdout); message != "" {
-		return FailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: message}
+		return FailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: message}
 	}
 	return FailureResult{
-		Reason:  interfaces.WorkFailureTypeUnknown,
+		Reason:  workerexecution.WorkFailureTypeUnknown,
 		Message: fmt.Sprintf("gemini exited with code %d", result.ExitCode),
 	}
 }
@@ -110,11 +110,11 @@ func lastGeminiStructuredFailure(streams []string) (FailureResult, bool) {
 		return FailureResult{}, false
 	}
 	reason := classifyGeminiFailureSignal(last.Type, last.Status, last.Code, last.Message)
-	if reason != interfaces.WorkFailureTypeUnknown {
+	if reason != workerexecution.WorkFailureTypeUnknown {
 		return geminiFailureResult(reason, last.Message), true
 	}
 	return FailureResult{
-		Reason:  interfaces.WorkFailureTypeUnknown,
+		Reason:  workerexecution.WorkFailureTypeUnknown,
 		Message: safeGeminiStructuredMessage(last.Message),
 	}, true
 }
@@ -196,7 +196,7 @@ func lastGeminiTextFailure(stream string) (FailureResult, bool) {
 			continue
 		}
 		reason := classifyGeminiFailureSignal("", "", "", message)
-		if reason == interfaces.WorkFailureTypeUnknown {
+		if reason == workerexecution.WorkFailureTypeUnknown {
 			continue
 		}
 		last = geminiFailureResult(reason, "")
@@ -215,7 +215,7 @@ func lastGeminiUnknownMessage(stream string) string {
 	return last
 }
 
-func classifyGeminiFailureSignal(errorType, status, code, message string) interfaces.WorkFailureType {
+func classifyGeminiFailureSignal(errorType, status, code, message string) workerexecution.WorkFailureType {
 	structuredSignals := []string{
 		strings.ToLower(strings.TrimSpace(errorType)),
 		strings.ToLower(strings.TrimSpace(status)),
@@ -224,15 +224,15 @@ func classifyGeminiFailureSignal(errorType, status, code, message string) interf
 	for _, signal := range structuredSignals {
 		switch signal {
 		case "fatalauthenticationerror", "authenticationerror", "unauthenticated", "permission_denied", "401", "403":
-			return interfaces.WorkFailureTypeAuthFailure
+			return workerexecution.WorkFailureTypeAuthFailure
 		case "badrequesterror", "invalid_argument", "400":
-			return interfaces.WorkFailureTypePermanentBadRequest
+			return workerexecution.WorkFailureTypePermanentBadRequest
 		case "resource_exhausted", "ratelimitexceeded", "429":
-			return interfaces.WorkFailureTypeThrottled
+			return workerexecution.WorkFailureTypeThrottled
 		case "deadline_exceeded", "124", "408":
-			return interfaces.WorkFailureTypeTimeout
+			return workerexecution.WorkFailureTypeTimeout
 		case "internal", "unavailable", "500", "502", "503", "504":
-			return interfaces.WorkFailureTypeInternalServerError
+			return workerexecution.WorkFailureTypeInternalServerError
 		}
 	}
 
@@ -243,26 +243,26 @@ func classifyGeminiFailureSignal(errorType, status, code, message string) interf
 		"permission denied", "http 401", "status 401", "code 401",
 		"http 403", "status 403", "code 403", "authentication failed",
 		"unauthorized", "forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	case containsAny(normalized,
 		"badrequesterror", "invalid_argument", "invalid argument", "invalid request",
 		"bad request", "http 400", "status 400", "code 400"):
-		return interfaces.WorkFailureTypePermanentBadRequest
+		return workerexecution.WorkFailureTypePermanentBadRequest
 	case containsAny(normalized,
 		"resource_exhausted", "resource exhausted", "ratelimitexceeded", "rate limit",
 		"quota exceeded", "too many requests", "http 429", "status 429", "code 429"):
-		return interfaces.WorkFailureTypeThrottled
+		return workerexecution.WorkFailureTypeThrottled
 	case containsAny(normalized,
 		"deadline_exceeded", "deadline exceeded", "request timed out", "request timeout",
 		"command timed out", "provider timed out"):
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	case containsAny(normalized,
 		"internal server error", "service unavailable", "upstream unavailable",
 		"http 500", "status 500", "code 500", "http 502", "status 502", "code 502",
 		"http 503", "status 503", "code 503", "http 504", "status 504", "code 504"):
-		return interfaces.WorkFailureTypeInternalServerError
+		return workerexecution.WorkFailureTypeInternalServerError
 	default:
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 
@@ -296,9 +296,9 @@ func isGeminiErrorSignal(normalized string) bool {
 		"invalid request", "bad request", "service unavailable", "upstream unavailable")
 }
 
-func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage string) FailureResult {
+func geminiFailureResult(reason workerexecution.WorkFailureType, upstreamMessage string) FailureResult {
 	message := geminiFixedFailureMessage(reason)
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+	if reason == workerexecution.WorkFailureTypeAuthFailure || reason == workerexecution.WorkFailureTypePermanentBadRequest {
 		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
 			message = safe
 		}
@@ -306,17 +306,17 @@ func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage stri
 	return FailureResult{Reason: reason, Message: message}
 }
 
-func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
+func geminiFixedFailureMessage(reason workerexecution.WorkFailureType) string {
 	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return authFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
+	case workerexecution.WorkFailureTypePermanentBadRequest:
 		return badRequestMessage
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return throttleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return timeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return serverFailureMessage
 	default:
 		return ""

@@ -9,11 +9,11 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/packageassets"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const packagedRuntimeScriptPath = "scripts/pf2-003-runtime-fixture.sh"
@@ -60,7 +60,7 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 		t.Fatalf("dispatch history = %#v, want one completed dispatch", snapshot.DispatchHistory)
 	}
 	dispatch := snapshot.DispatchHistory[0]
-	if dispatch.Outcome != interfaces.OutcomeFailed || dispatch.Reason != "packaged runtime failure" {
+	if dispatch.Outcome != workerexecution.OutcomeFailed || dispatch.Reason != "packaged runtime failure" {
 		t.Fatalf("dispatch outcome = %s reason = %q, want FAILED with script stderr", dispatch.Outcome, dispatch.Reason)
 	}
 

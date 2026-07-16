@@ -9,10 +9,11 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"go.uber.org/zap"
 )
 
@@ -36,7 +37,7 @@ type Bundle struct {
 	LeaseExecution       *modelhost.LeaseExecution
 	Logger               *zap.Logger
 	LogSink              *logging.RuntimeLogSink
-	MetricsSink          *logging.RuntimeMetricsSink
+	MetricsSink          *platformmetrics.RuntimeMetricsSink
 	Recording            *replay.Recorder
 	RecordPath           string
 	dispatchMetricFields sync.Map

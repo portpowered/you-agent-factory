@@ -9,7 +9,10 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
@@ -170,7 +173,7 @@ func assertPortableExpandedExecution(t *testing.T, targetDir string, loaded *fac
 	if err != nil {
 		t.Fatalf("execute expanded workstation: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted || result.Output != "portable copied script accepted" {
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "portable copied script accepted" {
 		t.Fatalf("result = %#v", result)
 	}
 
@@ -190,21 +193,21 @@ func assertPortableExpandedExecution(t *testing.T, targetDir string, loaded *fac
 	}
 }
 
-func portableWorkDispatch() interfaces.WorkDispatch {
+func portableWorkDispatch() work.WorkDispatch {
 	now := time.Now()
-	return interfaces.WorkDispatch{
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-1",
 		TransitionID:    "transition-1",
 		WorkerType:      "executor",
 		WorkstationName: "execute-story",
 		InputTokens: []any{
-			interfaces.Token{
+			factorytoken.Token{
 				ID:      "token-1",
 				PlaceID: "task:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-001",
 					WorkTypeID: "task",
-					DataType:   interfaces.DataTypeWork,
+					DataType:   factorytoken.DataTypeWork,
 					TraceID:    "trace-001",
 					Payload:    []byte("portable task"),
 				},

@@ -4,9 +4,10 @@ import (
 	"sort"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -180,13 +181,13 @@ func newQueuedCandidateAnalysis(et interfaces.EnabledTransition, topology *state
 	}
 }
 
-func (a *queuedCandidateAnalysis) consumeArc(arcName string, tokens []interfaces.Token) {
+func (a *queuedCandidateAnalysis) consumeArc(arcName string, tokens []factorytoken.Token) {
 	for _, token := range tokens {
 		a.consumeToken(arcName, token)
 	}
 }
 
-func (a *queuedCandidateAnalysis) consumeToken(arcName string, token interfaces.Token) {
+func (a *queuedCandidateAnalysis) consumeToken(arcName string, token factorytoken.Token) {
 	tokenID := token.ID
 	if tokenID == "" {
 		return
@@ -209,7 +210,7 @@ func (a *queuedCandidateAnalysis) consumeToken(arcName string, token interfaces.
 	}
 }
 
-func (a *queuedCandidateAnalysis) observeTraceCandidate(token interfaces.Token) {
+func (a *queuedCandidateAnalysis) observeTraceCandidate(token factorytoken.Token) {
 	if !isCustomerWorkToken(token) {
 		return
 	}
@@ -241,15 +242,15 @@ func snapshotTopology(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnap
 	return snapshot.Topology
 }
 
-func isProcessingWorkToken(token interfaces.Token, topology *state.Net) bool {
+func isProcessingWorkToken(token factorytoken.Token, topology *state.Net) bool {
 	if topology == nil || !isCustomerWorkToken(token) {
 		return false
 	}
 	return topology.StateCategoryForPlace(token.PlaceID) == state.StateCategoryProcessing
 }
 
-func isCustomerWorkToken(token interfaces.Token) bool {
-	if token.Color.DataType == interfaces.DataTypeResource {
+func isCustomerWorkToken(token factorytoken.Token) bool {
+	if token.Color.DataType == factorytoken.DataTypeResource {
 		return false
 	}
 	return !interfaces.IsSystemTimeWorkType(token.Color.WorkTypeID)
@@ -373,7 +374,7 @@ func buildInitializedTraceRegistry(snapshot *interfaces.EngineStateSnapshot[petr
 			dispatchAt = dispatch.StartTime
 		}
 		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.TraceID == "" || token.Color.DataType == interfaces.DataTypeResource {
+			if token.Color.TraceID == "" || token.Color.DataType == factorytoken.DataTypeResource {
 				continue
 			}
 			if earliest, ok := registry[token.Color.TraceID]; !ok || dispatchAt.Before(earliest) {
@@ -384,7 +385,7 @@ func buildInitializedTraceRegistry(snapshot *interfaces.EngineStateSnapshot[petr
 			if mutation.Token == nil {
 				continue
 			}
-			if mutation.Token.Color.TraceID == "" || mutation.Token.Color.DataType == interfaces.DataTypeResource {
+			if mutation.Token.Color.TraceID == "" || mutation.Token.Color.DataType == factorytoken.DataTypeResource {
 				continue
 			}
 			if earliest, ok := registry[mutation.Token.Color.TraceID]; !ok || dispatchAt.Before(earliest) {
@@ -402,7 +403,7 @@ func activeTracesFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.Mar
 	}
 
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if token.Color.TraceID == "" {
@@ -413,7 +414,7 @@ func activeTracesFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.Mar
 
 	for _, dispatch := range snapshot.Dispatches {
 		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.DataType == interfaces.DataTypeResource {
+			if token.Color.DataType == factorytoken.DataTypeResource {
 				continue
 			}
 			if token.Color.TraceID == "" {
@@ -426,7 +427,7 @@ func activeTracesFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.Mar
 	return active
 }
 
-func stableArcNames(bindings map[string][]interfaces.Token) []string {
+func stableArcNames(bindings map[string][]factorytoken.Token) []string {
 	arcNames := make([]string, 0, len(bindings))
 	for arcName := range bindings {
 		arcNames = append(arcNames, arcName)

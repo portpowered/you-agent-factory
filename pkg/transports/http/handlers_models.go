@@ -12,8 +12,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -153,7 +153,7 @@ func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocatio
 	return request, nil
 }
 
-func generatedResolvedModelInvocationBindings(values []interfaces.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
+func generatedResolvedModelInvocationBindings(values []workerexecution.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
 	if len(values) == 0 {
 		return nil
 	}

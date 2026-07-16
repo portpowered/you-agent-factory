@@ -8,12 +8,17 @@ import (
 	"sync"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/go-co-op/gocron/v2"
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/work/timework"
 	"go.uber.org/zap"
+
+	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work/timework"
 )
 
 const (
@@ -139,7 +144,7 @@ func (s *Service) registerCronJobs(
 	workflowIdentity := s.workflowIdentity(factoryDir)
 	for _, workstation := range factoryCfg.Workstations {
 		ws := workstation
-		if ws.Kind != interfaces.WorkstationKindCron {
+		if ws.Kind != workertaxonomy.WorkstationKindCron {
 			continue
 		}
 		schedule, err := cronSchedule(ws)
@@ -385,8 +390,8 @@ func (s *Service) cronExecutionTimeout(
 
 // CronTriggerFailure classifies cron tick submit failures for retry policy.
 type CronTriggerFailure struct {
-	Family    interfaces.WorkFailureFamily
-	Type      interfaces.WorkFailureType
+	Family    workerexecution.WorkFailureFamily
+	Type      workerexecution.WorkFailureType
 	Retryable bool
 }
 
@@ -394,20 +399,20 @@ type CronTriggerFailure struct {
 func ClassifyCronTriggerFailure(err error) CronTriggerFailure {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return CronTriggerFailure{
-			Family:    interfaces.WorkFailureFamilyRetryable,
-			Type:      interfaces.WorkFailureTypeTimeout,
+			Family:    workerexecution.WorkFailureFamilyRetryable,
+			Type:      workerexecution.WorkFailureTypeTimeout,
 			Retryable: true,
 		}
 	}
 	if errors.Is(err, context.Canceled) {
 		return CronTriggerFailure{
-			Family: interfaces.WorkFailureFamilyTerminal,
-			Type:   interfaces.WorkFailureTypeUnknown,
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeUnknown,
 		}
 	}
 	return CronTriggerFailure{
-		Family:    interfaces.WorkFailureFamilyRetryable,
-		Type:      interfaces.WorkFailureTypeInternalServerError,
+		Family:    workerexecution.WorkFailureFamilyRetryable,
+		Type:      workerexecution.WorkFailureTypeInternalServerError,
 		Retryable: true,
 	}
 }

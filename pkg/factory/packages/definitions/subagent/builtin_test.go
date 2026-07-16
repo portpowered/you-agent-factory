@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 const (
@@ -29,7 +29,7 @@ func TestBuiltInSubagentFactoryJSON_AssemblesFromDeclarativePromptAssets(t *test
 	if cfg.Workers[0].Body != wantWorkerPrompt {
 		t.Fatal("subagent-worker body does not exactly match authored asset")
 	}
-	if cfg.Workers[0].AgentTools == nil || cfg.Workers[0].AgentTools.Policy != interfaces.AgentWorkerToolPolicyReadOnly {
+	if cfg.Workers[0].AgentTools == nil || cfg.Workers[0].AgentTools.Policy != workerconfig.AgentToolPolicyReadOnly {
 		t.Fatalf("subagent-worker agentTools = %#v, want READ_ONLY policy", cfg.Workers[0].AgentTools)
 	}
 	if len(cfg.Workstations) != 1 || cfg.Workstations[0].Name != "run-subagent" {

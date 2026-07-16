@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -100,9 +100,9 @@ func TestInvokeModel_ClassifiesProviderRuntimeFailureWithoutRawLogs(t *testing.T
 
 type timeoutProvider struct{}
 
-func (timeoutProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
-		interfaces.WorkFailureTypeTimeout,
+func (timeoutProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		workerexecution.WorkFailureTypeTimeout,
 		"execution timeout",
 		nil,
 	)
@@ -110,9 +110,9 @@ func (timeoutProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRe
 
 type runtimeFailureProvider struct{}
 
-func (runtimeFailureProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
-		interfaces.WorkFailureTypeUnknown,
+func (runtimeFailureProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		workerexecution.WorkFailureTypeUnknown,
 		"ERROR: subprocess transcript should not reach customers",
 		nil,
 	)

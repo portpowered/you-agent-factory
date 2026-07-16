@@ -5,8 +5,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
 	"go.uber.org/zap"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // StartPollersForRuntime supervises all configured poller workstations until ctx is canceled.
@@ -35,7 +38,7 @@ func (s *Service) startPollersForRuntime(
 ) error {
 	for _, workstation := range factoryCfg.Workstations {
 		ws := workstation
-		if ws.Kind != interfaces.WorkstationKindPoller {
+		if ws.Kind != workertaxonomy.WorkstationKindPoller {
 			continue
 		}
 
@@ -58,10 +61,10 @@ func (s *Service) startPollersForRuntime(
 			continue
 		}
 		switch {
-		case interfaces.IsScriptWorkerType(workerDef.Type):
+		case workertaxonomy.IsScriptWorkerType(workerDef.Type):
 			s.StartScriptPoller(ctx, sidecars, runtimeCfg, ws, workerDef, submitter)
-		case interfaces.IsPollerWorkerType(workerDef.Type):
-			if workerDef.Provider != interfaces.HostedWorkerProviderLinear {
+		case workertaxonomy.IsPollerWorkerType(workerDef.Type):
+			if workerDef.Provider != workertaxonomy.HostedWorkerProviderLinear {
 				s.logger().Warn("hosted poller disabled",
 					zap.String("workstation", ws.Name),
 					zap.String("worker", workerName),

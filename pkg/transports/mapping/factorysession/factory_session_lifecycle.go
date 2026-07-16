@@ -2,12 +2,11 @@ package factorysession
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -75,7 +74,7 @@ func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) 
 	response := factoryapi.FactorySessionDurableReadModel{
 		SessionId:        result.SessionID,
 		Status:           factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(result.OrchestratorKind),
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
 		ResolvedSource:   resolvedSourceToAPI(result.ResolvedSource),
 	}
 	applyOptionalSessionReadResponseFields(&response, result)
@@ -441,18 +440,6 @@ func lifecycleControlLinksToAPI(links factorysessionexecution.LifecycleControlLi
 	return response
 }
 
-// LiveLifecycleControlLinksForSession builds post-control inspection links for one
-// live workspace factory session.
-func LiveLifecycleControlLinksForSession(sessionID string) factorysessionexecution.LifecycleControlLinks {
-	base := fmt.Sprintf("/factory-sessions/%s", strings.TrimSpace(sessionID))
-	return factorysessionexecution.LifecycleControlLinks{
-		Session: base,
-		Status:  base,
-		Results: base + "/result",
-		Events:  base + "/events",
-	}
-}
-
 // LifecycleControlSuccessStatus maps one accepted lifecycle-control result to the
 // HTTP success status for the public durable control routes.
 func LifecycleControlSuccessStatus(result factorysessionexecution.LifecycleControlResult) int {
@@ -539,6 +526,6 @@ func LiveLifecycleControlResponse(
 		Operation: operation,
 		Outcome:   outcome,
 		Status:    status,
-		Links:     LiveLifecycleControlLinksForSession(sessionID),
+		Links:     factorysessionexecution.LiveLifecycleControlLinksForSession(sessionID),
 	})
 }

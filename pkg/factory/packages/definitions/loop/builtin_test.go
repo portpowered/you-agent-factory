@@ -8,8 +8,9 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -160,8 +161,8 @@ func TestBuiltInLoopFactory_AppliesOperatorModelOverridesWithoutChangingLoopConf
 	if !ok {
 		t.Fatal("expected loop worker")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderCursor) {
-		t.Fatalf("loop worker model provider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCursor)
+	if worker.ModelProvider != string(modelprovider.Cursor) {
+		t.Fatalf("loop worker model provider = %q, want %q", worker.ModelProvider, modelprovider.Cursor)
 	}
 	if worker.Model != "loop-cursor-model" {
 		t.Fatalf("loop worker model = %q, want loop-cursor-model", worker.Model)

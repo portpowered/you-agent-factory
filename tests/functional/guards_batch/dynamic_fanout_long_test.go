@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,10 +20,10 @@ func TestConfigDriven_DynamicFanout_ThreeChildren(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Config-driven fanout"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Page 1 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Page 2 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Page 3 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Page 1 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Page 2 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Page 3 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
 	)
 
 	parserExec := &fanoutParserExecutor{childCount: 3}
@@ -59,7 +59,7 @@ func TestConfigDriven_DynamicFanout_AnyChildFailedRoutesParent(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Child failure fan-in"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Chapter failure recorded. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Chapter failure recorded. COMPLETE"},
 	)
 
 	parserExec := &fanoutParserExecutor{childCount: 3}
@@ -104,9 +104,9 @@ func TestConfigDriven_DynamicFanout_ParentCompletes(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Parent completion check"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Page 1 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Page 2 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Page 1 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Page 2 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
 	)
 
 	parserExec := &fanoutParserExecutor{childCount: 2}

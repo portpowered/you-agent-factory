@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ProjectedLifecycleControlStatus returns the lifecycle-control status that live
@@ -295,12 +293,12 @@ type interruptedDispatchPreservation struct {
 
 // ObservedCancellationStatusForInterrupt returns the provider or process cancellation
 // status observed when one dispatch interruption is recorded.
-func ObservedCancellationStatusForInterrupt(priorStatus DispatchStatus) factoryapi.FactoryDispatchStatus {
+func ObservedCancellationStatusForInterrupt(priorStatus DispatchStatus) DispatchStatus {
 	switch priorStatus {
 	case DispatchStatusRunning:
-		return factoryapi.FactoryDispatchStatusRUNNING
+		return DispatchStatusRunning
 	default:
-		return factoryapi.FactoryDispatchStatusINTERRUPTED
+		return DispatchStatusInterrupted
 	}
 }
 

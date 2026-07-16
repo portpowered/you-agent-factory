@@ -7,10 +7,15 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func mustNewCatalogHost(t *testing.T, assets AssetGateway, opts Options) *CatalogHost {
@@ -169,11 +174,11 @@ type recordingConstructorAssets struct {
 func (a *recordingConstructorAssets) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (AssetPullResult, error) {
 	a.pulls++
 	return AssetPullResult{
-		PullOutcome: factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		PullOutcome: managedruntime.PullOutcomeInstalledSuccessfully,
 		Snapshot: ReadinessSnapshot{
-			Identity:       Identity{Name: "OMNIVOICE_Q4_K_M", Locality: factoryapi.WorkerModelLocalityLocal},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+			Identity:       Identity{Name: "OMNIVOICE_Q4_K_M", Locality: managedruntime.LocalityLocal},
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateInstalled,
 		},
 	}, nil
 }
@@ -186,15 +191,15 @@ func (a *recordingConstructorAssets) InspectRuntimeCache(context.Context, *facto
 func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing.T) {
 	identity := Identity{
 		Name:     "OMNIVOICE_Q4_K_M",
-		Locality: factoryapi.WorkerModelLocalityLocal,
+		Locality: managedruntime.LocalityLocal,
 	}
 
 	cases := []struct {
 		name        string
 		inspection  CacheInspection
 		unsupported bool
-		readiness   factoryapi.ManagedRuntimeReadinessState
-		lifecycle   factoryapi.ManagedRuntimeLifecycleState
+		readiness   managedruntime.ReadinessState
+		lifecycle   managedruntime.LifecycleState
 		failure     FailureClass
 	}{
 		{
@@ -204,8 +209,8 @@ func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing
 				Installed:          true,
 				InstalledFileCount: 2,
 			},
-			readiness: factoryapi.ManagedRuntimeReadinessStateREADY,
-			lifecycle: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+			readiness: managedruntime.ReadinessStateReady,
+			lifecycle: managedruntime.LifecycleStateInstalled,
 			failure:   FailureClassNone,
 		},
 		{
@@ -214,8 +219,8 @@ func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing
 				Supported:     true,
 				MissingAssets: []string{"model.gguf"},
 			},
-			readiness: factoryapi.ManagedRuntimeReadinessStateMISSING,
-			lifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			readiness: managedruntime.ReadinessStateMissing,
+			lifecycle: managedruntime.LifecycleStateNotInstalled,
 			failure:   FailureClassMissingAssets,
 		},
 		{
@@ -224,8 +229,8 @@ func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing
 				Supported:          true,
 				InstalledFileCount: 1,
 			},
-			readiness: factoryapi.ManagedRuntimeReadinessStateLOADING,
-			lifecycle: factoryapi.ManagedRuntimeLifecycleStateINSTALLING,
+			readiness: managedruntime.ReadinessStateLoading,
+			lifecycle: managedruntime.LifecycleStateInstalling,
 			failure:   FailureClassLoadingTimeout,
 		},
 		{
@@ -234,15 +239,15 @@ func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing
 				Supported:        true,
 				PartialArtifacts: true,
 			},
-			readiness: factoryapi.ManagedRuntimeReadinessStateFAILED,
-			lifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			readiness: managedruntime.ReadinessStateFailed,
+			lifecycle: managedruntime.LifecycleStateNotInstalled,
 			failure:   FailureClassMissingAssets,
 		},
 		{
 			name:        "unsupported",
 			unsupported: true,
-			readiness:   factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
-			lifecycle:   factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE,
+			readiness:   managedruntime.ReadinessStateUnsupported,
+			lifecycle:   managedruntime.LifecycleStateNotApplicable,
 			failure:     FailureClassUnsupportedRuntime,
 		},
 	}
@@ -274,15 +279,15 @@ func TestFailureClassForReadinessState_MapsPublicContractStates(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		readiness factoryapi.ManagedRuntimeReadinessState
+		readiness managedruntime.ReadinessState
 		want      FailureClass
 	}{
-		{name: "ready", readiness: factoryapi.ManagedRuntimeReadinessStateREADY, want: FailureClassNone},
-		{name: "missing", readiness: factoryapi.ManagedRuntimeReadinessStateMISSING, want: FailureClassMissingAssets},
-		{name: "loading", readiness: factoryapi.ManagedRuntimeReadinessStateLOADING, want: FailureClassLoadingTimeout},
-		{name: "failed", readiness: factoryapi.ManagedRuntimeReadinessStateFAILED, want: FailureClassProcessCrash},
-		{name: "unsupported", readiness: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED, want: FailureClassUnsupportedRuntime},
-		{name: "unknown", readiness: factoryapi.ManagedRuntimeReadinessState("UNKNOWN"), want: FailureClassUnsupportedRuntime},
+		{name: "ready", readiness: managedruntime.ReadinessStateReady, want: FailureClassNone},
+		{name: "missing", readiness: managedruntime.ReadinessStateMissing, want: FailureClassMissingAssets},
+		{name: "loading", readiness: managedruntime.ReadinessStateLoading, want: FailureClassLoadingTimeout},
+		{name: "failed", readiness: managedruntime.ReadinessStateFailed, want: FailureClassProcessCrash},
+		{name: "unsupported", readiness: managedruntime.ReadinessStateUnsupported, want: FailureClassUnsupportedRuntime},
+		{name: "unknown", readiness: managedruntime.ReadinessState("UNKNOWN"), want: FailureClassUnsupportedRuntime},
 	}
 
 	for _, test := range tests {
@@ -298,13 +303,13 @@ func TestManagedRuntimeFromSnapshot_PreservesPublicVocabulary(t *testing.T) {
 	snapshot := ReadinessSnapshot{
 		Identity: Identity{
 			Name:     "OMNIVOICE_Q4_K_M",
-			Locality: factoryapi.WorkerModelLocalityLocal,
-			SupportedOperations: []factoryapi.ModelOperation{{
+			Locality: managedruntime.LocalityLocal,
+			SupportedOperations: []managedruntime.Operation{{
 				Name: "TTS",
 			}},
 		},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateInstalled,
 		FailureClass:   FailureClassNone,
 		Diagnostics: map[string]string{
 			"readinessState": "READY",
@@ -317,10 +322,10 @@ func TestManagedRuntimeFromSnapshot_PreservesPublicVocabulary(t *testing.T) {
 	if managed.Identity != snapshot.Identity.Name {
 		t.Fatalf("identity = %q, want %q", managed.Identity, snapshot.Identity.Name)
 	}
-	if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if managed.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
 	}
-	if managed.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if managed.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("lifecycle = %s, want INSTALLED", managed.LifecycleState)
 	}
 	if len(managed.SupportedOperations) != 1 || managed.SupportedOperations[0].Name != "TTS" {
@@ -345,7 +350,7 @@ func TestCatalogHost_InspectReadinessAndLeaseLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if ready.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("ready state = %s, want READY", ready.ReadinessState)
 	}
 
@@ -380,7 +385,7 @@ func TestCatalogHost_BlocksLeaseForNonReadyStates(t *testing.T) {
 	if !errors.As(err, &readinessErr) {
 		t.Fatalf("error = %v, want *ReadinessError", err)
 	}
-	if readinessErr.Snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
+	if readinessErr.Snapshot.ReadinessState != managedruntime.ReadinessStateLoading {
 		t.Fatalf("readiness = %s, want LOADING", readinessErr.Snapshot.ReadinessState)
 	}
 	if !errors.Is(err, ErrLoadingTimeout) {
@@ -428,26 +433,26 @@ func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig)
 }
 
 func catalogFactoryConfig(includeResource bool) *interfaces.FactoryConfig {
-	worker := interfaces.WorkerConfig{
+	worker := workerconfig.Config{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
 		}},
 	}
 	if includeResource {
-		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
+		worker.Resources = []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}}
 	}
 	cfg := &interfaces.FactoryConfig{
 		Name:    "factory",
-		Workers: []interfaces.WorkerConfig{worker},
+		Workers: []workerconfig.Config{worker},
 	}
 	if includeResource {
-		cfg.Resources = []interfaces.ResourceConfig{{
+		cfg.Resources = []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",

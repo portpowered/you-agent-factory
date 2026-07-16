@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -20,7 +21,7 @@ import (
 func TestWorktreePassthrough(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "my-feature-branch",
 		WorkID:     "work-wt-001",
 		WorkTypeID: "task",
@@ -70,8 +71,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
+	if call.Command != string(modelprovider.Claude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})

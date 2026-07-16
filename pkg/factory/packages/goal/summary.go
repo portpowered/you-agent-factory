@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // ShouldFormatInvocationSummary reports whether workstation output should be
@@ -18,7 +21,9 @@ func ShouldFormatInvocationSummary(workstation *interfaces.FactoryWorkstationCon
 	if strings.TrimSpace(workstation.Name) != PackagedExecuteWorkstationName {
 		return false
 	}
-	switch interfaces.EffectiveWorkstationTypeForCompatibility(*workstation) {
+	switch workercompatibility.EffectiveWorkstationTypeForCompatibility(workercompatibility.Workstation{
+		Name: workstation.Name, Type: workstation.Type, Kind: workertaxonomy.WorkstationKind(workstation.Kind), WorkerTypeName: workstation.WorkerTypeName,
+	}) {
 	case interfaces.WorkstationTypeModel, interfaces.WorkstationTypeAgent:
 		return true
 	default:
@@ -28,13 +33,13 @@ func ShouldFormatInvocationSummary(workstation *interfaces.FactoryWorkstationCon
 
 // SummaryContentFromWorkerOutput converts goal worker output into canonical text
 // work content for invocation primary-result selection.
-func SummaryContentFromWorkerOutput(output, stopToken string) ([]interfaces.WorkContentPart, error) {
+func SummaryContentFromWorkerOutput(output, stopToken string) ([]work.WorkContentPart, error) {
 	summary := normalizeGoalSummaryText(output, stopToken)
 	if summary == "" {
 		return nil, fmt.Errorf("goal worker output is empty after normalization")
 	}
-	return []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: summary,
 	}}, nil
 }

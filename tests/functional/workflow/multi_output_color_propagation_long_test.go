@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,7 +16,7 @@ func TestMultiOutputColorPropagation(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "my-feature-plan",
 		WorkID:     "work-idea-001",
 		WorkTypeID: "idea",
@@ -73,7 +73,7 @@ func TestMultiOutputColorPropagation_NameAvailableDownstream(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "multi_output_color_propagation"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "prd-factory-log-levels",
 		WorkID:     "work-idea-002",
 		WorkTypeID: "idea",

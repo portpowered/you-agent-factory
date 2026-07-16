@@ -4,16 +4,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestPollerRunWorkstationKindTargets_RejectsConflictingBehavior(t *testing.T) {
 	t.Parallel()
 
 	cfg := taxonomyCompatibilityBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:    "script-poller",
 		Type:    interfaces.WorkerTypeScript,
 		Command: "factory/scripts/poll.sh",
@@ -38,7 +39,7 @@ func TestWorkerWorkstationBehaviorCompatibilityTargets_RejectsIncompatiblePairin
 	t.Parallel()
 
 	cfg := taxonomyCompatibilityBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{
+	cfg.Workers = []workerconfig.Config{
 		{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()},
 		{Name: "agent", Type: interfaces.WorkerTypeAgent},
 	}
@@ -63,7 +64,7 @@ func TestValidate_IncludesWorkerWorkstationBehaviorCompatibilityTargets(t *testi
 	t.Parallel()
 
 	cfg := taxonomyCompatibilityBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()}}
+	cfg.Workers = []workerconfig.Config{{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: taxonomyInferenceOperationFixture()}}
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:           "agent-with-infer",
 		Type:           interfaces.WorkstationTypeAgent,
@@ -89,16 +90,16 @@ func taxonomyCompatibilityBaseConfig() *interfaces.FactoryConfig {
 	}
 }
 
-func taxonomyInferenceOperationFixture() []interfaces.ModelOperation {
-	return []interfaces.ModelOperation{{
+func taxonomyInferenceOperationFixture() []workerconfig.ModelOperation {
+	return []workerconfig.ModelOperation{{
 		Name: "TTS",
-		Inputs: []interfaces.ModelOperationSlot{{
+		Inputs: []workerconfig.ModelOperationSlot{{
 			Name:         "text",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 		}},
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []workerconfig.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 		}},
 	}}
 }

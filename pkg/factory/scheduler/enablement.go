@@ -6,10 +6,11 @@ import (
 	"sort"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // EnablementEvaluator wraps transition enablement logic with structured logging.
@@ -116,8 +117,8 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		}
 	}
 
-	guardBindings := make(map[string]*interfaces.Token)
-	result := make(map[string][]interfaces.Token)
+	guardBindings := make(map[string]*factorytoken.Token)
+	result := make(map[string][]factorytoken.Token)
 	arcModes := make(map[string]interfaces.ArcMode)
 
 	// Phase 1: evaluate unguarded arcs to build bindings.
@@ -175,8 +176,8 @@ func (e *EnablementEvaluator) evaluateGuardedArc(
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	arc *petri.Arc,
 	marking *petri.MarkingSnapshot,
-	guardBindings map[string]*interfaces.Token,
-	result map[string][]interfaces.Token,
+	guardBindings map[string]*factorytoken.Token,
+	result map[string][]factorytoken.Token,
 	arcModes map[string]interfaces.ArcMode,
 ) bool {
 	candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
@@ -250,8 +251,8 @@ func (e *EnablementEvaluator) findSingleTokenBindingTransition(
 		snapshot:            snapshot,
 		runtime:             singleTokenRuntimeContext(e, tr, snapshot),
 		order:               singleTokenBindingOrder(tr),
-		bindings:            make(map[string]*interfaces.Token, len(tr.InputArcs)),
-		result:              make(map[string][]interfaces.Token, len(tr.InputArcs)),
+		bindings:            make(map[string]*factorytoken.Token, len(tr.InputArcs)),
+		result:              make(map[string][]factorytoken.Token, len(tr.InputArcs)),
 		arcModes:            make(map[string]interfaces.ArcMode, len(tr.InputArcs)),
 		usedConsumeTokenIDs: make(map[string]bool),
 	}
@@ -315,8 +316,8 @@ type singleTokenBindingSearch struct {
 	snapshot            *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	runtime             petri.RuntimeGuardContext
 	order               []int
-	bindings            map[string]*interfaces.Token
-	result              map[string][]interfaces.Token
+	bindings            map[string]*factorytoken.Token
+	result              map[string][]factorytoken.Token
 	arcModes            map[string]interfaces.ArcMode
 	usedConsumeTokenIDs map[string]bool
 }
@@ -342,7 +343,7 @@ func (s *singleTokenBindingSearch) search(position int) bool {
 	return false
 }
 
-func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates []interfaces.Token) []interfaces.Token {
+func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates []factorytoken.Token) []factorytoken.Token {
 	if arc.Guard == nil {
 		return candidates
 	}
@@ -353,14 +354,14 @@ func (s *singleTokenBindingSearch) matchedCandidates(arc *petri.Arc, candidates 
 	return stableTokens(guardMatched)
 }
 
-func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, key string, candidate interfaces.Token) bool {
+func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, key string, candidate factorytoken.Token) bool {
 	if arc.Mode != interfaces.ArcModeObserve && s.usedConsumeTokenIDs[candidate.ID] {
 		return false
 	}
 
 	candidateCopy := candidate
 	s.bindings[key] = &candidateCopy
-	s.result[key] = []interfaces.Token{candidateCopy}
+	s.result[key] = []factorytoken.Token{candidateCopy}
 	s.arcModes[key] = arc.Mode
 	if arc.Mode != interfaces.ArcModeObserve {
 		s.usedConsumeTokenIDs[candidate.ID] = true
@@ -379,7 +380,7 @@ func (s *singleTokenBindingSearch) tryCandidate(position int, arc *petri.Arc, ke
 	return false
 }
 
-func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.RuntimeGuardContext, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
+func (e *EnablementEvaluator) evaluateGuard(guard petri.Guard, runtime petri.RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *petri.MarkingSnapshot) ([]factorytoken.Token, bool) {
 	if guard == nil {
 		return nil, false
 	}
@@ -444,8 +445,8 @@ func expandRepeatedCardinalityOneBindings(tr *petri.Transition, marking *petri.M
 func repeatedBindingArcTokens(
 	tr *petri.Transition,
 	marking *petri.MarkingSnapshot,
-) (map[string][]interfaces.Token, int, bool, bool) {
-	arcTokens := make(map[string][]interfaces.Token)
+) (map[string][]factorytoken.Token, int, bool, bool) {
+	arcTokens := make(map[string][]factorytoken.Token)
 	candidateCount := 0
 	hasWorkInput := false
 	for i := range tr.InputArcs {
@@ -464,7 +465,7 @@ func repeatedBindingTokensForInput(
 	arc *petri.Arc,
 	marking *petri.MarkingSnapshot,
 	currentCandidateCount int,
-) (string, []interfaces.Token, int, bool, bool) {
+) (string, []factorytoken.Token, int, bool, bool) {
 	if !isSingleTokenCardinality(arc.Cardinality) {
 		return "", nil, 0, false, false
 	}
@@ -482,7 +483,7 @@ func repeatedBindingTokensForInput(
 	return key, tokens, candidateCount, hasWorkInput, true
 }
 
-func repeatedBindingTokensForArc(arc *petri.Arc, marking *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
+func repeatedBindingTokensForArc(arc *petri.Arc, marking *petri.MarkingSnapshot) ([]factorytoken.Token, bool) {
 	tokens := stableTokens(marking.TokensInPlace(arc.PlaceID))
 	if len(tokens) == 0 {
 		return nil, false
@@ -508,7 +509,7 @@ func minPositiveCandidateCount(current int, candidate int) int {
 	return current
 }
 
-func containsWorkCandidateToken(tokens []interfaces.Token) bool {
+func containsWorkCandidateToken(tokens []factorytoken.Token) bool {
 	for _, token := range tokens {
 		if isWorkCandidateToken(token) {
 			return true
@@ -520,22 +521,22 @@ func containsWorkCandidateToken(tokens []interfaces.Token) bool {
 func expandRepeatedBindingCandidates(
 	tr *petri.Transition,
 	base interfaces.EnabledTransition,
-	arcTokens map[string][]interfaces.Token,
+	arcTokens map[string][]factorytoken.Token,
 	candidateCount int,
 ) []interfaces.EnabledTransition {
 	expanded := make([]interfaces.EnabledTransition, 0, candidateCount)
 	for candidateIndex := 0; candidateIndex < candidateCount; candidateIndex++ {
-		bindings := make(map[string][]interfaces.Token, len(base.Bindings))
+		bindings := make(map[string][]factorytoken.Token, len(base.Bindings))
 		arcModes := make(map[string]interfaces.ArcMode, len(base.ArcModes))
 		for i := range tr.InputArcs {
 			arc := &tr.InputArcs[i]
 			key := arcKey(arc)
 			arcModes[key] = arc.Mode
 			if arc.Mode == interfaces.ArcModeObserve {
-				bindings[key] = append([]interfaces.Token(nil), base.Bindings[key]...)
+				bindings[key] = append([]factorytoken.Token(nil), base.Bindings[key]...)
 				continue
 			}
-			bindings[key] = []interfaces.Token{arcTokens[key][candidateIndex]}
+			bindings[key] = []factorytoken.Token{arcTokens[key][candidateIndex]}
 		}
 		expanded = append(expanded, interfaces.EnabledTransition{
 			TransitionID: base.TransitionID,
@@ -554,11 +555,11 @@ func isSingleTokenCardinality(cardinality petri.ArcCardinality) bool {
 	return cardinality.Mode == petri.CardinalityN && cardinality.Count == 1
 }
 
-func isWorkCandidateToken(token interfaces.Token) bool {
-	if token.Color.DataType == interfaces.DataTypeResource {
+func isWorkCandidateToken(token factorytoken.Token) bool {
+	if token.Color.DataType == factorytoken.DataTypeResource {
 		return false
 	}
-	return token.Color.DataType == interfaces.DataTypeWork ||
+	return token.Color.DataType == factorytoken.DataTypeWork ||
 		token.Color.WorkID != "" ||
 		token.Color.WorkTypeID != "" ||
 		token.Color.TraceID != ""
@@ -602,11 +603,11 @@ func transitionSortName(tr *petri.Transition) string {
 	return tr.Name
 }
 
-func stableTokens(tokens []interfaces.Token) []interfaces.Token {
+func stableTokens(tokens []factorytoken.Token) []factorytoken.Token {
 	if len(tokens) < 2 {
 		return tokens
 	}
-	ordered := append([]interfaces.Token(nil), tokens...)
+	ordered := append([]factorytoken.Token(nil), tokens...)
 	sort.Slice(ordered, func(i, j int) bool {
 		if ordered[i].ID == ordered[j].ID {
 			return ordered[i].PlaceID < ordered[j].PlaceID
@@ -631,7 +632,7 @@ func FindEnabledTransitions(n *state.Net, marking *petri.MarkingSnapshot) []inte
 
 // ApplyCardinality selects the appropriate number of tokens from matched candidates
 // based on the arc's cardinality mode. Returns nil if the cardinality cannot be satisfied.
-func ApplyCardinality(tokens []interfaces.Token, cardinality petri.ArcCardinality) []interfaces.Token {
+func ApplyCardinality(tokens []factorytoken.Token, cardinality petri.ArcCardinality) []factorytoken.Token {
 	switch cardinality.Mode {
 	case petri.CardinalityOne:
 		if len(tokens) < 1 {
@@ -659,7 +660,7 @@ func ApplyCardinality(tokens []interfaces.Token, cardinality petri.ArcCardinalit
 
 	case petri.CardinalityZeroOrMore:
 		if tokens == nil {
-			return []interfaces.Token{}
+			return []factorytoken.Token{}
 		}
 		return tokens
 

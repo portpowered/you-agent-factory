@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -20,14 +20,14 @@ const (
 // DispatchQueuedInput carries replay-safe facts for DISPATCH_QUEUED.
 type DispatchQueuedInput struct {
 	SessionID           string
-	OrchestratorKind    factoryapi.FactoryOrchestratorKind
+	OrchestratorKind    string
 	OrchestratorDialect string
 	PhaseID             string
 	PhaseName           string
 	DispatchID          string
 	Source              string
 	Tick                int
-	DispatchKind        factoryapi.FactoryDispatchKind
+	DispatchKind        interfaces.FactoryDispatchKind
 	Label               string
 	CoordinationRef     string
 	RunnerID            string
@@ -45,7 +45,7 @@ type DispatchQueuedInput struct {
 // DispatchInterruptedInput carries replay-safe facts for DISPATCH_INTERRUPTED.
 type DispatchInterruptedInput struct {
 	SessionID           string
-	OrchestratorKind    factoryapi.FactoryOrchestratorKind
+	OrchestratorKind    string
 	OrchestratorDialect string
 	PhaseID             string
 	PhaseName           string
@@ -53,42 +53,42 @@ type DispatchInterruptedInput struct {
 	Source              string
 	Tick                int
 	Reason              string
-	ObservedStatus      factoryapi.FactoryDispatchStatus
+	ObservedStatus      interfaces.FactoryDispatchStatus
 	RetryPlanned        bool
-	ProviderSessionRef  *factoryapi.LoadableProviderSessionRef
-	CheckpointRef       *factoryapi.FactorySessionJavaScriptCheckpointRef
+	ProviderSessionRef  *workerexecution.ProviderSessionMetadata
+	CheckpointRef       *interfaces.FactorySessionJavaScriptCheckpointEventRef
 }
 
 // DispatchReconciledInput carries replay-safe facts for DISPATCH_RECONCILED.
 type DispatchReconciledInput struct {
 	SessionID            string
-	OrchestratorKind     factoryapi.FactoryOrchestratorKind
+	OrchestratorKind     string
 	OrchestratorDialect  string
 	PhaseID              string
 	PhaseName            string
 	DispatchID           string
 	Source               string
 	Tick                 int
-	ReconciledStatus     factoryapi.FactoryDispatchStatus
-	ReconciliationSource factoryapi.DispatchReconciliationSource
+	ReconciledStatus     interfaces.FactoryDispatchStatus
+	ReconciliationSource interfaces.DispatchReconciliationSource
 	Replayed             bool
-	Usage                *factoryapi.FactoryDispatchUsage
-	ResultArtifactRef    *factoryapi.FactoryArtifactRef
+	Usage                *interfaces.FactoryDispatchUsage
+	ResultArtifactRef    *interfaces.FactoryArtifactRef
 	ArtifactIDs          []string
-	FailureDetail        *factoryapi.FailureDetail
+	FailureDetail        *workerexecution.FailureDetail
 }
 
 // ArtifactCreatedInput carries replay-safe facts for ARTIFACT_CREATED.
 type ArtifactCreatedInput struct {
 	SessionID           string
-	OrchestratorKind    factoryapi.FactoryOrchestratorKind
+	OrchestratorKind    string
 	OrchestratorDialect string
 	PhaseID             string
 	PhaseName           string
 	DispatchID          string
 	Source              string
 	Tick                int
-	Artifact            factoryapi.FactoryArtifact
+	Artifact            interfaces.FactoryArtifact
 	CapturedAt          *time.Time
 }
 
@@ -112,7 +112,7 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 		eventTime,
 		sequence,
 	)
-	payload := factoryapi.DispatchQueuedEventPayload{
+	payload := interfaces.DispatchQueuedEventPayload{
 		DispatchKind: input.DispatchKind,
 	}
 	if label := strings.TrimSpace(input.Label); label != "" {
@@ -122,7 +122,7 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 		payload.CoordinationRef = &coordinationRef
 	}
 	if runnerID := strings.TrimSpace(input.RunnerID); runnerID != "" {
-		payload.RunnerId = &runnerID
+		payload.RunnerID = &runnerID
 	}
 	if model := strings.TrimSpace(input.Model); model != "" {
 		payload.Model = &model
@@ -131,10 +131,10 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 		payload.Provider = &provider
 	}
 	if parentDispatchID := strings.TrimSpace(input.ParentDispatchID); parentDispatchID != "" {
-		payload.ParentDispatchId = &parentDispatchID
+		payload.ParentDispatchID = &parentDispatchID
 	}
 	if retryOfDispatchID := strings.TrimSpace(input.RetryOfDispatchID); retryOfDispatchID != "" {
-		payload.RetryOfDispatchId = &retryOfDispatchID
+		payload.RetryOfDispatchID = &retryOfDispatchID
 	}
 	if input.QueuePosition != nil {
 		payload.QueuePosition = input.QueuePosition
@@ -147,14 +147,14 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 	}
 	if len(input.InputArtifactIDs) > 0 {
 		artifactIDs := append([]string(nil), input.InputArtifactIDs...)
-		payload.InputArtifactIds = &artifactIDs
+		payload.InputArtifactIDs = &artifactIDs
 	}
 	if len(input.InputWorkIDs) > 0 {
 		workIDs := append([]string(nil), input.InputWorkIDs...)
-		payload.InputWorkIds = &workIDs
+		payload.InputWorkIDs = &workIDs
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchQueued,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchQueued,
 		fmt.Sprintf("%s/%s", eventIDDispatchQueuedPrefix, input.DispatchID),
 		context,
 		payload,
@@ -180,7 +180,7 @@ func (h *FactoryEventHistory) RecordDispatchInterrupted(input DispatchInterrupte
 		eventTime,
 		sequence,
 	)
-	payload := factoryapi.DispatchInterruptedEventPayload{
+	payload := interfaces.DispatchInterruptedEventPayload{
 		Reason:         strings.TrimSpace(input.Reason),
 		ObservedStatus: input.ObservedStatus,
 		InterruptedAt:  eventTime,
@@ -194,8 +194,8 @@ func (h *FactoryEventHistory) RecordDispatchInterrupted(input DispatchInterrupte
 		checkpointRef := *input.CheckpointRef
 		payload.CheckpointRef = &checkpointRef
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchInterrupted,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchInterrupted,
 		fmt.Sprintf("%s/%d", eventIDDispatchInterruptedPrefix, sequence),
 		context,
 		payload,
@@ -221,7 +221,7 @@ func (h *FactoryEventHistory) RecordDispatchReconciled(input DispatchReconciledI
 		eventTime,
 		sequence,
 	)
-	payload := factoryapi.DispatchReconciledEventPayload{
+	payload := interfaces.DispatchReconciledEventPayload{
 		ReconciledStatus:     input.ReconciledStatus,
 		ReconciliationSource: input.ReconciliationSource,
 		Replayed:             input.Replayed,
@@ -236,14 +236,14 @@ func (h *FactoryEventHistory) RecordDispatchReconciled(input DispatchReconciledI
 	}
 	if len(input.ArtifactIDs) > 0 {
 		artifactIDs := append([]string(nil), input.ArtifactIDs...)
-		payload.ArtifactIds = &artifactIDs
+		payload.ArtifactIDs = &artifactIDs
 	}
 	if input.FailureDetail != nil {
 		failureDetail := *input.FailureDetail
 		payload.FailureDetail = &failureDetail
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchReconciled,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchReconciled,
 		fmt.Sprintf("%s/%s", eventIDDispatchReconciledPrefix, input.DispatchID),
 		context,
 		payload,
@@ -252,7 +252,7 @@ func (h *FactoryEventHistory) RecordDispatchReconciled(input DispatchReconciledI
 
 // RecordArtifactCreated records a canonical artifact creation marker.
 func (h *FactoryEventHistory) RecordArtifactCreated(input ArtifactCreatedInput, eventTime time.Time) {
-	if h == nil || strings.TrimSpace(input.SessionID) == "" || strings.TrimSpace(input.Artifact.Id) == "" {
+	if h == nil || strings.TrimSpace(input.SessionID) == "" || strings.TrimSpace(input.Artifact.ID) == "" {
 		return
 	}
 	eventTime = canonicalDispatchLifecycleEventTime(eventTime)
@@ -269,16 +269,16 @@ func (h *FactoryEventHistory) RecordArtifactCreated(input ArtifactCreatedInput, 
 		eventTime,
 		sequence,
 	)
-	payload := factoryapi.ArtifactCreatedEventPayload{
+	payload := interfaces.ArtifactCreatedEventPayload{
 		Artifact: input.Artifact,
 	}
 	if input.CapturedAt != nil {
 		capturedAt := canonicalDispatchLifecycleEventTime(*input.CapturedAt)
 		payload.CapturedAt = &capturedAt
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeArtifactCreated,
-		fmt.Sprintf("%s/%s", eventIDArtifactCreatedPrefix, input.Artifact.Id),
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeArtifactCreated,
+		fmt.Sprintf("%s/%s", eventIDArtifactCreatedPrefix, input.Artifact.ID),
 		context,
 		payload,
 	))
@@ -286,7 +286,7 @@ func (h *FactoryEventHistory) RecordArtifactCreated(input ArtifactCreatedInput, 
 
 func (h *FactoryEventHistory) dispatchLifecycleContext(
 	sessionID string,
-	orchestratorKind factoryapi.FactoryOrchestratorKind,
+	orchestratorKind string,
 	orchestratorDialect string,
 	phaseID string,
 	phaseName string,
@@ -295,16 +295,16 @@ func (h *FactoryEventHistory) dispatchLifecycleContext(
 	tick int,
 	eventTime time.Time,
 	sessionSequence int,
-) factoryapi.FactoryEventContext {
-	context := h.sessionLifecycleContext(sessionID, orchestratorKind, orchestratorDialect, source, tick, eventTime, sessionSequence)
+) interfaces.FactoryEventContext {
+	context := h.domainSessionLifecycleContext(sessionID, orchestratorKind, orchestratorDialect, source, tick, eventTime, sessionSequence)
 	if phaseID := strings.TrimSpace(phaseID); phaseID != "" {
-		context.PhaseId = &phaseID
+		context.PhaseID = &phaseID
 	}
 	if phaseName := strings.TrimSpace(phaseName); phaseName != "" {
 		context.PhaseName = &phaseName
 	}
 	if dispatchID := strings.TrimSpace(dispatchID); dispatchID != "" {
-		context.DispatchId = &dispatchID
+		context.DispatchID = &dispatchID
 	}
 	return context
 }
@@ -320,17 +320,23 @@ func canonicalDispatchLifecycleEventTime(eventTime time.Time) time.Time {
 // any recorded event.
 var ErrReconnectCursorNotFound = fmt.Errorf("reconnect cursor not found in event history")
 
-// BuildReconnectReplay returns the historical events a client should apply after
-// reconnecting from a last acknowledged event id or sequence. When durable
-// dispatch state advanced beyond the acknowledged projection, synthetic
-// DISPATCH_RECONCILED facts are appended with replayed=true.
-func BuildReconnectReplay(
-	events []factoryapi.FactoryEvent,
+// BuildCanonicalReconnectReplay returns the historical canonical events a
+// domain consumer should apply after reconnecting from an acknowledged cursor.
+func BuildCanonicalReconnectReplay(
+	events []interfaces.FactoryEvent,
 	cursor interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
-) ([]factoryapi.FactoryEvent, error) {
+) ([]interfaces.FactoryEvent, error) {
+	return buildDomainReconnectReplay(cloneFactoryEvents(events), cursor, scope)
+}
+
+func buildDomainReconnectReplay(
+	events []interfaces.FactoryEvent,
+	cursor interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) ([]interfaces.FactoryEvent, error) {
 	if cursor.AfterEventID == "" && cursor.AfterSequence == nil {
-		replay := make([]factoryapi.FactoryEvent, len(events))
+		replay := make([]interfaces.FactoryEvent, len(events))
 		copy(replay, events)
 		return replay, nil
 	}
@@ -346,19 +352,19 @@ func BuildReconnectReplay(
 		return nil, err
 	}
 	if len(reconciled) == 0 {
-		replay := make([]factoryapi.FactoryEvent, len(missed))
+		replay := make([]interfaces.FactoryEvent, len(missed))
 		copy(replay, missed)
 		return replay, nil
 	}
 
-	replay := make([]factoryapi.FactoryEvent, 0, len(missed)+len(reconciled))
+	replay := make([]interfaces.FactoryEvent, 0, len(missed)+len(reconciled))
 	replay = append(replay, missed...)
 	replay = append(replay, reconciled...)
 	return replay, nil
 }
 
 func findAcknowledgedEventIndex(
-	events []factoryapi.FactoryEvent,
+	events []interfaces.FactoryEvent,
 	cursor interfaces.FactoryEventReconnectCursor,
 	scope interfaces.FactoryEventReconnectScope,
 ) (int, error) {
@@ -398,19 +404,19 @@ func findAcknowledgedEventIndex(
 	return -1, fmt.Errorf("%w: after_sequence %d", ErrReconnectCursorNotFound, ackSequence)
 }
 
-func eventBelongsToSession(event factoryapi.FactoryEvent, sessionID string) bool {
-	if event.Context.SessionId == nil {
+func eventBelongsToSession(event interfaces.FactoryEvent, sessionID string) bool {
+	if event.Context.SessionID == nil {
 		return false
 	}
-	return strings.TrimSpace(*event.Context.SessionId) == strings.TrimSpace(sessionID)
+	return strings.TrimSpace(*event.Context.SessionID) == strings.TrimSpace(sessionID)
 }
 
 func synthesizeDispatchReconciliationEvents(
-	events []factoryapi.FactoryEvent,
+	events []interfaces.FactoryEvent,
 	ackIndex int,
-	missed []factoryapi.FactoryEvent,
+	missed []interfaces.FactoryEvent,
 	scope interfaces.FactoryEventReconnectScope,
-) ([]factoryapi.FactoryEvent, error) {
+) ([]interfaces.FactoryEvent, error) {
 	if ackIndex < 0 || len(events) == 0 {
 		return nil, nil
 	}
@@ -418,11 +424,11 @@ func synthesizeDispatchReconciliationEvents(
 	ackTick := maxEventTick(ackEvents)
 	fullTick := maxEventTick(events)
 
-	ackState, err := projections.ReconstructFactoryWorldState(ackEvents, ackTick)
+	ackState, err := projections.ReconstructCanonicalFactoryWorldState(ackEvents, ackTick)
 	if err != nil {
 		return nil, err
 	}
-	fullState, err := projections.ReconstructFactoryWorldState(events, fullTick)
+	fullState, err := projections.ReconstructCanonicalFactoryWorldState(events, fullTick)
 	if err != nil {
 		return nil, err
 	}
@@ -433,7 +439,7 @@ func synthesizeDispatchReconciliationEvents(
 	ackDispatches := dispatchStatesByID(ackState.JavaScriptRuntime.Dispatches)
 	missedDispatchCoverage := dispatchLifecycleCoverage(missed)
 	now := time.Now().UTC()
-	synthetic := make([]factoryapi.FactoryEvent, 0)
+	synthetic := make([]interfaces.FactoryEvent, 0)
 
 	for _, dispatch := range fullState.JavaScriptRuntime.Dispatches {
 		if scope.SessionID != "" && !dispatchBelongsToReconnectScope(dispatch, scope.SessionID, events) {
@@ -454,10 +460,10 @@ func synthesizeDispatchReconciliationEvents(
 func dispatchBelongsToReconnectScope(
 	dispatch interfaces.FactorySessionDispatchState,
 	sessionID string,
-	events []factoryapi.FactoryEvent,
+	events []interfaces.FactoryEvent,
 ) bool {
 	for _, event := range events {
-		if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatch.ID {
+		if event.Context.DispatchID == nil || *event.Context.DispatchID != dispatch.ID {
 			continue
 		}
 		if eventBelongsToSession(event, sessionID) {
@@ -475,13 +481,13 @@ func dispatchStatesByID(dispatches []interfaces.FactorySessionDispatchState) map
 	return states
 }
 
-func dispatchLifecycleCoverage(events []factoryapi.FactoryEvent) map[string]bool {
+func dispatchLifecycleCoverage(events []interfaces.FactoryEvent) map[string]bool {
 	covered := make(map[string]bool)
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeDispatchReconciled, factoryapi.FactoryEventTypeDispatchInterrupted:
-			if event.Context.DispatchId != nil {
-				covered[*event.Context.DispatchId] = true
+		case interfaces.FactoryEventTypeDispatchReconciled, interfaces.FactoryEventTypeDispatchInterrupted:
+			if event.Context.DispatchID != nil {
+				covered[*event.Context.DispatchID] = true
 			}
 		}
 	}
@@ -499,8 +505,8 @@ func dispatchStatusAdvanced(previous interfaces.FactorySessionDispatchState, cur
 }
 
 func isTerminalDispatchStatus(status string) bool {
-	switch factoryapi.FactoryDispatchStatus(strings.TrimSpace(status)) {
-	case factoryapi.FactoryDispatchStatusCOMPLETED, factoryapi.FactoryDispatchStatusFAILED:
+	switch interfaces.FactoryDispatchStatus(strings.TrimSpace(status)) {
+	case interfaces.FactoryDispatchStatusCompleted, interfaces.FactoryDispatchStatusFailed:
 		return true
 	default:
 		return false
@@ -508,12 +514,12 @@ func isTerminalDispatchStatus(status string) bool {
 }
 
 func dispatchRank(status string) int {
-	switch factoryapi.FactoryDispatchStatus(strings.TrimSpace(status)) {
-	case factoryapi.FactoryDispatchStatusQUEUED:
+	switch interfaces.FactoryDispatchStatus(strings.TrimSpace(status)) {
+	case interfaces.FactoryDispatchStatusQueued:
 		return 1
-	case factoryapi.FactoryDispatchStatusRUNNING:
+	case interfaces.FactoryDispatchStatusRunning:
 		return 2
-	case factoryapi.FactoryDispatchStatusCOMPLETED, factoryapi.FactoryDispatchStatusFAILED:
+	case interfaces.FactoryDispatchStatusCompleted, interfaces.FactoryDispatchStatusFailed:
 		return 3
 	default:
 		return 0
@@ -522,52 +528,55 @@ func dispatchRank(status string) int {
 
 func syntheticDispatchReconciledEvent(
 	dispatch interfaces.FactorySessionDispatchState,
-	events []factoryapi.FactoryEvent,
+	events []interfaces.FactoryEvent,
 	eventTime time.Time,
-) factoryapi.FactoryEvent {
+) interfaces.FactoryEvent {
 	sessionID, orchestratorKind, phaseID, phaseName, tick := dispatchReconnectContext(dispatch, events)
-	reconciledStatus := factoryapi.FactoryDispatchStatus(strings.TrimSpace(dispatch.Status))
+	reconciledStatus := interfaces.FactoryDispatchStatus(strings.TrimSpace(dispatch.Status))
 	if reconciledStatus == "" {
-		reconciledStatus = factoryapi.FactoryDispatchStatusCOMPLETED
+		reconciledStatus = interfaces.FactoryDispatchStatusCompleted
 	}
-	payload := factoryapi.DispatchReconciledEventPayload{
+	payload := interfaces.DispatchReconciledEventPayload{
 		ReconciledStatus:     reconciledStatus,
-		ReconciliationSource: factoryapi.STREAMREPLAY,
+		ReconciliationSource: interfaces.DispatchReconciliationSourceStreamReplay,
 		Replayed:             true,
 	}
 	if len(dispatch.ArtifactIDs) > 0 {
 		artifactIDs := append([]string(nil), dispatch.ArtifactIDs...)
-		payload.ArtifactIds = &artifactIDs
+		payload.ArtifactIDs = &artifactIDs
 	}
 	if dispatch.Usage != nil {
 		retryCount := int32(dispatch.Usage.RetryCount)
-		usage := factoryapi.FactoryDispatchUsage{
+		usage := interfaces.FactoryDispatchUsage{
 			InputTokens:    int64Ptr(dispatch.Usage.InputTokens),
 			OutputTokens:   int64Ptr(dispatch.Usage.OutputTokens),
 			TotalTokens:    int64Ptr(dispatch.Usage.TotalTokens),
-			CostUsd:        float64Ptr(dispatch.Usage.CostUSD),
+			CostUSD:        float64Ptr(dispatch.Usage.CostUSD),
 			DurationMillis: int64Ptr(dispatch.Usage.DurationMillis),
 			RetryCount:     &retryCount,
 		}
 		payload.Usage = &usage
 	}
 	if dispatch.FailureDetail != nil {
-		payload.FailureDetail = failureDetail(dispatch.FailureDetail.Reason, dispatch.FailureDetail.Message)
+		payload.FailureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureType(dispatch.FailureDetail.Reason),
+			Message: dispatch.FailureDetail.Message,
+		}
 	}
 	source := "stream-reconnect"
-	context := factoryapi.FactoryEventContext{
+	context := interfaces.FactoryEventContext{
 		Tick:             tick,
 		EventTime:        eventTime,
 		Sequence:         len(events),
-		SessionId:        stringPtrIfNotEmpty(sessionID),
+		SessionID:        stringPtrIfNotEmpty(sessionID),
 		OrchestratorKind: orchestratorKind,
-		PhaseId:          stringPtrIfNotEmpty(phaseID),
+		PhaseID:          stringPtrIfNotEmpty(phaseID),
 		PhaseName:        stringPtrIfNotEmpty(phaseName),
-		DispatchId:       stringPtrIfNotEmpty(dispatch.ID),
+		DispatchID:       stringPtrIfNotEmpty(dispatch.ID),
 		Source:           &source,
 	}
-	return factoryEvent(
-		factoryapi.FactoryEventTypeDispatchReconciled,
+	return domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchReconciled,
 		fmt.Sprintf("%s/%s/reconnect", eventIDDispatchReconciledPrefix, dispatch.ID),
 		context,
 		payload,
@@ -576,19 +585,19 @@ func syntheticDispatchReconciledEvent(
 
 func dispatchReconnectContext(
 	dispatch interfaces.FactorySessionDispatchState,
-	events []factoryapi.FactoryEvent,
-) (sessionID string, orchestratorKind *factoryapi.FactoryOrchestratorKind, phaseID, phaseName string, tick int) {
+	events []interfaces.FactoryEvent,
+) (sessionID string, orchestratorKind *string, phaseID, phaseName string, tick int) {
 	for index := len(events) - 1; index >= 0; index-- {
 		event := events[index]
-		if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatch.ID {
+		if event.Context.DispatchID == nil || *event.Context.DispatchID != dispatch.ID {
 			continue
 		}
-		if event.Context.SessionId != nil {
-			sessionID = *event.Context.SessionId
+		if event.Context.SessionID != nil {
+			sessionID = *event.Context.SessionID
 		}
 		orchestratorKind = event.Context.OrchestratorKind
-		if event.Context.PhaseId != nil {
-			phaseID = *event.Context.PhaseId
+		if event.Context.PhaseID != nil {
+			phaseID = *event.Context.PhaseID
 		}
 		if event.Context.PhaseName != nil {
 			phaseName = *event.Context.PhaseName
@@ -603,7 +612,7 @@ func float64Ptr(value float64) *float64 {
 	return &value
 }
 
-func maxEventTick(events []factoryapi.FactoryEvent) int {
+func maxEventTick(events []interfaces.FactoryEvent) int {
 	tick := -1
 	for _, event := range events {
 		if event.Context.Tick > tick {

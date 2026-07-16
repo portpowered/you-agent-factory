@@ -22,12 +22,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
@@ -35,18 +36,23 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -309,20 +315,20 @@ func TestFactoryService_LiveSessionsOwnIsolatedResponseEventStores(t *testing.T)
 
 	defaultHistory := liveSessionHandle(defaultSession).Bundle.EventHistory
 	betaHistory := liveSessionHandle(betaSession).Bundle.EventHistory
-	defaultHistoryCount := len(defaultHistory.Events())
-	betaHistoryCount := len(betaHistory.Events())
+	defaultHistoryCount := len(defaultHistory.CanonicalEvents())
+	betaHistoryCount := len(betaHistory.CanonicalEvents())
 	defaultEvent := publishSessionResponseEvent(t, defaultSession, "run-default")
 	betaEvent := publishSessionResponseEvent(t, betaSession, "run-beta")
 	assertPublishedResponseEventsAreSessionIsolated(t, defaultSession, betaSession, defaultEvent, betaEvent)
-	if len(defaultHistory.Events()) != defaultHistoryCount || len(betaHistory.Events()) != betaHistoryCount {
+	if len(defaultHistory.CanonicalEvents()) != defaultHistoryCount || len(betaHistory.CanonicalEvents()) != betaHistoryCount {
 		t.Fatal("response-event publication mutated canonical FactoryEvent history")
 	}
 
 	defaultHistory.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
 		SessionID:        factorysessions.CanonicalFactorySessionID(defaultSession),
-		OrchestratorKind: factoryapi.PETRI,
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
 		Source:           "runtime",
-		FinalStatus:      factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		FinalStatus:      interfaces.FactorySessionLifecycleStatusSucceeded,
 	}, time.Now().UTC())
 	assertResponseEventCompletionIsSessionIsolated(t, defaultSession, betaSession)
 
@@ -710,7 +716,7 @@ type sessionCapturingCommandRunner struct {
 
 func (r *sessionCapturingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.mu.Lock()
-	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
 	r.mu.Unlock()
 	return workers.CommandResult{Stdout: []byte("ok")}, nil
 }
@@ -738,24 +744,24 @@ func (r *sessionCapturingCommandRunner) waitForRequests(t *testing.T, want int, 
 
 type sessionCapturingProvider struct {
 	mu       sync.Mutex
-	requests []interfaces.ProviderInferenceRequest
+	requests []workerexecution.ProviderInferenceRequest
 }
 
-func (p *sessionCapturingProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *sessionCapturingProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
-	p.requests = append(p.requests, interfaces.CloneProviderInferenceRequest(req))
+	p.requests = append(p.requests, workerexecution.CloneProviderInferenceRequest(req))
 	p.mu.Unlock()
-	return interfaces.InferenceResponse{Content: "ok"}, nil
+	return workerexecution.InferenceResponse{Content: "ok"}, nil
 }
 
-func (p *sessionCapturingProvider) waitForRequests(t *testing.T, want int, wait time.Duration) []interfaces.ProviderInferenceRequest {
+func (p *sessionCapturingProvider) waitForRequests(t *testing.T, want int, wait time.Duration) []workerexecution.ProviderInferenceRequest {
 	t.Helper()
 
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		p.mu.Lock()
 		if len(p.requests) >= want {
-			requests := append([]interfaces.ProviderInferenceRequest(nil), p.requests...)
+			requests := append([]workerexecution.ProviderInferenceRequest(nil), p.requests...)
 			p.mu.Unlock()
 			return requests
 		}
@@ -1018,7 +1024,7 @@ func TestFactoryService_SessionRuntimeSurfaceTargetsExplicitSessionID(t *testing
 	defer harness.stop(t)
 
 	betaSessionID := harness.openFactorySession(t, "beta")
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     "beta-session-targeted-work",
 		Name:       "beta-session-targeted-work",
 		WorkTypeID: "task",
@@ -1717,7 +1723,7 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	t.Helper()
 
 	var targetedErr interface {
-		ErrorTargets() []factoryapi.FactoryValidationTarget
+		ErrorTargets() []factoryvalidation.Target
 	}
 	if !errors.As(err, &targetedErr) {
 		t.Fatalf("validation error %v did not expose structured targets", err)
@@ -1732,8 +1738,8 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	if target.Code != wantCode {
 		t.Fatalf("validation target code = %q, want %q", target.Code, wantCode)
 	}
-	if target.Subject.Id != wantField {
-		t.Fatalf("validation target subject id = %q, want %q", target.Subject.Id, wantField)
+	if target.Subject.ID != wantField {
+		t.Fatalf("validation target subject id = %q, want %q", target.Subject.ID, wantField)
 	}
 }
 
@@ -1746,7 +1752,7 @@ func assertFactorySessionConfigLoadFailure(t *testing.T, err error, wantTargetID
 	}
 
 	var targetedErr interface {
-		ErrorTargets() []factoryapi.FactoryValidationTarget
+		ErrorTargets() []factoryvalidation.Target
 	}
 	if !errors.As(err, &targetedErr) {
 		t.Fatalf("config load error %v did not expose structured targets", err)
@@ -1759,8 +1765,8 @@ func assertFactorySessionConfigLoadFailure(t *testing.T, err error, wantTargetID
 	if target.Code != "factory.session.target.config_load_failed" {
 		t.Fatalf("config load target code = %q, want factory.session.target.config_load_failed", target.Code)
 	}
-	if target.Subject.Id != wantTargetID {
-		t.Fatalf("config load target subject id = %q, want %q", target.Subject.Id, wantTargetID)
+	if target.Subject.ID != wantTargetID {
+		t.Fatalf("config load target subject id = %q, want %q", target.Subject.ID, wantTargetID)
 	}
 }
 
@@ -1995,9 +2001,9 @@ func TestPortableCanonicalFactsRetainJavaScriptProjectionInputsCheckpointAndResu
 			ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{ID: "artifact-checkpoint"},
 		}},
 		ResultStatus: "FAILED_WITH_PARTIAL",
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "safe partial result"},
-			{Type: interfaces.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "safe partial result"},
+			{Type: work.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
 		},
 	}
 	succeeded := factoryapi.FactorySessionDurableLifecycleStatusFailed
@@ -2145,29 +2151,39 @@ func terminalJavaScriptRecordingHistory(
 	eventTime := time.Date(2026, 7, 12, 18, 0, 0, 0, time.UTC)
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime })
 	history.RecordSessionStarted(factoryevents.SessionLifecycleStartInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, OrchestratorDialect: "workflow-v1",
 		Source: "runtime", FactoryID: "recorded-workflow", SourceRef: "workflow.js",
 		SourceHash: "sha256:" + strings.Repeat("b", 64), PolicyHash: "sha256:" + strings.Repeat("c", 64), ArgsDigest: argsDigest,
 	}, eventTime)
 	artifactHash, artifactSize := "sha256:"+strings.Repeat("d", 64), int64(16)
 	capturedAt := eventTime.Add(time.Second)
 	history.RecordArtifactCreated(factoryevents.ArtifactCreatedInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 1,
-		Artifact: factoryapi.FactoryArtifact{Id: "artifact-result", Kind: factoryapi.FactoryArtifactKindFINALRESULT,
-			Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC, ContentHash: &artifactHash, SizeBytes: &artifactSize,
-			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt}},
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 1,
+		Artifact: interfaces.FactoryArtifact{ID: "artifact-result", Kind: "FINAL_RESULT",
+			Visibility: "PUBLIC", ContentHash: &artifactHash, SizeBytes: &artifactSize,
+			CaptureMetadata: &interfaces.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt}},
 		CapturedAt: &capturedAt,
 	}, capturedAt)
-	status := factoryapi.FactoryEventSessionResultStatus(resultStatus)
+	status := interfaces.FactorySessionResultStatus(resultStatus)
 	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 2,
-		ResultStatus: status, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded result"}}, ArtifactIDs: []string{"artifact-result"},
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 2,
+		ResultStatus: status, ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded result"}}, ArtifactIDs: []string{"artifact-result"},
 	}, eventTime.Add(2*time.Second))
 	history.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 3,
-		FinalStatus: finalStatus, ResultStatus: &status, ArtifactIDs: []string{"artifact-result"}, FailureDetail: failure,
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 3,
+		FinalStatus: interfaces.FactorySessionLifecycleStatus(finalStatus), ResultStatus: &status, ArtifactIDs: []string{"artifact-result"}, FailureDetail: sessionEventFailureDetail(failure),
 	}, eventTime.Add(3*time.Second))
 	return history
+}
+
+func sessionEventFailureDetail(failure *factoryapi.FailureDetail) *workerexecution.FailureDetail {
+	if failure == nil {
+		return nil
+	}
+	return &workerexecution.FailureDetail{
+		Reason:  workerexecution.WorkFailureType(failure.Reason),
+		Message: failure.Message,
+	}
 }
 
 func TestFactoryService_PortableReplayRestoresPausedAndResumedPublicReadsWithoutLiveExecution(t *testing.T) {
@@ -2233,43 +2249,43 @@ func lifecycleJavaScriptRecordingHistory(t *testing.T, finalStatus factoryapi.Fa
 	eventTime := time.Date(2026, 7, 12, 19, 0, 0, 0, time.UTC)
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime })
 	history.RecordSessionStarted(factoryevents.SessionLifecycleStartInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, OrchestratorDialect: "workflow-v1",
 		Source: "runtime", FactoryID: "recorded-workflow", SourceRef: "workflow.js",
 		SourceHash: "sha256:" + strings.Repeat("b", 64), PolicyHash: "sha256:" + strings.Repeat("c", 64), ArgsDigest: argsDigest,
 	}, eventTime)
 	checkpointAt := eventTime.Add(time.Second)
 	artifactHash, artifactSize := "sha256:"+strings.Repeat("f", 64), int64(12)
 	history.RecordArtifactCreated(factoryevents.ArtifactCreatedInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 1,
-		Artifact: factoryapi.FactoryArtifact{Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
-			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize,
-			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointAt}}, CapturedAt: &checkpointAt,
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 1,
+		Artifact: interfaces.FactoryArtifact{ID: "artifact-checkpoint", Kind: "CHECKPOINT",
+			Visibility: "INTERNAL_CHECKPOINT", ContentHash: &artifactHash, SizeBytes: &artifactSize,
+			CaptureMetadata: &interfaces.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointAt}}, CapturedAt: &checkpointAt,
 	}, checkpointAt)
 	history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, OrchestratorDialect: "workflow-v1",
 		CheckpointID: "checkpoint-public-1", Source: "runtime", Tick: 2, Label: "Approval", Timestamp: &checkpointAt,
 		SourceHash: "sha256:" + strings.Repeat("b", 64), RuntimeSnapshotDigest: "sha256:" + strings.Repeat("8", 64),
-		ArtifactRef: &factoryapi.FactoryArtifactRef{Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
-			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize},
-		ResumabilityStatus: factoryapi.RESUMABLE,
+		ArtifactRef: &interfaces.FactoryArtifactRef{ID: "artifact-checkpoint", Kind: interfaces.JavaScriptCheckpointArtifactKind,
+			Visibility: interfaces.JavaScriptCheckpointArtifactVisibility, ContentHash: &artifactHash, SizeBytes: &artifactSize},
+		ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable,
 	}, checkpointAt)
-	partialStatus := factoryapi.FactoryEventSessionResultStatusPartial
+	partialStatus := interfaces.FactorySessionResultStatusPartial
 	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 3,
-		ResultStatus: partialStatus, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded partial result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 3,
+		ResultStatus: partialStatus, ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded partial result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
 	}, eventTime.Add(2*time.Second))
-	control := factoryevents.SessionLifecycleControlInput{SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1", Source: "runtime"}
+	control := factoryevents.SessionLifecycleControlInput{SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, OrchestratorDialect: "workflow-v1", Source: "runtime"}
 	history.RecordSessionPaused(control, eventTime.Add(3*time.Second))
 	if resumed {
 		history.RecordSessionResumed(control, eventTime.Add(4*time.Second))
-		finalResultStatus := factoryapi.FactoryEventSessionResultStatusFinal
+		finalResultStatus := interfaces.FactorySessionResultStatusFinal
 		history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
-			SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 6,
-			ResultStatus: finalResultStatus, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded final result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
+			SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 6,
+			ResultStatus: finalResultStatus, ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded final result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
 		}, eventTime.Add(5*time.Second))
 		history.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
-			SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 7,
-			FinalStatus: finalStatus, ResultStatus: &finalResultStatus, ArtifactIDs: []string{"artifact-checkpoint"},
+			SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 7,
+			FinalStatus: interfaces.FactorySessionLifecycleStatus(finalStatus), ResultStatus: &finalResultStatus, ArtifactIDs: []string{"artifact-checkpoint"},
 		}, eventTime.Add(6*time.Second))
 	}
 	return history, interfaces.JavaScriptCheckpointRecord{
@@ -2336,9 +2352,9 @@ func assertPortableLifecycleReplayInspection(t *testing.T, svc *FactoryService, 
 
 type countingReplayProvider struct{ calls atomic.Int32 }
 
-func (p *countingReplayProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *countingReplayProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.calls.Add(1)
-	return interfaces.InferenceResponse{}, errors.New("live provider must not be used during recording replay")
+	return workerexecution.InferenceResponse{}, errors.New("live provider must not be used during recording replay")
 }
 
 func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHandshakeSnapshotToken(t *testing.T) {
@@ -2800,10 +2816,10 @@ type durableRetryDispatchFailingChildProvider struct{}
 
 func (durableRetryDispatchFailingChildProvider) Infer(
 	_ context.Context,
-	_ interfaces.ProviderInferenceRequest,
-) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
-		interfaces.WorkFailureTypePermanentBadRequest,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		"simulated live child error",
 		nil,
 	)
@@ -3810,7 +3826,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 
 	session := harness.requireSession(t, defaultFactorySessionID)
 	eventHistory := liveSessionHandle(session).Bundle.EventHistory
-	recorded := eventHistory.Events()
+	recorded := generatedFactoryEventsForTest(t, eventHistory.CanonicalEvents())
 	if len(recorded) == 0 {
 		t.Fatal("event history = empty, want initial structure event")
 	}
@@ -4279,7 +4295,7 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 
 	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase=planning"))
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
-	publisher(workerprovider.CompletedFragment("dispatch-1", &interfaces.ProviderSessionMetadata{
+	publisher(workerprovider.CompletedFragment("dispatch-1", &workerexecution.ProviderSessionMetadata{
 		Provider: "cursor",
 		Kind:     "session_id",
 		ID:       "cursor-session-1",
@@ -4348,7 +4364,7 @@ func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEv
 	}
 	for i := range before {
 		if after[i].Type != before[i].Type {
-			t.Fatalf("factory event types changed after internal stream publication: before=%v after=%v", serviceFactoryEventTypes(before), serviceFactoryEventTypes(after))
+			t.Fatalf("factory event types changed after internal stream publication: before=%v after=%v", serviceCanonicalFactoryEventTypes(before), serviceCanonicalFactoryEventTypes(after))
 		}
 	}
 
@@ -4356,6 +4372,14 @@ func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEv
 	assertSessionEventsDoNotContain(t, session, "internal-progress-fragment")
 	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindResponseFragment))
 	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindProgressFragment))
+}
+
+func serviceCanonicalFactoryEventTypes(events []interfaces.FactoryEvent) []interfaces.FactoryEventType {
+	types := make([]interfaces.FactoryEventType, len(events))
+	for index, event := range events {
+		types[index] = event.Type
+	}
+	return types
 }
 
 func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareOneSessionStream(t *testing.T) {
@@ -4679,7 +4703,7 @@ func newSlowConsumerProgressPublisherHarness(t *testing.T) (*FactoryService, wor
 	svc := &FactoryService{
 		sessions: sessions,
 		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
-			return responsestream.NewSessionResponseStreamWithClock(factory.RealClock{}, responsestream.RetentionLimits{MaxEvents: 2})
+			return responsestream.NewSessionResponseStreamWithClock(platformclock.Real{}, responsestream.RetentionLimits{MaxEvents: 2})
 		},
 	}
 	publisher := svc.inferenceProgressPublisher(sessionID, nil)
@@ -4751,13 +4775,13 @@ func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, work
 	t.Helper()
 	const sessionID = "session-progress-backpressure"
 
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-progress-backpressure",
 		"runtime-progress-backpressure",
 		"/factory",
 		"/factory",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
@@ -4797,7 +4821,7 @@ func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, work
 		sessions: sessions,
 		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
 			return responsestream.NewSessionResponseStreamWithClock(
-				factory.RealClock{},
+				platformclock.Real{},
 				responsestream.RetentionLimits{MaxEvents: 2},
 			)
 		},
@@ -5035,7 +5059,7 @@ func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetada
 		Type:              workerprovider.NormalizedEventTypeFinalText,
 		Payload:           "final response",
 		ExternalEventType: "response.completed",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-codex-1",
@@ -5111,7 +5135,7 @@ func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegraded
 type forwardingSessionInvoker struct {
 	ctx       context.Context
 	sessionID string
-	request   factoryapi.InvocationRequest
+	request   sessioninvocation.InvocationRequest
 	result    sessioninvocation.FactoryInvocationResult
 	err       error
 }
@@ -5119,7 +5143,7 @@ type forwardingSessionInvoker struct {
 func (s *forwardingSessionInvoker) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.InvocationRequest,
+	request sessioninvocation.InvocationRequest,
 ) (sessioninvocation.FactoryInvocationResult, error) {
 	s.ctx = ctx
 	s.sessionID = sessionID
@@ -5132,7 +5156,7 @@ func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.
 	request := factoryapi.InvocationRequest{RequestId: &requestID, Args: &map[string]any{"input": "hello"}}
 	wantResult := sessioninvocation.FactoryInvocationResult{
 		RequestID: "result-request", TraceID: "trace-1",
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: "COMPLETED",
 	}
 	wantErr := errors.New("owner failure")
 	invoker := &forwardingSessionInvoker{result: wantResult, err: wantErr}
@@ -5150,8 +5174,58 @@ func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.
 	if invoker.ctx != ctx || invoker.sessionID != "session-1" {
 		t.Fatalf("forwarded ctx/session = %#v/%q", invoker.ctx, invoker.sessionID)
 	}
-	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
+	if invoker.request.RequestID == nil || *invoker.request.RequestID != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
 		t.Fatalf("forwarded request = %#v", invoker.request)
+	}
+}
+
+func TestFactoryService_InvokeFactorySessionRecordsDurablePetriCompletion(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		result     sessioninvocation.FactoryInvocationResult
+		wantStatus factorysessionexecution.LifecycleStatus
+	}{
+		{
+			name: "completed",
+			result: sessioninvocation.FactoryInvocationResult{
+				Status: interfaces.InvocationTerminalStatusCompleted,
+				PrimaryResult: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText, Text: "durable result",
+				}},
+			},
+			wantStatus: factorysessionexecution.LifecycleStatusSucceeded,
+		},
+		{
+			name: "failed",
+			result: sessioninvocation.FactoryInvocationResult{
+				Status:    interfaces.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_FAILED", Message: "worker failed",
+			},
+			wantStatus: factorysessionexecution.LifecycleStatusFailed,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			execution := factorysessionexecution.NewJavaScriptRuntimeService(
+				factorysessionexecution.JavaScriptRuntimeServiceConfig{
+					ProjectRoot: t.TempDir(),
+				},
+			)
+			svc := &FactoryService{
+				sessionInvoker:   &forwardingSessionInvoker{result: test.result},
+				durableExecution: execution,
+			}
+
+			if _, err := svc.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{}); err != nil {
+				t.Fatalf("InvokeFactorySession: %v", err)
+			}
+			read, err := execution.GetSession(context.Background(), "session-1")
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			if read.Status != test.wantStatus {
+				t.Fatalf("durable status = %q, want %q", read.Status, test.wantStatus)
+			}
+		})
 	}
 }
 
@@ -5178,7 +5252,7 @@ func TestInvokeJavaScriptFactorySession_UsesDurableResultAndTypedArguments(t *te
 	if err != nil {
 		t.Fatalf("invoke JavaScript factory session: %v", err)
 	}
-	if result.Status != factoryapi.InvocationTerminalStatusCompleted || result.SessionID != "dur-sess-deep-research-001" {
+	if result.Status != interfaces.InvocationTerminalStatusCompleted || result.SessionID != "dur-sess-deep-research-001" {
 		t.Fatalf("result = %#v, want completed durable-session result", result)
 	}
 	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "Synthesized research result" {
@@ -5247,15 +5321,88 @@ func TestJavaScriptInvocationResult_TimesOutWithoutDurableResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("javaScriptInvocationResult() error = %v", err)
 	}
-	if result.Status != factoryapi.InvocationTerminalStatusTimedOut || result.ErrorCode != string(factoryapi.INVOCATIONTIMEDOUT) {
+	if result.Status != interfaces.InvocationTerminalStatusTimedOut || result.ErrorCode != string(factoryapi.INVOCATIONTIMEDOUT) {
 		t.Fatalf("result = %#v, want timed-out invocation diagnostic", result)
 	}
 }
 
-func sessionInvocationInputForTest(cfg *interfaces.FactoryConfig) (*workinvocation.NormalizedArguments, error) {
-	resolved, err := sessioninvocation.ResolveSessionInvocationInput(cfg, factoryapi.InvocationRequest{
-		Args: &map[string]any{"topic": "event sourcing", "researchDepth": "3", "maxSubagents": "1"},
+func TestJavaScriptInvocationResult_ReportsInvalidAndFailedDurableResults(t *testing.T) {
+	t.Parallel()
+	if _, err := javaScriptInvocationResult("request-invalid", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-invalid"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeCompleted,
+		Result:           json.RawMessage(`{`),
+	}); err == nil || !strings.Contains(err.Error(), "decode JavaScript workflow result") {
+		t.Fatalf("invalid result error = %v, want decode context", err)
+	}
+
+	result, err := javaScriptInvocationResult("request-empty", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-empty"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeCompleted,
+		Result:           json.RawMessage(`{}`),
 	})
+	if err != nil {
+		t.Fatalf("empty durable result: %v", err)
+	}
+	if result.Status != interfaces.InvocationTerminalStatusFailed || result.ErrorCode != "INVOCATION_RESULT_UNAVAILABLE" {
+		t.Fatalf("empty durable result = %#v, want unavailable failure", result)
+	}
+
+	result, err = javaScriptInvocationResult("request-failed", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-failed"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeCompleted,
+		Result:           json.RawMessage(`{"failureDetail":{"reason":"WORKER_FAILED","message":"worker stopped"}}`),
+	})
+	if err != nil {
+		t.Fatalf("failed durable result: %v", err)
+	}
+	if result.ErrorCode != "WORKER_FAILED" || result.Message != "worker stopped" {
+		t.Fatalf("failed durable result = %#v, want failure detail", result)
+	}
+}
+
+func TestJavaScriptInvocationArgs_RejectsInvalidShapesAndSchema(t *testing.T) {
+	t.Parallel()
+	if args, err := javascriptInvocationArgs(nil, nil); err != nil || args != nil {
+		t.Fatalf("nil arguments = %#v, %v, want nil, nil", args, err)
+	}
+
+	multiple := &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{
+		"topic": {Values: []string{"one", "two"}},
+	}}
+	if _, err := javascriptInvocationArgs(nil, multiple); err == nil || !strings.Contains(err.Error(), "exactly one value") {
+		t.Fatalf("multiple-value error = %v, want cardinality diagnostic", err)
+	}
+
+	invalidSchema := deepResearchInvocationConfig()
+	invalidSchema.Orchestrator.JavaScript.ArgsSchema = json.RawMessage(`{`)
+	single := &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{
+		"topic": {Values: []string{"event sourcing"}},
+	}}
+	if _, err := javascriptInvocationArgs(invalidSchema, single); err == nil || !strings.Contains(err.Error(), "invalid JavaScript args schema") {
+		t.Fatalf("invalid-schema error = %v, want schema diagnostic", err)
+	}
+}
+
+func TestJavaScriptInvocationSource_RejectsMissingConfigurationAndSource(t *testing.T) {
+	t.Parallel()
+	service := &FactoryService{}
+	if _, err := service.javaScriptInvocationSource("session-1", nil); err == nil || !strings.Contains(err.Error(), "configuration is required") {
+		t.Fatalf("nil config error = %v, want configuration diagnostic", err)
+	}
+	missingSource := &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{
+		Kind:       interfaces.OrchestratorKindJavaScript,
+		JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{},
+	}}
+	if _, err := service.javaScriptInvocationSource("session-1", missingSource); err == nil || !strings.Contains(err.Error(), "no workflow source") {
+		t.Fatalf("missing source error = %v, want source diagnostic", err)
+	}
+}
+
+func sessionInvocationInputForTest(cfg *interfaces.FactoryConfig) (*workinvocation.NormalizedArguments, error) {
+	resolved, err := sessioninvocation.ResolveSessionInvocationInput(cfg, factorysessionmapping.InvocationRequestFromAPI(factoryapi.InvocationRequest{
+		Args: &map[string]any{"topic": "event sourcing", "researchDepth": "3", "maxSubagents": "1"},
+	}))
 	return resolved.NormalizedArguments, err
 }
 

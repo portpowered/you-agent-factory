@@ -26,7 +26,7 @@ Use this map when changing terminal reviewed-lane completion through the
 - `tests/functional/guards_batch/same_name_consume_path_cell_disposition_test.go`
   leaves reviewer-verifiable disposition evidence for the three PRD stranded
   cells using observable runtime and projection outcomes.
-- `pkg/testutil/service_harness.go` exposes `MoveWork` for focused operator-move
+- `internal/testutil/service_harness.go` exposes `MoveWork` for focused operator-move
   recovery tests through the service layer.
 - `pkg/transports/cli/work/move.go` and `pkg/service/runtime_sessions.go` are the CLI/API
   operator-move boundaries for bounded historical cleanup.

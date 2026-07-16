@@ -3,15 +3,17 @@ package executor
 import (
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // WorkerPool manages WorkerRunners by worker type, providing a shared resultCh
 // that the engine selects on to wake when workers complete.
 type WorkerPool struct {
-	runners  map[string]*WorkerRunner   // worker type ID → runner
-	resultCh chan interfaces.WorkResult // shared result channel — engine selects on this
+	runners  map[string]*WorkerRunner        // worker type ID → runner
+	resultCh chan workerexecution.WorkResult // shared result channel — engine selects on this
 	logger   logging.Logger
 	mu       sync.RWMutex
 }
@@ -20,7 +22,7 @@ type WorkerPool struct {
 func NewWorkerPool(logger logging.Logger) *WorkerPool {
 	return &WorkerPool{
 		runners:  make(map[string]*WorkerRunner),
-		resultCh: make(chan interfaces.WorkResult, 64),
+		resultCh: make(chan workerexecution.WorkResult, 64),
 		logger:   logging.EnsureLogger(logger),
 	}
 }
@@ -36,7 +38,7 @@ func (p *WorkerPool) Register(workerType string, executor WorkerExecutor) {
 
 // Dispatch sends a WorkDispatch to the appropriate runner's dispatch channel.
 // Returns false if no runner is registered for the dispatch's worker type.
-func (p *WorkerPool) Dispatch(workerType string, dispatch interfaces.WorkDispatch) bool {
+func (p *WorkerPool) Dispatch(workerType string, dispatch work.WorkDispatch) bool {
 	p.mu.RLock()
 	runner, ok := p.runners[workerType]
 	p.mu.RUnlock()
@@ -56,7 +58,7 @@ func (p *WorkerPool) Dispatch(workerType string, dispatch interfaces.WorkDispatc
 }
 
 // ResultCh returns the shared result channel that the engine should select on.
-func (p *WorkerPool) ResultCh() <-chan interfaces.WorkResult {
+func (p *WorkerPool) ResultCh() <-chan workerexecution.WorkResult {
 	return p.resultCh
 }
 

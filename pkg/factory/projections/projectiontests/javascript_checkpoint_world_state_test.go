@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -43,7 +45,7 @@ func TestReconstructFactoryWorldState_JavaScriptCheckpointRefEventProjectsArtifa
 		Payload: eventPayload,
 	}}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 1)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

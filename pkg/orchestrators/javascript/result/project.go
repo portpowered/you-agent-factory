@@ -4,14 +4,13 @@ import (
 	"encoding/json"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // ProjectPrimaryResult maps one validated workflow result to WorkContent parts.
-func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interfaces.FactorySessionArtifactState) ([]interfaces.WorkContentPart, Result) {
+func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interfaces.FactorySessionArtifactState) ([]work.WorkContentPart, Result) {
 	validation := ValidateTypedValue(value)
 	if validation.HasIssues() {
 		return nil, validation
@@ -38,14 +37,13 @@ func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interf
 }
 
 // BuildLiveSessionResult projects the live terminal session result read shape.
-func BuildLiveSessionResult(input SessionResultInput) factoryapi.FactorySessionLiveResult {
-	result := factoryapi.FactorySessionLiveResult{
-		SessionId: strings.TrimSpace(input.SessionID),
+func BuildLiveSessionResult(input SessionResultInput) LiveSessionResult {
+	result := LiveSessionResult{
+		SessionID: strings.TrimSpace(input.SessionID),
 		Status:    input.Status,
 	}
 	if len(input.CheckpointRefs) > 0 {
-		checkpoints := append([]factoryapi.FactorySessionJavaScriptCheckpointRef(nil), input.CheckpointRefs...)
-		result.CheckpointRefs = &checkpoints
+		result.CheckpointRefs = append([]interfaces.FactorySessionJavaScriptCheckpointEventRef(nil), input.CheckpointRefs...)
 	}
 	if input.ResultArtifact != nil {
 		copied := *input.ResultArtifact
@@ -55,67 +53,56 @@ func BuildLiveSessionResult(input SessionResultInput) factoryapi.FactorySessionL
 }
 
 // BuildSessionResult projects the durable terminal session result read shape.
-func BuildSessionResult(input SessionResultInput) factoryapi.FactorySessionResult {
-	result := factoryapi.FactorySessionResult{
-		SessionId:    strings.TrimSpace(input.SessionID),
+func BuildSessionResult(input SessionResultInput) SessionResult {
+	result := SessionResult{
+		SessionID:    strings.TrimSpace(input.SessionID),
 		ResultStatus: resultStatusFromSessionStatus(input.Status),
 	}
 	if parts, validation := ProjectPrimaryResult(input.SessionID, input.PrimaryValue, input.Artifacts); !validation.HasIssues() && len(parts) > 0 {
-		if generated := contentcontract.GeneratedPtrFromParts(parts); generated != nil {
-			result.PrimaryResult = generated
-		}
+		result.PrimaryResult = work.CloneWorkContentParts(parts)
 	}
 	artifactIDs, artifactRefs := projectArtifactProjection(input)
-	if len(artifactIDs) > 0 {
-		result.ArtifactIds = &artifactIDs
-	}
-	if len(artifactRefs) > 0 {
-		result.ArtifactRefs = &artifactRefs
-	}
+	result.ArtifactIDs = artifactIDs
+	result.ArtifactRefs = artifactRefs
 	return result
 }
 
 // BuildSessionResultUpdatedPayload projects the SESSION_RESULT_UPDATED event
 // payload using the same result and artifact ids as BuildSessionResult.
-func BuildSessionResultUpdatedPayload(input SessionResultInput) factoryapi.SessionResultUpdatedEventPayload {
+func BuildSessionResultUpdatedPayload(input SessionResultInput) SessionResultUpdatedPayload {
 	sessionResult := BuildSessionResult(input)
-	payload := factoryapi.SessionResultUpdatedEventPayload{
+	payload := SessionResultUpdatedPayload{
 		ResultStatus: eventResultStatusFromSessionStatus(input.Status),
 	}
-	if sessionResult.PrimaryResult != nil {
-		payload.ResultSummary = sessionResult.PrimaryResult
-	}
-	if sessionResult.ArtifactIds != nil && len(*sessionResult.ArtifactIds) > 0 {
-		artifactIDs := append([]string(nil), (*sessionResult.ArtifactIds)...)
-		payload.ArtifactIds = &artifactIDs
-	}
+	payload.ResultSummary = work.CloneWorkContentParts(sessionResult.PrimaryResult)
+	payload.ArtifactIDs = append([]string(nil), sessionResult.ArtifactIDs...)
 	return payload
 }
 
-func eventResultStatusFromSessionStatus(status factoryapi.FactorySessionStatus) factoryapi.FactoryEventSessionResultStatus {
-	if status == factoryapi.FactorySessionStatusFINISHED {
-		return factoryapi.FactoryEventSessionResultStatusFinal
+func eventResultStatusFromSessionStatus(status interfaces.RuntimeStatus) interfaces.FactorySessionResultStatus {
+	if status == interfaces.RuntimeStatusFinished {
+		return interfaces.FactorySessionResultStatusFinal
 	}
-	return factoryapi.FactoryEventSessionResultStatusPartial
+	return interfaces.FactorySessionResultStatusPartial
 }
 
-func resultStatusFromSessionStatus(status factoryapi.FactorySessionStatus) factoryapi.FactorySessionResultStatus {
+func resultStatusFromSessionStatus(status interfaces.RuntimeStatus) ResultStatus {
 	switch status {
-	case factoryapi.FactorySessionStatusFINISHED:
-		return factoryapi.FactorySessionResultStatusFinal
-	case factoryapi.FactorySessionStatusACTIVE:
-		return factoryapi.FactorySessionResultStatusPartial
+	case interfaces.RuntimeStatusFinished:
+		return ResultStatusFinal
+	case interfaces.RuntimeStatusActive:
+		return ResultStatusPartial
 	default:
-		return factoryapi.FactorySessionResultStatusNotReady
+		return ResultStatusNotReady
 	}
 }
 
-func projectArtifactProjection(input SessionResultInput) ([]string, []factoryapi.FactoryArtifactRef) {
+func projectArtifactProjection(input SessionResultInput) ([]string, []interfaces.FactoryArtifactRef) {
 	seen := make(map[string]struct{})
 	var artifactIDs []string
-	var artifactRefs []factoryapi.FactoryArtifactRef
-	addArtifact := func(ref factoryapi.FactoryArtifactRef) {
-		id := strings.TrimSpace(ref.Id)
+	var artifactRefs []interfaces.FactoryArtifactRef
+	addArtifact := func(ref interfaces.FactoryArtifactRef) {
+		id := strings.TrimSpace(ref.ID)
 		if id == "" {
 			return
 		}
@@ -134,10 +121,10 @@ func projectArtifactProjection(input SessionResultInput) ([]string, []factoryapi
 		if id == "" {
 			continue
 		}
-		addArtifact(factoryapi.FactoryArtifactRef{
-			Id:         id,
-			Kind:       factoryapi.FactoryArtifactKind(strings.ToUpper(strings.TrimSpace(artifact.Kind))),
-			Visibility: factoryapi.FactoryArtifactVisibility(strings.TrimSpace(artifact.Visibility)),
+		addArtifact(interfaces.FactoryArtifactRef{
+			ID:         id,
+			Kind:       strings.ToUpper(strings.TrimSpace(artifact.Kind)),
+			Visibility: strings.TrimSpace(artifact.Visibility),
 		})
 	}
 	return artifactIDs, artifactRefs
@@ -148,36 +135,36 @@ func projectDecodedValue(
 	value any,
 	artifacts []interfaces.FactorySessionArtifactState,
 	path string,
-) ([]interfaces.WorkContentPart, []Issue) {
+) ([]work.WorkContentPart, []Issue) {
 	switch typed := value.(type) {
 	case nil:
-		return []interfaces.WorkContentPart{jsonPart(nil, path)}, nil
+		return []work.WorkContentPart{jsonPart(nil, path)}, nil
 	case bool, float64, json.Number:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case string:
 		if issues := validateEmbeddedArtifactURI(sessionID, typed, path); len(issues) > 0 {
 			return nil, issues
 		}
 		if artifact, ok := artifactForEmbeddedString(sessionID, typed, artifacts); ok {
-			return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
+			return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 		}
 		if len(typed) > DefaultMaxEmbeddedBytes {
 			if artifact := syntheticLargeTextArtifact(typed, path); artifact.ID != "" {
-				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
+				return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 			}
 		}
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case []any:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case map[string]any:
 		if artifactID, ok := typed["artifactId"].(string); ok {
 			if artifact, found := findArtifact(artifacts, artifactID); found {
-				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, "")}, nil
+				return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, "")}, nil
 			}
 		}
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	default:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	}
 }
 
@@ -198,13 +185,13 @@ func validateEmbeddedArtifactURI(sessionID, value, path string) []Issue {
 	return issues
 }
 
-func jsonPart(value any, path string) interfaces.WorkContentPart {
+func jsonPart(value any, path string) work.WorkContentPart {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		raw = []byte("null")
 	}
-	part := interfaces.WorkContentPart{
-		Type: interfaces.WorkContentPartTypeJSON,
+	part := work.WorkContentPart{
+		Type: work.WorkContentPartTypeJSON,
 		JSON: raw,
 	}
 	if path != "" && path != "$" {
@@ -213,30 +200,30 @@ func jsonPart(value any, path string) interfaces.WorkContentPart {
 	return part
 }
 
-func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArtifactState, text string) interfaces.WorkContentPart {
+func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArtifactState, text string) work.WorkContentPart {
 	artifactID := strings.TrimSpace(artifact.ID)
 	uri := FormatArtifactURI(sessionID, artifactID)
 	kind := strings.ToUpper(strings.TrimSpace(artifact.Kind))
 	switch kind {
 	case "IMAGE":
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeImage,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeImage,
 			URL:         uri,
 			ArtifactID:  artifactID,
 			Label:       artifact.Label,
 			ContentType: artifactContentType(artifact),
 		}
 	case "AUDIO":
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
 			URL:         uri,
 			ArtifactID:  artifactID,
 			Label:       artifact.Label,
 			ContentType: artifactContentType(artifact),
 		}
 	case "BINARY", "PATCH", "DATASET":
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeBinary,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeBinary,
 			URL:         uri,
 			ArtifactID:  artifactID,
 			Label:       artifact.Label,
@@ -244,30 +231,30 @@ func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArti
 		}
 	case "LOG", "FINDING", "CHECKPOINT", "CHILD_RESULT", "WORKTREE_SUMMARY":
 		if strings.TrimSpace(text) != "" && len(text) <= DefaultMaxEmbeddedBytes {
-			return interfaces.WorkContentPart{
-				Type:       interfaces.WorkContentPartTypeText,
+			return work.WorkContentPart{
+				Type:       work.WorkContentPartTypeText,
 				Text:       text,
 				ArtifactID: artifactID,
 				Label:      artifact.Label,
 			}
 		}
-		return interfaces.WorkContentPart{
-			Type:       interfaces.WorkContentPartTypeText,
+		return work.WorkContentPart{
+			Type:       work.WorkContentPartTypeText,
 			Text:       uri,
 			ArtifactID: artifactID,
 			Label:      artifact.Label,
 		}
 	default:
 		if strings.TrimSpace(text) != "" && len(text) <= DefaultMaxEmbeddedBytes {
-			return interfaces.WorkContentPart{
-				Type:       interfaces.WorkContentPartTypeText,
+			return work.WorkContentPart{
+				Type:       work.WorkContentPartTypeText,
 				Text:       text,
 				ArtifactID: artifactID,
 				Label:      firstNonEmpty(artifact.Label, "result"),
 			}
 		}
-		return interfaces.WorkContentPart{
-			Type:       interfaces.WorkContentPartTypeText,
+		return work.WorkContentPart{
+			Type:       work.WorkContentPartTypeText,
 			Text:       uri,
 			ArtifactID: artifactID,
 			Label:      firstNonEmpty(artifact.Label, "result"),

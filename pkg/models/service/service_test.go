@@ -8,10 +8,10 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -92,7 +92,7 @@ func TestServiceNilReceiverPreservesUnavailableRuntimeErrors(t *testing.T) {
 	assertUnavailable("GetModel", err)
 	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	assertUnavailable("PullModel", err)
-	_, err = svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	_, err = svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{Operation: "TTS"})
 	assertUnavailable("InvokeModel", err)
 	if _, err := svc.modelInvocationExecutor(nil, nil, "worker"); err == nil {
 		t.Fatal("nil service modelInvocationExecutor() succeeded")

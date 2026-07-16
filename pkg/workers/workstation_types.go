@@ -1,6 +1,10 @@
 package workers
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import (
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+)
 
 // PostResultAction determines what the engine should do after processing a work result.
 type PostResultAction string
@@ -28,7 +32,7 @@ type WorkstationTypeStrategy interface {
 
 	// HandleResult examines a work result and returns the action the engine
 	// should take. For "standard" workstations this always returns ActionAdvance.
-	HandleResult(result interfaces.WorkResult) PostResultAction
+	HandleResult(result workerexecution.WorkResult) PostResultAction
 }
 
 // StandardWorkstationType implements the default fire-once behavior.
@@ -37,11 +41,11 @@ type StandardWorkstationType struct{}
 
 // Kind returns WorkstationKindStandard.
 func (s *StandardWorkstationType) Kind() interfaces.WorkstationKind {
-	return interfaces.WorkstationKindStandard
+	return workertaxonomy.WorkstationKindStandard
 }
 
 // HandleResult always returns ActionAdvance — standard workstations route every result.
-func (s *StandardWorkstationType) HandleResult(_ interfaces.WorkResult) PostResultAction {
+func (s *StandardWorkstationType) HandleResult(_ workerexecution.WorkResult) PostResultAction {
 	return ActionAdvance
 }
 
@@ -60,13 +64,13 @@ type RepeaterWorkstationType struct{}
 
 // Kind returns WorkstationKindRepeater.
 func (r *RepeaterWorkstationType) Kind() interfaces.WorkstationKind {
-	return interfaces.WorkstationKindRepeater
+	return workertaxonomy.WorkstationKindRepeater
 }
 
 // HandleResult returns ActionRepeat for CONTINUE outcomes (the worker signals
 // "not done yet") and ActionAdvance for ACCEPTED, REJECTED, or FAILED.
-func (r *RepeaterWorkstationType) HandleResult(result interfaces.WorkResult) PostResultAction {
-	if result.Outcome == interfaces.OutcomeContinue {
+func (r *RepeaterWorkstationType) HandleResult(result workerexecution.WorkResult) PostResultAction {
+	if result.Outcome == workerexecution.OutcomeContinue {
 		return ActionRepeat
 	}
 	return ActionAdvance
@@ -79,11 +83,11 @@ type CronWorkstationType struct{}
 
 // Kind returns WorkstationKindCron.
 func (c *CronWorkstationType) Kind() interfaces.WorkstationKind {
-	return interfaces.WorkstationKindCron
+	return workertaxonomy.WorkstationKindCron
 }
 
 // HandleResult routes cron execution results through normal arc handling.
-func (c *CronWorkstationType) HandleResult(_ interfaces.WorkResult) PostResultAction {
+func (c *CronWorkstationType) HandleResult(_ workerexecution.WorkResult) PostResultAction {
 	return ActionAdvance
 }
 
@@ -94,11 +98,11 @@ type PollerWorkstationType struct{}
 
 // Kind returns WorkstationKindPoller.
 func (p *PollerWorkstationType) Kind() interfaces.WorkstationKind {
-	return interfaces.WorkstationKindPoller
+	return workertaxonomy.WorkstationKindPoller
 }
 
 // HandleResult routes poller execution results through normal arc handling.
-func (p *PollerWorkstationType) HandleResult(_ interfaces.WorkResult) PostResultAction {
+func (p *PollerWorkstationType) HandleResult(_ workerexecution.WorkResult) PostResultAction {
 	return ActionAdvance
 }
 

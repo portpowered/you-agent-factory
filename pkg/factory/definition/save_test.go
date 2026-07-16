@@ -11,27 +11,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
 	svc := New(stubDefinitionHost{})
-	saveErr := svc.ValidateEditableFactoryTopology(factory)
+	saveErr := svc.ValidateEditableFactoryTopology(mustFactorySnapshot(factory))
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("ValidateEditableFactoryTopology error = %v, want topology validation error", saveErr)
@@ -99,7 +100,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 		}},
 	}
 
-	_, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement)
+	_, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement))
 	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want %v", err, apisurface.ErrFactoryVersionStale)
 	}
@@ -172,7 +173,7 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 		}},
 	}
 
-	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement); err != nil {
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement)); err != nil {
 		t.Fatalf("SaveReplaceCurrentForSession: %v", err)
 	}
 	if !host.discardCalled {
@@ -260,7 +261,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 		}},
 	}
 
-	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement); err != nil {
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement)); err != nil {
 		t.Fatalf("SaveReplaceCurrentForSession: %v", err)
 	}
 	if !host.replaceCalled {
@@ -326,7 +327,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 		}},
 	}
 
-	_, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement)
+	_, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement))
 	if err == nil || err.Error() != "activation failed" {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want activation failed", err)
 	}
@@ -351,22 +352,22 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 	if _, err := svc.SerializeNamedFactory("alpha", nil, true); err == nil {
 		t.Fatal("SerializeNamedFactory: expected error for nil service")
 	}
-	if _, err := svc.PrepareEditableFactoryPersistView("alpha", factoryapi.Factory{}); err == nil {
+	if _, err := svc.PrepareEditableFactoryPersistView("alpha", nil); err == nil {
 		t.Fatal("PrepareEditableFactoryPersistView: expected error for nil service")
 	}
-	if _, err := svc.PersistPayloadFromView(nil, factoryapi.HybridLogicalTimestamp{}); err == nil {
+	if _, err := svc.PersistPayloadFromView(nil, interfaces.FactoryVersion{}); err == nil {
 		t.Fatal("PersistPayloadFromView: expected error for nil service")
 	}
-	if _, err := svc.PreparePersistedFactoryPayload("alpha", factoryapi.Factory{}, factoryapi.HybridLogicalTimestamp{}); err == nil {
+	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, interfaces.FactoryVersion{}); err == nil {
 		t.Fatal("PreparePersistedFactoryPayload: expected error for nil service")
 	}
-	if err := svc.ValidateEditableFactoryTopology(factoryapi.Factory{}); err == nil {
+	if err := svc.ValidateEditableFactoryTopology(nil); err == nil {
 		t.Fatal("ValidateEditableFactoryTopology: expected error for nil service")
 	}
-	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), "session", factoryapi.Factory{}); err == nil {
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), "session", EditableFactory{}); err == nil {
 		t.Fatal("SaveReplaceCurrentForSession: expected error for nil service")
 	}
-	if _, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session", factoryapi.Factory{}); err == nil {
+	if _, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session", EditableFactory{}); err == nil {
 		t.Fatal("SaveUpsertNamedAndActivateForSession: expected error for nil service")
 	}
 	if err := svc.ActivateNamedFactory(context.Background(), "alpha"); err == nil {
@@ -377,12 +378,18 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.T) {
 	t.Parallel()
 
-	err := New(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest(factoryapi.Factory{
-		Name: "bad/name",
-	})
+	err := New(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest("bad/name", nil)
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("ValidateUpsertNamedFactoryRequest error = %v, want invalid named factory name", err)
 	}
+}
+
+func validateDefinitionSnapshotForTest(snapshot *interfaces.FactorySnapshot, loader factoryconfig.WorkstationLoader) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, loader)
+}
+
+func (h *splitLayoutSaveHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validateDefinitionSnapshotForTest(snapshot, h.WorkstationLoader())
 }
 
 func TestService_SerializeNamedFactoryUpsertResponse_ReturnsThinBundledFiles(t *testing.T) {
@@ -399,8 +406,14 @@ func TestService_SerializeNamedFactoryUpsertResponse_ReturnsThinBundledFiles(t *
 	if err != nil {
 		t.Fatalf("SerializeNamedFactoryUpsertResponse: %v", err)
 	}
-	if got.Name != "alpha" {
-		t.Fatalf("factory name = %q, want alpha", got.Name)
+	var decoded struct {
+		Name string `json:"name"`
+	}
+	if err := got.Decode(&decoded); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if decoded.Name != "alpha" {
+		t.Fatalf("factory name = %q, want alpha", decoded.Name)
 	}
 }
 
@@ -413,7 +426,7 @@ func TestSaveReplaceCurrentForSession_RejectsInvalidWritableCurrentName(t *testi
 			Name: "bad/name",
 		},
 	}
-	_, err := New(host).SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, factoryapi.Factory{})
+	_, err := New(host).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want invalid named factory name", err)
 	}
@@ -456,8 +469,8 @@ func (h *splitLayoutSaveHost) SessionFactoryPersistRoot(*factorysessions.LiveSes
 	return h.sessionRootDir
 }
 
-func (h *splitLayoutSaveHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return h.current, nil
+func (h *splitLayoutSaveHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(h.current), nil
 }
 
 func (h *splitLayoutSaveHost) WithActivationLock(fn func() error) error { return fn() }
@@ -466,7 +479,7 @@ func (h *splitLayoutSaveHost) RequireIdleRuntimeForSession(context.Context, stri
 	return nil
 }
 
-func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return h.activateErr
 }
 

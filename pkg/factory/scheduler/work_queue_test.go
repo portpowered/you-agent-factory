@@ -5,21 +5,22 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestWorkInQueueScheduler_BatchesMultipleIndependentTransitions(t *testing.T) {
 	sched := NewWorkInQueueScheduler(3)
 
-	tokA := interfaces.Token{ID: "tok-a", PlaceID: "p-work"}
-	tokB := interfaces.Token{ID: "tok-b", PlaceID: "p-work"}
-	tokC := interfaces.Token{ID: "tok-c", PlaceID: "p-work"}
+	tokA := factorytoken.Token{ID: "tok-a", PlaceID: "p-work"}
+	tokB := factorytoken.Token{ID: "tok-b", PlaceID: "p-work"}
+	tokC := factorytoken.Token{ID: "tok-c", PlaceID: "p-work"}
 	enabled := []interfaces.EnabledTransition{
-		{TransitionID: "tr-c", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {tokC}}},
-		{TransitionID: "tr-a", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {tokA}}},
-		{TransitionID: "tr-b", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {tokB}}},
+		{TransitionID: "tr-c", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {tokC}}},
+		{TransitionID: "tr-a", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {tokA}}},
+		{TransitionID: "tr-b", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {tokB}}},
 	}
 
 	decisions := sched.Select(enabled, nil)
@@ -35,9 +36,9 @@ func TestWorkInQueueScheduler_DeterministicallyOrdersEqualRankCandidates(t *test
 	sched := NewWorkInQueueScheduler(3)
 
 	enabled := []interfaces.EnabledTransition{
-		{TransitionID: "tr-gamma", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-gamma", PlaceID: "p-work", EnteredAt: baseTokenTime}}}},
-		{TransitionID: "tr-alpha", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-alpha", PlaceID: "p-work", EnteredAt: baseTokenTime}}}},
-		{TransitionID: "tr-beta", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-beta", PlaceID: "p-work", EnteredAt: baseTokenTime}}}},
+		{TransitionID: "tr-gamma", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {{ID: "tok-gamma", PlaceID: "p-work", EnteredAt: baseTokenTime}}}},
+		{TransitionID: "tr-alpha", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {{ID: "tok-alpha", PlaceID: "p-work", EnteredAt: baseTokenTime}}}},
+		{TransitionID: "tr-beta", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {{ID: "tok-beta", PlaceID: "p-work", EnteredAt: baseTokenTime}}}},
 	}
 
 	for i := 0; i < 10; i++ {
@@ -50,9 +51,9 @@ func TestWorkInQueueScheduler_DeterministicallyOrdersEqualRankCandidates(t *test
 func TestWorkInQueueScheduler_BoundedOutputRespectsDispatchCap(t *testing.T) {
 	sched := NewWorkInQueueScheduler(2)
 	enabled := []interfaces.EnabledTransition{
-		{TransitionID: "tr-1", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-1", PlaceID: "p-work"}}}},
-		{TransitionID: "tr-2", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-2", PlaceID: "p-work"}}}},
-		{TransitionID: "tr-3", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {{ID: "tok-3", PlaceID: "p-work"}}}},
+		{TransitionID: "tr-1", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {{ID: "tok-1", PlaceID: "p-work"}}}},
+		{TransitionID: "tr-2", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {{ID: "tok-2", PlaceID: "p-work"}}}},
+		{TransitionID: "tr-3", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {{ID: "tok-3", PlaceID: "p-work"}}}},
 	}
 
 	if decisions := sched.Select(enabled, nil); len(decisions) != 2 {
@@ -62,14 +63,14 @@ func TestWorkInQueueScheduler_BoundedOutputRespectsDispatchCap(t *testing.T) {
 
 func TestWorkInQueueScheduler_EnforcesTokenExclusivityAcrossBatch(t *testing.T) {
 	sched := NewWorkInQueueScheduler(3)
-	shared := interfaces.Token{ID: "shared", PlaceID: "p-work"}
-	unique := interfaces.Token{ID: "unique", PlaceID: "p-work"}
-	other := interfaces.Token{ID: "other", PlaceID: "p-work"}
+	shared := factorytoken.Token{ID: "shared", PlaceID: "p-work"}
+	unique := factorytoken.Token{ID: "unique", PlaceID: "p-work"}
+	other := factorytoken.Token{ID: "other", PlaceID: "p-work"}
 
 	enabled := []interfaces.EnabledTransition{
-		{TransitionID: "tr-1", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {shared, unique}}},
-		{TransitionID: "tr-2", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {shared}}},
-		{TransitionID: "tr-3", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {other}}},
+		{TransitionID: "tr-1", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {shared, unique}}},
+		{TransitionID: "tr-2", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {shared}}},
+		{TransitionID: "tr-3", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {other}}},
 	}
 
 	decisions := sched.Select(enabled, nil)
@@ -100,16 +101,16 @@ func TestWorkInQueueScheduler_DeterministicallyBatchesPriorityTiersBeforeFallbac
 
 func TestWorkInQueueScheduler_HigherPriorityCandidateClaimsSharedTokenBeforeFallbackCandidate(t *testing.T) {
 	sched := NewWorkInQueueScheduler(2)
-	sharedProcessing := interfaces.Token{
+	sharedProcessing := factorytoken.Token{
 		ID: "tok-shared-processing", PlaceID: "task:review", EnteredAt: baseTokenTime.Add(-30 * time.Minute),
-		Color: interfaces.TokenColor{WorkID: "work-shared", TraceID: "trace-shared", WorkTypeID: "task"},
+		Color: factorytoken.Color{WorkID: "work-shared", TraceID: "trace-shared", WorkTypeID: "task"},
 	}
 
 	enabled := []interfaces.EnabledTransition{
-		{TransitionID: "tr-a-lower-priority-shared", WorkerType: "agent", Bindings: map[string][]interfaces.Token{"input": {sharedProcessing}}},
-		{TransitionID: "tr-z-higher-priority-shared", WorkerType: "agent", Bindings: map[string][]interfaces.Token{
+		{TransitionID: "tr-a-lower-priority-shared", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{"input": {sharedProcessing}}},
+		{TransitionID: "tr-z-higher-priority-shared", WorkerType: "agent", Bindings: map[string][]factorytoken.Token{
 			"left":  {sharedProcessing},
-			"right": {{ID: "tok-processing-right", PlaceID: "task:review", Color: interfaces.TokenColor{WorkID: "work-right", TraceID: "trace-right", WorkTypeID: "task"}}},
+			"right": {{ID: "tok-processing-right", PlaceID: "task:review", Color: factorytoken.Color{WorkID: "work-right", TraceID: "trace-right", WorkTypeID: "task"}}},
 		}},
 		priorityEnabledTransition("tr-independent", "task:init", "tok-independent", baseTokenTime),
 	}

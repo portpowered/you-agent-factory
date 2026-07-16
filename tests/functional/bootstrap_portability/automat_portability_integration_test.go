@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBoundedReadiness(t *testing.T) {
@@ -40,7 +40,7 @@ func TestAutomatPortabilityFixture_IntegrationSmoke_CoversFlattenExpandAndBounde
 		t.Fatalf("remove authored fixture after expand: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, expandedDir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, expandedDir, work.SubmitRequest{
 		WorkID:     automatDispatchReadyWorkID,
 		WorkTypeID: "chapter",
 		TraceID:    "trace-automat-ready",

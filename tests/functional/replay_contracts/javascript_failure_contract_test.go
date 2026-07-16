@@ -8,7 +8,7 @@ import (
 
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 )
 
 func TestJavaScriptDocumentedFailureContracts(t *testing.T) {

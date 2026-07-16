@@ -11,18 +11,37 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
+
+func generatedFactoryEventsForToolTest(t testing.TB, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	generated := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		if err := event.Decode(&generated[index]); err != nil {
+			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		}
+	}
+	return generated
+}
 
 func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {
 	t.Parallel()
 
 	recorder := NewToolDiagnosticRecorder()
-	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyDisabled, t.TempDir(), recorder)
+	executor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyDisabled, t.TempDir(), recorder)
 	_, err := executor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameReadFile,
@@ -31,7 +50,7 @@ func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {
 	if !errors.Is(err, ErrToolPolicyDenied) {
 		t.Fatalf("Execute error = %v, want ErrToolPolicyDenied", err)
 	}
-	metadata := toolDiagnosticsMetadata(interfaces.AgentWorkerToolPolicyDisabled, recorder)
+	metadata := toolDiagnosticsMetadata(workerconfig.AgentToolPolicyDisabled, recorder)
 	if metadata[DiagnosticToolDiagnostics] == "" {
 		t.Fatalf("tool diagnostics = %#v, want denied summary", metadata)
 	}
@@ -47,7 +66,7 @@ func TestPolicyToolExecutor_ReadOnlyAllowsReadAndDeniesWrite(t *testing.T) {
 	}
 
 	recorder := NewToolDiagnosticRecorder()
-	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyReadOnly, dir, recorder)
+	executor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyReadOnly, dir, recorder)
 	response, err := executor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameReadFile,
@@ -75,7 +94,7 @@ func TestPolicyToolExecutor_EnabledAllowsWrite(t *testing.T) {
 
 	dir := t.TempDir()
 	recorder := NewToolDiagnosticRecorder()
-	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyEnabled, dir, recorder)
+	executor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyEnabled, dir, recorder)
 	_, err := executor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameWriteFile,
@@ -91,7 +110,7 @@ func TestPolicyToolExecutor_EnabledAllowsWrite(t *testing.T) {
 	if string(data) != "saved" {
 		t.Fatalf("written content = %q, want saved", string(data))
 	}
-	metadata := toolDiagnosticsMetadata(interfaces.AgentWorkerToolPolicyEnabled, recorder)
+	metadata := toolDiagnosticsMetadata(workerconfig.AgentToolPolicyEnabled, recorder)
 	if metadata[DiagnosticToolCallCount] != "2" {
 		t.Fatalf("tool call count = %q, want 2 start+success events recorded", metadata[DiagnosticToolCallCount])
 	}
@@ -105,7 +124,7 @@ func TestPolicyToolExecutor_ReadOnlyListDirectory(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyReadOnly, dir, NewToolDiagnosticRecorder())
+	executor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyReadOnly, dir, NewToolDiagnosticRecorder())
 	response, err := executor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameListDirectory,
@@ -122,7 +141,7 @@ func TestPolicyToolExecutor_ReadOnlyListDirectory(t *testing.T) {
 func TestPolicyToolExecutor_RejectsPathEscape(t *testing.T) {
 	t.Parallel()
 
-	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyReadOnly, t.TempDir(), NewToolDiagnosticRecorder())
+	executor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyReadOnly, t.TempDir(), NewToolDiagnosticRecorder())
 	_, err := executor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameReadFile,
@@ -182,7 +201,7 @@ func TestPolicyToolExecutor_FailureDiagnosticsExcludeAbsolutePaths(t *testing.T)
 				tc.setup(t, caseDir)
 			}
 			localRecorder := NewToolDiagnosticRecorder()
-			localExecutor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyEnabled, caseDir, localRecorder)
+			localExecutor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyEnabled, caseDir, localRecorder)
 			_, err := localExecutor.Execute(context.Background(), messages.ToolCall{
 				ID:        "tc1",
 				Name:      tc.toolName,
@@ -191,7 +210,7 @@ func TestPolicyToolExecutor_FailureDiagnosticsExcludeAbsolutePaths(t *testing.T)
 			if err == nil {
 				t.Fatal("expected tool failure")
 			}
-			metadata := toolDiagnosticsMetadata(interfaces.AgentWorkerToolPolicyEnabled, localRecorder)
+			metadata := toolDiagnosticsMetadata(workerconfig.AgentToolPolicyEnabled, localRecorder)
 			diagnostics := metadata[DiagnosticToolDiagnostics]
 			if diagnostics == "" {
 				t.Fatalf("tool diagnostics = %#v, want failure summary", metadata)
@@ -285,7 +304,7 @@ func TestPolicyToolExecutor_AbsolutePathArgumentOmitsPathFromDiagnostics(t *test
 
 	absolutePath := filepath.Join(t.TempDir(), "secret.txt")
 	recorder := NewToolDiagnosticRecorder()
-	executor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyReadOnly, t.TempDir(), recorder)
+	executor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyReadOnly, t.TempDir(), recorder)
 	_, err := executor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameReadFile,
@@ -295,7 +314,7 @@ func TestPolicyToolExecutor_AbsolutePathArgumentOmitsPathFromDiagnostics(t *test
 		t.Fatal("expected absolute path rejection")
 	}
 
-	metadata := toolDiagnosticsMetadata(interfaces.AgentWorkerToolPolicyReadOnly, recorder)
+	metadata := toolDiagnosticsMetadata(workerconfig.AgentToolPolicyReadOnly, recorder)
 	diagnostics := metadata[DiagnosticToolDiagnostics]
 	if diagnostics == "" {
 		t.Fatalf("tool diagnostics = %#v, want failure summary", metadata)
@@ -330,15 +349,15 @@ func TestSanitizeToolDiagnosticDetail_TruncatesLongValues(t *testing.T) {
 func TestToolDefinitionsForPolicy_ExposesSupportedTools(t *testing.T) {
 	t.Parallel()
 
-	readOnly := toolDefinitionsForPolicy(interfaces.AgentWorkerToolPolicyReadOnly)
+	readOnly := toolDefinitionsForPolicy(workerconfig.AgentToolPolicyReadOnly)
 	if len(readOnly) != 2 {
 		t.Fatalf("read-only tools = %d, want 2", len(readOnly))
 	}
-	enabled := toolDefinitionsForPolicy(interfaces.AgentWorkerToolPolicyEnabled)
+	enabled := toolDefinitionsForPolicy(workerconfig.AgentToolPolicyEnabled)
 	if len(enabled) != 3 {
 		t.Fatalf("enabled tools = %d, want 3", len(enabled))
 	}
-	if toolDefinitionsForPolicy(interfaces.AgentWorkerToolPolicyDisabled) != nil {
+	if toolDefinitionsForPolicy(workerconfig.AgentToolPolicyDisabled) != nil {
 		t.Fatal("disabled policy should not expose tool definitions")
 	}
 }
@@ -351,7 +370,7 @@ func TestLibraryHarnessAdapter_EnabledToolsRegistersExecutor(t *testing.T) {
 	result, err := adapter.Execute(context.Background(), HarnessInput{
 		UserMessage:  "hello",
 		Inferencer:   staticInferencer{response: "done"},
-		ToolPolicy:   interfaces.AgentWorkerToolPolicyReadOnly,
+		ToolPolicy:   workerconfig.AgentToolPolicyReadOnly,
 		WorkingDir:   dir,
 		ToolRecorder: NewToolDiagnosticRecorder(),
 	})
@@ -370,7 +389,7 @@ func TestLibraryHarnessAdapter_DisabledRunsNoToolsMode(t *testing.T) {
 	result, err := adapter.Execute(context.Background(), HarnessInput{
 		UserMessage: "hello",
 		Inferencer:  staticInferencer{response: "done"},
-		ToolPolicy:  interfaces.AgentWorkerToolPolicyDisabled,
+		ToolPolicy:  workerconfig.AgentToolPolicyDisabled,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -385,7 +404,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 
 	caseDir := t.TempDir()
 	recorder := NewToolDiagnosticRecorder()
-	toolExecutor := NewPolicyToolExecutor(interfaces.AgentWorkerToolPolicyEnabled, caseDir, recorder)
+	toolExecutor := NewPolicyToolExecutor(workerconfig.AgentToolPolicyEnabled, caseDir, recorder)
 	_, toolErr := toolExecutor.Execute(context.Background(), messages.ToolCall{
 		ID:        "tc1",
 		Name:      ToolNameReadFile,
@@ -395,7 +414,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		t.Fatal("expected tool failure")
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:      "dispatch-tool-fail",
 		TransitionID:    "execute",
 		WorkstationName: "Execute",
@@ -404,7 +423,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		dispatch,
 		toolErr,
 		time.Second,
-		interfaces.AgentWorkerToolPolicyEnabled,
+		workerconfig.AgentToolPolicyEnabled,
 		recorder,
 	)
 	if strings.Contains(result.Error, caseDir) {
@@ -416,11 +435,11 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		WorkstationName: dispatch.WorkstationName,
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Reason:          result.Error,
 		Duration:        time.Second,
 	})
-	events := history.Events()
+	events := generatedFactoryEventsForToolTest(t, history.CanonicalEvents())
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -435,7 +454,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, payload.FailureDetail.Message)
 	}
 
-	workItem := interfaces.FactoryWorkItem{
+	workItem := work.FactoryWorkItem{
 		ID:          "work-tool-fail",
 		WorkTypeID:  "task",
 		DisplayName: "Tool failure story",
@@ -444,7 +463,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 	}
 	completedAt := time.Unix(1, 0).UTC()
 	state := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
 			workItem.ID: workItem,
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
@@ -457,10 +476,10 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 			CompletedAt:    completedAt,
 			DurationMillis: 1000,
 			Result: interfaces.WorkstationResult{
-				Outcome: string(interfaces.OutcomeFailed),
+				Outcome: string(workerexecution.OutcomeFailed),
 				Error:   result.Error,
-				FailureDetail: &interfaces.FailureDetail{
-					Reason:  interfaces.WorkFailureTypeUnknown,
+				FailureDetail: &workerexecution.FailureDetail{
+					Reason:  workerexecution.WorkFailureTypeUnknown,
 					Message: result.Error,
 				},
 			},
@@ -494,11 +513,11 @@ func TestAgentRunExecutor_ToolRuntimeFailureSurfacesFailureClass(t *testing.T) {
 	harness := &recordingHarnessAdapter{err: newToolRuntimeError(ToolNameReadFile, `{"path":"missing.txt"}`, fs.ErrNotExist)}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"agent-worker": {
-					Type: interfaces.WorkerTypeAgent,
-					AgentTools: &interfaces.AgentWorkerToolsConfig{
-						Policy: interfaces.AgentWorkerToolPolicyReadOnly,
+					Type: workertaxonomy.WorkerTypeAgent,
+					AgentTools: &workerconfig.AgentToolsConfig{
+						Policy: workerconfig.AgentToolPolicyReadOnly,
 					},
 				},
 			},
@@ -525,11 +544,11 @@ func TestAgentRunExecutor_ToolPolicyViolationSurfacesFailureClass(t *testing.T) 
 	harness := &recordingHarnessAdapter{err: ErrToolPolicyDenied}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"agent-worker": {
-					Type: interfaces.WorkerTypeAgent,
-					AgentTools: &interfaces.AgentWorkerToolsConfig{
-						Policy: interfaces.AgentWorkerToolPolicyReadOnly,
+					Type: workertaxonomy.WorkerTypeAgent,
+					AgentTools: &workerconfig.AgentToolsConfig{
+						Policy: workerconfig.AgentToolPolicyReadOnly,
 					},
 				},
 			},
@@ -542,8 +561,8 @@ func TestAgentRunExecutor_ToolPolicyViolationSurfacesFailureClass(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassToolPolicy {
 		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassToolPolicy)
@@ -558,11 +577,11 @@ func TestAgentRunExecutor_SuccessIncludesToolPolicyDiagnostics(t *testing.T) {
 	}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"agent-worker": {
-					Type: interfaces.WorkerTypeAgent,
-					AgentTools: &interfaces.AgentWorkerToolsConfig{
-						Policy: interfaces.AgentWorkerToolPolicyDisabled,
+					Type: workertaxonomy.WorkerTypeAgent,
+					AgentTools: &workerconfig.AgentToolsConfig{
+						Policy: workerconfig.AgentToolPolicyDisabled,
 					},
 				},
 			},
@@ -575,10 +594,10 @@ func TestAgentRunExecutor_SuccessIncludesToolPolicyDiagnostics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticToolPolicy] != interfaces.AgentWorkerToolPolicyDisabled {
+	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticToolPolicy] != workerconfig.AgentToolPolicyDisabled {
 		t.Fatalf("tool policy diagnostics = %#v", result.Diagnostics)
 	}
-	if harness.lastInput.ToolPolicy != interfaces.AgentWorkerToolPolicyDisabled {
+	if harness.lastInput.ToolPolicy != workerconfig.AgentToolPolicyDisabled {
 		t.Fatalf("harness tool policy = %q, want DISABLED", harness.lastInput.ToolPolicy)
 	}
 }

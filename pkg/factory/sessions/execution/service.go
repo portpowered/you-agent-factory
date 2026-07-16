@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
@@ -167,6 +168,18 @@ func LifecycleControlLinksForSession(sessionID string, includeEvents bool) Lifec
 		Dispatches: inspection.Dispatches,
 		Artifacts:  inspection.Artifacts,
 		Events:     inspection.Events,
+	}
+}
+
+// LiveLifecycleControlLinksForSession builds post-control inspection links for
+// one live workspace Factory Session.
+func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
+	base := fmt.Sprintf("/factory-sessions/%s", strings.TrimSpace(sessionID))
+	return LifecycleControlLinks{
+		Session: base,
+		Status:  base,
+		Results: base + "/result",
+		Events:  base + "/events",
 	}
 }
 
@@ -376,10 +389,10 @@ func SmokeLiveChildProvider() workers.Provider {
 
 type smokeLiveChildProvider struct{}
 
-func (smokeLiveChildProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{
+func (smokeLiveChildProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{
 		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-1",

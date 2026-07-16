@@ -4,11 +4,14 @@ import (
 	"context"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
@@ -25,7 +28,7 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 			alreadyDispatched = true
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{DispatchID: "d1", TransitionID: "t1", WorkerType: "test-worker"},
+					Dispatch: work.WorkDispatch{DispatchID: "d1", TransitionID: "t1", WorkerType: "test-worker"},
 					Mutations: []interfaces.MarkingMutation{{
 						Type:      interfaces.MutationConsume,
 						TokenID:   "tok-1",
@@ -39,7 +42,7 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 
 	var dispatched []string
 	eng := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
-		WithDispatchHandler(func(d interfaces.WorkDispatch) {
+		WithDispatchHandler(func(d work.WorkDispatch) {
 			dispatched = append(dispatched, d.TransitionID)
 		}),
 	)
@@ -63,10 +66,10 @@ func TestDispatchRecordsTrackedInRunningDispatches(t *testing.T) {
 		t.Errorf("expected 1 mutation consuming tok-1, got %v", mutations)
 	}
 
-	eng.GetResultBuffer().Write(context.Background(), interfaces.WorkResult{
+	eng.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{
 		DispatchID:   "d1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	})
 	eng.NotifyResult()
 	if err := eng.Tick(context.Background()); err != nil {
@@ -86,16 +89,16 @@ func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) 
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:   "dispatch-1",
 						TransitionID: "transition-1",
 						WorkerType:   "worker-a",
-						Execution: interfaces.ExecutionMetadata{
+						Execution: work.ExecutionMetadata{
 							TraceID:   "trace-1",
 							WorkIDs:   []string{"work-1"},
 							ReplayKey: "transition-1/trace-1/work-1",
 						},
-						InputTokens: workers.InputTokens(interfaces.Token{
+						InputTokens: workers.InputTokens(factorytoken.Token{
 							ID:      "token-1",
 							PlaceID: "task:init",
 						}),
@@ -113,7 +116,7 @@ func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) 
 	var records []interfaces.FactoryDispatchRecord
 	hook := newTestDispatchResultHook()
 	var eng *FactoryEngine
-	hook.submit = func(_ context.Context, dispatch interfaces.WorkDispatch) error {
+	hook.submit = func(_ context.Context, dispatch work.WorkDispatch) error {
 		if len(records) != 1 {
 			t.Fatalf("dispatch submitted before recorder observed it; record count = %d", len(records))
 		}
@@ -146,10 +149,10 @@ func TestDispatchResultHook_RecordsDispatchBeforeSubmittingToHook(t *testing.T) 
 func TestDispatchEntry_SubmitsRawInterfacesWorkDispatch(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
-	inputToken := interfaces.Token{
+	inputToken := factorytoken.Token{
 		ID:      "token-raw",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-raw",
 			WorkTypeID: "task",
 			TraceID:    "trace-raw",
@@ -160,7 +163,7 @@ func TestDispatchEntry_SubmitsRawInterfacesWorkDispatch(t *testing.T) {
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:      "dispatch-raw",
 						TransitionID:    "transition-raw",
 						WorkerType:      "worker-raw",
@@ -179,10 +182,10 @@ func TestDispatchEntry_SubmitsRawInterfacesWorkDispatch(t *testing.T) {
 	}
 
 	hook := newTestDispatchResultHook()
-	var handled []interfaces.WorkDispatch
+	var handled []work.WorkDispatch
 	eng := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
 		WithDispatchResultHook(hook),
-		WithDispatchHandler(func(dispatch interfaces.WorkDispatch) {
+		WithDispatchHandler(func(dispatch work.WorkDispatch) {
 			handled = append(handled, dispatch)
 		}),
 	)
@@ -197,7 +200,7 @@ func TestDispatchEntry_SubmitsRawInterfacesWorkDispatch(t *testing.T) {
 		t.Fatalf("handled dispatches = %d, want 1", len(handled))
 	}
 
-	for label, dispatch := range map[string]interfaces.WorkDispatch{"hook": hook.submits[0], "handler": handled[0]} {
+	for label, dispatch := range map[string]work.WorkDispatch{"hook": hook.submits[0], "handler": handled[0]} {
 		if dispatch.DispatchID != "dispatch-raw" || dispatch.WorkerType != "worker-raw" {
 			t.Fatalf("%s dispatch identity = %#v, want raw dispatch identity", label, dispatch)
 		}
@@ -221,10 +224,10 @@ func TestDispatchResultHook_CompletionRecordedAtObservedTick(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
 	hook := newTestDispatchResultHook()
-	hook.results = []interfaces.WorkResult{{
+	hook.results = []workerexecution.WorkResult{{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}}
 
 	var records []interfaces.FactoryCompletionRecord
@@ -272,14 +275,14 @@ func TestTokenNamePopulatedOnDispatchAndCompletion(t *testing.T) {
 			alreadyDispatched = true
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:   "d1",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
-						InputTokens: workers.InputTokens(interfaces.Token{
+						InputTokens: workers.InputTokens(factorytoken.Token{
 							ID:      "tok-1",
 							PlaceID: "task:init",
-							Color: interfaces.TokenColor{
+							Color: factorytoken.Color{
 								Name:       "my-task-name",
 								WorkID:     "work-1",
 								WorkTypeID: "task",
@@ -297,17 +300,17 @@ func TestTokenNamePopulatedOnDispatchAndCompletion(t *testing.T) {
 		},
 	}
 
-	eng := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(_ interfaces.WorkDispatch) {}))
+	eng := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(_ work.WorkDispatch) {}))
 	if err := eng.Tick(context.Background()); err != nil {
 		t.Fatalf("Tick() error: %v", err)
 	}
 
 	assertConsumedTokenName(t, eng.GetRuntimeStateSnapshot().Dispatches["d1"].ConsumedTokens, "my-task-name", "DispatchEntry")
 
-	eng.GetResultBuffer().Write(context.Background(), interfaces.WorkResult{
+	eng.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{
 		DispatchID:   "d1",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	})
 	eng.NotifyResult()
 	if err := eng.Tick(context.Background()); err != nil {
@@ -332,7 +335,7 @@ func TestDispatchRecordsAlwaysTracked(t *testing.T) {
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{DispatchID: "d1", TransitionID: "t1", WorkerType: "test-worker"},
+					Dispatch: work.WorkDispatch{DispatchID: "d1", TransitionID: "t1", WorkerType: "test-worker"},
 					Mutations: []interfaces.MarkingMutation{{
 						Type:      interfaces.MutationConsume,
 						TokenID:   "tok-1",
@@ -346,7 +349,7 @@ func TestDispatchRecordsAlwaysTracked(t *testing.T) {
 
 	var dispatched []string
 	eng := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
-		WithDispatchHandler(func(d interfaces.WorkDispatch) {
+		WithDispatchHandler(func(d work.WorkDispatch) {
 			dispatched = append(dispatched, d.TransitionID)
 		}),
 	)
@@ -390,7 +393,7 @@ func assertSingleDispatchRecord(t *testing.T, records []interfaces.FactoryDispat
 	}
 }
 
-func assertConsumedTokenName(t *testing.T, tokens []interfaces.Token, wantName, label string) {
+func assertConsumedTokenName(t *testing.T, tokens []factorytoken.Token, wantName, label string) {
 	t.Helper()
 	if len(tokens) != 1 {
 		t.Fatalf("expected 1 consumed token on %s, got %d", label, len(tokens))
@@ -408,7 +411,7 @@ func TestResultWhileAutomaticTicksPaused_BuffersUntilResume(t *testing.T) {
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:   "dispatch-paused-result",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
@@ -425,13 +428,13 @@ func TestResultWhileAutomaticTicksPaused_BuffersUntilResume(t *testing.T) {
 
 	paused := true
 	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
-		WithDispatchHandler(func(interfaces.WorkDispatch) {}),
+		WithDispatchHandler(func(work.WorkDispatch) {}),
 		WithAutomaticTicksPaused(func() bool {
 			return paused
 		}),
 	)
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-paused-result",
 	}}); err != nil {
@@ -446,10 +449,10 @@ func TestResultWhileAutomaticTicksPaused_BuffersUntilResume(t *testing.T) {
 	}
 
 	paused = true
-	engine.GetResultBuffer().Write(context.Background(), interfaces.WorkResult{
+	engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{
 		DispatchID:   "dispatch-paused-result",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	})
 	engine.NotifyResult()
 	if err := engine.Tick(context.Background()); err != nil {
@@ -488,7 +491,7 @@ func TestWakeForPendingProcessing_SignalsBufferedResultAfterPausedWake(t *testin
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:   "dispatch-paused-wake",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
@@ -505,13 +508,13 @@ func TestWakeForPendingProcessing_SignalsBufferedResultAfterPausedWake(t *testin
 
 	paused := true
 	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
-		WithDispatchHandler(func(interfaces.WorkDispatch) {}),
+		WithDispatchHandler(func(work.WorkDispatch) {}),
 		WithAutomaticTicksPaused(func() bool {
 			return paused
 		}),
 	)
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-paused-result-wake",
 	}}); err != nil {
@@ -523,10 +526,10 @@ func TestWakeForPendingProcessing_SignalsBufferedResultAfterPausedWake(t *testin
 	}
 
 	paused = true
-	engine.GetResultBuffer().Write(context.Background(), interfaces.WorkResult{
+	engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{
 		DispatchID:   "dispatch-paused-wake",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	})
 	engine.NotifyResult()
 	if err := engine.Tick(context.Background()); err != nil {
@@ -554,7 +557,7 @@ func TestDispatchResultHookWhileAutomaticTicksPaused_BuffersUntilResume(t *testi
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:   "dispatch-hook-paused",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
@@ -578,7 +581,7 @@ func TestDispatchResultHookWhileAutomaticTicksPaused_BuffersUntilResume(t *testi
 		}),
 	)
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-hook-paused-result",
 	}}); err != nil {
@@ -593,10 +596,10 @@ func TestDispatchResultHookWhileAutomaticTicksPaused_BuffersUntilResume(t *testi
 	}
 
 	paused = true
-	hook.results = append(hook.results, interfaces.WorkResult{
+	hook.results = append(hook.results, workerexecution.WorkResult{
 		DispatchID:   "dispatch-hook-paused",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	})
 	select {
 	case hook.waitCh <- struct{}{}:

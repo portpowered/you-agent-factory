@@ -1,0 +1,82 @@
+package runtimefixtures
+
+import (
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	// RuntimeWorkstationLookupFixture provides a narrow map-backed
+	// RuntimeWorkstationLookup for tests.
+)
+
+type RuntimeWorkstationLookupFixture struct {
+	Workstations map[string]*interfaces.FactoryWorkstationConfig
+}
+
+var _ interfaces.RuntimeWorkstationLookup = RuntimeWorkstationLookupFixture{}
+
+func (f RuntimeWorkstationLookupFixture) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := f.Workstations[name]
+	return workstation, ok
+}
+
+// RuntimeDefinitionLookupFixture provides a narrow map-backed
+// RuntimeDefinitionLookup for tests.
+type RuntimeDefinitionLookupFixture struct {
+	Workstations map[string]*interfaces.FactoryWorkstationConfig
+	Workers      map[string]*workerconfig.Config
+	Factory      *interfaces.FactoryConfig
+}
+
+var _ interfaces.RuntimeDefinitionLookup = RuntimeDefinitionLookupFixture{}
+var _ interfaces.RuntimeFactoryConfigLookup = RuntimeDefinitionLookupFixture{}
+
+func (f RuntimeDefinitionLookupFixture) Worker(name string) (*workerconfig.Config, bool) {
+	worker, ok := f.Workers[name]
+	return worker, ok
+}
+
+func (f RuntimeDefinitionLookupFixture) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := f.Workstations[name]
+	return workstation, ok
+}
+
+func (f RuntimeDefinitionLookupFixture) FactoryConfig() *interfaces.FactoryConfig {
+	return f.Factory
+}
+
+// RuntimeConfigLookupFixture provides a narrow map-backed RuntimeConfigLookup
+// for tests, with RuntimeBaseDir defaulting to FactoryDir when unset.
+type RuntimeConfigLookupFixture struct {
+	Workstations    map[string]*interfaces.FactoryWorkstationConfig
+	Workers         map[string]*workerconfig.Config
+	Factory         *interfaces.FactoryConfig
+	FactoryPath     string
+	RuntimeBasePath string
+}
+
+var _ interfaces.RuntimeConfigLookup = RuntimeConfigLookupFixture{}
+var _ interfaces.RuntimeFactoryConfigLookup = RuntimeConfigLookupFixture{}
+
+func (f RuntimeConfigLookupFixture) FactoryDir() string {
+	return f.FactoryPath
+}
+
+func (f RuntimeConfigLookupFixture) Worker(name string) (*workerconfig.Config, bool) {
+	worker, ok := f.Workers[name]
+	return worker, ok
+}
+
+func (f RuntimeConfigLookupFixture) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := f.Workstations[name]
+	return workstation, ok
+}
+
+func (f RuntimeConfigLookupFixture) RuntimeBaseDir() string {
+	if f.RuntimeBasePath != "" {
+		return f.RuntimeBasePath
+	}
+	return f.FactoryPath
+}
+
+func (f RuntimeConfigLookupFixture) FactoryConfig() *interfaces.FactoryConfig {
+	return f.Factory
+}

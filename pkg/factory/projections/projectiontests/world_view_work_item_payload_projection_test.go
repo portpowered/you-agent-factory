@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestBuildFactoryWorldView_EnrichesActiveExecutionWorkItemRefsWithSelectedWorkPayload(t *testing.T) {
@@ -22,7 +23,7 @@ func TestBuildFactoryWorldView_EnrichesActiveExecutionWorkItemRefsWithSelectedWo
 	if len(execution.WorkItems) != 1 || execution.WorkItems[0].WorkID != "work-1" {
 		t.Fatalf("active execution work items = %#v, want work-1", execution.WorkItems)
 	}
-	if execution.WorkItems[0].PayloadStatus != string(interfaces.WorkPayloadResolutionResolved) {
+	if execution.WorkItems[0].PayloadStatus != string(work.WorkPayloadResolutionResolved) {
 		t.Fatalf("active work payload status = %q, want RESOLVED", execution.WorkItems[0].PayloadStatus)
 	}
 	assertWorkItemRefLineageTextContent(t, execution.WorkItems[0], "draft-v1")
@@ -44,7 +45,7 @@ func TestBuildFactoryWorldView_EnrichesActiveExecutionWorkItemRefsWithSelectedWo
 	if work1Ref == nil {
 		t.Fatalf("place occupancy refs = %#v, want work-1 somewhere", latestView.Runtime.PlaceOccupancyWorkItemsByPlaceID)
 	}
-	if work1Ref.PayloadStatus != string(interfaces.WorkPayloadResolutionResolved) {
+	if work1Ref.PayloadStatus != string(work.WorkPayloadResolutionResolved) {
 		t.Fatalf("work-1 payload status = %q, want RESOLVED", work1Ref.PayloadStatus)
 	}
 	assertWorkItemRefLineageTextContent(t, *work1Ref, "draft-v3")
@@ -75,7 +76,7 @@ func TestBuildFactoryWorldView_MarksActiveExecutionWorkItemRefsUnavailableWithou
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
-	state.WorkItemsByID["work-missing"] = interfaces.FactoryWorkItem{
+	state.WorkItemsByID["work-missing"] = work.FactoryWorkItem{
 		ID:         "work-missing",
 		WorkTypeID: "task",
 	}
@@ -86,7 +87,7 @@ func TestBuildFactoryWorldView_MarksActiveExecutionWorkItemRefsUnavailableWithou
 		t.Fatalf("active execution work items = %#v, want one unavailable ref", execution.WorkItems)
 	}
 	ref := execution.WorkItems[0]
-	if ref.PayloadStatus != string(interfaces.WorkPayloadResolutionUnavailable) {
+	if ref.PayloadStatus != string(work.WorkPayloadResolutionUnavailable) {
 		t.Fatalf("payload status = %q, want UNAVAILABLE", ref.PayloadStatus)
 	}
 	if ref.PayloadUnavailableReason == "" {
@@ -102,7 +103,7 @@ func assertWorkItemRefLineageTextContent(t *testing.T, ref interfaces.FactoryWor
 	if len(ref.Content) != 1 {
 		t.Fatalf("content parts = %#v, want one text part", ref.Content)
 	}
-	if ref.Content[0].Type != interfaces.WorkContentPartTypeText || ref.Content[0].Text != wantText {
+	if ref.Content[0].Type != work.WorkContentPartTypeText || ref.Content[0].Text != wantText {
 		t.Fatalf("content = %#v, want text %q", ref.Content, wantText)
 	}
 }

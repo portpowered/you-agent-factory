@@ -6,17 +6,18 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJavaScriptProjection(t *testing.T) {
 	t0 := time.Date(2026, 6, 8, 17, 0, 0, 0, time.UTC)
-	workItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
+	workItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEvent(1, t0.Add(time.Second), workItem),
@@ -50,18 +51,14 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 	if err != nil {
 		t.Fatalf("marshal primary result: %v", err)
 	}
-	var primaryResult factoryapi.WorkContent
-	if err := json.Unmarshal([]byte(`[{"type":"JSON","json":{"ok":true,"count":2}}]`), &primaryResult); err != nil {
-		t.Fatalf("unmarshal primary result content: %v", err)
-	}
-	resultArtifact := factoryapi.FactoryArtifactRef{
-		Id:         "artifact-result-1",
-		Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
-		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+	resultArtifact := interfaces.FactoryArtifactRef{
+		ID:         "artifact-result-1",
+		Kind:       "FINAL_RESULT",
+		Visibility: "PUBLIC",
 	}
 	input := workflowresult.SessionResultInput{
 		SessionID:      sessionID,
-		Status:         factoryapi.FactorySessionStatusFINISHED,
+		Status:         interfaces.RuntimeStatusFinished,
 		PrimaryValue:   workflowresult.TypedValue{JSON: primaryJSON},
 		ResultArtifact: &resultArtifact,
 		Artifacts: []interfaces.FactorySessionArtifactState{{
@@ -106,7 +103,7 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 		t.Fatalf("artifact ids differ: %q vs %q", (*durableResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
 	}
 	liveResult := factorysessions.ProjectSessionResult(sessionID, ctx, factorysessions.NewJavaScriptCheckpointStore())
-	if liveResult.ResultArtifactRef == nil || liveResult.ResultArtifactRef.Id != (*eventPayload.ArtifactIds)[0] {
+	if liveResult.ResultArtifactRef == nil || liveResult.ResultArtifactRef.ID != (*eventPayload.ArtifactIds)[0] {
 		t.Fatalf("live result artifact = %#v, want id %q", liveResult.ResultArtifactRef, (*eventPayload.ArtifactIds)[0])
 	}
 }

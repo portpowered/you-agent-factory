@@ -5,15 +5,17 @@ import (
 	"strings"
 	"text/template"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // PromptRenderer interpolates token color data into prompt templates using
 // Go's text/template. The renderer builds PromptData from input tokens and
 // workflow context, then executes the template against it.
 type PromptRenderer interface {
-	Render(tmpl string, tokens []interfaces.Token, wfCtx *factory_context.FactoryContext) (string, error)
+	Render(tmpl string, tokens []factorytoken.Token, wfCtx *factory_context.FactoryContext) (string, error)
 }
 
 // TokenData holds the per-token data extracted from a single input token's color and history.
@@ -28,8 +30,8 @@ type TokenData struct {
 	Project    string
 	Tags       map[string]string
 	Payload    string
-	Relations  []interfaces.Relation
-	Content    []interfaces.WorkContentPart
+	Relations  []work.Relation
+	Content    []work.WorkContentPart
 
 	PreviousOutput    string
 	RejectionFeedback string
@@ -48,7 +50,7 @@ type PromptData struct {
 type PromptHistory struct {
 	LastError     string
 	FailureCount  int
-	FailureLog    []interfaces.FailureRecord
+	FailureLog    []factorytoken.Failure
 	TotalVisits   int
 	AttemptNumber int
 }
@@ -67,7 +69,7 @@ type DefaultPromptRenderer struct{}
 
 // Render parses the template string, builds PromptData from input tokens and
 // workflow context, and returns the rendered prompt.
-func (r *DefaultPromptRenderer) Render(tmpl string, tokens []interfaces.Token, wfCtx *factory_context.FactoryContext) (string, error) {
+func (r *DefaultPromptRenderer) Render(tmpl string, tokens []factorytoken.Token, wfCtx *factory_context.FactoryContext) (string, error) {
 	if tmpl == "" {
 		return r.getTokenPayloads(tokens)
 	}
@@ -88,7 +90,7 @@ func (r *DefaultPromptRenderer) Render(tmpl string, tokens []interfaces.Token, w
 }
 
 // BuildPromptData constructs PromptData from input tokens and workflow context.
-func BuildPromptData(tokens []interfaces.Token, wfCtx *factory_context.FactoryContext) PromptData {
+func BuildPromptData(tokens []factorytoken.Token, wfCtx *factory_context.FactoryContext) PromptData {
 	var data PromptData
 
 	for _, token := range tokens {
@@ -117,10 +119,10 @@ func BuildPromptData(tokens []interfaces.Token, wfCtx *factory_context.FactoryCo
 	return data
 }
 
-func (r *DefaultPromptRenderer) getTokenPayloads(tokens []interfaces.Token) (string, error) {
+func (r *DefaultPromptRenderer) getTokenPayloads(tokens []factorytoken.Token) (string, error) {
 	payloads := []string{}
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if token.Color.Payload == nil {
@@ -134,7 +136,7 @@ func (r *DefaultPromptRenderer) getTokenPayloads(tokens []interfaces.Token) (str
 	return strings.Join(payloads, "\n"), nil
 }
 
-func buildTokenData(token interfaces.Token, wfCtx *factory_context.FactoryContext) TokenData {
+func buildTokenData(token factorytoken.Token, wfCtx *factory_context.FactoryContext) TokenData {
 	td := TokenData{
 		Tags: make(map[string]string),
 	}
@@ -148,7 +150,7 @@ func buildTokenData(token interfaces.Token, wfCtx *factory_context.FactoryContex
 	td.ParentID = color.ParentID
 	td.Payload = string(color.Payload)
 	td.Relations = color.Relations
-	td.Content = append([]interfaces.WorkContentPart(nil), color.Content...)
+	td.Content = append([]work.WorkContentPart(nil), color.Content...)
 
 	if color.Tags != nil {
 		td.Tags = color.Tags
@@ -174,12 +176,12 @@ func buildTokenData(token interfaces.Token, wfCtx *factory_context.FactoryContex
 	return td
 }
 
-func promptContextProject(tokens []interfaces.Token, wfCtx *factory_context.FactoryContext) string {
+func promptContextProject(tokens []factorytoken.Token, wfCtx *factory_context.FactoryContext) string {
 	if project := explicitContextProject(wfCtx); project != "" {
 		return project
 	}
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if project := token.Color.Tags[factory_context.ProjectTagKey]; project != "" {

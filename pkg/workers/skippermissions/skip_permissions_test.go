@@ -4,7 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestEffectiveSkipPermissions(t *testing.T) {
@@ -23,40 +29,40 @@ func TestEffectiveSkipPermissions(t *testing.T) {
 		{
 			name:       "AbsentOverrideUsesPersistedFalse",
 			persisted:  false,
-			workerType: interfaces.WorkerTypeAgent,
+			workerType: workertaxonomy.WorkerTypeAgent,
 			want:       false,
 		},
 		{
 			name:               "OverrideTrueAgentWorker",
 			persisted:          false,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideTrue,
 			want:               true,
 		},
 		{
 			name:               "OverrideTrueModelWorkerIgnored",
 			persisted:          false,
-			workerType:         interfaces.WorkerTypeModel,
+			workerType:         workertaxonomy.WorkerTypeModel,
 			invocationOverride: &overrideTrue,
 			want:               false,
 		},
 		{
 			name:               "OverrideFalseAgentWorkerUsesPersistedFalse",
 			persisted:          false,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideFalse,
 			want:               false,
 		},
 		{
 			name:       "PersistedTrueWinsWithoutOverride",
 			persisted:  true,
-			workerType: interfaces.WorkerTypeAgent,
+			workerType: workertaxonomy.WorkerTypeAgent,
 			want:       true,
 		},
 		{
 			name:               "PersistedTrueWinsWithOverrideFalse",
 			persisted:          true,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideFalse,
 			want:               true,
 		},
@@ -90,47 +96,47 @@ func TestS14SkipPermissionsPrecedenceEvidence(t *testing.T) {
 		{
 			name:       "AbsentOverrideUsesPersistedFalse",
 			persisted:  false,
-			workerType: interfaces.WorkerTypeAgent,
+			workerType: workertaxonomy.WorkerTypeAgent,
 			want:       false,
 		},
 		{
 			name:               "OverrideTrueWithPersistedFalse",
 			persisted:          false,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideTrue,
 			want:               true,
 		},
 		{
 			name:               "OverrideTrueIgnoredForModelWorker",
 			persisted:          false,
-			workerType:         interfaces.WorkerTypeModel,
+			workerType:         workertaxonomy.WorkerTypeModel,
 			invocationOverride: &overrideTrue,
 			want:               false,
 		},
 		{
 			name:               "OverrideFalseWithPersistedFalse",
 			persisted:          false,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideFalse,
 			want:               false,
 		},
 		{
 			name:       "PersistedTrueWithoutOverride",
 			persisted:  true,
-			workerType: interfaces.WorkerTypeAgent,
+			workerType: workertaxonomy.WorkerTypeAgent,
 			want:       true,
 		},
 		{
 			name:               "PersistedTrueWithOverrideFalse",
 			persisted:          true,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideFalse,
 			want:               true,
 		},
 		{
 			name:               "PersistedTrueWithOverrideTrue",
 			persisted:          true,
-			workerType:         interfaces.WorkerTypeAgent,
+			workerType:         workertaxonomy.WorkerTypeAgent,
 			invocationOverride: &overrideTrue,
 			want:               true,
 		},
@@ -153,39 +159,39 @@ func TestAgentWorkerSupportsSkipPermissions(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		worker *interfaces.WorkerConfig
+		worker *workerconfig.Config
 		want   bool
 	}{
 		{
 			name: "SupportedCloudAgentProvider",
-			worker: &interfaces.WorkerConfig{
-				Type:          interfaces.WorkerTypeAgent,
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			worker: &workerconfig.Config{
+				Type:          workertaxonomy.WorkerTypeAgent,
+				ModelProvider: string(modelprovider.Claude),
 			},
 			want: true,
 		},
 		{
 			name: "LocalManagedAgentWorker",
-			worker: &interfaces.WorkerConfig{
-				Type:          interfaces.WorkerTypeAgent,
+			worker: &workerconfig.Config{
+				Type:          workertaxonomy.WorkerTypeAgent,
 				Model:         "OMNIVOICE_Q4_K_M",
-				ModelProvider: string(interfaces.ModelProviderClaude),
-				ModelLocality: interfaces.ModelLocalityLocal,
+				ModelProvider: string(modelprovider.Claude),
+				ModelLocality: workerconfig.ModelLocalityLocal,
 			},
 			want: false,
 		},
 		{
 			name: "UnsupportedModelProvider",
-			worker: &interfaces.WorkerConfig{
-				Type:          interfaces.WorkerTypeAgent,
+			worker: &workerconfig.Config{
+				Type:          workertaxonomy.WorkerTypeAgent,
 				ModelProvider: "acme",
 			},
 			want: false,
 		},
 		{
 			name: "ModelWorkerIgnored",
-			worker: &interfaces.WorkerConfig{
-				Type:          interfaces.WorkerTypeModel,
+			worker: &workerconfig.Config{
+				Type:          workertaxonomy.WorkerTypeModel,
 				ModelProvider: "acme",
 			},
 			want: true,
@@ -208,22 +214,22 @@ func TestValidateInvocationSkipPermissionsForWorker(t *testing.T) {
 	t.Parallel()
 
 	overrideTrue := true
-	agent := &interfaces.WorkerConfig{
-		Type:          interfaces.WorkerTypeAgent,
+	agent := &workerconfig.Config{
+		Type:          workertaxonomy.WorkerTypeAgent,
 		ModelProvider: "acme",
 	}
-	supportedAgent := &interfaces.WorkerConfig{
-		Type:          interfaces.WorkerTypeAgent,
-		ModelProvider: string(interfaces.ModelProviderClaude),
+	supportedAgent := &workerconfig.Config{
+		Type:          workertaxonomy.WorkerTypeAgent,
+		ModelProvider: string(modelprovider.Claude),
 	}
-	localManagedAgent := &interfaces.WorkerConfig{
-		Type:          interfaces.WorkerTypeAgent,
+	localManagedAgent := &workerconfig.Config{
+		Type:          workertaxonomy.WorkerTypeAgent,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelProvider: string(interfaces.ModelProviderClaude),
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelProvider: string(modelprovider.Claude),
+		ModelLocality: workerconfig.ModelLocalityLocal,
 	}
-	modelWorker := &interfaces.WorkerConfig{
-		Type:          interfaces.WorkerTypeModel,
+	modelWorker := &workerconfig.Config{
+		Type:          workertaxonomy.WorkerTypeModel,
 		ModelProvider: "acme",
 	}
 
@@ -250,10 +256,10 @@ func TestValidateInvocationSkipPermissionsForWorker(t *testing.T) {
 }
 
 type skipPermissionsRuntimeLookup struct {
-	workers map[string]*interfaces.WorkerConfig
+	workers map[string]*workerconfig.Config
 }
 
-func (s skipPermissionsRuntimeLookup) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (s skipPermissionsRuntimeLookup) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := s.workers[name]
 	return worker, ok
 }
@@ -266,7 +272,7 @@ func (skipPermissionsRuntimeLookup) Guard(string) (*interfaces.GuardConfig, bool
 	return nil, false
 }
 
-func (skipPermissionsRuntimeLookup) Resource(string) (*interfaces.ResourceConfig, bool) {
+func (skipPermissionsRuntimeLookup) Resource(string) (*factoryresource.Config, bool) {
 	return nil, false
 }
 
@@ -287,19 +293,19 @@ func TestValidateInvocationSkipPermissionsWorkers(t *testing.T) {
 
 	overrideTrue := true
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "supported-agent"},
 			{Name: "unsupported-agent"},
 		},
 	}
 	runtimeCfg := skipPermissionsRuntimeLookup{
-		workers: map[string]*interfaces.WorkerConfig{
+		workers: map[string]*workerconfig.Config{
 			"supported-agent": {
-				Type:          interfaces.WorkerTypeAgent,
-				ModelProvider: string(interfaces.ModelProviderClaude),
+				Type:          workertaxonomy.WorkerTypeAgent,
+				ModelProvider: string(modelprovider.Claude),
 			},
 			"unsupported-agent": {
-				Type:          interfaces.WorkerTypeAgent,
+				Type:          workertaxonomy.WorkerTypeAgent,
 				ModelProvider: "acme",
 			},
 		},
@@ -327,8 +333,8 @@ func TestAgentWorkerSupportsSkipPermissionsNilAndEmptyProvider(t *testing.T) {
 	if !AgentWorkerSupportsSkipPermissions(nil) {
 		t.Fatal("nil worker should be treated as supported")
 	}
-	if !AgentWorkerSupportsSkipPermissions(&interfaces.WorkerConfig{
-		Type:          interfaces.WorkerTypeAgent,
+	if !AgentWorkerSupportsSkipPermissions(&workerconfig.Config{
+		Type:          workertaxonomy.WorkerTypeAgent,
 		ModelProvider: "  ",
 	}) {
 		t.Fatal("empty provider should be treated as supported")

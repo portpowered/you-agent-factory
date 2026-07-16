@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 const javascriptRuntimeSymbolsBaselineFixture = "pkg/orchestrators/javascript/runtime/javascript-runtime-symbols.json"

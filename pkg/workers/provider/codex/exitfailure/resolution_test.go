@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 )
 
@@ -32,7 +33,7 @@ func TestResolveFailure_PrecedenceTable(t *testing.T) {
 				Stderr: []byte("ERROR: unexpected status 401\n"),
 			},
 			want: exitfailure.ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeThrottled,
+				Reason:  workerexecution.WorkFailureTypeThrottled,
 				Message: codexThrottleFailureMessage,
 			},
 			wantOK: true,
@@ -45,7 +46,7 @@ func TestResolveFailure_PrecedenceTable(t *testing.T) {
 				Stderr:   []byte("ERROR: unexpected status 401\n"),
 			},
 			want: exitfailure.ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeAuthFailure,
+				Reason:  workerexecution.WorkFailureTypeAuthFailure,
 				Message: codexAuthFailureMessage,
 			},
 			wantOK: true,
@@ -58,7 +59,7 @@ func TestResolveFailure_PrecedenceTable(t *testing.T) {
 				Stderr:   []byte("cleanup finished\n"),
 			},
 			want: exitfailure.ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeUnknown,
+				Reason:  workerexecution.WorkFailureTypeUnknown,
 				Message: exitfailure.UnknownFailureMessage,
 			},
 			wantOK: true,
@@ -74,7 +75,7 @@ func TestResolveFailure_PrecedenceTable(t *testing.T) {
 			},
 			res: exitfailure.ResolutionInput{CommandError: context.DeadlineExceeded},
 			want: exitfailure.ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeTimeout,
+				Reason:  workerexecution.WorkFailureTypeTimeout,
 				Message: "Codex execution timed out.",
 			},
 			wantOK: true,
@@ -88,7 +89,7 @@ func TestResolveFailure_PrecedenceTable(t *testing.T) {
 			},
 			res: exitfailure.ResolutionInput{FlushReason: exitfailure.FlushReasonCanceled},
 			want: exitfailure.ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeUnknown,
+				Reason:  workerexecution.WorkFailureTypeUnknown,
 				Message: "Codex execution was canceled.",
 			},
 			wantOK: true,
@@ -118,7 +119,7 @@ func TestResolveFailure_PreservesBoundedInternalCause(t *testing.T) {
 	if !ok {
 		t.Fatal("ResolveFailure() ok = false, want true")
 	}
-	if got.Result.Reason != interfaces.WorkFailureTypeAuthFailure {
+	if got.Result.Reason != workerexecution.WorkFailureTypeAuthFailure {
 		t.Fatalf("Reason = %q, want auth failure", got.Result.Reason)
 	}
 	if got.InternalCause == "" {
@@ -131,7 +132,7 @@ func TestStructuredStreamReportingOutcome_ClassifiesTerminalJSONL(t *testing.T) 
 	if !ok {
 		t.Fatal("StructuredStreamReportingOutcome() ok = false, want true")
 	}
-	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != codexThrottleFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeThrottled || got.Message != codexThrottleFailureMessage {
 		t.Fatalf("StructuredStreamReportingOutcome() = %#v, want throttle failure", got)
 	}
 }
@@ -141,7 +142,7 @@ func TestProcessExitReportingOutcome_ClassifiesStderrWithoutStdout(t *testing.T)
 		ExitCode: 1,
 		Stderr:   []byte("ERROR: unexpected status 401\n"),
 	})
-	if got.Reason != interfaces.WorkFailureTypeAuthFailure || got.Message != codexAuthFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeAuthFailure || got.Message != codexAuthFailureMessage {
 		t.Fatalf("ProcessExitReportingOutcome() = %#v, want auth failure", got)
 	}
 }
@@ -170,7 +171,7 @@ func TestStructuredStreamReportingOutcome_ClassifiesErrorRecordType(t *testing.T
 	if !ok {
 		t.Fatal("StructuredStreamReportingOutcome() ok = false, want true")
 	}
-	if got.Reason != interfaces.WorkFailureTypeInternalServerError || got.Message != codexServerFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeInternalServerError || got.Message != codexServerFailureMessage {
 		t.Fatalf("StructuredStreamReportingOutcome() = %#v, want server failure", got)
 	}
 }
@@ -183,7 +184,7 @@ func TestResolveFailure_ExitCode124WithoutContextDeadlineUsesExitCause(t *testin
 	if !ok {
 		t.Fatal("ResolveFailure() ok = false, want true")
 	}
-	if got.Result.Reason != interfaces.WorkFailureTypeTimeout {
+	if got.Result.Reason != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("Reason = %q, want timeout", got.Result.Reason)
 	}
 	if got.InternalCause != "exit code 124" {
@@ -199,7 +200,7 @@ func TestResolveFailure_StructuredJSONInternalCauseFromProcessExit(t *testing.T)
 	if !ok {
 		t.Fatal("ResolveFailure() ok = false, want true")
 	}
-	if got.Result.Reason != interfaces.WorkFailureTypeAuthFailure {
+	if got.Result.Reason != workerexecution.WorkFailureTypeAuthFailure {
 		t.Fatalf("Reason = %q, want auth failure", got.Result.Reason)
 	}
 	if got.InternalCause == "" {

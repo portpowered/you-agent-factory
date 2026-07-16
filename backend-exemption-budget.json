@@ -27,6 +27,12 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/factory/contracts/interfaces_contract_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/factory/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
@@ -54,12 +60,6 @@
       "target": "pkg/factory/sessions/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/interfaces/interfaces_contract_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
@@ -165,7 +165,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/internal/cursorstorage/store_blob_decode.go#decodeBlobEntryValue",
+      "target": "pkg/platform/cursors/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
     },
@@ -195,9 +195,9 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/events/event_history.go#factoryEventPayload",
+      "target": "pkg/factory/contracts/work_runtime_test.go#TestCloneToken_PreserveNilAndEmptyValues",
       "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: canonical event payload union stays on one generated-type switch for replay-safe emission."
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this clone contract test keeps nil, empty, and detached-copy assertions together on the public seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -258,6 +258,36 @@
       "target": "pkg/factory/projections/world_state_dispatch.go#mergeJavaScriptDispatchState",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: dispatch replay merge keeps JavaScript dispatch field updates together for queue/interrupt/reconcile states."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/factory/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the embedded generated-factory artifact contract together across all authored sections."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/factory/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this generated-factory contract test keeps the canonical workstation projection assertions in one readable flow."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/factory/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/factory/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper intentionally validates the merged generated workstation artifact contract in one place."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/factory/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the replay completion diagnostics contract together across all supported branches."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -417,87 +447,51 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/interfaces/work_runtime_test.go#TestCloneToken_PreserveNilAndEmptyValues",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this clone contract test keeps nil, empty, and detached-copy assertions together on the public seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/protobuf_decoder.go#extractProtobufFields",
+      "target": "pkg/platform/cursors/protobuf_decoder.go#extractProtobufFields",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session protobuf decoding stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/redacted_reasoning_decoder.go#decodeRedactedReasoning",
+      "target": "pkg/platform/cursors/redacted_reasoning_decoder.go#decodeRedactedReasoning",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session redacted reasoning decoding stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/store_blob_decode.go#decodeBlobEntryValue",
+      "target": "pkg/platform/cursors/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/store_parse.go#messageUnknownContentText",
+      "target": "pkg/platform/cursors/store_parse.go#messageUnknownContentText",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session message content formatting stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/store_parse.go#parseComposerFromData",
+      "target": "pkg/platform/cursors/store_parse.go#parseComposerFromData",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session composer parsing stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/store_parse.go#parseTextMessageFormat",
+      "target": "pkg/platform/cursors/store_parse.go#parseTextMessageFormat",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session text bubble parsing stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/store_query.go#QueryBlobsTable",
+      "target": "pkg/platform/cursors/store_query.go#QueryBlobsTable",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/internal/cursorstorage/store_query.go#QueryMetaTable",
+      "target": "pkg/platform/cursors/store_query.go#QueryMetaTable",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: MIT-ported cursor-session store schema probing stays grouped until extraction refactor."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the embedded generated-factory artifact contract together across all authored sections."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this generated-factory contract test keeps the canonical workstation projection assertions in one readable flow."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper intentionally validates the merged generated workstation artifact contract in one place."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the replay completion diagnostics contract together across all supported branches."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -867,6 +861,12 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/factory/contracts/interfaces_contract_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/factory/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
@@ -894,12 +894,6 @@
       "target": "pkg/factory/sessions/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/interfaces/interfaces_contract_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
@@ -1005,7 +999,7 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/internal/cursorstorage/store_blob_decode.go#decodeBlobEntryValue",
+      "target": "pkg/platform/cursors/store_blob_decode.go#decodeBlobEntryValue",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-function-lines threshold. Current rationale: MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor."
     },

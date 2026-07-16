@@ -8,9 +8,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work/timework"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func ruleInputTypes(cfg *interfaces.FactoryConfig) []Finding {
@@ -324,7 +325,7 @@ func ruleWorkerWorkstationBehaviorCompatibility(cfg *interfaces.FactoryConfig) [
 func rulePollerWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 	var findings []Finding
 
-	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
+	workersByName := make(map[string]workerconfig.Config, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		workersByName[worker.Name] = worker
 	}
@@ -505,7 +506,7 @@ func ruleHostedWorkers(cfg *interfaces.FactoryConfig) []Finding {
 	return findings
 }
 
-func validateHostedWorker(basePath string, worker interfaces.WorkerConfig) []Finding {
+func validateHostedWorker(basePath string, worker workerconfig.Config) []Finding {
 	var findings []Finding
 	if strings.TrimSpace(worker.Provider) == "" {
 		findings = append(findings, Finding{
@@ -542,7 +543,7 @@ func validateHostedWorker(basePath string, worker interfaces.WorkerConfig) []Fin
 	return append(findings, validateHostedLinearWorker(basePath, worker.Linear)...)
 }
 
-func validateHostedLinearWorker(basePath string, cfg *interfaces.HostedLinearWorkerConfig) []Finding {
+func validateHostedLinearWorker(basePath string, cfg *workerconfig.HostedLinearWorkerConfig) []Finding {
 	var findings []Finding
 	if strings.TrimSpace(cfg.Mapping.WorkType) == "" {
 		findings = append(findings, Finding{
@@ -571,7 +572,7 @@ func validateHostedLinearWorker(basePath string, cfg *interfaces.HostedLinearWor
 	return findings
 }
 
-func validateUnsupportedHostedWorkerFields(basePath string, worker interfaces.WorkerConfig) []Finding {
+func validateUnsupportedHostedWorkerFields(basePath string, worker workerconfig.Config) []Finding {
 	var findings []Finding
 	if strings.TrimSpace(worker.Provider) != "" {
 		findings = append(findings, Finding{
@@ -822,7 +823,7 @@ func ruleAgentWorkerTools(cfg *interfaces.FactoryConfig) []Finding {
 			})
 			continue
 		}
-		if !interfaces.IsKnownAgentWorkerToolPolicy(policy) {
+		if !workerconfig.IsKnownAgentToolPolicy(policy) {
 			findings = append(findings, Finding{
 				Severity: SeverityError,
 				Path:     basePath + ".agentTools.policy",

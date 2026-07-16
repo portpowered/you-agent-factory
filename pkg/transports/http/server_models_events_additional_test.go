@@ -12,14 +12,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
 
@@ -46,15 +48,15 @@ func TestReconnectCursorFromParams(t *testing.T) {
 // TestCompatibilityGetEvents_* exercises handler regressions for compatibility-only GET /events.
 func TestCompatibilityGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	liveEvents := make(chan factoryapi.FactoryEvent, 1)
-	liveEvents <- factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest}
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	liveEvents <- testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest})
 	close(liveEvents)
 
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	rec := httptest.NewRecorder()
 	srv.getEvents(rec, req, false, func(context.Context) (*interfaces.FactoryEventStream, error) {
 		return &interfaces.FactoryEventStream{
-			History: []factoryapi.FactoryEvent{{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
+			History: []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest})},
 			Events:  liveEvents,
 		}, nil
 	})
@@ -158,7 +160,7 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 
 func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	liveEvents := make(chan factoryapi.FactoryEvent)
+	liveEvents := make(chan interfaces.FactoryEvent)
 	close(liveEvents)
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-a/events", nil)
@@ -367,7 +369,7 @@ func TestPullModel_ErrorMappings(t *testing.T) {
 			pullErr: &apisurface.ManagedRuntimePullError{
 				Result: apisurface.ModelPullResult{
 					ModelName:          "OMNIVOICE_Q4_K_M",
-					ProviderLocality:   interfaces.ModelLocalityLocal,
+					ProviderLocality:   workerconfig.ModelLocalityLocal,
 					ManagedPullOutcome: "TIMED_OUT",
 					ReadinessState:     "FAILED",
 				},
@@ -460,7 +462,7 @@ func (listModelsAPI) ListModels(context.Context) (factoryapi.ListModelsResponse,
 	return factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "OMNIVOICE_Q4_K_M"}}}, nil
 }
 
-func TestServer_ListModels_RoutesThroughInjectedModelService(t *testing.T) {
+func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
@@ -510,17 +512,17 @@ func modelWiringFactoryConfig(includeResource bool) map[string]any {
 		"type":          interfaces.WorkerTypeModel,
 		"modelProvider": "CODEX",
 		"model":         "OMNIVOICE_Q4_K_M",
-		"modelLocality": interfaces.ModelLocalityLocal,
+		"modelLocality": workerconfig.ModelLocalityLocal,
 		"operations": []map[string]any{{
 			"name": "TTS",
 			"inputs": []map[string]any{{
 				"name":         "text",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 				"required":     true,
 			}},
 			"outputs": []map[string]any{{
 				"name":         "audio",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -532,7 +534,7 @@ func modelWiringFactoryConfig(includeResource bool) map[string]any {
 		worker["resources"] = []map[string]any{{"name": "omnivoice-cache", "capacity": 1}}
 		cfg["resources"] = []map[string]any{{
 			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
+			"type":       factoryresource.TypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
 			"backend":    "LLAMACPP",

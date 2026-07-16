@@ -4,7 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -13,7 +15,7 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 	phaseStartedAt := t0.Add(2 * time.Second)
 	checkpointTime := t0.Add(3 * time.Second)
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
-	kind := factoryapi.JAVASCRIPT
+	kind := interfaces.OrchestratorKindJavaScript
 	history.RecordOrchestratorPhaseChanged(OrchestratorPhaseChangedInput{
 		SessionID:        "session-js",
 		OrchestratorKind: kind,
@@ -21,7 +23,7 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 		PhaseName:        "plan",
 		Source:           "runtime",
 		Tick:             1,
-		PhaseStatus:      factoryapi.ACTIVE,
+		PhaseStatus:      interfaces.OrchestratorPhaseStatusActive,
 		StartedAt:        &phaseStartedAt,
 		ProgressSummary:  "Planning workflow",
 	}, phaseStartedAt)
@@ -34,7 +36,7 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 		Tick:              2,
 		PreviousPhaseID:   "phase-plan",
 		PreviousPhaseName: "plan",
-		PhaseStatus:       factoryapi.ACTIVE,
+		PhaseStatus:       interfaces.OrchestratorPhaseStatusActive,
 		StartedAt:         &checkpointTime,
 		ProgressSummary:   "Entered execute phase",
 	}, checkpointTime)
@@ -52,21 +54,21 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 		Timestamp:             &checkpointTime,
 		SourceHash:            "sha256:source",
 		RuntimeSnapshotDigest: "sha256:snapshot",
-		ResumabilityStatus:    factoryapi.RESUMABLE,
-		ArtifactRef: &factoryapi.FactoryArtifactRef{
-			Id:          "artifact-ckpt-1",
-			Kind:        factoryapi.FactoryArtifactKindCHECKPOINT,
-			Visibility:  factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+		ResumabilityStatus:    interfaces.CheckpointResumabilityStatusResumable,
+		ArtifactRef: &interfaces.FactoryArtifactRef{
+			ID:          "artifact-ckpt-1",
+			Kind:        interfaces.JavaScriptCheckpointArtifactKind,
+			Visibility:  interfaces.JavaScriptCheckpointArtifactVisibility,
 			ContentHash: &hash,
 			SizeBytes:   &size,
 		},
-		Warnings: []factoryapi.FactoryDispatchWarning{{
+		Warnings: []interfaces.FactoryDispatchWarning{{
 			Code:    "checkpoint_stale_inputs",
 			Message: "Some inputs were captured before the latest dispatch completed",
 		}},
 	}, checkpointTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want phase, phase, checkpoint", len(events))
 	}
@@ -74,7 +76,7 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 	assertOrchestratorProgressEventType(t, events[1], factoryapi.FactoryEventTypeOrchestratorPhaseChanged)
 	assertOrchestratorProgressEventType(t, events[2], factoryapi.FactoryEventTypeOrchestratorCheckpointWritten)
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 2)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 2)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

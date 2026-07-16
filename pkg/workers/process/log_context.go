@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 	workLogEventCommandRunnerCleanupCompleted = "command_runner.cleanup_completed"
 )
 
-func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+func workLogFields(metadata work.ExecutionMetadata, keysAndValues ...any) []any {
 	fields := []any{
 		"request_id", metadata.RequestID,
 		"trace_id", metadata.TraceID,

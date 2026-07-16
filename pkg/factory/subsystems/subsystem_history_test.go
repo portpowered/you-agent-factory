@@ -5,32 +5,34 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *testing.T) {
 	timestamp := time.Date(2026, time.April, 6, 12, 0, 0, 0, time.UTC)
 	subsystem := NewHistory(nil)
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "dispatch-1",
 			TransitionID: "transition-review",
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 		}},
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"dispatch-1": {
 				DispatchID: "dispatch-1",
-				ConsumedTokens: []interfaces.Token{
+				ConsumedTokens: []factorytoken.Token{
 					{
 						ID:      "token-1",
 						PlaceID: "story:init",
-						Color: interfaces.TokenColor{
+						Color: factorytoken.Color{
 							WorkID:     "story-1",
 							WorkTypeID: "story",
 						},
-						History: interfaces.TokenHistory{
+						History: factorytoken.History{
 							TotalVisits: map[string]int{
 								"transition-build": 2,
 							},
@@ -41,7 +43,7 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 								"story:init": 3,
 							},
 							LastError: "previous failure",
-							FailureLog: []interfaces.FailureRecord{{
+							FailureLog: []factorytoken.Failure{{
 								TransitionID: "transition-build",
 								Timestamp:    timestamp,
 								Error:        "build failed",
@@ -90,24 +92,24 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 }
 
 func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) {
-	consumed := []interfaces.Token{
+	consumed := []factorytoken.Token{
 		{
-			Color: interfaces.TokenColor{WorkID: "task-1", WorkTypeID: "task"},
-			History: interfaces.TokenHistory{
+			Color: factorytoken.Color{WorkID: "task-1", WorkTypeID: "task"},
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"process": 3, "review": 2},
 			},
 		},
 		{
-			Color: interfaces.TokenColor{WorkID: "review-1", WorkTypeID: "review", ParentID: "task-1"},
-			History: interfaces.TokenHistory{
+			Color: factorytoken.Color{WorkID: "review-1", WorkTypeID: "review", ParentID: "task-1"},
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"process": 3, "review": 1},
 			},
 		},
 	}
 
-	history := buildHistory(consumed, &interfaces.WorkResult{
+	history := buildHistory(consumed, &workerexecution.WorkResult{
 		TransitionID: "review",
-		Outcome:      interfaces.OutcomeContinue,
+		Outcome:      workerexecution.OutcomeContinue,
 	}, "task-1")
 
 	if got := history.TotalVisits["process"]; got != 3 {
@@ -120,20 +122,20 @@ func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) 
 
 func TestBuildHistory_ExcludesDifferentWorkOnSharedTrace(t *testing.T) {
 	const sharedTrace = "batch-trace"
-	consumed := []interfaces.Token{
+	consumed := []factorytoken.Token{
 		{
-			Color:   interfaces.TokenColor{WorkID: "task-a", WorkTypeID: "task", CurrentChainingTraceID: sharedTrace},
-			History: interfaces.TokenHistory{TotalVisits: map[string]int{"process": 1, "review": 0}},
+			Color:   factorytoken.Color{WorkID: "task-a", WorkTypeID: "task", CurrentChainingTraceID: sharedTrace},
+			History: factorytoken.History{TotalVisits: map[string]int{"process": 1, "review": 0}},
 		},
 		{
-			Color:   interfaces.TokenColor{WorkID: "review-b", WorkTypeID: "review", ParentID: "task-b", CurrentChainingTraceID: sharedTrace},
-			History: interfaces.TokenHistory{TotalVisits: map[string]int{"process": 7, "review": 6}},
+			Color:   factorytoken.Color{WorkID: "review-b", WorkTypeID: "review", ParentID: "task-b", CurrentChainingTraceID: sharedTrace},
+			History: factorytoken.History{TotalVisits: map[string]int{"process": 7, "review": 6}},
 		},
 	}
 
-	history := buildHistory(consumed, &interfaces.WorkResult{
+	history := buildHistory(consumed, &workerexecution.WorkResult{
 		TransitionID: "review",
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 	}, "task-a")
 
 	if got := history.TotalVisits["process"]; got != 1 {
@@ -145,14 +147,14 @@ func TestBuildHistory_ExcludesDifferentWorkOnSharedTrace(t *testing.T) {
 }
 
 func TestBuildHistory_AccumulatesRepeatedCandidateCycles(t *testing.T) {
-	consumed := []interfaces.Token{{
-		Color:   interfaces.TokenColor{WorkID: "task-a", WorkTypeID: "task"},
-		History: interfaces.TokenHistory{TotalVisits: map[string]int{"process": 2, "review": 3}},
+	consumed := []factorytoken.Token{{
+		Color:   factorytoken.Color{WorkID: "task-a", WorkTypeID: "task"},
+		History: factorytoken.History{TotalVisits: map[string]int{"process": 2, "review": 3}},
 	}}
 
-	history := buildHistory(consumed, &interfaces.WorkResult{
+	history := buildHistory(consumed, &workerexecution.WorkResult{
 		TransitionID: "review",
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 	}, "task-a")
 
 	if got := history.TotalVisits["process"]; got != 2 {
@@ -173,9 +175,9 @@ func TestCandidateWorkID_UsesAuthoredInputOrderInsteadOfDispatchTokenOrder(t *te
 			},
 		},
 	}}
-	consumed := []interfaces.Token{
-		{PlaceID: "review:init", Color: interfaces.TokenColor{WorkID: "review-b", ParentID: "task-b"}},
-		{PlaceID: "task:in-review", Color: interfaces.TokenColor{WorkID: "task-a"}},
+	consumed := []factorytoken.Token{
+		{PlaceID: "review:init", Color: factorytoken.Color{WorkID: "review-b", ParentID: "task-b"}},
+		{PlaceID: "task:in-review", Color: factorytoken.Color{WorkID: "task-a"}},
 	}
 
 	if got := candidateWorkID(net, "review", consumed); got != "task-a" {
@@ -184,10 +186,10 @@ func TestCandidateWorkID_UsesAuthoredInputOrderInsteadOfDispatchTokenOrder(t *te
 }
 
 func TestBuildHistory_WhenDispatchLookupMissing_UsesOnlyCurrentResult(t *testing.T) {
-	history := buildHistory(nil, &interfaces.WorkResult{
+	history := buildHistory(nil, &workerexecution.WorkResult{
 		DispatchID:   "dispatch-missing",
 		TransitionID: "transition-review",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, "")
 
 	if got := history.TotalVisits["transition-review"]; got != 1 {

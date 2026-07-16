@@ -9,13 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,7 +27,7 @@ func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *t
 	dir := workInProgressPriorityFixture(t)
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "processing COMPLETE"}},
 		"finisher":  {{Content: "finish existing COMPLETE"}, {Content: "finish initial COMPLETE"}},
 	})
@@ -39,7 +42,7 @@ func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *t
 		),
 	)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		{
 			RequestID:  "request-state-priority",
 			WorkID:     "work-initial",
@@ -70,7 +73,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeOrdersProcessingThenInitialThenCron(t 
 	expiresAt := dueAt.Add(time.Hour)
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"finisher":    {{Content: "finish processing COMPLETE"}},
 		"starter":     {{Content: "start initial COMPLETE"}},
 		"cron-worker": {{Content: "cron initial COMPLETE"}},
@@ -89,7 +92,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeOrdersProcessingThenInitialThenCron(t 
 		),
 	)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		schedulerPriorityWorkRequest("request-runtime-priority", "work-processing", "processing", "task", "processing"),
 		schedulerPriorityWorkRequest("request-runtime-priority", "work-initial", "initial", "task", ""),
 		schedulerPriorityWorkRequest("request-runtime-priority", "work-cron-input", "cron-input", "scheduled", ""),
@@ -108,7 +111,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeCustomSchedulerReceivesRuntimeConfig(t
 	expiresAt := dueAt.Add(time.Hour)
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"finisher":    {{Content: "finish processing COMPLETE"}},
 		"starter":     {{Content: "start initial COMPLETE"}},
 		"cron-worker": {{Content: "cron initial COMPLETE"}},
@@ -124,7 +127,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeCustomSchedulerReceivesRuntimeConfig(t
 		),
 	)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		schedulerPriorityWorkRequest("request-runtime-priority-custom", "work-processing", "processing", "task", "processing"),
 		schedulerPriorityWorkRequest("request-runtime-priority-custom", "work-initial", "initial", "task", ""),
 		schedulerPriorityWorkRequest("request-runtime-priority-custom", "work-cron-input", "cron-input", "scheduled", ""),
@@ -254,8 +257,8 @@ stopToken: COMPLETE
 `
 }
 
-func schedulerPriorityWorkRequest(requestID, workID, name, workTypeID, targetState string) interfaces.SubmitRequest {
-	return interfaces.SubmitRequest{
+func schedulerPriorityWorkRequest(requestID, workID, name, workTypeID, targetState string) work.SubmitRequest {
+	return work.SubmitRequest{
 		RequestID:   requestID,
 		WorkID:      workID,
 		Name:        name,
@@ -266,8 +269,8 @@ func schedulerPriorityWorkRequest(requestID, workID, name, workTypeID, targetSta
 	}
 }
 
-func schedulerPriorityCronTimeRequest(workID, workstation string, dueAt, expiresAt time.Time) interfaces.SubmitRequest {
-	return interfaces.SubmitRequest{
+func schedulerPriorityCronTimeRequest(workID, workstation string, dueAt, expiresAt time.Time) work.SubmitRequest {
+	return work.SubmitRequest{
 		RequestID:   "request-runtime-priority",
 		WorkID:      workID,
 		Name:        "cron:" + workstation,
@@ -321,7 +324,7 @@ func (s *recordingWorkInQueueScheduler) SetRuntimeConfig(runtimeConfig interface
 	scheduler.ApplyRuntimeConfig(s.inner, runtimeConfig)
 }
 
-func tokenIDList(tokens []interfaces.Token) string {
+func tokenIDList(tokens []factorytoken.Token) string {
 	ids := make([]string, len(tokens))
 	for i := range tokens {
 		ids[i] = tokens[i].ID + ":" + string(tokens[i].Color.DataType)
@@ -424,7 +427,7 @@ func dispatchWorkStateCategory(dispatch interfaces.FactoryDispatchRecord, topolo
 	category := state.StateCategoryProcessing
 	found := false
 	for _, token := range workers.WorkDispatchInputTokens(dispatch.Dispatch) {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		tokenCategory := topology.StateCategoryForPlace(token.PlaceID)
@@ -477,7 +480,7 @@ func nonTerminalWorkItemsInSnapshot(snapshot *interfaces.EngineStateSnapshot[pet
 
 	var items []string
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType != interfaces.DataTypeWork || token.Color.WorkID == "" {
+		if token == nil || token.Color.DataType != factorytoken.DataTypeWork || token.Color.WorkID == "" {
 			continue
 		}
 		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)

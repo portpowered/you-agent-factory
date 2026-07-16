@@ -9,8 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -24,7 +25,7 @@ const (
 // provider-neutral facts a full-stream adapter must produce from them.
 type FullStreamFixture struct {
 	NewAdapter          func() adapter.Adapter
-	Request             interfaces.ProviderInferenceRequest
+	Request             workerexecution.ProviderInferenceRequest
 	ContentAndTools     []adapter.Observation
 	RetryableFailure    []adapter.Observation
 	UnsafeAndRecovering []adapter.Observation
@@ -38,7 +39,7 @@ type FullStreamFixture struct {
 // assertions without exposing the fixture's native event vocabulary.
 type FullStreamExpected struct {
 	Capabilities    adapter.Capabilities
-	ProviderSession interfaces.ProviderSessionMetadata
+	ProviderSession workerexecution.ProviderSessionMetadata
 	ProviderRef     string
 	MessageItemID   string
 	ToolItemID      string
@@ -139,10 +140,10 @@ func parseRetryFailure(t *testing.T, providerAdapter adapter.Adapter, observatio
 func assertRetryFailure(t *testing.T, result adapter.FailureResult, expected FullStreamExpected, forbidden []string) {
 	t.Helper()
 	failure := result.Failure
-	if failure == nil || !failure.Retry.Retryable || failure.Family != interfaces.WorkFailureFamilyThrottle {
+	if failure == nil || !failure.Retry.Retryable || failure.Family != workerexecution.WorkFailureFamilyThrottle {
 		t.Fatalf("ClassifyFailure() = %#v", result)
 	}
-	if failure.Type != interfaces.WorkFailureTypeThrottled {
+	if failure.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("normalized retry facts = %#v", failure)
 	}
 	if expected.RetryAfter > 0 && (failure.Retry.RetryAfter == nil || int64(failure.Retry.RetryAfter.Seconds()) != expected.RetryAfter) {
@@ -179,7 +180,7 @@ func verifyUnterminatedFlush(t *testing.T, fixture FullStreamFixture) {
 	}
 }
 
-func assertFullStreamContract(t *testing.T, providerAdapter adapter.Adapter, request interfaces.ProviderInferenceRequest, expected adapter.Capabilities) {
+func assertFullStreamContract(t *testing.T, providerAdapter adapter.Adapter, request workerexecution.ProviderInferenceRequest, expected adapter.Capabilities) {
 	t.Helper()
 	command, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{Request: request})
 	if err != nil {

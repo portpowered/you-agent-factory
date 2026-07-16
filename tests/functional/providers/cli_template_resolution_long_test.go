@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,7 +25,7 @@ func TestTemplateTests_ScriptExecutorDropsResourceTokensFromArgTemplates(t *test
 		`type={{ (index .Inputs 0).DataType }}`,
 	})
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "script-resource-name",
 		WorkID:     "work-script-template-resource",
 		WorkTypeID: "task",
@@ -69,7 +70,7 @@ func TestTemplateTests_ScriptWrapDropsResourceTokensFromWorkstationTemplates(t *
 		`type={{ (index .Inputs 0).DataType }}`,
 	}, "\n"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "script-wrap-resource-name",
 		WorkID:     "work-script-wrap-template-resource",
 		WorkTypeID: "task",
@@ -172,7 +173,7 @@ func TestTemplateTests_ScriptWrapClaudeResolvesWorkstationExecutionTemplates(t *
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(interfaces.ModelProviderClaude, "test-claude-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.Claude, "test-claude-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
@@ -206,7 +207,7 @@ func TestTemplateTests_ScriptWrapCodexResolvesWorkstationExecutionTemplates(t *t
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(interfaces.ModelProviderCodex, "test-codex-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.Codex, "test-codex-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
@@ -235,7 +236,7 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.SetWorkingDirectory(t, dir)
 	configureCursorExecutionTemplateWorkstation(t, dir)
-	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(interfaces.ModelProviderCursor, "test-cursor-model"))
+	writeNamedWorkerAgents(t, dir, "processor", buildModelWorkerConfig(modelprovider.Cursor, "test-cursor-model"))
 
 	writeExecutionTemplateSeed(t, dir)
 
@@ -253,8 +254,8 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 		HasNoTokenInPlace("task:failed")
 
 	req := runner.LastRequest()
-	if req.Command != string(interfaces.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
+	if req.Command != string(modelprovider.Cursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
 	}
 	wantWorkDir := support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch")
 	assertCommandArgs(t, req, []string{

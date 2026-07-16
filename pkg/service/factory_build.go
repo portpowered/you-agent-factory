@@ -14,6 +14,8 @@ import (
 	"time"
 	"unsafe"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -22,18 +24,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
@@ -41,12 +44,16 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 	"go.uber.org/zap"
@@ -85,6 +92,35 @@ func portableReplayLoadResult(cfg *FactoryServiceConfig, result FactoryConfigLoa
 	return result, portable, nil
 }
 
+func workersSchedulerServiceConfig(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	logger *zap.Logger,
+	hostedWorkers hostedworkers.Config,
+) workersservice.Config {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	runner := workers.CommandRunner(workers.ExecCommandRunner{})
+	workflowID := ""
+	defaultFactoryDir := ""
+	if cfg != nil {
+		if cfg.WorkerApplication.ScriptCommandRunner != nil {
+			runner = cfg.WorkerApplication.ScriptCommandRunner
+		}
+		workflowID = cfg.WorkflowID
+		defaultFactoryDir = cfg.Dir
+	}
+	return workersservice.Config{
+		Logger:            logger,
+		Clock:             clock,
+		CommandRunner:     runner,
+		WorkflowID:        workflowID,
+		DefaultFactoryDir: defaultFactoryDir,
+		HostedWorkers:     hostedWorkers,
+	}
+}
+
 func loadPortableRecordingReplay(path string) (*recordingreplay.RecordingReplayProjection, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -116,35 +152,6 @@ func composePortableReplayCore(cfg *FactoryServiceConfig, root FactoryServiceRoo
 		clock: clock, logger: load.SessionLogger, modelAssets: collaborators.LocalModels.Assets,
 		durableExecution: recordingreplay.NewService(*load.RecordingReplay),
 	}, true
-}
-
-func workersSchedulerServiceConfig(
-	cfg *FactoryServiceConfig,
-	clock factory.Clock,
-	logger *zap.Logger,
-	hostedWorkers hostedworkers.Config,
-) workersservice.Config {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	runner := workers.CommandRunner(workers.ExecCommandRunner{})
-	workflowID := ""
-	defaultFactoryDir := ""
-	if cfg != nil {
-		if cfg.WorkerApplication.ScriptCommandRunner != nil {
-			runner = cfg.WorkerApplication.ScriptCommandRunner
-		}
-		workflowID = cfg.WorkflowID
-		defaultFactoryDir = cfg.Dir
-	}
-	return workersservice.Config{
-		Logger:            logger,
-		Clock:             clock,
-		CommandRunner:     runner,
-		WorkflowID:        workflowID,
-		DefaultFactoryDir: defaultFactoryDir,
-		HostedWorkers:     hostedWorkers,
-	}
 }
 
 type runtimeBundleBuildInput struct {
@@ -388,21 +395,21 @@ func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
 	}
 }
 
-func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
+func runtimeMetricsPath(sink *platformmetrics.RuntimeMetricsSink) string {
 	if sink == nil {
 		return ""
 	}
 	return sink.Path()
 }
 
-func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
+func runtimeMetricsRootDir(sink *platformmetrics.RuntimeMetricsSink) string {
 	if sink == nil {
 		return ""
 	}
 	return sink.RootDir()
 }
 
-func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
+func runtimeMetricsStartTime(sink *platformmetrics.RuntimeMetricsSink) time.Time {
 	if sink == nil {
 		return time.Time{}
 	}
@@ -630,13 +637,13 @@ func wrapLocalModelRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	modelDomain LocalModelDomain,
 ) workers.Runner {
 	return factoryservice.WrapLocalModelRunner(inner, runtimeCfg, factoryCfg, workerDef, modelDomain)
 }
 
-func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
 	return factoryservice.CloseBundleSinks(logSink, metricsSink)
 }
 
@@ -702,7 +709,7 @@ func (fs *FactoryService) simpleDashboardRenderData(
 	if err != nil {
 		return dashboardrender.SimpleDashboardRenderData{}, err
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, selectedTick)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, selectedTick)
 	if err != nil {
 		return dashboardrender.SimpleDashboardRenderData{}, err
 	}
@@ -712,13 +719,13 @@ func (fs *FactoryService) simpleDashboardRenderData(
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+	if runner := workerrunner.NormalizeRunnerID(override); runner != "" {
 		return runner
 	}
 	if factoryCfg == nil {
 		return ""
 	}
-	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+	return workerrunner.NormalizeRunnerID(factoryCfg.Runner)
 }
 
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
@@ -906,7 +913,7 @@ func buildWorkerExecutor(
 func buildProviderBackedWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
@@ -959,7 +966,7 @@ func buildProviderBackedWorkerExecutor(
 
 func providerBackedRunner(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
@@ -980,7 +987,7 @@ func providerBackedRunner(
 
 func newProviderRunner(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
@@ -1005,7 +1012,7 @@ func newProviderRunner(
 
 func providerRunnerOptions(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
@@ -1055,7 +1062,7 @@ func wrapRecordingProviderRunner(
 
 func buildScriptWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
@@ -1103,12 +1110,12 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 			workerModelProvider = worker.ModelProvider
 		}
 
-		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
+		selection := workerrunner.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
 		workerOpenCodeAgent := ""
 		if worker != nil {
 			workerOpenCodeAgent = worker.OpenCodeAgent
 		}
-		if err := interfaces.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
+		if err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
 			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", i, workstation.Name, err)
 		}
 		if !runnerSelectionRequiresValidation(selection) {
@@ -1125,12 +1132,12 @@ type runnerSelectionPreflight struct {
 	skipCommandAvailability bool
 }
 
-func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection) bool {
-	return selection.Source != interfaces.RunnerSelectionSourceDefault
+func runnerSelectionRequiresValidation(selection workerexecution.ResolvedRunnerSelection) bool {
+	return selection.Source != workerexecution.RunnerSelectionSourceDefault
 }
 
-func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
-	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
+func validateResolvedRunnerSelection(selection workerexecution.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
+	if _, ok := workerrunner.BuiltInRunnerMetadata(selection.RunnerID); !ok {
 		return fmt.Errorf("unknown runner %q", selection.RunnerID)
 	}
 	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
@@ -1339,15 +1346,21 @@ func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
 	return fs.cfg.ModelPullMetricsRecorder
 }
 
-func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
+func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) json.RawMessage {
+	var safe *workerdiagnostics.SafeWorkDiagnostics
 	if success != nil {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
+		safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(success)
+	} else {
+		var providerErr *workerprovider.ProviderError
+		if errors.As(err, &providerErr) {
+			safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+		}
 	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+	payload, encodeErr := workerdiagnostics.SafeWorkDiagnosticsEventPayload(safe)
+	if encodeErr != nil || string(payload) == "null" {
+		return nil
 	}
-	return nil
+	return payload
 }
 
 func modelEventErrorClass(err error) string {
@@ -1497,9 +1510,6 @@ func RuntimeHostConfigFromFactoryService(cfg *FactoryServiceConfig) *runtimehost
 	}
 	return (*runtimehost.Config)(unsafe.Pointer(cfg))
 }
-
-// ModelService is the compose-facing model API collaborator.
-type ModelService = apisurface.ModelAPI
 
 func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
 	if core == nil {

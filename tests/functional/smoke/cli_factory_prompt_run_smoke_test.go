@@ -14,10 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -103,7 +105,7 @@ func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
 		t,
 		dir,
 		"goal-executor",
-		support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"),
+		support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"),
 	)
 	return dir
 }
@@ -424,7 +426,7 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 	}
 
 	prompt := fmt.Sprintf("functional-smoke-named-factory-%d", time.Now().UnixNano())
-	testutil.WriteSeedRequest(t, namedFactoryDir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, namedFactoryDir, work.SubmitRequest{
 		WorkID:     "named-factory-smoke-work",
 		WorkTypeID: defaultPromptRunWorkTypeName,
 		TraceID:    "named-factory-smoke-trace",

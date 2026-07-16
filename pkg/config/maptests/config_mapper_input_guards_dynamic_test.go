@@ -3,9 +3,10 @@ package maptests
 import (
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 const dynamicFanoutSpawnedByWorkstation = "parser"
@@ -29,7 +30,7 @@ func dynamicFanoutFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "parse-worker"},
 			{Name: "complete-worker"},
 		},

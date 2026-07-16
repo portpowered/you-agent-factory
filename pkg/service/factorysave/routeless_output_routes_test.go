@@ -4,10 +4,11 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestValidateEditableFactoryTopology_RoutelessCronAndLogicalMove_InvalidFactoryTargets(t *testing.T) {
@@ -20,17 +21,17 @@ func TestValidateEditableFactoryTopology_RoutelessCronAndLogicalMove_InvalidFact
 	}{
 		{
 			name:        "routeless_cron",
-			decode:      factoryvalidation.DecodeRoutelessCronFactory,
+			decode:      factoryfixtures.DecodeRoutelessCronFactory,
 			workstation: "cron",
 		},
 		{
 			name:        "routeless_logical_move",
-			decode:      factoryvalidation.DecodeRoutelessLogicalMoveFactory,
+			decode:      factoryfixtures.DecodeRoutelessLogicalMoveFactory,
 			workstation: "router",
 		},
 		{
 			name:        "routeless_logical_move_cron",
-			decode:      factoryvalidation.DecodeRoutelessLogicalMoveCronFactory,
+			decode:      factoryfixtures.DecodeRoutelessLogicalMoveCronFactory,
 			workstation: "trigger-monkey",
 		},
 	}
@@ -74,7 +75,7 @@ func TestValidateEditableFactoryTopology_RoutelessCronAndLogicalMove_InvalidFact
 func TestValidateUpsertNamedFactoryRequest_RoutelessLogicalMove_InvalidFactoryTargets(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeRoutelessLogicalMoveFactory()
+	factory, err := factoryfixtures.DecodeRoutelessLogicalMoveFactory()
 	if err != nil {
 		t.Fatalf("DecodeRoutelessLogicalMoveFactory: %v", err)
 	}

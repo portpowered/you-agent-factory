@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this dashboard projection case keeps the active-dispatch observability contract together in one scenario.
@@ -14,7 +15,7 @@ func TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory(t *testing.T) {
 	t0 := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	state, err := ReconstructFactoryWorldState([]factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{
 			ID:          "work-bootstrap",
 			WorkTypeID:  "task",
 			DisplayName: "Bootstrap",
@@ -39,7 +40,7 @@ func TestBuildSimpleDashboardProjection_RecordsWorkMoveHistory(t *testing.T) {
 		record.ToState != "review" ||
 		record.FromPlaceID != "task:init" ||
 		record.ToPlaceID != "task:review" ||
-		record.Source != interfaces.WorkStateChangeSourceAPI ||
+		record.Source != work.WorkStateChangeSourceAPI ||
 		record.Tick != 2 {
 		t.Fatalf("move record = %#v, want bootstrap api move at tick 2", record)
 	}
@@ -49,7 +50,7 @@ func TestBuildSimpleDashboardProjection_TracksActiveDispatchState(t *testing.T) 
 	t0 := time.Date(2026, 5, 5, 15, 0, 0, 0, time.UTC)
 	state, err := ReconstructFactoryWorldState([]factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{
 			ID:          "work-1",
 			WorkTypeID:  "task",
 			DisplayName: "Write docs",
@@ -63,7 +64,7 @@ func TestBuildSimpleDashboardProjection_TracksActiveDispatchState(t *testing.T) 
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID: "work-1",
 				PlaceID: "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{
+				WorkItem: &work.FactoryWorkItem{
 					ID:          "work-1",
 					WorkTypeID:  "task",
 					DisplayName: "Write docs",
@@ -211,7 +212,7 @@ func reconstructTerminalDashboardState(t0 time.Time, outcome string) (interfaces
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
 			Result:         interfaces.WorkstationResult{Outcome: outcome},
 			DurationMillis: 1500,
-			OutputWork:     []interfaces.FactoryWorkItem{dashboardProjectionOutputWorkItem()},
+			OutputWork:     []work.FactoryWorkItem{dashboardProjectionOutputWorkItem()},
 		}),
 	}, 3)
 }
@@ -227,13 +228,13 @@ func reconstructNonTerminalDashboardState(t0 time.Time, outcome string) (interfa
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
 			Result:         interfaces.WorkstationResult{Outcome: outcome},
 			DurationMillis: 1500,
-			OutputWork:     []interfaces.FactoryWorkItem{dashboardProjectionOutputWorkItem()},
+			OutputWork:     []work.FactoryWorkItem{dashboardProjectionOutputWorkItem()},
 		}),
 	}, 3)
 }
 
-func dashboardProjectionWorkItem() interfaces.FactoryWorkItem {
-	return interfaces.FactoryWorkItem{
+func dashboardProjectionWorkItem() work.FactoryWorkItem {
+	return work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "Write docs",
@@ -242,7 +243,7 @@ func dashboardProjectionWorkItem() interfaces.FactoryWorkItem {
 	}
 }
 
-func dashboardProjectionOutputWorkItem() interfaces.FactoryWorkItem {
+func dashboardProjectionOutputWorkItem() work.FactoryWorkItem {
 	item := dashboardProjectionWorkItem()
 	item.PlaceID = ""
 	return item

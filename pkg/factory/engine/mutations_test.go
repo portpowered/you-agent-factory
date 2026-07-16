@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -16,17 +17,17 @@ func testPlaces() map[string]*petri.Place {
 	}
 }
 
-func testToken(id, placeID string) *interfaces.Token {
-	return &interfaces.Token{
+func testToken(id, placeID string) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:        id,
 		PlaceID:   placeID,
 		CreatedAt: time.Now(),
 		EnteredAt: time.Now(),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-" + id,
 			WorkTypeID: "wt",
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         make(map[string]int),
 			ConsecutiveFailures: make(map[string]int),
 			PlaceVisits:         make(map[string]int),

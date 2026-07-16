@@ -4,10 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,7 +35,7 @@ func providerErrorSmokeWork(name, payload string) testutil.ProviderErrorSmokeWor
 	}
 }
 
-func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, provider interfaces.ModelProvider, workName, model string) {
+func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, provider modelprovider.ID, workName, model string) {
 	t.Helper()
 
 	if req.Command != string(provider) {
@@ -42,12 +44,12 @@ func assertProviderCommandMatchesLane(t *testing.T, req workers.CommandRequest, 
 	support.AssertArgsContainSequence(t, req.Args, []string{"--model", model})
 
 	switch provider {
-	case interfaces.ModelProviderClaude:
+	case modelprovider.Claude:
 		support.AssertArgsContainSequence(t, req.Args, []string{"--worktree", workName})
 		if len(req.Stdin) != 0 {
 			t.Fatalf("expected claude prompt in args, got stdin %q", string(req.Stdin))
 		}
-	case interfaces.ModelProviderCodex:
+	case modelprovider.Codex:
 		if got := req.Args[len(req.Args)-1]; got != "-" {
 			t.Fatalf("expected codex stdin placeholder '-', got %q", got)
 		}
@@ -162,8 +164,8 @@ func assertProviderErrorLoopBreakerHistory(
 	if loopBreaker.WorkstationName != "provider-error-loop-breaker" {
 		t.Fatalf("final workstation = %q, want provider-error-loop-breaker", loopBreaker.WorkstationName)
 	}
-	if loopBreaker.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("final loop-breaker outcome = %s, want %s", loopBreaker.Outcome, interfaces.OutcomeAccepted)
+	if loopBreaker.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("final loop-breaker outcome = %s, want %s", loopBreaker.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !dispatchHasOutputMutationToPlace(loopBreaker, work.WorkTypeID+":failed", work.WorkID) {
 		t.Fatalf("final loop-breaker mutations = %#v, want route to %s:failed", loopBreaker.OutputMutations, work.WorkTypeID)
@@ -218,14 +220,14 @@ func assertRetryableInternalServerRequeueOutcome(
 	if runner.CallCount() < 3 {
 		t.Fatalf("provider command count = %d, want at least 3", runner.CallCount())
 	}
-	assertProviderCommandMatchesLane(t, runner.LastRequest(), interfaces.ModelProviderCodex, work.Name, "gpt-5-codex")
+	assertProviderCommandMatchesLane(t, runner.LastRequest(), modelprovider.Codex, work.Name, "gpt-5-codex")
 
 	if len(outcome.Dispatches) != 1 {
 		t.Fatalf("dispatch count = %d, want 1 failed dispatch before requeue", len(outcome.Dispatches))
 	}
 	dispatch := outcome.Dispatches[0]
-	if dispatch.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %s, want %s", dispatch.Outcome, interfaces.OutcomeFailed)
+	if dispatch.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %s, want %s", dispatch.Outcome, workerexecution.OutcomeFailed)
 	}
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
 	assertFailureMetadataIsRetryableInternalServer(t, dispatch.FailureMetadata)
@@ -246,17 +248,17 @@ func assertRetryableInternalServerRequeueOutcome(
 	}
 }
 
-func assertFailureMetadataIsRetryableInternalServer(t *testing.T, failure *interfaces.WorkFailureMetadata) {
+func assertFailureMetadataIsRetryableInternalServer(t *testing.T, failure *workerexecution.WorkFailureMetadata) {
 	t.Helper()
 
 	if failure == nil {
 		t.Fatal("FailureMetadata is nil, want normalized internal_server_error metadata")
 	}
-	if failure.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("FailureMetadata type = %s, want %s", failure.Type, interfaces.WorkFailureTypeInternalServerError)
+	if failure.Type != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("FailureMetadata type = %s, want %s", failure.Type, workerexecution.WorkFailureTypeInternalServerError)
 	}
-	if failure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("FailureMetadata family = %s, want %s", failure.Family, interfaces.WorkFailureFamilyRetryable)
+	if failure.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("FailureMetadata family = %s, want %s", failure.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 }
 

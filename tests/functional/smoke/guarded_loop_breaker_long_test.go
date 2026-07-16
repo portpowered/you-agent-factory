@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,7 +22,7 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 	support.ClearSeedInputs(t, dir)
 	assertFactoryHasNoTopLevelExhaustionRules(t, dir)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"executor": {
 			{Content: "<result>ACCEPTED</result>"},
 			{Content: "<result>ACCEPTED</result>"},
@@ -37,7 +39,7 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "story",
 		WorkID:     "guarded-loop-breaker-smoke",
 		TraceID:    "trace-guarded-loop-breaker-smoke",

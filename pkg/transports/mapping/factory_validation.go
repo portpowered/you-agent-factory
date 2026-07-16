@@ -5,7 +5,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -97,6 +98,103 @@ func RenderFactoryValidationHuman(
 		return fmt.Errorf("factory validation found blocking issues")
 	}
 	return nil
+}
+
+// FactoryValidationResultToAPI maps a canonical Factory validation result at
+// the public transport boundary.
+func FactoryValidationResultToAPI(result factoryvalidation.Result) factoryapi.FactoryValidationResult {
+	return factoryapi.FactoryValidationResult{Targets: FactoryValidationTargetsToAPI(result.Targets)}
+}
+
+// FactoryValidationTargetsToAPI maps canonical Factory validation targets at
+// the public transport boundary.
+func FactoryValidationTargetsToAPI(targets []factoryvalidation.Target) []factoryapi.FactoryValidationTarget {
+	if len(targets) == 0 {
+		return []factoryapi.FactoryValidationTarget{}
+	}
+	mapped := make([]factoryapi.FactoryValidationTarget, 0, len(targets))
+	for _, target := range targets {
+		mapped = append(mapped, FactoryValidationTargetToAPI(target))
+	}
+	return mapped
+}
+
+// FactoryValidationTargetToAPI maps one canonical Factory validation target at
+// the public transport boundary.
+func FactoryValidationTargetToAPI(target factoryvalidation.Target) factoryapi.FactoryValidationTarget {
+	return factoryapi.FactoryValidationTarget{
+		Code:     target.Code,
+		Severity: factoryValidationSeverityToAPI(target.Severity),
+		Message:  target.Message,
+		Subject: factoryapi.FactoryValidationSubject{
+			Type:     factoryValidationSubjectTypeToAPI(target.Subject.Type),
+			Id:       target.Subject.ID,
+			Location: factoryValidationSubjectLocationToAPI(target.Subject.Location),
+		},
+	}
+}
+
+func factoryValidationSeverityToAPI(severity factoryvalidation.Severity) factoryapi.FactoryValidationSeverity {
+	switch severity {
+	case factoryvalidation.SeverityWarning:
+		return factoryapi.FactoryValidationSeverityWarning
+	case factoryvalidation.SeverityHint:
+		return factoryapi.FactoryValidationSeverityHint
+	default:
+		return factoryapi.FactoryValidationSeverityError
+	}
+}
+
+func factoryValidationSubjectTypeToAPI(subjectType factoryvalidation.SubjectType) factoryapi.FactoryValidationSubjectType {
+	switch subjectType {
+	case factoryvalidation.SubjectTypeWorkstation:
+		return factoryapi.FactoryValidationSubjectTypeWorkstation
+	case factoryvalidation.SubjectTypeWorkType:
+		return factoryapi.FactoryValidationSubjectTypeWorkType
+	case factoryvalidation.SubjectTypeWorkState:
+		return factoryapi.FactoryValidationSubjectTypeWorkState
+	case factoryvalidation.SubjectTypeWorker:
+		return factoryapi.FactoryValidationSubjectTypeWorker
+	case factoryvalidation.SubjectTypeResource:
+		return factoryapi.FactoryValidationSubjectTypeResource
+	case factoryvalidation.SubjectTypeRoute:
+		return factoryapi.FactoryValidationSubjectTypeRoute
+	default:
+		return factoryapi.FactoryValidationSubjectTypeFactory
+	}
+}
+
+func factoryValidationSubjectLocationToAPI(location factoryvalidation.SubjectLocation) factoryapi.FactoryValidationSubjectLocation {
+	switch location {
+	case factoryvalidation.SubjectLocationOnRejection:
+		return factoryapi.FactoryValidationSubjectLocationOnRejection
+	case factoryvalidation.SubjectLocationOnFailure:
+		return factoryapi.FactoryValidationSubjectLocationOnFailure
+	case factoryvalidation.SubjectLocationOutputs:
+		return factoryapi.FactoryValidationSubjectLocationOutputs
+	case factoryvalidation.SubjectLocationInputs:
+		return factoryapi.FactoryValidationSubjectLocationInputs
+	case factoryvalidation.SubjectLocationStates:
+		return factoryapi.FactoryValidationSubjectLocationStates
+	case factoryvalidation.SubjectLocationTerminal:
+		return factoryapi.FactoryValidationSubjectLocationTerminal
+	case factoryvalidation.SubjectLocationReference:
+		return factoryapi.FactoryValidationSubjectLocationReference
+	default:
+		return factoryapi.FactoryValidationSubjectLocationDefinition
+	}
+}
+
+// FactoryTopologyValidationErrorInput maps a canonical validation result into
+// the transport-owned topology error input.
+func FactoryTopologyValidationErrorInput(
+	result factoryvalidation.Result,
+	message string,
+) (string, []factoryapi.FactoryValidationTarget) {
+	if message == "" {
+		message = factoryvalidation.DefaultTopologyValidationMessage
+	}
+	return message, FactoryValidationTargetsToAPI(result.Targets)
 }
 
 // FormatFactoryValidationTarget renders one API validation target for human CLI output.

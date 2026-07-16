@@ -17,6 +17,7 @@ import (
 	"time"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -31,10 +32,11 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
@@ -88,7 +90,7 @@ type RunConfig struct {
 	RuntimeMetricsDir string
 	// RuntimeMetricsConfig controls service-owned structured runtime metrics
 	// rolling behavior.
-	RuntimeMetricsConfig logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig platformmetrics.RuntimeMetricsConfig
 	// MockWorkersEnabled enables deterministic mock-worker execution. When
 	// true and MockWorkersConfigPath is empty, the runtime uses the default
 	// accept behavior for all worker dispatches.
@@ -952,7 +954,7 @@ func isInteractiveOutput(output io.Writer) bool {
 }
 
 // LoadWorkFile reads a canonical FACTORY_REQUEST_BATCH from a JSON file.
-func LoadWorkFile(path string) (interfaces.WorkRequest, error) {
+func LoadWorkFile(path string) (work.WorkRequest, error) {
 	return batchload.LoadFromFile(path)
 }
 

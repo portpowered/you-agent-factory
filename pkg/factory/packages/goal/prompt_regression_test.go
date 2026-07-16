@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 var packagedGoalLegacyPromptAliases = []string{"MODEL_WORKER", "MODEL_RUN"}

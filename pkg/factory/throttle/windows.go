@@ -4,14 +4,15 @@ import (
 	"sort"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type FailureRecord struct {
 	Provider        string
 	Model           string
 	OccurredAt      time.Time
-	FailureMetadata *interfaces.WorkFailureMetadata
+	FailureMetadata *workerexecution.WorkFailureMetadata
 }
 
 type laneKey struct {
@@ -89,6 +90,6 @@ func laneID(key laneKey) string {
 	return key.provider + "/" + key.model
 }
 
-func triggersThrottlePause(failure *interfaces.WorkFailureMetadata) bool {
-	return failure != nil && failure.Family == interfaces.WorkFailureFamilyThrottle
+func triggersThrottlePause(failure *workerexecution.WorkFailureMetadata) bool {
+	return failure != nil && failure.Family == workerexecution.WorkFailureFamilyThrottle
 }

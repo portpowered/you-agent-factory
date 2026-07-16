@@ -7,9 +7,14 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 // BuildFactoryWorldWorkstationRequestProjectionSlice keeps the additive
@@ -186,7 +191,7 @@ func workstationFailureDetail(reason, message string) *factoryapi.FailureDetail 
 	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
 }
 
-func workstationFailureDetailFromCanonical(detail *interfaces.FailureDetail) *factoryapi.FailureDetail {
+func workstationFailureDetailFromCanonical(detail *workerexecution.FailureDetail) *factoryapi.FailureDetail {
 	if detail == nil {
 		return nil
 	}
@@ -195,7 +200,7 @@ func workstationFailureDetailFromCanonical(detail *interfaces.FailureDetail) *fa
 
 func workstationDispatchRequestView(
 	runnerID string,
-	runnerSource interfaces.RunnerSelectionSource,
+	runnerSource workerexecution.RunnerSelectionSource,
 	startedAt time.Time,
 	inputWorkItems []factoryapi.FactoryWorldWorkItemRef,
 	currentChainingTraceID string,
@@ -217,24 +222,40 @@ func workstationDispatchRequestView(
 	}
 }
 
-func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedRunnerView {
-	runnerID = interfaces.NormalizeRunnerID(runnerID)
+func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource workerexecution.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedRunnerView {
+	runnerID = workerrunner.NormalizeRunnerID(runnerID)
 	if runnerID == "" && runnerSource == "" {
 		return nil
 	}
 	view := &factoryapi.FactoryWorldSelectedRunnerView{
-		RunnerId:        interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
-		SelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(runnerSource)),
+		RunnerId:        runnerIDPtr(runnerID),
+		SelectionSource: runnerSelectionSourcePtr(string(runnerSource)),
 	}
-	if metadata, ok := interfaces.BuiltInRunnerMetadata(runnerID); ok {
+	if metadata, ok := workerrunner.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
 		view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
 	}
 	return view
 }
 
+func runnerIDPtr(value string) *factoryapi.RunnerID {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.RunnerID(interfaces.PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
+	return &converted
+}
+
+func runnerSelectionSourcePtr(value string) *factoryapi.RunnerSelectionSource {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.RunnerSelectionSource(interfaces.PermissivePublicFactoryRunnerSelectionSource(value))
+	return &converted
+}
+
 func generatedFactoryWorldRunnerCapabilitiesView(
-	capabilities interfaces.RunnerCapabilities,
+	capabilities workerexecution.RunnerCapabilities,
 ) *factoryapi.FactoryWorldRunnerCapabilitiesView {
 	baseline := make([]factoryapi.FactoryWorldRunnerBaselineCapability, 0, len(capabilities.Baseline))
 	for _, capability := range capabilities.Baseline {
@@ -365,7 +386,7 @@ func scriptResponseErrored(response interfaces.FactoryWorldScriptResponse) bool 
 	}
 }
 
-func dispatchHasCustomerWork(ids []string, items map[string]interfaces.FactoryWorkItem) bool {
+func dispatchHasCustomerWork(ids []string, items map[string]work.FactoryWorkItem) bool {
 	return len(workItemRefsForIDs(ids, items)) > 0
 }
 
@@ -446,14 +467,14 @@ func consumedInputWorkItemRefsForCompletion(
 func consumedInputWorkItemRefs(
 	dispatchID string,
 	inputs []interfaces.WorkstationInput,
-	fallbackItems []interfaces.FactoryWorkItem,
+	fallbackItems []work.FactoryWorkItem,
 	fallbackIDs []string,
 	state interfaces.FactoryWorldState,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(inputs)+len(fallbackItems)+len(fallbackIDs))
 	seen := make(map[string]struct{}, len(inputs)+len(fallbackItems)+len(fallbackIDs))
 
-	appendConsumedRef := func(workID string, fallback *interfaces.FactoryWorkItem) {
+	appendConsumedRef := func(workID string, fallback *work.FactoryWorkItem) {
 		if workID == "" {
 			return
 		}
@@ -492,14 +513,14 @@ func consumedInputWorkItemRefs(
 
 func consumedInputWorkItemRef(
 	workID string,
-	fallback *interfaces.FactoryWorkItem,
-	resolution interfaces.WorkPayloadResolution,
+	fallback *work.FactoryWorkItem,
+	resolution work.WorkPayloadResolution,
 ) interfaces.FactoryWorldWorkItemRef {
-	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+	if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 		return lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status))
 	}
 
-	item := interfaces.FactoryWorkItem{ID: workID}
+	item := work.FactoryWorkItem{ID: workID}
 	if fallback != nil {
 		item = *fallback
 	}
@@ -527,7 +548,7 @@ func outputWorkItemRefsForCompletion(
 			continue
 		}
 		resolution := state.PayloadLineage.ResolveOutputWorkSnapshot(completion.DispatchID, item.ID)
-		if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+		if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 			refs = append(refs, lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status)))
 		} else {
 			ref := workItemRef(item)
@@ -544,12 +565,12 @@ func outputWorkItemRefsForCompletion(
 }
 
 func lineageResolvedWorkItemRef(
-	snapshot *interfaces.WorkPayloadSnapshot,
+	snapshot *work.WorkPayloadSnapshot,
 	payloadStatus string,
 ) interfaces.FactoryWorldWorkItemRef {
 	ref := workItemRef(snapshot.WorkItem)
 	ref.State = snapshot.WorkItem.State
-	ref.Content = interfaces.CloneWorkContentParts(snapshot.WorkItem.Content)
+	ref.Content = work.CloneWorkContentParts(snapshot.WorkItem.Content)
 	ref.PayloadStatus = payloadStatus
 	ref.LineageLogicalWorkID = snapshot.LogicalWorkID
 	ref.LineageSourceKind = string(snapshot.SourceKind)
@@ -560,7 +581,7 @@ func lineageResolvedWorkItemRef(
 
 func workItemRefsForIDs(
 	ids []string,
-	items map[string]interfaces.FactoryWorkItem,
+	items map[string]work.FactoryWorkItem,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(ids))
 	for _, id := range sortedStrings(ids) {
@@ -573,7 +594,7 @@ func workItemRefsForIDs(
 	return refs
 }
 
-func workItemRefsForItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
+func workItemRefsForItems(items []work.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -605,7 +626,7 @@ func workItemRefsForInputs(inputs []interfaces.WorkstationInput) []interfaces.Fa
 	return refs
 }
 
-func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
+func workItemRef(item work.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
 	currentChainingTraceID := item.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = item.TraceID
@@ -706,7 +727,7 @@ func mutationViewsPtrForCompletion(
 	return &views
 }
 
-func generatedTokenViewForWorkItem(tokenID string, item interfaces.FactoryWorkItem) *factoryapi.FactoryWorldTokenView {
+func generatedTokenViewForWorkItem(tokenID string, item work.FactoryWorkItem) *factoryapi.FactoryWorldTokenView {
 	if tokenID == "" {
 		tokenID = item.ID
 	}
@@ -728,14 +749,14 @@ func generatedTokenViewForWorkItem(tokenID string, item interfaces.FactoryWorkIt
 	}
 }
 
-func mutationTypeForOutput(input interfaces.WorkstationInput, item interfaces.FactoryWorkItem) string {
+func mutationTypeForOutput(input interfaces.WorkstationInput, item work.FactoryWorkItem) string {
 	if input.WorkItem != nil && input.WorkItem.ID == item.ID {
 		return string(interfaces.MutationMove)
 	}
 	return string(interfaces.MutationCreate)
 }
 
-func mutationTokenID(input interfaces.WorkstationInput, item interfaces.FactoryWorkItem) string {
+func mutationTokenID(input interfaces.WorkstationInput, item work.FactoryWorkItem) string {
 	if input.TokenID != "" && input.WorkItem != nil && input.WorkItem.ID == item.ID {
 		return input.TokenID
 	}
@@ -775,12 +796,12 @@ func generatedFactoryWorldScriptResponse(
 }
 
 func generatedFactoryWorldAgentRunInspection(
-	diagnostics *interfaces.SafeWorkDiagnostics,
+	diagnostics *workerdiagnostics.SafeWorkDiagnostics,
 ) *factoryapi.FactoryWorldAgentRunInspectionView {
 	if diagnostics == nil || diagnostics.AgentRun == nil {
 		return nil
 	}
-	return interfaces.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
+	return workerdiagnosticsmapping.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
 }
 
 func stringSlicePtr(values []string) *[]string {

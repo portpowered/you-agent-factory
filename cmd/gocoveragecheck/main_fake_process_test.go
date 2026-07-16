@@ -341,7 +341,7 @@ func TestGoListCommandWithExcludedPackagesOnly(t *testing.T) {
 	}
 
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/transports/http/client")
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures")
+	fmt.Fprintln(os.Stdout, modulePath+"/internal/testutil/runtimefixtures")
 	os.Exit(0)
 }
 
@@ -370,7 +370,7 @@ func TestGoListCommandWithDuplicatesAndExcludedPackages(t *testing.T) {
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config\t2")
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config/exhaustiontests\t0")
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/transports/http/client\t4")
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures\t1")
+	fmt.Fprintln(os.Stdout, modulePath+"/internal/testutil/runtimefixtures\t1")
 	fmt.Fprintln(os.Stdout, modulePath+"/cmd/factory\t1")
 	os.Exit(0)
 }

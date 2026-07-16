@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestServiceMode_WorkerResultWhilePaused_BuffersUntilResume(t *testing.T) {
@@ -25,7 +26,7 @@ func TestServiceMode_WorkerResultWhilePaused_BuffersUntilResume(t *testing.T) {
 	)
 	defer h.stop()
 
-	if _, err := submitWorkRequests(context.Background(), h.Factory, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), h.Factory, []work.SubmitRequest{{
 		RequestID:  "request-runtime-paused-result-001",
 		WorkTypeID: "task",
 		TraceID:    "trace-runtime-paused-result",

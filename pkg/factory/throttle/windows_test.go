@@ -4,19 +4,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestDeriveActiveThrottlePauses_ResolvesFailureMetadataOnlyRecord(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
 
 	pauses := DeriveActiveThrottlePauses([]FailureRecord{{
-		Provider:        "claude",
-		Model:           "claude-sonnet",
-		OccurredAt:      now.Add(-5 * time.Minute),
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		Provider:   "claude",
+		Model:      "claude-sonnet",
+		OccurredAt: now.Add(-5 * time.Minute),
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 	}}, 30*time.Minute, now)
 
@@ -35,9 +35,9 @@ func TestDeriveActiveThrottlePauses_CreatesOneActiveLaneForThrottleFailure(t *te
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-5 * time.Minute),
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 	}}, 30*time.Minute, now)
 
@@ -59,18 +59,18 @@ func TestDeriveActiveThrottlePauses_LaterFailureExtendsLaneExpiry(t *testing.T) 
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: first,
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyThrottle,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyThrottle,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		},
 		{
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: second,
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyThrottle,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyThrottle,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		},
 	}, 15*time.Minute, now)
@@ -93,9 +93,9 @@ func TestDeriveActiveThrottlePauses_OmitsExpiredWindows(t *testing.T) {
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-45 * time.Minute),
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 	}}, 15*time.Minute, now)
 
@@ -112,18 +112,18 @@ func TestDeriveActiveThrottlePauses_KeepsProviderOnlyAndProviderModelLanesIsolat
 			Provider:   "claude",
 			Model:      "",
 			OccurredAt: now.Add(-5 * time.Minute),
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyThrottle,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyThrottle,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		},
 		{
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: now.Add(-4 * time.Minute),
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyThrottle,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyThrottle,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		},
 	}, 30*time.Minute, now)
@@ -143,9 +143,9 @@ func TestDeriveActiveThrottlePauses_IgnoresRetryableNonThrottleFailures(t *testi
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-5 * time.Minute),
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
 		},
 	}}, 30*time.Minute, now)
 

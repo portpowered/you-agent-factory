@@ -1,13 +1,16 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func assertJSONField(t *testing.T, object map[string]any, field string, want any) {
@@ -41,19 +44,35 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID:  "dispatch-1",
 		CreatedTick: 4,
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-1",
 			TransitionID:    "build",
 			WorkerType:      "builder",
 			WorkstationName: "Build",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				RequestID: "request-1",
 				ReplayKey: "replay-1",
 			},
 		},
 	}, eventTime)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("subscribe canonical events: %v", err)
+	}
+	if len(stream.History) != 1 {
+		t.Fatalf("canonical history count = %d, want 1", len(stream.History))
+	}
+	var canonicalPayload interfaces.DispatchRequestEventPayload
+	if err := stream.History[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch request payload: %v", err)
+	}
+	if canonicalPayload.Metadata == nil || stringValueForEventHistoryTest(canonicalPayload.Metadata.ReplayKey) != "replay-1" {
+		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
+	}
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -83,13 +102,13 @@ func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t
 
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-utc",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:   "dispatch-utc",
 			TransitionID: "build",
 		},
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -107,11 +126,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesFactoryRunnerOverrideM
 	history.SetFactoryRunnerOverride("  gemini  ")
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDGemini {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDGemini)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != workerexecution.RunnerIDGemini {
+		t.Fatalf("metadata runnerId = %q, want %q", got, workerexecution.RunnerIDGemini)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceFactory) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceFactory)
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(workerexecution.RunnerSelectionSourceFactory) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, workerexecution.RunnerSelectionSourceFactory)
 	}
 }
 
@@ -125,11 +144,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesSharedFactoryConfigRun
 	)
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDOpenCode {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDOpenCode)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != workerexecution.RunnerIDOpenCode {
+		t.Fatalf("metadata runnerId = %q, want %q", got, workerexecution.RunnerIDOpenCode)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceFactory) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceFactory)
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(workerexecution.RunnerSelectionSourceFactory) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, workerexecution.RunnerSelectionSourceFactory)
 	}
 }
 
@@ -141,11 +160,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_DefaultsRunnerMetadataWith
 	)
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDCodex {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDCodex)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != workerexecution.RunnerIDCodex {
+		t.Fatalf("metadata runnerId = %q, want %q", got, workerexecution.RunnerIDCodex)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceDefault) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceDefault)
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(workerexecution.RunnerSelectionSourceDefault) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, workerexecution.RunnerSelectionSourceDefault)
 	}
 }
 
@@ -157,42 +176,58 @@ func TestFactoryEventHistory_RecordWorkstationRequest_DefaultsRunnerMetadataWhen
 	)
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDCodex {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDCodex)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != workerexecution.RunnerIDCodex {
+		t.Fatalf("metadata runnerId = %q, want %q", got, workerexecution.RunnerIDCodex)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceDefault) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceDefault)
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(workerexecution.RunnerSelectionSourceDefault) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, workerexecution.RunnerSelectionSourceDefault)
 	}
 }
 
 func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailureDetails(t *testing.T) {
 	eventTime := time.Date(2026, 4, 17, 9, 30, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   "dispatch-failed",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Output:       "partial output",
 		Error:        "provider error: throttled: selected model is at capacity",
 		Feedback:     "retry later",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-failed",
 		TransitionID:    "build",
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Reason:          result.Error,
 		EndTime:         eventTime,
 		Duration:        2 * time.Second,
 	}
 
 	history.RecordWorkstationResponse(9, result, completed)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("subscribe canonical events: %v", err)
+	}
+	if len(stream.History) != 1 {
+		t.Fatalf("canonical history count = %d, want 1", len(stream.History))
+	}
+	var canonicalPayload workerexecution.DispatchResponseEventPayload
+	if err := stream.History[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch response payload: %v", err)
+	}
+	if canonicalPayload.FailureDetail == nil || canonicalPayload.FailureDetail.Reason != workerexecution.WorkFailureTypeThrottled {
+		t.Fatalf("canonical failure detail = %#v, want throttled", canonicalPayload.FailureDetail)
+	}
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -235,21 +270,21 @@ func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDuratio
 	localZone := time.FixedZone("Factory/Local", -5*60*60)
 	fallbackTime := time.Date(2026, 4, 17, 9, 30, 0, 0, localZone)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return fallbackTime })
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   "dispatch-fallback",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:   result.DispatchID,
 		TransitionID: result.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Duration:     1500 * time.Millisecond,
 	}
 
 	history.RecordWorkstationResponse(9, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -267,21 +302,21 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 	eventTime := time.Date(2026, 4, 21, 1, 15, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 	errorText := "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   "dispatch-codex-windows-4294967295",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        errorText,
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
 		},
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      result.DispatchID,
 		TransitionID:    result.TransitionID,
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Reason:          errorText,
 		EndTime:         eventTime,
 		Duration:        3 * time.Second,
@@ -289,7 +324,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 
 	history.RecordWorkstationResponse(12, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -298,7 +333,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 		t.Fatalf("dispatch completed payload: %v", err)
 	}
 	if payload.FailureDetail == nil || payload.FailureDetail.Reason != factoryapi.WorkFailureTypeInternalServerError {
-		t.Fatalf("failure detail = %#v, want %q", payload.FailureDetail, interfaces.WorkFailureTypeInternalServerError)
+		t.Fatalf("failure detail = %#v, want %q", payload.FailureDetail, workerexecution.WorkFailureTypeInternalServerError)
 	}
 	if payload.FailureDetail.Message != errorText {
 		t.Fatalf("failure message = %q, want %q", payload.FailureDetail.Message, errorText)
@@ -306,11 +341,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 	if payload.ProviderFailure == nil {
 		t.Fatal("expected provider failure metadata on dispatch completed payload")
 	}
-	if stringValueForEventHistoryTest(payload.ProviderFailure.Family) != string(interfaces.WorkFailureFamilyRetryable) {
-		t.Fatalf("provider failure family = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Family), interfaces.WorkFailureFamilyRetryable)
+	if stringValueForEventHistoryTest(payload.ProviderFailure.Family) != string(workerexecution.WorkFailureFamilyRetryable) {
+		t.Fatalf("provider failure family = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Family), workerexecution.WorkFailureFamilyRetryable)
 	}
-	if stringValueForEventHistoryTest(payload.ProviderFailure.Type) != string(interfaces.WorkFailureTypeInternalServerError) {
-		t.Fatalf("provider failure type = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Type), interfaces.WorkFailureTypeInternalServerError)
+	if stringValueForEventHistoryTest(payload.ProviderFailure.Type) != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("provider failure type = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Type), workerexecution.WorkFailureTypeInternalServerError)
 	}
 
 	data, err := json.Marshal(events[0])
@@ -333,7 +368,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OmitsRetiredProviderAttem
 
 	history.RecordWorkstationResponse(12, safeDiagnosticsWorkResult(), safeDiagnosticsCompletedDispatch(eventTime))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -354,19 +389,19 @@ func assertEventTimeUTCJSON(t *testing.T, event factoryapi.FactoryEvent, want st
 	}
 }
 
-func safeDiagnosticsWorkResult() interfaces.WorkResult {
-	return interfaces.WorkResult{
+func safeDiagnosticsWorkResult() workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   "dispatch-diagnostics",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "completed",
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "response_id",
 			ID:       "resp-safe-123",
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{
-			RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-123",
 				UserMessageHash:  "user-hash-456",
 				Variables: map[string]string{
@@ -378,7 +413,7 @@ func safeDiagnosticsWorkResult() interfaces.WorkResult {
 					"env":            "raw rendered environment must stay private",
 				},
 			},
-			Provider: &interfaces.ProviderDiagnostic{
+			Provider: &workerexecution.ProviderDiagnostic{
 				Provider: "codex",
 				Model:    "gpt-5.4",
 				RequestMetadata: map[string]string{
@@ -401,13 +436,13 @@ func safeDiagnosticsWorkResult() interfaces.WorkResult {
 					"env_secret":          "raw response env secret must stay private",
 				},
 			},
-			Command: &interfaces.CommandDiagnostic{
+			Command: &workerexecution.CommandDiagnostic{
 				Stdin: "raw command stdin must stay private",
 				Env: map[string]string{
 					"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private",
 				},
 			},
-			Panic: &interfaces.PanicDiagnostic{Stack: "panic stack should not be dashboard-facing"},
+			Panic: &workerexecution.PanicDiagnostic{Stack: "panic stack should not be dashboard-facing"},
 		},
 	}
 }
@@ -417,7 +452,7 @@ func safeDiagnosticsCompletedDispatch(eventTime time.Time) interfaces.CompletedD
 		DispatchID:      "dispatch-diagnostics",
 		TransitionID:    "build",
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeAccepted,
+		Outcome:         workerexecution.OutcomeAccepted,
 		EndTime:         eventTime,
 		Duration:        3 * time.Second,
 	}
@@ -476,18 +511,18 @@ func dispatchRequestMetadataForEventHistoryTest(t *testing.T, history *FactoryEv
 	t.Helper()
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-runner",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-runner",
 			TransitionID:    "build",
 			WorkerType:      "builder",
 			WorkstationName: "Build",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "replay-runner",
 			},
 		},
 	}, time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}

@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,7 +23,7 @@ func TestNamePropagation_InPromptTemplate(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "design-doc-review",
 		WorkTypeID: "task",
 		Payload:    []byte(`review the design document`),
@@ -29,7 +31,7 @@ func TestNamePropagation_InPromptTemplate(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Reviewed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -58,7 +60,7 @@ func TestNamePropagation_MarkdownFile(t *testing.T) {
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Reviewed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -95,19 +97,19 @@ func TestNamePropagation_MarkdownFile(t *testing.T) {
 
 type spawningExecutor struct {
 	mu    sync.Mutex
-	calls []interfaces.WorkDispatch
+	calls []work.WorkDispatch
 }
 
-func (s *spawningExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (s *spawningExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, dispatch)
 	callNum := len(s.calls)
 	s.mu.Unlock()
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 
 	if callNum == 1 {
@@ -115,11 +117,11 @@ func (s *spawningExecutor) Execute(_ context.Context, dispatch interfaces.WorkDi
 		if len(dispatch.InputTokens) > 0 {
 			parentWorkID = firstInputToken(dispatch.InputTokens).Color.WorkID
 		}
-		result.SpawnedWork = []interfaces.TokenColor{{
+		result.SpawnedWork = []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     fmt.Sprintf("%s-child", parentWorkID),
 			Name:       "spawned-subtask",
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			ParentID:   parentWorkID,
 			Payload:    []byte(`child payload`),
 		}}
@@ -128,10 +130,10 @@ func (s *spawningExecutor) Execute(_ context.Context, dispatch interfaces.WorkDi
 	return result, nil
 }
 
-func (s *spawningExecutor) getCalls() []interfaces.WorkDispatch {
+func (s *spawningExecutor) getCalls() []work.WorkDispatch {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return append([]interfaces.WorkDispatch(nil), s.calls...)
+	return append([]work.WorkDispatch(nil), s.calls...)
 }
 
 func TestNamePropagation_SpawnedChildWork(t *testing.T) {
@@ -139,7 +141,7 @@ func TestNamePropagation_SpawnedChildWork(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "name_propagation"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "parent-task",
 		WorkTypeID: "task",
 		Payload:    []byte(`parent payload`),
@@ -148,7 +150,7 @@ func TestNamePropagation_SpawnedChildWork(t *testing.T) {
 
 	spawnExec := &spawningExecutor{}
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Child done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Child done. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,

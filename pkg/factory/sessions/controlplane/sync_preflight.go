@@ -6,10 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
 // SyncPreflightTarget resolves one live session for sync-preflight reads.
@@ -27,7 +26,7 @@ type SyncPreflightHost interface {
 	) (SyncPreflightTarget, error)
 	BackendScopeID() string
 	StreamGenerationID(session *factorysessions.LiveSession) string
-	LiveSessionEvents(session *factorysessions.LiveSession) []factoryapi.FactoryEvent
+	LiveSessionEvents(session *factorysessions.LiveSession) []interfaces.FactoryEvent
 }
 
 // GetLiveFactorySessionSyncPreflight validates reconnect cursors and session identity
@@ -38,64 +37,64 @@ func GetLiveFactorySessionSyncPreflight(
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 	logicalResolve *interfaces.FactorySessionLogicalResolveHint,
-) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+) (factorysessions.SyncPreflightResult, error) {
 	response := newSyncPreflightResponse(sessionID, reconnect)
 	if IsDurableExecutionSessionID(sessionID) {
-		response.ReasonCode = factoryapi.SessionNotFound
+		response.Reason = factorysessions.SyncPreflightReasonSessionNotFound
 		return response, nil
 	}
 	if host == nil {
-		return factoryapi.FactorySessionSyncPreflightResponse{}, errors.New("factory session gateway is required")
+		return factorysessions.SyncPreflightResult{}, errors.New("factory session gateway is required")
 	}
 
 	resolved, err := host.ResolveSyncPreflightTarget(sessionID, logicalResolve)
 	if err != nil {
-		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+		return factorysessions.SyncPreflightResult{}, err
 	}
 	if resolved.Unresolved {
-		response.ReasonCode = factoryapi.LogicalSessionUnresolved
+		response.Reason = factorysessions.SyncPreflightReasonLogicalSessionUnresolved
 		if logicalResolve != nil {
-			response.BackendScopeId = stringPointer(logicalResolve.BackendScopeID)
-			response.LogicalSessionKeyId = stringPointer(logicalResolve.LogicalSessionKeyID)
+			response.BackendScopeID = stringPointer(logicalResolve.BackendScopeID)
+			response.LogicalSessionKeyID = stringPointer(logicalResolve.LogicalSessionKeyID)
 		}
 		return response, nil
 	}
 	if resolved.Session == nil {
-		response.ReasonCode = factoryapi.SessionNotFound
+		response.Reason = factorysessions.SyncPreflightReasonSessionNotFound
 		return response, nil
 	}
 	session := resolved.Session
 
-	response.BackendScopeId = stringPointer(host.BackendScopeID())
-	response.LogicalSessionKeyId = stringPointer(logicalSessionKeyID(session))
-	response.FactorySessionId = stringPointer(factorysessions.CanonicalFactorySessionID(session))
-	response.StreamGenerationId = stringPointer(host.StreamGenerationID(session))
+	response.BackendScopeID = stringPointer(host.BackendScopeID())
+	response.LogicalSessionKeyID = stringPointer(logicalSessionKeyID(session))
+	response.FactorySessionID = stringPointer(factorysessions.CanonicalFactorySessionID(session))
+	response.StreamGenerationID = stringPointer(host.StreamGenerationID(session))
 	if resolved.Remapped {
-		response.ReasonCode = factoryapi.LogicalSessionRemap
+		response.Reason = factorysessions.SyncPreflightReasonLogicalSessionRemap
 		return response, nil
 	}
 
 	if !response.ReconnectCursor.Provided {
-		response.ReasonCode = factoryapi.Ok
+		response.Reason = factorysessions.SyncPreflightReasonOK
 		response.CheckpointReusable = true
 		return response, nil
 	}
 
 	eventsSnapshot := host.LiveSessionEvents(session)
-	_, err = events.BuildReconnectReplay(
+	_, err = events.BuildCanonicalReconnectReplay(
 		eventsSnapshot,
 		*reconnect,
 		interfaces.FactoryEventReconnectScope{SessionID: session.ID},
 	)
 	if err != nil {
 		if errors.Is(err, events.ErrReconnectCursorNotFound) {
-			response.ReasonCode = factoryapi.CursorStale
+			response.Reason = factorysessions.SyncPreflightReasonCursorStale
 			return response, nil
 		}
-		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+		return factorysessions.SyncPreflightResult{}, err
 	}
 
-	response.ReasonCode = factoryapi.Ok
+	response.Reason = factorysessions.SyncPreflightReasonOK
 	response.CheckpointReusable = true
 	response.ReconnectCursor.ValidForStreamGeneration = true
 	return response, nil
@@ -104,11 +103,11 @@ func GetLiveFactorySessionSyncPreflight(
 func newSyncPreflightResponse(
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
-) factoryapi.FactorySessionSyncPreflightResponse {
-	response := factoryapi.FactorySessionSyncPreflightResponse{
-		RequestedSessionId: strings.TrimSpace(sessionID),
-		ReasonCode:         factoryapi.SessionNotFound,
-		ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+) factorysessions.SyncPreflightResult {
+	response := factorysessions.SyncPreflightResult{
+		RequestedSessionID: strings.TrimSpace(sessionID),
+		Reason:             factorysessions.SyncPreflightReasonSessionNotFound,
+		ReconnectCursor: factorysessions.SyncPreflightReconnectCursor{
 			Provided: reconnect != nil && (strings.TrimSpace(reconnect.AfterEventID) != "" || reconnect.AfterSequence != nil),
 		},
 	}
@@ -116,7 +115,7 @@ func newSyncPreflightResponse(
 		return response
 	}
 	if afterEventID := strings.TrimSpace(reconnect.AfterEventID); afterEventID != "" {
-		response.ReconnectCursor.AfterEventId = &afterEventID
+		response.ReconnectCursor.AfterEventID = &afterEventID
 	}
 	if reconnect.AfterSequence != nil {
 		value := int64(*reconnect.AfterSequence)

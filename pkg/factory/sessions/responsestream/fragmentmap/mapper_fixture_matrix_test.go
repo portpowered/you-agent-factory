@@ -9,7 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/fragmentmap"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 var internalFragmentFixtureMatrix = []struct {
@@ -213,8 +214,8 @@ func TestMapFragment_ResponseFragmentItemIDStableAcrossMatrixDeltas(t *testing.T
 		Kind:       responsestream.EventKindResponseFragment,
 		Type:       responsestream.EventTypeTextDelta,
 		DispatchID: "dispatch-matrix",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor),
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor),
 			Kind:     "session_id",
 			ID:       "cursor-session-matrix",
 		},

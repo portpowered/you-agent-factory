@@ -12,33 +12,34 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type dispatchRecorder struct {
 	mu         sync.Mutex
-	dispatches []interfaces.WorkDispatch
+	dispatches []work.WorkDispatch
 }
 
-func (r *dispatchRecorder) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (r *dispatchRecorder) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	r.mu.Lock()
 	r.dispatches = append(r.dispatches, dispatch)
 	r.mu.Unlock()
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 
-func (r *dispatchRecorder) Dispatches() []interfaces.WorkDispatch {
+func (r *dispatchRecorder) Dispatches() []work.WorkDispatch {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	out := make([]interfaces.WorkDispatch, len(r.dispatches))
+	out := make([]work.WorkDispatch, len(r.dispatches))
 	copy(out, r.dispatches)
 	return out
 }
@@ -49,8 +50,8 @@ func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testi
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"shared-executor"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -135,7 +136,7 @@ func TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers(t *test
 
 	rewriteStatelessCollectorForDifferentWorkers(t, dir)
 
-	work := map[string][]interfaces.InferenceResponse{
+	work := map[string][]workerexecution.InferenceResponse{
 		"agent-a": {{Content: "Stage 1 done. COMPLETE"}},
 		"agent-b": {{Content: "Stage 2 done. COMPLETE"}},
 	}

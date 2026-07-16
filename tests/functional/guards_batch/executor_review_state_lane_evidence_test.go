@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -372,7 +372,7 @@ func injectDuplicateReviewInitPattern(
 ) {
 	t.Helper()
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "task",

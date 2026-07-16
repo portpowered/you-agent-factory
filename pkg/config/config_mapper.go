@@ -8,10 +8,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // ConfigMapper converts a FactoryConfig into a petri state.
@@ -95,11 +98,11 @@ func (cm *ConfigMapper) convertToTransitions(cfg *interfaces.FactoryConfig, plac
 	return transitions
 }
 
-func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interfaces.FactoryWorkstationConfig) []interfaces.ResourceConfig {
-	combined := make(map[string]interfaces.ResourceConfig, len(ws.Resources))
+func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interfaces.FactoryWorkstationConfig) []factoryresource.Config {
+	combined := make(map[string]factoryresource.Config, len(ws.Resources))
 	order := make([]string, 0, len(ws.Resources))
 
-	appendResources := func(resources []interfaces.ResourceConfig) {
+	appendResources := func(resources []factoryresource.Config) {
 		for _, resource := range resources {
 			if existing, ok := combined[resource.Name]; ok {
 				existing.Capacity += resource.Capacity
@@ -119,7 +122,7 @@ func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interface
 	if len(order) == 0 {
 		return nil
 	}
-	out := make([]interfaces.ResourceConfig, 0, len(order))
+	out := make([]factoryresource.Config, 0, len(order))
 	for _, name := range order {
 		out = append(out, combined[name])
 	}
@@ -191,7 +194,7 @@ func (cm *ConfigMapper) appendOutcomeArcs(target *[]petri.Arc, routes []interfac
 	}
 }
 
-func (cm *ConfigMapper) appendResourceArcs(t *petri.Transition, resources []interfaces.ResourceConfig) {
+func (cm *ConfigMapper) appendResourceArcs(t *petri.Transition, resources []factoryresource.Config) {
 	for _, ru := range resources {
 		resourcePlaceID := fmt.Sprintf("%s:%s", ru.Name, interfaces.ResourceStateAvailable)
 		t.InputArcs = append(t.InputArcs, petri.Arc{
@@ -273,7 +276,7 @@ func (cm *ConfigMapper) applyFactoryGuards(cfg *interfaces.FactoryConfig, transi
 	}
 }
 
-func factoryConfigWorker(cfg *interfaces.FactoryConfig, name string) (*interfaces.WorkerConfig, bool) {
+func factoryConfigWorker(cfg *interfaces.FactoryConfig, name string) (*workerconfig.Config, bool) {
 	if cfg == nil {
 		return nil, false
 	}
@@ -568,7 +571,7 @@ func mapToID(io interfaces.IOConfig) string {
 	return fmt.Sprintf("%s:%s", io.WorkTypeName, io.StateName)
 }
 
-func mapToPlace(resource interfaces.ResourceConfig) *petri.Place {
+func mapToPlace(resource factoryresource.Config) *petri.Place {
 	return &petri.Place{
 		ID:     fmt.Sprintf("%s:%s", resource.Name, interfaces.ResourceStateAvailable),
 		TypeID: resource.Name,
@@ -919,10 +922,10 @@ func cloneInvocationExampleConfigs(configs []interfaces.InvocationExampleConfig)
 }
 
 // CloneWorkerConfig returns a copy of a worker runtime definition.
-func CloneWorkerConfig(def interfaces.WorkerConfig) interfaces.WorkerConfig {
+func CloneWorkerConfig(def workerconfig.Config) workerconfig.Config {
 	def.Args = append([]string(nil), def.Args...)
 	def.Operations = cloneModelOperations(def.Operations)
-	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
+	def.Resources = append([]factoryresource.Config(nil), def.Resources...)
 	def.Auth = cloneHostedWorkerAuthConfig(def.Auth)
 	def.Linear = cloneHostedLinearWorkerConfig(def.Linear)
 	return def
@@ -933,7 +936,7 @@ func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.
 	def.Inputs = cloneIOConfigs(def.Inputs)
 	def.Outputs = cloneIOConfigs(def.Outputs)
 	def.OperationBindings = cloneModelOperationBindings(def.OperationBindings)
-	def.Resources = append([]interfaces.ResourceConfig(nil), def.Resources...)
+	def.Resources = append([]factoryresource.Config(nil), def.Resources...)
 	def.Guards = cloneGuardConfigs(def.Guards)
 	def.StopWords = append([]string(nil), def.StopWords...)
 	def.RuntimeStopWords = append([]string(nil), def.RuntimeStopWords...)
@@ -970,17 +973,17 @@ func cloneWorkTypeConfigs(configs []interfaces.WorkTypeConfig) []interfaces.Work
 	return out
 }
 
-func cloneResourceConfigs(configs []interfaces.ResourceConfig) []interfaces.ResourceConfig {
-	return append([]interfaces.ResourceConfig(nil), configs...)
+func cloneResourceConfigs(configs []factoryresource.Config) []factoryresource.Config {
+	return append([]factoryresource.Config(nil), configs...)
 }
 
-func cloneModelOperations(operations []interfaces.ModelOperation) []interfaces.ModelOperation {
+func cloneModelOperations(operations []workerconfig.ModelOperation) []workerconfig.ModelOperation {
 	if len(operations) == 0 {
 		return nil
 	}
-	cloned := make([]interfaces.ModelOperation, len(operations))
+	cloned := make([]workerconfig.ModelOperation, len(operations))
 	for i, operation := range operations {
-		cloned[i] = interfaces.ModelOperation{
+		cloned[i] = workerconfig.ModelOperation{
 			Name:    operation.Name,
 			Inputs:  cloneModelOperationSlots(operation.Inputs),
 			Outputs: cloneModelOperationSlots(operation.Outputs),
@@ -989,13 +992,13 @@ func cloneModelOperations(operations []interfaces.ModelOperation) []interfaces.M
 	return cloned
 }
 
-func cloneModelOperationSlots(slots []interfaces.ModelOperationSlot) []interfaces.ModelOperationSlot {
+func cloneModelOperationSlots(slots []workerconfig.ModelOperationSlot) []workerconfig.ModelOperationSlot {
 	if len(slots) == 0 {
 		return nil
 	}
-	cloned := make([]interfaces.ModelOperationSlot, len(slots))
+	cloned := make([]workerconfig.ModelOperationSlot, len(slots))
 	for i, slot := range slots {
-		cloned[i] = interfaces.ModelOperationSlot{
+		cloned[i] = workerconfig.ModelOperationSlot{
 			Name:         slot.Name,
 			ContentTypes: append([]string(nil), slot.ContentTypes...),
 			Required:     slot.Required,
@@ -1023,8 +1026,8 @@ func clonePortableResourceManifestConfig(cfg *interfaces.PortableResourceManifes
 	return cloned
 }
 
-func cloneWorkerConfigs(configs []interfaces.WorkerConfig) []interfaces.WorkerConfig {
-	out := make([]interfaces.WorkerConfig, len(configs))
+func cloneWorkerConfigs(configs []workerconfig.Config) []workerconfig.Config {
+	out := make([]workerconfig.Config, len(configs))
 	for i := range configs {
 		out[i] = CloneWorkerConfig(configs[i])
 	}
@@ -1055,8 +1058,8 @@ func cloneModelOperationBindings(bindings []interfaces.ModelOperationBinding) []
 	for i := range bindings {
 		out[i] = interfaces.ModelOperationBinding{
 			Slot:           bindings[i].Slot,
-			Config:         interfaces.CloneWorkContentParts(bindings[i].Config),
-			DefaultContent: interfaces.CloneWorkContentParts(bindings[i].DefaultContent),
+			Config:         work.CloneWorkContentParts(bindings[i].Config),
+			DefaultContent: work.CloneWorkContentParts(bindings[i].DefaultContent),
 		}
 		if bindings[i].Selector != nil {
 			selector := *bindings[i].Selector

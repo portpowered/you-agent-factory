@@ -3,21 +3,21 @@ package factory
 import (
 	"context"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // WorkMover is synchronous operator control ingress for relocating work tokens.
 type WorkMover interface {
-	MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error)
+	MoveWork(ctx context.Context, workID string, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error)
 }
 
 // APIFactory is the factory boundary required by the HTTP API server.
 type APIFactory interface {
 	// SubmitWorkRequest injects a canonical work request batch idempotently.
-	SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
+	SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
 
 	// SubscribeFactoryEvents returns canonical factory event history followed by
 	// live events. The live stream closes when ctx is canceled. When reconnect
@@ -47,7 +47,7 @@ type Factory interface {
 	Resume(ctx context.Context) error
 
 	// GetFactoryEvents returns the current-process canonical event history.
-	GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error)
+	GetFactoryEvents(ctx context.Context) ([]interfaces.FactoryEvent, error)
 
 	// WaitToComplete returns a channel that is closed when all tokens reach
 	// terminal or failed places and no dispatches are in flight. Callers can

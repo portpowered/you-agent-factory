@@ -9,12 +9,10 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
@@ -27,7 +25,7 @@ type ProjectionContext struct {
 	LifecycleControlStatus string
 	BackendScopeID         string
 	LogicalSessionKeyID    string
-	NormalizedTarget       *factoryapi.FactorySessionLogicalTarget
+	NormalizedTarget       *RuntimeLogicalTarget
 	RuntimeStartedAt       time.Time
 	Enabled                []interfaces.EnabledTransition
 	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
@@ -36,44 +34,24 @@ type ProjectionContext struct {
 	Now                    time.Time
 }
 
-// SessionResponse maps a live session and runtime projection to the API detail shape.
-func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
-	summary := SummaryResponse(ctx.Session)
-	runtime := projectSessionReadRuntime(ctx)
-	return factoryapi.FactorySession{
-		FactoryDir: summary.FactoryDir,
-		FolderPath: summary.FolderPath,
-		Id:         summary.Id,
-		IsDefault:  summary.IsDefault,
-		Project:    summary.Project,
-		Target:     summary.Target,
-		Runtime:    runtime,
-	}
+// ReadProjection carries one live Factory Session read and records whether its
+// runtime projection was available. List reads retain the summary when runtime
+// projection fails; detail reads return that failure directly.
+type ReadProjection struct {
+	Context          ProjectionContext
+	RuntimeAvailable bool
 }
 
-// SummaryWithRuntime maps a live session to the API summary shape with runtime projection.
-func SummaryWithRuntime(ctx ProjectionContext) factoryapi.FactorySessionSummary {
-	summary := SummaryResponse(ctx.Session)
-	runtime := projectSessionReadRuntime(ctx)
-	summary.Runtime = &runtime
-	return summary
-}
-
-// projectSessionReadRuntime builds the dispatch-free runtime shared by list and
-// detail reads. Dispatch inspection remains on its dedicated API endpoints.
-func projectSessionReadRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
-	return ProjectRuntime(ctx)
-}
-
-// ProjectRuntime builds the orchestrator-aware runtime projection for one session.
-func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
+// ProjectRuntimeContract builds the Factory Session-owned orchestrator-aware
+// runtime projection for one session.
+func ProjectRuntimeContract(ctx ProjectionContext) RuntimeProjection {
 	now := ctx.Now
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	kind := interfaces.EffectiveOrchestratorKind(ctx.FactoryCfg)
-	runtime := factoryapi.FactorySessionRuntime{
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(kind),
+	runtime := RuntimeProjection{
+		OrchestratorKind: kind,
 		Status:           projectedSessionStatus(ctx),
 		Progress:         projectedSessionProgress(ctx),
 		Usage:            projectedSessionUsage(ctx),
@@ -83,35 +61,25 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		runtime.StreamIdentity = streamIdentity
 	}
 	if lifecycleControlStatus := projectedSessionLifecycleControlStatus(ctx); lifecycleControlStatus != "" {
-		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
+		status := lifecycleControlStatus
 		runtime.LifecycleControlStatus = &status
 	}
 	projectOrchestratorIdentity(&runtime, ctx.FactoryCfg)
 	switch kind {
 	case interfaces.OrchestratorKindJavaScript:
-		runtime.Javascript = projectedJavaScriptRuntime(ctx)
+		runtime.JavaScript = projectedJavaScriptRuntime(ctx)
 	default:
 		runtime.Petri = projectedPetriRuntime(ctx)
 	}
 	artifacts := projectedSessionArtifacts(ctx, kind)
-	if artifacts != nil {
-		runtime.Artifacts = artifacts
-	}
-	runtime.StopSummary = apisurface.BuildFactorySessionStopSummary(sessionIDFromProjectionContext(ctx), ctx.Snapshot, ctx.JavaScript)
+	runtime.Artifacts = artifacts
 	return runtime
-}
-
-func sessionIDFromProjectionContext(ctx ProjectionContext) string {
-	if ctx.Session == nil {
-		return ""
-	}
-	return strings.TrimSpace(ctx.Session.ID)
 }
 
 func projectedSessionStreamIdentity(
 	ctx ProjectionContext,
-	lifecycle factoryapi.FactorySessionLifecycle,
-) *factoryapi.FactorySessionStreamIdentity {
+	lifecycle RuntimeLifecycle,
+) *RuntimeStreamIdentity {
 	sessionID := ""
 	if ctx.Session != nil {
 		sessionID = CanonicalFactorySessionID(ctx.Session)
@@ -131,23 +99,21 @@ func projectedSessionStreamIdentity(
 		streamGenerationID = lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
 	}
 	logicalSessionKeyID := strings.TrimSpace(ctx.LogicalSessionKeyID)
-	normalizedTarget := ctx.NormalizedTarget
 	if logicalSessionKeyID == "" {
 		return nil
 	}
-	return &factoryapi.FactorySessionStreamIdentity{
+	return &RuntimeStreamIdentity{
 		BackendScopeID:      backendScopeID,
 		LogicalSessionKeyID: logicalSessionKeyID,
 		FactorySessionID:    sessionID,
 		StreamGenerationID:  streamGenerationID,
-		NormalizedTarget:    normalizedTarget,
 	}
 }
 
 func projectedSessionArtifacts(
 	ctx ProjectionContext,
 	kind string,
-) *[]factoryapi.FactoryArtifact {
+) *[]interfaces.FactoryArtifact {
 	switch kind {
 	case interfaces.OrchestratorKindJavaScript:
 		if ctx.JavaScript == nil {
@@ -160,7 +126,7 @@ func projectedSessionArtifacts(
 	}
 }
 
-func projectOrchestratorIdentity(runtime *factoryapi.FactorySessionRuntime, cfg *interfaces.FactoryConfig) {
+func projectOrchestratorIdentity(runtime *RuntimeProjection, cfg *interfaces.FactoryConfig) {
 	if runtime == nil || cfg == nil || cfg.Orchestrator == nil {
 		return
 	}
@@ -178,14 +144,14 @@ func projectOrchestratorIdentity(runtime *factoryapi.FactorySessionRuntime, cfg 
 	}
 }
 
-func projectedSessionStatus(ctx ProjectionContext) factoryapi.FactorySessionStatus {
+func projectedSessionStatus(ctx ProjectionContext) string {
 	if ctx.Snapshot == nil {
 		if ctx.JavaScript != nil && strings.TrimSpace(ctx.JavaScript.ScriptStatus) == "FINISHED" {
-			return factoryapi.FactorySessionStatusFINISHED
+			return string(interfaces.RuntimeStatusFinished)
 		}
-		return factoryapi.FactorySessionStatusIDLE
+		return string(interfaces.RuntimeStatusIdle)
 	}
-	return factoryapi.FactorySessionStatus(ctx.Snapshot.RuntimeStatus)
+	return string(ctx.Snapshot.RuntimeStatus)
 }
 
 func projectedSessionLifecycleControlStatus(ctx ProjectionContext) string {
@@ -202,17 +168,17 @@ func projectedSessionFactoryState(ctx ProjectionContext) string {
 	return ctx.Snapshot.FactoryState
 }
 
-func projectedSessionProgress(ctx ProjectionContext) factoryapi.FactorySessionProgress {
+func projectedSessionProgress(ctx ProjectionContext) RuntimeProgress {
 	if ctx.Snapshot == nil {
-		return factoryapi.FactorySessionProgress{
+		return RuntimeProgress{
 			FactoryState:  projectedSessionFactoryState(ctx),
-			Categories:    factoryapi.StatusCategories{},
+			Categories:    RuntimeStatusCategories{},
 			InFlightCount: 0,
 			TotalTokens:   0,
 		}
 	}
 	categories, _ := categorizeProjectionTokens(&ctx.Snapshot.Marking, ctx.Snapshot.Topology)
-	return factoryapi.FactorySessionProgress{
+	return RuntimeProgress{
 		FactoryState:  projectedSessionFactoryState(ctx),
 		Categories:    categories,
 		InFlightCount: ctx.Snapshot.InFlightCount,
@@ -220,22 +186,22 @@ func projectedSessionProgress(ctx ProjectionContext) factoryapi.FactorySessionPr
 	}
 }
 
-func projectedSessionUsage(ctx ProjectionContext) factoryapi.FactorySessionUsage {
+func projectedSessionUsage(ctx ProjectionContext) RuntimeUsage {
 	if ctx.Snapshot == nil {
-		return factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}}
+		return RuntimeUsage{Resources: []RuntimeResourceUsage{}}
 	}
 	_, resources := categorizeProjectionTokens(&ctx.Snapshot.Marking, ctx.Snapshot.Topology)
-	return factoryapi.FactorySessionUsage{Resources: resources}
+	return RuntimeUsage{Resources: resources}
 }
 
-func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) factoryapi.FactorySessionLifecycle {
+func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) RuntimeLifecycle {
 	startedAt := now
 	if ctx.Snapshot != nil && ctx.Snapshot.Uptime > 0 {
 		startedAt = now.Add(-ctx.Snapshot.Uptime).UTC()
 	} else if !ctx.RuntimeStartedAt.IsZero() {
 		startedAt = ctx.RuntimeStartedAt.UTC()
 	}
-	lifecycle := factoryapi.FactorySessionLifecycle{
+	lifecycle := RuntimeLifecycle{
 		StartedAt: startedAt,
 		UpdatedAt: now.UTC(),
 	}
@@ -246,25 +212,25 @@ func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) factoryapi.
 	return lifecycle
 }
 
-func projectedPetriRuntime(ctx ProjectionContext) *factoryapi.FactorySessionPetriProjection {
+func projectedPetriRuntime(ctx ProjectionContext) *PetriRuntimeProjection {
 	if ctx.Snapshot == nil {
-		return &factoryapi.FactorySessionPetriProjection{
-			Marking:            []factoryapi.TokenResponse{},
-			EnabledTransitions: []factoryapi.FactorySessionPetriEnabledTransition{},
+		return &PetriRuntimeProjection{
+			Marking:            []RuntimeToken{},
+			EnabledTransitions: []PetriEnabledTransition{},
 		}
 	}
-	return &factoryapi.FactorySessionPetriProjection{
+	return &PetriRuntimeProjection{
 		Marking:            projectedMarkingTokens(&ctx.Snapshot.Marking),
 		EnabledTransitions: projectedEnabledTransitions(ctx.Enabled),
 	}
 }
 
-func projectedJavaScriptRuntime(ctx ProjectionContext) *factoryapi.FactorySessionJavaScriptProjection {
+func projectedJavaScriptRuntime(ctx ProjectionContext) *JavaScriptRuntimeProjection {
 	state := ctx.JavaScript
 	if state == nil {
 		state = defaultJavaScriptRuntimeState(ctx.FactoryCfg)
 	}
-	projection := &factoryapi.FactorySessionJavaScriptProjection{
+	projection := &JavaScriptRuntimeProjection{
 		Phase:               stringPointerOrNil(state.Phase),
 		Phases:              append([]string(nil), state.Phases...),
 		ArgsDigest:          stringPointerOrNil(state.ArgsDigest),
@@ -289,28 +255,28 @@ func defaultJavaScriptRuntimeState(cfg *interfaces.FactoryConfig) *interfaces.Fa
 	return state
 }
 
-func projectedJavaScriptScriptStatus(value string) factoryapi.FactorySessionJavaScriptScriptStatus {
+func projectedJavaScriptScriptStatus(value string) interfaces.FactorySessionJavaScriptScriptStatus {
 	switch strings.ToUpper(strings.TrimSpace(value)) {
 	case "RUNNING":
-		return factoryapi.FactorySessionJavaScriptScriptStatusRUNNING
+		return interfaces.FactorySessionJavaScriptScriptStatusRunning
 	case "PAUSED":
-		return factoryapi.FactorySessionJavaScriptScriptStatusPAUSED
+		return interfaces.FactorySessionJavaScriptScriptStatusPaused
 	case "FINISHED":
-		return factoryapi.FactorySessionJavaScriptScriptStatusFINISHED
+		return interfaces.FactorySessionJavaScriptScriptStatusFinished
 	case "FAILED":
-		return factoryapi.FactorySessionJavaScriptScriptStatusFAILED
+		return interfaces.FactorySessionJavaScriptScriptStatusFailed
 	default:
-		return factoryapi.FactorySessionJavaScriptScriptStatusIDLE
+		return interfaces.FactorySessionJavaScriptScriptStatusIdle
 	}
 }
 
 func projectedJavaScriptChildDispatchCounts(
 	state *interfaces.FactorySessionJavaScriptRuntimeState,
-) factoryapi.FactorySessionJavaScriptChildDispatchCounts {
+) interfaces.FactorySessionChildDispatchCounts {
 	if state == nil {
-		return factoryapi.FactorySessionJavaScriptChildDispatchCounts{}
+		return interfaces.FactorySessionChildDispatchCounts{}
 	}
-	return factoryapi.FactorySessionJavaScriptChildDispatchCounts{
+	return interfaces.FactorySessionChildDispatchCounts{
 		Queued:    state.QueuedDispatches,
 		Running:   state.RunningDispatches,
 		Completed: state.CompletedDispatches,
@@ -319,13 +285,13 @@ func projectedJavaScriptChildDispatchCounts(
 
 func projectedJavaScriptCheckpoints(
 	checkpoints []interfaces.FactorySessionJavaScriptCheckpointRef,
-) []factoryapi.FactorySessionJavaScriptCheckpointRef {
+) []interfaces.FactorySessionJavaScriptCheckpointEventRef {
 	if len(checkpoints) == 0 {
 		return nil
 	}
-	projected := make([]factoryapi.FactorySessionJavaScriptCheckpointRef, 0, len(checkpoints))
+	projected := make([]interfaces.FactorySessionJavaScriptCheckpointEventRef, 0, len(checkpoints))
 	for _, checkpoint := range checkpoints {
-		item := factoryapi.FactorySessionJavaScriptCheckpointRef{Id: checkpoint.ID}
+		item := interfaces.FactorySessionJavaScriptCheckpointEventRef{ID: checkpoint.ID}
 		if label := strings.TrimSpace(checkpoint.Label); label != "" {
 			item.Label = &label
 		}
@@ -345,18 +311,18 @@ func projectedJavaScriptCheckpoints(
 	return projected
 }
 
-func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactRef) factoryapi.FactoryArtifactRef {
+func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactRef) interfaces.FactoryArtifactRef {
 	artifactID := strings.TrimSpace(ref.ID)
-	kind := factoryapi.FactoryArtifactKind(strings.TrimSpace(ref.Kind))
+	kind := strings.TrimSpace(ref.Kind)
 	if kind == "" {
-		kind = factoryapi.FactoryArtifactKindCHECKPOINT
+		kind = "CHECKPOINT"
 	}
-	visibility := factoryapi.FactoryArtifactVisibility(strings.TrimSpace(ref.Visibility))
+	visibility := strings.TrimSpace(ref.Visibility)
 	if visibility == "" {
-		visibility = factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT
+		visibility = "INTERNAL_CHECKPOINT"
 	}
-	projected := factoryapi.FactoryArtifactRef{
-		Id:         artifactID,
+	projected := interfaces.FactoryArtifactRef{
+		ID:         artifactID,
 		Kind:       kind,
 		Visibility: visibility,
 	}
@@ -370,25 +336,25 @@ func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactR
 	return projected
 }
 
-func projectedJavaScriptBudgets(raw json.RawMessage) *factoryapi.FactorySessionBudgets {
-	resolution := apisurface.ResolveWorkflowPolicy(workflowpolicy.Request{FactoryDefault: raw})
+func projectedJavaScriptBudgets(raw json.RawMessage) *RuntimeBudgets {
+	resolution := workflowpolicy.Resolve(workflowpolicy.Request{FactoryDefault: raw})
 	if resolution.Policy.MaxAgents <= 0 {
 		return nil
 	}
 	value := resolution.Policy.MaxAgents
-	return &factoryapi.FactorySessionBudgets{MaxAgents: &value}
+	return &RuntimeBudgets{MaxAgents: &value}
 }
 
-func projectedMarkingTokens(marking *petri.MarkingSnapshot) []factoryapi.TokenResponse {
+func projectedMarkingTokens(marking *petri.MarkingSnapshot) []RuntimeToken {
 	if marking == nil || len(marking.Tokens) == 0 {
-		return []factoryapi.TokenResponse{}
+		return []RuntimeToken{}
 	}
 	tokenIDs := make([]string, 0, len(marking.Tokens))
 	for tokenID := range marking.Tokens {
 		tokenIDs = append(tokenIDs, tokenID)
 	}
 	sort.Strings(tokenIDs)
-	tokens := make([]factoryapi.TokenResponse, 0, len(tokenIDs))
+	tokens := make([]RuntimeToken, 0, len(tokenIDs))
 	for _, tokenID := range tokenIDs {
 		token := marking.Tokens[tokenID]
 		if token == nil || interfaces.IsSystemTimeToken(token) {
@@ -401,33 +367,33 @@ func projectedMarkingTokens(marking *petri.MarkingSnapshot) []factoryapi.TokenRe
 
 func projectedEnabledTransitions(
 	enabled []interfaces.EnabledTransition,
-) []factoryapi.FactorySessionPetriEnabledTransition {
+) []PetriEnabledTransition {
 	if len(enabled) == 0 {
-		return []factoryapi.FactorySessionPetriEnabledTransition{}
+		return []PetriEnabledTransition{}
 	}
-	projected := make([]factoryapi.FactorySessionPetriEnabledTransition, 0, len(enabled))
+	projected := make([]PetriEnabledTransition, 0, len(enabled))
 	for _, transition := range enabled {
-		projected = append(projected, factoryapi.FactorySessionPetriEnabledTransition{
-			TransitionId: transition.TransitionID,
+		projected = append(projected, PetriEnabledTransition{
+			TransitionID: transition.TransitionID,
 			WorkerType:   transition.WorkerType,
 		})
 	}
 	sort.Slice(projected, func(i, j int) bool {
-		if projected[i].TransitionId == projected[j].TransitionId {
+		if projected[i].TransitionID == projected[j].TransitionID {
 			return projected[i].WorkerType < projected[j].WorkerType
 		}
-		return projected[i].TransitionId < projected[j].TransitionId
+		return projected[i].TransitionID < projected[j].TransitionID
 	})
 	return projected
 }
 
-func projectedTokenResponse(token *interfaces.Token) factoryapi.TokenResponse {
-	resp := factoryapi.TokenResponse{
-		Id:        token.ID,
-		PlaceId:   token.PlaceID,
-		WorkId:    token.Color.WorkID,
+func projectedTokenResponse(token *factorytoken.Token) RuntimeToken {
+	resp := RuntimeToken{
+		ID:        token.ID,
+		PlaceID:   token.PlaceID,
+		WorkID:    token.Color.WorkID,
 		WorkType:  token.Color.WorkTypeID,
-		TraceId:   token.Color.TraceID,
+		TraceID:   token.Color.TraceID,
 		CreatedAt: token.CreatedAt,
 		EnteredAt: token.EnteredAt,
 	}
@@ -439,14 +405,14 @@ func projectedTokenResponse(token *interfaces.Token) factoryapi.TokenResponse {
 		resp.ChainingTraceDepth = &depth
 	}
 	if traceID := firstNonEmptyString(token.Color.CurrentChainingTraceID, token.Color.TraceID); traceID != "" {
-		resp.CurrentChainingTraceId = &traceID
+		resp.CurrentChainingTraceID = &traceID
 	}
 	if len(token.Color.PreviousChainingTraceIDs) > 0 {
 		previous := append([]string(nil), token.Color.PreviousChainingTraceIDs...)
-		resp.PreviousChainingTraceIds = &previous
+		resp.PreviousChainingTraceIDs = &previous
 	}
 	if len(token.Color.Tags) > 0 {
-		tags := factoryapi.StringMap(token.Color.Tags)
+		tags := map[string]string(token.Color.Tags)
 		resp.Tags = &tags
 	}
 	return resp
@@ -455,8 +421,8 @@ func projectedTokenResponse(token *interfaces.Token) factoryapi.TokenResponse {
 func categorizeProjectionTokens(
 	marking *petri.MarkingSnapshot,
 	net *state.Net,
-) (factoryapi.StatusCategories, []factoryapi.ResourceUsage) {
-	var categories factoryapi.StatusCategories
+) (RuntimeStatusCategories, []RuntimeResourceUsage) {
+	var categories RuntimeStatusCategories
 	resourceCounts := make(map[string]int)
 	resourceTotals := resourceTotalsFromTopology(net)
 	if marking == nil {
@@ -466,7 +432,7 @@ func categorizeProjectionTokens(
 		if token == nil || interfaces.IsSystemTimeToken(token) {
 			continue
 		}
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			resourceID, resourceState := state.SplitPlaceID(token.PlaceID)
 			if _, ok := resourceTotals[resourceID]; !ok {
 				resourceTotals[resourceID]++
@@ -525,15 +491,15 @@ func resourceTotalsFromTopology(net *state.Net) map[string]int {
 	return totals
 }
 
-func resourceUsage(counts map[string]int, totals map[string]int) []factoryapi.ResourceUsage {
+func resourceUsage(counts map[string]int, totals map[string]int) []RuntimeResourceUsage {
 	ids := make([]string, 0, len(totals))
 	for id := range totals {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	resources := make([]factoryapi.ResourceUsage, 0, len(ids))
+	resources := make([]RuntimeResourceUsage, 0, len(ids))
 	for _, id := range ids {
-		resources = append(resources, factoryapi.ResourceUsage{
+		resources = append(resources, RuntimeResourceUsage{
 			Available: counts[id],
 			Name:      id,
 			Total:     totals[id],

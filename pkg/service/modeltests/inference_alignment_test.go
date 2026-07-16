@@ -6,9 +6,13 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/service"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
@@ -16,7 +20,7 @@ func TestInvokeModel_UsesSharedInferenceBindingAndOutputShaping(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	providerRaw := mustMarshalAudioContentResponse(t, audioPath)
 	provider := &providerCallRecorder{
-		responses: []interfaces.InferenceResponse{{Content: providerRaw}},
+		responses: []workerexecution.InferenceResponse{{Content: providerRaw}},
 	}
 	svc := buildModelCatalogServiceWithOptions(t, cloudModelInvocationConfig(), service.FactoryServiceConfig{
 		ProviderOverride: provider,
@@ -34,11 +38,11 @@ func TestInvokeModel_UsesSharedInferenceBindingAndOutputShaping(t *testing.T) {
 		t.Fatalf("InvokeModel: %v", err)
 	}
 
-	operation := interfaces.ModelOperation{
+	operation := workerconfig.ModelOperation{
 		Name: "TTS",
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []workerconfig.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 		}},
 	}
 	shaped, err := workerinference.WorkContentFromInferenceOutput(providerRaw, operation)
@@ -55,11 +59,11 @@ func TestInvokeModel_UsesSharedInferenceBindingAndOutputShaping(t *testing.T) {
 
 func TestInvokeModel_InferenceAndLegacyBindingFixturesStayAligned(t *testing.T) {
 	worker := inferenceBindingWorkerFixture()
-	inputTokens := []interfaces.Token{{
+	inputTokens := []factorytoken.Token{{
 		ID: "token-tts",
-		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+		Color: factorytoken.Color{
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Slot: "text",
 				Text: "hello world",
 			}},
@@ -90,20 +94,20 @@ func TestInvokeModel_InferenceAndLegacyBindingFixturesStayAligned(t *testing.T) 
 	}
 }
 
-func inferenceBindingWorkerFixture() *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func inferenceBindingWorkerFixture() *workerconfig.Config {
+	return &workerconfig.Config{
 		Name: "tts-worker",
 		Type: interfaces.WorkerTypeInference,
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}

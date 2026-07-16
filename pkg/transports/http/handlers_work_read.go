@@ -20,12 +20,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/moveprojection"
 	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workquery "github.com/portpowered/infinite-you/pkg/work/query"
 	"go.uber.org/zap"
@@ -276,7 +278,7 @@ func loadSessionStopSummary(
 	return &summary
 }
 
-func findPublicWorkToken(materialized materialize.PublicWorkTokens, id string) (*interfaces.Token, bool, bool) {
+func findPublicWorkToken(materialized materialize.PublicWorkTokens, id string) (*factorytoken.Token, bool, bool) {
 	for _, token := range materialized.Tokens {
 		if token.ID == id && publicWorkToken(token) {
 			_, inFlightOnly := materialized.InFlightOnlyByID[token.ID]
@@ -294,7 +296,7 @@ func findPublicWorkToken(materialized materialize.PublicWorkTokens, id string) (
 	}
 	return nil, false, false
 }
-func tokenToWork(t *interfaces.Token, net *state.Net, inFlightOnly bool) factoryapi.Work {
+func tokenToWork(t *factorytoken.Token, net *state.Net, inFlightOnly bool) factoryapi.Work {
 	name := firstNonEmptyString(t.Color.Name, t.Color.WorkID, t.ID)
 	return factoryapi.Work{
 		Name:                     name,
@@ -310,7 +312,7 @@ func tokenToWork(t *interfaces.Token, net *state.Net, inFlightOnly bool) factory
 	}
 }
 
-func publicWorkNamesByID(tokens []*interfaces.Token) map[string]string {
+func publicWorkNamesByID(tokens []*factorytoken.Token) map[string]string {
 	names := make(map[string]string, len(tokens))
 	for _, token := range tokens {
 		if !materialize.IsPublicWorkToken(token) || token.Color.WorkID == "" {
@@ -321,7 +323,7 @@ func publicWorkNamesByID(tokens []*interfaces.Token) map[string]string {
 	return names
 }
 
-func generatedWorkRelations(token *interfaces.Token, sourceWorkName string, workNamesByID map[string]string) *[]factoryapi.Relation {
+func generatedWorkRelations(token *factorytoken.Token, sourceWorkName string, workNamesByID map[string]string) *[]factoryapi.Relation {
 	if token == nil || len(token.Color.Relations) == 0 {
 		return nil
 	}
@@ -340,14 +342,14 @@ func generatedWorkRelations(token *interfaces.Token, sourceWorkName string, work
 	return &relations
 }
 
-func workStateForMaterializedToken(t *interfaces.Token, net *state.Net, inFlightOnly bool) *factoryapi.WorkState {
+func workStateForMaterializedToken(t *factorytoken.Token, net *state.Net, inFlightOnly bool) *factoryapi.WorkState {
 	if inFlightOnly {
 		return workStateForInFlightToken(t, net)
 	}
 	return workStateForToken(t, net)
 }
 
-func workStateForInFlightToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {
+func workStateForInFlightToken(t *factorytoken.Token, net *state.Net) *factoryapi.WorkState {
 	if t == nil {
 		return nil
 	}
@@ -366,7 +368,7 @@ func workStateForInFlightToken(t *interfaces.Token, net *state.Net) *factoryapi.
 	}
 }
 
-func workStateForToken(t *interfaces.Token, net *state.Net) *factoryapi.WorkState {
+func workStateForToken(t *factorytoken.Token, net *state.Net) *factoryapi.WorkState {
 	if t == nil {
 		return nil
 	}
@@ -396,10 +398,10 @@ func workTypesFromNet(net *state.Net) map[string]*state.WorkType {
 	return net.WorkTypes
 }
 
-func publicWorkToken(token *interfaces.Token) bool {
+func publicWorkToken(token *factorytoken.Token) bool {
 	return materialize.IsPublicWorkToken(token)
 }
-func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+func domainWorkContentToGeneratedPtr(parts []work.WorkContentPart) *factoryapi.WorkContent {
 	return contentcontract.GeneratedPtrFromParts(parts)
 }
 

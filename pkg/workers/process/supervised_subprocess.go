@@ -3,7 +3,7 @@ package process
 import (
 	"os/exec"
 
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // SubprocessTree supervises a command process tree for cancel and post-run cleanup.

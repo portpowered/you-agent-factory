@@ -11,7 +11,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -23,8 +24,6 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 	}
 	deletedTypeNames := map[string]struct{}{
 		"FactoryEventEnvelope": {},
-		"FactoryEventContext":  {},
-		"FactoryEventType":     {},
 		"RecordedWorkRequest":  {},
 		"RecordedSubmission":   {},
 		"RecordedDispatch":     {},
@@ -32,6 +31,7 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 		"SubmissionDiagnostic": {},
 		"DispatchDiagnostic":   {},
 	}
+	canonicalFactoryEventTypeOwner := filepath.Join(moduleRoot, "pkg", "factory", "contracts", "factory_events.go")
 
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(moduleRoot, func(path string, entry os.DirEntry, walkErr error) error {
@@ -67,18 +67,33 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 			}
 			for _, spec := range genDecl.Specs {
 				typeSpec := spec.(*ast.TypeSpec)
-				if _, deleted := deletedTypeNames[typeSpec.Name.Name]; deleted {
-					t.Fatalf("%s declares deleted legacy replay/event type %s", path, typeSpec.Name.Name)
-				}
-				if typeSpec.Assign.IsValid() && aliasesGeneratedAPI(typeSpec.Type, generatedImportNames) {
-					t.Fatalf("%s aliases generated API type %s; use generated types directly", path, typeSpec.Name.Name)
-				}
+				assertAllowedFactoryContractType(t, path, canonicalFactoryEventTypeOwner, typeSpec, deletedTypeNames, generatedImportNames)
 			}
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("scan handwritten API models: %v", err)
+	}
+}
+
+func assertAllowedFactoryContractType(
+	t *testing.T,
+	path string,
+	canonicalFactoryEventTypeOwner string,
+	typeSpec *ast.TypeSpec,
+	deletedTypeNames map[string]struct{},
+	generatedImportNames map[string]struct{},
+) {
+	t.Helper()
+	if (typeSpec.Name.Name == "FactoryEventType" || typeSpec.Name.Name == "FactoryEventContext") && path != canonicalFactoryEventTypeOwner {
+		t.Fatalf("%s declares %s outside canonical Factory owner %s", path, typeSpec.Name.Name, canonicalFactoryEventTypeOwner)
+	}
+	if _, deleted := deletedTypeNames[typeSpec.Name.Name]; deleted {
+		t.Fatalf("%s declares deleted legacy replay/event type %s", path, typeSpec.Name.Name)
+	}
+	if typeSpec.Assign.IsValid() && aliasesGeneratedAPI(typeSpec.Type, generatedImportNames) {
+		t.Fatalf("%s aliases generated API type %s; use generated types directly", path, typeSpec.Name.Name)
 	}
 }
 
@@ -115,8 +130,8 @@ func TestOpenAPIContract_WorkerModelProviderEnumMatchesSupportedBackendProviders
 	schemas := componentSchemas(t, doc)
 	schema := schemaObject(t, schemas, "WorkerModelProvider")
 
-	wantPublic := make([]string, 0, len(interfaces.SupportedModelProviders()))
-	for _, internal := range interfaces.SupportedModelProviders() {
+	wantPublic := make([]string, 0, len(modelprovider.Supported()))
+	for _, internal := range modelprovider.Supported() {
 		public, ok := interfaces.PublicWorkerModelProviderFromInternal(internal)
 		if !ok {
 			t.Fatalf("PublicWorkerModelProviderFromInternal(%q) = false", internal)
@@ -126,12 +141,12 @@ func TestOpenAPIContract_WorkerModelProviderEnumMatchesSupportedBackendProviders
 	sort.Strings(wantPublic)
 	assertEnumValues(t, schema, "WorkerModelProvider", wantPublic)
 
-	for _, internal := range interfaces.SupportedModelProviders() {
+	for _, internal := range modelprovider.Supported() {
 		public, ok := interfaces.PublicWorkerModelProviderFromInternal(internal)
 		if !ok {
 			t.Fatalf("PublicWorkerModelProviderFromInternal(%q) = false", internal)
 		}
-		mapped, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(public)
+		mapped, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(string(public))
 		if !ok || mapped != internal {
 			t.Fatalf("InternalModelProviderFromPublicWorkerModelProvider(%q) = (%q, %v), want (%q, true)", public, mapped, ok, internal)
 		}
@@ -149,11 +164,11 @@ func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t
 		factoryapi.WorkerModelProviderPi,
 		factoryapi.WorkerModelProviderAgy,
 	}
-	if len(want) != len(interfaces.SupportedModelProviders()) {
-		t.Fatalf("generated WorkerModelProvider constants = %d, supported internal providers = %d", len(want), len(interfaces.SupportedModelProviders()))
+	if len(want) != len(modelprovider.Supported()) {
+		t.Fatalf("generated WorkerModelProvider constants = %d, supported internal providers = %d", len(want), len(modelprovider.Supported()))
 	}
 	for _, public := range want {
-		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(public); !ok {
+		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(string(public)); !ok {
 			t.Fatalf("InternalModelProviderFromPublicWorkerModelProvider(%q) = false", public)
 		}
 	}

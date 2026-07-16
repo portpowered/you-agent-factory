@@ -19,25 +19,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -45,6 +52,37 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func generatedFactoryEventsForTest(t testing.TB, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	generated := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		if err := event.Decode(&generated[index]); err != nil {
+			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		}
+	}
+	return generated
+}
+
+func generatedFactoryFromRuntimeConfigForTest(factoryDir string, factoryCfg *interfaces.FactoryConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) (factoryapi.Factory, error) {
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(factoryDir, factoryCfg, runtimeCfg)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	generated, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return *generated, nil
+}
+
+func runtimeConfigFromGeneratedFactoryForTest(generated factoryapi.Factory) (*replay.EmbeddedRuntimeConfig, error) {
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		return nil, err
+	}
+	return replay.RuntimeConfigFromFactorySnapshot(snapshot)
+}
 
 // recordModeServiceRunTimeout allows full runtime startup under Windows CI load.
 const recordModeServiceRunTimeout = 5 * time.Second
@@ -93,7 +131,7 @@ func init() {
 func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -274,7 +312,7 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 		t.Fatalf("construct model service: %v", err)
 	}
-	svc := AttachModelServiceCollaborator(shell, modelAPI)
+	svc := AttachModelServiceCollaborator(shell, AdaptModelService(modelAPI))
 	svc = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: svc},
 		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
@@ -383,35 +421,35 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
 			LoadPolicy: "ON_DEMAND",
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "tts-worker",
 			Type:          interfaces.WorkerTypeInference,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelProvider: interfaces.RunnerIDCodex,
-			ModelLocality: interfaces.ModelLocalityLocal,
+			ModelProvider: workerexecution.RunnerIDCodex,
+			ModelLocality: workerconfig.ModelLocalityLocal,
 			Command:       localmodels.DefaultOmniVoiceCommand,
-			Resources: []interfaces.ResourceConfig{{
+			Resources: []factoryresource.Config{{
 				Name:     "omnivoice-cache",
 				Capacity: 1,
 			}},
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 					Required:     true,
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []workerconfig.ModelOperationSlot{{
 					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},
@@ -423,7 +461,7 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 			OperationBindings: []interfaces.ModelOperationBinding{{
 				Slot: "text",
 				Selector: &interfaces.ModelOperationBindingSelector{
-					Type: interfaces.ModelOperationContentTypeText,
+					Type: workerconfig.ModelOperationContentTypeText,
 				},
 			}},
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "speech", StateName: "init"}},
@@ -680,11 +718,12 @@ func TestBuildFactoryService_RecordModeWritesInitialArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load(recording): %v", err)
 	}
-	if artifact.Factory.Workers == nil {
+	generatedFactory := decodeRecordedFactorySnapshot(t, artifact.Factory)
+	if generatedFactory.Workers == nil {
 		t.Fatal("expected embedded factory config")
 	}
-	if artifact.Factory.FactoryDirectory == nil || *artifact.Factory.FactoryDirectory != dir {
-		t.Fatalf("factory directory = %#v, want %q", artifact.Factory.FactoryDirectory, dir)
+	if generatedFactory.FactoryDirectory == nil || *generatedFactory.FactoryDirectory != dir {
+		t.Fatalf("factory directory = %#v, want %q", generatedFactory.FactoryDirectory, dir)
 	}
 }
 
@@ -727,9 +766,19 @@ func TestBuildFactoryService_RecordModeResolvesGeneratedDefaultSessionPathAndCre
 	if err != nil {
 		t.Fatalf("Load(recording): %v", err)
 	}
-	if artifact.Factory.FactoryDirectory == nil || *artifact.Factory.FactoryDirectory != dir {
-		t.Fatalf("factory directory = %#v, want %q", artifact.Factory.FactoryDirectory, dir)
+	generatedFactory := decodeRecordedFactorySnapshot(t, artifact.Factory)
+	if generatedFactory.FactoryDirectory == nil || *generatedFactory.FactoryDirectory != dir {
+		t.Fatalf("factory directory = %#v, want %q", generatedFactory.FactoryDirectory, dir)
 	}
+}
+
+func decodeRecordedFactorySnapshot(t *testing.T, snapshot *interfaces.FactorySnapshot) factoryapi.Factory {
+	t.Helper()
+	var generated factoryapi.Factory
+	if err := snapshot.Decode(&generated); err != nil {
+		t.Fatalf("decode recorded Factory snapshot: %v", err)
+	}
+	return generated
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-log-fixture review=2026-07-18 removal=split-runtime-log-fixture-before-next-runtime-logging-change
@@ -742,7 +791,7 @@ func TestBuildFactoryService_RecordModeRecordsSubmittedWorkAtEngineTick(t *testi
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		WorkTypeID: "task",
 		Name:       "from-work-file",
 		TraceID:    "trace-work-file",
@@ -826,7 +875,7 @@ func TestBuildFactoryService_PetriMutationsReloadThroughComposedDurableOwner(t *
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
 	writeWorkstationAgentsMD(t, dir, "process")
 	workFile := filepath.Join(dir, "petri-owner-work.json")
-	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	writeWorkRequestFile(t, workFile, work.SubmitRequest{
 		WorkTypeID: "task", Name: "petri-owner", TraceID: "trace-petri-owner",
 	})
 	cfg := &FactoryServiceConfig{
@@ -899,7 +948,7 @@ func assertReplayArtifactStoresCanonicalEvents(t *testing.T, path string, artifa
 	}
 	types := make([]factoryapi.FactoryEventType, 0, len(artifact.Events))
 	for _, event := range artifact.Events {
-		types = append(types, event.Type)
+		types = append(types, factoryapi.FactoryEventType(event.Type))
 	}
 	next := 0
 	for _, eventType := range types {
@@ -930,7 +979,7 @@ func TestBuildFactoryService_RecordModeStreamsReadableArtifactBeforeShutdown(t *
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	writeWorkRequestFile(t, workFile, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-streamed-recording",
 		Payload:    []byte(`{"task":"record before shutdown"}`),
@@ -1016,7 +1065,7 @@ func TestBuildFactoryService_RecordModeCopiesWorkerDiagnosticsToArtifact(t *test
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-diagnostics",
 		Payload:    []byte(`{"task":"record diagnostics"}`),
@@ -1076,7 +1125,7 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	writeWorkRequestFile(t, workFile, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-script-diagnostics",
 		Payload:    []byte(`{"task":"record script diagnostics"}`),
@@ -1155,30 +1204,30 @@ func runServiceUntilDispatchCompletion(t *testing.T, svc *FactoryService) {
 
 type providerCallRecorder struct {
 	mu        sync.Mutex
-	calls     []interfaces.ProviderInferenceRequest
-	responses []interfaces.InferenceResponse
+	calls     []workerexecution.ProviderInferenceRequest
+	responses []workerexecution.InferenceResponse
 }
 
-func (p *providerCallRecorder) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *providerCallRecorder) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.calls = append(p.calls, interfaces.CloneProviderInferenceRequest(req))
+	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
 	if len(p.responses) == 0 {
-		return interfaces.InferenceResponse{Content: "ok"}, nil
+		return workerexecution.InferenceResponse{Content: "ok"}, nil
 	}
 	response := p.responses[0]
 	p.responses = p.responses[1:]
 	return response, nil
 }
 
-func (p *providerCallRecorder) Calls() []interfaces.ProviderInferenceRequest {
+func (p *providerCallRecorder) Calls() []workerexecution.ProviderInferenceRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	calls := make([]interfaces.ProviderInferenceRequest, len(p.calls))
+	calls := make([]workerexecution.ProviderInferenceRequest, len(p.calls))
 	for i, call := range p.calls {
-		calls[i] = interfaces.CloneProviderInferenceRequest(call)
+		calls[i] = workerexecution.CloneProviderInferenceRequest(call)
 	}
 	return calls
 }
@@ -1194,7 +1243,7 @@ func (r *providerCommandRunnerRecorder) Run(_ context.Context, req workers.Comma
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
 	return r.result, r.err
 }
 
@@ -1216,10 +1265,10 @@ func TestLoadWorkersFromConfig_PromptTemplateFromBody(t *testing.T) {
 
 	factoryCfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	}
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, factoryCfg,
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1263,10 +1312,10 @@ func TestLoadWorkersFromConfig_PromptTemplateFromFile(t *testing.T) {
 
 	factoryCfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	}
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, factoryCfg,
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1317,9 +1366,9 @@ You are a helpful assistant.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1381,9 +1430,9 @@ You are a helpful assistant.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1397,8 +1446,8 @@ You are a helpful assistant.
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
 		},
 	}
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	recorder := func(event factoryapi.FactoryEvent) {
+	recorded := make([]workerexecution.InferenceEvent, 0, 2)
+	recorder := func(event workerexecution.InferenceEvent) {
 		recorded = append(recorded, event)
 	}
 
@@ -1421,14 +1470,14 @@ You are a helpful assistant.
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-model-worker-provider-command",
 		TransitionID:    "t-model-worker-provider-command",
 		WorkerType:      "worker-a",
 		WorkstationName: "review",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "tok-model-worker-provider-command",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:  "work-model-worker-provider-command",
 				Payload: []byte("helpful input"),
 			},
@@ -1508,7 +1557,7 @@ func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherPanicLeavesProviderFa
 	if err != nil {
 		t.Fatalf("unexpected execution error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
+	if result.Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("result outcome = %q, want failed provider result", result.Outcome)
 	}
 	if strings.TrimSpace(result.Error) == "" || !strings.Contains(result.Error, "provider subprocess failed") {
@@ -1532,15 +1581,15 @@ type modelWorkerProgressPublisherServiceTestOptions struct {
 func executeModelWorkerProgressPublisherServiceTest(
 	t *testing.T,
 	options modelWorkerProgressPublisherServiceTestOptions,
-) (interfaces.WorkResult, error, []factoryapi.FactoryEvent) {
+) (workerexecution.WorkResult, error, []workerexecution.InferenceEvent) {
 	t.Helper()
 
 	runner := &providerCommandRunnerRecorder{
 		result: options.commandResult,
 		err:    options.commandErr,
 	}
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	recorder := func(event factoryapi.FactoryEvent) {
+	recorded := make([]workerexecution.InferenceEvent, 0, 2)
+	recorder := func(event workerexecution.InferenceEvent) {
 		recorded = append(recorded, event)
 	}
 
@@ -1598,7 +1647,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, execErr := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, execErr := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      modelWorkerProgressPublisherDispatchID,
 		TransitionID:    "t-model-worker-provider-progress",
 		WorkerType:      "worker-a",
@@ -1630,9 +1679,9 @@ You are a helpful assistant.
 	writeWorkstationAgentsMD(t, dir, "review")
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1657,10 +1706,10 @@ func newModelWorkerProgressPublisherSessions(dir string) *factorysessions.Regist
 	return sessions
 }
 
-func modelWorkerProgressPublisherToken() interfaces.Token {
-	return interfaces.Token{
+func modelWorkerProgressPublisherToken() factorytoken.Token {
+	return factorytoken.Token{
 		ID: "tok-model-worker-provider-progress",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:  "work-model-worker-provider-progress",
 			Payload: []byte("helpful input"),
 		},
@@ -1679,12 +1728,12 @@ func TestLoadWorkersFromConfig_ModelInvokeContractExecutesAcrossLocalAndCloudWor
 		{
 			name:          "local tts worker",
 			model:         "OMNIVOICE_Q4_K_M",
-			modelLocality: interfaces.ModelLocalityLocal,
+			modelLocality: workerconfig.ModelLocalityLocal,
 		},
 		{
 			name:          "cloud tts worker",
 			model:         "gpt-4o-mini-tts",
-			modelLocality: interfaces.ModelLocalityCloud,
+			modelLocality: workerconfig.ModelLocalityCloud,
 		},
 	}
 
@@ -1695,8 +1744,8 @@ func TestLoadWorkersFromConfig_ModelInvokeContractExecutesAcrossLocalAndCloudWor
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if result.Outcome != interfaces.OutcomeAccepted {
-				t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+			if result.Outcome != workerexecution.OutcomeAccepted {
+				t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 			}
 			assertModelInvokeProviderCall(t, provider.Calls(), tt.model, tt.modelLocality)
 		})
@@ -1710,7 +1759,7 @@ func TestLoadWorkersFromConfig_ModelInvokeWorkstationExecutesThroughLocalManaged
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	provider := &providerCallRecorder{}
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -1720,8 +1769,8 @@ func TestLoadWorkersFromConfig_ModelInvokeWorkstationExecutesThroughLocalManaged
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
 	if runtime.invocationCount() != 1 {
@@ -1730,7 +1779,7 @@ func TestLoadWorkersFromConfig_ModelInvokeWorkstationExecutesThroughLocalManaged
 	if calls := provider.Calls(); len(calls) != 0 {
 		t.Fatalf("provider calls = %#v, want local managed runtime to bypass provider path", calls)
 	}
-	assertManagedRuntimeModelInvokeInvocation(t, runtime.invocationRequests(), interfaces.ModelLocalityLocal)
+	assertManagedRuntimeModelInvokeInvocation(t, runtime.invocationRequests(), workerconfig.ModelLocalityLocal)
 }
 
 func modelInvokeWorkstationExecutorForLocalManagedRuntime(
@@ -1742,7 +1791,7 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 
 	factoryCfg := localModelFactoryConfig()
 	cache := localModelTestCacheLayout(t)
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, map[string]*interfaces.WorkerConfig{
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, map[string]*workerconfig.Config{
 		"tts-worker": modelInvokeLocalManagedRuntimeWorker(),
 	}, map[string]*interfaces.FactoryWorkstationConfig{
 		"speak": modelInvokeWorkstationConfig(),
@@ -1792,9 +1841,9 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 	return wsExec
 }
 
-func modelInvokeLocalManagedRuntimeWorker() *interfaces.WorkerConfig {
-	worker := modelInvokeRuntimeWorker("OMNIVOICE_Q4_K_M", interfaces.ModelLocalityLocal)
-	worker.Resources = []interfaces.ResourceConfig{{
+func modelInvokeLocalManagedRuntimeWorker() *workerconfig.Config {
+	worker := modelInvokeRuntimeWorker("OMNIVOICE_Q4_K_M", workerconfig.ModelLocalityLocal)
+	worker.Resources = []factoryresource.Config{{
 		Name:     "omnivoice-cache",
 		Capacity: 1,
 	}}
@@ -1840,24 +1889,24 @@ func assertManagedRuntimeModelInvokeInvocation(
 func assertModelInvokeAcceptedAudioOutput(t *testing.T, output string, audioPath string) {
 	t.Helper()
 
-	var content []interfaces.WorkContentPart
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(output), &content); err != nil {
 		t.Fatalf("decode accepted model invoke output: %v", err)
 	}
-	if len(content) != 1 || content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].File != audioPath {
+	if len(content) != 1 || content[0].Type != work.WorkContentPartTypeAudio || content[0].File != audioPath {
 		t.Fatalf("accepted output = %#v, want one audio part at %q", content, audioPath)
 	}
 }
 
 func modelInvokeExecutionFixture(t *testing.T, model string, modelLocality string) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
-	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
+	provider := &providerCallRecorder{responses: []workerexecution.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
 	factoryCfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "speak", WorkerTypeName: "tts-worker"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "tts-worker"}},
+		Workers:      []workerconfig.Config{{Name: "tts-worker"}},
 	}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg,
-		map[string]*interfaces.WorkerConfig{"tts-worker": modelInvokeRuntimeWorker(model, modelLocality)},
+		map[string]*workerconfig.Config{"tts-worker": modelInvokeRuntimeWorker(model, modelLocality)},
 		map[string]*interfaces.FactoryWorkstationConfig{"speak": modelInvokeWorkstationConfig()},
 	)
 	opts, err := loadWorkersFromConfigForServiceTest("", factoryCfg, "", runtimeCfg, provider, nil, nil, nil, nil)
@@ -1879,21 +1928,21 @@ func modelInvokeExecutionFixture(t *testing.T, model string, modelLocality strin
 	return provider, wsExec
 }
 
-func modelInvokeRuntimeWorker(model string, modelLocality string) *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func modelInvokeRuntimeWorker(model string, modelLocality string) *workerconfig.Config {
+	return &workerconfig.Config{
 		Name:          "tts-worker",
 		Type:          interfaces.WorkerTypeModel,
 		Model:         model,
-		ModelProvider: interfaces.RunnerIDCodex,
+		ModelProvider: workerexecution.RunnerIDCodex,
 		ModelLocality: modelLocality,
 		Body:          "You are a TTS worker.",
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{
-				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-				{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+			Inputs: []workerconfig.ModelOperationSlot{
+				{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}, Required: true},
+				{Name: "voice", ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON}},
 			},
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Outputs: []workerconfig.ModelOperationSlot{{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}}},
 		}},
 	}
 }
@@ -1910,13 +1959,13 @@ func modelInvokeWorkstationConfig() *interfaces.FactoryWorkstationConfig {
 				Slot: "text",
 				Selector: &interfaces.ModelOperationBindingSelector{
 					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
+					Type:  workerconfig.ModelOperationContentTypeText,
 				},
 			},
 			{
 				Slot: "voice",
-				Config: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeJSON,
+				Config: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeJSON,
 					Role: "voice",
 					JSON: []byte(`{"name":"alloy"}`),
 				}},
@@ -1925,18 +1974,18 @@ func modelInvokeWorkstationConfig() *interfaces.FactoryWorkstationConfig {
 	}
 }
 
-func modelInvokeDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func modelInvokeDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-tts",
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-tts",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-tts",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello world",
 				}},
@@ -1945,7 +1994,7 @@ func modelInvokeDispatch() interfaces.WorkDispatch {
 	}
 }
 
-func assertModelInvokeProviderCall(t *testing.T, calls []interfaces.ProviderInferenceRequest, wantModel string, wantLocality string) {
+func assertModelInvokeProviderCall(t *testing.T, calls []workerexecution.ProviderInferenceRequest, wantModel string, wantLocality string) {
 	t.Helper()
 	if len(calls) != 1 {
 		t.Fatalf("provider calls = %d, want 1", len(calls))
@@ -1967,16 +2016,16 @@ func assertModelInvokeProviderCall(t *testing.T, calls []interfaces.ProviderInfe
 	assertModelInvokeVoiceBinding(t, call.ModelBindings[1])
 }
 
-func assertModelInvokeTextBinding(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+func assertModelInvokeTextBinding(t *testing.T, binding workerexecution.ResolvedModelOperationBinding) {
 	t.Helper()
-	if binding.Slot != "text" || binding.Source != interfaces.ModelOperationBindingSourceInput || binding.Content[0].Text != "hello world" {
+	if binding.Slot != "text" || binding.Source != workerexecution.ModelOperationBindingSourceInput || binding.Content[0].Text != "hello world" {
 		t.Fatalf("text model binding = %#v, want generic text slot from input", binding)
 	}
 }
 
-func assertModelInvokeVoiceBinding(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+func assertModelInvokeVoiceBinding(t *testing.T, binding workerexecution.ResolvedModelOperationBinding) {
 	t.Helper()
-	if binding.Slot != "voice" || binding.Source != interfaces.ModelOperationBindingSourceConfig || string(binding.Content[0].JSON) != `{"name":"alloy"}` {
+	if binding.Slot != "voice" || binding.Source != workerexecution.ModelOperationBindingSourceConfig || string(binding.Content[0].JSON) != `{"name":"alloy"}` {
 		t.Fatalf("voice model binding = %#v, want config voice binding", binding)
 	}
 }
@@ -1989,9 +2038,9 @@ func TestLoadWorkersFromConfig_ReplayEmbeddedRuntimeUsesCanonicalLookup(t *testi
 
 	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1999,11 +2048,11 @@ func TestLoadWorkersFromConfig_ReplayEmbeddedRuntimeUsesCanonicalLookup(t *testi
 		},
 	)
 
-	generated, err := replay.GeneratedFactoryFromRuntimeConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
+	generated, err := generatedFactoryFromRuntimeConfigForTest(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromRuntimeConfig: %v", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactoryForTest(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -2049,9 +2098,9 @@ func TestLoadWorkersFromConfig_LoadedRuntimeBaseDirOverrideFlowsThroughCanonical
 
 	loaded := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2098,9 +2147,9 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 			Name:           "run-script",
 			WorkerTypeName: "script-worker",
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "script-worker"}},
+		Workers: []workerconfig.Config{{Name: "script-worker"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"script-worker": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "script-worker")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2129,15 +2178,15 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-runtime-lookup-script",
 		TransitionID:    "t-runtime-lookup-script",
 		WorkerType:      "script-worker",
 		WorkstationName: "run-script",
 		ProjectID:       "agent-factory",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "tok-runtime-lookup-script",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-runtime-lookup-script",
 			},
 		}),
@@ -2145,8 +2194,8 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if got := runner.request.WorkDir; got != filepath.Join(runtimeBaseDir, "workspace") {
 		t.Fatalf("command working directory = %q, want %q", got, filepath.Join(runtimeBaseDir, "workspace"))
@@ -2171,9 +2220,9 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScri
 			Name:           "run-script",
 			WorkerTypeName: "script-worker",
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "script-worker"}},
+		Workers: []workerconfig.Config{{Name: "script-worker"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"script-worker": mustLoadWorkerConfig(t, filepath.Join(namedFactoryDir, "workers", "script-worker")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2202,15 +2251,15 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScri
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-runtime-lookup-script-ref",
 		TransitionID:    "t-runtime-lookup-script-ref",
 		WorkerType:      "script-worker",
 		WorkstationName: "run-script",
 		ProjectID:       "agent-factory",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "tok-runtime-lookup-script-ref",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-runtime-lookup-script-ref",
 			},
 		}),
@@ -2218,8 +2267,8 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScri
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if len(runner.request.Args) != 2 {
 		t.Fatalf("command args = %#v, want 2 entries", runner.request.Args)
@@ -2243,9 +2292,9 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 			Name:           "run-script",
 			WorkerTypeName: "script-worker",
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "script-worker"}},
+		Workers: []workerconfig.Config{{Name: "script-worker"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"script-worker": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "script-worker")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2253,11 +2302,11 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 		},
 	)
 
-	generated, err := replay.GeneratedFactoryFromRuntimeConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
+	generated, err := generatedFactoryFromRuntimeConfigForTest(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromRuntimeConfig: %v", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactoryForTest(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -2282,15 +2331,15 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-replay-runtime-lookup-script",
 		TransitionID:    "t-replay-runtime-lookup-script",
 		WorkerType:      "script-worker",
 		WorkstationName: "run-script",
 		ProjectID:       "agent-factory",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "tok-replay-runtime-lookup-script",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-replay-runtime-lookup-script",
 			},
 		}),
@@ -2298,8 +2347,8 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if got := runner.request.WorkDir; got != filepath.Join(dir, "workspace") {
 		t.Fatalf("command working directory = %q, want %q", got, filepath.Join(dir, "workspace"))
@@ -2308,16 +2357,16 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 
 func TestLoadWorkersFromConfig_ScriptWorkerUsesWorkstationExecutor(t *testing.T) {
 	dir := t.TempDir()
-	scriptRecorder := func(factoryapi.FactoryEvent) {}
+	scriptRecorder := func(workerexecution.ScriptEvent) {}
 
 	writeScriptWorkerAgentsMD(t, dir, "script-worker")
 	writeWorkstationAgentsMD(t, dir, "run-script")
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "run-script"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "script-worker"}},
+		Workers:      []workerconfig.Config{{Name: "script-worker"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"script-worker": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "script-worker")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2433,10 +2482,10 @@ func loadWorkersFromConfigForServiceTest(
 	)
 }
 
-func assertCanonicalModelWorkerExecutionResult(t *testing.T, result interfaces.WorkResult) {
+func assertCanonicalModelWorkerExecutionResult(t *testing.T, result workerexecution.WorkResult) {
 	t.Helper()
 
-	if result.Outcome != interfaces.OutcomeAccepted || result.Output != "provider-output COMPLETE" {
+	if result.Outcome != workerexecution.OutcomeAccepted || result.Output != "provider-output COMPLETE" {
 		t.Fatalf("result = %#v, want accepted provider output", result)
 	}
 	if result.ProviderSession == nil || result.ProviderSession.Provider != "codex" || result.ProviderSession.ID != "sess_codex_123" {
@@ -2450,22 +2499,22 @@ func assertCanonicalProviderCommandRequests(t *testing.T, requests []workers.Com
 	if len(requests) != 1 {
 		t.Fatalf("provider command runner request count = %d, want 1", len(requests))
 	}
-	if requests[0].Command != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("provider command = %q, want %q", requests[0].Command, interfaces.ModelProviderCodex)
+	if requests[0].Command != string(modelprovider.Codex) {
+		t.Fatalf("provider command = %q, want %q", requests[0].Command, modelprovider.Codex)
 	}
 }
 
-func assertRecordedInferenceEvents(t *testing.T, recorded []factoryapi.FactoryEvent) {
+func assertRecordedInferenceEvents(t *testing.T, recorded []workerexecution.InferenceEvent) {
 	t.Helper()
 
 	if len(recorded) != 2 {
 		t.Fatalf("recorded event count = %d, want 2", len(recorded))
 	}
-	if recorded[0].Type != factoryapi.FactoryEventTypeInferenceRequest {
-		t.Fatalf("first event type = %s, want %s", recorded[0].Type, factoryapi.FactoryEventTypeInferenceRequest)
+	if recorded[0].Kind != workerexecution.InferenceEventKindRequest || recorded[0].Request == nil || recorded[0].Response != nil {
+		t.Fatalf("first event = %#v, want inference request", recorded[0])
 	}
-	if recorded[1].Type != factoryapi.FactoryEventTypeInferenceResponse {
-		t.Fatalf("second event type = %s, want %s", recorded[1].Type, factoryapi.FactoryEventTypeInferenceResponse)
+	if recorded[1].Kind != workerexecution.InferenceEventKindResponse || recorded[1].Response == nil || recorded[1].Request != nil {
+		t.Fatalf("second event = %#v, want inference response", recorded[1])
 	}
 }
 
@@ -2519,10 +2568,10 @@ func TestWorkerWorkstationTaxonomyRuntime_InferencePairingExecutesLikeLegacyMode
 			if err != nil {
 				t.Fatalf("Execute: %v", err)
 			}
-			if result.Outcome != interfaces.OutcomeAccepted {
-				t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+			if result.Outcome != workerexecution.OutcomeAccepted {
+				t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 			}
-			assertModelInvokeProviderCall(t, provider.Calls(), "gpt-4o-mini-tts", interfaces.ModelLocalityCloud)
+			assertModelInvokeProviderCall(t, provider.Calls(), "gpt-4o-mini-tts", workerconfig.ModelLocalityCloud)
 		})
 	}
 }
@@ -2532,7 +2581,7 @@ func TestWorkerWorkstationTaxonomyRuntime_OmniVoiceInferenceExecutesWithoutAgent
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -2549,8 +2598,8 @@ func TestWorkerWorkstationTaxonomyRuntime_OmniVoiceInferenceExecutesWithoutAgent
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
 	if runtime.invocationCount() != 1 {
@@ -2570,8 +2619,8 @@ func TestWorkerWorkstationTaxonomyRuntime_OmniVoiceInferenceExecutesWithoutAgent
 	if request.Model != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("model = %q, want OMNIVOICE_Q4_K_M inference model identity", request.Model)
 	}
-	if request.ModelLocality != interfaces.ModelLocalityLocal {
-		t.Fatalf("model locality = %q, want %q", request.ModelLocality, interfaces.ModelLocalityLocal)
+	if request.ModelLocality != workerconfig.ModelLocalityLocal {
+		t.Fatalf("model locality = %q, want %q", request.ModelLocality, workerconfig.ModelLocalityLocal)
 	}
 	if len(request.ModelBindings) != 1 || request.ModelBindings[0].Slot != "text" {
 		t.Fatalf("model bindings = %#v, want one resolved text input binding", request.ModelBindings)
@@ -2584,7 +2633,7 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceTaxonomyRecordsModelExecution
 	eventTime := taxonomyRuntimeEventTime()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -2597,12 +2646,12 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceTaxonomyRecordsModelExecution
 	)
 	wsExec, history := taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(t, runtime, cfg, eventTime)
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "dispatch-taxonomy-inference",
 		TransitionID:    "transition-taxonomy-inference",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			CurrentTick: 2,
 			RequestID:   "request-taxonomy-inference",
 			TraceID:     "trace-taxonomy-inference",
@@ -2613,10 +2662,10 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceTaxonomyRecordsModelExecution
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
-	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
+	assertRecordedLocalModelExecutionEvents(t, generatedFactoryEventsForTest(t, history.CanonicalEvents()), audioPath)
 }
 
 func TestWorkerWorkstationTaxonomyRuntime_AgentRunWithInferenceWorkerFailsValidationBeforeDispatch(t *testing.T) {
@@ -2678,12 +2727,12 @@ func taxonomyModelInvokeExecutionFixtureFromRuntimeConfig(
 ) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
 
-	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
+	provider := &providerCallRecorder{responses: []workerexecution.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(
 		t,
 		"",
 		cfg,
-		map[string]*interfaces.WorkerConfig{"tts-worker": taxonomyRuntimeModelInvokeWorker(cfg.Workers[0].Type)},
+		map[string]*workerconfig.Config{"tts-worker": taxonomyRuntimeModelInvokeWorker(cfg.Workers[0].Type)},
 		map[string]*interfaces.FactoryWorkstationConfig{"speak": taxonomyRuntimeModelInvokeWorkstation(cfg.Workstations[0].Type)},
 	)
 	opts, err := loadWorkersFromConfigForServiceTest("", cfg, "", runtimeCfg, provider, nil, nil, nil, nil)
@@ -2792,23 +2841,23 @@ func taxonomyRuntimeModelInvokeFactoryJSON(workerType, workstationType string) [
 			"type":          workerType,
 			"model":         "gpt-4o-mini-tts",
 			"modelProvider": "CODEX",
-			"modelLocality": interfaces.ModelLocalityCloud,
+			"modelLocality": workerconfig.ModelLocalityCloud,
 			"operations": []map[string]any{{
 				"name": "TTS",
 				"inputs": []map[string]any{
 					{
 						"name":         "text",
-						"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+						"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 						"required":     true,
 					},
 					{
 						"name":         "voice",
-						"contentTypes": []string{interfaces.ModelOperationContentTypeJSON},
+						"contentTypes": []string{workerconfig.ModelOperationContentTypeJSON},
 					},
 				},
 				"outputs": []map[string]any{{
 					"name":         "audio",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+					"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},
@@ -2822,13 +2871,13 @@ func taxonomyRuntimeModelInvokeFactoryJSON(workerType, workstationType string) [
 					"slot": "text",
 					"selector": map[string]any{
 						"label": "utterance",
-						"type":  interfaces.ModelOperationContentTypeText,
+						"type":  workerconfig.ModelOperationContentTypeText,
 					},
 				},
 				{
 					"slot": "voice",
 					"config": []map[string]any{{
-						"type": interfaces.WorkContentPartTypeJSON,
+						"type": work.WorkContentPartTypeJSON,
 						"role": "voice",
 						"json": map[string]string{"name": "alloy"},
 					}},
@@ -2846,8 +2895,8 @@ func taxonomyRuntimeModelInvokeFactoryJSON(workerType, workstationType string) [
 	return data
 }
 
-func taxonomyRuntimeModelInvokeWorker(runtimeWorkerType string) *interfaces.WorkerConfig {
-	worker := modelInvokeRuntimeWorker("gpt-4o-mini-tts", interfaces.ModelLocalityCloud)
+func taxonomyRuntimeModelInvokeWorker(runtimeWorkerType string) *workerconfig.Config {
+	worker := modelInvokeRuntimeWorker("gpt-4o-mini-tts", workerconfig.ModelLocalityCloud)
 	worker.Type = runtimeWorkerType
 	return worker
 }
@@ -2920,7 +2969,7 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -2975,8 +3024,8 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
 	if launcher.startCount() != 1 {
@@ -2993,7 +3042,7 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -3017,7 +3066,7 @@ func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *t
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
-	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+	if result.Status != "COMPLETED" {
 		t.Fatalf("invocation status = %q, want COMPLETED (error=%q message=%q work=%q state=%q)", result.Status, result.ErrorCode, result.Message, result.WorkName, result.WorkState)
 	}
 	if len(result.PrimaryResult) == 0 {
@@ -3049,7 +3098,7 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceWorkerUsesModelHostLeases(t *
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -3066,8 +3115,8 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceWorkerUsesModelHostLeases(t *
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
 	if launcher.startCount() != 1 {
@@ -3099,9 +3148,9 @@ func modelHostBackedLocalModelDomain(
 
 func inferenceModelHostFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
@@ -3111,40 +3160,40 @@ func inferenceModelHostFactoryConfig() *interfaces.FactoryConfig {
 			Name:           "speak",
 			WorkerTypeName: "tts-worker",
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "tts-worker",
 		}},
 	}
 }
 
-func inferenceModelHostRuntimeWorkers(healthEndpoint string) map[string]*interfaces.WorkerConfig {
-	worker := &interfaces.WorkerConfig{
+func inferenceModelHostRuntimeWorkers(healthEndpoint string) map[string]*workerconfig.Config {
+	worker := &workerconfig.Config{
 		Name:          "tts-worker",
 		Type:          interfaces.WorkerTypeInference,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelProvider: interfaces.RunnerIDCodex,
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Resources: []interfaces.ResourceConfig{{
+		ModelProvider: workerexecution.RunnerIDCodex,
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
 			Capacity: 1,
 		}},
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
 	if strings.TrimSpace(healthEndpoint) != "" {
 		worker.Args = []string{"--health-endpoint", healthEndpoint}
 	}
-	return map[string]*interfaces.WorkerConfig{"tts-worker": worker}
+	return map[string]*workerconfig.Config{"tts-worker": worker}
 }
 
 func inferenceModelHostWorkstation() *interfaces.FactoryWorkstationConfig {
@@ -3157,24 +3206,24 @@ func inferenceModelHostWorkstation() *interfaces.FactoryWorkstationConfig {
 			Slot: "text",
 			Selector: &interfaces.ModelOperationBindingSelector{
 				Label: "utterance",
-				Type:  interfaces.ModelOperationContentTypeText,
+				Type:  workerconfig.ModelOperationContentTypeText,
 			},
 		}},
 	}
 }
 
-func inferenceModelHostDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func inferenceModelHostDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-inference-lease",
 		TransitionID:    "transition-inference-lease",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-inference-lease",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-inference-lease",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello inference lease",
 				}},

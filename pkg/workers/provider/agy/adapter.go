@@ -8,7 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -52,7 +55,7 @@ func WithSessionConfig(cfg agypty.SessionConfig) Option {
 func NewAdapter(factoryRoot string, opts ...Option) *Adapter {
 	adapterValue := &Adapter{
 		FactoryRoot: strings.TrimSpace(factoryRoot),
-		Executable:  string(interfaces.ModelProviderAgy),
+		Executable:  string(modelprovider.Agy),
 		SessionCfg:  agypty.DefaultSessionConfig(),
 	}
 	for _, opt := range opts {
@@ -73,7 +76,7 @@ func NewAdapterWithAllocator(factoryRoot string, allocator agypty.PTYAllocator, 
 }
 
 func (a *Adapter) Identity() adapter.Identity {
-	return adapter.Identity(interfaces.ModelProviderAgy)
+	return adapter.Identity(modelprovider.Agy)
 }
 
 func (a *Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
@@ -117,7 +120,7 @@ func (a *Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) 
 	return adapter.CommandBuildResult{Request: command}, nil
 }
 
-func (a *Adapter) buildFlags(req interfaces.ProviderInferenceRequest) []string {
+func (a *Adapter) buildFlags(req workerexecution.ProviderInferenceRequest) []string {
 	flags := []string{"--headless"}
 	if model := strings.TrimSpace(req.Model); model != "" {
 		flags = append(flags, "--model", model)
@@ -131,7 +134,7 @@ func (a *Adapter) buildFlags(req interfaces.ProviderInferenceRequest) []string {
 func (a *Adapter) resolveExecutable() (string, error) {
 	executable := strings.TrimSpace(a.Executable)
 	if executable == "" {
-		executable = string(interfaces.ModelProviderAgy)
+		executable = string(modelprovider.Agy)
 	}
 	executable = filepath.Clean(executable)
 	if executable == "" || executable == "." {

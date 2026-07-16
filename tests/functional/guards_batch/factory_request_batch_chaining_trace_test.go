@@ -7,10 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -64,7 +69,7 @@ func newChainingTraceFanInHarness(t *testing.T) (*testutil.ServiceTestHarness, *
 	})
 	support.WriteWorkstationConfig(t, dir, "merge", "---\ntype: MODEL_WORKSTATION\n---\nMerge the completed work.\n")
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "merged lineage COMPLETE"}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -79,16 +84,16 @@ func newThreeWorkstationChainingTraceHarness(t *testing.T) *testutil.ServiceTest
 
 	dir := testutil.ScaffoldFactoryDir(t, threeWorkstationChainingTraceFactoryConfig())
 	h := testutil.NewServiceTestHarness(t, dir)
-	h.MockWorker("preparer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("preparer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 	h.SetCustomExecutor("splitter", newGeneratedBatchExecutor(t, threeWorkstationChainingTraceGeneratedBatch()))
-	h.MockWorker("merger", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("merger", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 	return h
 }
 
 func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		Name: "three-workstation-chaining-trace",
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:     "slot",
 			Capacity: 1,
 		}},
@@ -125,7 +130,7 @@ func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "preparer"},
 			{Name: "splitter"},
 			{Name: "merger"},
@@ -151,18 +156,18 @@ func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 					{WorkTypeName: "right", StateName: "init"},
 				},
 				Outputs:   []interfaces.IOConfig{{WorkTypeName: "merged", StateName: "complete"}},
-				Resources: []interfaces.ResourceConfig{{Name: "slot", Capacity: 1}},
+				Resources: []factoryresource.Config{{Name: "slot", Capacity: 1}},
 			},
 		},
 	}
 }
 
-func threeWorkstationChainingTraceGeneratedBatch() interfaces.GeneratedSubmissionBatch {
-	return interfaces.GeneratedSubmissionBatch{
-		Request: interfaces.WorkRequest{
+func threeWorkstationChainingTraceGeneratedBatch() work.GeneratedSubmissionBatch {
+	return work.GeneratedSubmissionBatch{
+		Request: work.WorkRequest{
 			RequestID: "request-generated-branches",
-			Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-			Works: []interfaces.Work{
+			Type:      work.WorkRequestTypeFactoryRequestBatch,
+			Works: []work.Work{
 				{
 					Name:                   "branch-z",
 					WorkID:                 "work-branch-z",
@@ -181,10 +186,10 @@ func threeWorkstationChainingTraceGeneratedBatch() interfaces.GeneratedSubmissio
 				},
 			},
 		},
-		Metadata: interfaces.GeneratedSubmissionBatchMetadata{
+		Metadata: work.GeneratedSubmissionBatchMetadata{
 			Source: "generator:three-workstation",
 		},
-		Submissions: []interfaces.SubmitRequest{
+		Submissions: []work.SubmitRequest{
 			{Name: "branch-z", WorkID: "work-branch-z", Tags: map[string]string{"branch": "z"}},
 			{Name: "branch-a", WorkID: "work-branch-a", Tags: map[string]string{"branch": "a"}},
 		},
@@ -231,10 +236,10 @@ func chainingTraceFanInWorkstation() map[string]any {
 func submitChainingTraceFanInWork(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-chaining-fan-in-smoke",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{
 				Name:                   "lineage-z",
 				WorkID:                 "work-lineage-z",
@@ -259,10 +264,10 @@ func submitChainingTraceFanInWork(t *testing.T, h *testutil.ServiceTestHarness) 
 func submitThreeWorkstationChainingTraceWork(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-three-workstation-lineage",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:                   "seed-root",
 			WorkID:                 "work-seed-root",
 			WorkTypeID:             "seed",
@@ -490,7 +495,7 @@ func assertThreeWorkstationWorldStateAndResources(
 ) {
 	t.Helper()
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -564,7 +569,7 @@ func assertThreeWorkstationWorldStateAndResources(
 
 func assertProjectedGeneratedBranch(
 	t *testing.T,
-	item interfaces.FactoryWorkItem,
+	item work.FactoryWorkItem,
 	wantWorkID string,
 	wantWorkType string,
 	wantTrace string,

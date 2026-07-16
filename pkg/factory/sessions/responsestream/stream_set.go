@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
 
 // StreamSet keeps the dispatch-keyed internal response streams owned by one
@@ -33,7 +34,7 @@ func NewStreamSetWithFactory(newStream func() *SessionResponseStream) *StreamSet
 	return NewStreamSetWithFactoryAndRetention(
 		newStream,
 		DefaultCompletedDispatchRetention(),
-		factory.RealClock{},
+		platformclock.Real{},
 	)
 }
 

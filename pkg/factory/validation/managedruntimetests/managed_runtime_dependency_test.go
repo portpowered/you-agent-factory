@@ -3,18 +3,20 @@ package validation_test
 import (
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestManagedRuntimeDependencyTargets_RejectsUnsupportedIdentity(t *testing.T) {
 	t.Parallel()
 
 	cfg := &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "unknown-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "UNKNOWN_RUNTIME",
 			Backend:    "LLAMACPP",
@@ -30,9 +32,9 @@ func TestManagedRuntimeDependencyTargets_RejectsInvalidBackend(t *testing.T) {
 	t.Parallel()
 
 	cfg := &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",
@@ -48,11 +50,11 @@ func TestManagedRuntimeDependencyTargets_RejectsLocalWorkerWithoutDependency(t *
 	t.Parallel()
 
 	cfg := &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
+			ModelLocality: workerconfig.ModelLocalityLocal,
 		}},
 	}
 
@@ -64,20 +66,20 @@ func TestManagedRuntimeDependencyTargets_AcceptsValidAuthoredFactory(t *testing.
 	t.Parallel()
 
 	cfg := &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
 			LoadPolicy: "ON_DEMAND",
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Resources:     []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}},
 		}},
 	}
 
@@ -90,9 +92,9 @@ func TestValidate_IncludesManagedRuntimeDependencyTargets(t *testing.T) {
 	t.Parallel()
 
 	cfg := &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",
