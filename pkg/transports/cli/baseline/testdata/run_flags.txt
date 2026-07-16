@@ -1,7 +1,7 @@
 continuously		false	keep the factory alive while idle until cancelled
 debug	d	false	emit lower-level command diagnostics where supported (implies --verbose)
 default-worker-model			default worker model for model workers with omitted model
-default-worker-model-provider			default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, and anthropic; DEFAULT resolves through lower-precedence concrete provider)
+default-worker-model-provider			default worker model provider for model workers with omitted modelProvider (accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai; DEFAULT resolves through lower-precedence concrete provider)
 dir		factory	factory base directory
 factory			path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input
 json		false	emit structured JSON on stdout for supported commands; diagnostics remain on stderr

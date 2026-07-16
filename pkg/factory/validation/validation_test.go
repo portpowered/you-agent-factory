@@ -661,6 +661,15 @@ func TestValidate_InvocationContracts(t *testing.T) {
 	})
 }
 
+func TestValidate_WorkerModelProviderPreservesExistingOpenAIAlias(t *testing.T) {
+	t.Parallel()
+
+	cfg := invocationConfig()
+	cfg.Workers[0].ModelProvider = "openai"
+
+	assertTargetAbsent(t, factoryvalidation.Validate(cfg).Targets, factoryvalidation.CodeWorkerUnsupportedModelProvider, factoryvalidation.SubjectTypeWorker)
+}
+
 func TestValidate_OrchestratorCompatibilityAndWorkPropagation(t *testing.T) {
 	t.Run("legacy Petri factory without orchestrator remains valid", func(t *testing.T) {
 		cfg := invocationConfig()

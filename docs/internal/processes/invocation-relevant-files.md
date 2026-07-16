@@ -197,6 +197,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   explicit model-worker `modelProvider` values; permit only supported providers,
   the symbolic `DEFAULT`, or an exact interpolation reference to a declared
   invocation parameter so invalid materialized worker edits fail before runtime.
+  Keep established public aliases such as `openai` accepted through the same
+  canonicalization helper; validation must not turn a permissive legacy alias
+  into an incompatibility.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical

@@ -468,7 +468,7 @@ func CanonicalizeReasoningEffort(value string) (string, bool) {
 // representative public aliases for operator-facing validation errors.
 func AcceptedPublicWorkerModelProviderSummary() string {
 	return "accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; " +
-		"accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, and anthropic"
+		"accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, anthropic, and openai"
 }
 
 // PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.
