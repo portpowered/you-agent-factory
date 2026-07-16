@@ -303,6 +303,10 @@ func TestConfigInitCommand_FactoryMaterializationFailureReportsActionableError(t
 	if err := os.WriteFile(blocker, []byte("blocks hierarchical factory layout\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(factory scope blocker): %v", err)
 	}
+	packagedFactories := factorypackages.Names()
+	if len(packagedFactories) == 0 {
+		t.Fatal("expected at least one packaged factory")
+	}
 
 	root := cli.NewRootCommand()
 	root.SetOut(io.Discard)
@@ -316,7 +320,7 @@ func TestConfigInitCommand_FactoryMaterializationFailureReportsActionableError(t
 	got := err.Error()
 	for _, want := range []string{
 		"install packaged factory",
-		"@you/fusion",
+		packagedFactories[0],
 		namedFactoriesRoot,
 	} {
 		if !strings.Contains(got, want) {

@@ -265,6 +265,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   validated with `operatorconfig.LoadFileConfig` and left byte-identical on
   re-run. `pkg/config/configinit` enumerates `pkg/factory/packages` and persists
   only missing catalog entries through `factoryconfig.PersistNamedFactory`;
+  catalog-order failure tests should derive the reported package from
+  `factorypackages.Names()[0]` rather than naming a particular package, because
+  the lexical catalog may gain new entries.
   valid installed directories are loaded and skipped without rewriting
   customer-owned files. Isolated-home rerun coverage lives in
   `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,

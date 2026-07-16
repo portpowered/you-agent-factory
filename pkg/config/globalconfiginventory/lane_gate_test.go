@@ -25,7 +25,7 @@ var productionLoaderSources = []struct {
 }{
 	{
 		relativePath: "pkg/config/operatorconfig/operator_config.go",
-		sha256Hex:    "1d3fca2d661b223afc49971e810ff952a1c3d7de17c53d5e7a670a05b1e2652b",
+		sha256Hex:    "86656d0f4d67fe48d875b0baddfb6db6f46d2d6fe70e935815ec8c02571412fe",
 	},
 	{
 		relativePath: "pkg/config/systemconfig/system_config.go",
