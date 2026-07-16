@@ -126,6 +126,15 @@ func TestLiveLifecycle_ApplyControl_AcceptsRunningPause(t *testing.T) {
 	if result.Status != factorysessionexecution.LifecycleStatusPaused {
 		t.Fatalf("status = %q, want PAUSED", result.Status)
 	}
+	wantLinks := factorysessionexecution.LifecycleControlLinks{
+		Session: "/factory-sessions/sess-1",
+		Status:  "/factory-sessions/sess-1",
+		Results: "/factory-sessions/sess-1/result",
+		Events:  "/factory-sessions/sess-1/events",
+	}
+	if result.Links != wantLinks {
+		t.Fatalf("links = %#v, want %#v", result.Links, wantLinks)
+	}
 	if testFactory.pauseCalls != 1 {
 		t.Fatalf("pause calls = %d, want 1", testFactory.pauseCalls)
 	}

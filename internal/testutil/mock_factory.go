@@ -879,6 +879,6 @@ func mockLiveLifecycleControl(
 		Operation: operation,
 		Outcome:   outcome,
 		Status:    resultStatus,
-		Links:     factorysession.LiveLifecycleControlLinksForSession(sessionID),
+		Links:     factorysessionexecution.LiveLifecycleControlLinksForSession(sessionID),
 	}, nil
 }

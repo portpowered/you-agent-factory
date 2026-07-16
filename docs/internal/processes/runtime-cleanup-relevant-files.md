@@ -398,3 +398,9 @@ Service and runtime-host compatibility adapters convert generated
 before invoking domain normalization, validation, submission, waiting, or
 telemetry policy; generated request and Work-content models must not enter the
 Factory Session invocation owner.
+
+Live lifecycle results, including their post-control inspection links, are
+Factory Session execution contracts. Build those links in
+`pkg/factory/sessions/execution` before the dataplane returns its result; the
+transport mapper may serialize the result but must not supply domain result
+fields back to the dataplane.

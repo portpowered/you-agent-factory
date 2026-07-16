@@ -171,6 +171,18 @@ func LifecycleControlLinksForSession(sessionID string, includeEvents bool) Lifec
 	}
 }
 
+// LiveLifecycleControlLinksForSession builds post-control inspection links for
+// one live workspace Factory Session.
+func LiveLifecycleControlLinksForSession(sessionID string) LifecycleControlLinks {
+	base := fmt.Sprintf("/factory-sessions/%s", strings.TrimSpace(sessionID))
+	return LifecycleControlLinks{
+		Session: base,
+		Status:  base,
+		Results: base + "/result",
+		Events:  base + "/events",
+	}
+}
+
 // StartSourceContext supplies filesystem roots for durable start source resolution.
 type StartSourceContext struct {
 	ProjectRoot string

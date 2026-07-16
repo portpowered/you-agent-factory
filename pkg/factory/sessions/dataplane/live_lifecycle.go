@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // LiveLifecycle supervises live session pause, resume, and close through the runtime host seam.
@@ -89,7 +88,7 @@ func (l *LiveLifecycle) ApplyControl(
 		Operation: operation,
 		Outcome:   outcome,
 		Status:    resultStatus,
-		Links:     factorysession.LiveLifecycleControlLinksForSession(sessionID),
+		Links:     factorysessionexecution.LiveLifecycleControlLinksForSession(sessionID),
 	}
 	l.host.ObserveLiveLifecycleControl(sessionID, operation, control, outcome, resultStatus, nil)
 	return result, nil
