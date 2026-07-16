@@ -10,6 +10,15 @@ primary-result behavior.
   can be persisted or built into a Factory Session. Keep this boundary free of
   `pkg/config` imports to avoid config and packaged-factory import cycles.
 
+## Packaged classifier model override behavior
+
+- `@you/classifier` owns concrete model selections on each classifier and tier
+  worker. Global `--default-worker-model-provider` and
+  `--default-worker-model` retain their normal `file < env < flag` precedence,
+  but only fill omitted worker fields; they must not replace these authored
+  selections or alter `classificationRoutes`. Cover that behavior in
+  `pkg/factory/packages/classifier/factory_test.go`.
+
 ## Operator worker preset initialization
 
 - `pkg/config/configinit/init.go` creates baseline operator configuration only
