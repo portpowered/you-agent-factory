@@ -206,6 +206,10 @@ Petri output mutations become final in the post-transition response boundary;
 wire them with `factory.WithPetriMutationRecorder` to
 `JavaScriptRuntimeService.RecordPetriTokenMutations`, and propagate persistence
 errors so an unrecorded completion cannot finish its tick.
+After session invocation selects its terminal result, route that result through
+the same execution owner before returning it so the durable lifecycle, result,
+canonical completion event, and primary result become visible atomically to a
+subsequent API, CLI, or MCP process.
 `make durable-runtime-construction-check` reports those bypasses with remediation
 to use the Factory Session recorder, while allowing package tests and explicitly
 typed JavaScript checkpoint or Petri internal records.
