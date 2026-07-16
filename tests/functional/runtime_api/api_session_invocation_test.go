@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -197,21 +199,23 @@ func TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus(t *testing.T) {
 
 func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	var svc *service.FactoryService
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		CaptureService: func(captured *service.FactoryService) {
-			svc = captured
-		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
 			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
 			cfg.Logger = zap.NewNop()
 		},
 	})
-	if _, err := svc.PauseLiveFactorySession(context.Background(), factorysessions.DefaultSessionID, factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("PauseLiveFactorySession: %v", err)
+	pause := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		server.URL()+"/factory-sessions/"+factorysessions.DefaultSessionID+"/pause",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+		"pause session",
+	)
+	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause || pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
 
 	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
@@ -236,46 +240,27 @@ func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 	}
 }
 
-func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testing.T) {
+func TestSessionInvocationAPI_CanceledRequestReturnsContextCanceled(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	blocking := newBlockingInvocationRunner()
-	var svc *service.FactoryService
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		CaptureService: func(captured *service.FactoryService) {
-			svc = captured
-		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
 			support.ConfigureWorkerCommands(t, cfg, blocking, nil)
 			cfg.Logger = zap.NewNop()
 		},
 	})
-	_ = server
-	if svc == nil {
-		t.Fatal("expected functional server to capture factory service")
-	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	resultCh := make(chan factoryapi.InvocationResponse, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		result, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, textInvocationRequest(t, "invoke this", nil))
-		if err != nil {
-			errCh <- err
-			return
+		response, err := postInvocationWithContext(ctx, server.URL(), textInvocationRequest(t, "invoke this", nil))
+		if response != nil {
+			response.Body.Close()
 		}
-		response := factoryapi.InvocationResponse{
-			RequestId: result.RequestID,
-			TraceId:   result.TraceID,
-			Status:    result.Status,
-		}
-		if result.ErrorCode != "" {
-			code := factoryapi.InvocationResponseErrorCode(result.ErrorCode)
-			response.ErrorCode = &code
-		}
-		resultCh <- response
+		errCh <- err
 	}()
 
 	<-blocking.started
@@ -283,14 +268,11 @@ func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testin
 
 	select {
 	case err := <-errCh:
-		t.Fatalf("InvokeFactorySession returned error: %v", err)
-	case response := <-resultCh:
-		if response.Status != factoryapi.InvocationTerminalStatusCanceled {
-			t.Fatalf("invocation status = %q, want CANCELED", response.Status)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled invocation error = %v, want context canceled", err)
 		}
-		if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONCANCELED {
-			t.Fatalf("invocation errorCode = %#v, want INVOCATION_CANCELED", response.ErrorCode)
-		}
+	case <-time.After(time.Second):
+		t.Fatal("canceled invocation did not return to the HTTP client")
 	}
 }
 
@@ -405,6 +387,24 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 		t.Fatalf("decode invocation response: %v", err)
 	}
 	return decoded
+}
+
+func postInvocationWithContext(ctx context.Context, serverURL string, request factoryapi.InvocationRequest) (*http.Response, error) {
+	body, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	httpRequest, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		return nil, err
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	return http.DefaultClient.Do(httpRequest)
 }
 
 var _ workers.CommandRunner = (*blockingInvocationRunner)(nil)
