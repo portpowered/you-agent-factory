@@ -1,15 +1,21 @@
 package ralph
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	"go.uber.org/zap"
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePlanThenExecuteFactory(t *testing.T) {
@@ -128,6 +134,98 @@ func TestBuiltInRalphFactory_ParameterDefaultsAndInvalidValuesAreHandledBeforeDi
 	if argumentErr.Parameter != "planningDetail" || !strings.Contains(argumentErr.Error(), "declared choices") {
 		t.Fatalf("invalid parameter diagnostic = %#v, want actionable planningDetail choices error", argumentErr)
 	}
+}
+
+func TestBuiltInRalphFactory_AppliesOperatorModelAndProviderDefaultsToBothWorkers(t *testing.T) {
+	globalRoot := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+	workerApplication, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+
+	builder, err := runtimebuild.New(
+		runtimebuild.Config{
+			ApplyOperatorDefaults: true,
+			WorkerApplication:     workerApplication,
+			OperatorDefaults: operatorconfig.ResolvedDefaults{
+				WorkerModelProvider: "CODEX",
+				WorkerModel:         "gpt-5-codex",
+			},
+		},
+		factory.EnsureClock(nil),
+		zap.NewNop(),
+		func(context.Context, runtimebuild.SessionBuildSpec) (any, error) { return struct{}{}, nil },
+	)
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
+	spec, err := builder.BuildSpec(context.Background(), runtimebuild.SessionSpecInput{
+		Dir:              resolution.FactoryDir,
+		FolderPath:       resolution.FactoryDir,
+		SessionID:        "~default",
+		ExecutionBaseDir: resolution.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("BuildSpec: %v", err)
+	}
+
+	for _, workerName := range []string{"ralph-planner", "ralph-executor"} {
+		worker, ok := spec.LoadedFactoryCfg.Worker(workerName)
+		if !ok {
+			t.Fatalf("missing %q worker", workerName)
+		}
+		if worker.ModelProvider != string(interfaces.ModelProviderCodex) || worker.Model != "gpt-5-codex" {
+			t.Fatalf("worker %q runtime selection = provider %q model %q, want %s/gpt-5-codex", workerName, worker.ModelProvider, worker.Model, interfaces.ModelProviderCodex)
+		}
+	}
+}
+
+func TestBuiltInRalphFactory_RejectsInvalidOperatorProviderBeforeDispatch(t *testing.T) {
+	workerApplication, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	builder, err := runtimebuild.New(
+		runtimebuild.Config{
+			ApplyOperatorDefaults: true,
+			WorkerApplication:     workerApplication,
+			OperatorDefaults: operatorconfig.ResolvedDefaults{
+				WorkerModelProvider: "not-a-provider",
+			},
+		},
+		factory.EnsureClock(nil),
+		zap.NewNop(),
+		func(context.Context, runtimebuild.SessionBuildSpec) (any, error) { return struct{}{}, nil },
+	)
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
+
+	_, err = builder.BuildSpec(context.Background(), runtimebuild.SessionSpecInput{
+		Dir:              mustPersistRalphFactory(t),
+		FolderPath:       t.TempDir(),
+		SessionID:        "~default",
+		ExecutionBaseDir: t.TempDir(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported worker model provider") {
+		t.Fatalf("BuildSpec invalid provider error = %v, want actionable unsupported provider error", err)
+	}
+}
+
+func mustPersistRalphFactory(t *testing.T) string {
+	t.Helper()
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	return dir
 }
 
 func assertNormalizedArgument(t *testing.T, normalized *invocations.NormalizedArguments, name string, want []string) {

@@ -318,6 +318,19 @@ you run --named @you/ralph "Ship the login fix by Friday" \
   --planning-detail detailed --execution-style cautious
 ```
 
+Ralph's workers leave runtime selection unset, so the standard
+`--default-worker-model-provider` and `--default-worker-model` flags apply to
+both the planner and executor. For example:
+
+```bash
+you run --named @you/ralph "Ship the login fix by Friday" \
+  --planning-detail brief --default-worker-model-provider codex \
+  --default-worker-model gpt-5-codex
+```
+
+As with other factories, values authored on a worker take precedence over these
+operator defaults. Unsupported provider values fail before worker dispatch.
+
 ### Built-in `@you/goal` repeater
 
 The shipped goal factory is deliberately minimal. It defines only `goal:init`,
