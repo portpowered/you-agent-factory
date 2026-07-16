@@ -429,6 +429,12 @@ through `pkg/transports/mapping/validationentry`, preserving generated taxonomy
 aliases and public topology-error targets without importing transport packages
 back into `pkg/factory/definition`.
 
+Editable Factory-definition reads and writes use `FactorySnapshot`,
+`FactoryVersion`, `EditableFactory`, and `SaveMode` at the definition owner.
+`pkg/transports/mapping/factorydefinition` captures generated submissions and
+assembles generated read/save responses; composition injects that adapter
+instead of making `pkg/factory/definition` import transport contracts.
+
 Live Factory Session summaries and discovered targets retain `LiveSession`,
 `Target`, and `TargetRef` as their owner-defined values. Convert those values,
 including canonical runtime session identity and optional target names, through

@@ -100,7 +100,7 @@ func TestSaveReplaceCurrentForSession_RejectsStaleBaseVersion(t *testing.T) {
 		}},
 	}
 
-	_, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement)
+	_, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement))
 	if !errors.Is(err, apisurface.ErrFactoryVersionStale) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want %v", err, apisurface.ErrFactoryVersionStale)
 	}
@@ -173,7 +173,7 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 		}},
 	}
 
-	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement); err != nil {
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement)); err != nil {
 		t.Fatalf("SaveReplaceCurrentForSession: %v", err)
 	}
 	if !host.discardCalled {
@@ -261,7 +261,7 @@ func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testi
 		}},
 	}
 
-	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement); err != nil {
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement)); err != nil {
 		t.Fatalf("SaveReplaceCurrentForSession: %v", err)
 	}
 	if !host.replaceCalled {
@@ -327,7 +327,7 @@ func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testi
 		}},
 	}
 
-	_, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement)
+	_, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, replacement))
 	if err == nil || err.Error() != "activation failed" {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want activation failed", err)
 	}
@@ -364,10 +364,10 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 	if err := svc.ValidateEditableFactoryTopology(nil); err == nil {
 		t.Fatal("ValidateEditableFactoryTopology: expected error for nil service")
 	}
-	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), "session", factoryapi.Factory{}); err == nil {
+	if _, err := svc.SaveReplaceCurrentSnapshotForSession(context.Background(), "session", EditableFactory{}); err == nil {
 		t.Fatal("SaveReplaceCurrentForSession: expected error for nil service")
 	}
-	if _, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session", factoryapi.Factory{}); err == nil {
+	if _, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session", EditableFactory{}); err == nil {
 		t.Fatal("SaveUpsertNamedAndActivateForSession: expected error for nil service")
 	}
 	if err := svc.ActivateNamedFactory(context.Background(), "alpha"); err == nil {
@@ -426,7 +426,7 @@ func TestSaveReplaceCurrentForSession_RejectsInvalidWritableCurrentName(t *testi
 			Name: "bad/name",
 		},
 	}
-	_, err := New(host).SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, factoryapi.Factory{})
+	_, err := New(host).SaveReplaceCurrentSnapshotForSession(context.Background(), factorysessions.DefaultSessionID, mustEditableFactoryForTest(t, factoryapi.Factory{}))
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("SaveReplaceCurrentForSession error = %v, want invalid named factory name", err)
 	}

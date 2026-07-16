@@ -879,7 +879,7 @@ var ErrInvalidNamedFactory = factoryconfig.ErrInvalidNamedFactory
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
-var ErrCurrentFactoryNotFound = errors.New("current factory not found")
+var ErrCurrentFactoryNotFound = interfaces.ErrCurrentFactoryNotFound
 
 // ErrFactorySessionNotFound reports that no live session matched the requested
 // public session identifier.

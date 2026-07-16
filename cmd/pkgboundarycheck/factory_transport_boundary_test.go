@@ -30,22 +30,21 @@ func TestRunRejectsFactoryDomainTransportImports(t *testing.T) {
 	}
 }
 
-func TestRunAllowsFactoryTransportImportsOnlyForDocumentedMigrationFilesAndTests(t *testing.T) {
+func TestRunAllowsFactoryTransportImportsOnlyForTests(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/factory/definition/service.go", "factorydefinition", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
-		t.Fatalf("run() error = %v, want exact migration inventory and test imports allowed; stderr=%q", err, stderr.String())
+		t.Fatalf("run() error = %v, want test imports allowed; stderr=%q", err, stderr.String())
 	}
 
-	writeGoImportFile(t, repoRoot, "pkg/factory/definition/new_adapter.go", "factorydefinition", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	writeGoImportFile(t, repoRoot, "pkg/factory/definition/service.go", "factorydefinition", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	stderr.Reset()
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
-		t.Fatal("run() error = nil, want unlisted Factory definition transport import rejected")
+		t.Fatal("run() error = nil, want retired Factory definition transport import rejected")
 	}
 }
 

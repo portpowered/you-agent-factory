@@ -63,7 +63,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 		}},
 	}
 
-	saved, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session-alpha", imported)
+	saved, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session-alpha", mustEditableFactoryForTest(t, imported))
 	if err != nil {
 		t.Fatalf("SaveUpsertNamedAndActivateForSession: %v", err)
 	}
@@ -146,7 +146,7 @@ func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *te
 		}},
 	}
 
-	saved, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session-alpha", replacement)
+	saved, err := svc.SaveUpsertNamedSnapshotAndActivateForSession(context.Background(), "session-alpha", mustEditableFactoryForTest(t, replacement))
 	if err != nil {
 		t.Fatalf("SaveUpsertNamedAndActivateForSession: %v", err)
 	}

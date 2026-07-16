@@ -140,9 +140,7 @@ func defaultBoundaryPolicy() boundaryPolicy {
 // remaining Factory-owned files that still adapt generated transport values.
 // New reverse dependencies are rejected even while these files migrate to
 // domain-owned inputs and transport mapping moves outward.
-var documentedFactoryTransportExceptions = []string{
-	"pkg/factory/definition/service.go",
-}
+var documentedFactoryTransportExceptions = []string{}
 
 type config struct {
 	root        string

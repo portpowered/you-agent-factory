@@ -6,6 +6,7 @@ import (
 
 	apitypes "github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
@@ -169,10 +170,10 @@ func saveFactoryThroughDefinition(
 	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	return factorydefinition.New(saveDefinitionHostAdapter{
+	return factorydefinitionmapping.New(factorydefinition.New(saveDefinitionHostAdapter{
 		saveHost: saveHost,
 		rootDir:  rootDir,
-	}).Save(ctx, sessionID, mode, request)
+	})).Save(ctx, sessionID, mode, request)
 }
 
 func (h saveDefinitionHostAdapter) PersistRootDir() string { return h.rootDir }

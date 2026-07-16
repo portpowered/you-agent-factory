@@ -174,6 +174,10 @@ type FactoryVersion struct {
 // based on an older definition version than the durable current version.
 var ErrFactoryVersionStale = errors.New("factory version is stale")
 
+// ErrCurrentFactoryNotFound reports that no durable current-Factory pointer
+// could be resolved for canonical definition readback.
+var ErrCurrentFactoryNotFound = errors.New("current factory not found")
+
 // FactoryLayoutConfig carries non-executable portable graph editor layout
 // metadata keyed by canonical graph ids.
 type FactoryLayoutConfig struct {

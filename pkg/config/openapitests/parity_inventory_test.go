@@ -297,7 +297,7 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "pkg/factory/contracts/factory_config.go",
-		sha256Hex:    "1e3727e75fecb5b78a5bd072a30adbb1646740197c29fe21534943048d40c4ae",
+		sha256Hex:    "24ec73a57af547860e0f9042f03a63c78e746a3bce6e5883d4b30300aca58fbb",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",

@@ -225,8 +225,12 @@ func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SerializeNamedFactory: %v", err)
 	}
-	if got.Name != "alpha" {
-		t.Fatalf("factory name = %q, want alpha", got.Name)
+	mapped, err := factorySnapshotForCompatibilityTest(got)
+	if err != nil {
+		t.Fatalf("map SerializeNamedFactory result: %v", err)
+	}
+	if mapped.Name != "alpha" {
+		t.Fatalf("factory name = %q, want alpha", mapped.Name)
 	}
 }
 

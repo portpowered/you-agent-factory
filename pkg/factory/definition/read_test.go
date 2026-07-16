@@ -159,11 +159,15 @@ func TestService_GetCurrentNamedFactory_ReadsPersistedPointerAndPayload(t *testi
 	if err != nil {
 		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
-	if current.Name != "alpha" {
-		t.Fatalf("current factory name = %q, want alpha", current.Name)
+	mapped, err := factorySnapshotForCompatibilityTest(current)
+	if err != nil {
+		t.Fatalf("map GetCurrentNamedFactory result: %v", err)
 	}
-	if current.Id == nil || *current.Id != "alpha" {
-		t.Fatalf("current factory id = %#v, want alpha", current.Id)
+	if mapped.Name != "alpha" {
+		t.Fatalf("current factory name = %q, want alpha", mapped.Name)
+	}
+	if mapped.Id == nil || *mapped.Id != "alpha" {
+		t.Fatalf("current factory id = %#v, want alpha", mapped.Id)
 	}
 }
 
@@ -195,8 +199,12 @@ func TestService_GetCurrentNamedFactory_FallsBackToLiveRuntimeWhenPointerMissing
 	if err != nil {
 		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
-	if current.Name != apisurface.DefaultCurrentFactoryName {
-		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	mapped, err := factorySnapshotForCompatibilityTest(current)
+	if err != nil {
+		t.Fatalf("map GetCurrentNamedFactory result: %v", err)
+	}
+	if mapped.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", mapped.Name, apisurface.DefaultCurrentFactoryName)
 	}
 }
 
@@ -306,7 +314,7 @@ func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesFileModTimeForDefault
 	if err != nil {
 		t.Fatalf("CurrentFactoryDefinitionVersionAtRoot: %v", err)
 	}
-	if got.Logical.Int64() != modTime.UnixNano() || !got.Physical.Equal(modTime) {
+	if got.Logical != modTime.UnixNano() || !got.Physical.Equal(modTime) {
 		t.Fatalf("version = %#v, want logical=%d physical=%s", got, modTime.UnixNano(), modTime)
 	}
 }

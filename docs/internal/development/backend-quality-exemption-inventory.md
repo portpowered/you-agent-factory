@@ -51,9 +51,9 @@ later removal. Line numbers are revision-stamped source locations, not stable id
 
 The coverage baseline is parsed like `gocoveragecheck`: trim surrounding whitespace, ignore
 blank and `#` comment lines, and deduplicate the remaining full import paths. It contains
-**71** packages. Of **37** directive-owning package directories,
+**72** packages. Of **37** directive-owning package directories,
 **18** are in both systems and **19** are directive only; the remaining
-**53** baseline packages are coverage-baseline only.
+**54** baseline packages are coverage-baseline only.
 
 | Owning package | Active directives | Files | Quality-system status |
 | --- | ---: | ---: | --- |
@@ -102,6 +102,7 @@ directive occurrence in the focused scan:
 
 - `pkg/transports/http/apitypes`
 - `pkg/transports/mapping`
+- `pkg/transports/mapping/factorydefinition`
 - `pkg/transports/mapping/optional`
 - `pkg/transports/cli/clidiag`
 - `pkg/transports/cli/dashboardrender`

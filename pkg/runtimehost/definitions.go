@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
@@ -256,15 +257,15 @@ func (dh factoryDefinitionHost) SwapPersistedNamedFactoryRuntime(
 	return dh.Host.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
 }
 
-var _ FactoryDefinitionService = (*factorydefinition.Service)(nil)
+var _ FactoryDefinitionService = (*factorydefinitionmapping.Service)(nil)
 
 func newFactoryDefinitionService(h *Host) FactoryDefinitionService {
-	return factorydefinition.New(factoryDefinitionHost{Host: h})
+	return factorydefinitionmapping.New(factorydefinition.New(factoryDefinitionHost{Host: h}))
 }
 
 func (h *Host) requireDefinitions() FactoryDefinitionService {
 	if h == nil {
-		return factorydefinition.New(factoryDefinitionHost{})
+		return factorydefinitionmapping.New(factorydefinition.New(factoryDefinitionHost{}))
 	}
 	if h.definitions == nil {
 		h.definitions = newFactoryDefinitionService(h)
@@ -272,8 +273,8 @@ func (h *Host) requireDefinitions() FactoryDefinitionService {
 	return h.definitions
 }
 
-func (h *Host) definitionService() *factorydefinition.Service {
-	if svc, ok := h.requireDefinitions().(*factorydefinition.Service); ok {
+func (h *Host) definitionService() *factorydefinitionmapping.Service {
+	if svc, ok := h.requireDefinitions().(*factorydefinitionmapping.Service); ok {
 		return svc
 	}
 	return nil
