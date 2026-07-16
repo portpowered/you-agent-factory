@@ -2191,6 +2191,7 @@ func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvo
 		Observe:       fs.observeSessionInvocation,
 		Telemetry:     fs.sessionInvocationTelemetry(),
 		BeforeSubmit:  fs.configureLoopInterval,
+		AfterSubmit:   fs.triggerLoopStartup,
 		SpecialCase:   serviceSessionInvocationSpecialCase{},
 	})
 }
@@ -2241,12 +2242,25 @@ func (fs *FactoryService) configureLoopInterval(
 		fs.loopIntervalSessions.Delete(sessionID)
 		return fmt.Errorf("loop period: repeat-loop-iteration workstation is missing")
 	}
+	var startupWorkstation interfaces.FactoryWorkstationConfig
+	for _, candidate := range cfg.Workstations {
+		if candidate.Name == "schedule-loop-iteration" {
+			startupWorkstation = candidate
+			break
+		}
+	}
+	if startupWorkstation.Name == "" {
+		fs.loopIntervalSessions.Delete(sessionID)
+		return fmt.Errorf("loop period: schedule-loop-iteration workstation is missing")
+	}
+	workflowIdentity := workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir())
+	submitter := workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory))
 	if err := workersScheduler.StartCronIntervalWatcher(
 		sidecarCtx,
 		&handle.Sidecars,
 		handle.Bundle.RuntimeCfg,
-		workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir()),
-		workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory)),
+		workflowIdentity,
+		submitter,
 		workstation,
 		period,
 	); err != nil {
@@ -2254,6 +2268,34 @@ func (fs *FactoryService) configureLoopInterval(
 		return fmt.Errorf("loop period: %w", err)
 	}
 	return nil
+}
+
+func (fs *FactoryService) triggerLoopStartup(
+	ctx context.Context,
+	sessionID string,
+	cfg *interfaces.FactoryConfig,
+	_ *workinvocation.NormalizedArguments,
+) error {
+	if cfg == nil || cfg.Name != "@you/loop" {
+		return nil
+	}
+	session := fs.sessionByID(sessionID)
+	handle := liveSessionHandle(session)
+	if handle == nil || handle.Bundle == nil {
+		return fmt.Errorf("loop startup: Factory Session runtime is unavailable")
+	}
+	workersScheduler, err := fs.requireWorkersScheduler()
+	if err != nil {
+		return err
+	}
+	for _, workstation := range cfg.Workstations {
+		if workstation.Name == "schedule-loop-iteration" {
+			return workersScheduler.SubmitCronTick(ctx, handle.Bundle.RuntimeCfg,
+				workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir()),
+				workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory)), workstation, time.Time{})
+		}
+	}
+	return fmt.Errorf("loop startup: schedule-loop-iteration workstation is missing")
 }
 
 func loopInvocationPeriod(arguments *workinvocation.NormalizedArguments) (time.Duration, error) {

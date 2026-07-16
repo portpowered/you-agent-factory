@@ -120,6 +120,9 @@ func (s *Service) SubmitCronTick(
 	ws interfaces.FactoryWorkstationConfig,
 	firedAt time.Time,
 ) error {
+	if firedAt.IsZero() {
+		firedAt = s.supervisorClock().Now().UTC()
+	}
 	return s.submitCronTickForRuntime(ctx, runtimeCfg, workflowIdentity, submitter, ws, firedAt)
 }
 

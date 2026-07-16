@@ -32,7 +32,7 @@ func TestBuiltInLoopFactoryJSON_DeclaresStartupAndSessionRecurringTopology(t *te
 		t.Fatalf("request parameter = %#v, want required request", request)
 	}
 	schedule := workstation(t, cfg, "schedule-loop-iteration")
-	if schedule.Kind != interfaces.WorkstationKindCron || schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 2 *" || !schedule.Cron.TriggerAtStart {
+	if schedule.Kind != interfaces.WorkstationKindCron || schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 12 *" || !schedule.Cron.TriggerAtStart {
 		t.Fatalf("schedule workstation = %#v, want one-time trigger-at-start cron", schedule)
 	}
 	if schedule.WorkPropagation == nil || schedule.WorkPropagation.Mode != interfaces.WorkPropagationModePreserveInput {
@@ -150,7 +150,7 @@ func TestBuiltInLoopFactory_AppliesOperatorModelOverridesWithoutChangingLoopConf
 	if worker.Model != "loop-cursor-model" {
 		t.Fatalf("loop worker model = %q, want loop-cursor-model", worker.Model)
 	}
-	if schedule := workstation(t, loaded.FactoryConfig(), "schedule-loop-iteration"); schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 2 *" {
+	if schedule := workstation(t, loaded.FactoryConfig(), "schedule-loop-iteration"); schedule.Cron == nil || schedule.Cron.Schedule != "0 0 31 12 *" {
 		t.Fatalf("schedule = %#v, want unchanged startup cron", schedule.Cron)
 	}
 	if run := workstation(t, loaded.FactoryConfig(), "run-loop-iteration"); run.Worktree != "${worktree}" {

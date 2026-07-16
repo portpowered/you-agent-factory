@@ -3,6 +3,18 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## Session-scoped invocation activation
+
+- `pkg/factory/sessions/invocation/session_owner.go` separates validated
+  `BeforeSubmit` setup from `AfterSubmit` activation. Use the latter when a
+  session sidecar must consume the submitted invocation Work (for example, a
+  startup cron tick); firing it before submission can race and drop the first
+  eligible iteration.
+- `pkg/service/runtime_sessions.go` owns the `@you/loop` interval watcher and
+  its post-submission startup tick. Keep both attached to the Factory Session
+  sidecar context so stop and replacement cancel and join them with the
+  session lifecycle.
+
 ## CLI run and submit command contracts
 
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives

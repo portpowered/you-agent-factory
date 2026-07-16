@@ -67,8 +67,11 @@ type SessionOwnerDependencies struct {
 	// BeforeSubmit performs session-scoped setup after invocation validation and
 	// before the first Work can enter the runtime.
 	BeforeSubmit func(context.Context, string, *interfaces.FactoryConfig, *workinvocation.NormalizedArguments) error
-	Telemetry    SessionInvocationTelemetry
-	SpecialCase  SessionInvocationSpecialCase
+	// AfterSubmit performs session-scoped activation once the invocation Work is
+	// available to the runtime.
+	AfterSubmit func(context.Context, string, *interfaces.FactoryConfig, *workinvocation.NormalizedArguments) error
+	Telemetry   SessionInvocationTelemetry
+	SpecialCase SessionInvocationSpecialCase
 }
 
 // SessionOwner coordinates the complete session invocation lifecycle through
@@ -144,6 +147,11 @@ func (o *SessionOwner) InvokeFactorySession(
 	if o.deps.Telemetry != nil {
 		o.deps.Telemetry.InvocationSubmitted(factoryCfg, resolved.Source)
 		o.deps.Telemetry.LogInvocationSubmitted(sessionID, resolved.Source, factoryCfg, submitResult)
+	}
+	if o.deps.AfterSubmit != nil {
+		if err := o.deps.AfterSubmit(ctx, sessionID, factoryCfg, resolved.NormalizedArguments); err != nil {
+			return FactoryInvocationResult{}, err
+		}
 	}
 	return o.waitForResult(ctx, sessionID, SessionInvocationWaitInput{
 		RequestID:        submitResult.RequestID,
