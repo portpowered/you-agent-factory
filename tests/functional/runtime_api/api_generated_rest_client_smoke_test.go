@@ -2,6 +2,7 @@ package runtime_api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -20,6 +21,8 @@ import (
 )
 
 const generatedRESTClientSmokeTimeout = 10 * time.Second
+
+const generatedRESTClientDeadline = 2 * time.Second
 
 // TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies is a pre-DI
 // transport/client proof. Production-shaped graph equivalence belongs to the
@@ -127,6 +130,106 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	}
 	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound || failure.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
 		t.Fatalf("generated API error = %#v, want NOT_FOUND/RESPONSE_EVENT_SESSION_NOT_FOUND", failure.JSON404)
+	}
+}
+
+// TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline is a pre-DI
+// transport/client proof against the current functional HTTP host. It verifies
+// caller-owned context bounds without claiming production-graph equivalence.
+func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.ProviderCommandRunnerOverride = generatedRESTStreamingRunner{}
+	})
+
+	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-rest-client-context-bounds",
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "generated REST client context bounds"},
+	})
+	waitForGeneratedWorkComplete(t, host.URL(), traceID, generatedRESTClientSmokeTimeout)
+
+	t.Run("cancellation", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		started, result := startOutstandingGeneratedRESTCall(t, host.URL(), ctx)
+		waitForGeneratedRESTResponseStart(t, started, result)
+
+		cancel()
+		assertGeneratedRESTContextError(t, result, context.Canceled)
+	})
+
+	t.Run("deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), generatedRESTClientDeadline)
+		defer cancel()
+		started, result := startOutstandingGeneratedRESTCall(t, host.URL(), ctx)
+		waitForGeneratedRESTResponseStart(t, started, result)
+
+		assertGeneratedRESTContextError(t, result, context.DeadlineExceeded)
+	})
+}
+
+type generatedRESTCallResult struct {
+	response *generatedclient.GetFactoryResponseEventsBySessionIdClientResponse
+	err      error
+}
+
+func startOutstandingGeneratedRESTCall(
+	t *testing.T,
+	baseURL string,
+	ctx context.Context,
+) (<-chan struct{}, <-chan generatedRESTCallResult) {
+	t.Helper()
+	started := make(chan struct{}, 1)
+	adapter, err := restclient.New(baseURL, &http.Client{Transport: responseStartedRoundTripper{
+		started: started,
+		base:    http.DefaultTransport,
+	}})
+	if err != nil {
+		t.Fatalf("construct generated REST adapter: %v", err)
+	}
+
+	result := make(chan generatedRESTCallResult, 1)
+	go func() {
+		response, callErr := adapter.GetFactoryResponseEventsBySessionID(ctx, "~default", nil)
+		result <- generatedRESTCallResult{response: response, err: callErr}
+	}()
+	return started, result
+}
+
+func waitForGeneratedRESTResponseStart(
+	t *testing.T,
+	started <-chan struct{},
+	result <-chan generatedRESTCallResult,
+) {
+	t.Helper()
+	select {
+	case <-started:
+	case completed := <-result:
+		t.Fatalf("generated REST call completed before it was outstanding: response=%#v error=%v", completed.response, completed.err)
+	case <-time.After(generatedRESTClientSmokeTimeout):
+		t.Fatal("timed out waiting for generated REST response to start")
+	}
+}
+
+func assertGeneratedRESTContextError(
+	t *testing.T,
+	result <-chan generatedRESTCallResult,
+	want error,
+) {
+	t.Helper()
+	select {
+	case completed := <-result:
+		if completed.response != nil {
+			t.Fatalf("generated REST response = %#v, want no typed API response", completed.response)
+		}
+		if !errors.Is(completed.err, want) {
+			t.Fatalf("generated REST error = %v, want errors.Is(error, %v)", completed.err, want)
+		}
+	case <-time.After(generatedRESTClientSmokeTimeout):
+		t.Fatalf("generated REST call did not terminate within %s", generatedRESTClientSmokeTimeout)
 	}
 }
 
