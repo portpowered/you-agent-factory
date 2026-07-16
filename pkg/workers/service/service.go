@@ -11,10 +11,14 @@ type Service struct {
 	cfg Config
 }
 
-// New constructs a workers scheduling service with explicit dependencies.
-func New(cfg Config) *Service {
+// NewWorkersSchedulerService constructs the worker-sidecar owner from explicit,
+// worker-owned dependencies.
+func NewWorkersSchedulerService(cfg Config) *Service {
 	return &Service{cfg: cfg}
 }
+
+// New constructs a workers scheduling service with explicit dependencies.
+func New(cfg Config) *Service { return NewWorkersSchedulerService(cfg) }
 
 func (s *Service) logger() *zap.Logger {
 	if s == nil || s.cfg.Logger == nil {
@@ -31,8 +35,10 @@ func (s *Service) commandRunner() workers.CommandRunner {
 }
 
 func (s *Service) supervisorClock() clockwork.Clock {
-	if s != nil && s.cfg.Clock != nil {
-		return s.cfg.Clock
+	if s != nil {
+		if clock, ok := s.cfg.Clock.(clockwork.Clock); ok && clock != nil {
+			return clock
+		}
 	}
 	return clockwork.NewRealClock()
 }

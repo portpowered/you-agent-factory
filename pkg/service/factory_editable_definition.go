@@ -425,7 +425,7 @@ func NewFactoryServiceCollaborators(
 		Sessions:         sessions,
 		LocalModels:      startupLocalModels,
 		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
+		WorkersScheduler: workersservice.NewWorkersSchedulerService(workersSchedulerServiceConfig(cfg, clock, baseLogger, hostedWorkers)),
 	}, nil
 }
 

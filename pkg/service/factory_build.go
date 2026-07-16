@@ -118,19 +118,12 @@ func composePortableReplayCore(cfg *FactoryServiceConfig, root FactoryServiceRoo
 	}, true
 }
 
-// NewWorkersSchedulerService constructs the worker-sidecar owner at the
-// runtime composition boundary. Watcher paths must only use this initialized
-// instance and never reconstruct its dependencies.
-func NewWorkersSchedulerService(
+func workersSchedulerServiceConfig(
 	cfg *FactoryServiceConfig,
 	clock factory.Clock,
 	logger *zap.Logger,
 	hostedWorkers hostedworkers.Config,
-) *workersservice.Service {
-	supervisorClock := clockwork.NewRealClock()
-	if clockworkClock, ok := clock.(clockwork.Clock); ok && clockworkClock != nil {
-		supervisorClock = clockworkClock
-	}
+) workersservice.Config {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
@@ -144,14 +137,14 @@ func NewWorkersSchedulerService(
 		workflowID = cfg.WorkflowID
 		defaultFactoryDir = cfg.Dir
 	}
-	return workersservice.New(workersservice.Config{
+	return workersservice.Config{
 		Logger:            logger,
-		Clock:             supervisorClock,
+		Clock:             clock,
 		CommandRunner:     runner,
 		WorkflowID:        workflowID,
 		DefaultFactoryDir: defaultFactoryDir,
 		HostedWorkers:     hostedWorkers,
-	})
+	}
 }
 
 type runtimeBundleBuildInput struct {

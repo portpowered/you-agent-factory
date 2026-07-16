@@ -61,12 +61,17 @@ func NewWorkersScheduler(
 	baseLogger *zap.Logger,
 	hostedWorkers hostedworkers.Config,
 ) *workersservice.Service {
-	return service.NewWorkersSchedulerService(
-		service.FactoryServiceConfigFromRuntimeHost(cfg),
-		clock,
-		baseLogger,
-		hostedWorkers,
-	)
+	workerConfig := workersservice.Config{
+		Logger:        baseLogger,
+		Clock:         clock,
+		HostedWorkers: hostedWorkers,
+	}
+	if cfg != nil {
+		workerConfig.CommandRunner = cfg.WorkerApplication.ScriptCommandRunner
+		workerConfig.WorkflowID = cfg.WorkflowID
+		workerConfig.DefaultFactoryDir = cfg.Dir
+	}
+	return workersservice.NewWorkersSchedulerService(workerConfig)
 }
 
 // CloseRuntimeBundleSinks closes startup bundle sinks when composition fails.
