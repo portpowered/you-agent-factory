@@ -1240,6 +1240,12 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
+	assertExplicitFactoryServiceCollaborators(t, svc, alphaDir)
+}
+
+func assertExplicitFactoryServiceCollaborators(t *testing.T, svc *FactoryService, alphaDir string) {
+	t.Helper()
+
 	if svc.sessions == nil {
 		t.Fatal("expected explicit factorysessions.Registry collaborator")
 	}
