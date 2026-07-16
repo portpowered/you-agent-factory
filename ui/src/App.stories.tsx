@@ -1100,7 +1100,7 @@ export const DashboardImprovementsSmokeNarrow = {
     },
   },
   render: () => (
-    <div style={{ maxWidth: "100%", width: "360px" }}>
+    <div style={{ maxWidth: "100%", width: "320px" }}>
       <App />
     </div>
   ),
@@ -1129,9 +1129,57 @@ export const DashboardImprovementsSmokeNarrow = {
     await expect(
       dashboardScope.getByRole("article", { name: "Trace drill-down" }),
     ).toBeVisible();
-    expect(frame?.getBoundingClientRect().width ?? 0).toBeLessThanOrEqual(360);
+    expect(frame?.getBoundingClientRect().width ?? 0).toBeLessThanOrEqual(320);
     expectNoPageHorizontalOverflow(canvasElement);
   },
+};
+
+export const DashboardResponsiveEmpty = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: { body: { sessions: [] } },
+        },
+      ],
+    },
+  },
+  render: () => <App />,
+};
+
+export const DashboardResponsiveError = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: {
+            body: { code: "NETWORK_ERROR", message: "Sessions are offline." },
+            status: 503,
+          },
+        },
+      ],
+    },
+  },
+  render: () => <App />,
+};
+
+export const DashboardResponsiveLoading = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: () => new Promise(() => {}),
+        },
+      ],
+    },
+  },
+  render: () => <App />,
 };
 
 export const CurrentSelectionEditableConfigurationDesktopVerification = {
