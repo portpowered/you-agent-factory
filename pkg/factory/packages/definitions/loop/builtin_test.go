@@ -2,6 +2,7 @@ package builtinloop_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -74,12 +75,27 @@ func TestBuiltInLoopFactory_NormalizesHourlyPeriodAndWorktree(t *testing.T) {
 	if run.Worktree != "release-dashboard" {
 		t.Fatalf("interpolated run worktree = %q, want configured worktree", run.Worktree)
 	}
-	if _, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+	defaultArguments, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Check the release dashboard"},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments default period: %v", err)
+	}
+	if got := defaultArguments.Arguments["period"].Values; !reflect.DeepEqual(got, []string{"1h"}) {
+		t.Fatalf("default period = %#v, want hourly period", got)
+	}
+
+	_, err = invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
 		Signature:      cfg.InvocationSignature,
 		PositionalArgs: []string{"Check the release dashboard"},
 		NamedArgs:      []invocations.NamedArgumentInput{{Key: "period", Values: []string{"5m"}}},
-	}); err == nil {
+	})
+	if err == nil {
 		t.Fatal("NormalizeArguments error = nil, want unsupported period failure")
+	}
+	if !strings.Contains(err.Error(), `parameter "period" value "5m" is not one of the declared choices`) {
+		t.Fatalf("NormalizeArguments unsupported period error = %v", err)
 	}
 }
 
