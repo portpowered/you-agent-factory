@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -42,6 +43,25 @@ func (*recordingWorkerSidecarOwner) SubmitCronTick(
 	time.Time,
 ) error {
 	return nil
+}
+
+func TestNewLiveSessionStateBuildsOptionalRuntimeHandle(t *testing.T) {
+	t.Parallel()
+
+	spec := &runtimebuild.SessionBuildSpec{}
+	empty := NewLiveSessionState(nil, spec)
+	if empty == nil || empty.bundle != nil || empty.handle != nil || empty.spec != spec {
+		t.Fatalf("empty live session state = %#v, want detached spec without handle", empty)
+	}
+	bundle := &factoryRuntimeBundle{}
+	bound := NewLiveSessionState(bundle, spec)
+	if bound.bundle != bundle || bound.handle == nil || bound.handle.Bundle != bundle || bound.spec != spec {
+		t.Fatalf("bound live session state = %#v, want runtime handle", bound)
+	}
+	policy := CoordinatorPolicyFromConfig(nil)
+	if policy.FactoryDir() != "" || policy.MockWorkersConfig() != nil {
+		t.Fatalf("nil coordinator policy = %#v, want zero value", policy)
+	}
 }
 
 func TestHostStartSchedulerSidecarsForRuntimeDelegatesCompleteSessionInput(t *testing.T) {

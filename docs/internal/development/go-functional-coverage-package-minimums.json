@@ -13,10 +13,6 @@
       }
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/composebridge",
-      "minimum": 0.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/config",
       "minimum": 64.55
     },

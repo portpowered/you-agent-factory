@@ -115,12 +115,17 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("provider bindings = %#v, want one text binding for hello world", calls[0].ModelBindings)
 	}
 
+	assertUnsupportedModelInvocationRejected(t, server.URL())
+}
+
+func assertUnsupportedModelInvocationRejected(t *testing.T, serverURL string) {
+	t.Helper()
 	unsupportedBody, err := json.Marshal(factoryapi.ModelInvocationRequest{Operation: "EMBED"})
 	if err != nil {
 		t.Fatalf("marshal unsupported invocation: %v", err)
 	}
 	unsupportedResponse, err := http.Post(
-		server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations",
+		serverURL+"/models/OMNIVOICE_Q4_K_M/invocations",
 		"application/json",
 		bytes.NewReader(unsupportedBody),
 	)

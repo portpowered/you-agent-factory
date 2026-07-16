@@ -43,9 +43,8 @@ var approvedApplicationCompositionFiles = map[string]struct{}{
 	"pkg/wire/production.go":                                {},
 	"pkg/factory/sessions/execution/service.go":             {},
 	"pkg/factory/sessions/execution/testharness/harness.go": {},
-	// Batch 008 moves remaining legacy composition roots behind pkg/wire.
-	"pkg/composebridge/core.go": {},
-	"pkg/service/factory.go":    {},
+	"pkg/wire/runtime_core.go":                              {},
+	"pkg/service/factory.go":                                {},
 }
 
 var javascriptLiveChildRoots = []string{

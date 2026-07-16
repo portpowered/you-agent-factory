@@ -56,6 +56,7 @@ make verify
 make release-surface-smoke
 make lint
 make backend-size
+make backend-dependency-graph
 make pkg-maint
 make ui-deadcode
 make script-timeout-companion-smoke-100
@@ -71,6 +72,13 @@ make ui-integration-test
 make ui-storybook
 make ui-test-storybook
 ```
+
+`make backend-dependency-graph` writes the direct production-import graph for
+repository packages under `cmd/` and `pkg/` to
+`.artifacts/backend-dependency-graph/backend-dependency-graph.dot`. When
+Graphviz's `dot` command is available, the target also renders a sibling SVG.
+Standard-library, third-party, `internal/`, and test-only packages are omitted so
+the graph stays focused on the requested backend package boundaries.
 
 ## Dashboard UI test runners
 

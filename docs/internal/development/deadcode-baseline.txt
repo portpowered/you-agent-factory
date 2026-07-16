@@ -5,7 +5,6 @@ pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionLo
 pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionResourceWaitFinished
 pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionResourceWaitStarted
 pkg/runtimehost/factory_runtime_state.go: unreachable func: modelExecutionTraceFromContext
-pkg/runtimehost/poller_watcher.go: unreachable func: Host.submitCronTick
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.inferenceProgressPublisher
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.openFactorySession
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.sessionResponseStream

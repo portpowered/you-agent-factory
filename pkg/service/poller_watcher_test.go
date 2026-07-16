@@ -28,6 +28,7 @@ import (
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -49,7 +50,31 @@ func initializeWorkersSchedulerForTest(svc *FactoryService) {
 	} else {
 		cfg, _ = ConfigWithWorkerApplication(cfg)
 	}
-	svc.workersScheduler = NewWorkersSchedulerService(cfg, svc.clock, svc.logger, svc.hostedWorkers)
+	svc.workersScheduler = workersservice.NewWorkersSchedulerService(workersSchedulerServiceConfig(cfg, svc.clock, svc.logger, svc.hostedWorkers))
+}
+
+func TestWorkersSchedulerServiceConfigAppliesDefaultsAndExplicitInputs(t *testing.T) {
+	t.Parallel()
+
+	defaults := workersSchedulerServiceConfig(nil, nil, nil, hostedworkers.Config{})
+	if defaults.Logger == nil || defaults.CommandRunner == nil || defaults.WorkflowID != "" || defaults.DefaultFactoryDir != "" {
+		t.Fatalf("default worker scheduler config = %#v, want usable defaults", defaults)
+	}
+
+	runner := workers.ExecCommandRunner{}
+	cfg := &FactoryServiceConfig{
+		Dir:        "/factory",
+		WorkflowID: "workflow-a",
+		WorkerApplication: workerapplication.Components{
+			ScriptCommandRunner: runner,
+		},
+	}
+	logger := zap.NewNop()
+	explicit := workersSchedulerServiceConfig(cfg, factory.EnsureClock(nil), logger, hostedworkers.Config{})
+	if explicit.Logger != logger || explicit.CommandRunner != runner ||
+		explicit.WorkflowID != "workflow-a" || explicit.DefaultFactoryDir != "/factory" {
+		t.Fatalf("explicit worker scheduler config = %#v, want supplied inputs", explicit)
+	}
 }
 
 func TestFactoryService_StartLiveRuntimeSidecars_RequiresInitializedWorkerSidecarOwner(t *testing.T) {

@@ -324,9 +324,6 @@ func newFactorySaveService(fs *FactoryService) *factorysave.Service {
 }
 
 func wireFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) factorySaveSaver {
-	if cfg != nil && cfg.FactorySave != nil {
-		return cfg.FactorySave
-	}
 	return newFactorySaveService(fs)
 }
 
@@ -440,7 +437,7 @@ func NewFactoryServiceCollaborators(
 		Sessions:         sessions,
 		LocalModels:      startupLocalModels,
 		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
+		WorkersScheduler: workersservice.NewWorkersSchedulerService(workersSchedulerServiceConfig(cfg, clock, baseLogger, hostedWorkers)),
 	}, nil
 }
 

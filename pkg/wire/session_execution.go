@@ -8,12 +8,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	"go.uber.org/zap"
 )
 
@@ -28,6 +36,132 @@ func BuildSessionExecutionService(
 	request sessionexecutioncli.ServiceRequest,
 ) (sessionexecutioncli.ServiceOwner, error) {
 	return buildSessionExecutionService(ctx, request, InjectRuntimeCore)
+}
+
+// BuildSessionExecutionWithApplication constructs an owned runtime-backed
+// execution service using the worker application selected for the process.
+func BuildSessionExecutionWithApplication(
+	ctx context.Context,
+	request sessionexecutioncli.ServiceRequest,
+	application workerapplication.Components,
+) (sessionexecutioncli.ServiceOwner, error) {
+	provider, err := normalizeSessionExecutionProvider(request.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if provider != factorysessionexecution.ExecutionProviderJavaScriptRuntime {
+		return buildSessionExecutionService(ctx, request, InjectRuntimeCore)
+	}
+	projectRoot, err := resolveSessionExecutionProjectRoot(request.ProjectRoot)
+	if err != nil {
+		return nil, err
+	}
+	persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	var workerProvider workers.Provider
+	if request.ChildExecutorMode == factorysessionexecution.ChildExecutorModeLive {
+		if !application.Valid() {
+			return nil, fmt.Errorf("construct session worker provider: worker application is required")
+		}
+		workerProvider, err = application.Provider.New()
+		if err != nil {
+			return nil, fmt.Errorf("construct session worker provider: %w", err)
+		}
+	}
+	execution, err := factorysessionexecution.NewExecutionService(provider, factorysessionexecution.ServiceConfig{
+		ProjectRoot: projectRoot, ChildExecutorMode: request.ChildExecutorMode,
+		Provider: workerProvider, ProviderExecutor: providerexecution.NewExecutor(workerProvider),
+		Persistence: persistence, Clock: factory.EnsureClock(nil),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ownedExecutionService{Service: execution}, nil
+}
+
+// SessionExecutionBuilderWithEdges binds process-selected worker edges to the
+// transport-facing durable execution builder.
+func SessionExecutionBuilderWithEdges(
+	buildApplication WorkerApplicationBuilder,
+	edges FunctionalEdges,
+) sessionexecutioncli.ServiceBuilder {
+	return func(ctx context.Context, request sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
+		if buildApplication == nil {
+			return nil, fmt.Errorf("construct session execution: worker application builder is required")
+		}
+		application, err := buildApplication(zap.NewNop(), edges)
+		if err != nil {
+			return nil, fmt.Errorf("construct session execution: %w", err)
+		}
+		return BuildSessionExecutionWithApplication(ctx, request, application)
+	}
+}
+
+type providerCommandEdge struct{ workers.CommandRunner }
+type scriptCommandEdge struct{ workers.CommandRunner }
+type providerPTYEdge struct{ agypty.PTYAllocator }
+
+func provideProviderCommandEdge(edges FunctionalEdges) providerCommandEdge {
+	runner := edges.ProviderCommandRunner
+	if runner == nil {
+		runner = workerprocess.ExecCommandRunner{}
+	}
+	return providerCommandEdge{CommandRunner: runner}
+}
+
+func provideScriptCommandEdge(edges FunctionalEdges) scriptCommandEdge {
+	runner := edges.ScriptCommandRunner
+	if runner == nil {
+		runner = workerprocess.ExecCommandRunner{}
+	}
+	return scriptCommandEdge{CommandRunner: runner}
+}
+
+func provideProviderPTYEdge(edges FunctionalEdges) (providerPTYEdge, error) {
+	allocator := edges.AgyPTYAllocator
+	if allocator == nil {
+		var err error
+		allocator, err = agypty.NewDefaultPlatformAllocatorFactory().NewAllocator()
+		if err != nil {
+			return providerPTYEdge{}, fmt.Errorf("construct worker application: create Agy PTY allocator: %w", err)
+		}
+	}
+	return providerPTYEdge{PTYAllocator: allocator}, nil
+}
+
+func provideWorkerProviderFactory(runner providerCommandEdge, allocator providerPTYEdge) (*workerprovider.Factory, error) {
+	return workerprovider.NewFactory(workerprovider.ConstructionInput{
+		CommandRunner: runner.CommandRunner, AgyPTYAllocator: allocator.PTYAllocator,
+	})
+}
+
+func provideWorkerScriptFactory(runner scriptCommandEdge) (*workerexecutor.ScriptFactory, error) {
+	return workerexecutor.NewScriptFactory(runner.CommandRunner)
+}
+
+func provideWorkerHostedConfig(logger *zap.Logger, edges FunctionalEdges) hostedworkers.Config {
+	return hostedworkers.NewConfig(hostedworkers.Config{
+		Logger: logger, Clock: edges.HostedClock, HTTPClient: edges.HostedHTTPClient,
+		SecretResolver: edges.HostedSecretResolver, LinearEndpoint: edges.HostedLinearEndpoint,
+	})
+}
+
+func provideWorkerApplication(
+	provider *workerprovider.Factory,
+	script *workerexecutor.ScriptFactory,
+	hosted hostedworkers.Config,
+	providerRunner providerCommandEdge,
+	scriptRunner scriptCommandEdge,
+	edges FunctionalEdges,
+) workerapplication.Components {
+	return workerapplication.Components{
+		Provider: provider, Script: script, Hosted: hosted,
+		ProviderCommandRunner: providerRunner.CommandRunner, ScriptCommandRunner: scriptRunner.CommandRunner,
+		ProviderCommandInjected: edges.ProviderCommandRunner != nil,
+		ScriptCommandInjected:   edges.ScriptCommandRunner != nil,
+	}
 }
 
 func buildSessionExecutionService(
@@ -100,7 +234,7 @@ func buildRuntimeBackedSessionExecutionGraph(
 	resources := &resourceSet{}
 	if bundle := core.StartupBundle(); bundle != nil {
 		resources.add("runtime core", closeFunc(func() error {
-			return composebridge.CloseRuntimeBundleSinks(bundle.LogSink, bundle.MetricsSink)
+			return factoryservice.CloseBundleSinks(bundle.LogSink, bundle.MetricsSink)
 		}))
 	}
 	graph, err := assembleProductionGraph(core, cfg, Inputs{MCPInput: input, MCPOutput: output}, resources)

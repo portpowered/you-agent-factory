@@ -72,6 +72,9 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 			signature:     loaded.InvocationSignature,
 		}, nil
 	case strings.TrimSpace(cfg.FactoryConfigPath) != "":
+		if javascriptWorkflowPath(cfg.FactoryConfigPath) {
+			return nil, nil
+		}
 		loaded, err := factoryrun.LoadFactoryConfigFromConfigFile(cfg.FactoryConfigPath)
 		if err != nil {
 			return nil, err
@@ -84,6 +87,15 @@ func loadFactoryInvocationHelpData(cliName string, cfg RunConfig) (*factoryInvoc
 		}, nil
 	default:
 		return nil, nil
+	}
+}
+
+func javascriptWorkflowPath(path string) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(path))) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	default:
+		return false
 	}
 }
 

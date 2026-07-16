@@ -11,10 +11,41 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
+
+func TestInjectCLICommandConstructsFreshCobraTree(t *testing.T) {
+	t.Parallel()
+
+	first := InjectCLICommand(cli.RootCommandOptions{})
+	second := InjectCLICommand(cli.RootCommandOptions{})
+	if first == nil || second == nil {
+		t.Fatal("InjectCLICommand() returned a nil command")
+	}
+	if first == second {
+		t.Fatal("InjectCLICommand() reused mutable Cobra command state")
+	}
+	if first.Name() != "you" {
+		t.Fatalf("InjectCLICommand() name = %q, want you", first.Name())
+	}
+}
+
+func TestInjectWireCoreReturnsCompleteProcessComposition(t *testing.T) {
+	t.Parallel()
+
+	core := InjectWireCore()
+	if core.BuildCLICommand == nil || core.BuildProcessGraph == nil || core.InitializeProcess == nil ||
+		core.BuildMCPExecution == nil || core.BuildSessionExecution == nil || core.BuildModelInvocation == nil ||
+		core.BuildWorkerApplication == nil || core.BuildRunSessionExecution == nil {
+		t.Fatalf("InjectWireCore() returned incomplete composition: %+v", core)
+	}
+	if command := core.BuildCLICommand(cli.RootCommandOptions{}); command == nil || command.Name() != "you" {
+		t.Fatalf("WireCore.BuildCLICommand() = %v, want you command", command)
+	}
+}
 
 func TestBuildCLIRunnerConstructsInertGraphApplication(t *testing.T) {
 	t.Parallel()

@@ -14,6 +14,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
@@ -28,6 +29,147 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestSessionGatewayHostRejectsRequiredOperationsWithoutHost(t *testing.T) {
+	t.Parallel()
+
+	gateway := sessionGatewayHost{}
+	ctx := context.Background()
+	if _, err := gateway.DiscoverTargets("."); err == nil {
+		t.Fatal("DiscoverTargets succeeded without a host")
+	}
+	if _, err := gateway.OpenLiveSessionForTarget(ctx, factorysessions.Target{}); err == nil {
+		t.Fatal("OpenLiveSessionForTarget succeeded without a host")
+	}
+	if _, err := gateway.RequireSession("session"); err == nil {
+		t.Fatal("RequireSession succeeded without a host")
+	}
+	if _, err := gateway.BuildSessionProjectionContext(ctx, nil); err == nil {
+		t.Fatal("BuildSessionProjectionContext succeeded without a host")
+	}
+	if _, err := gateway.ResolveSyncPreflightTarget("session", &interfaces.FactorySessionLogicalResolveHint{}); err == nil {
+		t.Fatal("ResolveSyncPreflightTarget succeeded without a host")
+	}
+	if _, err := gateway.SessionFactory("session"); err == nil {
+		t.Fatal("SessionFactory succeeded without a host")
+	}
+	if err := gateway.StopLiveSession("session"); err == nil {
+		t.Fatal("StopLiveSession succeeded without a host")
+	}
+}
+
+func TestSessionGatewayHostReturnsEmptyStateWithoutHost(t *testing.T) {
+	t.Parallel()
+
+	gateway := sessionGatewayHost{}
+	if gateway.ListLiveSessionIDs() != nil || gateway.GetLiveSession("session") != nil {
+		t.Fatal("nil host exposed live sessions")
+	}
+	if gateway.BackendScopeID() != "" || gateway.StreamGenerationID(nil) != "" {
+		t.Fatal("nil host exposed session identity")
+	}
+	if gateway.LiveSessionEvents(nil) != nil || gateway.DurableExecution() != nil || gateway.ResponseStreams(nil) != nil {
+		t.Fatal("nil host exposed runtime state")
+	}
+	if gateway.NewResponseStream() == nil {
+		t.Fatal("nil host did not provide an isolated response stream")
+	}
+	if gateway.CloseResponseStreamDispatch(nil, "dispatch") || gateway.JavaScriptCheckpointStore(nil) != nil {
+		t.Fatal("nil host mutated response or checkpoint state")
+	}
+
+	gateway.CloseResponseStreams(nil)
+	gateway.ObserveLiveLifecycleControl(
+		"session",
+		factorysessionexecution.LifecycleControlPause,
+		factorysessionexecution.ControlRequest{},
+		factorysessionexecution.LifecycleControlOutcomeAccepted,
+		factorysessionexecution.LifecycleStatusPaused,
+		errors.New("ignored"),
+	)
+	gateway.ObserveResponseStreamPublished(nil, "session", responsestream.Event{})
+	gateway.ObserveResponseStreamCompaction(nil, "session", "dispatch", responsestream.CompactionSummary{})
+	gateway.ObserveResponseStreamDegraded(nil, "session", "dispatch", "reason", zap.NewNop(), errors.New("ignored"))
+}
+
+func TestCoordinatorPolicyExposesCompositionSelections(t *testing.T) {
+	t.Parallel()
+
+	mocks := &factoryconfig.MockWorkersConfig{}
+	policy := CoordinatorPolicyFromConfig(&Config{Dir: "/factory", MockWorkersConfig: mocks})
+	if policy.FactoryDir() != "/factory" || policy.MockWorkersConfig() != mocks {
+		t.Fatalf("policy = %#v, want selected factory and mock-worker config", policy)
+	}
+	if !hasExplicitHostCoordinatorReferencePolicy(policy) {
+		t.Fatal("reference-only coordinator policy was not explicit")
+	}
+}
+
+func TestSessionGatewayHostReadsRuntimeHostSession(t *testing.T) {
+	t.Parallel()
+
+	gateway, session, _ := newGatewayHostSession(t)
+	if got := gateway.ListLiveSessionIDs(); len(got) != 1 || got[0] != "session" {
+		t.Fatalf("ListLiveSessionIDs = %v", got)
+	}
+	if gateway.GetLiveSession("session") != session {
+		t.Fatal("GetLiveSession did not return the registered session")
+	}
+	if got, err := gateway.RequireSession("session"); err != nil || got != session {
+		t.Fatalf("RequireSession = (%p, %v)", got, err)
+	}
+	if gateway.BackendScopeID() != "host-scope" {
+		t.Fatalf("BackendScopeID = %q", gateway.BackendScopeID())
+	}
+	_ = gateway.StreamGenerationID(session)
+	if gateway.LiveSessionEvents(session) != nil {
+		t.Fatal("empty runtime bundle exposed events")
+	}
+	if _, err := gateway.SessionFactory("session"); err != nil {
+		t.Fatalf("SessionFactory: %v", err)
+	}
+	if gateway.DurableExecution() != nil {
+		t.Fatal("empty host exposed durable execution")
+	}
+}
+
+func TestSessionGatewayHostOwnsResponseState(t *testing.T) {
+	t.Parallel()
+
+	gateway, session, host := newGatewayHostSession(t)
+	streams := gateway.ResponseStreams(session)
+	if streams == nil || gateway.ResponseStreams(session) != streams {
+		t.Fatal("ResponseStreams did not retain the session-owned stream set")
+	}
+	streams.Stream("dispatch")
+	if !gateway.CloseResponseStreamDispatch(session, "dispatch") {
+		t.Fatal("CloseResponseStreamDispatch did not close the selected stream")
+	}
+	checkpointStore := gateway.JavaScriptCheckpointStore(session)
+	if checkpointStore == nil || gateway.JavaScriptCheckpointStore(session) != checkpointStore {
+		t.Fatal("JavaScriptCheckpointStore did not retain session-owned state")
+	}
+	gateway.ObserveResponseStreamPublished(session, "session", responsestream.Event{DispatchID: "dispatch"})
+	gateway.ObserveResponseStreamCompaction(session, "session", "dispatch", responsestream.CompactionSummary{})
+	gateway.ObserveResponseStreamDegraded(session, "session", "dispatch", "test", zap.NewNop(), errors.New("degraded"))
+	gateway.CloseResponseStreams(session)
+	if host.requireSessionGateway() == nil || host.requireSessionGateway() != host.sessionGateway {
+		t.Fatal("requireSessionGateway did not cache the host gateway")
+	}
+}
+
+func newGatewayHostSession(t *testing.T) (sessionGatewayHost, *factorysessions.LiveSession, *Host) {
+	t.Helper()
+	bundle := &factoryRuntimeBundle{BackendScopeID: "bundle-scope", Logger: zap.NewNop()}
+	session := factorysessions.NewLiveSession(
+		"session", t.TempDir(), "", "", factorysessions.TargetRef{},
+		NewLiveSessionState(bundle, nil), false, "",
+	)
+	registry := factorysessions.NewRegistry()
+	registry.Upsert(session, true)
+	host := &Host{cfg: &Config{BackendScopeID: "host-scope"}, sessions: registry, logger: zap.NewNop()}
+	return sessionGatewayHost{Host: host}, session, host
+}
 
 func TestHostDurableOperationsRequireInjectedExecution(t *testing.T) {
 	t.Parallel()

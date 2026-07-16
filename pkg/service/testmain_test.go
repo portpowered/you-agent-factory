@@ -48,6 +48,7 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -290,7 +291,7 @@ func startLocalModelInferenceTestServer(
 		Sessions:         sessions,
 		LocalModels:      domain,
 		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock)),
+		WorkersScheduler: workersservice.NewWorkersSchedulerService(workersSchedulerServiceConfig(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock))),
 	}
 	shell, err := ComposeFactoryService(
 		ctx,

@@ -27,6 +27,17 @@ type liveSessionState struct {
 	responseStreams       *factorysessions.SessionResponseStreamSet
 }
 
+// NewLiveSessionState constructs the runtimehost-owned handle stored on a live
+// Factory Session. Composition roots must not manufacture a service-owned
+// lookalike because runtimehost session operations require this concrete type.
+func NewLiveSessionState(bundle *factoryRuntimeBundle, spec *runtimebuild.SessionBuildSpec) *LiveSessionState {
+	state := &liveSessionState{bundle: bundle, spec: spec}
+	if bundle != nil {
+		state.handle = &liveRuntimeHandle{Bundle: bundle}
+	}
+	return state
+}
+
 type hostCoordinatorPolicy struct {
 	dir                     string
 	executionBaseDir        string

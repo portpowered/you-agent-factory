@@ -92,6 +92,35 @@ func portableReplayLoadResult(cfg *FactoryServiceConfig, result FactoryConfigLoa
 	return result, portable, nil
 }
 
+func workersSchedulerServiceConfig(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	logger *zap.Logger,
+	hostedWorkers hostedworkers.Config,
+) workersservice.Config {
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	runner := workers.CommandRunner(workers.ExecCommandRunner{})
+	workflowID := ""
+	defaultFactoryDir := ""
+	if cfg != nil {
+		if cfg.WorkerApplication.ScriptCommandRunner != nil {
+			runner = cfg.WorkerApplication.ScriptCommandRunner
+		}
+		workflowID = cfg.WorkflowID
+		defaultFactoryDir = cfg.Dir
+	}
+	return workersservice.Config{
+		Logger:            logger,
+		Clock:             clock,
+		CommandRunner:     runner,
+		WorkflowID:        workflowID,
+		DefaultFactoryDir: defaultFactoryDir,
+		HostedWorkers:     hostedWorkers,
+	}
+}
+
 func loadPortableRecordingReplay(path string) (*recordingreplay.RecordingReplayProjection, bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -123,42 +152,6 @@ func composePortableReplayCore(cfg *FactoryServiceConfig, root FactoryServiceRoo
 		clock: clock, logger: load.SessionLogger, modelAssets: collaborators.LocalModels.Assets,
 		durableExecution: recordingreplay.NewService(*load.RecordingReplay),
 	}, true
-}
-
-// NewWorkersSchedulerService constructs the worker-sidecar owner at the
-// runtime composition boundary. Watcher paths must only use this initialized
-// instance and never reconstruct its dependencies.
-func NewWorkersSchedulerService(
-	cfg *FactoryServiceConfig,
-	clock factory.Clock,
-	logger *zap.Logger,
-	hostedWorkers hostedworkers.Config,
-) *workersservice.Service {
-	supervisorClock := clockwork.NewRealClock()
-	if clockworkClock, ok := clock.(clockwork.Clock); ok && clockworkClock != nil {
-		supervisorClock = clockworkClock
-	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	runner := workers.CommandRunner(workers.ExecCommandRunner{})
-	workflowID := ""
-	defaultFactoryDir := ""
-	if cfg != nil {
-		if cfg.WorkerApplication.ScriptCommandRunner != nil {
-			runner = cfg.WorkerApplication.ScriptCommandRunner
-		}
-		workflowID = cfg.WorkflowID
-		defaultFactoryDir = cfg.Dir
-	}
-	return workersservice.New(workersservice.Config{
-		Logger:            logger,
-		Clock:             supervisorClock,
-		CommandRunner:     runner,
-		WorkflowID:        workflowID,
-		DefaultFactoryDir: defaultFactoryDir,
-		HostedWorkers:     hostedWorkers,
-	})
 }
 
 type runtimeBundleBuildInput struct {
@@ -1245,6 +1238,26 @@ func newRuntimeBuildService(
 	)
 }
 
+// NewRuntimeBuildServiceWithObservers constructs the runtime builder with the
+// session-owner callbacks selected by the application composition root.
+func NewRuntimeBuildServiceWithObservers(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+	localModels *LocalModelDomain,
+	progressPublisherFactory func(string) workerprovider.InferenceProgressPublisher,
+	dispatchCompletionFactory func(string) func(string),
+) (*runtimebuild.Service, error) {
+	return newRuntimeBuildService(
+		cfg,
+		clock,
+		baseLogger,
+		localModels,
+		inferenceProgressPublisherFactory(progressPublisherFactory),
+		dispatchCompletionObserverFactory(dispatchCompletionFactory),
+	)
+}
+
 func workerApplicationWithProgress(input runtimeBundleBuildInput) (workerapplication.Components, error) {
 	if input.workerApplication.ProviderCommandInjected {
 		return input.workerApplication, nil
@@ -1496,97 +1509,6 @@ func RuntimeHostConfigFromFactoryService(cfg *FactoryServiceConfig) *runtimehost
 		return nil
 	}
 	return (*runtimehost.Config)(unsafe.Pointer(cfg))
-}
-
-// EnsureBackendScopeForCompose resolves backend scope before core composition.
-func EnsureBackendScopeForCompose(cfg *runtimehost.Config, logger *zap.Logger) error {
-	return ensureServiceBackendScope(FactoryServiceConfigFromRuntimeHost(cfg), logger)
-}
-
-// NewRuntimeBuildServiceForCompose constructs the runtimebuild collaborator for
-// initializer-owned core composition.
-func NewRuntimeBuildServiceForCompose(
-	cfg *runtimehost.Config,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	localModels *LocalModelDomain,
-	sessions *factorysessions.Registry,
-) (*runtimebuild.Service, error) {
-	return newRuntimeBuildService(
-		FactoryServiceConfigFromRuntimeHost(cfg),
-		clock,
-		baseLogger,
-		localModels,
-		inferenceProgressPublisherFactory(
-			runtimehost.NewInferenceProgressPublisherFactory(sessions, baseLogger),
-		),
-		dispatchCompletionObserverFactory(
-			runtimehost.NewSessionDispatchCompletionObserverFactory(sessions),
-		),
-	)
-}
-
-// LoadFactoryConfigForStartup loads factory.json and replay metadata for compose.
-func LoadFactoryConfigForStartup(
-	cfg *runtimehost.Config,
-	root FactoryServiceRoot,
-) (FactoryConfigLoadResult, error) {
-	return LoadFactoryConfigForCompose(FactoryServiceConfigFromRuntimeHost(cfg), root)
-}
-
-// ClockForCompose selects the factory clock for the loaded replay artifact.
-func ClockForCompose(cfg *runtimehost.Config, load FactoryConfigLoadResult) factory.Clock {
-	return ServiceClockForCompose(FactoryServiceConfigFromRuntimeHost(cfg), load)
-}
-
-// CloseRuntimeBundleSinksForCompose closes startup bundle sinks when compose fails.
-func CloseRuntimeBundleSinksForCompose(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
-	return closeRuntimeBundleSinks(logSink, metricsSink)
-}
-
-// ReplayFactoryModeOptionsForCompose builds replay side-effect options for compose.
-func ReplayFactoryModeOptionsForCompose(
-	replayArtifact *interfaces.ReplayArtifact,
-) (*replay.SideEffects, []factory.FactoryOption, error) {
-	return replayFactoryModeOptions(replayArtifact)
-}
-
-// AsRuntimeBundleForCompose converts a runtime-build product into the startup bundle.
-func AsRuntimeBundleForCompose(bundle any) *factoryRuntimeBundle {
-	return asRuntimeBundle(bundle)
-}
-
-// NewStartupLiveSessionHandle constructs the default session handle during startup.
-func NewStartupLiveSessionHandle(bundle *factoryRuntimeBundle, spec *runtimebuild.SessionBuildSpec) any {
-	state := &liveSessionState{bundle: bundle, spec: spec}
-	if bundle != nil {
-		state.handle = &liveRuntimeHandle{Bundle: bundle}
-	}
-	return state
-}
-
-// WireModelAssetPullerForCompose selects the model asset puller for compose.
-func WireModelAssetPullerForCompose(cfg *runtimehost.Config, production modelAssetPuller) modelAssetPuller {
-	return wireModelAssetPuller(FactoryServiceConfigFromRuntimeHost(cfg), production)
-}
-
-// ModelService is the compose-facing model API collaborator.
-type ModelService = apisurface.ModelAPI
-
-// NewModelServiceFromCore constructs a model service from a composed runtime core.
-func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
-	if core == nil {
-		return nil
-	}
-	return runtimehost.NewHostFromCore(core).ModelService()
-}
-
-// NewFactoryDefinitionServiceFromCore constructs a factory definition service from a core.
-func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefinitionService {
-	if core == nil {
-		return factoryDefinitionHost{}
-	}
-	return factoryDefinitionHost{FactoryService: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
 }
 
 func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {

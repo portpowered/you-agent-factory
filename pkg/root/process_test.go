@@ -118,7 +118,7 @@ func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *test
 	err := ExecuteWithDependencies(Input{
 		Args: []string{"you", "run", "--dir", dir, "--quiet", "--no-record"},
 		Env:  homeEnvironment(t.TempDir()),
-	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
+	}, Dependencies{Initializer: initializer})
 
 	if !errors.Is(err, initializerErr) {
 		t.Fatalf("ExecuteWithDependencies() error = %v, want initializer failure", err)
@@ -154,7 +154,7 @@ func TestProductionGraphConstructionFailuresPreventInitializerStartup(t *testing
 		t.Run(test.name, func(t *testing.T) {
 			initializer := &recordingInitializer{}
 			code := Run(Input{Args: test.args, Env: rootTestEnvironment()}, Dependencies{
-				GraphBuilder: productionGraphBuilder{}, Initializer: initializer,
+				Initializer: initializer,
 			})
 			if code != ExitFailure {
 				t.Fatalf("exit code = %d, want %d", code, ExitFailure)

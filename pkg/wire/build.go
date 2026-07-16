@@ -40,7 +40,7 @@ func buildApplicationRunner(
 	cfg *service.FactoryServiceConfig,
 	mode initializer.Mode,
 ) (initializer.LocalRuntimeRunner, error) {
-	runtimeCfg := service.RuntimeHostConfigFromFactoryService(cfg)
+	runtimeCfg := serviceConfigAsRuntimeConfig(cfg)
 	if runtimeCfg != nil {
 		copied := *runtimeCfg
 		runtimeCfg = &copied
