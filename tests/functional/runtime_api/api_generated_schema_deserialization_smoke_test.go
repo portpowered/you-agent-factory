@@ -162,33 +162,6 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 		generatedSchemaRuntimeSummaryFromRuntimeConfig(t, replayRuntime.Worker, replayRuntime.Workstation)
 }
 
-func TestGeneratedSchemaDeserializationSmoke_FileAndRecordedTransportRejectRetiredFieldsAtSameBoundaryStage(t *testing.T) {
-	support.SkipLongFunctional(t, "slow generated-schema retired-field sweep")
-	dir := t.TempDir()
-	factoryJSON := []byte(`{
-		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"workers": [{"name":"worker-a"}],
-		"workstations": [{
-			"name":"step-one",
-			"worker":"worker-a",
-			"inputs":[{"workType":"task","state":"init"}],
-			"outputs":[{"workType":"task","state":"complete"}],
-			"join":{"waitFor":"task","waitState":"complete","require":"all"}
-		}]
-	}`)
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), factoryJSON, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
-
-	_, fileErr := config.LoadRuntimeConfig(dir, nil)
-	assertGeneratedSchemaBoundaryFailure(t, fileErr)
-
-	artifactPath := filepath.Join(t.TempDir(), "retired-generated-schema-boundary.replay.json")
-	writeGeneratedSchemaReplayArtifact(t, artifactPath, factoryJSON)
-	_, replayErr := replay.Load(artifactPath)
-	assertGeneratedSchemaBoundaryFailure(t, replayErr)
-}
-
 type generatedSchemaRuntimeSummary struct {
 	workers      []generatedSchemaWorkerSummary
 	workstations []generatedSchemaRuntimeWorkstationSummary
@@ -384,23 +357,6 @@ func assertGeneratedSmokeWorkstationBoundary(t *testing.T, workstations []factor
 	t.Fatalf("workstations = %#v, want %q", workstations, name)
 }
 
-func assertGeneratedSchemaBoundaryFailure(t *testing.T, err error) {
-	t.Helper()
-
-	if err == nil {
-		t.Fatal("expected generated schema boundary failure, got nil")
-	}
-	text := err.Error()
-	for _, snippet := range []string{
-		"is not supported",
-		"use ",
-	} {
-		if !strings.Contains(text, snippet) {
-			t.Fatalf("generated schema boundary error = %q, want substring %q", text, snippet)
-		}
-	}
-}
-
 func requireGeneratedSchemaRunStartedPayload(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.RunRequestEventPayload {
 	t.Helper()
 
@@ -419,39 +375,6 @@ func requireGeneratedSchemaRunStartedPayload(t *testing.T, events []factoryapi.F
 	}
 	t.Fatalf("recorded events missing RUN_REQUEST: %#v", functionalEventTypes(events))
 	return factoryapi.RunRequestEventPayload{}
-}
-
-func writeGeneratedSchemaReplayArtifact(t *testing.T, path string, factoryJSON []byte) {
-	t.Helper()
-
-	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
-	artifact := map[string]any{
-		"schemaVersion": replay.CurrentSchemaVersion,
-		"recordedAt":    recordedAt.UTC().Format(time.RFC3339),
-		"events": []any{
-			map[string]any{
-				"id":            "factory-event/run-started",
-				"schemaVersion": string(factoryapi.AgentFactoryEventV1),
-				"type":          string(factoryapi.FactoryEventTypeRunRequest),
-				"context": map[string]any{
-					"eventTime": recordedAt.UTC().Format(time.RFC3339),
-					"sequence":  0,
-					"tick":      0,
-				},
-				"payload": map[string]any{
-					"recordedAt": recordedAt.UTC().Format(time.RFC3339),
-					"factory":    json.RawMessage(factoryJSON),
-				},
-			},
-		},
-	}
-	data, err := json.MarshalIndent(artifact, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal replay artifact: %v", err)
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
-		t.Fatalf("write replay artifact: %v", err)
-	}
 }
 
 func stringValueFromFunctionalPtr[T ~string](value *T) string {

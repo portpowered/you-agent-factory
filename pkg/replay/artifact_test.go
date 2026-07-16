@@ -33,6 +33,64 @@ func TestSaveLoad_PreservesReplayArtifactFields(t *testing.T) {
 	assertReplayArtifactFieldPreservation(t, loaded)
 }
 
+func TestLoadRejectsRetiredGeneratedFactoryFields(t *testing.T) {
+	t.Parallel()
+
+	factoryJSON := []byte(`{
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"worker-a"}],
+		"workstations": [{
+			"name":"step-one",
+			"worker":"worker-a",
+			"inputs":[{"workType":"task","state":"init"}],
+			"outputs":[{"workType":"task","state":"complete"}],
+			"join":{"waitFor":"task","waitState":"complete","require":"all"}
+		}]
+	}`)
+	artifactPath := filepath.Join(t.TempDir(), "retired-generated-schema-boundary.replay.json")
+	writeRetiredGeneratedSchemaArtifact(t, artifactPath, factoryJSON)
+
+	_, err := Load(artifactPath)
+	assertRetiredGeneratedFactoryFieldFailure(t, "Load", err)
+}
+
+func writeRetiredGeneratedSchemaArtifact(t *testing.T, path string, factoryJSON []byte) {
+	t.Helper()
+
+	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	artifact := map[string]any{
+		"schemaVersion": CurrentSchemaVersion,
+		"recordedAt":    recordedAt.Format(time.RFC3339),
+		"events": []any{map[string]any{
+			"id":            "factory-event/run-started",
+			"schemaVersion": string(factoryapi.AgentFactoryEventV1),
+			"type":          string(factoryapi.FactoryEventTypeRunRequest),
+			"context":       map[string]any{"eventTime": recordedAt.Format(time.RFC3339), "sequence": 0, "tick": 0},
+			"payload":       map[string]any{"recordedAt": recordedAt.Format(time.RFC3339), "factory": json.RawMessage(factoryJSON)},
+		}},
+	}
+	data, err := json.Marshal(artifact)
+	if err != nil {
+		t.Fatalf("marshal replay artifact: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write replay artifact: %v", err)
+	}
+}
+
+func assertRetiredGeneratedFactoryFieldFailure(t *testing.T, operation string, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("%s() error = nil, want retired generated field failure", operation)
+	}
+	for _, snippet := range []string{"is not supported", "use "} {
+		if !strings.Contains(err.Error(), snippet) {
+			t.Fatalf("%s() error = %q, want substring %q", operation, err, snippet)
+		}
+	}
+}
+
 func TestNormalizeHistoricalFailureDetails_PrecedenceAndCompleteness(t *testing.T) {
 	tests := []struct{ name, input, reason, message string }{
 		{"reason and message", `{"failureReason":"timeout","failureMessage":"timed out"}`, "timeout", "timed out"},

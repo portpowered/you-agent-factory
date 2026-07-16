@@ -11,6 +11,42 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestLoadRuntimeConfigRejectsRetiredGeneratedFactoryFields(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryJSON := []byte(`{
+		"workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+		"workers": [{"name":"worker-a"}],
+		"workstations": [{
+			"name":"step-one",
+			"worker":"worker-a",
+			"inputs":[{"workType":"task","state":"init"}],
+			"outputs":[{"workType":"task","state":"complete"}],
+			"join":{"waitFor":"task","waitState":"complete","require":"all"}
+		}]
+	}`)
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), factoryJSON, 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	_, err := LoadRuntimeConfig(dir, nil)
+	assertRetiredGeneratedFactoryFieldFailure(t, "LoadRuntimeConfig", err)
+}
+
+func assertRetiredGeneratedFactoryFieldFailure(t *testing.T, operation string, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatalf("%s() error = nil, want retired generated field failure", operation)
+	}
+	for _, snippet := range []string{"is not supported", "use "} {
+		if !strings.Contains(err.Error(), snippet) {
+			t.Fatalf("%s() error = %q, want substring %q", operation, err, snippet)
+		}
+	}
+}
+
 func TestLoadedFactoryConfig_AccessorsAndMutations(t *testing.T) {
 	t.Parallel()
 
