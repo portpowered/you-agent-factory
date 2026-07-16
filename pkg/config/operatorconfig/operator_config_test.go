@@ -136,6 +136,49 @@ func TestBaselineClassifierWorkerPresetsAreValidAndUnique(t *testing.T) {
 	}
 }
 
+func TestWriteBaselineClassifierWorkerPresets(t *testing.T) {
+	t.Run("adds presets to generated config", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(path, []byte(`{"defaults":{"workerModel":"gpt-5"}}`), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+
+		if err := WriteBaselineClassifierWorkerPresets(path); err != nil {
+			t.Fatalf("WriteBaselineClassifierWorkerPresets: %v", err)
+		}
+		cfg, err := LoadFileConfig(path)
+		if err != nil {
+			t.Fatalf("LoadFileConfig: %v", err)
+		}
+		if len(cfg.WorkerPresets) != len(BaselineClassifierWorkerPresets()) {
+			t.Fatalf("preset count = %d, want %d", len(cfg.WorkerPresets), len(BaselineClassifierWorkerPresets()))
+		}
+	})
+
+	for _, tt := range []struct {
+		name     string
+		contents string
+		want     string
+	}{
+		{name: "missing config", want: "read generated operator config"},
+		{name: "malformed config", contents: `{`, want: "parse generated operator config"},
+		{name: "existing presets", contents: `{"workerPresets":[]}`, want: "already has workerPresets"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			if tt.contents != "" {
+				if err := os.WriteFile(path, []byte(tt.contents), 0o600); err != nil {
+					t.Fatalf("WriteFile: %v", err)
+				}
+			}
+			err := WriteBaselineClassifierWorkerPresets(path)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
 func containsPreset(presets []WorkerPreset, id string) bool {
 	for _, preset := range presets {
 		if preset.ID == id {

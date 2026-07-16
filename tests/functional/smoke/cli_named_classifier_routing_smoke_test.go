@@ -17,6 +17,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/classifier"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -24,6 +25,72 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func TestNamedClassifierConfiguration_ResolvesGlobalPresetsBeforeSessionBuild(t *testing.T) {
+	homeDir := t.TempDir()
+	initialized, err := configinit.Init(homeDir)
+	if err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
+	factoryDir, err := factoryconfig.MapNamedFactoryDir(initialized.NamedFactoriesRoot, classifier.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	defaults, err := operatorconfig.ResolveFromHomeWithEnvironment(homeDir, operatorconfig.Defaults{}, operatorconfig.FlagOverrides{})
+	if err != nil {
+		t.Fatalf("ResolveFromHomeWithEnvironment: %v", err)
+	}
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, defaults); err != nil {
+		t.Fatalf("ApplyToLoadedConfig: %v", err)
+	}
+
+	for _, want := range []struct{ name, model string }{
+		{name: "classify-complexity", model: "gpt-5-mini"},
+		{name: "run-small", model: "gpt-5-mini"},
+		{name: "run-medium", model: "gpt-5"},
+		{name: "run-large", model: "gpt-5.4"},
+	} {
+		worker, ok := loaded.Worker(want.name)
+		if !ok {
+			t.Fatalf("worker %q is missing", want.name)
+		}
+		if worker.ModelProvider != "CODEX" || worker.Model != want.model {
+			t.Fatalf("worker %q = %q/%q, want CODEX/%q", want.name, worker.ModelProvider, worker.Model, want.model)
+		}
+	}
+}
+
+func TestNamedClassifierConfiguration_RejectsUnknownPresetBeforeSessionBuild(t *testing.T) {
+	homeDir := t.TempDir()
+	initialized, err := configinit.Init(homeDir)
+	if err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
+	factoryDir, err := factoryconfig.MapNamedFactoryDir(initialized.NamedFactoriesRoot, classifier.PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	worker, ok := loaded.Worker("run-small")
+	if !ok {
+		t.Fatal("run-small worker is missing")
+	}
+	worker.Preset = "missing-preset"
+
+	err = operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+		ConfigPath: operatorconfig.DefaultConfigPath(homeDir),
+	})
+	if err == nil || !strings.Contains(err.Error(), `unknown operator worker preset "missing-preset"`) {
+		t.Fatalf("ApplyToLoadedConfig error = %v, want unknown preset guidance", err)
+	}
+}
 
 func TestNamedClassifierRouting_ClassifierLabelsDispatchOnlyMatchingTarget(t *testing.T) {
 	if testing.Short() {
