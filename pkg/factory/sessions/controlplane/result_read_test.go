@@ -55,8 +55,8 @@ func TestGetLiveFactorySessionResult_ReturnsJavaScriptProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionResult: %v", err)
 	}
-	if result.SessionId != "sess-js" {
-		t.Fatalf("session id = %q, want sess-js", result.SessionId)
+	if result.SessionID != "sess-js" {
+		t.Fatalf("session id = %q, want sess-js", result.SessionID)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestGetLiveFactorySessionPartialResult_ReturnsJavaScriptProjection(t *testi
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionPartialResult: %v", err)
 	}
-	if result.SessionId != "sess-js-partial" {
-		t.Fatalf("session id = %q, want sess-js-partial", result.SessionId)
+	if result.SessionID != "sess-js-partial" {
+		t.Fatalf("session id = %q, want sess-js-partial", result.SessionID)
 	}
 }

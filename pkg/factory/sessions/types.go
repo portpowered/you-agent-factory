@@ -14,6 +14,20 @@ import (
 // DefaultSessionID is the stable alias for the primary live factory session.
 const DefaultSessionID = "~default"
 
+type compatibilityError string
+
+func (err compatibilityError) Error() string { return string(err) }
+
+func (err compatibilityError) Is(target error) bool {
+	return target != nil && target.Error() == string(err)
+}
+
+// ErrNotFound reports that no live Factory Session matched a requested identity.
+var ErrNotFound error = compatibilityError("factory session not found")
+
+// ErrResultUnavailable reports that a Factory Session cannot expose JavaScript results.
+var ErrResultUnavailable error = compatibilityError("factory session result unavailable")
+
 // TargetKind identifies whether a session target is the default factory or a named layout.
 type TargetKind string
 

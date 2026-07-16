@@ -334,8 +334,9 @@ Checkpoint-backed live and partial result reads follow that boundary too.
 `pkg/factory/sessions.ProjectSessionResult` returns the JavaScript result
 owner's detached live projection, while `ProjectSessionPartialResult` returns
 its detached checkpoint-backed partial projection. Convert those values through
-`pkg/transports/mapping` only when the control plane assembles generated public
-responses.
+`pkg/transports/mapping` only at the session-service compatibility edge that
+assembles generated public responses. Control-plane result reads return the
+detached result-owner values and must not import transport contracts.
 
 Normalized Factory Session logical-target identity is derived in
 `pkg/factory/sessions/logicaltarget` and represented by its canonical reference
@@ -376,6 +377,10 @@ progress, usage, Petri and JavaScript projections, checkpoints, artifacts,
 stream identity, logical target, and stop-summary compatibility in
 `pkg/transports/mapping/factorysession`. The Factory Session owner should not
 import generated HTTP contracts to expose runtime, summary, or detail helpers.
+Control-plane list reads return ordered `ReadProjection` values, preserving an
+identity-only fallback when runtime projection fails, and detail reads return
+`ProjectionContext` directly. Generated list and detail assembly belongs at the
+session-service compatibility edge through `pkg/transports/mapping/factorysession`.
 
 Reconnect sync preflight follows the canonical event boundary as well. The
 control plane validates cursors against detached `FactoryEvent` values and

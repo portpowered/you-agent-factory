@@ -117,10 +117,9 @@ func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testin
 		"beta-project",
 	)
 	summaries := []factoryapi.FactorySessionSummary{
-		factorysession.SessionSummaryToAPI(namedSession),
 		factorysession.SessionSummaryToAPI(defaultSession),
+		factorysession.SessionSummaryToAPI(namedSession),
 	}
-	factorysession.SortSessionSummaries(summaries)
 	if !summaries[0].IsDefault || summaries[0].Id != factorysessions.CanonicalFactorySessionID(defaultSession) {
 		t.Fatalf("first summary = %#v, want canonical default session first", summaries[0])
 	}
@@ -138,6 +137,31 @@ func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testin
 	}})
 	if len(targets) != 1 || targets[0].Ref.Name == nil || *targets[0].Ref.Name != "beta" || targets[0].Label != "Beta" {
 		t.Fatalf("targets = %#v, want mapped named target", targets)
+	}
+}
+
+func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
+	t.Parallel()
+
+	withRuntime := &factorysessions.LiveSession{ID: "session-runtime", Project: "runtime-project"}
+	fallback := &factorysessions.LiveSession{ID: "session-fallback", Project: "fallback-project"}
+	response := factorysession.ReadProjectionsToAPI([]factorysessions.ReadProjection{
+		{
+			Context:          factorysessions.ProjectionContext{Session: withRuntime},
+			RuntimeAvailable: true,
+		},
+		{Context: factorysessions.ProjectionContext{Session: fallback}},
+	})
+
+	if len(response.Sessions) != 2 {
+		t.Fatalf("sessions = %d, want 2", len(response.Sessions))
+	}
+	if response.Sessions[0].Id != "session-runtime" || response.Sessions[0].Runtime == nil ||
+		response.Sessions[0].Runtime.Status != factoryapi.FactorySessionStatusIDLE {
+		t.Fatalf("runtime summary = %#v, want mapped IDLE runtime", response.Sessions[0])
+	}
+	if response.Sessions[1].Id != "session-fallback" || response.Sessions[1].Runtime != nil {
+		t.Fatalf("fallback summary = %#v, want identity without runtime", response.Sessions[1])
 	}
 }
 

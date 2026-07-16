@@ -34,6 +34,14 @@ type ProjectionContext struct {
 	Now                    time.Time
 }
 
+// ReadProjection carries one live Factory Session read and records whether its
+// runtime projection was available. List reads retain the summary when runtime
+// projection fails; detail reads return that failure directly.
+type ReadProjection struct {
+	Context          ProjectionContext
+	RuntimeAvailable bool
+}
+
 // ProjectRuntimeContract builds the Factory Session-owned orchestrator-aware
 // runtime projection for one session.
 func ProjectRuntimeContract(ctx ProjectionContext) RuntimeProjection {

@@ -1,7 +1,6 @@
 package factorysession
 
 import (
-	"sort"
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -48,6 +47,19 @@ func SummaryWithRuntimeToAPI(ctx factorysessions.ProjectionContext) factoryapi.F
 	runtime := sessionRuntimeToAPI(ctx)
 	summary.Runtime = &runtime
 	return summary
+}
+
+// ReadProjectionsToAPI maps domain-owned list reads to the public response.
+func ReadProjectionsToAPI(reads []factorysessions.ReadProjection) factoryapi.ListFactorySessionsResponse {
+	summaries := make([]factoryapi.FactorySessionSummary, 0, len(reads))
+	for _, read := range reads {
+		if read.RuntimeAvailable {
+			summaries = append(summaries, SummaryWithRuntimeToAPI(read.Context))
+			continue
+		}
+		summaries = append(summaries, SessionSummaryToAPI(read.Context.Session))
+	}
+	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}
 }
 
 // RuntimeFromContextToAPI projects owner-defined runtime state and maps it to
@@ -216,16 +228,6 @@ func valueOrEmpty[T any](value *[]T) []T {
 		return nil
 	}
 	return *value
-}
-
-// SortSessionSummaries orders public summaries with default sessions first, then by id.
-func SortSessionSummaries(summaries []factoryapi.FactorySessionSummary) {
-	sort.SliceStable(summaries, func(i, j int) bool {
-		if summaries[i].IsDefault != summaries[j].IsDefault {
-			return summaries[i].IsDefault
-		}
-		return summaries[i].Id < summaries[j].Id
-	})
 }
 
 // TargetToAPI maps one discovered Factory Session target to the public shape.
