@@ -39,11 +39,6 @@ func ValidateCustomization(cfg *interfaces.FactoryConfig) error {
 		}
 	}
 
-	for label := range requiredClassifierLabels {
-		if _, exists := seen[label]; !exists {
-			return fmt.Errorf("@you/classifier customization is missing classification route label %q", label)
-		}
-	}
 	return nil
 }
 
@@ -146,11 +141,6 @@ func supportedClassifierModelProvider(value string) bool {
 	}
 	if _, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(trimmed); ok {
 		return true
-	}
-	for _, provider := range interfaces.SupportedModelProviders() {
-		if string(provider) == trimmed {
-			return true
-		}
 	}
 	return false
 }
