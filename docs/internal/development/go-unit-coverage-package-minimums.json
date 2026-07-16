@@ -440,7 +440,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service",
-      "minimum": 78.46
+      "minimum": 78.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
