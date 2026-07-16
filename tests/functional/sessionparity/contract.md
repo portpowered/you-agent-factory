@@ -36,7 +36,13 @@ they are never sorted by transport arrival time. All retained child facts carry
 the parent `sessionId`, so parity tests can reject facts correlated to another
 Factory Session.
 
-The adapters introduced by the next story normalize equivalent interface value
-encodings to these fields. Protocol envelopes, HTTP status and headers, CLI
-rendering or diagnostics, and MCP JSON-RPC request-correlation metadata do not
-belong in this contract because they are not Factory Session facts.
+`NormalizeREST`, `NormalizeCLIJSON`, and `NormalizeMCP` accept captured JSON
+observations only. They read `session`, `factorySession`, and
+`result.factorySession` respectively, then decode the same stable field names
+into `Projection`. Missing required facts and incompatible JSON values return a
+`NormalizationError` with the customer interface and stable field path; no
+value is defaulted to create false parity.
+
+Protocol envelopes, HTTP status and headers, CLI rendering or diagnostics, and
+MCP JSON-RPC request-correlation metadata do not belong in this contract
+because they are not Factory Session facts.
