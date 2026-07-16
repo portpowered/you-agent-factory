@@ -30,6 +30,8 @@ type FunctionalAPIServerConfig struct {
 	FactoryDir                string
 	UseMockWorkers            bool
 	WaitForServiceModeRuntime bool
+	ReplayPath                string
+	ExecutionBaseDir          string
 	Configure                 func(*service.FactoryServiceConfig)
 	ExtraOptions              []factory.FactoryOption
 	CaptureAPISurface         func(apisurface.APISurface)
@@ -88,6 +90,8 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	if cfg.UseMockWorkers {
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
 	}
+	serviceCfg.ReplayPath = cfg.ReplayPath
+	serviceCfg.ExecutionBaseDir = cfg.ExecutionBaseDir
 	if cfg.Configure != nil {
 		cfg.Configure(serviceCfg)
 	}
