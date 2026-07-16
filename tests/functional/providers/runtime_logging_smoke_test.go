@@ -38,7 +38,9 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 	t.Setenv(runtimeLoggingSmokeEnvKey, "runtime-logging-smoke-value")
 
 	rollingConfig := logging.RuntimeLogConfig{
-		MaxSize:    1,
+		// Keep the startup record in the active file. This smoke verifies that the
+		// configured rolling policy is emitted, not rollover behavior itself.
+		MaxSize:    64,
 		MaxBackups: 2,
 		MaxAge:     3,
 		Compress:   true,
