@@ -148,6 +148,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+  Package invocation tests should assert both the defaulted normalized value
+  and explicit invalid-choice diagnostics, so a declared `defaultValue` cannot
+  drift independently from the accepted-value contract.
 - `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
   interpolation validation. Keep file-contents substitution, omitted-exact-field
