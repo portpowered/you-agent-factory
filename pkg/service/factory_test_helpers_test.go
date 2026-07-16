@@ -18,8 +18,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -32,8 +34,90 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
+
+func buildHostedWorkersConfigForServiceTest(
+	cfg *FactoryServiceConfig,
+	logger *zap.Logger,
+	clock factory.Clock,
+) hostedworkers.Config {
+	if cfg != nil && cfg.WorkerApplication.Valid() {
+		return cfg.WorkerApplication.Hosted
+	}
+	hostedClock, _ := clock.(clockwork.Clock)
+	components, _ := workerapplication.New(logger, workerapplication.Edges{
+		HostedClock: hostedClock,
+	})
+	return components.Hosted
+}
+
+func serviceTestConfigWithWorkerApplication(t *testing.T, cfg *FactoryServiceConfig) *FactoryServiceConfig {
+	t.Helper()
+	configured, err := ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	return configured
+}
+
+func serviceTestConfigWithWorkerEdges(t *testing.T, cfg *FactoryServiceConfig, edges workerapplication.Edges) *FactoryServiceConfig {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, edges)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
+	return cfg
+}
+
+// loadWorkersFromConfig preserves the package-test helper shape while
+// production construction consumes the composed worker application directly.
+func loadWorkersFromConfig(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	workflowContext *factory_context.FactoryContext,
+	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+	commandRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
+	now func() time.Time,
+	modelDomain localModelDomain,
+	agyPTYAllocators ...agypty.PTYAllocator,
+) ([]factory.FactoryOption, error) {
+	var allocator agypty.PTYAllocator
+	if len(agyPTYAllocators) > 0 {
+		allocator = agyPTYAllocators[0]
+	}
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+		ProviderCommandRunner: providerCommandRunner,
+		ScriptCommandRunner:   commandRunner,
+		AgyPTYAllocator:       allocator,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return loadWorkersFromApplication(
+		factoryDir, factoryCfg, factoryRunnerID, runtimeCfg, workflowContext, logger,
+		skipBuiltInRunnerPrerequisiteValidation, invocationSkipPermissionsOverride,
+		providerOverride, inferenceProgressPublisher, components, scriptRecorder,
+		inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain,
+	)
+}
 
 func minimalFactoryConfig() map[string]any {
 	return factoryfixtures.MinimalFactoryConfig()
@@ -2196,4 +2280,46 @@ You are a helpful agent.
 	if len(runner.Requests()) != 0 {
 		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
 	}
+}
+
+func TestWorkerApplicationWithProgressPreservesCompositionSelection(t *testing.T) {
+	t.Run("production graph installs progress runner", func(t *testing.T) {
+		components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+		if err != nil {
+			t.Fatalf("construct production worker application: %v", err)
+		}
+		got, err := workerApplicationWithProgress(runtimeBundleBuildInput{
+			workerApplication:             components,
+			inferenceProgressPublisherSet: true,
+			inferenceProgressPublisher:    func(workerprovider.InferenceProgressFragment) {},
+		})
+		if err != nil {
+			t.Fatalf("workerApplicationWithProgress() error = %v", err)
+		}
+		if !got.ProviderCommandInjected {
+			t.Fatal("runtime progress runner was not installed on the composed provider factory")
+		}
+	})
+
+	t.Run("functional provider edge is not replaced", func(t *testing.T) {
+		runner := &providerCommandRunnerRecorder{}
+		components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+			ProviderCommandRunner: runner,
+			AgyPTYAllocator:       &agypty.MockAllocator{},
+		})
+		if err != nil {
+			t.Fatalf("construct functional worker application: %v", err)
+		}
+		got, err := workerApplicationWithProgress(runtimeBundleBuildInput{
+			workerApplication:             components,
+			inferenceProgressPublisherSet: true,
+			inferenceProgressPublisher:    func(workerprovider.InferenceProgressFragment) {},
+		})
+		if err != nil {
+			t.Fatalf("workerApplicationWithProgress() error = %v", err)
+		}
+		if got.Provider != components.Provider {
+			t.Fatal("runtime progress setup replaced the composition-selected provider factory")
+		}
+	})
 }

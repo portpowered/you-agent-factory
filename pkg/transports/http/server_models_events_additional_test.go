@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 )
 
@@ -479,7 +480,7 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
-	transport, err := initializer.InitializeAPITransport(context.Background(), &initializer.Config{
+	transport, err := initializer.InitializeAPITransport(context.Background(), composedInitializerConfig(t, &initializer.Config{
 		Dir:                      dir,
 		MockWorkersConfig:        factoryconfig.NewEmptyMockWorkersConfig(),
 		Logger:                   zap.NewNop(),
@@ -487,7 +488,7 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 		RuntimeFileLoggingPolicy: runtimehost.RuntimeFileLoggingPolicyDisabled,
 		RuntimeMetricsPolicy:     runtimehost.RuntimeMetricsPolicyDisabled,
 		ModelAssets:              listModelsWiringAssetPuller{},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("InitializeAPITransport: %v", err)
 	}
@@ -510,9 +511,10 @@ func TestInjectAPITransport_RejectsInvalidFactoryBeforeServing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &service.FactoryServiceConfig{Dir: t.TempDir()}
+	components := newTestWorkerApplication(t)
+	cfg := &service.FactoryServiceConfig{Dir: t.TempDir(), WorkerApplication: components}
 
-	_, errInit := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: cfg.Dir})
+	_, errInit := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: cfg.Dir, WorkerApplication: components})
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
 	if errInit == nil {
@@ -524,6 +526,22 @@ func TestInjectAPITransport_RejectsInvalidFactoryBeforeServing(t *testing.T) {
 	if errService.Error() != errInit.Error() {
 		t.Fatalf("InitializeAPITransport error = %q, want %q", errInit, errService)
 	}
+}
+
+func composedInitializerConfig(t *testing.T, cfg *initializer.Config) *initializer.Config {
+	t.Helper()
+	configured := *cfg
+	configured.WorkerApplication = newTestWorkerApplication(t)
+	return &configured
+}
+
+func newTestWorkerApplication(t *testing.T) workerapplication.Components {
+	t.Helper()
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	return components
 }
 
 func modelWiringFactoryConfig(includeResource bool) map[string]any {

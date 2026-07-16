@@ -12,8 +12,8 @@ import (
 	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
-	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 	codexprogress "github.com/portpowered/infinite-you/pkg/workers/provider/codex/progress"
 	cursorprogress "github.com/portpowered/infinite-you/pkg/workers/provider/cursor/progress"
 )
@@ -33,16 +33,16 @@ const (
 )
 
 const (
-	codexRetainedTextBytes      = codexprogress.ProgressRetainedTextBytes
-	codexRetainedProgressBytes  = codexprogress.ProgressRetainedProgressBytes
-	codexMetadataRunnerIDKey    = codexprogress.ProgressMetadataRunnerIDKey
-	codexMetadataWorkIDKey      = codexprogress.ProgressMetadataWorkIDKey
-	codexMetadataWorkstationKey = codexprogress.ProgressMetadataWorkstationKey
-	codexMetadataTextBytesKey   = codexprogress.ProgressMetadataTextBytesKey
-	codexMetadataTruncatedKey   = codexprogress.ProgressMetadataTruncatedKey
-	codexMetadataRawBytesKey    = codexprogress.ProgressMetadataRawBytesKey
-	codexMetadataRawSHA256Key   = codexprogress.ProgressMetadataRawSHA256Key
-	codexMetadataDiagnosticKey  = codexprogress.ProgressMetadataDiagnosticKey
+	codexRetainedTextBytes       = codexprogress.ProgressRetainedTextBytes
+	codexRetainedProgressBytes   = codexprogress.ProgressRetainedProgressBytes
+	codexMetadataRunnerIDKey     = codexprogress.ProgressMetadataRunnerIDKey
+	codexMetadataWorkIDKey       = codexprogress.ProgressMetadataWorkIDKey
+	codexMetadataWorkstationKey  = codexprogress.ProgressMetadataWorkstationKey
+	codexMetadataTextBytesKey    = codexprogress.ProgressMetadataTextBytesKey
+	codexMetadataTruncatedKey    = codexprogress.ProgressMetadataTruncatedKey
+	codexMetadataRawBytesKey     = codexprogress.ProgressMetadataRawBytesKey
+	codexMetadataRawSHA256Key    = codexprogress.ProgressMetadataRawSHA256Key
+	codexMetadataDiagnosticKey   = codexprogress.ProgressMetadataDiagnosticKey
 	codexDiagnosticUnknownEvent  = codexprogress.ProgressDiagnosticUnknownEvent
 	codexDiagnosticMalformedJSON = codexprogress.ProgressDiagnosticMalformedJSON
 	codexDiagnosticIncompleteSSE = codexprogress.ProgressDiagnosticIncompleteSSE
@@ -199,11 +199,14 @@ func (p *ScriptWrapProvider) executeAgy(
 	if factoryRoot == "" {
 		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
 	}
-	opts := []agyadapter.Option{}
+	providerAdapter := agyadapter.NewAdapter(factoryRoot)
 	if p.agyAllocator != nil {
-		opts = append(opts, agyadapter.WithAllocator(p.agyAllocator))
+		var err error
+		providerAdapter, err = agyadapter.NewAdapterWithAllocator(factoryRoot, p.agyAllocator)
+		if err != nil {
+			return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+		}
 	}
-	providerAdapter := agyadapter.NewAdapter(factoryRoot, opts...)
 	registry, err := adapter.NewRegistry(providerAdapter)
 	if err != nil {
 		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)

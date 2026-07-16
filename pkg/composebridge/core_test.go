@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
@@ -13,9 +14,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"go.uber.org/zap"
 )
+
+func composedRuntimeConfig(t *testing.T, cfg *runtimehost.Config) *runtimehost.Config {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
+	return cfg
+}
 
 func TestCompatibilityFacadesShareFakeDurableExecution(t *testing.T) {
 	t.Parallel()
@@ -61,12 +73,12 @@ func TestBuildCore_RejectsRecordAndReplayTogether(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &runtimehost.Config{
+	cfg := composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:        t.TempDir(),
 		RecordPath: "recording.json",
 		ReplayPath: "recording.json",
 		Logger:     zap.NewNop(),
-	}
+	})
 
 	core, err := composebridge.BuildCore(ctx, cfg)
 	if core != nil {
@@ -81,10 +93,10 @@ func TestBuildCore_RejectsMissingFactoryConfig(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &runtimehost.Config{
+	cfg := composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:    t.TempDir(),
 		Logger: zap.NewNop(),
-	}
+	})
 
 	core, err := composebridge.BuildCore(ctx, cfg)
 	if core != nil {
@@ -95,6 +107,21 @@ func TestBuildCore_RejectsMissingFactoryConfig(t *testing.T) {
 	}
 }
 
+func TestBuildCore_RejectsMissingWorkerApplicationBeforeFactoryLoad(t *testing.T) {
+	t.Parallel()
+
+	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
+		Dir:    t.TempDir(),
+		Logger: zap.NewNop(),
+	})
+	if core != nil {
+		t.Fatal("expected BuildCore to return nil core")
+	}
+	if err == nil || !strings.Contains(err.Error(), "worker application is required") {
+		t.Fatalf("BuildCore error = %v, want missing worker application", err)
+	}
+}
+
 func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 	t.Parallel()
 
@@ -102,12 +129,12 @@ func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	cfg := &runtimehost.Config{
+	cfg := composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:                                     dir,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	}
+	})
 
 	core, err := composebridge.BuildCore(ctx, cfg)
 	if err != nil {
@@ -142,13 +169,13 @@ func TestBuildCore_ComposesExplicitlyDisabledPersistence(t *testing.T) {
 
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
+	core, err := composebridge.BuildCore(context.Background(), composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:                                     dir,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("BuildCore: %v", err)
 	}
@@ -169,13 +196,13 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
 		t.Fatalf("write blocked root: %v", err)
 	}
-	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
+	core, err := composebridge.BuildCore(context.Background(), composedRuntimeConfig(t, &runtimehost.Config{
 		Dir:                                     dir,
 		ExecutionBaseDir:                        blockedRoot,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}))
 	if core != nil {
 		t.Fatal("BuildCore returned a core for unavailable persistence")
 	}

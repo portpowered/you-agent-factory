@@ -37,9 +37,9 @@ func NewCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
+	hostedWorkers hostedworkers.Config,
 ) Collaborators {
 	startupLocalModels := NewLocalModelDomain(cfg)
-	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
 	return Collaborators{
 		Sessions:         sessions,
 		LocalModels:      startupLocalModels,
@@ -210,6 +210,9 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	if !cfg.WorkerApplication.Valid() {
+		return nil, fmt.Errorf("compose runtime worker application is required")
+	}
 	root, err := resolveRoot(cfg)
 	if err != nil {
 		return nil, err
@@ -222,7 +225,8 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		return nil, err
 	}
 	clock := ClockForCompose(cfg, load)
-	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry())
+	hostedWorkers := cfg.WorkerApplication.Hosted
+	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry(), hostedWorkers)
 	return ComposeCore(
 		ctx,
 		cfg,
@@ -230,6 +234,6 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		collaborators,
 		load,
 		clock,
-		HostedWorkers(cfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 }
