@@ -44,15 +44,6 @@ func (violation FunctionalBoundaryViolation) Error() string {
 	)
 }
 
-// CheckFunctionalTestBoundaries statically checks Go sources under
-// tests/functional. It does not type-check, execute tests, or contact a live
-// service. Approved client, contract, composition, and external-edge packages
-// are excluded before implementation-use inspection.
-func CheckFunctionalTestBoundaries(repositoryRoot string) error {
-	_, err := CheckFunctionalTestBoundariesReport(repositoryRoot)
-	return err
-}
-
 // CheckFunctionalTestBoundariesReport checks the complete functional tree and
 // reports exact unchanged legacy files quarantined by the reviewed baseline.
 func CheckFunctionalTestBoundariesReport(repositoryRoot string) (FunctionalBoundaryReport, error) {

@@ -189,10 +189,6 @@ func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.Facto
 	return events
 }
 
-func (fs *FunctionalAPIServer) Done() <-chan struct{} {
-	return fs.done
-}
-
 func (fs *FunctionalAPIServer) Stop(t *testing.T) {
 	t.Helper()
 
