@@ -5037,6 +5037,54 @@ func TestJavaScriptInvocationArgs_CoercesSchemaTypedSignatureArguments(t *testin
 	}
 }
 
+func TestCoerceJavaScriptArgument_ValidatesDeclaredScalarTypes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		value      string
+		schemaType string
+		want       any
+		wantErr    string
+	}{
+		{name: "number", value: "1.5", schemaType: "number", want: 1.5},
+		{name: "boolean", value: "true", schemaType: "boolean", want: true},
+		{name: "invalid integer", value: "three", schemaType: "integer", wantErr: "argument \"researchDepth\" must be an integer"},
+		{name: "invalid number", value: "one", schemaType: "number", wantErr: "argument \"researchDepth\" must be a number"},
+		{name: "invalid boolean", value: "yes", schemaType: "boolean", wantErr: "argument \"researchDepth\" must be a boolean"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := coerceJavaScriptArgument("researchDepth", tt.value, tt.schemaType)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("coerceJavaScriptArgument() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("coerceJavaScriptArgument() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("coerceJavaScriptArgument() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestJavaScriptInvocationResult_TimesOutWithoutDurableResult(t *testing.T) {
+	t.Parallel()
+	result, err := javaScriptInvocationResult("request-1", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-1"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeTimedOut,
+	})
+	if err != nil {
+		t.Fatalf("javaScriptInvocationResult() error = %v", err)
+	}
+	if result.Status != factoryapi.InvocationTerminalStatusTimedOut || result.ErrorCode != string(factoryapi.INVOCATIONTIMEDOUT) {
+		t.Fatalf("result = %#v, want timed-out invocation diagnostic", result)
+	}
+}
+
 func sessionInvocationInputForTest(cfg *interfaces.FactoryConfig) (*workinvocation.NormalizedArguments, error) {
 	resolved, err := sessioninvocation.ResolveSessionInvocationInput(cfg, factoryapi.InvocationRequest{
 		Args: &map[string]any{"topic": "event sourcing", "researchDepth": "3", "maxSubagents": "1"},
