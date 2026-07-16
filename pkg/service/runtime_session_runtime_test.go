@@ -5159,6 +5159,79 @@ func TestJavaScriptInvocationResult_TimesOutWithoutDurableResult(t *testing.T) {
 	}
 }
 
+func TestJavaScriptInvocationResult_ReportsInvalidAndFailedDurableResults(t *testing.T) {
+	t.Parallel()
+	if _, err := javaScriptInvocationResult("request-invalid", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-invalid"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeCompleted,
+		Result:           json.RawMessage(`{`),
+	}); err == nil || !strings.Contains(err.Error(), "decode JavaScript workflow result") {
+		t.Fatalf("invalid result error = %v, want decode context", err)
+	}
+
+	result, err := javaScriptInvocationResult("request-empty", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-empty"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeCompleted,
+		Result:           json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("empty durable result: %v", err)
+	}
+	if result.Status != interfaces.InvocationTerminalStatusFailed || result.ErrorCode != "INVOCATION_RESULT_UNAVAILABLE" {
+		t.Fatalf("empty durable result = %#v, want unavailable failure", result)
+	}
+
+	result, err = javaScriptInvocationResult("request-failed", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-failed"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeCompleted,
+		Result:           json.RawMessage(`{"failureDetail":{"reason":"WORKER_FAILED","message":"worker stopped"}}`),
+	})
+	if err != nil {
+		t.Fatalf("failed durable result: %v", err)
+	}
+	if result.ErrorCode != "WORKER_FAILED" || result.Message != "worker stopped" {
+		t.Fatalf("failed durable result = %#v, want failure detail", result)
+	}
+}
+
+func TestJavaScriptInvocationArgs_RejectsInvalidShapesAndSchema(t *testing.T) {
+	t.Parallel()
+	if args, err := javascriptInvocationArgs(nil, nil); err != nil || args != nil {
+		t.Fatalf("nil arguments = %#v, %v, want nil, nil", args, err)
+	}
+
+	multiple := &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{
+		"topic": {Values: []string{"one", "two"}},
+	}}
+	if _, err := javascriptInvocationArgs(nil, multiple); err == nil || !strings.Contains(err.Error(), "exactly one value") {
+		t.Fatalf("multiple-value error = %v, want cardinality diagnostic", err)
+	}
+
+	invalidSchema := deepResearchInvocationConfig()
+	invalidSchema.Orchestrator.JavaScript.ArgsSchema = json.RawMessage(`{`)
+	single := &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{
+		"topic": {Values: []string{"event sourcing"}},
+	}}
+	if _, err := javascriptInvocationArgs(invalidSchema, single); err == nil || !strings.Contains(err.Error(), "invalid JavaScript args schema") {
+		t.Fatalf("invalid-schema error = %v, want schema diagnostic", err)
+	}
+}
+
+func TestJavaScriptInvocationSource_RejectsMissingConfigurationAndSource(t *testing.T) {
+	t.Parallel()
+	service := &FactoryService{}
+	if _, err := service.javaScriptInvocationSource("session-1", nil); err == nil || !strings.Contains(err.Error(), "configuration is required") {
+		t.Fatalf("nil config error = %v, want configuration diagnostic", err)
+	}
+	missingSource := &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{
+		Kind:       interfaces.OrchestratorKindJavaScript,
+		JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{},
+	}}
+	if _, err := service.javaScriptInvocationSource("session-1", missingSource); err == nil || !strings.Contains(err.Error(), "no workflow source") {
+		t.Fatalf("missing source error = %v, want source diagnostic", err)
+	}
+}
+
 func sessionInvocationInputForTest(cfg *interfaces.FactoryConfig) (*workinvocation.NormalizedArguments, error) {
 	resolved, err := sessioninvocation.ResolveSessionInvocationInput(cfg, factorysessionmapping.InvocationRequestFromAPI(factoryapi.InvocationRequest{
 		Args: &map[string]any{"topic": "event sourcing", "researchDepth": "3", "maxSubagents": "1"},

@@ -63,6 +63,28 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 	assertSubmissionHookFinalKeepAliveShutdown(t, due)
 }
 
+func TestApplyReplaySubmissionDefaultsRecoversLongestWorkTypeFromWorkID(t *testing.T) {
+	submissions := []replaySubmission{{request: work.WorkRequest{Works: []work.Work{
+		{WorkID: "work-research-task-42"},
+		{WorkID: "work-task-43"},
+		{WorkID: "unrecognized-44"},
+	}}}}
+	factoryConfig := &interfaces.FactoryConfig{WorkTypes: []interfaces.WorkTypeConfig{
+		{Name: "task"},
+		{Name: "research-task"},
+	}}
+
+	applyReplaySubmissionDefaults(submissions, factoryConfig)
+
+	got := submissions[0].request.Works
+	if got[0].WorkTypeID != "research-task" || got[1].WorkTypeID != "task" {
+		t.Fatalf("recovered work types = %q, %q, want research-task, task", got[0].WorkTypeID, got[1].WorkTypeID)
+	}
+	if got[2].WorkTypeID != "" {
+		t.Fatalf("unrecognized work type = %q, want empty", got[2].WorkTypeID)
+	}
+}
+
 func assertSubmissionHookBeforeDueTick(t *testing.T, got interfaces.SubmissionHookResult) {
 	t.Helper()
 	if len(got.GeneratedBatches) != 0 {
