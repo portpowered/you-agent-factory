@@ -15,7 +15,13 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const defaultFactorySessionSSEHarnessTimeout = 5 * time.Second
+const (
+	defaultFactorySessionSSEHarnessTimeout   = 5 * time.Second
+	factorySessionSSEBackendScopeHeader      = "X-Factory-Session-Backend-Scope-Id"
+	factorySessionSSELogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
+	factorySessionSSEFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
+	factorySessionSSEStreamGenerationHeader  = "X-Factory-Session-Stream-Generation-Id"
+)
 
 var (
 	errFactorySessionSSEHarnessTimeout   = errors.New("factory session SSE harness timeout elapsed")
@@ -38,13 +44,50 @@ type FactorySessionSSEHarness struct {
 	timeout time.Duration
 }
 
+// FactorySessionSSEStreamIdentity preserves the four independent identities
+// returned by a successful session event stream handshake.
+type FactorySessionSSEStreamIdentity struct {
+	BackendScopeID      string
+	LogicalSessionKeyID string
+	FactorySessionID    string
+	StreamGenerationID  string
+}
+
+// FactorySessionSSEFrame is one complete SSE protocol frame. FactoryEvent is
+// populated only when Data contains a valid generated FactoryEvent contract.
+type FactorySessionSSEFrame struct {
+	ID           string
+	Event        string
+	Data         string
+	Comment      string
+	FactoryEvent *factoryapi.FactoryEvent
+
+	kind factorySessionSSEFrameKind
+}
+
+// FactorySessionSSEParseError reports invalid FactoryEvent JSON together with
+// the complete protocol frame that caused the failure.
+type FactorySessionSSEParseError struct {
+	Frame FactorySessionSSEFrame
+	Err   error
+}
+
+func (e *FactorySessionSSEParseError) Error() string {
+	return fmt.Sprintf("decode FactoryEvent from SSE frame: %v", e.Err)
+}
+
+func (e *FactorySessionSSEParseError) Unwrap() error { return e.Err }
+
 // FactorySessionSSEStream is one open session event SSE connection.
 type FactorySessionSSEStream struct {
-	t        *testing.T
-	timeout  time.Duration
-	Response *http.Response
-	reader   *bufio.Reader
-	cancel   context.CancelFunc
+	t         *testing.T
+	timeout   time.Duration
+	Response  *http.Response
+	Identity  FactorySessionSSEStreamIdentity
+	reader    *bufio.Reader
+	cancel    context.CancelFunc
+	lastFrame FactorySessionSSEFrame
+	hasFrame  bool
 }
 
 // NewFactorySessionSSEHarness returns a harness that fails closed when a read
@@ -71,6 +114,7 @@ func (h *FactorySessionSSEHarness) Open(serverURL, sessionID, query string) *Fac
 	if err != nil {
 		h.t.Fatalf("new session SSE request: %v", err)
 	}
+	req.Header.Set("Accept", "text/event-stream")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		cancel()
@@ -91,9 +135,28 @@ func (h *FactorySessionSSEHarness) Open(serverURL, sessionID, query string) *Fac
 		t:        h.t,
 		timeout:  h.timeout,
 		Response: resp,
+		Identity: factorySessionSSEIdentityFromHeader(resp.Header),
 		reader:   bufio.NewReader(resp.Body),
 		cancel:   cancel,
 	}
+}
+
+func factorySessionSSEIdentityFromHeader(header http.Header) FactorySessionSSEStreamIdentity {
+	return FactorySessionSSEStreamIdentity{
+		BackendScopeID:      header.Get(factorySessionSSEBackendScopeHeader),
+		LogicalSessionKeyID: header.Get(factorySessionSSELogicalSessionKeyHeader),
+		FactorySessionID:    header.Get(factorySessionSSEFactorySessionHeader),
+		StreamGenerationID:  header.Get(factorySessionSSEStreamGenerationHeader),
+	}
+}
+
+// LastValidFrame returns the most recent completely parsed frame on this
+// connection. A malformed data frame does not replace the last valid frame.
+func (s *FactorySessionSSEStream) LastValidFrame() (FactorySessionSSEFrame, bool) {
+	if s == nil || !s.hasFrame {
+		return FactorySessionSSEFrame{}, false
+	}
+	return s.lastFrame, true
 }
 
 // Close cancels the stream request context and closes the response body.
@@ -180,20 +243,29 @@ func (s *FactorySessionSSEStream) TryWaitForKeepalive(timeout time.Duration) (Fa
 
 func factorySessionSSEKeepaliveSignalFromFrame(
 	signal FactorySessionSSEKeepaliveSignal,
-	frame factorySessionSSEFrame,
+	frame FactorySessionSSEFrame,
 ) (FactorySessionSSEKeepaliveSignal, error) {
 	switch frame.kind {
 	case factorySessionSSEFrameComment:
-		signal.SSEComment = frame.comment
+		signal.SSEComment = frame.Comment
 		return signal, nil
 	case factorySessionSSEFrameOther:
-		signal.SSEComment = frame.comment
+		signal.SSEComment = firstNonEmptyFactorySessionSSEString(frame.Comment, frame.Event, frame.Data)
 		return signal, nil
 	case factorySessionSSEFrameData:
-		return signal, fmt.Errorf("idle keepalive read factory event id %q", frame.event.Id)
+		return signal, fmt.Errorf("idle keepalive read factory event id %q", frame.FactoryEvent.Id)
 	default:
 		return signal, fmt.Errorf("unexpected idle keepalive frame kind %d", frame.kind)
 	}
+}
+
+func firstNonEmptyFactorySessionSSEString(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *FactorySessionSSEStream) setReadDeadline(deadline time.Time) error {
@@ -231,31 +303,55 @@ func (s *FactorySessionSSEStream) TryReadNextEvent(timeout time.Duration) (facto
 	if timeout <= 0 {
 		timeout = s.timeout
 	}
+	deadline := time.Now().Add(timeout)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return factoryapi.FactoryEvent{}, fmt.Errorf("%w after %s", errFactorySessionSSEHarnessTimeout, timeout)
+		}
+		frame, err := s.TryReadNextFrame(remaining)
+		if err != nil {
+			return factoryapi.FactoryEvent{}, err
+		}
+		if frame.FactoryEvent != nil {
+			return *frame.FactoryEvent, nil
+		}
+	}
+}
+
+// TryReadNextFrame reads one complete SSE frame within timeout. Protocol-only
+// and comment-only frames are returned without being treated as FactoryEvents.
+func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (FactorySessionSSEFrame, error) {
+	s.t.Helper()
+	if timeout <= 0 {
+		timeout = s.timeout
+	}
 	type readResult struct {
-		event factoryapi.FactoryEvent
+		frame FactorySessionSSEFrame
+		ok    bool
 		err   error
 	}
 	done := make(chan readResult, 1)
 	go func() {
-		event, ok, err := tryReadSSEFactoryEvent(s.reader)
-		if err != nil {
-			done <- readResult{err: err}
-			return
-		}
-		if !ok {
-			done <- readResult{err: io.EOF}
-			return
-		}
-		done <- readResult{event: event}
+		frame, ok, err := tryReadNextSSEFrame(s.reader)
+		done <- readResult{frame: frame, ok: ok, err: err}
 	}()
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
 	case result := <-done:
-		return result.event, result.err
+		if result.err != nil {
+			return result.frame, result.err
+		}
+		if !result.ok {
+			return FactorySessionSSEFrame{}, io.EOF
+		}
+		s.lastFrame = result.frame
+		s.hasFrame = true
+		return result.frame, nil
 	case <-timer.C:
-		return factoryapi.FactoryEvent{}, fmt.Errorf("%w after %s", errFactorySessionSSEHarnessTimeout, timeout)
+		return FactorySessionSSEFrame{}, fmt.Errorf("%w after %s", errFactorySessionSSEHarnessTimeout, timeout)
 	}
 }
 
@@ -322,61 +418,64 @@ const (
 	factorySessionSSEFrameOther
 )
 
-type factorySessionSSEFrame struct {
-	kind    factorySessionSSEFrameKind
-	comment string
-	event   factoryapi.FactoryEvent
-}
-
-func tryReadNextSSEFrame(reader *bufio.Reader) (factorySessionSSEFrame, bool, error) {
-	var dataLine string
-	var commentLine string
-	var eventName string
+func tryReadNextSSEFrame(reader *bufio.Reader) (FactorySessionSSEFrame, bool, error) {
+	var frame FactorySessionSSEFrame
+	var dataLines []string
+	var commentLines []string
+	var hasIDField bool
+	var hasEventField bool
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if dataLine == "" && commentLine == "" && eventName == "" {
-				return factorySessionSSEFrame{}, false, nil
+			if !hasIDField && !hasEventField && len(dataLines) == 0 && len(commentLines) == 0 {
+				return FactorySessionSSEFrame{}, false, nil
 			}
-			return factorySessionSSEFrame{}, false, err
+			return frame, false, err
 		}
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
 			break
 		}
-		switch {
-		case strings.HasPrefix(line, ":"):
-			commentLine = strings.TrimSpace(strings.TrimPrefix(line, ":"))
-		case strings.HasPrefix(line, "data: "):
-			dataLine = strings.TrimPrefix(line, "data: ")
-		case strings.HasPrefix(line, "event: "):
-			eventName = strings.TrimPrefix(line, "event: ")
+		if strings.HasPrefix(line, ":") {
+			commentLines = append(commentLines, strings.TrimPrefix(strings.TrimPrefix(line, ":"), " "))
+			continue
+		}
+		field, value, found := strings.Cut(line, ":")
+		if !found {
+			field, value = line, ""
+		} else {
+			value = strings.TrimPrefix(value, " ")
+		}
+		switch field {
+		case "id":
+			hasIDField = true
+			frame.ID = value
+		case "event":
+			hasEventField = true
+			frame.Event = value
+		case "data":
+			dataLines = append(dataLines, value)
 		}
 	}
-	if dataLine != "" {
+	frame.Data = strings.Join(dataLines, "\n")
+	frame.Comment = strings.Join(commentLines, "\n")
+	if len(dataLines) > 0 {
 		var event factoryapi.FactoryEvent
-		if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
-			return factorySessionSSEFrame{
-				kind:    factorySessionSSEFrameOther,
-				comment: firstNonEmptyFactorySessionSSEString(commentLine, eventName, dataLine),
-			}, true, nil
+		if err := json.Unmarshal([]byte(frame.Data), &event); err != nil {
+			frame.kind = factorySessionSSEFrameOther
+			return frame, true, &FactorySessionSSEParseError{Frame: frame, Err: err}
 		}
-		return factorySessionSSEFrame{kind: factorySessionSSEFrameData, event: event}, true, nil
+		frame.kind = factorySessionSSEFrameData
+		frame.FactoryEvent = &event
+		return frame, true, nil
 	}
-	if commentLine != "" {
-		return factorySessionSSEFrame{kind: factorySessionSSEFrameComment, comment: commentLine}, true, nil
+	if len(commentLines) > 0 {
+		frame.kind = factorySessionSSEFrameComment
+		return frame, true, nil
 	}
-	if eventName != "" {
-		return factorySessionSSEFrame{kind: factorySessionSSEFrameOther, comment: eventName}, true, nil
+	if hasIDField || hasEventField {
+		frame.kind = factorySessionSSEFrameOther
+		return frame, true, nil
 	}
-	return factorySessionSSEFrame{}, false, nil
-}
-
-func firstNonEmptyFactorySessionSSEString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
+	return FactorySessionSSEFrame{}, false, nil
 }

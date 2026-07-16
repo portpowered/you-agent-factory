@@ -598,6 +598,8 @@ this gate or approved for removal.
 
 ### Global events and default-session selection
 
+- The reusable session SSE harness must send `Accept: text/event-stream`, retain backend-scope/logical-session-key/Factory Session/stream-generation identity as distinct values, and preserve complete `id`/`event`/`data`/comment frames. Decode data with the generated `FactoryEvent` contract, return malformed-data errors with the offending frame, and keep the prior valid frame available for diagnostics; focused protocol and real-transport evidence lives in `factorysessionsse/harness_internal_test.go` and `factorysessionsse/initial_stream_test.go`.
+
 Canonical guidance: dashboard, replay, reconnect, and new integrations open
 `GET /factory-sessions/{session_id}/events` with the resolved Factory Session
 UUID. `~default` is only an accepted selector at API and CLI boundaries; a list
