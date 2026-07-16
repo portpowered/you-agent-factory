@@ -8,17 +8,18 @@ import (
 )
 
 const (
-	sharedHomeDirName     = ".you-agent-factory"
-	namedFactoriesDirName = "factories"
-	operatorConfigFile    = "config.json"
-	recordingsDirName     = "recordings"
-	runtimeLogsDirName    = "logs"
-	runtimeMetricsName    = "metrics"
-	recordingsMonthFmt    = "2006-01"
-	recordingsDateFmt     = "2006-01-02"
-	runtimeMetricsYear    = "2006"
-	runtimeMetricsMonth   = "01"
-	runtimeMetricsDay     = "02"
+	sharedHomeDirName           = ".you-agent-factory"
+	namedFactoriesDirName       = "factories"
+	legacyNamedFactoriesDirName = "you-agent-factories"
+	operatorConfigFile          = "config.json"
+	recordingsDirName           = "recordings"
+	runtimeLogsDirName          = "logs"
+	runtimeMetricsName          = "metrics"
+	recordingsMonthFmt          = "2006-01"
+	recordingsDateFmt           = "2006-01-02"
+	runtimeMetricsYear          = "2006"
+	runtimeMetricsMonth         = "01"
+	runtimeMetricsDay           = "02"
 )
 
 // SharedRoot returns the canonical shared root below the supplied home
@@ -31,6 +32,12 @@ func SharedRoot(homeDir string) string {
 // below homeDir.
 func NamedFactoriesRoot(homeDir string) string {
 	return filepath.Join(SharedRoot(homeDir), namedFactoriesDirName)
+}
+
+// LegacyNamedFactoriesRoot returns the retired global named-factory root used
+// only to migrate existing customer-owned factories during initialization.
+func LegacyNamedFactoriesRoot(homeDir string) string {
+	return filepath.Join(SharedRoot(homeDir), legacyNamedFactoriesDirName)
 }
 
 // OperatorConfigPath returns the default operator config path below homeDir.

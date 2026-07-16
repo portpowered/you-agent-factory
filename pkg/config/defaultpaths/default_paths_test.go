@@ -17,6 +17,9 @@ func TestSharedScopedPaths(t *testing.T) {
 	if got, want := NamedFactoriesRoot(homeDir), filepath.Join(homeDir, ".you-agent-factory", "factories"); got != want {
 		t.Fatalf("NamedFactoriesRoot() = %q, want %q", got, want)
 	}
+	if got, want := LegacyNamedFactoriesRoot(homeDir), filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"); got != want {
+		t.Fatalf("LegacyNamedFactoriesRoot() = %q, want %q", got, want)
+	}
 	if got, want := OperatorConfigPath(homeDir), filepath.Join(homeDir, ".you-agent-factory", "config.json"); got != want {
 		t.Fatalf("OperatorConfigPath() = %q, want %q", got, want)
 	}

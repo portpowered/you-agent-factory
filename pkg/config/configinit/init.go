@@ -58,6 +58,9 @@ func Init(homeDir string) (Result, error) {
 
 	configPath := defaultpaths.OperatorConfigPath(homeDir)
 	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot); err != nil {
+		return Result{}, err
+	}
 
 	if err := ensureSystemConfigParentIsDirectory(configPath); err != nil {
 		return Result{}, err
@@ -92,6 +95,65 @@ func Init(homeDir string) (Result, error) {
 		SystemConfigOutcome: systemConfigOutcome,
 		PackagedFactories:   packagedFactories,
 	}, nil
+}
+
+type legacyFactoryMigration struct {
+	name      string
+	sourceDir string
+	targetDir string
+}
+
+func migrateLegacyNamedFactories(homeDir, namedFactoriesRoot string) error {
+	legacyRoot := defaultpaths.LegacyNamedFactoriesRoot(homeDir)
+	info, err := os.Stat(legacyRoot)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect legacy global factory root %s: %w", legacyRoot, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("migrate legacy global factory root %s: path is not a directory; rename or remove it before retrying", legacyRoot)
+	}
+
+	entries, err := factoryconfig.ListNamedFactories(legacyRoot)
+	if err != nil {
+		return fmt.Errorf("list legacy global factories in %s: %w", legacyRoot, err)
+	}
+	migrations := make([]legacyFactoryMigration, 0, len(entries))
+	for _, entry := range entries {
+		targetDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, entry.Name)
+		if err != nil {
+			return fmt.Errorf("map legacy factory %q from %s: %w", entry.Name, legacyRoot, err)
+		}
+		if _, err := os.Stat(targetDir); err == nil {
+			return fmt.Errorf(
+				"migrate legacy factory %q: canonical destination %s already exists; preserved legacy factory at %s without overwriting either copy; move or rename one copy and retry",
+				entry.Name,
+				targetDir,
+				entry.FactoryDir,
+			)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect canonical destination %s for legacy factory %q: %w", targetDir, entry.Name, err)
+		}
+		migrations = append(migrations, legacyFactoryMigration{
+			name:      entry.Name,
+			sourceDir: entry.FactoryDir,
+			targetDir: targetDir,
+		})
+	}
+
+	for _, migration := range migrations {
+		if err := os.MkdirAll(filepath.Dir(migration.targetDir), 0o755); err != nil {
+			return fmt.Errorf("create canonical parent for legacy factory %q at %s: %w", migration.name, migration.targetDir, err)
+		}
+	}
+	for _, migration := range migrations {
+		if err := os.Rename(migration.sourceDir, migration.targetDir); err != nil {
+			return fmt.Errorf("migrate legacy factory %q from %s to %s: %w", migration.name, migration.sourceDir, migration.targetDir, err)
+		}
+	}
+	return nil
 }
 
 func ensureSystemConfigParentIsDirectory(configPath string) error {
