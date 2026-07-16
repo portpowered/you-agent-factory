@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
@@ -23,7 +25,7 @@ import (
 // Work, so they must not pass through the Petri invocation waiter.
 func (fs *FactoryService) invokeJavaScriptFactorySession(
 	ctx context.Context,
-	_ string,
+	sessionID string,
 	cfg *interfaces.FactoryConfig,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
@@ -35,9 +37,9 @@ func (fs *FactoryService) invokeJavaScriptFactorySession(
 	if err != nil {
 		return apisurface.FactoryInvocationResult{}, err
 	}
-	name := strings.TrimSpace(cfg.Name)
-	if name == "" {
-		return apisurface.FactoryInvocationResult{}, fmt.Errorf("JavaScript factory has no resolvable name")
+	source, err := fs.javaScriptInvocationSource(sessionID, cfg)
+	if err != nil {
+		return apisurface.FactoryInvocationResult{}, err
 	}
 	requestID := "invocation-" + factorysessions.NewSessionID()
 	if request.RequestId != nil && strings.TrimSpace(*request.RequestId) != "" {
@@ -45,13 +47,59 @@ func (fs *FactoryService) invokeJavaScriptFactorySession(
 	}
 	started, err := fs.durableExecutionService().StartSync(ctx, factorysessionexecution.StartRequest{
 		RequestID: requestID,
-		Source:    factorysessionexecution.Source{Kind: workflowsource.KindFactoryID, FactoryID: name},
+		Source:    source,
 		Args:      args,
 	})
 	if err != nil {
 		return apisurface.FactoryInvocationResult{}, &interfaces.RequestValidationError{Message: err.Error()}
 	}
 	return javaScriptInvocationResult(requestID, started)
+}
+
+func (fs *FactoryService) javaScriptInvocationSource(sessionID string, cfg *interfaces.FactoryConfig) (factorysessionexecution.Source, error) {
+	if cfg == nil || cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
+		return factorysessionexecution.Source{}, fmt.Errorf("JavaScript factory configuration is required")
+	}
+	jsCfg := cfg.Orchestrator.JavaScript
+	content := ""
+	if jsCfg.InlineSource != nil {
+		content = strings.TrimSpace(jsCfg.InlineSource.Inline)
+	}
+	sourceRef := strings.TrimSpace(jsCfg.SourceRef)
+	if content == "" && sourceRef == "" {
+		return factorysessionexecution.Source{}, fmt.Errorf("JavaScript factory has no workflow source")
+	}
+	var factoryDir string
+	if content == "" {
+		runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
+		if err != nil {
+			return factorysessionexecution.Source{}, err
+		}
+		factoryDir = runtimeCfg.FactoryDir()
+		content, err = workflowvalidation.FileSourceReader(factoryDir).ReadWorkflowSource(sourceRef)
+		if err != nil {
+			return factorysessionexecution.Source{}, fmt.Errorf("read JavaScript factory workflow %q: %w", sourceRef, err)
+		}
+	}
+	if sourceRef == "" {
+		sourceRef = "inline"
+	}
+	name := strings.TrimSpace(cfg.Name)
+	if name == "" {
+		name = filepath.Base(factoryDir)
+	}
+	return factorysessionexecution.Source{
+		Kind: workflowsource.KindInlineWorkflow,
+		InlineWorkflow: &factorysessionexecution.InlineWorkflowSource{
+			InlineSource: content,
+			Metadata: map[string]string{
+				"sourceRef": fmt.Sprintf("factory:%s:%s", name, filepath.ToSlash(sourceRef)),
+			},
+			Agents:        jsCfg.Agents,
+			ArgsSchema:    jsCfg.ArgsSchema,
+			DefaultPolicy: jsCfg.DefaultPolicy,
+		},
+	}, nil
 }
 
 func javascriptInvocationArgs(cfg *interfaces.FactoryConfig, normalized *workinvocation.NormalizedArguments) (map[string]any, error) {

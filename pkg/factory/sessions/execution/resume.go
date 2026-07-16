@@ -927,6 +927,9 @@ func cloneStartSource(source Source) Source {
 	if source.InlineWorkflow != nil {
 		inline := *source.InlineWorkflow
 		inline.Metadata = cloneStringStringMap(source.InlineWorkflow.Metadata)
+		inline.Agents = cloneJavaScriptAgents(source.InlineWorkflow.Agents)
+		inline.ArgsSchema = append(json.RawMessage(nil), source.InlineWorkflow.ArgsSchema...)
+		inline.DefaultPolicy = append(json.RawMessage(nil), source.InlineWorkflow.DefaultPolicy...)
 		cloned.InlineWorkflow = &inline
 	}
 	if len(source.FactoryInline) > 0 {

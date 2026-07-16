@@ -160,6 +160,7 @@ func resolveStartSourceWithResolution(req StartRequest, ctx StartSourceContext) 
 	}
 
 	resolution := workflowsource.Resolve(startSourceRequest(req.Source), sourceCtx)
+	applyInlineFactoryDeclaration(&resolution, req.Source)
 	if !resolution.Found {
 		message := "workflow source could not be resolved"
 		if len(resolution.Diagnostics) > 0 && strings.TrimSpace(resolution.Diagnostics[0].Message) != "" {
@@ -184,6 +185,19 @@ func resolveStartSourceWithResolution(req StartRequest, ctx StartSourceContext) 
 		resolved.ResolutionOrder = []string{stage}
 	}
 	return resolved, resolution, nil
+}
+
+func applyInlineFactoryDeclaration(resolution *workflowsource.Resolution, source Source) {
+	if resolution == nil || source.Kind != workflowsource.KindInlineWorkflow || source.InlineWorkflow == nil {
+		return
+	}
+	inline := source.InlineWorkflow
+	if sourceRef := strings.TrimSpace(inline.Metadata["sourceRef"]); sourceRef != "" {
+		resolution.SourceRef = sourceRef
+	}
+	resolution.Agents = cloneJavaScriptAgents(inline.Agents)
+	resolution.ArgsSchema = append(json.RawMessage(nil), inline.ArgsSchema...)
+	resolution.DefaultPolicy = append(json.RawMessage(nil), inline.DefaultPolicy...)
 }
 
 func validateResolvedSourceContent(resolution workflowsource.Resolution) error {

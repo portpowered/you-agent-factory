@@ -1022,7 +1022,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   factories do not submit Petri Work. Keep signature normalization shared with
   `pkg/factory/sessions/invocation`, then coerce declared JSON-schema scalar
   types before durable JavaScript validation so CLI/API string carriers retain
-  the workflow's typed argument contract.
+  the workflow's typed argument contract. When the current factory has already
+  resolved an authored workflow asset, pass that asset as an inline durable
+  source together with its source identity, args schema, agents, and default
+  policy; resolving its scoped name again from the session directory loses the
+  materialized named-factory context.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata

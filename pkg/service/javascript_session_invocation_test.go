@@ -77,7 +77,8 @@ func deepResearchInvocationConfig() *interfaces.FactoryConfig {
 			{Name: "maxSubagents", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
 		}},
 		Orchestrator: &interfaces.FactoryOrchestratorConfig{Kind: interfaces.OrchestratorKindJavaScript, JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
-			ArgsSchema: json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"},"researchDepth":{"type":"integer"},"maxSubagents":{"type":"integer"}}}`),
+			InlineSource: &interfaces.FactoryOrchestratorJavaScriptInlineSource{Inline: `meta({ name: "deep-research", version: 1 }); final("done");`},
+			ArgsSchema:   json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"},"researchDepth":{"type":"integer"},"maxSubagents":{"type":"integer"}}}`),
 		}},
 	}
 }
