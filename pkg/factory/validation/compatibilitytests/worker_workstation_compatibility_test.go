@@ -4,11 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func taxonomyValidationBaseConfig() *interfaces.FactoryConfig {
@@ -48,7 +49,7 @@ func TestValidate_WorkerWorkstationCompatibility_AcceptsCompatiblePairings(t *te
 			t.Parallel()
 
 			cfg := taxonomyValidationBaseConfig()
-			cfg.Workers = []interfaces.WorkerConfig{{Name: "executor", Type: tt.workerType}}
+			cfg.Workers = []workerconfig.Config{{Name: "executor", Type: tt.workerType}}
 			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 				Name:           "execute-story",
 				Type:           tt.workstationType,
@@ -117,7 +118,7 @@ func TestValidate_WorkerWorkstationCompatibility_RejectsIncompatiblePairings(t *
 			t.Parallel()
 
 			cfg := taxonomyValidationBaseConfig()
-			cfg.Workers = []interfaces.WorkerConfig{{Name: "executor", Type: tt.workerType}}
+			cfg.Workers = []workerconfig.Config{{Name: "executor", Type: tt.workerType}}
 			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 				Name:           "execute-story",
 				Type:           tt.workstationType,

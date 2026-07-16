@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -30,8 +30,8 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorRes
 			},
 		},
 	}
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "alpha"}}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -46,10 +46,10 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesSingleInputWhenSelectorRes
 func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t *testing.T) {
 	eval := NewEnablementEvaluator(nil)
 	n := matchesFieldsPairNet()
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "alpha"}}},
-		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "alpha"}}},
-		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "beta"}}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
+		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
+		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "beta"}}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -67,9 +67,9 @@ func TestEnablementEvaluator_MatchesFieldsGuardEnablesOnMatchingTwoInputValues(t
 func TestEnablementEvaluator_MatchesFieldsGuardBlocksMismatchedTwoInputValues(t *testing.T) {
 	eval := NewEnablementEvaluator(nil)
 	n := matchesFieldsPairNet()
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "alpha"}}},
-		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "beta"}}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "alpha"}}},
+		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "beta"}}},
 	})
 
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
@@ -137,12 +137,12 @@ func matchesFieldsTripletNet() *state.Net {
 }
 
 func matchesFieldsTripletSnapshot(planValue, taskValue string, assetValues map[string]string) petri.MarkingSnapshot {
-	tokens := map[string]*interfaces.Token{
-		"plan-" + planValue: {ID: "plan-" + planValue, PlaceID: "plan:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": planValue}}},
-		"task-" + taskValue: {ID: "task-" + taskValue, PlaceID: "task:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": taskValue}}},
+	tokens := map[string]*factorytoken.Token{
+		"plan-" + planValue: {ID: "plan-" + planValue, PlaceID: "plan:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": planValue}}},
+		"task-" + taskValue: {ID: "task-" + taskValue, PlaceID: "task:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": taskValue}}},
 	}
 	for assetID, assetValue := range assetValues {
-		tokens[assetID] = &interfaces.Token{ID: assetID, PlaceID: "asset:ready", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": assetValue}}}
+		tokens[assetID] = &factorytoken.Token{ID: assetID, PlaceID: "asset:ready", Color: factorytoken.Color{Tags: map[string]string{"_last_output": assetValue}}}
 	}
 	return makeTestSnapshot(tokens)
 }

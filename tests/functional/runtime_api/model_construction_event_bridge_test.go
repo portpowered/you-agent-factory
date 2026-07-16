@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -43,16 +43,16 @@ func TestModelConstructionDiagnosticsAndRecordedEventsCrossRuntimeBoundaries(t *
 
 	localTime := time.Date(2026, time.July, 16, 8, 0, 0, 0, time.FixedZone("fixture", -7*60*60))
 	history := factoryevents.NewFactoryEventHistory(nil, nil)
-	history.AppendRecordedEvent(factoryapi.FactoryEvent{
+	history.AppendRecordedEvent(interfaces.FactoryEvent{
 		Id:      "factory-event/model-boundary/1",
-		Type:    factoryapi.FactoryEventTypeModelResponse,
-		Context: factoryapi.FactoryEventContext{Tick: 1, EventTime: localTime},
+		Type:    interfaces.FactoryEventTypeModelResponse,
+		Context: interfaces.FactoryEventContext{Tick: 1, EventTime: localTime},
 	})
-	recorded := history.Events()
+	recorded := history.CanonicalEvents()
 	if len(recorded) != 1 {
 		t.Fatalf("recorded event count = %d, want 1", len(recorded))
 	}
-	if recorded[0].SchemaVersion != factoryapi.AgentFactoryEventV1 || recorded[0].Context.Sequence != 0 {
+	if recorded[0].SchemaVersion != interfaces.FactoryEventSchemaVersionV1 || recorded[0].Context.Sequence != 0 {
 		t.Fatalf("recorded event envelope = %#v, want canonical schema and sequence", recorded[0])
 	}
 	if got := recorded[0].Context.EventTime; got.Location() != time.UTC || !got.Equal(localTime) {

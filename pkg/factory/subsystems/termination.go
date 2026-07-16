@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TerminationCheckSubsystem detects when the runtime snapshot has no active
@@ -81,7 +83,7 @@ func (tc *TerminationCheckSubsystem) shouldTerminate(snapshot *interfaces.Engine
 }
 
 // isTerminalOrFailed returns true if the token is in a TERMINAL or FAILED place.
-func (tc *TerminationCheckSubsystem) isTerminalOrFailed(token *interfaces.Token) bool {
+func (tc *TerminationCheckSubsystem) isTerminalOrFailed(token *factorytoken.Token) bool {
 	place, ok := tc.state.Places[token.PlaceID]
 	if !ok {
 		return false
@@ -123,12 +125,12 @@ const (
 func executorReviewReconcileMutations(
 	marking *petri.MarkingSnapshot,
 	workstationName string,
-	outcome interfaces.WorkOutcome,
-	consumedTokens []interfaces.Token,
+	outcome workerexecution.WorkOutcome,
+	consumedTokens []factorytoken.Token,
 	outputArcs []petri.Arc,
 	now time.Time,
 ) []interfaces.MarkingMutation {
-	if marking == nil || outcome != interfaces.OutcomeAccepted {
+	if marking == nil || outcome != workerexecution.OutcomeAccepted {
 		return nil
 	}
 
@@ -194,10 +196,10 @@ func executorReviewReconcileMutations(
 	}
 }
 
-func executorReviewLineageFromConsumed(consumed []interfaces.Token) (traceID string, laneName string) {
-	traceID = interfaces.CurrentChainingTraceIDFromTokens(consumed)
+func executorReviewLineageFromConsumed(consumed []factorytoken.Token) (traceID string, laneName string) {
+	traceID = factorytoken.CurrentChainingTraceID(consumed, interfaces.SystemTimeWorkTypeID)
 	for i := range consumed {
-		if consumed[i].Color.DataType == interfaces.DataTypeResource {
+		if consumed[i].Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if consumed[i].Color.Name != "" {
@@ -228,7 +230,7 @@ func containsPlace(places []string, want string) bool {
 	return false
 }
 
-func consumedTokenIDs(consumed []interfaces.Token) map[string]struct{} {
+func consumedTokenIDs(consumed []factorytoken.Token) map[string]struct{} {
 	if len(consumed) == 0 {
 		return nil
 	}
@@ -278,7 +280,7 @@ func consumeTokensAtPlaceForTrace(
 	return mutations
 }
 
-func canonicalExecutorReviewTraceID(color interfaces.TokenColor) string {
+func canonicalExecutorReviewTraceID(color factorytoken.Color) string {
 	if color.CurrentChainingTraceID != "" {
 		return color.CurrentChainingTraceID
 	}

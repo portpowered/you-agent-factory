@@ -9,7 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/fragmentmap"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
@@ -23,8 +24,8 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 		Type:       responsestream.EventTypeProgress,
 		DispatchID: "dispatch-42",
 		Payload:    "planning next step",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor),
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -180,8 +181,8 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 		Type:       responsestream.EventTypeTextDelta,
 		DispatchID: "dispatch-42",
 		Payload:    "hello ",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor),
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -389,8 +390,8 @@ func TestMapFragment_StreamCompletedEmitsRunCompleted(t *testing.T) {
 		RecordedAt: recordedAt,
 		Kind:       responsestream.EventKindStreamCompleted,
 		DispatchID: "dispatch-42",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor),
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},
@@ -453,8 +454,8 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 		Type:       responsestream.EventTypeFailed,
 		DispatchID: "dispatch-99",
 		Payload:    "normalized provider failure",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor),
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor),
 			Kind:     "session_id",
 			ID:       "cursor-session-456",
 		},
@@ -642,8 +643,8 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 			FirstRetainedSequence: 3,
 			LastDroppedSequence:   2,
 		},
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor),
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor),
 			Kind:     "session_id",
 			ID:       "cursor-session-123",
 		},

@@ -11,10 +11,19 @@ import (
 	"strings"
 	"time"
 
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/pkg/workers/worktree"
@@ -37,7 +46,7 @@ type Tool struct {
 
 // OutputParser parses structured output from a worker execution response.
 type OutputParser interface {
-	ParseJSON(response string, schema []byte) ([]interfaces.TokenColor, error)
+	ParseJSON(response string, schema []byte) ([]factorytoken.Color, error)
 }
 
 // WorkstationExecutor wraps a WorkerExecutor with workstation-specific
@@ -62,14 +71,14 @@ const classifierFailureRawOutputLimit = 160
 type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
 	SessionID        string
-	InputTokens      []interfaces.Token
+	InputTokens      []factorytoken.Token
 	EnvVars          map[string]string
 	Worktree         string
 	WorkingDirectory string
 }
 
 // Execute implements WorkerExecutor for WorkstationExecutor.
-func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	start := time.Now()
 	logger := logging.EnsureLogger(we.Logger)
 	logger.Info("workstation: execution entered",
@@ -80,17 +89,17 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch interfaces.
 			"workstation", dispatch.WorkstationName)...)
 	workstationDef, ok := we.runtimeWorkstation(dispatch)
 	if !ok {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "workstation not found: " + workstationLookupKey(dispatch),
-			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 		}, nil
 	}
 
 	switch workstationDef.Type {
-	case interfaces.WorkstationTypeLogical:
+	case workertaxonomy.WorkstationTypeLogical:
 		return we.executeLogicalMove(dispatch, start), nil
 	default:
 		return we.executeModelWorkstation(ctx, dispatch, workstationDef, start)
@@ -98,7 +107,7 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch interfaces.
 }
 
 // executeLogicalMove passes input token colors through without calling any worker.
-func (we *WorkstationExecutor) executeLogicalMove(dispatch interfaces.WorkDispatch, start time.Time) interfaces.WorkResult {
+func (we *WorkstationExecutor) executeLogicalMove(dispatch work.WorkDispatch, start time.Time) workerexecution.WorkResult {
 	logger := logging.EnsureLogger(we.Logger)
 
 	logger.Info("logical move fired",
@@ -107,31 +116,31 @@ func (we *WorkstationExecutor) executeLogicalMove(dispatch interfaces.WorkDispat
 			"dispatch_id", dispatch.DispatchID,
 			"input_count", len(dispatch.InputTokens))...)
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-		Metrics: interfaces.WorkMetrics{
+		Outcome:      workerexecution.OutcomeAccepted,
+		Metrics: workerexecution.WorkMetrics{
 			Duration: time.Since(start),
 		},
 	}
 }
 
 // executeModelWorkstation renders the prompt and calls the configured worker executor.
-func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (interfaces.WorkResult, error) {
+func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (workerexecution.WorkResult, error) {
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
 	if invocationArgs != nil {
 		interpolatedWorkstation, err := invocations.InterpolateWorkstationConfig(*workstationDef, invocationArgs, os.ReadFile)
 		if err != nil {
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
 				TransitionID: dispatch.TransitionID,
-				Outcome:      interfaces.OutcomeFailed,
+				Outcome:      workerexecution.OutcomeFailed,
 				Error:        err.Error(),
 				Diagnostics:  invocationDiagnostics,
-				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+				Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 			}, nil
 		}
 		workstationDef = &interpolatedWorkstation
@@ -139,24 +148,24 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	workerName := workstationWorkerName(workstationDef, dispatch)
 	workerDef, ok := we.RuntimeConfig.Worker(workerName)
 	if !ok {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "worker config not found: " + workerName,
-			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 		}, nil
 	}
 	if invocationArgs != nil {
 		interpolatedWorker, err := invocations.InterpolateWorkerConfig(*workerDef, invocationArgs, os.ReadFile)
 		if err != nil {
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
 				TransitionID: dispatch.TransitionID,
-				Outcome:      interfaces.OutcomeFailed,
+				Outcome:      workerexecution.OutcomeFailed,
 				Error:        err.Error(),
 				Diagnostics:  invocationDiagnostics,
-				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+				Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 			}, nil
 		}
 		workerDef = &interpolatedWorker
@@ -180,7 +189,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	if err != nil {
 		return result, err
 	}
-	if workstationDef.Type == interfaces.WorkstationTypeClassify {
+	if workstationDef.Type == workertaxonomy.WorkstationTypeClassify {
 		return normalizeClassifierWorkResult(result), nil
 	}
 	return result, nil
@@ -188,8 +197,8 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 
 func invocationDiagnosticsForDispatch(
 	runtimeCfg interfaces.RuntimeFactoryConfigLookup,
-	args *interfaces.InvocationArguments,
-) *interfaces.WorkDiagnostics {
+	args *work.InvocationArguments,
+) *workerexecution.WorkDiagnostics {
 	if args == nil {
 		return nil
 	}
@@ -201,26 +210,37 @@ func invocationDiagnosticsForDispatch(
 	if diagnostic == nil {
 		return nil
 	}
-	return &interfaces.WorkDiagnostics{Invocation: diagnostic}
+	return &workerexecution.WorkDiagnostics{Invocation: diagnostic}
 }
 
-func invocationArgumentsFromDispatch(dispatch interfaces.WorkDispatch) *interfaces.InvocationArguments {
+func invocationArgumentsFromDispatch(dispatch work.WorkDispatch) *work.InvocationArguments {
 	for _, raw := range dispatch.InputTokens {
-		token, ok := raw.(interfaces.Token)
-		if !ok {
+		token := factoryTokenFromDispatchInput(raw)
+		if token == nil {
 			continue
 		}
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if token.Color.InvocationArguments != nil {
-			return interfaces.CloneInvocationArguments(token.Color.InvocationArguments)
+			return work.CloneInvocationArguments(token.Color.InvocationArguments)
 		}
 	}
 	return nil
 }
 
-func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {
+func factoryTokenFromDispatchInput(raw any) *factorytoken.Token {
+	switch token := raw.(type) {
+	case factorytoken.Token:
+		return &token
+	case *factorytoken.Token:
+		return token
+	default:
+		return nil
+	}
+}
+
+func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *workerexecution.WorkResult) {
 	requestContext := resolvedWorkstationExecutionContext{
 		ProjectID:   dispatch.ProjectID,
 		SessionID:   factorySessionIDFromWorkflowContext(we.WorkflowContext),
@@ -242,12 +262,12 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 					"transition_id", dispatch.TransitionID,
 					"dispatch_id", dispatch.DispatchID,
 					"error", err)...)
-			failed := interfaces.WorkResult{
+			failed := workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
 				TransitionID: dispatch.TransitionID,
-				Outcome:      interfaces.OutcomeFailed,
+				Outcome:      workerexecution.OutcomeFailed,
 				Error:        "parameterized field resolution failed: " + err.Error(),
-				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+				Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 			}
 			return resolvedWorkstationExecutionContext{}, &failed
 		}
@@ -312,13 +332,13 @@ func defaultRuntimeWorkingDirectory(runtimeCfg interfaces.RuntimeConfigLookup) s
 
 func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	ctx context.Context,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	workstationDef *interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	requestContext *resolvedWorkstationExecutionContext,
 	start time.Time,
-) *interfaces.WorkResult {
-	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+) *workerexecution.WorkResult {
+	selection := workerrunner.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
 	executionProvider := modelProviderForExecution(workerDef.ModelProvider, selection)
 	if !worktree.ShouldPrepareFactoryWorktreeForCodex(executionProvider, workstationDef.WorkingDirectory, requestContext.Worktree) {
 		return nil
@@ -387,7 +407,7 @@ func pathExists(value string) bool {
 	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
-func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
+func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.WorkDispatch, workerName string, workerDef *workerconfig.Config, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (workerexecution.WorkstationExecutionRequest, *workerexecution.WorkResult) {
 	modelBindings, err := resolveModelOperationBindings(workstationDef, workerDef, requestContext.InputTokens)
 	if err != nil {
 		logger.Error("model operation binding resolution failed",
@@ -396,14 +416,14 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 				"dispatch_id", dispatch.DispatchID,
 				"operation", workstationDef.Operation,
 				"error", err)...)
-		failed := interfaces.WorkResult{
+		failed := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "model operation binding resolution failed: " + err.Error(),
-			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 		}
-		return interfaces.WorkstationExecutionRequest{}, &failed
+		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
 
 	rendered, err := we.Renderer.Render(
@@ -418,19 +438,19 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 				"dispatch_id", dispatch.DispatchID,
 				"prompt_template", workstationDef.PromptTemplate,
 				"error", err)...)
-		failed := interfaces.WorkResult{
+		failed := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "prompt render failed: " + err.Error(),
-			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 		}
-		return interfaces.WorkstationExecutionRequest{}, &failed
+		return workerexecution.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
-	return interfaces.WorkstationExecutionRequest{
-		Dispatch:                 interfaces.CloneWorkDispatch(dispatch),
+	selection := workerrunner.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	return workerexecution.WorkstationExecutionRequest{
+		Dispatch:                 work.CloneWorkDispatch(dispatch),
 		WorkerType:               workerName,
 		WorkstationType:          dispatch.WorkstationName,
 		RunnerID:                 selection.RunnerID,
@@ -440,6 +460,8 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		InputTokens:              InputTokens(requestContext.InputTokens...),
 		ModelOperation:           workstationDef.Operation,
 		ModelBindings:            modelBindings,
+		Model:                    workerDef.Model,
+		ModelProvider:            workerDef.ModelProvider,
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,
@@ -450,16 +472,16 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 	}, nil
 }
 
-func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (interfaces.WorkResult, error) {
+func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request workerexecution.WorkstationExecutionRequest, workerDef *workerconfig.Config, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (workerexecution.WorkResult, error) {
 	executorCtx := ctx
 	executionTimeout, err := resolveExecutionTimeout(workerDef, workstationDef)
 	if err != nil {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
 			TransitionID: request.Dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        err.Error(),
-			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 		}, nil
 	}
 	if executionTimeout > 0 {
@@ -479,12 +501,12 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 				"transition_id", request.Dispatch.TransitionID,
 				"dispatch_id", request.Dispatch.DispatchID,
 				"error", err)...)
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
 			TransitionID: request.Dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "executor failed: " + err.Error(),
-			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 		}, nil
 	}
 
@@ -497,19 +519,19 @@ func (we *WorkstationExecutor) executeInnerWorker(ctx context.Context, request i
 	return result, nil
 }
 
-func normalizeClassifierWorkResult(result interfaces.WorkResult) interfaces.WorkResult {
-	if result.Outcome == interfaces.OutcomeFailed {
+func normalizeClassifierWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
+	if result.Outcome == workerexecution.OutcomeFailed {
 		return result
 	}
 
 	label, err := normalizeClassifierLabel(result.Output)
 	if err != nil {
-		result.Outcome = interfaces.OutcomeFailed
+		result.Outcome = workerexecution.OutcomeFailed
 		result.Error = classifierOutputErrorDetail(result.Output, err)
 		return result
 	}
 
-	result.Outcome = interfaces.OutcomeAccepted
+	result.Outcome = workerexecution.OutcomeAccepted
 	result.Output = label
 	result.Feedback = ""
 	return result
@@ -550,11 +572,11 @@ func classifierRawOutputEvidence(rawOutput string) string {
 // Compile-time check.
 var _ WorkerExecutor = (*WorkstationExecutor)(nil)
 
-func executionRequestInputTokens(request interfaces.WorkstationExecutionRequest) []interfaces.Token {
+func executionRequestInputTokens(request workerexecution.WorkstationExecutionRequest) []factorytoken.Token {
 	return cloneInputTokens(request.InputTokens)
 }
 
-func executionRequestContext(request interfaces.WorkstationExecutionRequest) *factory_context.FactoryContext {
+func executionRequestContext(request workerexecution.WorkstationExecutionRequest) *factory_context.FactoryContext {
 	if request.WorkingDirectory == "" && len(request.EnvVars) == 0 && request.ProjectID == "" && request.FactorySessionID == "" {
 		return nil
 	}
@@ -595,7 +617,7 @@ func factorySessionIDFromWorkflowContext(wfCtx *factory_context.FactoryContext) 
 	return strings.TrimSpace(wfCtx.SessionID)
 }
 
-func (we *WorkstationExecutor) runtimeWorkstation(dispatch interfaces.WorkDispatch) (*interfaces.FactoryWorkstationConfig, bool) {
+func (we *WorkstationExecutor) runtimeWorkstation(dispatch work.WorkDispatch) (*interfaces.FactoryWorkstationConfig, bool) {
 	if we.RuntimeConfig == nil {
 		return nil, false
 	}
@@ -608,26 +630,26 @@ func (we *WorkstationExecutor) runtimeWorkstation(dispatch interfaces.WorkDispat
 	}
 	workerName := workstationWorkerName(workstationDef, dispatch)
 	workerDef, ok := we.RuntimeConfig.Worker(workerName)
-	if !ok || workerDef.Type != interfaces.WorkerTypeScript {
+	if !ok || workerDef.Type != workertaxonomy.WorkerTypeScript {
 		return nil, false
 	}
 	fallback := *workstationDef
-	fallback.Type = interfaces.WorkstationTypeModel
+	fallback.Type = workertaxonomy.WorkstationTypeModel
 	return &fallback, true
 }
 
-func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch interfaces.WorkDispatch) string {
+func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch work.WorkDispatch) string {
 	if workstationDef != nil && workstationDef.WorkerTypeName != "" {
 		return workstationDef.WorkerTypeName
 	}
 	return dispatch.WorkerType
 }
 
-func workstationLookupKey(dispatch interfaces.WorkDispatch) string {
+func workstationLookupKey(dispatch work.WorkDispatch) string {
 	return dispatch.WorkstationName
 }
 
-func resolveExecutionTimeout(workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
+func resolveExecutionTimeout(workerDef *workerconfig.Config, workstationDef *interfaces.FactoryWorkstationConfig) (time.Duration, error) {
 	if workstationDef != nil {
 		timeout, err := config.WorkstationExecutionTimeout(workstationDef)
 		if err != nil {
@@ -655,17 +677,17 @@ func resolveExecutionTimeout(workerDef *interfaces.WorkerConfig, workstationDef 
 	return 0, nil
 }
 
-func timeoutWorkResult(dispatch interfaces.WorkDispatch, duration time.Duration) interfaces.WorkResult {
-	failureMetadata := &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyRetryable,
-		Type:   interfaces.WorkFailureTypeTimeout,
+func timeoutWorkResult(dispatch work.WorkDispatch, duration time.Duration) workerexecution.WorkResult {
+	failureMetadata := &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyRetryable,
+		Type:   workerexecution.WorkFailureTypeTimeout,
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Error:           "execution timeout",
-		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
-		Metrics:         interfaces.WorkMetrics{Duration: duration},
+		FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadata),
+		Metrics:         workerexecution.WorkMetrics{Duration: duration},
 	}
 }

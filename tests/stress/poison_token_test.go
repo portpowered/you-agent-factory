@@ -7,11 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestPoisonTokenMalformedSubmissions verifies that malformed work submissions
@@ -76,7 +80,7 @@ func TestPoisonTokenMalformedSubmissions(t *testing.T) {
 
 	t.Run("mixed_batch_rejects_without_partial_submit", func(t *testing.T) {
 		h := newPoisonSubmitHarness(t)
-		err := h.SubmitFullError(context.Background(), []interfaces.SubmitRequest{
+		err := h.SubmitFullError(context.Background(), []work.SubmitRequest{
 			{WorkTypeID: "task", Payload: []byte(`{"good": 1}`)},
 			{WorkTypeID: "missing", Payload: []byte(`{"bad": 1}`)},
 		})
@@ -106,7 +110,7 @@ func TestPoisonTokenMalformedExecutorResults(t *testing.T) {
 	}{
 		{name: "unknown_outcome_enum", workerName: "poison-worker", executor: &poisonExecutor{outcome: "TOTALLY_INVALID_OUTCOME"}},
 		{name: "empty_result_from_executor", workerName: "empty-worker", executor: &emptyResultExecutor{}},
-		{name: "result_with_non_existent_transition_id", workerName: "bad-transition-worker", executor: &poisonExecutor{overrideTransitionID: "totally-fake-transition", outcome: interfaces.OutcomeAccepted}},
+		{name: "result_with_non_existent_transition_id", workerName: "bad-transition-worker", executor: &poisonExecutor{overrideTransitionID: "totally-fake-transition", outcome: workerexecution.OutcomeAccepted}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newPoisonExecHarness(t, tc.workerName)
@@ -145,7 +149,7 @@ func TestPoisonTokenValidWorkUnaffected(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w"}},
+		Workers: []workerconfig.Config{{Name: "w"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "process", WorkerTypeName: "w",
@@ -171,16 +175,16 @@ func TestPoisonTokenValidWorkUnaffected(t *testing.T) {
 
 	// Submit a burst of mixed valid and invalid work.
 	for i := range validItems {
-		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
+		requireSubmitFullRejected(t, h, []work.SubmitRequest{
 			{WorkTypeID: "", Payload: []byte(`{"poison":true}`)},
 		}, "missing workTypeName")
-		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
+		requireSubmitFullRejected(t, h, []work.SubmitRequest{
 			{WorkTypeID: "bogus", Payload: []byte(`{"poison":true}`)},
 		}, "unknown work type")
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+		h.SubmitFull(context.Background(), []work.SubmitRequest{
 			{WorkTypeID: "task", Payload: fmt.Appendf(nil, `{"item":%d}`, i)},
 		})
-		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
+		requireSubmitFullRejected(t, h, []work.SubmitRequest{
 			{WorkTypeID: "also-bogus", Payload: []byte(`{"poison":true}`)},
 		}, "unknown work type")
 	}
@@ -240,7 +244,7 @@ func TestPoisonTokenNoGlobalStateCorruption(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w"}},
+		Workers: []workerconfig.Config{{Name: "w"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "w",
 			Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -316,7 +320,7 @@ func assertMassiveInvalidSpawnHandled(t *testing.T) {
 	h.SetCustomExecutor("spawn-worker", &massiveSpawnExecutor{
 		spawnCount:  10000,
 		spawnTypeID: "nonexistent-type",
-		realOutcome: interfaces.OutcomeAccepted,
+		realOutcome: workerexecution.OutcomeAccepted,
 	})
 	h.SubmitWork("task", []byte(`{"test": "massive-spawn"}`))
 	h.RunUntilComplete(t, 10*time.Second)
@@ -348,7 +352,7 @@ func assertMassiveValidSpawnHandled(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			}},
 		},
-		Workers: []interfaces.WorkerConfig{{Name: "spawn-worker"}, {Name: "child-worker"}},
+		Workers: []workerconfig.Config{{Name: "spawn-worker"}, {Name: "child-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "process", WorkerTypeName: "spawn-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 			{Name: "child-process", WorkerTypeName: "child-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "child", StateName: "complete"}}},
@@ -359,7 +363,7 @@ func assertMassiveValidSpawnHandled(t *testing.T) {
 	h.SetCustomExecutor("spawn-worker", &massiveSpawnExecutor{
 		spawnCount:  spawnCount,
 		spawnTypeID: "child",
-		realOutcome: interfaces.OutcomeAccepted,
+		realOutcome: workerexecution.OutcomeAccepted,
 	})
 	h.SubmitWork("task", []byte(`{"test": "valid-spawn"}`))
 	h.RunUntilComplete(t, 30*time.Second)
@@ -385,7 +389,7 @@ func TestPoisonTokenNoPanic(t *testing.T) {
 	}
 
 	// Build a simple workflow used across subtests.
-	buildNet := func() *interfaces.TokenColor {
+	buildNet := func() *factorytoken.Color {
 		return nil // placeholder, not used
 	}
 	_ = buildNet
@@ -532,7 +536,7 @@ func poisonExecCfg(workerName string) *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: workerName}},
+		Workers: []workerconfig.Config{{Name: workerName}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: workerName,
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -548,17 +552,17 @@ func poisonExecCfg(workerName string) *interfaces.FactoryConfig {
 
 // poisonExecutor returns a WorkResult with configurable poison fields.
 type poisonExecutor struct {
-	outcome              interfaces.WorkOutcome
+	outcome              workerexecution.WorkOutcome
 	overrideTransitionID string
 }
 
-func (e *poisonExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *poisonExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	transitionID := dispatch.TransitionID
 	if e.overrideTransitionID != "" {
 		transitionID = e.overrideTransitionID
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: transitionID,
 		Outcome:      e.outcome,
@@ -569,28 +573,28 @@ func (e *poisonExecutor) Execute(_ context.Context, dispatch interfaces.WorkDisp
 // no Outcome, no OutputTokens.
 type emptyResultExecutor struct{}
 
-func (e *emptyResultExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{}, nil
+func (e *emptyResultExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{}, nil
 }
 
 // massiveSpawnExecutor returns ACCEPTED with N spawned work items.
 type massiveSpawnExecutor struct {
 	spawnCount  int
 	spawnTypeID string
-	realOutcome interfaces.WorkOutcome
+	realOutcome workerexecution.WorkOutcome
 }
 
-func (e *massiveSpawnExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	spawned := make([]interfaces.TokenColor, e.spawnCount)
+func (e *massiveSpawnExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	spawned := make([]factorytoken.Color, e.spawnCount)
 	for i := range spawned {
-		spawned[i] = interfaces.TokenColor{
+		spawned[i] = factorytoken.Color{
 			WorkID:     fmt.Sprintf("spawn-%d", i),
 			WorkTypeID: e.spawnTypeID,
 			Payload:    fmt.Appendf(nil, `{"spawned_index": %d}`, i),
 		}
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      e.realOutcome,
@@ -603,8 +607,8 @@ type errorExecutor struct {
 	err error
 }
 
-func (e *errorExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{}, e.err
+func (e *errorExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{}, e.err
 }
 
 // panicWorkerExecutor panics from Execute to exercise executor panic recovery.
@@ -612,7 +616,7 @@ type panicWorkerExecutor struct {
 	message string
 }
 
-func (e *panicWorkerExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *panicWorkerExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
 	panic(e.message)
 }
 
@@ -654,7 +658,7 @@ func requireSubmitRejected(t *testing.T, h *testutil.ServiceTestHarness, workTyp
 	}
 }
 
-func requireSubmitFullRejected(t *testing.T, h *testutil.ServiceTestHarness, reqs []interfaces.SubmitRequest, wantErr string) {
+func requireSubmitFullRejected(t *testing.T, h *testutil.ServiceTestHarness, reqs []work.SubmitRequest, wantErr string) {
 	t.Helper()
 
 	err := h.SubmitFullError(context.Background(), reqs)

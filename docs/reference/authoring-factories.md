@@ -279,11 +279,12 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal` and `@you/tts` also use the
+First-party built-ins such as `@you/goal`, `@you/quorum`, and `@you/tts` also use the
 named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
+you run --named @you/quorum "Compare the two proposed release plans."
 you run --named @you/tts --output primary "Read the release summary."
 ```
 

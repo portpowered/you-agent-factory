@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -101,7 +101,7 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 	response := factoryapi.FactoryDispatch{
 		Id:               result.ID,
 		SessionId:        result.SessionID,
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(result.OrchestratorKind),
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
 		DispatchKind:     factoryapi.FactoryDispatchKind(result.DispatchKind),
 		Status:           factoryapi.FactoryDispatchStatus(result.Status),
 	}
@@ -241,12 +241,20 @@ func EventReadResponseToAPI(result factorysessionexecution.EventReadResult) []fa
 // FactoryEventStreamFromReadResult maps one durable event read result into the
 // shared reconnect stream shape used by API, CLI, MCP, and UI transports.
 func FactoryEventStreamFromReadResult(result factorysessionexecution.EventReadResult) *interfaces.FactoryEventStream {
-	closed := make(chan factoryapi.FactoryEvent)
+	closed := make(chan interfaces.FactoryEvent)
 	close(closed)
 	stream := &interfaces.FactoryEventStream{
 		Events: closed,
 	}
-	events := EventReadResponseToAPI(result)
+	events := make([]interfaces.FactoryEvent, 0, len(result.Events))
+	for _, raw := range result.Events {
+		var event interfaces.FactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			continue
+		}
+		event.Payload = append(json.RawMessage(nil), event.Payload...)
+		events = append(events, event)
+	}
 	if len(events) == 0 {
 		return stream
 	}

@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestInvocationErrorsAreNilSafeAndPreserveConstructedMessage(t *testing.T) {
@@ -209,7 +210,7 @@ func TestNormalizeArguments_CompatibilityFallsBackToSharedTextResolver(t *testin
 
 func TestNormalizeArguments_CompatibilityPreservesAPIContentFallback(t *testing.T) {
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
-		CompatibilityContent: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "hello"}},
+		CompatibilityContent: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
 	})
 	if err != nil {
 		t.Fatalf("NormalizeArguments: %v", err)

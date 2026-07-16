@@ -22,7 +22,7 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 - `pkg/service/` wires the runtime, configuration, API server, replay, logging, and worker construction.
 - `pkg/transports/http/` serves runtime HTTP endpoints and the embedded dashboard shell.
 - `pkg/workers/` owns worker execution contracts, provider calls, script command execution, and work-scoped metadata.
-- `pkg/replay/` owns record/replay artifact construction, side-effect matching, and deterministic replay behavior.
+- `pkg/platform/replay/` owns policy-free replay artifact filesystem mechanics; `pkg/factory/replay/` owns Factory-event artifact construction, side-effect matching, and deterministic replay behavior.
 - `ui/` is the Vite dashboard source. `ui/dist/` is generated local build output, and `make ui-build` refreshes the ignored embed registration that wires those assets into Go builds.
 - `tests/functional_test/` contains workflow fixtures and smoke coverage.
 
@@ -543,7 +543,7 @@ feature code.
 8. Run `make ui-integration-test` when changing browser-backed dashboard workflows, files under `ui/integration/`, shared browser harness seams, or fixture-driven session and graph-editor journeys that must be verified in Chromium.
 9. Run `make ui-storybook` when Storybook fixtures, visual states, or dashboard component stories change.
 10. Run `make ui-test-storybook` after `make ui-storybook` when Storybook play functions, dashboard Storybook runtime mocks, or browser-backed interaction behavior change.
-11. Run replay-focused smoke tests when changing `pkg/replay`, record/replay CLI flags, worker side-effect matching, or artifact promotion behavior.
+11. Run replay-focused smoke tests when changing `pkg/platform/replay`, `pkg/factory/replay`, record/replay CLI flags, worker side-effect matching, or artifact promotion behavior.
 
 ## Frontend Testing Layers
 
@@ -649,7 +649,7 @@ behavior explicit inside the test that needs it.
 - If browser-side PNG metadata has already shipped under a given `schemaVersion`, keep import compatibility for those required fields under that same version; for example, `v1` import still needs to accept legacy `factoryName` even though fresh exports now write canonical `name`.
 - Browser-side factory export canonicalization must normalize legacy guard enum spellings such as `visit_count`, `all_children_complete`, and `any_child_failed` to the public OpenAPI values before packaging metadata; key-only alias rewrites still leak non-canonical factory contracts into exported PNGs.
 - Browser-side export canonicalization must also preserve the full generated same-name input-guard contract: normalize `same_name` to `SAME_NAME` and `match_input` to `matchInput` instead of rejecting valid current-factory payloads during PNG export.
-- Browser-side export canonicalization must stay aligned with `pkg/interfaces/public_factory_enums.go` and the strict generated-factory boundary in `pkg/config`: shared worker and workstation aliases canonicalize through the interfaces-owned helpers, while the generated `Factory` decode still rejects unsupported values after normalization.
+- Browser-side export canonicalization must stay aligned with `pkg/factory/contracts/public_factory_enums.go` and the strict generated-factory boundary in `pkg/config`: shared worker and workstation aliases canonicalize through the Factory-owned helpers, while the generated `Factory` decode still rejects unsupported values after normalization.
 - Browser-side export dialogs must invalidate any in-flight PNG export attempt when the dialog closes so a late async rasterization or metadata-write completion cannot trigger a download after the user cancels or dismisses the flow.
 - For Agent Factory boundary-cleanup work that narrows a customer-visible DTO or formatter seam, check in a field inventory under `docs/internal/development/*-data-model.md` before removing the broad contract so later stories can distinguish render-owned fields from canonical passthrough and dead aggregate-only ballast.
 - For browser-backed dashboard download stories, serve `ui/storybook-static` and scope the Vitest Storybook run with `--testNamePattern` when only one changed story needs proof. If the story or App-level test both decodes an uploaded image and downloads a blob, stub `createImageBitmap` or `OffscreenCanvas` on `globalThis` instead of `URL.createObjectURL` so the upload decode path does not consume the download stub.
@@ -673,8 +673,8 @@ behavior explicit inside the test that needs it.
 - Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/transports/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
 - Multi-session runtime ownership should follow `docs/architecture/session-runtime-ownership.md`: the service is the coordinator and router, while session runtime config, execution base, event history, and active runtime state belong to the addressed live session rather than mutable service-global config.
 - Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
-- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/transports/http`, `pkg/config`, or `pkg/replay` behavior tests.
-- Provider-error and lane-isolation smoke tests should use `pkg/testutil` harness helpers instead of open-coded fixture scaffolding and polling loops.
+- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/transports/http`, `pkg/config`, or `pkg/factory/replay` behavior tests.
+- Provider-error and lane-isolation smoke tests should use `internal/testutil` harness helpers instead of open-coded fixture scaffolding and polling loops.
 - Shared Codex, Cursor-family, and Claude provider-failure fixtures live in `pkg/workers/testdata/provider_error_corpus.json`; extend that corpus and load it through `provider.LoadProviderErrorCorpus()` from `pkg/workers/provider` before adding new inline raw provider payloads to worker or functional tests.
 - Shared provider-error smoke scenarios should assert `CompletedDispatch.FailureMetadata` type and family from the corpus entry they use, so normalization and runtime routing stay aligned through the full worker-pool path instead of only through final token placement.
 - When transcript-trimming or bounded-error-line tests need extra noise around a supported provider failure, start from the shared corpus entry and layer the unique transcript text around that corpus-derived `ERROR:` line instead of open-coding a fresh supported payload.
@@ -714,7 +714,7 @@ registry := workers.NewWorkstationTypeRegistry()
 registry.Register(&MyCustomType{})
 ```
 
-The config validator checks workstation scheduling values against a known set of kinds. To make a new kind available in `factory.json`, add the kind constant to `pkg/interfaces/factory_config.go` and update the validation in `pkg/config/config_validator.go`.
+The config validator checks workstation scheduling values against a known set of kinds. To make a new kind available in `factory.json`, add the kind constant to `pkg/factory/contracts/factory_config.go` and update the validation in `pkg/config/config_validator.go`.
 
 ## Factory document vs dashboard snapshot
 

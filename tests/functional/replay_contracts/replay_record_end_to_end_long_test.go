@@ -13,14 +13,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -202,7 +205,7 @@ Finish the input task.
 `)
 
 	generatedBatchOutput := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]},"metadata":{"parentLineage":["request-replay-external-batch","work-external-fanout"],"relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]}}`
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "record external first"},
 			{Content: generatedBatchOutput},
@@ -221,15 +224,15 @@ Finish the input task.
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithRecordPath(artifactPath),
 	)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-replay-external-batch",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "external-first", WorkID: "work-external-first", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external first"},
 			{Name: "external-fanout", WorkID: "work-external-fanout", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external fanout"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
 			SourceWorkName: "external-fanout",
 			TargetWorkName: "external-first",
 		}},
@@ -297,7 +300,7 @@ stopToken: COMPLETE
 ---
 Finish the input task.
 `)
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "provider-replay-env-work",
 		TraceID:    "provider-replay-env-trace",
@@ -380,7 +383,7 @@ func assertGeneratedReplayRequestMetadata(t *testing.T, events []factoryapi.Fact
 		t.Fatalf("generated relation metadata = %#v, want generated-beta depends on generated-alpha complete", relations)
 	}
 
-	world, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -517,7 +520,7 @@ args:
 func writeRecordReplayWorkFile(t *testing.T, path string) {
 	t.Helper()
 
-	req := interfaces.SubmitRequest{
+	req := work.SubmitRequest{
 		WorkID:     "record-replay-e2e-work",
 		WorkTypeID: "task",
 		TraceID:    "record-replay-e2e-trace",

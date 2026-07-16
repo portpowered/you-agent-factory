@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -13,16 +13,16 @@ func TestDependencyTracking_BlocksUntilSatisfied(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_tracking_dir"))
 
 	workIDA := "task-A-work-id"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     workIDA,
 		Payload:    []byte("task A"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    []byte("task B"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "complete"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "complete"},
 		},
 	})
 

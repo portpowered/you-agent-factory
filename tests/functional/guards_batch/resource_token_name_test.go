@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -60,9 +60,9 @@ func TestResourceGated_DispatchTokenName(t *testing.T) {
 	}
 
 	for _, tok := range resourceTokens {
-		if tok.Color.DataType != interfaces.DataTypeResource {
+		if tok.Color.DataType != factorytoken.DataTypeResource {
 			t.Errorf("resource token %s has DataType %q, expected %q",
-				tok.ID, tok.Color.DataType, interfaces.DataTypeResource)
+				tok.ID, tok.Color.DataType, factorytoken.DataTypeResource)
 		}
 	}
 }

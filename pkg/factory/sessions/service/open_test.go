@@ -7,13 +7,12 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -88,7 +87,7 @@ func (h *openTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string
 	return "runtime-test::sess-1"
 }
 
-func (h *openTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []factoryapi.FactoryEvent {
+func (h *openTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []interfaces.FactoryEvent {
 	return nil
 }
 
@@ -233,17 +232,17 @@ func TestService_OpenFactorySession_RejectsValidateOnlyWithInitNewFactory(t *tes
 	gateway := factorysessionservice.New(&openTestHost{})
 	validateOnly := true
 	initNewFactory := true
-	_, err := gateway.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+	_, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
 		FolderPath:     "/tmp",
-		ValidateOnly:   &validateOnly,
-		InitNewFactory: &initNewFactory,
+		ValidateOnly:   validateOnly,
+		InitNewFactory: initNewFactory,
 	})
 	if err == nil || !strings.Contains(err.Error(), "initNewFactory cannot be combined with validateOnly") {
 		t.Fatalf("OpenFactorySession error = %v, want initNewFactory/validateOnly conflict", err)
 	}
 }
 
-func TestService_OpenFactorySession_MapsOpenedSessionSummary(t *testing.T) {
+func TestService_OpenFactorySession_ReturnsOpenedSessionIdentity(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
@@ -266,18 +265,18 @@ func TestService_OpenFactorySession_MapsOpenedSessionSummary(t *testing.T) {
 	}
 	gateway := factorysessionservice.New(host)
 
-	response, err := gateway.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
 		FolderPath: "/tmp",
 	})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
-	if response.Session == nil || response.Session.Id != "sess-1" {
-		t.Fatalf("response session = %#v, want sess-1", response.Session)
+	if result == nil || result.SessionID != "sess-1" {
+		t.Fatalf("open result = %#v, want sess-1", result)
 	}
 }
 
-func TestService_OpenFactorySession_PropagatesRequireSessionError(t *testing.T) {
+func TestService_OpenFactorySession_DoesNotMapLiveSessionAtDomainBoundary(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
@@ -290,10 +289,13 @@ func TestService_OpenFactorySession_PropagatesRequireSessionError(t *testing.T) 
 	}
 	gateway := factorysessionservice.New(host)
 
-	_, err := gateway.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+	result, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
 		FolderPath: "/tmp",
 	})
-	if err == nil {
-		t.Fatal("OpenFactorySession = nil, want require session error")
+	if err != nil {
+		t.Fatalf("OpenFactorySession: %v", err)
+	}
+	if result == nil || result.SessionID != "sess-1" {
+		t.Fatalf("open result = %#v, want sess-1", result)
 	}
 }

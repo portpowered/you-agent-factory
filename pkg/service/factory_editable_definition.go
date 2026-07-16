@@ -9,6 +9,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -17,6 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorydefinitionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorydefinition"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -114,11 +117,23 @@ func (h factoryDefinitionHost) SessionFactoryPersistRoot(session *factorysession
 	return sessionFactoryPersistRoot(h.FactoryService.factoryRootDir, session)
 }
 
-func (h factoryDefinitionHost) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+func (h factoryDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, h.WorkstationLoader())
+}
+
+func (h factoryDefinitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {
 	if h.FactoryService == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
+		return nil, fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+	current, err := h.FactoryService.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(current)
+	if err != nil {
+		return nil, fmt.Errorf("capture current factory snapshot: %w", err)
+	}
+	return snapshot, nil
 }
 
 func (h factoryDefinitionHost) WithActivationLock(fn func() error) error {
@@ -141,13 +156,13 @@ func (h factoryDefinitionHost) ActivateSessionEditableFactory(
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
-	name factoryapi.FactoryName,
+	name string,
 	runtimeName string,
 ) error {
 	if h.FactoryService == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
+	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, factoryapi.FactoryName(name), runtimeName)
 }
 
 func (h factoryDefinitionHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
@@ -215,15 +230,15 @@ func (h factoryDefinitionHost) SwapPersistedNamedFactoryRuntime(
 	return h.FactoryService.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
 }
 
-var _ FactoryDefinitionService = (*factorydefinition.Service)(nil)
+var _ FactoryDefinitionService = (*factorydefinitionmapping.Service)(nil)
 
 func newFactoryDefinitionService(fs *FactoryService) FactoryDefinitionService {
-	return factorydefinition.New(factoryDefinitionHost{FactoryService: fs})
+	return factorydefinitionmapping.New(factorydefinition.New(factoryDefinitionHost{FactoryService: fs}))
 }
 
 func (fs *FactoryService) requireDefinitions() FactoryDefinitionService {
 	if fs == nil {
-		return factorydefinition.New(factoryDefinitionHost{})
+		return factorydefinitionmapping.New(factorydefinition.New(factoryDefinitionHost{}))
 	}
 	if fs.definitions == nil {
 		fs.definitions = newFactoryDefinitionService(fs)
@@ -231,8 +246,8 @@ func (fs *FactoryService) requireDefinitions() FactoryDefinitionService {
 	return fs.definitions
 }
 
-func (fs *FactoryService) definitionService() *factorydefinition.Service {
-	if svc, ok := fs.requireDefinitions().(*factorydefinition.Service); ok {
+func (fs *FactoryService) definitionService() *factorydefinitionmapping.Service {
+	if svc, ok := fs.requireDefinitions().(*factorydefinitionmapping.Service); ok {
 		return svc
 	}
 	return nil
@@ -787,7 +802,7 @@ func ComposeFactoryCore(
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	)
-	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddGeneratedRecorder)
+	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddEventTypeRecorder)
 	collaborators.Sessions.Upsert(defaultSession, true)
 
 	coreBuilt = true

@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
 func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T) {
-	provider := newUnitMockProvider(interfaces.InferenceResponse{
+	provider := newUnitMockProvider(workerexecution.InferenceResponse{
 		Content: `{"text":"bridged-child-output"}`,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "provider-session-42",
@@ -75,17 +75,17 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 }
 
 type unitMockProvider struct {
-	response  interfaces.InferenceResponse
+	response  workerexecution.InferenceResponse
 	callCount int
-	lastReq   interfaces.ProviderInferenceRequest
+	lastReq   workerexecution.ProviderInferenceRequest
 	mu        sync.Mutex
 }
 
-func newUnitMockProvider(response interfaces.InferenceResponse) *unitMockProvider {
+func newUnitMockProvider(response workerexecution.InferenceResponse) *unitMockProvider {
 	return &unitMockProvider{response: response}
 }
 
-func (m *unitMockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *unitMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.callCount++
@@ -101,17 +101,17 @@ type failingUnitMockProvider struct {
 
 type sequencedUnitMockProvider struct {
 	results []struct {
-		response interfaces.InferenceResponse
+		response workerexecution.InferenceResponse
 		err      error
 	}
 	callCount int
 }
 
-func (m *sequencedUnitMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *sequencedUnitMockProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	index := m.callCount
 	m.callCount++
 	if index >= len(m.results) {
-		return interfaces.InferenceResponse{}, provider.NewProviderError(interfaces.WorkFailureTypeUnknown, "unexpected provider call", nil)
+		return workerexecution.InferenceResponse{}, provider.NewProviderError(workerexecution.WorkFailureTypeUnknown, "unexpected provider call", nil)
 	}
 	return m.results[index].response, m.results[index].err
 }
@@ -120,11 +120,11 @@ func newFailingUnitMockProvider(err error) *failingUnitMockProvider {
 	return &failingUnitMockProvider{err: err}
 }
 
-func (m *failingUnitMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *failingUnitMockProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.callCount++
-	return interfaces.InferenceResponse{}, m.err
+	return workerexecution.InferenceResponse{}, m.err
 }
 
 var _ workers.Provider = (*unitMockProvider)(nil)
@@ -221,7 +221,7 @@ func (s *testChildRecordSink) failedDispatchRecords(dispatchID string) []workflo
 func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *testing.T) {
 	const failureMessage = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
 	provider := newFailingUnitMockProvider(provider.NewProviderError(
-		interfaces.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		failureMessage,
 		nil,
 	))
@@ -248,13 +248,13 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 	if failed.Status != workflowruntime.ChildDispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", failed.Status)
 	}
-	if failed.FailureDetail == nil || failed.FailureDetail.Reason != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("failureDetail = %#v, want %q", failed.FailureDetail, interfaces.WorkFailureTypePermanentBadRequest)
+	if failed.FailureDetail == nil || failed.FailureDetail.Reason != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("failureDetail = %#v, want %q", failed.FailureDetail, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	if failed.FailureDetail.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("failure message = %q", failed.FailureDetail.Message)
 	}
-	if failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != interfaces.WorkFailureTypePermanentBadRequest {
+	if failed.Retryable == nil || *failed.Retryable || failed.FailureClassification != workerexecution.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("retry diagnostics = retryable:%v classification:%q", failed.Retryable, failed.FailureClassification)
 	}
 	if strings.Contains(failed.FailureDetail.Message, "gpt-5.6-sol") {
@@ -272,13 +272,13 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 }
 
 func TestProviderChildExecutor_Execute_RetryThenSuccessRecordsSuccessfulAttempt(t *testing.T) {
-	retryable := provider.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "temporary server error", nil)
+	retryable := provider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "temporary server error", nil)
 	mock := &sequencedUnitMockProvider{results: []struct {
-		response interfaces.InferenceResponse
+		response workerexecution.InferenceResponse
 		err      error
 	}{
 		{err: retryable},
-		{response: interfaces.InferenceResponse{Content: "recovered"}},
+		{response: workerexecution.InferenceResponse{Content: "recovered"}},
 	}}
 	executor := NewRetryingProviderChildExecutor("session-retry-success", providerexecution.NewProviderExecutor(mock), newTestChildRecordSink(), 1)
 	executor.sleep = func(context.Context, time.Duration) error { return nil }
@@ -300,9 +300,9 @@ func TestProviderChildExecutor_Execute_RetryThenSuccessRecordsSuccessfulAttempt(
 }
 
 func TestProviderChildExecutor_Execute_RetryExhaustionUsesConfiguredLimit(t *testing.T) {
-	retryable := provider.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil)
+	retryable := provider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timed out", nil)
 	mock := &sequencedUnitMockProvider{results: []struct {
-		response interfaces.InferenceResponse
+		response workerexecution.InferenceResponse
 		err      error
 	}{{err: retryable}, {err: retryable}, {err: retryable}}}
 	sink := newTestChildRecordSink()
@@ -320,17 +320,17 @@ func TestProviderChildExecutor_Execute_RetryExhaustionUsesConfiguredLimit(t *tes
 	if len(failed) != 1 || failed[0].Attempt != 3 {
 		t.Fatalf("failed dispatches = %#v, want one failure at attempt 3", failed)
 	}
-	if failed[0].Retryable == nil || !*failed[0].Retryable || failed[0].FailureClassification != interfaces.WorkFailureTypeTimeout {
+	if failed[0].Retryable == nil || !*failed[0].Retryable || failed[0].FailureClassification != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("retry diagnostics = retryable:%v classification:%q", failed[0].Retryable, failed[0].FailureClassification)
 	}
 }
 
 func TestProviderChildExecutor_Execute_CancellationPreventsNextAttempt(t *testing.T) {
-	retryable := provider.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "temporary server error", nil)
+	retryable := provider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "temporary server error", nil)
 	mock := &sequencedUnitMockProvider{results: []struct {
-		response interfaces.InferenceResponse
+		response workerexecution.InferenceResponse
 		err      error
-	}{{err: retryable}, {response: interfaces.InferenceResponse{Content: "must not run"}}}}
+	}{{err: retryable}, {response: workerexecution.InferenceResponse{Content: "must not run"}}}}
 	executor := NewRetryingProviderChildExecutor("session-retry-canceled", providerexecution.NewProviderExecutor(mock), newTestChildRecordSink(), 1)
 	ctx, cancel := context.WithCancel(context.Background())
 	executor.sleep = func(ctx context.Context, _ time.Duration) error {
@@ -419,7 +419,7 @@ func newBlockingMockProvider() *blockingMockProvider {
 	}
 }
 
-func (m *blockingMockProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *blockingMockProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.mu.Lock()
 	if !m.inferStartedSet {
 		m.inferStartedSet = true
@@ -431,7 +431,7 @@ func (m *blockingMockProvider) Infer(ctx context.Context, _ interfaces.ProviderI
 	m.mu.Lock()
 	m.contextCanceled++
 	m.mu.Unlock()
-	return interfaces.InferenceResponse{}, ctx.Err()
+	return workerexecution.InferenceResponse{}, ctx.Err()
 }
 
 func (m *blockingMockProvider) waitForInferStart(t *testing.T) {

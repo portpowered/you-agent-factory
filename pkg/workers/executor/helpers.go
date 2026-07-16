@@ -7,7 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -40,12 +45,12 @@ const (
 	MetadataOnlyCommandEnvValue = metadataOnlyCommandEnvValue
 )
 
-func cloneInputTokens(rawTokens []any) []interfaces.Token {
+func cloneInputTokens(rawTokens []any) []factorytoken.Token {
 	if len(rawTokens) == 0 {
 		return nil
 	}
 
-	out := make([]interfaces.Token, 0, len(rawTokens))
+	out := make([]factorytoken.Token, 0, len(rawTokens))
 	for _, raw := range rawTokens {
 		token, ok := decodeToken(raw)
 		if !ok {
@@ -56,7 +61,7 @@ func cloneInputTokens(rawTokens []any) []interfaces.Token {
 	return out
 }
 
-func clonePetriInputTokens(inputTokens []interfaces.Token) []any {
+func clonePetriInputTokens(inputTokens []factorytoken.Token) []any {
 	if len(inputTokens) == 0 {
 		return nil
 	}
@@ -75,45 +80,45 @@ func cloneRawInputTokens(inputTokens []any) []any {
 	return append([]any(nil), inputTokens...)
 }
 
-func decodeToken(raw any) (interfaces.Token, bool) {
-	if token, ok := raw.(interfaces.Token); ok {
+func decodeToken(raw any) (factorytoken.Token, bool) {
+	if token, ok := raw.(factorytoken.Token); ok {
 		return token, true
 	}
 
 	encoded, err := json.Marshal(raw)
 	if err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
-	var token interfaces.Token
+	var token factorytoken.Token
 	if err := json.Unmarshal(encoded, &token); err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
 	return token, true
 }
 
-func InputTokens(tokens ...interfaces.Token) []any {
+func InputTokens(tokens ...factorytoken.Token) []any {
 	return clonePetriInputTokens(tokens)
 }
 
-func WorkDispatchInputTokens(dispatch interfaces.WorkDispatch) []interfaces.Token {
+func WorkDispatchInputTokens(dispatch work.WorkDispatch) []factorytoken.Token {
 	return cloneInputTokens(dispatch.InputTokens)
 }
 
-func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
+func CommandRequestInputTokens(request CommandRequest) []factorytoken.Token {
 	return cloneInputTokens(request.InputTokens)
 }
 
-func workDispatchNonResourceTokensForWorkstation(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
-	var tokens []interfaces.Token
+func workDispatchNonResourceTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []factorytoken.Token {
+	var tokens []factorytoken.Token
 	for _, token := range orderedWorkDispatchTokensForWorkstation(dispatch, workstationDef) {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			tokens = append(tokens, token)
 		}
 	}
 	return tokens
 }
 
-func orderedWorkDispatchTokensForWorkstation(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
+func orderedWorkDispatchTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []factorytoken.Token {
 	tokens := WorkDispatchInputTokens(dispatch)
 	if workstationDef == nil || len(tokens) < 2 {
 		return tokens
@@ -124,7 +129,7 @@ func orderedWorkDispatchTokensForWorkstation(dispatch interfaces.WorkDispatch, w
 		byPlace[token.PlaceID] = append(byPlace[token.PlaceID], i)
 	}
 
-	ordered := make([]interfaces.Token, 0, len(tokens))
+	ordered := make([]factorytoken.Token, 0, len(tokens))
 	used := make([]bool, len(tokens))
 	appendPlaceTokens := func(placeID string) {
 		for _, index := range byPlace[placeID] {
@@ -276,31 +281,15 @@ func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	return &exitCodeCopy
 }
 
-func stringPtrIfNotEmpty(value string) *string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
-}
-
-func stringSlicePtr(values ...string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := append([]string(nil), values...)
-	return &cloned
-}
-
-func firstImageContentPart(rawTokens []any) (int, int, interfaces.WorkContentPart, bool) {
+func firstImageContentPart(rawTokens []any) (int, int, work.WorkContentPart, bool) {
 	for tokenIndex, token := range cloneInputTokens(rawTokens) {
 		for partIndex, part := range token.Color.Content {
-			if part.Type == interfaces.WorkContentPartTypeImage {
+			if part.Type == work.WorkContentPartTypeImage {
 				return tokenIndex, partIndex, part, true
 			}
 		}
 	}
-	return 0, 0, interfaces.WorkContentPart{}, false
+	return 0, 0, work.WorkContentPart{}, false
 }
 
 func unsupportedImageContentError(rawTokens []any, executionPath string) error {
@@ -326,7 +315,7 @@ const (
 
 // WorkLogFields returns stable structured log fields for work-scoped runtime
 // records. Empty strings are intentional so unavailable IDs remain explicit.
-func WorkLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+func WorkLogFields(metadata work.ExecutionMetadata, keysAndValues ...any) []any {
 	fields := []any{
 		"request_id", metadata.RequestID,
 		"trace_id", metadata.TraceID,
@@ -360,11 +349,11 @@ type NoopExecutor struct{}
 
 // Execute implements WorkerExecutor. It propagates the first input token's
 // color and returns OutcomeAccepted immediately.
-func (n *NoopExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (n *NoopExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 

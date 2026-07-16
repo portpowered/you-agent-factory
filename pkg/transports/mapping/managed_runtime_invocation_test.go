@@ -8,10 +8,28 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
+
+func TestInvocationResponseFromResult_MapsDomainTerminalStatus(t *testing.T) {
+	response := InvocationResponseFromResult(interfaces.FactoryInvocationResult{
+		RequestID: "request-1",
+		TraceID:   "trace-1",
+		Status:    interfaces.InvocationTerminalStatusTimedOut,
+		ErrorCode: string(interfaces.InvocationErrorCodeTimedOut),
+	})
+
+	if response.Status != factoryapi.InvocationTerminalStatusTimedOut {
+		t.Fatalf("status = %q, want TIMED_OUT", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONTIMEDOUT {
+		t.Fatalf("error code = %#v, want INVOCATION_TIMED_OUT", response.ErrorCode)
+	}
+}
 
 func TestInvocationErrorFromManagedRuntime_ReadyAllowsInvocation(t *testing.T) {
 	err := InvocationErrorFromManagedRuntime(factoryapi.ManagedRuntime{
@@ -40,8 +58,8 @@ func TestInvocationErrorFromManagedRuntime_MissingUsesManagedVocabulary(t *testi
 	if !errors.As(err, &readinessErr) {
 		t.Fatalf("error = %T, want *ManagedRuntimeInvocationError", err)
 	}
-	if readinessErr.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
-		readinessErr.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+	if readinessErr.ReadinessState != managedruntime.ReadinessStateMissing ||
+		readinessErr.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("readiness = (%s, %s), want MISSING NOT_INSTALLED", readinessErr.ReadinessState, readinessErr.LifecycleState)
 	}
 }
@@ -125,7 +143,7 @@ func TestClassifyInferenceFailure_UnsupportedOperationIdentifiesTarget(t *testin
 func TestClassifyInferenceFailure_TimeoutUsesActionableMessage(t *testing.T) {
 	ctx := InferenceFailureContext{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS"}
 	failure, ok := ClassifyInferenceFailure(
-		workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "execution timeout", context.DeadlineExceeded),
+		workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "execution timeout", context.DeadlineExceeded),
 		ctx,
 	)
 	if !ok || failure.Class != InferenceFailureClassTimeout {
@@ -154,11 +172,11 @@ func TestClassifyInferenceFailure_RuntimeFailureSuppressesRawSubprocessLogs(t *t
 
 func TestClassifyInferenceWorkResultFailure_UsesFailureMetadata(t *testing.T) {
 	ctx := InferenceFailureContext{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS"}
-	failure, ok := ClassifyInferenceWorkResultFailure(interfaces.WorkResult{
-		Outcome: interfaces.OutcomeFailed,
+	failure, ok := ClassifyInferenceWorkResultFailure(workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeFailed,
 		Error:   "execution timeout",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Type: interfaces.WorkFailureTypeTimeout,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Type: workerexecution.WorkFailureTypeTimeout,
 		},
 	}, ctx)
 	if !ok || failure.Class != InferenceFailureClassTimeout {

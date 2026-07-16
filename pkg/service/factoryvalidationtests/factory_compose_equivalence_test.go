@@ -1,15 +1,98 @@
 package factoryvalidationtests
 
 import (
+	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"go.uber.org/zap"
 )
+
+type commandRunnerProbe struct{}
+
+func (*commandRunnerProbe) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	return workerprocess.CommandResult{}, nil
+}
+
+func TestConfigWithWorkerApplicationPreservesDistinctCommandRunnerOverrides(t *testing.T) {
+	t.Parallel()
+
+	providerRunner := &commandRunnerProbe{}
+	scriptRunner := &commandRunnerProbe{}
+	cfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
+		ProviderCommandRunnerOverride: workers.CommandRunner(providerRunner),
+		CommandRunnerOverride:         workers.CommandRunner(scriptRunner),
+	})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if cfg.WorkerApplication.ProviderCommandRunner != providerRunner {
+		t.Fatal("provider command runner override was not preserved")
+	}
+	if cfg.WorkerApplication.ScriptCommandRunner != scriptRunner {
+		t.Fatal("script command runner override was not preserved")
+	}
+}
+
+func TestConfigWithWorkerApplicationRejectsNilConfig(t *testing.T) {
+	t.Parallel()
+
+	if _, err := service.ConfigWithWorkerApplication(nil); err == nil {
+		t.Fatal("ConfigWithWorkerApplication(nil) succeeded")
+	}
+}
+
+func TestConfigWithWorkerApplicationKeepsPreconstructedApplicationWithoutOverrides(t *testing.T) {
+	t.Parallel()
+
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	configured, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{WorkerApplication: components})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if configured.WorkerApplication.Provider != components.Provider || configured.WorkerApplication.Script != components.Script {
+		t.Fatal("ConfigWithWorkerApplication unexpectedly replaced the supplied worker factories")
+	}
+}
+
+func TestConfigWithWorkerApplicationAppliesOverrideToPreconstructedApplication(t *testing.T) {
+	t.Parallel()
+
+	baseProviderRunner := &commandRunnerProbe{}
+	baseScriptRunner := &commandRunnerProbe{}
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+		ProviderCommandRunner: baseProviderRunner,
+		ScriptCommandRunner:   baseScriptRunner,
+	})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	overrideProviderRunner := &commandRunnerProbe{}
+	configured, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
+		WorkerApplication:             components,
+		ProviderCommandRunnerOverride: overrideProviderRunner,
+	})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if configured.WorkerApplication.ProviderCommandRunner != overrideProviderRunner {
+		t.Fatal("preconstructed worker application did not receive provider command runner override")
+	}
+	if configured.WorkerApplication.ScriptCommandRunner != baseScriptRunner {
+		t.Fatal("preconstructed worker application unexpectedly replaced script command runner")
+	}
+}
 
 func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T) {
 	t.Parallel()
@@ -67,7 +150,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("modelsservice.NewService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, models)
+	composed := service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models))
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
@@ -204,7 +287,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("modelsservice.NewService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, models)
+	composed := service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models))
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),

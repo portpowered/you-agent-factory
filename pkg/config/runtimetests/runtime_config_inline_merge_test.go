@@ -1,13 +1,14 @@
 package runtimetests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestInlineRuntimeDefinitions_LoadsSplitDefinitionsIntoFactoryConfig(t *testing.T) {

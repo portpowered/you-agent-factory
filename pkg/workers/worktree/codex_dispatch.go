@@ -3,7 +3,7 @@ package worktree
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 )
 
 // ShouldPrepareFactoryWorktreeForCodex reports whether a Codex model workstation
@@ -24,5 +24,5 @@ func ShouldPrepareFactoryWorktreeForCodex(
 	if strings.TrimSpace(authoredWorkingDirectory) != "" {
 		return false
 	}
-	return strings.TrimSpace(executionModelProvider) == string(interfaces.ModelProviderCodex)
+	return strings.TrimSpace(executionModelProvider) == string(modelprovider.Codex)
 }

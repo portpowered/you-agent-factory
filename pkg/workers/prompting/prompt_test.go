@@ -8,17 +8,19 @@ import (
 	"testing"
 	"time"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
 	"github.com/portpowered/infinite-you/internal/testpath"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPromptRenderer_BasicInterpolation(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-1",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-123",
 			WorkTypeID: "code-changes",
 			TraceID:    "trace-abc",
@@ -61,9 +63,9 @@ func TestPromptData_ExposesOnlyCanonicalTemplateRoots(t *testing.T) {
 func TestPromptRenderer_TopLevelTokenAliasFailsWhileInputsRender(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-1",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:  "work-123",
 			Payload: []byte("Implement the feature"),
 		},
@@ -86,9 +88,9 @@ func TestPromptRenderer_TopLevelTokenAliasFailsWhileInputsRender(t *testing.T) {
 func TestPromptRenderer_RetryAwarePrompt(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-2",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:  "work-456",
 			Payload: []byte("Write a design document"),
 			Tags: map[string]string{
@@ -96,11 +98,11 @@ func TestPromptRenderer_RetryAwarePrompt(t *testing.T) {
 				"_rejection_feedback": "Missing error handling section",
 			},
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{"tr-design": 2},
 			ConsecutiveFailures: map[string]int{},
 			LastError:           "",
-			FailureLog: []interfaces.FailureRecord{
+			FailureLog: []factorytoken.Failure{
 				{TransitionID: "tr-design", Timestamp: time.Now(), Error: "timeout", Attempt: 1},
 			},
 		},
@@ -242,9 +244,9 @@ func TestBuildPromptData_MapsFactoryContextSessionID(t *testing.T) {
 func TestPromptRenderer_ContextSessionID(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-session",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-session",
 		},
 	}}
@@ -282,9 +284,9 @@ func TestPromptRenderer_ContextSessionID(t *testing.T) {
 func TestPromptRenderer_ContextFields(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-3",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-789",
 			Tags:   map[string]string{},
 		},
@@ -319,11 +321,11 @@ GOPRIVATE: {{ index .Context.Env "GOPRIVATE" }}`
 func TestPromptRenderer_ContextProjectPrefersExplicitContextOverTokenTag(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-project",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:   "work-project",
-			DataType: interfaces.DataTypeWork,
+			DataType: factorytoken.DataTypeWork,
 			Tags: map[string]string{
 				factory_context.ProjectTagKey: "token-project",
 			},
@@ -348,12 +350,12 @@ func TestPromptRenderer_ContextProjectPrefersExplicitContextOverTokenTag(t *test
 func TestPromptRenderer_ContextProjectFallsBackToFirstWorkInputProjectTag(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "resource-slot",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "slot-1",
-				DataType: interfaces.DataTypeResource,
+				DataType: factorytoken.DataTypeResource,
 				Tags: map[string]string{
 					factory_context.ProjectTagKey: "resource-project",
 				},
@@ -361,9 +363,9 @@ func TestPromptRenderer_ContextProjectFallsBackToFirstWorkInputProjectTag(t *tes
 		},
 		{
 			ID: "tok-first-work",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "work-first",
-				DataType: interfaces.DataTypeWork,
+				DataType: factorytoken.DataTypeWork,
 				Tags: map[string]string{
 					factory_context.ProjectTagKey: "first-work-project",
 				},
@@ -371,9 +373,9 @@ func TestPromptRenderer_ContextProjectFallsBackToFirstWorkInputProjectTag(t *tes
 		},
 		{
 			ID: "tok-second-work",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "work-second",
-				DataType: interfaces.DataTypeWork,
+				DataType: factorytoken.DataTypeWork,
 				Tags: map[string]string{
 					factory_context.ProjectTagKey: "second-work-project",
 				},
@@ -394,11 +396,11 @@ func TestPromptRenderer_ContextProjectFallsBackToFirstWorkInputProjectTag(t *tes
 func TestPromptRenderer_ContextProjectIgnoresResourceOnlyProjectTag(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "resource-slot",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:   "slot-1",
-			DataType: interfaces.DataTypeResource,
+			DataType: factorytoken.DataTypeResource,
 			Tags: map[string]string{
 				factory_context.ProjectTagKey: "resource-project",
 			},
@@ -419,9 +421,9 @@ func TestPromptRenderer_MissingOptionalFields(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
 	// Empty token — no tags, no history, no payload.
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID:    "tok-empty",
-		Color: interfaces.TokenColor{WorkID: "work-empty"},
+		Color: factorytoken.Color{WorkID: "work-empty"},
 	}}
 
 	tmpl := `ID: {{ (index .Inputs 0).WorkID }}
@@ -472,10 +474,10 @@ func TestPromptRenderer_InvalidTemplate(t *testing.T) {
 func TestPromptRenderer_MultipleInputTokens_PerVariableContext(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-prd",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-prd",
 				WorkTypeID: "prd",
 				Payload:    []byte("Build the login page"),
@@ -484,7 +486,7 @@ func TestPromptRenderer_MultipleInputTokens_PerVariableContext(t *testing.T) {
 		},
 		{
 			ID: "tok-review",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-review",
 				WorkTypeID: "review",
 				Payload:    []byte("Review feedback: add tests"),
@@ -521,10 +523,10 @@ Reviewer: {{ index (index .Inputs 1).Tags "reviewer" }}`
 func TestPromptRenderer_MultipleInputTokens_DistinctContexts(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-a",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-a",
 				WorkTypeID: "type-a",
 				TraceID:    "trace-a",
@@ -532,14 +534,14 @@ func TestPromptRenderer_MultipleInputTokens_DistinctContexts(t *testing.T) {
 				Payload:    []byte("payload-a"),
 				Tags:       map[string]string{"key": "val-a"},
 			},
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"tr-1": 1},
 				LastError:   "error-a",
 			},
 		},
 		{
 			ID: "tok-b",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "type-b",
 				TraceID:    "trace-b",
@@ -547,7 +549,7 @@ func TestPromptRenderer_MultipleInputTokens_DistinctContexts(t *testing.T) {
 				Payload:    []byte("payload-b"),
 				Tags:       map[string]string{"key": "val-b"},
 			},
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"tr-2": 3},
 				LastError:   "error-b",
 			},
@@ -574,24 +576,24 @@ B: {{ (index .Inputs 1).WorkID }} {{ (index .Inputs 1).WorkTypeID }} {{ (index .
 func TestPromptRenderer_MultipleInputTokens_PreservesPerInputCanonicalContent(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-text",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-text",
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "plan"},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "plan"},
 				},
 				Payload: []byte("plan"),
 			},
 		},
 		{
 			ID: "tok-mixed",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-mixed",
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
-					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "caption"},
+					{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
 				},
 				Payload: []byte("caption"),
 			},
@@ -621,22 +623,22 @@ func TestPromptRenderer_ResourceToken_FirstInList(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
 	// Simulate a dispatch where the resource token appears first.
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "agent-slot:resource:0",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "agent-slot:0",
 				WorkTypeID: "agent-slot",
-				DataType:   interfaces.DataTypeResource,
+				DataType:   factorytoken.DataTypeResource,
 				Payload:    nil,
 			},
 		},
 		{
 			ID: "tok-story",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "story-abc",
 				WorkTypeID: "story",
-				DataType:   interfaces.DataTypeWork,
+				DataType:   factorytoken.DataTypeWork,
 				Payload:    []byte("Implement the login feature"),
 			},
 		},
@@ -662,19 +664,19 @@ func TestPromptRenderer_ResourceToken_FirstInList(t *testing.T) {
 func TestPromptRenderer_ResourceToken_DataTypeAccessible(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "agent-slot:resource:0",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "agent-slot:0",
-				DataType: interfaces.DataTypeResource,
+				DataType: factorytoken.DataTypeResource,
 			},
 		},
 		{
 			ID: "tok-work",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "work-xyz",
-				DataType: interfaces.DataTypeWork,
+				DataType: factorytoken.DataTypeWork,
 				Payload:  []byte("do the thing"),
 			},
 		},
@@ -712,12 +714,12 @@ Count: {{ len .Inputs }}`
 func TestPromptRenderer_AllResourceTokens(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "gpu:resource:0",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "gpu:0",
-				DataType: interfaces.DataTypeResource,
+				DataType: factorytoken.DataTypeResource,
 			},
 		},
 	}
@@ -742,20 +744,20 @@ func TestPromptRenderer_AllResourceTokens(t *testing.T) {
 func TestPromptRenderer_NoTemplateSkipsResourcePayloads(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "agent-slot:resource:0",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "agent-slot:0",
-				DataType: interfaces.DataTypeResource,
+				DataType: factorytoken.DataTypeResource,
 				Payload:  []byte("should be ignored"),
 			},
 		},
 		{
 			ID: "tok-work",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:   "work-123",
-				DataType: interfaces.DataTypeWork,
+				DataType: factorytoken.DataTypeWork,
 				Payload:  []byte("real story content"),
 			},
 		},
@@ -778,9 +780,9 @@ func TestPromptRenderer_NoTemplateSkipsResourcePayloads(t *testing.T) {
 func TestPromptRenderer_SingleToken_InputsSlicePopulated(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 
-	tokens := []interfaces.Token{{
+	tokens := []factorytoken.Token{{
 		ID: "tok-single",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:  "work-single",
 			Payload: []byte("single payload"),
 		},

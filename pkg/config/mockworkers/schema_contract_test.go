@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 

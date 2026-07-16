@@ -31,7 +31,7 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 		{name: "generated api package", importPath: modulePath + "/pkg/transports/http/generated", want: false},
 		{name: "generated client package", importPath: modulePath + "/pkg/transports/http/client", want: false},
 		{name: "generated mcp package", importPath: modulePath + "/pkg/transports/mcp/generated", want: false},
-		{name: "test helper package", importPath: modulePath + "/pkg/testutil/runtimefixtures", want: false},
+		{name: "test helper package", importPath: modulePath + "/internal/testutil/runtimefixtures", want: false},
 		{name: "functional test package", importPath: modulePath + "/tests/functional/runtime_api", want: false},
 		{name: "ui package", importPath: modulePath + "/ui", want: false},
 	}
@@ -86,7 +86,7 @@ func TestResolveCoverageLaneDefaultsToUnitPackages(t *testing.T) {
 	if slices.Contains(coverPackages, modulePath+"/pkg/transports/http/client") {
 		t.Fatalf("cover packages unexpectedly include generated client: %v", coverPackages)
 	}
-	if slices.Contains(coverPackages, modulePath+"/pkg/testutil") {
+	if slices.Contains(coverPackages, modulePath+"/internal/testutil") {
 		t.Fatalf("cover packages unexpectedly include test helper package: %v", coverPackages)
 	}
 	if !slices.Contains(testPackages, modulePath+"/pkg/config") {
@@ -133,8 +133,8 @@ func TestCoverageTestJobs(t *testing.T) {
 		cfg  config
 		want int
 	}{
-		{name: "unit uses go default", cfg: config{suite: "unit"}, want: 0},
-		{name: "functional is bounded", cfg: config{suite: "functional"}, want: defaultFunctionalCoverageJobs},
+		{name: "unit serializes coverage writers", cfg: config{suite: "unit"}, want: defaultCoverageJobs},
+		{name: "functional serializes coverage writers", cfg: config{suite: "functional"}, want: defaultCoverageJobs},
 		{name: "explicit override", cfg: config{suite: "functional", jobs: 1}, want: 1},
 	}
 	for _, tc := range cases {
@@ -448,7 +448,7 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
-		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
+		modulePath + "/internal/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
 
@@ -456,13 +456,13 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 		"total: (statements) 81.0%\n",
 		modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n"+
 			modulePath+"/pkg/transports/http/client\t\tcoverage: 0.0% of statements\n"+
-			modulePath+"/pkg/testutil/runtimefixtures\t\tcoverage: 0.0% of statements\n",
+			modulePath+"/internal/testutil/runtimefixtures\t\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/transports/http/client",
-			modulePath + "/pkg/testutil/runtimefixtures",
+			modulePath + "/internal/testutil/runtimefixtures",
 		},
 		80,
 		emptyCoverageBaseline,
@@ -490,7 +490,7 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
-		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
+		modulePath + "/internal/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
 
@@ -498,13 +498,13 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 		"total: (statements) 81.0%\n",
 		"ok  "+modulePath+"/pkg/service\t0.111s\tcoverage: 100.0% of statements\n"+
 			"ok  "+modulePath+"/pkg/transports/http/client\t(cached)\tcoverage: 0.0% of statements\n"+
-			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements\n",
+			"ok  "+modulePath+"/internal/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/transports/http/client",
-			modulePath + "/pkg/testutil/runtimefixtures",
+			modulePath + "/internal/testutil/runtimefixtures",
 		},
 		80,
 		emptyCoverageBaseline,
@@ -532,7 +532,7 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
-		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
+		modulePath + "/internal/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
 
@@ -540,13 +540,13 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(
 		"total: (statements) 81.0%\n",
 		"ok  "+modulePath+"/pkg/service\t0.111s\tcoverage: 100.0% of statements\n"+
 			"ok  "+modulePath+"/pkg/transports/http/client\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/transports/http/client, "+modulePath+"/pkg/service\n"+
-			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/testutil/runtimefixtures, "+modulePath+"/pkg/service\n",
+			"ok  "+modulePath+"/internal/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements in "+modulePath+"/internal/testutil/runtimefixtures, "+modulePath+"/pkg/service\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/transports/http/client",
-			modulePath + "/pkg/testutil/runtimefixtures",
+			modulePath + "/internal/testutil/runtimefixtures",
 		},
 		80,
 		emptyCoverageBaseline,
@@ -633,6 +633,91 @@ func TestEvaluateCoverageIgnoresExternalTotalReportAndUsesMergedProfileCoverage(
 	}
 	if totalLine != "total: (statements) 60.0%" {
 		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 60.0%")
+	}
+}
+
+func TestCanonicalizeCoverageProfileMergesRepeatedBlocksInStableOrder(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 7",
+		modulePath + "/tests/functional/runtime_api/server.go:1.1,2.1 5 1",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 4",
+		"",
+	}, "\n"))
+
+	coverPackages := []string{
+		modulePath + "/pkg/service",
+		modulePath + "/pkg/config",
+	}
+	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
+		t.Fatalf("canonicalizeCoverageProfile() error = %v", err)
+	}
+
+	got, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read canonical profile: %v", err)
+	}
+	want := strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("canonical profile = %q, want %q", got, want)
+	}
+
+	totals, err := readCoverageProfileTotals(profilePath, repoRoot)
+	if err != nil {
+		t.Fatalf("readCoverageProfileTotals() error = %v", err)
+	}
+	if totals[modulePath+"/pkg/config"] != (packageCoverageTotals{coveredStatements: 3, totalStatements: 3}) {
+		t.Fatalf("config totals = %+v, want 3/3", totals[modulePath+"/pkg/config"])
+	}
+	if totals[modulePath+"/pkg/service"] != (packageCoverageTotals{coveredStatements: 2, totalStatements: 2}) {
+		t.Fatalf("service totals = %+v, want 2/2", totals[modulePath+"/pkg/service"])
+	}
+}
+
+func TestMergeCoverageProfilesCombinesIsolatedTestBinaries(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	firstProfile := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
+		"",
+	}, "\n"))
+	secondProfile := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		"",
+	}, "\n"))
+	outputPath := filepath.Join(t.TempDir(), "merged.out")
+	coverPackages := []string{modulePath + "/pkg/config", modulePath + "/pkg/service"}
+
+	if err := mergeCoverageProfiles([]string{firstProfile, secondProfile}, outputPath, repoRoot, coverPackages); err != nil {
+		t.Fatalf("mergeCoverageProfiles() error = %v", err)
+	}
+	got, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read merged profile: %v", err)
+	}
+	want := strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("merged profile = %q, want %q", got, want)
 	}
 }
 

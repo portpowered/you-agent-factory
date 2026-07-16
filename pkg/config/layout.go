@@ -12,9 +12,11 @@ import (
 	"runtime"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // InlineRuntimeDefinitionOptions controls how split runtime definition files
@@ -190,7 +192,7 @@ func FactoryConfigWithRuntimeDefinitions(cfg *interfaces.FactoryConfig, runtimeC
 	return inlined, nil
 }
 
-func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfaces.WorkerConfig) {
+func applyWorkerRuntimeDefinition(worker *workerconfig.Config, def *workerconfig.Config) {
 	if worker == nil || def == nil {
 		return
 	}
@@ -200,7 +202,7 @@ func applyWorkerRuntimeDefinition(worker *interfaces.WorkerConfig, def *interfac
 	applyWorkerRuntimeResources(worker, runtimeDef)
 }
 
-func applyWorkerRuntimeIdentity(worker *interfaces.WorkerConfig, runtimeDef interfaces.WorkerConfig) {
+func applyWorkerRuntimeIdentity(worker *workerconfig.Config, runtimeDef workerconfig.Config) {
 	if worker.Name == "" && runtimeDef.Name != "" {
 		worker.Name = runtimeDef.Name
 	}
@@ -230,7 +232,7 @@ func applyWorkerRuntimeIdentity(worker *interfaces.WorkerConfig, runtimeDef inte
 	}
 }
 
-func applyWorkerRuntimeExecution(worker *interfaces.WorkerConfig, runtimeDef interfaces.WorkerConfig) {
+func applyWorkerRuntimeExecution(worker *workerconfig.Config, runtimeDef workerconfig.Config) {
 	if runtimeDef.Command != "" {
 		worker.Command = runtimeDef.Command
 	}
@@ -263,9 +265,9 @@ func applyWorkerRuntimeExecution(worker *interfaces.WorkerConfig, runtimeDef int
 	}
 }
 
-func applyWorkerRuntimeResources(worker *interfaces.WorkerConfig, runtimeDef interfaces.WorkerConfig) {
+func applyWorkerRuntimeResources(worker *workerconfig.Config, runtimeDef workerconfig.Config) {
 	if len(runtimeDef.Resources) > 0 {
-		worker.Resources = append([]interfaces.ResourceConfig(nil), runtimeDef.Resources...)
+		worker.Resources = append([]factoryresource.Config(nil), runtimeDef.Resources...)
 	}
 }
 
@@ -332,7 +334,7 @@ func readFactoryConfigExpansionSource(path string) ([]byte, string, string, erro
 	return data, sourcePath, targetDir, nil
 }
 
-func runtimeWorkerDefinition(factoryDir string, worker interfaces.WorkerConfig, requireSplitDefinition bool) (*interfaces.WorkerConfig, error) {
+func runtimeWorkerDefinition(factoryDir string, worker workerconfig.Config, requireSplitDefinition bool) (*workerconfig.Config, error) {
 	inlineWorker, err := workerConfigFromInlineConfig(&worker)
 	if err != nil {
 		return nil, fmt.Errorf("invalid inline worker definition")
@@ -484,12 +486,12 @@ func mergeRuntimeWorkstationDefinitions(inlineDef, splitDef *interfaces.FactoryW
 	return &merged, nil
 }
 
-func workerDefForExpansion(def interfaces.WorkerConfig) interfaces.WorkerConfig {
+func workerDefForExpansion(def workerconfig.Config) workerconfig.Config {
 	if def.Type == "" {
-		return interfaces.WorkerConfig{Type: interfaces.WorkerTypeModel}
+		return workerconfig.Config{Type: interfaces.WorkerTypeModel}
 	}
 
-	return interfaces.WorkerConfig{
+	return workerconfig.Config{
 		Type:             def.Type,
 		Provider:         def.Provider,
 		Model:            def.Model,
@@ -498,7 +500,7 @@ func workerDefForExpansion(def interfaces.WorkerConfig) interfaces.WorkerConfig 
 		SessionID:        def.SessionID,
 		Command:          def.Command,
 		Args:             append([]string(nil), def.Args...),
-		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),
+		Resources:        append([]factoryresource.Config(nil), def.Resources...),
 		Concurrency:      def.Concurrency,
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,

@@ -4,13 +4,14 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestCollectPublicWorkTokens_MarkingOnlyUnchanged(t *testing.T) {
 	marking := &petri.MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-1": testWorkToken("tok-1", "work-a", "task:init", "task"),
 			"tok-2": testWorkToken("tok-2", "work-b", "task:review", "task"),
 		},
@@ -24,11 +25,11 @@ func TestCollectPublicWorkTokens_MarkingOnlyUnchanged(t *testing.T) {
 }
 
 func TestCollectPublicWorkTokens_DispatchOnlyVisible(t *testing.T) {
-	dispatchToken := interfaces.Token{
+	dispatchToken := factorytoken.Token{
 		ID:      "tok-dispatch",
 		PlaceID: "task:processing",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-in-flight",
 			WorkTypeID: "task",
 			Name:       "In flight item",
@@ -37,11 +38,11 @@ func TestCollectPublicWorkTokens_DispatchOnlyVisible(t *testing.T) {
 	dispatches := map[string]*interfaces.DispatchEntry{
 		"dispatch-1": {
 			DispatchID:     "dispatch-1",
-			ConsumedTokens: []interfaces.Token{dispatchToken},
+			ConsumedTokens: []factorytoken.Token{dispatchToken},
 		},
 	}
 
-	got := CollectPublicWorkTokens(&petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}}, dispatches)
+	got := CollectPublicWorkTokens(&petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}}, dispatches)
 	if len(got.Tokens) != 1 {
 		t.Fatalf("token count = %d, want 1", len(got.Tokens))
 	}
@@ -57,21 +58,21 @@ func TestCollectPublicWorkTokens_MarkingWinsOnWorkIDDedupe(t *testing.T) {
 	markingToken := testWorkToken("tok-mark", "work-shared", "task:init", "task")
 	markingToken.Color.Name = "Marking copy"
 
-	dispatchToken := interfaces.Token{
+	dispatchToken := factorytoken.Token{
 		ID:      "tok-dispatch",
 		PlaceID: "task:processing",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-shared",
 			WorkTypeID: "task",
 			Name:       "Dispatch copy",
 		},
 	}
 	dispatches := map[string]*interfaces.DispatchEntry{
-		"dispatch-1": {ConsumedTokens: []interfaces.Token{dispatchToken}},
+		"dispatch-1": {ConsumedTokens: []factorytoken.Token{dispatchToken}},
 	}
 
-	got := CollectPublicWorkTokens(&petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+	got := CollectPublicWorkTokens(&petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 		"tok-mark": markingToken,
 	}}, dispatches)
 
@@ -86,19 +87,19 @@ func TestCollectPublicWorkTokens_MarkingWinsOnWorkIDDedupe(t *testing.T) {
 
 func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 	marking := &petri.MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-work": testWorkToken("tok-work", "work-visible", "task:init", "task"),
 			"tok-resource": {
 				ID: "tok-resource",
-				Color: interfaces.TokenColor{
-					DataType: interfaces.DataTypeResource,
+				Color: factorytoken.Color{
+					DataType: factorytoken.DataTypeResource,
 					WorkID:   "resource-1",
 				},
 			},
 			"tok-system": {
 				ID: "tok-system",
-				Color: interfaces.TokenColor{
-					DataType:   interfaces.DataTypeWork,
+				Color: factorytoken.Color{
+					DataType:   factorytoken.DataTypeWork,
 					WorkTypeID: interfaces.SystemTimeWorkTypeID,
 					WorkID:     "system-time",
 				},
@@ -107,18 +108,18 @@ func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 	}
 	dispatches := map[string]*interfaces.DispatchEntry{
 		"dispatch-1": {
-			ConsumedTokens: []interfaces.Token{
+			ConsumedTokens: []factorytoken.Token{
 				{
 					ID: "tok-dispatch-resource",
-					Color: interfaces.TokenColor{
-						DataType: interfaces.DataTypeResource,
+					Color: factorytoken.Color{
+						DataType: factorytoken.DataTypeResource,
 						WorkID:   "resource-dispatch",
 					},
 				},
 				{
 					ID: "tok-dispatch-system",
-					Color: interfaces.TokenColor{
-						DataType:   interfaces.DataTypeWork,
+					Color: factorytoken.Color{
+						DataType:   factorytoken.DataTypeWork,
 						WorkTypeID: interfaces.SystemTimeWorkTypeID,
 						WorkID:     "system-dispatch",
 					},
@@ -126,8 +127,8 @@ func TestCollectPublicWorkTokens_ExcludesResourceAndSystemTime(t *testing.T) {
 				{
 					ID:      "tok-dispatch-work",
 					PlaceID: "task:processing",
-					Color: interfaces.TokenColor{
-						DataType:   interfaces.DataTypeWork,
+					Color: factorytoken.Color{
+						DataType:   factorytoken.DataTypeWork,
 						WorkID:     "work-dispatch-only",
 						WorkTypeID: "task",
 					},
@@ -147,31 +148,31 @@ func TestIsPublicWorkToken(t *testing.T) {
 	if !IsPublicWorkToken(testWorkToken("tok-1", "work-1", "task:init", "task")) {
 		t.Fatal("expected public work token")
 	}
-	if IsPublicWorkToken(&interfaces.Token{
-		Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+	if IsPublicWorkToken(&factorytoken.Token{
+		Color: factorytoken.Color{DataType: factorytoken.DataTypeResource},
 	}) {
 		t.Fatal("resource token should not be public work")
 	}
-	if IsPublicWorkToken(&interfaces.Token{
-		Color: interfaces.TokenColor{WorkTypeID: interfaces.SystemTimeWorkTypeID},
+	if IsPublicWorkToken(&factorytoken.Token{
+		Color: factorytoken.Color{WorkTypeID: interfaces.SystemTimeWorkTypeID},
 	}) {
 		t.Fatal("system time token should not be public work")
 	}
 }
 
-func testWorkToken(id, workID, placeID, workTypeID string) *interfaces.Token {
-	return &interfaces.Token{
+func testWorkToken(id, workID, placeID, workTypeID string) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:      id,
 		PlaceID: placeID,
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     workID,
 			WorkTypeID: workTypeID,
 		},
 	}
 }
 
-func assertTokenIDs(t *testing.T, tokens []*interfaces.Token, want []string) {
+func assertTokenIDs(t *testing.T, tokens []*factorytoken.Token, want []string) {
 	t.Helper()
 	got := tokenIDs(tokens)
 	slices.Sort(got)
@@ -187,7 +188,7 @@ func assertTokenIDs(t *testing.T, tokens []*interfaces.Token, want []string) {
 	}
 }
 
-func tokenIDs(tokens []*interfaces.Token) []string {
+func tokenIDs(tokens []*factorytoken.Token) []string {
 	ids := make([]string, len(tokens))
 	for i, token := range tokens {
 		if token != nil {

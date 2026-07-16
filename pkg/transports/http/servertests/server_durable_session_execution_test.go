@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -235,7 +235,7 @@ func newAPIJavaScriptExecutionService(t *testing.T, projectRoot, childExecutorMo
 	service, err := testharness.New(testharness.Config{
 		Mode:              testharness.ModeJavaScript,
 		ProjectRoot:       projectRoot,
-		Clock:             factory.RealClock{},
+		Clock:             platformclock.Real{},
 		Provider:          provider,
 		Persistence:       runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
 		ChildExecutorMode: childExecutorMode,

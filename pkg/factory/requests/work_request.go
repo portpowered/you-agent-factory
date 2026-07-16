@@ -8,13 +8,14 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
 )
 
 // NormalizeWorkRequest validates a FACTORY_REQUEST_BATCH and converts it into runtime submit requests.
-func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkRequestNormalizeOptions) ([]interfaces.SubmitRequest, error) {
-	if req.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+func NormalizeWorkRequest(req workdomain.WorkRequest, opts workdomain.WorkRequestNormalizeOptions) ([]workdomain.SubmitRequest, error) {
+	if req.Type != workdomain.WorkRequestTypeFactoryRequestBatch {
 		return nil, fmt.Errorf("work_request: unsupported type %q", req.Type)
 	}
 	if req.RequestID == "" {
@@ -37,7 +38,7 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 	}
 
 	traceID := batchTraceID(req)
-	normalized := make([]interfaces.SubmitRequest, 0, len(req.Works))
+	normalized := make([]workdomain.SubmitRequest, 0, len(req.Works))
 	for i, work := range req.Works {
 		workTypeID := work.WorkTypeID
 		if workTypeID == "" {
@@ -69,14 +70,14 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 			tags["_execution_id"] = work.ExecutionID
 		}
 
-		normalized = append(normalized, interfaces.SubmitRequest{
+		normalized = append(normalized, workdomain.SubmitRequest{
 			RequestID:                itemRequestID,
 			WorkID:                   workIndex[work.Name].id,
 			Name:                     work.Name,
 			WorkTypeID:               workTypeID,
 			ChainingTraceDepth:       normalizeSubmitChainingTraceDepth(work.ChainingTraceDepth, itemCurrentChainingTraceID, itemTraceID),
 			CurrentChainingTraceID:   itemCurrentChainingTraceID,
-			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
+			PreviousChainingTraceIDs: workdomain.CanonicalChainingTraceIDs(work.PreviousChainingTraceIDs),
 			TraceID:                  itemTraceID,
 			Content:                  content,
 			Payload:                  payload,
@@ -87,19 +88,20 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 				factory.CloneRuntimeRelations(relIndex[work.Name]),
 				work.RuntimeRelations,
 			),
+			InvocationArguments: workdomain.CloneInvocationArguments(work.InvocationArguments),
 		})
 	}
 	return normalized, nil
 }
 
 // SubmitResultFromNormalized builds accepted batch metadata from normalized submit requests.
-func SubmitResultFromNormalized(requestID string, normalized []interfaces.SubmitRequest) interfaces.WorkRequestSubmitResult {
+func SubmitResultFromNormalized(requestID string, normalized []workdomain.SubmitRequest) workdomain.WorkRequestSubmitResult {
 	return WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 }
 
 // NormalizeGeneratedSubmissionBatch validates the canonical generated request
 // and merges optional runtime submission fields onto the matching work items.
-func NormalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch, opts interfaces.WorkRequestNormalizeOptions) ([]interfaces.SubmitRequest, error) {
+func NormalizeGeneratedSubmissionBatch(batch work.GeneratedSubmissionBatch, opts workdomain.WorkRequestNormalizeOptions) ([]workdomain.SubmitRequest, error) {
 	normalized, err := NormalizeWorkRequest(batch.Request, opts)
 	if err != nil {
 		return nil, err
@@ -125,8 +127,8 @@ func NormalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch
 }
 
 func normalizedSubmissionMatch(
-	normalized []interfaces.SubmitRequest,
-	submitted interfaces.SubmitRequest,
+	normalized []workdomain.SubmitRequest,
+	submitted workdomain.SubmitRequest,
 	usedByWorkID map[string]bool,
 	usedByName map[string]bool,
 ) int {
@@ -141,7 +143,7 @@ func normalizedSubmissionMatch(
 	return -1
 }
 
-func matchNormalizedSubmissionByWorkID(normalized []interfaces.SubmitRequest, workID string, usedByWorkID map[string]bool) int {
+func matchNormalizedSubmissionByWorkID(normalized []workdomain.SubmitRequest, workID string, usedByWorkID map[string]bool) int {
 	for i, req := range normalized {
 		if usedByWorkID[req.WorkID] {
 			continue
@@ -153,7 +155,7 @@ func matchNormalizedSubmissionByWorkID(normalized []interfaces.SubmitRequest, wo
 	return -1
 }
 
-func matchNormalizedSubmissionByName(normalized []interfaces.SubmitRequest, name string, usedByName map[string]bool) int {
+func matchNormalizedSubmissionByName(normalized []workdomain.SubmitRequest, name string, usedByName map[string]bool) int {
 	for i, req := range normalized {
 		if usedByName[req.Name] {
 			continue
@@ -165,7 +167,7 @@ func matchNormalizedSubmissionByName(normalized []interfaces.SubmitRequest, name
 	return -1
 }
 
-func applyGeneratedSubmissionOverrides(next interfaces.SubmitRequest, submitted interfaces.SubmitRequest) interfaces.SubmitRequest {
+func applyGeneratedSubmissionOverrides(next workdomain.SubmitRequest, submitted workdomain.SubmitRequest) workdomain.SubmitRequest {
 	if submitted.TargetState != "" {
 		next.TargetState = submitted.TargetState
 	}
@@ -182,21 +184,21 @@ func applyGeneratedSubmissionOverrides(next interfaces.SubmitRequest, submitted 
 		next.Relations = appendUniquePetriRelations(factory.CloneRuntimeRelations(submitted.Relations), next.Relations)
 	}
 	if len(submitted.PreviousChainingTraceIDs) > 0 {
-		next.PreviousChainingTraceIDs = interfaces.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
+		next.PreviousChainingTraceIDs = workdomain.CanonicalChainingTraceIDs(submitted.PreviousChainingTraceIDs)
 	}
 	return next
 }
 
 // WorkRequestFromSubmitRequests wraps normalized submit requests in the
 // canonical FACTORY_REQUEST_BATCH contract.
-func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfaces.WorkRequest {
+func WorkRequestFromSubmitRequests(requests []workdomain.SubmitRequest) workdomain.WorkRequest {
 	if len(requests) == 0 {
-		return interfaces.WorkRequest{Type: interfaces.WorkRequestTypeFactoryRequestBatch}
+		return workdomain.WorkRequest{Type: workdomain.WorkRequestTypeFactoryRequestBatch}
 	}
 
 	requestID := sharedSubmitRequestID(requests)
 	usedNames := make(map[string]int, len(requests))
-	works := make([]interfaces.Work, 0, len(requests))
+	works := make([]work.Work, 0, len(requests))
 	for i, req := range requests {
 		itemRequestID := req.RequestID
 		if itemRequestID == "" {
@@ -204,7 +206,7 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 		}
 		currentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID)
 		name := uniqueSubmitWorkName(req, i, usedNames)
-		works = append(works, interfaces.Work{
+		works = append(works, work.Work{
 			Name:                     name,
 			WorkID:                   req.WorkID,
 			RequestID:                itemRequestID,
@@ -214,26 +216,27 @@ func WorkRequestFromSubmitRequests(requests []interfaces.SubmitRequest) interfac
 			CurrentChainingTraceID:   currentChainingTraceID,
 			PreviousChainingTraceIDs: append([]string(nil), req.PreviousChainingTraceIDs...),
 			TraceID:                  req.TraceID,
-			Content:                  append([]interfaces.WorkContentPart(nil), req.Content...),
+			Content:                  append([]work.WorkContentPart(nil), req.Content...),
 			Payload:                  factory.CloneRuntimePayload(req.Payload),
 			Tags:                     factory.CloneRuntimeTags(req.Tags),
 			ExecutionID:              req.ExecutionID,
 			RuntimeRelations:         factory.CloneRuntimeRelations(req.Relations),
+			InvocationArguments:      work.CloneInvocationArguments(req.InvocationArguments),
 		})
 	}
 
-	return interfaces.WorkRequest{
+	return workdomain.WorkRequest{
 		RequestID:              requestID,
 		CurrentChainingTraceID: ResolveWorkRequestCurrentChainingTraceID(requests[0].CurrentChainingTraceID, requests[0].TraceID),
-		Type:                   interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:                   workdomain.WorkRequestTypeFactoryRequestBatch,
 		Works:                  works,
 	}
 }
 
 // WorkRequestRecordFromSubmitRequests builds the canonical request-history
 // record for a normalized batch submission.
-func WorkRequestRecordFromSubmitRequests(requestID string, source string, requests []interfaces.SubmitRequest) interfaces.WorkRequestRecord {
-	workItems := make([]interfaces.FactoryWorkItem, 0, len(requests))
+func WorkRequestRecordFromSubmitRequests(requestID string, source string, requests []workdomain.SubmitRequest) work.WorkRequestRecord {
+	workItems := make([]work.FactoryWorkItem, 0, len(requests))
 	workNamesByID := make(map[string]string, len(requests))
 	traceID := ""
 	for _, req := range requests {
@@ -242,24 +245,24 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 		}
 		name := SubmitWorkName(req)
 		workNamesByID[req.WorkID] = name
-		workItems = append(workItems, interfaces.FactoryWorkItem{
+		workItems = append(workItems, work.FactoryWorkItem{
 			ID:                       req.WorkID,
 			WorkTypeID:               req.WorkTypeID,
 			State:                    req.TargetState,
 			DisplayName:              name,
 			ChainingTraceDepth:       req.ChainingTraceDepth,
 			CurrentChainingTraceID:   ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID),
-			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
+			PreviousChainingTraceIDs: workdomain.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
-			Content:                  append([]interfaces.WorkContentPart(nil), req.Content...),
+			Content:                  append([]work.WorkContentPart(nil), req.Content...),
 			Tags:                     maps.Clone(req.Tags),
 		})
 	}
 
-	var relations []interfaces.FactoryRelation
+	var relations []work.FactoryRelation
 	for _, req := range requests {
 		for _, relation := range req.Relations {
-			relations = append(relations, interfaces.FactoryRelation{
+			relations = append(relations, work.FactoryRelation{
 				Type:           string(relation.Type),
 				SourceWorkID:   req.WorkID,
 				SourceWorkName: SubmitWorkName(req),
@@ -272,9 +275,9 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 		}
 	}
 
-	return interfaces.WorkRequestRecord{
+	return work.WorkRequestRecord{
 		RequestID: requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      workdomain.WorkRequestTypeFactoryRequestBatch,
 		TraceID:   traceID,
 		Source:    source,
 		WorkItems: workItems,
@@ -283,7 +286,7 @@ func WorkRequestRecordFromSubmitRequests(requestID string, source string, reques
 }
 
 // SubmitWorkName returns the canonical display name for a submit request.
-func SubmitWorkName(req interfaces.SubmitRequest) string {
+func SubmitWorkName(req workdomain.SubmitRequest) string {
 	if req.Name != "" {
 		return req.Name
 	}
@@ -293,7 +296,7 @@ func SubmitWorkName(req interfaces.SubmitRequest) string {
 	return req.WorkID
 }
 
-func sharedSubmitRequestID(requests []interfaces.SubmitRequest) string {
+func sharedSubmitRequestID(requests []workdomain.SubmitRequest) string {
 	var shared string
 	for _, req := range requests {
 		if req.RequestID == "" {
@@ -310,7 +313,7 @@ func sharedSubmitRequestID(requests []interfaces.SubmitRequest) string {
 	return shared
 }
 
-func uniqueSubmitWorkName(req interfaces.SubmitRequest, index int, used map[string]int) string {
+func uniqueSubmitWorkName(req workdomain.SubmitRequest, index int, used map[string]int) string {
 	base := SubmitWorkName(req)
 	if base == "" {
 		base = fmt.Sprintf("work-%d", index+1)
@@ -328,7 +331,7 @@ type normalizedBatchWork struct {
 	workTypeID string
 }
 
-func validateBatchWork(req interfaces.WorkRequest, opts interfaces.WorkRequestNormalizeOptions) (map[string]normalizedBatchWork, error) {
+func validateBatchWork(req workdomain.WorkRequest, opts workdomain.WorkRequestNormalizeOptions) (map[string]normalizedBatchWork, error) {
 	workNames := make(map[string]bool, len(req.Works))
 	workIndex := make(map[string]normalizedBatchWork, len(req.Works))
 	for i, work := range req.Works {
@@ -369,8 +372,8 @@ func validateBatchWork(req interfaces.WorkRequest, opts interfaces.WorkRequestNo
 	return workIndex, nil
 }
 
-func validateAndIndexBatchRelations(req interfaces.WorkRequest, workIndex map[string]normalizedBatchWork, opts interfaces.WorkRequestNormalizeOptions) (map[string][]interfaces.Relation, error) {
-	relIndex := make(map[string][]interfaces.Relation)
+func validateAndIndexBatchRelations(req workdomain.WorkRequest, workIndex map[string]normalizedBatchWork, opts workdomain.WorkRequestNormalizeOptions) (map[string][]work.Relation, error) {
+	relIndex := make(map[string][]work.Relation)
 	seen := map[string]int{}
 	parentTargets := make(map[string]string)
 	for i, rel := range req.Relations {
@@ -382,7 +385,7 @@ func validateAndIndexBatchRelations(req interfaces.WorkRequest, workIndex map[st
 		if err != nil {
 			return nil, err
 		}
-		if rel.Type == interfaces.WorkRelationParentChild {
+		if rel.Type == work.WorkRelationParentChild {
 			if existingTarget, ok := parentTargets[rel.SourceWorkName]; ok && existingTarget != rel.TargetWorkName {
 				return nil, fmt.Errorf(
 					"work_request: relations[%d] assigns multiple PARENT_CHILD parents to %q (%q and %q)",
@@ -395,7 +398,7 @@ func validateAndIndexBatchRelations(req interfaces.WorkRequest, workIndex map[st
 			parentTargets[rel.SourceWorkName] = rel.TargetWorkName
 		}
 		if original, duplicate := seen[key]; duplicate {
-			if rel.Type == interfaces.WorkRelationDependsOn {
+			if rel.Type == work.WorkRelationDependsOn {
 				return nil, fmt.Errorf(
 					"work_request: relations[%d] duplicates relations[%d] (%q %q -> %q with requiredState %q)",
 					i,
@@ -421,7 +424,7 @@ func validateAndIndexBatchRelations(req interfaces.WorkRequest, workIndex map[st
 	return relIndex, nil
 }
 
-func validateBatchRelationEndpoints(i int, rel interfaces.WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
+func validateBatchRelationEndpoints(i int, rel work.WorkRelation, workIndex map[string]normalizedBatchWork) (normalizedBatchWork, error) {
 	if strings.TrimSpace(rel.SourceWorkName) == "" {
 		return normalizedBatchWork{}, fmt.Errorf("work_request: relations[%d] is missing sourceWorkName", i)
 	}
@@ -438,61 +441,61 @@ func validateBatchRelationEndpoints(i int, rel interfaces.WorkRelation, workInde
 	return targetWork, nil
 }
 
-func normalizeBatchRelation(i int, rel interfaces.WorkRelation, targetWork normalizedBatchWork, opts interfaces.WorkRequestNormalizeOptions) (interfaces.Relation, string, error) {
+func normalizeBatchRelation(i int, rel work.WorkRelation, targetWork normalizedBatchWork, opts workdomain.WorkRequestNormalizeOptions) (work.Relation, string, error) {
 	switch rel.Type {
-	case interfaces.WorkRelationDependsOn:
+	case work.WorkRelationDependsOn:
 		return normalizeDependsOnRelation(i, rel, targetWork, opts)
-	case interfaces.WorkRelationParentChild:
+	case work.WorkRelationParentChild:
 		return normalizeParentChildRelation(i, rel, targetWork)
 	default:
-		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] has unsupported type %q", i, rel.Type)
+		return work.Relation{}, "", fmt.Errorf("work_request: relations[%d] has unsupported type %q", i, rel.Type)
 	}
 }
 
-func normalizeDependsOnRelation(i int, rel interfaces.WorkRelation, targetWork normalizedBatchWork, opts interfaces.WorkRequestNormalizeOptions) (interfaces.Relation, string, error) {
+func normalizeDependsOnRelation(i int, rel work.WorkRelation, targetWork normalizedBatchWork, opts workdomain.WorkRequestNormalizeOptions) (work.Relation, string, error) {
 	if rel.SourceWorkName == rel.TargetWorkName {
-		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-dependency on %q", i, rel.SourceWorkName)
+		return work.Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-dependency on %q", i, rel.SourceWorkName)
 	}
 	requiredState := rel.RequiredState
 	if requiredState == "" {
 		requiredState = "complete"
 	}
 	if opts.ValidStatesByType != nil && !opts.ValidStatesByType[targetWork.workTypeID][requiredState] {
-		return interfaces.Relation{}, "", fmt.Errorf(
+		return work.Relation{}, "", fmt.Errorf(
 			"work_request: relations[%d] references unknown requiredState %q for target work type %q",
 			i,
 			requiredState,
 			targetWork.workTypeID,
 		)
 	}
-	return interfaces.Relation{
-		Type:          interfaces.RelationDependsOn,
+	return work.Relation{
+		Type:          work.RelationDependsOn,
 		TargetWorkID:  targetWork.id,
 		RequiredState: requiredState,
 	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, requiredState), nil
 }
 
-func normalizeParentChildRelation(i int, rel interfaces.WorkRelation, targetWork normalizedBatchWork) (interfaces.Relation, string, error) {
+func normalizeParentChildRelation(i int, rel work.WorkRelation, targetWork normalizedBatchWork) (work.Relation, string, error) {
 	if rel.SourceWorkName == rel.TargetWorkName {
-		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-parenting on %q", i, rel.SourceWorkName)
+		return work.Relation{}, "", fmt.Errorf("work_request: relations[%d] has self-parenting on %q", i, rel.SourceWorkName)
 	}
 	if rel.RequiredState != "" {
-		return interfaces.Relation{}, "", fmt.Errorf("work_request: relations[%d] must not set requiredState for PARENT_CHILD", i)
+		return work.Relation{}, "", fmt.Errorf("work_request: relations[%d] must not set requiredState for PARENT_CHILD", i)
 	}
-	return interfaces.Relation{
-		Type:         interfaces.RelationParentChild,
+	return work.Relation{
+		Type:         work.RelationParentChild,
 		TargetWorkID: targetWork.id,
 	}, relationValidationKey(rel.Type, rel.SourceWorkName, rel.TargetWorkName, ""), nil
 }
 
-func relationValidationKey(relType interfaces.WorkRelationType, sourceWorkName string, targetWorkName string, requiredState string) string {
+func relationValidationKey(relType work.WorkRelationType, sourceWorkName string, targetWorkName string, requiredState string) string {
 	return fmt.Sprintf("%s|%s|%s|%s", relType, sourceWorkName, targetWorkName, requiredState)
 }
 
-func rejectDependencyCycles(relations []interfaces.WorkRelation) error {
+func rejectDependencyCycles(relations []work.WorkRelation) error {
 	graph := make(map[string][]string)
 	for _, rel := range relations {
-		if rel.Type == interfaces.WorkRelationDependsOn {
+		if rel.Type == work.WorkRelationDependsOn {
 			graph[rel.SourceWorkName] = append(graph[rel.SourceWorkName], rel.TargetWorkName)
 		}
 	}
@@ -534,7 +537,7 @@ func rejectDependencyCycles(relations []interfaces.WorkRelation) error {
 	return nil
 }
 
-func batchTraceID(req interfaces.WorkRequest) string {
+func batchTraceID(req workdomain.WorkRequest) string {
 	if req.CurrentChainingTraceID != "" {
 		return req.CurrentChainingTraceID
 	}
@@ -565,7 +568,7 @@ func rawWorkPayload(payload any) ([]byte, error) {
 	}
 }
 
-func normalizeWorkContent(content []interfaces.WorkContentPart, payload any) ([]interfaces.WorkContentPart, []byte, error) {
+func normalizeWorkContent(content []work.WorkContentPart, payload any) ([]work.WorkContentPart, []byte, error) {
 	rawPayload, err := rawWorkPayload(payload)
 	if err != nil {
 		return nil, nil, err
@@ -603,26 +606,26 @@ func normalizeWorkContent(content []interfaces.WorkContentPart, payload any) ([]
 	return canonical, []byte(legacyText), nil
 }
 
-func canonicalContentFromLegacyPayload(rawPayload []byte) []interfaces.WorkContentPart {
+func canonicalContentFromLegacyPayload(rawPayload []byte) []work.WorkContentPart {
 	payloadText, ok := legacyPayloadAsText(rawPayload)
 	if !ok {
 		return nil
 	}
-	return []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: payloadText,
 	}}
 }
 
-func legacyTextPayloadFromCanonicalContent(content []interfaces.WorkContentPart) (string, bool, error) {
+func legacyTextPayloadFromCanonicalContent(content []work.WorkContentPart) (string, bool, error) {
 	var builder strings.Builder
 	hasText := false
 	for _, part := range content {
 		switch part.Type.Normalized() {
-		case interfaces.WorkContentPartTypeText:
+		case work.WorkContentPartTypeText:
 			hasText = true
 			builder.WriteString(part.Text)
-		case interfaces.WorkContentPartTypeImage:
+		case work.WorkContentPartTypeImage:
 			continue
 		default:
 			continue
@@ -656,7 +659,7 @@ func normalizeSubmitChainingTraceDepth(depth int, currentChainingTraceID string,
 	return 0
 }
 
-func appendUniquePetriRelations(base []interfaces.Relation, extra []interfaces.Relation) []interfaces.Relation {
+func appendUniquePetriRelations(base []work.Relation, extra []work.Relation) []work.Relation {
 	for _, relation := range extra {
 		if hasPetriRelation(base, relation) {
 			continue
@@ -666,7 +669,7 @@ func appendUniquePetriRelations(base []interfaces.Relation, extra []interfaces.R
 	return base
 }
 
-func hasPetriRelation(relations []interfaces.Relation, candidate interfaces.Relation) bool {
+func hasPetriRelation(relations []work.Relation, candidate work.Relation) bool {
 	for _, relation := range relations {
 		if relation.Type == candidate.Type &&
 			relation.TargetWorkID == candidate.TargetWorkID &&

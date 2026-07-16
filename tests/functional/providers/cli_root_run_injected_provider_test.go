@@ -10,7 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -186,7 +187,7 @@ func scaffoldRootRunProviderFactory(t *testing.T) (string, string) {
 		}},
 	})
 	support.WriteAgentConfig(t, dir, rootRunWorker, support.BuildModelWorkerConfig(
-		interfaces.ModelProviderCursor,
+		modelprovider.Cursor,
 		rootRunModel,
 	))
 	return dir, providerWorkDir
@@ -205,8 +206,8 @@ func isolatedRootRunEnvironment(home string) []string {
 
 func assertRootRunProviderRequest(t *testing.T, providerWorkDir string, request workers.CommandRequest) {
 	t.Helper()
-	if request.Command != string(interfaces.ModelProviderCursor) {
-		t.Fatalf("provider command = %q, want %q", request.Command, interfaces.ModelProviderCursor)
+	if request.Command != string(modelprovider.Cursor) {
+		t.Fatalf("provider command = %q, want %q", request.Command, modelprovider.Cursor)
 	}
 	support.AssertArgsContainSequence(t, request.Args, []string{"-p", "--model", rootRunModel})
 	support.AssertArgsContainSequence(t, request.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})

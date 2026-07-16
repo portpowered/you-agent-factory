@@ -4,9 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestLivelockInfiniteLoop validates that a simple infinite loop
@@ -33,7 +35,7 @@ func TestLivelockInfiniteLoop(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}, {Name: "worker-b"}},
+		Workers: []workerconfig.Config{{Name: "worker-a"}, {Name: "worker-b"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "step-a", WorkerTypeName: "worker-a",
@@ -59,16 +61,16 @@ func TestLivelockInfiniteLoop(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	// worker-a always accepts (moves init → processing).
-	workerAResults := make([]interfaces.WorkResult, 20)
+	workerAResults := make([]workerexecution.WorkResult, 20)
 	for i := range workerAResults {
-		workerAResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		workerAResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	workerA := h.MockWorker("worker-a", workerAResults...)
 
 	// worker-b always rejects (moves processing → init, creating the loop).
-	workerBResults := make([]interfaces.WorkResult, 20)
+	workerBResults := make([]workerexecution.WorkResult, 20)
 	for i := range workerBResults {
-		workerBResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "loop back"}
+		workerBResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "loop back"}
 	}
 	workerB := h.MockWorker("worker-b", workerBResults...)
 
@@ -121,7 +123,7 @@ func TestLivelockTriangleLoop(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker-1"}, {Name: "worker-2"}, {Name: "worker-3"}},
+		Workers: []workerconfig.Config{{Name: "worker-1"}, {Name: "worker-2"}, {Name: "worker-3"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "step-1", WorkerTypeName: "worker-1",
@@ -152,21 +154,21 @@ func TestLivelockTriangleLoop(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	// All workers accept, but step-3 always rejects → loops back to init.
-	w1Results := make([]interfaces.WorkResult, 20)
+	w1Results := make([]workerexecution.WorkResult, 20)
 	for i := range w1Results {
-		w1Results[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		w1Results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	w1 := h.MockWorker("worker-1", w1Results...)
 
-	w2Results := make([]interfaces.WorkResult, 20)
+	w2Results := make([]workerexecution.WorkResult, 20)
 	for i := range w2Results {
-		w2Results[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		w2Results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	w2 := h.MockWorker("worker-2", w2Results...)
 
-	w3Results := make([]interfaces.WorkResult, 20)
+	w3Results := make([]workerexecution.WorkResult, 20)
 	for i := range w3Results {
-		w3Results[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "cycle back"}
+		w3Results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "cycle back"}
 	}
 	w3 := h.MockWorker("worker-3", w3Results...)
 
@@ -239,7 +241,7 @@ func newInfiniteLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "wa"}, {Name: "wb"}},
+		Workers: []workerconfig.Config{{Name: "wa"}, {Name: "wb"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "step-a", WorkerTypeName: "wa", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}},
 			{Name: "step-b", WorkerTypeName: "wb", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
@@ -266,7 +268,7 @@ func newTriangleLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w1"}, {Name: "w2"}, {Name: "w3"}},
+		Workers: []workerconfig.Config{{Name: "w1"}, {Name: "w2"}, {Name: "w3"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "s1", WorkerTypeName: "w1", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}},
 			{Name: "s2", WorkerTypeName: "w2", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}},
@@ -281,10 +283,10 @@ func newTriangleLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
 	return h
 }
 
-func rejectedWorkResults(count int, feedback string) []interfaces.WorkResult {
-	results := make([]interfaces.WorkResult, count)
+func rejectedWorkResults(count int, feedback string) []workerexecution.WorkResult {
+	results := make([]workerexecution.WorkResult, count)
 	for i := range results {
-		results[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: feedback}
+		results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: feedback}
 	}
 	return results
 }

@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type readTestHost struct {
@@ -43,7 +41,7 @@ func (h *defaultIdentityTestHost) StreamGenerationID(*factorysessions.LiveSessio
 	return "stream-default-identity-test"
 }
 
-func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []factoryapi.FactoryEvent {
+func (h *defaultIdentityTestHost) LiveSessionEvents(*factorysessions.LiveSession) []interfaces.FactoryEvent {
 	return nil
 }
 
@@ -76,7 +74,7 @@ func (h *readTestHost) RequireSession(sessionID string) (*factorysessions.LiveSe
 	}
 	session := h.GetLiveSession(sessionID)
 	if session == nil {
-		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+		return nil, fmt.Errorf("%w: %s", factorysessions.ErrNotFound, sessionID)
 	}
 	return session, nil
 }
@@ -127,11 +125,11 @@ func TestListLiveFactorySessions_OrdersDefaultFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListLiveFactorySessions: %v", err)
 	}
-	if len(response.Sessions) != 2 {
-		t.Fatalf("sessions = %d, want 2", len(response.Sessions))
+	if len(response) != 2 {
+		t.Fatalf("sessions = %d, want 2", len(response))
 	}
-	if !response.Sessions[0].IsDefault || response.Sessions[0].Id != "~default" {
-		t.Fatalf("first session = %#v, want default first", response.Sessions[0])
+	if session := response[0].Context.Session; !session.IsDefault || session.ID != "~default" {
+		t.Fatalf("first session = %#v, want default first", session)
 	}
 }
 
@@ -198,59 +196,61 @@ func TestDefaultSessionSelectorResolvesConsistentRuntimeIdentity(t *testing.T) {
 
 func assertDefaultSessionListProjection(
 	t *testing.T,
-	listed factoryapi.ListFactorySessionsResponse,
+	listed []factorysessions.ReadProjection,
 	allocatedSessionID string,
 ) {
 	t.Helper()
-	if len(listed.Sessions) != 1 {
-		t.Fatalf("listed sessions = %d, want 1", len(listed.Sessions))
+	if len(listed) != 1 {
+		t.Fatalf("listed sessions = %d, want 1", len(listed))
 	}
-	if listed.Sessions[0].Id != allocatedSessionID || !listed.Sessions[0].IsDefault {
-		t.Fatalf("listed default session = %#v, want id %q and isDefault true", listed.Sessions[0], allocatedSessionID)
+	if session := listed[0].Context.Session; factorysessions.CanonicalFactorySessionID(session) != allocatedSessionID || !session.IsDefault {
+		t.Fatalf("listed default session = %#v, want id %q and isDefault true", session, allocatedSessionID)
 	}
-	if listed.Sessions[0].Runtime == nil {
-		t.Fatal("listed runtime is nil")
+	if !listed[0].RuntimeAvailable {
+		t.Fatal("listed runtime is unavailable")
 	}
 }
 
 func assertDefaultSessionDetailProjection(
 	t *testing.T,
-	got factoryapi.FactorySession,
+	got factorysessions.ProjectionContext,
 	allocatedSessionID string,
 ) {
 	t.Helper()
-	if got.Id != allocatedSessionID {
-		t.Fatalf("get-by-alias session id = %q, want %q", got.Id, allocatedSessionID)
+	if gotID := factorysessions.CanonicalFactorySessionID(got.Session); gotID != allocatedSessionID {
+		t.Fatalf("get-by-alias session id = %q, want %q", gotID, allocatedSessionID)
 	}
 }
 
 func assertDefaultSessionPreflightIdentity(
 	t *testing.T,
-	preflight factoryapi.FactorySessionSyncPreflightResponse,
+	preflight factorysessions.SyncPreflightResult,
 	allocatedSessionID string,
 ) {
 	t.Helper()
-	if preflight.RequestedSessionId != factorysessions.DefaultSessionID {
-		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionId, factorysessions.DefaultSessionID)
+	if preflight.RequestedSessionID != factorysessions.DefaultSessionID {
+		t.Fatalf("requestedSessionId = %q, want %q", preflight.RequestedSessionID, factorysessions.DefaultSessionID)
 	}
-	if preflight.FactorySessionId == nil || *preflight.FactorySessionId != allocatedSessionID {
-		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionId, allocatedSessionID)
+	if preflight.FactorySessionID == nil || *preflight.FactorySessionID != allocatedSessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", preflight.FactorySessionID, allocatedSessionID)
 	}
 }
 
 func assertResolvedSessionIDsAgree(
 	t *testing.T,
-	listed factoryapi.ListFactorySessionsResponse,
-	got factoryapi.FactorySession,
-	preflight factoryapi.FactorySessionSyncPreflightResponse,
+	listed []factorysessions.ReadProjection,
+	got factorysessions.ProjectionContext,
+	preflight factorysessions.SyncPreflightResult,
 ) {
 	t.Helper()
-	if listed.Sessions[0].Id != got.Id || got.Id != *preflight.FactorySessionId {
+	listedID := factorysessions.CanonicalFactorySessionID(listed[0].Context.Session)
+	gotID := factorysessions.CanonicalFactorySessionID(got.Session)
+	if listedID != gotID || gotID != *preflight.FactorySessionID {
 		t.Fatalf(
 			"resolved ids differ: list=%q get=%q preflight=%q",
-			listed.Sessions[0].Id,
-			got.Id,
-			*preflight.FactorySessionId,
+			listedID,
+			gotID,
+			*preflight.FactorySessionID,
 		)
 	}
 }
@@ -269,11 +269,11 @@ func TestListLiveFactorySessions_FallsBackWhenProjectionFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListLiveFactorySessions: %v", err)
 	}
-	if len(response.Sessions) != 1 || response.Sessions[0].Id != "sess-1" {
-		t.Fatalf("sessions = %#v, want sess-1 summary fallback", response.Sessions)
+	if len(response) != 1 || response[0].Context.Session.ID != "sess-1" {
+		t.Fatalf("sessions = %#v, want sess-1 summary fallback", response)
 	}
-	if response.Sessions[0].Runtime != nil {
-		t.Fatalf("runtime = %#v, want nil fallback summary", response.Sessions[0].Runtime)
+	if response[0].RuntimeAvailable {
+		t.Fatal("runtime available = true, want summary fallback")
 	}
 }
 
@@ -281,7 +281,7 @@ func TestGetLiveFactorySession_RejectsDurableIDs(t *testing.T) {
 	t.Parallel()
 
 	_, err := controlplane.GetLiveFactorySession(context.Background(), &readTestHost{}, "dur-sess-js-run-n-001")
-	if err == nil || !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+	if err == nil || !errors.Is(err, factorysessions.ErrNotFound) {
 		t.Fatalf("GetLiveFactorySession error = %v, want not found", err)
 	}
 }
@@ -303,7 +303,7 @@ func TestGetLiveFactorySession_ReturnsProjectedSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetLiveFactorySession: %v", err)
 	}
-	if session.Id != "sess-1" {
-		t.Fatalf("session id = %q, want sess-1", session.Id)
+	if session.Session.ID != "sess-1" {
+		t.Fatalf("session id = %q, want sess-1", session.Session.ID)
 	}
 }

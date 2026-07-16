@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	providertestdata "github.com/portpowered/infinite-you/pkg/workers/provider/testdata"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
+	providertestdata "github.com/portpowered/infinite-you/pkg/workers/provider/testdata"
 )
 
 const geminiThrottleFailureMessage = "The provider is rate limited; retry after capacity becomes available."
@@ -58,7 +59,7 @@ func TestParseProviderFailure_RejectsTranscriptAndDiagnosticNoise(t *testing.T) 
 	for _, line := range noise {
 		t.Run(line, func(t *testing.T) {
 			got := parseFailure(providertestdata.FailureInput{ExitCode: 17, Stderr: []byte(line)})
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
+			if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "gemini exited with code 17" {
 				t.Fatalf("ParseProviderFailure() = %#v, want exact safe exit fallback", got)
 			}
 		})
@@ -69,37 +70,37 @@ func TestParseProviderFailure_StructuredSignalsUseCanonicalMessages(t *testing.T
 	testCases := []struct {
 		name        string
 		stderr      string
-		wantReason  interfaces.WorkFailureType
+		wantReason  workerexecution.WorkFailureType
 		wantMessage string
 	}{
 		{
 			name:        "Authentication",
 			stderr:      `{"error":{"status":"UNAUTHENTICATED"}}`,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: "Gemini authentication failed.",
 		},
 		{
 			name:        "InvalidRequest",
 			stderr:      `{"error":{"code":400}}`,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantReason:  workerexecution.WorkFailureTypePermanentBadRequest,
 			wantMessage: "Gemini rejected the request.",
 		},
 		{
 			name:        "Quota",
 			stderr:      `{"error":{"status":"RESOURCE_EXHAUSTED"}}`,
-			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantReason:  workerexecution.WorkFailureTypeThrottled,
 			wantMessage: geminiThrottleFailureMessage,
 		},
 		{
 			name:        "Timeout",
 			stderr:      `{"error":{"status":"DEADLINE_EXCEEDED"}}`,
-			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantReason:  workerexecution.WorkFailureTypeTimeout,
 			wantMessage: geminipkg.TimeoutFailureMessage,
 		},
 		{
 			name:        "ServerFailure",
 			stderr:      `{"error":{"code":503}}`,
-			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantReason:  workerexecution.WorkFailureTypeInternalServerError,
 			wantMessage: "Gemini encountered a temporary server error.",
 		},
 	}
@@ -116,7 +117,7 @@ func TestParseProviderFailure_StructuredSignalsUseCanonicalMessages(t *testing.T
 
 func TestParseProviderFailure_ExitCode124MapsToTimeout(t *testing.T) {
 	got := parseFailure(providertestdata.FailureInput{ExitCode: 124})
-	if got.Reason != interfaces.WorkFailureTypeTimeout || got.Message != geminipkg.TimeoutFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeTimeout || got.Message != geminipkg.TimeoutFailureMessage {
 		t.Fatalf("ParseProviderFailure() = %#v, want timeout", got)
 	}
 }

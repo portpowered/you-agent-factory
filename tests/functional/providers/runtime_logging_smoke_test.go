@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -120,7 +121,7 @@ func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingC
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		RequestID:  "request-runtime-logging-smoke",
 		WorkID:     "work-runtime-logging-smoke",
 		WorkTypeID: "task",
@@ -239,7 +240,7 @@ func replayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArti
 	t.Helper()
 
 	events := make([]factoryapi.DispatchResponseEventPayload, 0)
-	for _, event := range artifact.Events {
+	for _, event := range testutil.GeneratedFactoryEvents(t, artifact.Events) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}

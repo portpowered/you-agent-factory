@@ -8,9 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestRecursiveWorkGeneration validates that a workflow where agents generate
@@ -36,9 +40,9 @@ func TestRecursiveWorkGeneration(t *testing.T) {
 	h.SetCustomExecutor("spawner", spawner)
 
 	// Finisher always accepts — one result per work item (15 total).
-	finisherResults := make([]interfaces.WorkResult, 15)
+	finisherResults := make([]workerexecution.WorkResult, 15)
 	for i := range finisherResults {
-		finisherResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		finisherResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	h.MockWorker("finisher", finisherResults...)
 
@@ -91,9 +95,9 @@ func TestRecursiveWorkGenerationTimeout(t *testing.T) {
 		spawner := &recursiveSpawnerExecutor{maxDepth: 3}
 		h.SetCustomExecutor("spawner", spawner)
 
-		finisherResults := make([]interfaces.WorkResult, 15)
+		finisherResults := make([]workerexecution.WorkResult, 15)
 		for i := range finisherResults {
-			finisherResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+			finisherResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 		}
 		h.MockWorker("finisher", finisherResults...)
 
@@ -124,7 +128,7 @@ func recursiveWorkCfg() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "spawner"}, {Name: "finisher"}},
+		Workers: []workerconfig.Config{{Name: "spawner"}, {Name: "finisher"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "process", WorkerTypeName: "spawner",
@@ -167,7 +171,7 @@ func (e *recursiveSpawnerExecutor) depthDistribution() map[int]int {
 	return dist
 }
 
-func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
@@ -188,10 +192,10 @@ func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch interface
 	e.depths = append(e.depths, depth)
 	e.mu.Unlock()
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 
 	// Spawn 2 children if not at max depth.
@@ -199,7 +203,7 @@ func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch interface
 		nextDepth := strconv.Itoa(depth + 1)
 		for i := range 2 {
 			childID := fmt.Sprintf("%s-child-%d", parentWorkID, i)
-			result.SpawnedWork = append(result.SpawnedWork, interfaces.TokenColor{
+			result.SpawnedWork = append(result.SpawnedWork, factorytoken.Color{
 				WorkTypeID: "work-item",
 				WorkID:     childID,
 				ParentID:   parentWorkID,

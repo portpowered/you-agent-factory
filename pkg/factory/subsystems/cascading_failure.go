@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // CascadingFailureSubsystem propagates failure from parent/dependency tokens
@@ -44,10 +46,10 @@ func (cf *CascadingFailureSubsystem) TickGroup() TickGroup {
 // a single Execute call via BFS.
 func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 	// Build reverse index: WorkID → tokens that DEPEND_ON that WorkID.
-	dependents := make(map[string][]*interfaces.Token)
+	dependents := make(map[string][]*factorytoken.Token)
 	for _, tok := range snapshot.Marking.Tokens {
 		for _, rel := range tok.Color.Relations {
-			if rel.Type == interfaces.RelationDependsOn {
+			if rel.Type == work.RelationDependsOn {
 				dependents[rel.TargetWorkID] = append(dependents[rel.TargetWorkID], tok)
 			}
 		}
@@ -98,7 +100,7 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 				FromPlace: dep.PlaceID,
 				ToPlace:   failedPlace,
 				Reason:    fmt.Sprintf("cascading failure: dependency %s failed", currentWorkID),
-				FailureRecords: []interfaces.FailureRecord{{
+				FailureRecords: []factorytoken.Failure{{
 					TransitionID: "",
 					Timestamp:    now,
 					Error:        fmt.Sprintf("cascading failure: dependency %s failed", currentWorkID),
@@ -119,7 +121,7 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 }
 
 // isInFailedPlace returns true if the token is in a FAILED-category place.
-func (cf *CascadingFailureSubsystem) isInFailedPlace(token *interfaces.Token) bool {
+func (cf *CascadingFailureSubsystem) isInFailedPlace(token *factorytoken.Token) bool {
 	place, ok := cf.state.Places[token.PlaceID]
 	if !ok {
 		return false
@@ -137,7 +139,7 @@ func (cf *CascadingFailureSubsystem) isInFailedPlace(token *interfaces.Token) bo
 }
 
 // isTerminalOrFailed returns true if the token is in a TERMINAL or FAILED place.
-func (cf *CascadingFailureSubsystem) isTerminalOrFailed(token *interfaces.Token) bool {
+func (cf *CascadingFailureSubsystem) isTerminalOrFailed(token *factorytoken.Token) bool {
 	place, ok := cf.state.Places[token.PlaceID]
 	if !ok {
 		return false
@@ -155,7 +157,7 @@ func (cf *CascadingFailureSubsystem) isTerminalOrFailed(token *interfaces.Token)
 }
 
 // failedPlaceForToken returns the FAILED place ID for the token's work type.
-func (cf *CascadingFailureSubsystem) failedPlaceForToken(token *interfaces.Token) string {
+func (cf *CascadingFailureSubsystem) failedPlaceForToken(token *factorytoken.Token) string {
 	wt, ok := cf.state.WorkTypes[token.Color.WorkTypeID]
 	if !ok {
 		return ""

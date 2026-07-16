@@ -134,6 +134,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - `pkg/factory/sessions/invocation/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
+  It must use Factory-contract binding constants directly; generated HTTP enums
+  are transport-boundary types and must not enter this domain package.
   `pkg/factory/sessions/invocation/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
   observations. `pkg/factory/sessions/invocation/session_telemetry.go` owns invocation metric
@@ -184,16 +186,20 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   non-success context for `sessionId`, `workId`, `workName`, and `workState`
   also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
-  validation shared by validate-only and save pre-check flows.
+  validation shared by validate-only and save pre-check flows. It validates the
+  authored policy and invocation-signature vocabulary declared by
+  `pkg/factory/contracts/factory_config.go`; generated OpenAPI enums are only
+  converted at config and transport boundaries.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
-- `pkg/interfaces/factory_runtime.go` owns the backend canonical
-  `WorkContentPart`, request-validation error, and `FactoryInvocationResult`
-  shapes used below transport and service boundaries; the Factory Session owner
-  constructs that shared result.
+- `pkg/work` owns canonical `Work`, `WorkRequest`, `WorkContentPart`, invocation
+  argument, dispatch identity, relation, and payload-lineage contracts. The
+  remaining request-validation error and `FactoryInvocationResult` session
+  result shape stay at their current boundary until Factory Session contracts
+  converge; the Factory Session owner constructs that shared result.
 - `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
-  and the backend-owned `interfaces.WorkContentPart` shape; pure content rules
-  remain in `pkg/work/content`.
+  and the backend-owned `work.WorkContentPart` shape; pure content rules remain
+  in `pkg/work/content`.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.
@@ -539,8 +545,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `primary_result_regression_test.go` without wiring the mapper into selection.
   Provider-native typed adapters live under `pkg/workers/provider/<provider>`
   and emit validated `responseevents.Draft` values. Sanitized cross-provider
-  parity transcripts and the adapter-neutral terminal harness live in
-  `pkg/workers/provider/parityfixtures` with fidelity-class fixtures under
+  parity transcripts and the adapter-neutral terminal harness are repository-only
+  support under `internal/testutil/providerparity`, with fidelity-class fixtures under
   `testdata/`; extend that catalog for CLI/API parity proofs instead of
   inventing parallel fixture trees. Use `parityfixtures.RunTransportParity`
   plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
@@ -554,14 +560,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   terminal `InvocationResponse` outcomes for the same fixture run. Consolidated
   Batch 09 parity proofs live in `parityfixtures.AssertCrossProviderParityCatalog`
   and `AssertCrossProviderParityForFixture`; run them from
-  `pkg/workers/provider/parityfixtures/suite_test.go`
+  `internal/testutil/providerparity/suite_test.go`
   (`TestCrossProviderParitySuite_Catalog`) and the provider-suite entrypoint
   `tests/functional/providers/cross_provider_parity_smoke_test.go`
   (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
   Batch 09 private-contract removal gates live in
-  `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`, `AssertClosure`,
+  `internal/testutil/responsestreamremovalgate` (`AssertGate`, `AssertClosure`,
   `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
   `AssertPublicTransportLayersDoNotImportLegacyCompat`,
   `AssertLegacyCompatMapperDeleted`,
@@ -577,7 +583,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`TestResponseStreamPrivateContractClosureSmoke`). Supported CLI NDJSON
   recordType constants and retired-record rejection live in
   `pkg/factory/sessions/responsestream/ndjsoncontract`; the canonical decoder in
-  `pkg/workers/provider/parityfixtures/transport.go` rejects retired private
+  `internal/testutil/providerparity/transport.go` rejects retired private
   record types before validating public envelopes. Run these before deleting
   private NDJSON record types. The retired `responsestream/compat` mapper package
   must stay deleted; internal fragment projection now lives in `fragmentmap`.
@@ -674,7 +680,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `ReplayArtifact` config loading. Privacy-bounded JavaScript Factory Session
   recordings compose `recordingreplay.Service` as an inspection-only durable read
   owner and skip Petri/runtime/provider construction; legacy artifacts continue
-  through `pkg/replay`. Production-path tests must exercise `FactoryService.Run`
+  through Factory-owned `pkg/factory/replay`, backed by policy-free artifact IO in
+  `pkg/platform/replay`. Production-path tests must exercise `FactoryService.Run`
   plus public session, event, artifact, and result reads with fail-on-use live
   dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
@@ -683,11 +690,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
   input even if the process-level `os.Stdin` is still a TTY.
-- `pkg/workers/inference/inference.go` resolves inference-run operation bindings,
-  maps direct invocation request bindings, builds the provider-neutral inference
-  request envelope, and shapes inference responses into ordered canonical
-  `WorkContentPart` output shared by direct model invocation and factory-session
-  execution paths.
+- `pkg/workers/inference/inference.go` resolves worker-owned inference-run
+  operation bindings, builds the provider-neutral request envelope, and shapes
+  canonical `WorkContentPart` output shared by direct model invocation and
+  Factory Session execution. Generated OpenAPI binding conversion belongs in
+  `pkg/transports/mapping/workerinference`; inference output parsing consumes the
+  Work-owned content shape and must not import generated or transport mapping
+  packages.
 - `pkg/transports/mapping/inference_failure.go` classifies inference readiness and
   execution failures into actionable customer-facing outcomes for missing model,
   loading model, unsupported operation, timeout, and runtime failure cases
@@ -987,6 +996,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   text or generated artifact bodies.
 - `pkg/factory/packages/goal/` owns packaged `@you/goal` factory metadata
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/factory/packages/catalog.go` is the single registration point for
+  shipped named factories. A new package needs a catalog definition plus a
+  directly-loadable factory payload; `you config init` materializes every
+  catalog entry without separate CLI registration. Customer-facing packaged
+  invocation guidance belongs in `docs/reference/run.md`.
+- Invocation-interpolated worker `modelProvider` and `model` fields are resolved
+  at dispatch time. A packaged factory that must be runnable without role flags
+  should declare parameter `defaultValue`s in its invocation signature; operator
+  defaults only fill authored empty worker fields before interpolation.
 - `pkg/transports/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared
   `InvocationRequest` payload shape, fail with stable
@@ -1044,6 +1062,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
   instead of submitted input text or raw audio payload bytes.
+- Packaged runtime behavior in `pkg/factory/subsystems/subsystem_transitioner.go`
+  must first verify the effective `RuntimeFactoryConfigLookup` identity before
+  applying package-owned token relations or metadata. Workstation and Work type
+  names are authored customer data, so they are never sufficient to identify a
+  packaged topology; keep a mutation-level customer-name-collision regression
+  test alongside the transitioner behavior.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
 - Production provider mode selection lives at the `pkg/workers/provider`
@@ -1071,4 +1095,6 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   authored fields when the current factory payload also declares that parameter
   in `invocationSignature`, or live session pages will fall back to legacy UI
   flows even when backend runtime validation already accepts the factory.
-- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/models/local/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/models/host/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.
+- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. Stable provider command identity lives in `pkg/models/provider`; worker and model invocation exchange `pkg/workers/execution` requests, results, provider sessions, and normalized failures, while `pkg/workers/diagnostics` owns the safe generated projection. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` when a process-wide host is configured, otherwise through the local manager fallback. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. See `docs/architecture/model-host.md`.
+- A named factory whose submitted Work fans out into derived terminal Work must define an explicit `invocationReturn` targeting the final Work type and terminal state. The default submitted-work return policy cannot follow a fan-out to a separately derived merge result.
+- Structured invocation input is normalized into the submitted Work's canonical text content at `pkg/factory/sessions/invocation/session_owner.go`; `WorkRequestFromSubmitRequests` and `NormalizeWorkRequest` must preserve cloned invocation arguments so fan-out-derived Work can render the original request without relying on a transient `${input}` placeholder. Use `workPropagation.mode: PRESERVE_INPUT` plus a dedicated processing-state route when a final fan-in must consume that original Work alongside derived branch results.

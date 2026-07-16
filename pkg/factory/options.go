@@ -4,14 +4,15 @@ import (
 	"context"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FactoryOption configures a factoryImpl via the functional options pattern.
@@ -51,7 +52,7 @@ func (c *FactoryConfig) IsInlineDispatch() bool { return c.inlineDispatch }
 
 // SubmissionRecorder receives authoritative submission observations from the
 // engine before submitted work is injected into the marking.
-type SubmissionRecorder func(interfaces.FactorySubmissionRecord)
+type SubmissionRecorder func(work.FactorySubmissionRecord)
 
 // DispatchRecorder receives authoritative dispatch observations from the
 // engine after in-flight tracking is updated and before worker submission.
@@ -65,9 +66,9 @@ type CompletionRecorder func(interfaces.FactoryCompletionRecord)
 // canonical Factory Session persistence owner after transition routing.
 type PetriMutationRecorder func(sessionID string, mutations []interfaces.TokenMutationRecord) error
 
-// FactoryEventRecorder receives canonical generated FactoryEvent messages in
+// FactoryEventRecorder receives canonical Factory-owned event messages in
 // append order as runtime history records them.
-type FactoryEventRecorder func(factoryapi.FactoryEvent)
+type FactoryEventRecorder func(interfaces.FactoryEvent)
 
 // SubmissionHook provides generated work batches, results, and events that
 // become visible to the engine at deterministic tick boundaries.
@@ -80,8 +81,8 @@ type SubmissionHook interface {
 // DispatchResultHook bridges engine-owned dispatch creation with worker
 // execution and tick-owned result delivery.
 type DispatchResultHook interface {
-	SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error
-	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
+	SubmitDispatch(ctx context.Context, dispatch work.WorkDispatch) error
+	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error)
 	WaitCh() <-chan struct{}
 	HasPendingResults() bool
 }
@@ -96,7 +97,7 @@ type DispatchResultHookWakeSignaler interface {
 // CompletionDeliveryPlanner maps a runtime dispatch to the logical tick at
 // which a completed worker result may become visible.
 type CompletionDeliveryPlanner interface {
-	DeliveryTickForDispatch(dispatch interfaces.WorkDispatch) (int, bool, error)
+	DeliveryTickForDispatch(dispatch work.WorkDispatch) (int, bool, error)
 }
 
 // WithNet sets the CPN definition for the factory. Required.
@@ -202,7 +203,7 @@ func WithSubmissionRecorder(recorder SubmissionRecorder) FactoryOption {
 	}
 }
 
-// WithFactoryEventRecorder records canonical generated events as they are
+// WithFactoryEventRecorder records canonical Factory events as they are
 // appended to the runtime event history.
 func WithFactoryEventRecorder(recorder FactoryEventRecorder) FactoryOption {
 	return func(c *FactoryConfig) {

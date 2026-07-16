@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
-	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
+	worker, err := InterpolateWorkerConfig(workerconfig.Config{
 		Model: "${model}",
 		Body:  "Use ${input}",
-	}, &interfaces.InvocationArguments{
-		Arguments: map[string]interfaces.InvocationArgument{
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
 			"input": {Values: []string{"draft"}},
 		},
 	}, nil)
@@ -30,7 +32,7 @@ func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 func TestInterpolateWorkstationConfig_RejectsMissingEmbeddedParameter(t *testing.T) {
 	_, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
 		PromptTemplate: "Use ${missing} now",
-	}, &interfaces.InvocationArguments{}, nil)
+	}, &work.InvocationArguments{}, nil)
 	if err == nil {
 		t.Fatal("InterpolateWorkstationConfig error = nil, want invalid interpolation")
 	}
@@ -52,10 +54,10 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 		return []byte("from-file"), nil
 	}
 
-	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
+	worker, err := InterpolateWorkerConfig(workerconfig.Config{
 		Body: "${input}",
-	}, &interfaces.InvocationArguments{
-		Arguments: map[string]interfaces.InvocationArgument{
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
 			"input": {
 				Values:    []string{path},
 				ValueMode: valueModeFileContents,
@@ -73,12 +75,12 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 func TestInvocationDiagnostic_RedactsSensitiveValuesAndPreservesSources(t *testing.T) {
 	diagnostic := InvocationDiagnostic(&interfaces.InvocationSignatureConfig{
 		Parameters: []interfaces.InvocationParameterConfig{{Name: "apiKey"}},
-	}, &interfaces.InvocationArguments{
-		Arguments: map[string]interfaces.InvocationArgument{
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
 			"apiKey": {
 				Values:    []string{"secret"},
 				Sensitive: true,
-				Sources: []interfaces.InvocationArgumentSource{{
+				Sources: []work.InvocationArgumentSource{{
 					Kind:   "NAMED",
 					Name:   "api-key",
 					Redact: true,

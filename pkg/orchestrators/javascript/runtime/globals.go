@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/dop251/goja"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 
 // runtimeGlobals binds the narrow default workflow surface: structured args, meta,

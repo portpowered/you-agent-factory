@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -15,12 +15,12 @@ func TestConfigDrivenRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will exhaust retries"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Processed. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Needs work"},
-		interfaces.InferenceResponse{Content: "Processed. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Still needs work"},
-		interfaces.InferenceResponse{Content: "Processed. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Not good enough"},
+		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Needs work"},
+		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Still needs work"},
+		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Not good enough"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -53,10 +53,10 @@ func TestConfigDrivenRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will succeed on second try"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Processed. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Needs work"},
-		interfaces.InferenceResponse{Content: "Processed. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Looks good. ACCEPTED"},
+		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Needs work"},
+		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,

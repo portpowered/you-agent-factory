@@ -21,15 +21,19 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -426,8 +430,8 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	defaultFactoryID := "root-runtime"
 	betaFactoryID := "beta-runtime"
-	defaultSession := newSessionScopedMockFactory(now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
-	betaSession := newSessionScopedMockFactory(now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
+	defaultSession := newSessionScopedMockFactory(t, now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
+	betaSession := newSessionScopedMockFactory(t, now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
 		SessionFactories: map[string]*testutil.MockFactory{
@@ -447,6 +451,7 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 }
 
 func newSessionScopedMockFactory(
+	t *testing.T,
 	now time.Time,
 	factoryID *string,
 	factoryName string,
@@ -456,15 +461,15 @@ func newSessionScopedMockFactory(
 ) *testutil.MockFactory {
 	return &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				tokenID: listWorkToken(tokenID, workID, "task:init", "task", now),
 			},
 		},
 		Net: sessionScopedStateNet(),
 		FactoryEventStream: &interfaces.FactoryEventStream{
 			StreamGenerationID: "stream-gen-" + factoryName,
-			History:            []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
-			Events:             make(chan factoryapi.FactoryEvent),
+			History:            []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest})},
+			Events:             make(chan interfaces.FactoryEvent),
 		},
 		CurrentFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
 	}
@@ -633,7 +638,7 @@ func requireHTTPSuccess(
 func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}},
+			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}},
 		},
 	})
 
@@ -744,12 +749,11 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	mf := &testutil.MockFactory{
-		OpenFactorySessionErr: apiTestSessionValidationError{
-			message: "folder validation failed",
-			targets: []factoryapi.FactoryValidationTarget{
-				factoryvalidation.FactorySessionFieldTarget("missing", "folderPath", "folder validation failed"),
-			},
-		},
+		OpenFactorySessionErr: factorysessions.NewValidationError(
+			factorysessions.ValidationReasonMissing,
+			"folderPath",
+			errors.New("folder validation failed"),
+		),
 	}
 	srv := newTestServer(mf)
 
@@ -786,11 +790,11 @@ func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testi
 			message: "factory configuration could not be loaded from the selected folder",
 			code:    "FACTORY_SESSION_CONFIG_LOAD_FAILED",
 			targets: []factoryapi.FactoryValidationTarget{
-				factoryvalidation.FactorySessionTargetTarget(
+				apisurface.FactoryValidationTargetToAPI(factoryvalidation.FactorySessionTargetTarget(
 					"config_load_failed",
 					"default",
 					`Factory target "default" at "/workspace/fleet" could not be loaded: unexpected end of JSON input`,
-				),
+				)),
 			},
 		},
 	}
@@ -980,8 +984,8 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 			result: apisurface.FactoryInvocationResult{
 				RequestID:     "invoke-1",
 				TraceID:       "trace-invoke-1",
-				Status:        factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
+				Status:        "COMPLETED",
+				PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "primary output"}},
 			},
 		},
 		{
@@ -990,9 +994,9 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 			result: apisurface.FactoryInvocationResult{
 				RequestID: "request-goal-parity-success",
 				TraceID:   "trace-goal-parity-success",
-				Status:    factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Status:    "COMPLETED",
+				PrimaryResult: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "goal parity completed",
 				}},
 			},
@@ -1021,9 +1025,9 @@ func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testin
 		InvokeFactoryResult: apisurface.FactoryInvocationResult{
 			RequestID: "invoke-structured-1",
 			TraceID:   "trace-structured-1",
-			Status:    factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Status:    "COMPLETED",
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "ok",
 			}},
 		},
@@ -1335,7 +1339,7 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	srv := NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: root})
 
@@ -1389,7 +1393,7 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigu
 	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
 	srv := NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: missingRoot})
 
@@ -1691,7 +1695,7 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 	}
 	assertProviderSessionDetailLoadsFromEventRef(t, srv, legacyAgentEventRef, factoryapi.Cursor)
 
-	canonicalizedLegacyRef := loadableProviderSessionRefFromEventMetadata(interfaces.ProviderSessionMetadata{
+	canonicalizedLegacyRef := loadableProviderSessionRefFromEventMetadata(workerexecution.ProviderSessionMetadata{
 		Provider: "agent",
 		Kind:     "session_id",
 		ID:       cursorSessionID,

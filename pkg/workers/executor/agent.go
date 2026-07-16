@@ -10,9 +10,18 @@ import (
 	"sync"
 	"time"
 
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
@@ -65,13 +74,14 @@ func newAgentExecutor(runtimeConfig interfaces.RuntimeDefinitionLookup, executor
 
 // Execute calls the Provider with one rendered workstation request, parses the
 // response against OutputSchema if present, and returns a WorkResult.
-func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	start := time.Now()
 	workerType := workerTypeForExecutionRequest(request)
 	workerDef, ok := ae.runtimeConfig.Worker(workerType)
 	if !ok {
 		return missingWorkerWorkResult(request.Dispatch, workerType, time.Since(start)), nil
 	}
+	workerDef = effectiveWorkerDefinition(request, workerDef)
 
 	workstationDef, _ := ae.runtimeConfig.Workstation(inferenceWorkstationType(request))
 	req := inferenceRequestForExecutionRequest(request, workerDef, workstationDef)
@@ -93,13 +103,13 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 	outcome := ae.evaluateOutcome(resp, workerDef)
 	shapedContent, err := ae.canonicalInferenceOutput(resp.Content, workerDef, request.ModelOperation)
 	if err != nil {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:      request.Dispatch.DispatchID,
 			TransitionID:    request.Dispatch.TransitionID,
-			Outcome:         interfaces.OutcomeFailed,
+			Outcome:         workerexecution.OutcomeFailed,
 			Output:          resp.Content,
 			Error:           err.Error(),
-			ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
+			ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
 			Diagnostics:     diagnostics,
 			Metrics:         agentWorkMetrics(start, retryCount),
 		}, nil
@@ -110,12 +120,26 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
 }
 
-func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfaces.WorkerConfig, operationName string) (string, error) {
+func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *workerconfig.Config) *workerconfig.Config {
+	if workerDef == nil || (request.Model == "" && request.ModelProvider == "") {
+		return workerDef
+	}
+	effective := *workerDef
+	if request.Model != "" {
+		effective.Model = request.Model
+	}
+	if request.ModelProvider != "" {
+		effective.ModelProvider = request.ModelProvider
+	}
+	return &effective
+}
+
+func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *workerconfig.Config, operationName string) (string, error) {
 	operationName = strings.TrimSpace(operationName)
 	if operationName == "" || workerDef == nil {
 		return raw, nil
 	}
-	var operation interfaces.ModelOperation
+	var operation workerconfig.ModelOperation
 	var ok bool
 	for _, candidate := range workerDef.Operations {
 		if strings.TrimSpace(candidate.Name) == operationName {
@@ -138,74 +162,74 @@ func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfa
 }
 
 func decisionEnvelopeWorkResult(
-	request interfaces.WorkstationExecutionRequest,
-	resp interfaces.InferenceResponse,
-	diagnostics *interfaces.WorkDiagnostics,
+	request workerexecution.WorkstationExecutionRequest,
+	resp workerexecution.InferenceResponse,
+	diagnostics *workerexecution.WorkDiagnostics,
 	retryCount int,
 	start time.Time,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	result := goal.WorkResultFromDecisionEnvelopeJSONOrFailed(
 		request.Dispatch.DispatchID,
 		request.Dispatch.TransitionID,
 		resp.Content,
 	)
-	result.ProviderSession = interfaces.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
 	result.Diagnostics = diagnostics
 	result.Metrics = agentWorkMetrics(start, retryCount)
 	return result
 }
 
 func goalRoutingEnvelopeWorkResult(
-	request interfaces.WorkstationExecutionRequest,
-	resp interfaces.InferenceResponse,
-	diagnostics *interfaces.WorkDiagnostics,
+	request workerexecution.WorkstationExecutionRequest,
+	resp workerexecution.InferenceResponse,
+	diagnostics *workerexecution.WorkDiagnostics,
 	retryCount int,
 	start time.Time,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	result := goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
 		request.Dispatch.DispatchID,
 		request.Dispatch.TransitionID,
 		resp.Content,
 	)
-	result.ProviderSession = interfaces.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.ProviderSession = workerexecution.CloneProviderSessionMetadata(resp.ProviderSession)
 	result.Diagnostics = diagnostics
 	result.Metrics = agentWorkMetrics(start, retryCount)
 	return result
 }
 
-func workerTypeForExecutionRequest(request interfaces.WorkstationExecutionRequest) string {
+func workerTypeForExecutionRequest(request workerexecution.WorkstationExecutionRequest) string {
 	if request.WorkerType != "" {
 		return request.WorkerType
 	}
 	return request.Dispatch.WorkerType
 }
 
-func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string, duration time.Duration) interfaces.WorkResult {
-	return interfaces.WorkResult{
+func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, duration time.Duration) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "worker config not found: " + workerType,
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
-func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) interfaces.WorkResult {
+func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time) workerexecution.WorkResult {
 	providerErr := workerprovider.NormalizeProviderExecutionError(err)
 	failureMetadata := workerprovider.WorkFailureMetadataFromError(providerErr)
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Error:           formatAgentProviderError(err),
-		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+		FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadata),
 		ProviderSession: providerSessionFromError(providerErr),
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount),
 	}
 }
 
-func (ae *AgentExecutor) workResultForInferenceResponse(request interfaces.WorkstationExecutionRequest, resp interfaces.InferenceResponse, outcome interfaces.WorkOutcome, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) (interfaces.WorkResult, error) {
+func (ae *AgentExecutor) workResultForInferenceResponse(request workerexecution.WorkstationExecutionRequest, resp workerexecution.InferenceResponse, outcome workerexecution.WorkOutcome, diagnostics *workerexecution.WorkDiagnostics, retryCount int, start time.Time) (workerexecution.WorkResult, error) {
 	metrics := agentWorkMetrics(start, retryCount)
 	if request.OutputSchema != "" {
 		ae.logger.Info("parsing output against schema", "schema", request.OutputSchema)
@@ -214,51 +238,51 @@ func (ae *AgentExecutor) workResultForInferenceResponse(request interfaces.Works
 			parseFailure = parseErr.Error()
 		}
 		if parseFailure != "" {
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:      request.Dispatch.DispatchID,
 				TransitionID:    request.Dispatch.TransitionID,
-				Outcome:         interfaces.OutcomeFailed,
+				Outcome:         workerexecution.OutcomeFailed,
 				Output:          resp.Content,
 				Error:           "output parse failed: " + parseFailure,
-				ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
+				ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
 				Diagnostics:     diagnostics,
 				Metrics:         metrics,
 			}, nil
 		}
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:      request.Dispatch.DispatchID,
 		TransitionID:    request.Dispatch.TransitionID,
 		Outcome:         outcome,
 		Output:          resp.Content,
-		ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(resp.ProviderSession),
 		Diagnostics:     diagnostics,
 		Metrics:         metrics,
 	}, nil
 }
 
-func agentWorkMetrics(start time.Time, retryCount int) interfaces.WorkMetrics {
-	return interfaces.WorkMetrics{
+func agentWorkMetrics(start time.Time, retryCount int) workerexecution.WorkMetrics {
+	return workerexecution.WorkMetrics{
 		Duration:   time.Since(start),
 		RetryCount: retryCount,
 	}
 }
 
-func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig) interfaces.ProviderInferenceRequest {
-	req := interfaces.ProviderInferenceRequest{
-		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
+func inferenceRequestForExecutionRequest(request workerexecution.WorkstationExecutionRequest, workerDef *workerconfig.Config, workstationDef *interfaces.FactoryWorkstationConfig) workerexecution.ProviderInferenceRequest {
+	req := workerexecution.ProviderInferenceRequest{
+		Dispatch:                     work.CloneWorkDispatch(request.Dispatch),
 		WorkerType:                   request.WorkerType,
 		WorkstationType:              inferenceWorkstationType(request),
 		RunnerID:                     request.RunnerID,
 		ProjectID:                    request.ProjectID,
 		InputTokens:                  cloneRawInputTokens(request.InputTokens),
 		ModelOperation:               request.ModelOperation,
-		ModelBindings:                interfaces.CloneResolvedModelOperationBindings(request.ModelBindings),
+		ModelBindings:                workerexecution.CloneResolvedModelOperationBindings(request.ModelBindings),
 		SystemPrompt:                 request.SystemPrompt,
 		UserMessage:                  request.UserMessage,
 		OutputSchema:                 request.OutputSchema,
-		ToolExecutionMode:            interfaces.RunnerToolExecutionModeRequired,
+		ToolExecutionMode:            workerexecution.RunnerToolExecutionModeRequired,
 		RequiredOptionalCapabilities: requiredRunnerOptionalCapabilities(request),
 		EnvVars:                      cloneEnvVars(request.EnvVars),
 		Worktree:                     request.Worktree,
@@ -266,17 +290,17 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 	}
 	if workerDef != nil {
 		req.Model = workerDef.Model
-		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, interfaces.ResolvedRunnerSelection{
+		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, workerexecution.ResolvedRunnerSelection{
 			RunnerID: request.RunnerID,
 			Source:   request.RunnerSelectionSource,
 		})
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {
-			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, interfaces.RunnerOptionalCapabilitySessionResume)
+			req.RequiredOptionalCapabilities = append(req.RequiredOptionalCapabilities, workerexecution.RunnerOptionalCapabilitySessionResume)
 		}
 	}
-	if req.ModelProvider == string(interfaces.ModelProviderOpenCode) {
+	if req.ModelProvider == string(modelprovider.OpenCode) {
 		workstationAgent := ""
 		workerAgent := ""
 		if workstationDef != nil {
@@ -285,13 +309,13 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 		if workerDef != nil {
 			workerAgent = workerDef.OpenCodeAgent
 		}
-		req.OpenCodeAgent = interfaces.ResolveOpenCodeAgent(workstationAgent, workerAgent)
+		req.OpenCodeAgent = workerrunner.ResolveOpenCodeAgent(workstationAgent, workerAgent)
 	}
 	return req
 }
 
-func modelProviderForExecution(workerModelProvider string, selection interfaces.ResolvedRunnerSelection) string {
-	if selection.Source == interfaces.RunnerSelectionSourceWorkstation || selection.Source == interfaces.RunnerSelectionSourceFactory {
+func modelProviderForExecution(workerModelProvider string, selection workerexecution.ResolvedRunnerSelection) string {
+	if selection.Source == workerexecution.RunnerSelectionSourceWorkstation || selection.Source == workerexecution.RunnerSelectionSourceFactory {
 		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
 			return provider
 		}
@@ -303,39 +327,39 @@ func modelProviderForExecution(workerModelProvider string, selection interfaces.
 }
 
 func modelProviderForRunnerID(runnerID string) string {
-	switch interfaces.NormalizeRunnerID(runnerID) {
-	case interfaces.RunnerIDCodex:
-		return string(interfaces.ModelProviderCodex)
-	case interfaces.RunnerIDGemini:
-		return string(interfaces.ModelProviderGemini)
-	case interfaces.RunnerIDKiro:
-		return string(interfaces.ModelProviderKiro)
-	case interfaces.RunnerIDCursorCLI:
-		return string(interfaces.ModelProviderCursor)
-	case interfaces.RunnerIDOpenCode:
-		return string(interfaces.ModelProviderOpenCode)
-	case interfaces.RunnerIDPi:
-		return string(interfaces.ModelProviderPi)
+	switch workerrunner.NormalizeRunnerID(runnerID) {
+	case workerexecution.RunnerIDCodex:
+		return string(modelprovider.Codex)
+	case workerexecution.RunnerIDGemini:
+		return string(modelprovider.Gemini)
+	case workerexecution.RunnerIDKiro:
+		return string(modelprovider.Kiro)
+	case workerexecution.RunnerIDCursorCLI:
+		return string(modelprovider.Cursor)
+	case workerexecution.RunnerIDOpenCode:
+		return string(modelprovider.OpenCode)
+	case workerexecution.RunnerIDPi:
+		return string(modelprovider.Pi)
 	default:
 		return ""
 	}
 }
 
-func inferenceWorkstationType(request interfaces.WorkstationExecutionRequest) string {
+func inferenceWorkstationType(request workerexecution.WorkstationExecutionRequest) string {
 	if request.WorkstationType != "" {
 		return request.WorkstationType
 	}
 	return request.Dispatch.WorkstationName
 }
 
-func providerSessionFromError(providerErr *workerprovider.ProviderError) *interfaces.ProviderSessionMetadata {
+func providerSessionFromError(providerErr *workerprovider.ProviderError) *workerexecution.ProviderSessionMetadata {
 	if providerErr == nil {
 		return nil
 	}
-	return interfaces.CloneProviderSessionMetadata(providerErr.ProviderSession)
+	return workerexecution.CloneProviderSessionMetadata(providerErr.ProviderSession)
 }
 
-func providerDiagnosticsFromError(providerErr *workerprovider.ProviderError) *interfaces.WorkDiagnostics {
+func providerDiagnosticsFromError(providerErr *workerprovider.ProviderError) *workerexecution.WorkDiagnostics {
 	if providerErr == nil {
 		return nil
 	}
@@ -346,7 +370,7 @@ func formatAgentProviderError(err error) string {
 	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) {
 		message := strings.TrimSpace(providerErr.Message)
-		if providerErr.Type == interfaces.WorkFailureTypeTimeout && message == "execution timeout" {
+		if providerErr.Type == workerexecution.WorkFailureTypeTimeout && message == "execution timeout" {
 			return message
 		}
 		if message != "" {
@@ -381,12 +405,12 @@ func newProviderRetryConfig() providerRetryConfig {
 	}
 }
 
-func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, int, error) {
+func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, int, error) {
 	logger := logging.EnsureLogger(ae.logger)
 	retryCount := 0
 	if ae.providerExecutor == nil {
-		return interfaces.InferenceResponse{}, retryCount, workerprovider.NewProviderError(
-			interfaces.WorkFailureTypeMisconfigured,
+		return workerexecution.InferenceResponse{}, retryCount, workerprovider.NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
 			"provider execution requires a provider",
 			nil,
 		)
@@ -403,12 +427,12 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 
 		providerErr := workerprovider.NormalizeProviderExecutionError(err)
 		if providerErr == nil {
-			return interfaces.InferenceResponse{}, retryCount, err
+			return workerexecution.InferenceResponse{}, retryCount, err
 		}
 
 		decision := workerprovider.WorkFailureDecisionFromProviderError(providerErr)
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
-			return interfaces.InferenceResponse{}, retryCount, providerErr
+			return workerexecution.InferenceResponse{}, retryCount, providerErr
 		}
 
 		baseDelay := ae.retryConfig.initialBackoff << retryCount
@@ -425,7 +449,7 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 				"backoff_ms", delay.Milliseconds())...)
 
 		if err := ae.retryConfig.sleep(ctx, delay); err != nil {
-			return interfaces.InferenceResponse{}, retryCount, err
+			return workerexecution.InferenceResponse{}, retryCount, err
 		}
 	}
 }
@@ -438,10 +462,10 @@ type runnerProviderAdapter struct {
 	inner Runner
 }
 
-func (a runnerProviderAdapter) Infer(ctx context.Context, request interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (a runnerProviderAdapter) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	if a.inner == nil {
-		return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
-			interfaces.WorkFailureTypeMisconfigured,
+		return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
 			"runner requires an implementation",
 			nil,
 		)
@@ -455,10 +479,10 @@ func RunnerFromProvider(provider Provider) Runner {
 	return providerRunnerAdapter{executor: providerexecution.NewExecutor(provider)}
 }
 
-func (a providerRunnerAdapter) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (a providerRunnerAdapter) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if a.executor == nil {
-		return interfaces.RunnerExecutionResult{}, workerprovider.NewProviderError(
-			interfaces.WorkFailureTypeMisconfigured,
+		return workerexecution.RunnerExecutionResult{}, workerprovider.NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
 			"runner requires a provider implementation",
 			nil,
 		)
@@ -467,39 +491,39 @@ func (a providerRunnerAdapter) Execute(ctx context.Context, request interfaces.R
 	return result.Response, err
 }
 
-func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionRequest) []interfaces.RunnerOptionalCapability {
-	capabilities := make([]interfaces.RunnerOptionalCapability, 0, 5)
+func requiredRunnerOptionalCapabilities(request workerexecution.WorkstationExecutionRequest) []workerexecution.RunnerOptionalCapability {
+	capabilities := make([]workerexecution.RunnerOptionalCapability, 0, 5)
 	if request.OutputSchema != "" {
-		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityStructuredOutput)
+		capabilities = append(capabilities, workerexecution.RunnerOptionalCapabilityStructuredOutput)
 	}
 	if request.WorkingDirectoryAuthored && request.WorkingDirectory != "" {
-		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorkingDirectory)
+		capabilities = append(capabilities, workerexecution.RunnerOptionalCapabilityWorkingDirectory)
 	}
 	if shouldRequireWorktreeRunnerCapability(request) {
-		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorktree)
+		capabilities = append(capabilities, workerexecution.RunnerOptionalCapabilityWorktree)
 	}
 	for _, token := range cloneInputTokens(request.InputTokens) {
 		if tokenHasImageContent(token) {
-			capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityImageInput)
+			capabilities = append(capabilities, workerexecution.RunnerOptionalCapabilityImageInput)
 			break
 		}
 	}
 	return capabilities
 }
 
-func shouldRequireWorktreeRunnerCapability(request interfaces.WorkstationExecutionRequest) bool {
+func shouldRequireWorktreeRunnerCapability(request workerexecution.WorkstationExecutionRequest) bool {
 	if request.Worktree == "" {
 		return false
 	}
-	if request.WorkingDirectory != "" && interfaces.NormalizeRunnerID(request.RunnerID) == interfaces.RunnerIDCodex {
+	if request.WorkingDirectory != "" && workerrunner.NormalizeRunnerID(request.RunnerID) == workerexecution.RunnerIDCodex {
 		return false
 	}
 	return true
 }
 
-func tokenHasImageContent(token interfaces.Token) bool {
+func tokenHasImageContent(token factorytoken.Token) bool {
 	for _, part := range token.Color.Content {
-		if part.Type == interfaces.WorkContentPartTypeImage {
+		if part.Type == work.WorkContentPartTypeImage {
 			return true
 		}
 	}
@@ -510,38 +534,38 @@ func tokenHasImageContent(token interfaces.Token) bool {
 // When no stop token is configured, all successful provider responses are ACCEPTED.
 // When a stop token is configured, the output is checked: found → ACCEPTED,
 // <CONTINUE> → CONTINUE, otherwise → REJECTED.
-func (ae *AgentExecutor) evaluateOutcome(resp interfaces.InferenceResponse, workerDef *interfaces.WorkerConfig) interfaces.WorkOutcome {
+func (ae *AgentExecutor) evaluateOutcome(resp workerexecution.InferenceResponse, workerDef *workerconfig.Config) workerexecution.WorkOutcome {
 	if workerDef.StopToken == "" {
 		ae.logger.Info("no stop token configured; defaulting to ACCEPTED outcome")
-		return interfaces.OutcomeAccepted
+		return workerexecution.OutcomeAccepted
 	}
 	if workerprovider.ContainsStopToken(resp.Content, workerDef.StopToken) {
 		ae.logger.Info("stop token found in output; returning ACCEPTED outcome", "stop_token", workerDef.StopToken)
-		return interfaces.OutcomeAccepted
+		return workerexecution.OutcomeAccepted
 	}
 	if strings.Contains(resp.Content, "<CONTINUE>") {
-		return interfaces.OutcomeContinue
+		return workerexecution.OutcomeContinue
 	}
-	return interfaces.OutcomeRejected
+	return workerexecution.OutcomeRejected
 }
 
 // parseOutputAgainstSchema parses the response content as JSON and validates
 // it can be unmarshalled into TokenColor structs. The schema parameter is
 // reserved for future schema validation; for MVP, we just validate JSON.
-func parseOutputAgainstSchema(content string, _ []byte) ([]interfaces.TokenColor, error) {
+func parseOutputAgainstSchema(content string, _ []byte) ([]factorytoken.Color, error) {
 	// Try parsing as array of token colors first.
-	var colors []interfaces.TokenColor
+	var colors []factorytoken.Color
 	if err := json.Unmarshal([]byte(content), &colors); err == nil {
 		return colors, nil
 	}
 
 	// Try parsing as a single token color.
-	var color interfaces.TokenColor
+	var color factorytoken.Color
 	if err := json.Unmarshal([]byte(content), &color); err != nil {
 		return nil, fmt.Errorf("response is not valid JSON: %w", err)
 	}
 
-	return []interfaces.TokenColor{color}, nil
+	return []factorytoken.Color{color}, nil
 }
 
 func sleepWithContext(ctx context.Context, delay time.Duration) error {

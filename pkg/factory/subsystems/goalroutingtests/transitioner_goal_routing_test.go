@@ -5,13 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestBuiltInGoalFactoryJSON_ExecuteRepeaterConsumesLoopInput(t *testing.T) {
@@ -40,9 +42,9 @@ func TestTransitioner_BuiltInGoalRepeaterContinueAndRejectRepeat(t *testing.T) {
 	net, workstation, transition := builtInGoalRepeaterFixture(t)
 	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
 
-	for _, outcome := range []interfaces.WorkOutcome{
-		interfaces.OutcomeContinue,
-		interfaces.OutcomeRejected,
+	for _, outcome := range []workerexecution.WorkOutcome{
+		workerexecution.OutcomeContinue,
+		workerexecution.OutcomeRejected,
 	} {
 		t.Run(string(outcome), func(t *testing.T) {
 			result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", outcome)
@@ -56,7 +58,7 @@ func TestTransitioner_BuiltInGoalRepeaterFailureRoutesToFailed(t *testing.T) {
 	net, workstation, transition := builtInGoalRepeaterFixture(t)
 	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
 
-	result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", interfaces.OutcomeFailed)
+	result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", workerexecution.OutcomeFailed)
 	assertSingleGoalMutationAtPlace(t, result, "goal:failed")
 }
 
@@ -85,7 +87,7 @@ func executeBuiltInGoalRepeaterResult(
 	transition *petri.Transition,
 	now time.Time,
 	inputPlace string,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 ) *interfaces.TickResult {
 	t.Helper()
 
@@ -108,7 +110,7 @@ func builtInGoalRepeaterSnapshot(
 	now time.Time,
 	transitionID string,
 	inputPlace string,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 ) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	dispatchID := "dispatch-" + string(outcome)
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
@@ -118,17 +120,17 @@ func builtInGoalRepeaterSnapshot(
 				TransitionID:    transitionID,
 				WorkstationName: goal.PackagedExecuteWorkstationName,
 				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:        "goal-token",
 					PlaceID:   inputPlace,
 					CreatedAt: now.Add(-time.Hour),
 					EnteredAt: now.Add(-time.Hour),
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID:     "goal-work",
 						WorkTypeID: goal.PackagedGoalWorkTypeName,
 						Payload:    []byte("finish the repository change"),
 					},
-					History: interfaces.TokenHistory{
+					History: factorytoken.History{
 						TotalVisits:         map[string]int{},
 						ConsecutiveFailures: map[string]int{},
 						PlaceVisits:         map[string]int{},
@@ -136,7 +138,7 @@ func builtInGoalRepeaterSnapshot(
 				}},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   dispatchID,
 			TransitionID: transitionID,
 			Outcome:      outcome,

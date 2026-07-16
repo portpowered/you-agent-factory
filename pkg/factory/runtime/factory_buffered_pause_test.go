@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestServiceMode_MultipleSubmissionsWhilePaused_ResumeDrainsToQuiescence(t *testing.T) {
@@ -40,7 +41,7 @@ func TestServiceMode_MultipleSubmissionsWhilePaused_ResumeDrainsToQuiescence(t *
 
 	traceIDs := []string{"trace-runtime-a", "trace-runtime-b", "trace-runtime-c"}
 	for i, traceID := range traceIDs {
-		result, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+		result, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 			RequestID:  fmt.Sprintf("request-runtime-paused-%03d", i+1),
 			WorkTypeID: "task",
 			TraceID:    traceID,
@@ -86,7 +87,7 @@ func TestServiceMode_MultipleSubmissionsWhilePaused_ResumeDrainsToQuiescence(t *
 
 func TestServiceMode_WorkerPoolResultWhilePaused_ResumeDrainsWithoutExternalSignal(t *testing.T) {
 	executor := &asyncRecordingExecutor{
-		started: make(chan interfaces.WorkDispatch, 1),
+		started: make(chan work.WorkDispatch, 1),
 		release: make(chan struct{}),
 	}
 
@@ -108,7 +109,7 @@ func TestServiceMode_WorkerPoolResultWhilePaused_ResumeDrainsWithoutExternalSign
 
 	waitForFactoryState(t, f, interfaces.FactoryStateRunning, time.Second)
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		RequestID:  "request-runtime-pool-inflight-001",
 		WorkTypeID: "task",
 		TraceID:    "trace-runtime-pool-inflight",

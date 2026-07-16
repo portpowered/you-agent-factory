@@ -13,14 +13,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	replay "github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -46,14 +46,11 @@ func buildRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehos
 	if cfg == nil {
 		return nil, fmt.Errorf("compose runtime config is required")
 	}
-	if !cfg.WorkerApplication.Valid() {
-		components, err := InjectWorkerApplication(cfg.Logger, FunctionalEdges{})
-		if err != nil {
-			return nil, fmt.Errorf("compose runtime worker application: %w", err)
-		}
-		cfg.WorkerApplication = components
+	serviceCfg, err := service.ConfigWithWorkerApplication(runtimeConfigAsServiceConfig(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("compose runtime worker application: %w", err)
 	}
-	serviceCfg := runtimeConfigAsServiceConfig(cfg)
+	cfg = serviceConfigAsRuntimeConfig(serviceCfg)
 	root, err := service.ResolveFactoryServiceRoot(serviceCfg)
 	if err != nil {
 		return nil, err
@@ -178,7 +175,7 @@ func composeRuntimeCore(
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	)
-	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddGeneratedRecorder)
+	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddEventTypeRecorder)
 	collaborators.sessions.Upsert(defaultSession, true)
 
 	modelAssets := collaborators.localModels.Assets

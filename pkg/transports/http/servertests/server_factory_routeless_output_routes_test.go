@@ -6,9 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -22,17 +23,17 @@ func TestValidateFactory_RoutelessCronAndLogicalMove_ReturnMissingOutputRoutesAt
 	}{
 		{
 			name:        "routeless_cron",
-			body:        factoryvalidation.RoutelessCronFactoryJSON,
+			body:        factoryfixtures.RoutelessCronFactoryJSON,
 			workstation: "cron",
 		},
 		{
 			name:        "routeless_logical_move",
-			body:        factoryvalidation.RoutelessLogicalMoveFactoryJSON,
+			body:        factoryfixtures.RoutelessLogicalMoveFactoryJSON,
 			workstation: "router",
 		},
 		{
 			name:        "routeless_logical_move_cron",
-			body:        factoryvalidation.RoutelessLogicalMoveCronFactoryJSON,
+			body:        factoryfixtures.RoutelessLogicalMoveCronFactoryJSON,
 			workstation: "trigger-monkey",
 		},
 	}

@@ -1,58 +1,26 @@
 package apisurface
 
 import (
-	"errors"
-	"fmt"
 	"net/http"
 
+	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ManagedRuntimePullError reports a classified managed-runtime pull failure while
 // preserving the transport-visible pull result contract.
-type ManagedRuntimePullError struct {
-	Result ModelPullResult
-	Cause  error
-}
-
-func (e *ManagedRuntimePullError) Error() string {
-	if e == nil {
-		return ""
-	}
-	outcome := factoryapi.ManagedRuntimePullOutcome(e.Result.ManagedPullOutcome)
-	readiness := factoryapi.ManagedRuntimeReadinessState(e.Result.ReadinessState)
-	if outcome == "" {
-		return fmt.Sprintf("managed runtime pull failed for %q", e.Result.ModelName)
-	}
-	return fmt.Sprintf(
-		"managed runtime pull for %q failed with outcome %s (readiness %s)",
-		e.Result.ModelName,
-		outcome,
-		readiness,
-	)
-}
-
-func (e *ManagedRuntimePullError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.Cause
-}
+type ManagedRuntimePullError = modelassets.PullError
 
 // IsManagedRuntimePullError reports whether err carries a classified managed-runtime
 // pull failure result for API and CLI transport mapping.
 func IsManagedRuntimePullError(err error) bool {
-	var pullErr *ManagedRuntimePullError
-	return errors.As(err, &pullErr) && pullErr != nil
+	_, ok := modelassets.AsPullError(err)
+	return ok
 }
 
 // AsManagedRuntimePullError returns the classified pull failure when present.
 func AsManagedRuntimePullError(err error) (*ManagedRuntimePullError, bool) {
-	var pullErr *ManagedRuntimePullError
-	if !errors.As(err, &pullErr) || pullErr == nil {
-		return nil, false
-	}
-	return pullErr, true
+	return modelassets.AsPullError(err)
 }
 
 // ManagedRuntimePullHTTPStatus maps one classified pull failure to an HTTP status.

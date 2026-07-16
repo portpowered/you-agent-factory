@@ -16,8 +16,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 const repoInstallScriptPath = "scripts/install.sh"

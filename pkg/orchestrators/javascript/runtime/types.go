@@ -3,9 +3,9 @@ package workflowruntime
 import (
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 const (

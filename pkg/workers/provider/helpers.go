@@ -12,8 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -165,14 +170,14 @@ func providerArgIsSensitivePositional(provider string, args []string, index int)
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case string(interfaces.ModelProviderCodex):
+	case string(modelprovider.Codex):
 		return args[index] != "-"
 	default:
 		return true
 	}
 }
 
-func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInferenceRequest, execReq CommandRequest) []any {
+func providerPreparedLogFields(ctx context.Context, req workerexecution.ProviderInferenceRequest, execReq CommandRequest) []any {
 	fields := providerLogFields(req,
 		"event_name", ProviderInvocationPrepared,
 		"model", providerModelForLog(req.Model),
@@ -188,7 +193,7 @@ func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInfer
 }
 
 func providerFailureLogFields(
-	req interfaces.ProviderInferenceRequest,
+	req workerexecution.ProviderInferenceRequest,
 	providerErr *ProviderError,
 	result CommandResult,
 	duration time.Duration,
@@ -212,25 +217,25 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 	// Codex exit failures are parsed into bounded, audited messages. Execution
 	// errors retain raw command diagnostics in the returned error, so they must
 	// use the same fixed reason-based messages as the other providers.
-	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && !isProviderExecutionCause(providerErr.Cause) {
+	if strings.EqualFold(strings.TrimSpace(provider), string(modelprovider.Codex)) && !isProviderExecutionCause(providerErr.Cause) {
 		return providerErr.Message
 	}
 	switch providerErr.Type {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return "Provider authentication failed."
-	case interfaces.WorkFailureTypePermanentBadRequest:
+	case workerexecution.WorkFailureTypePermanentBadRequest:
 		return "Provider rejected the request as invalid."
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return "Provider is temporarily unavailable due to usage or capacity limits."
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return "Provider encountered a temporary server error."
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return "Provider request timed out."
-	case interfaces.WorkFailureTypeMisconfigured:
+	case workerexecution.WorkFailureTypeMisconfigured:
 		return "Provider command could not be started."
-	case interfaces.WorkFailureTypeMissingExecutable:
+	case workerexecution.WorkFailureTypeMissingExecutable:
 		return "Provider executable could not be found."
-	case interfaces.WorkFailureTypeCommandLineTooLong:
+	case workerexecution.WorkFailureTypeCommandLineTooLong:
 		return "Provider command exceeded the operating system command-line limit."
 	default:
 		return "Provider execution failed."
@@ -251,11 +256,11 @@ func isProviderExecutionCause(err error) bool {
 // SafeProviderFailureDetail returns the allowlisted public diagnostic for a
 // normalized provider failure. It intentionally excludes causes and raw
 // provider output so durable projections can persist it safely.
-func SafeProviderFailureDetail(providerErr *ProviderError) *interfaces.FailureDetail {
+func SafeProviderFailureDetail(providerErr *ProviderError) *workerexecution.FailureDetail {
 	if providerErr == nil {
 		return nil
 	}
-	return &interfaces.FailureDetail{
+	return &workerexecution.FailureDetail{
 		Reason:  providerErr.Type,
 		Message: safeProviderFailureLogMessage("", providerErr),
 	}
@@ -315,12 +320,12 @@ var sensitiveCommandEnvNameFragments = []string{
 	"AWS_SECRET_ACCESS_KEY",
 }
 
-func cloneInputTokens(rawTokens []any) []interfaces.Token {
+func cloneInputTokens(rawTokens []any) []factorytoken.Token {
 	if len(rawTokens) == 0 {
 		return nil
 	}
 
-	out := make([]interfaces.Token, 0, len(rawTokens))
+	out := make([]factorytoken.Token, 0, len(rawTokens))
 	for _, raw := range rawTokens {
 		token, ok := decodeToken(raw)
 		if !ok {
@@ -338,23 +343,23 @@ func cloneRawInputTokens(inputTokens []any) []any {
 	return append([]any(nil), inputTokens...)
 }
 
-func decodeToken(raw any) (interfaces.Token, bool) {
-	if token, ok := raw.(interfaces.Token); ok {
+func decodeToken(raw any) (factorytoken.Token, bool) {
+	if token, ok := raw.(factorytoken.Token); ok {
 		return token, true
 	}
 
 	encoded, err := json.Marshal(raw)
 	if err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
-	var token interfaces.Token
+	var token factorytoken.Token
 	if err := json.Unmarshal(encoded, &token); err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
 	return token, true
 }
 
-func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+func workLogFields(metadata work.ExecutionMetadata, keysAndValues ...any) []any {
 	fields := []any{
 		"request_id", metadata.RequestID,
 		"trace_id", metadata.TraceID,
@@ -364,21 +369,21 @@ func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) 
 	return append(fields, keysAndValues...)
 }
 
-func providerLogFields(req interfaces.ProviderInferenceRequest, keysAndValues ...any) []any {
+func providerLogFields(req workerexecution.ProviderInferenceRequest, keysAndValues ...any) []any {
 	fields := workLogFields(req.Dispatch.Execution,
 		"dispatch_id", req.Dispatch.DispatchID,
-		"provider", interfaces.CanonicalProviderSessionProvider(req.ModelProvider),
+		"provider", workerexecution.CanonicalProviderSessionProvider(req.ModelProvider),
 		"worker_type", firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
 		"workstation", req.Dispatch.WorkstationName)
 	return append(fields, keysAndValues...)
 }
 
-func appendProviderSessionLogFields(fields []any, session *interfaces.ProviderSessionMetadata) []any {
+func appendProviderSessionLogFields(fields []any, session *workerexecution.ProviderSessionMetadata) []any {
 	if session == nil {
 		return fields
 	}
 	return append(fields,
-		"provider_session_provider", interfaces.CanonicalProviderSessionProvider(session.Provider),
+		"provider_session_provider", workerexecution.CanonicalProviderSessionProvider(session.Provider),
 		"provider_session_kind", session.Kind,
 		"provider_session_id", session.ID)
 }
@@ -399,15 +404,15 @@ func cloneWorkIDs(workIDs []string) []string {
 	return append([]string(nil), workIDs...)
 }
 
-func firstImageContentPart(rawTokens []any) (int, int, interfaces.WorkContentPart, bool) {
+func firstImageContentPart(rawTokens []any) (int, int, work.WorkContentPart, bool) {
 	for tokenIndex, token := range cloneInputTokens(rawTokens) {
 		for partIndex, part := range token.Color.Content {
-			if part.Type == interfaces.WorkContentPartTypeImage {
+			if part.Type == work.WorkContentPartTypeImage {
 				return tokenIndex, partIndex, part, true
 			}
 		}
 	}
-	return 0, 0, interfaces.WorkContentPart{}, false
+	return 0, 0, work.WorkContentPart{}, false
 }
 
 func unsupportedImageContentError(rawTokens []any, executionPath string) error {
@@ -485,7 +490,7 @@ func commandEnvDiagnosticMetadata(projection CommandEnvDiagnosticProjection) map
 	}
 }
 
-func workDiagnosticsForInferenceRequest(req interfaces.ProviderInferenceRequest) *interfaces.WorkDiagnostics {
+func workDiagnosticsForInferenceRequest(req workerexecution.ProviderInferenceRequest) *workerexecution.WorkDiagnostics {
 	requestMetadata := map[string]string{
 		"worker_type":       firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
 		"workstation_type":  req.WorkstationType,
@@ -497,12 +502,12 @@ func workDiagnosticsForInferenceRequest(req interfaces.ProviderInferenceRequest)
 	if req.OpenCodeAgent != "" {
 		requestMetadata["opencode_agent"] = req.OpenCodeAgent
 	}
-	return &interfaces.WorkDiagnostics{
-		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+	return &workerexecution.WorkDiagnostics{
+		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 			SystemPromptHash: hashText(req.SystemPrompt),
 			UserMessageHash:  hashText(req.UserMessage),
 		},
-		Provider: &interfaces.ProviderDiagnostic{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider:        req.ModelProvider,
 			Model:           req.Model,
 			RequestMetadata: requestMetadata,
@@ -519,14 +524,14 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func withInferenceResponseDiagnostics(base *interfaces.WorkDiagnostics, resp interfaces.InferenceResponse, retryCount int) *interfaces.WorkDiagnostics {
-	diagnostics := interfaces.CloneWorkDiagnostics(base)
+func withInferenceResponseDiagnostics(base *workerexecution.WorkDiagnostics, resp workerexecution.InferenceResponse, retryCount int) *workerexecution.WorkDiagnostics {
+	diagnostics := workerexecution.CloneWorkDiagnostics(base)
 	diagnostics = mergeWorkDiagnostics(diagnostics, resp.Diagnostics)
 	if diagnostics == nil {
-		diagnostics = &interfaces.WorkDiagnostics{}
+		diagnostics = &workerexecution.WorkDiagnostics{}
 	}
 	if diagnostics.Provider == nil {
-		diagnostics.Provider = &interfaces.ProviderDiagnostic{}
+		diagnostics.Provider = &workerexecution.ProviderDiagnostic{}
 	}
 	if diagnostics.Provider.ResponseMetadata == nil {
 		diagnostics.Provider.ResponseMetadata = make(map[string]string)
@@ -534,20 +539,20 @@ func withInferenceResponseDiagnostics(base *interfaces.WorkDiagnostics, resp int
 	diagnostics.Provider.ResponseMetadata["content_bytes"] = fmt.Sprintf("%d", len(resp.Content))
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
 	if resp.ProviderSession != nil {
-		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = interfaces.CanonicalProviderSessionProvider(resp.ProviderSession.Provider)
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = workerexecution.CanonicalProviderSessionProvider(resp.ProviderSession.Provider)
 		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = resp.ProviderSession.Kind
 		diagnostics.Provider.ResponseMetadata["provider_session_id"] = resp.ProviderSession.ID
 	}
 	return diagnostics
 }
 
-func withInferenceErrorDiagnostics(base *interfaces.WorkDiagnostics, err error, retryCount int) *interfaces.WorkDiagnostics {
-	diagnostics := interfaces.CloneWorkDiagnostics(base)
+func withInferenceErrorDiagnostics(base *workerexecution.WorkDiagnostics, err error, retryCount int) *workerexecution.WorkDiagnostics {
+	diagnostics := workerexecution.CloneWorkDiagnostics(base)
 	if diagnostics == nil {
-		diagnostics = &interfaces.WorkDiagnostics{}
+		diagnostics = &workerexecution.WorkDiagnostics{}
 	}
 	if diagnostics.Provider == nil {
-		diagnostics.Provider = &interfaces.ProviderDiagnostic{}
+		diagnostics.Provider = &workerexecution.ProviderDiagnostic{}
 	}
 	if diagnostics.Provider.ResponseMetadata == nil {
 		diagnostics.Provider.ResponseMetadata = make(map[string]string)
@@ -557,10 +562,10 @@ func withInferenceErrorDiagnostics(base *interfaces.WorkDiagnostics, err error, 
 	return diagnostics
 }
 
-func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *interfaces.WorkDiagnostics {
+func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *workerexecution.WorkDiagnostics {
 	envProjection := ProjectCommandEnvForDiagnostics(req.Env)
-	return &interfaces.WorkDiagnostics{
-		Command: &interfaces.CommandDiagnostic{
+	return &workerexecution.WorkDiagnostics{
+		Command: &workerexecution.CommandDiagnostic{
 			Command:    req.Command,
 			Args:       append([]string(nil), req.Args...),
 			Stdin:      string(req.Stdin),
@@ -576,14 +581,14 @@ func commandDiagnostics(req CommandRequest, result CommandResult, duration time.
 	}
 }
 
-func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces.WorkDiagnostics {
+func mergeWorkDiagnostics(base, overlay *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
 	if base == nil {
-		return interfaces.CloneWorkDiagnostics(overlay)
+		return workerexecution.CloneWorkDiagnostics(overlay)
 	}
 	if overlay == nil {
 		return base
 	}
-	overlay = interfaces.CloneWorkDiagnostics(overlay)
+	overlay = workerexecution.CloneWorkDiagnostics(overlay)
 	if overlay.RenderedPrompt != nil {
 		base.RenderedPrompt = overlay.RenderedPrompt
 	}
@@ -591,7 +596,7 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 		base.Provider = mergeProviderDiagnostic(base.Provider, overlay.Provider)
 	}
 	if overlay.Invocation != nil {
-		base.Invocation = interfaces.CloneWorkDiagnostics(&interfaces.WorkDiagnostics{Invocation: overlay.Invocation}).Invocation
+		base.Invocation = workerexecution.CloneWorkDiagnostics(&workerexecution.WorkDiagnostics{Invocation: overlay.Invocation}).Invocation
 	}
 	if overlay.Command != nil {
 		base.Command = overlay.Command
@@ -610,7 +615,7 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 	return base
 }
 
-func mergeProviderDiagnostic(base, overlay *interfaces.ProviderDiagnostic) *interfaces.ProviderDiagnostic {
+func mergeProviderDiagnostic(base, overlay *workerexecution.ProviderDiagnostic) *workerexecution.ProviderDiagnostic {
 	if base == nil {
 		return overlay
 	}

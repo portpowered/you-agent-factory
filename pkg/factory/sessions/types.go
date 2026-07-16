@@ -2,16 +2,31 @@ package factorysessions
 
 import (
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.
 const DefaultSessionID = "~default"
+
+type compatibilityError string
+
+func (err compatibilityError) Error() string { return string(err) }
+
+func (err compatibilityError) Is(target error) bool {
+	return target != nil && target.Error() == string(err)
+}
+
+// ErrNotFound reports that no live Factory Session matched a requested identity.
+var ErrNotFound error = compatibilityError("factory session not found")
+
+// ErrResultUnavailable reports that a Factory Session cannot expose JavaScript results.
+var ErrResultUnavailable error = compatibilityError("factory session result unavailable")
 
 // TargetKind identifies whether a session target is the default factory or a named layout.
 type TargetKind string
@@ -125,13 +140,13 @@ func (s *LiveSession) CloseResponseEvents() {
 // when its canonical FactoryEvent history observes terminal session completion.
 func BindResponseEventCompletion(
 	session *LiveSession,
-	addRecorder func(func(factoryapi.FactoryEvent)),
+	addRecorder func(func(interfaces.FactoryEventType)),
 ) {
 	if session == nil || addRecorder == nil {
 		return
 	}
-	addRecorder(func(event factoryapi.FactoryEvent) {
-		if event.Type == factoryapi.FactoryEventTypeSessionCompleted {
+	addRecorder(func(eventType interfaces.FactoryEventType) {
+		if eventType == interfaces.FactoryEventTypeSessionCompleted {
 			session.CompleteResponseEvents()
 		}
 	})
@@ -201,3 +216,140 @@ func NewSessionResponseStreamSetWithFactory(
 // SessionResponseStreamSubscription is an internal live-session response-stream
 // cursor that can read retained and live dispatch progress.
 type SessionResponseStreamSubscription = responsestream.Subscription
+
+// RuntimeProjection is the Factory Session-owned live runtime read model.
+// Transport packages map this detached value to their public contract.
+type RuntimeProjection struct {
+	Artifacts              *[]interfaces.FactoryArtifact
+	Budgets                *RuntimeBudgets
+	Dialect                *string
+	JavaScript             *JavaScriptRuntimeProjection
+	Lifecycle              RuntimeLifecycle
+	LifecycleControlStatus *string
+	OrchestratorKind       string
+	Petri                  *PetriRuntimeProjection
+	PolicyHash             *string
+	Progress               RuntimeProgress
+	SourceHash             *string
+	SourceRef              *string
+	Status                 string
+	StreamIdentity         *RuntimeStreamIdentity
+	Usage                  RuntimeUsage
+}
+
+type RuntimeBudgets struct{ MaxAgents *int }
+
+type RuntimeLifecycle struct {
+	FinishedAt *time.Time
+	StartedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type RuntimeStreamIdentity struct {
+	BackendScopeID      string
+	FactorySessionID    string
+	LogicalSessionKeyID string
+	StreamGenerationID  string
+}
+
+type RuntimeLogicalTarget struct {
+	FolderPath       string
+	Kind             string
+	NamedTarget      *string
+	ProviderBoundary *RuntimeLogicalProviderBoundary
+}
+
+type RuntimeLogicalProviderBoundary struct {
+	Boundary string
+	Kind     string
+	Provider string
+}
+
+type RuntimeProgress struct {
+	Categories    RuntimeStatusCategories
+	FactoryState  string
+	InFlightCount int
+	TotalTokens   int
+}
+
+type RuntimeStatusCategories struct {
+	Failed     int
+	Initial    int
+	Processing int
+	Terminal   int
+}
+
+type RuntimeUsage struct{ Resources []RuntimeResourceUsage }
+
+type RuntimeResourceUsage struct {
+	Available int
+	Name      string
+	Total     int
+}
+
+type PetriRuntimeProjection struct {
+	EnabledTransitions []PetriEnabledTransition
+	Marking            []RuntimeToken
+}
+
+type PetriEnabledTransition struct {
+	TransitionID string
+	WorkerType   string
+}
+
+type RuntimeToken struct {
+	ChainingTraceDepth       *int
+	CreatedAt                time.Time
+	CurrentChainingTraceID   *string
+	EnteredAt                time.Time
+	ID                       string
+	Name                     *string
+	PlaceID                  string
+	PreviousChainingTraceIDs *[]string
+	Tags                     *map[string]string
+	TraceID                  string
+	WorkID                   string
+	WorkType                 string
+}
+
+type JavaScriptRuntimeProjection struct {
+	ArgsDigest          *string
+	Checkpoints         *[]interfaces.FactorySessionJavaScriptCheckpointEventRef
+	ChildDispatchCounts interfaces.FactorySessionChildDispatchCounts
+	Phase               *string
+	Phases              []string
+	ScriptStatus        interfaces.FactorySessionJavaScriptScriptStatus
+}
+
+// SyncPreflightReason identifies the reconnect recovery decision for a live
+// Factory Session. Transports map these stable values to their public enums.
+type SyncPreflightReason string
+
+const (
+	SyncPreflightReasonOK                       SyncPreflightReason = "ok"
+	SyncPreflightReasonCursorStale              SyncPreflightReason = "cursor_stale"
+	SyncPreflightReasonSessionNotFound          SyncPreflightReason = "session_not_found"
+	SyncPreflightReasonLogicalSessionRemap      SyncPreflightReason = "logical_session_remap"
+	SyncPreflightReasonLogicalSessionUnresolved SyncPreflightReason = "logical_session_unresolved"
+)
+
+// SyncPreflightReconnectCursor retains the acknowledged cursor and whether it
+// belongs to the resolved stream generation.
+type SyncPreflightReconnectCursor struct {
+	AfterEventID             *string
+	AfterSequence            *int64
+	Provided                 bool
+	ValidForStreamGeneration bool
+}
+
+// SyncPreflightResult is the Factory Session-owned reconnect validation result.
+type SyncPreflightResult struct {
+	BackendScopeID      *string
+	CheckpointReusable  bool
+	FactorySessionID    *string
+	LogicalSessionKeyID *string
+	Reason              SyncPreflightReason
+	ReconnectCursor     SyncPreflightReconnectCursor
+	RequestedSessionID  string
+	StreamGenerationID  *string
+}

@@ -24,20 +24,21 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
@@ -156,7 +157,7 @@ var _ apisurface.SessionAPISurface = (*Host)(nil)
 // InvocationAPI returns the canonical invocation collaborator used by the
 // compatibility facade and composed HTTP surface.
 func (h *Host) InvocationAPI() apisurface.InvocationAPI {
-	return h.sessionInvocationOwner()
+	return sessionInvocationAPI{owner: h.sessionInvocationOwner()}
 }
 
 // DurableExecutionAPI returns the canonical durable-start collaborator used by
@@ -247,7 +248,7 @@ type Config struct {
 	RuntimeMetricsDir string
 	// RuntimeMetricsConfig controls bounded runtime metrics file behavior.
 	// Zero values use defaults that match the runtime log rolling policy.
-	RuntimeMetricsConfig logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig platformmetrics.RuntimeMetricsConfig
 	// WorkFile is an optional path to a FACTORY_REQUEST_BATCH JSON file
 	// containing initial work to submit when the factory starts.
 	WorkFile string
@@ -300,6 +301,10 @@ type Config struct {
 	// (prompt rendering, AgentExecutor, stop-token evaluation) without
 	// shelling out to a real CLI tool.
 	ProviderOverride workers.Provider
+	// ProviderCommandRunnerOverride, when non-nil, replaces the subprocess
+	// boundary used by MODEL_WORKER providers while preserving provider request
+	// construction and response handling.
+	ProviderCommandRunnerOverride workers.CommandRunner
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
 	// runner prerequisite checks during startup. Tests that replace execution
 	// with mocks or custom executors use this to exercise service wiring
@@ -311,6 +316,10 @@ type Config struct {
 	// workstation is skipped. Tests use this to inject workstation
 	// definitions without requiring files on disk.
 	WorkstationLoader factoryconfig.WorkstationLoader
+	// CommandRunnerOverride, when non-nil, replaces the subprocess boundary
+	// used by SCRIPT_WORKER executors. It is intentionally distinct from the
+	// provider command runner override.
+	CommandRunnerOverride workers.CommandRunner
 	// WorkerApplication is the process-composed worker/provider, script, and
 	// hosted-worker component shared by every runtime session.
 	WorkerApplication workerapplication.Components
@@ -745,7 +754,7 @@ func (fs *Host) publishFactoryChangeEvent(
 		return
 	}
 
-	payload, ok := replacementFactoryChangePayload(replacement.EventHistory.Events())
+	payload, ok := replacementFactoryChangePayload(replacement.EventHistory.CanonicalEvents())
 	if !ok {
 		return
 	}

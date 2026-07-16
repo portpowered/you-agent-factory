@@ -9,8 +9,9 @@ import (
 	"sync"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -269,7 +270,7 @@ func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testin
 		response := factoryapi.InvocationResponse{
 			RequestId: result.RequestID,
 			TraceId:   result.TraceID,
-			Status:    result.Status,
+			Status:    factoryapi.InvocationTerminalStatus(result.Status),
 		}
 		if result.ErrorCode != "" {
 			code := factoryapi.InvocationResponseErrorCode(result.ErrorCode)
@@ -325,7 +326,7 @@ func scaffoldInvocationFactory(t *testing.T, overrides map[string]any) string {
 		}
 	}
 	dir := support.ScaffoldFactory(t, cfg)
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 	return dir
 }
 

@@ -8,11 +8,13 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type recordingLogger struct {
@@ -90,10 +92,10 @@ func TestPauseResume_EmitCanonicalSessionLifecycleEvents(t *testing.T) {
 	var paused, resumed bool
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeSessionPaused:
+		case interfaces.FactoryEventTypeSessionPaused:
 			paused = true
 			assertLifecycleEventSessionID(t, event, "session-pause-resume")
-		case factoryapi.FactoryEventTypeSessionResumed:
+		case interfaces.FactoryEventTypeSessionResumed:
 			resumed = true
 			assertLifecycleEventSessionID(t, event, "session-pause-resume")
 		}
@@ -102,7 +104,7 @@ func TestPauseResume_EmitCanonicalSessionLifecycleEvents(t *testing.T) {
 		t.Fatalf("events missing pause/resume markers: paused=%v resumed=%v", paused, resumed)
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, len(events)-1)
+	worldState, err := projections.ReconstructCanonicalFactoryWorldState(events, len(events)-1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -142,9 +144,9 @@ func TestPauseResume_NoOpDoesNotEmitAdditionalLifecycleEvents(t *testing.T) {
 	pauseCount, resumeCount := 0, 0
 	for _, event := range events {
 		switch event.Type {
-		case factoryapi.FactoryEventTypeSessionPaused:
+		case interfaces.FactoryEventTypeSessionPaused:
 			pauseCount++
-		case factoryapi.FactoryEventTypeSessionResumed:
+		case interfaces.FactoryEventTypeSessionResumed:
 			resumeCount++
 		}
 	}
@@ -159,7 +161,7 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 		factory.WithNet(buildMoveControlNet()),
 		factory.WithInlineDispatch(),
 		factory.WithLogger(logging.NoopLogger{}),
-		factory.WithClock(replay.NewDeterministicClock(t0, time.Second)),
+		factory.WithClock(platformclock.NewDeterministic(t0, time.Second)),
 		factory.WithWorkflowContext(&factory_context.FactoryContext{SessionID: "session-paused-only"}),
 	)
 	if err != nil {
@@ -183,7 +185,7 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, len(events)-1)
+	worldState, err := projections.ReconstructCanonicalFactoryWorldState(events, len(events)-1)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -192,10 +194,10 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 	}
 }
 
-func assertLifecycleEventSessionID(t *testing.T, event factoryapi.FactoryEvent, wantSessionID string) {
+func assertLifecycleEventSessionID(t *testing.T, event interfaces.FactoryEvent, wantSessionID string) {
 	t.Helper()
-	if event.Context.SessionId == nil || *event.Context.SessionId != wantSessionID {
-		t.Fatalf("%s session id = %#v, want %s", event.Type, event.Context.SessionId, wantSessionID)
+	if event.Context.SessionID == nil || *event.Context.SessionID != wantSessionID {
+		t.Fatalf("%s session id = %#v, want %s", event.Type, event.Context.SessionID, wantSessionID)
 	}
 }
 func TestPauseResume_DiagnosticsLogAcceptedTransitions(t *testing.T) {
@@ -250,9 +252,9 @@ func TestResume_DiagnosticsLogPostResumeBufferedDrain(t *testing.T) {
 	}
 
 	impl := f.(*factoryImpl)
-	if !impl.resultBuffer.Write(ctx, interfaces.WorkResult{
+	if !impl.resultBuffer.Write(ctx, workerexecution.WorkResult{
 		DispatchID: "dispatch-drain",
-		Outcome:    interfaces.OutcomeAccepted,
+		Outcome:    workerexecution.OutcomeAccepted,
 	}) {
 		t.Fatal("buffered result write failed")
 	}
@@ -333,7 +335,7 @@ func TestTickWhilePaused_SkipsCascadeButOperatorMoveUpdatesMarking(t *testing.T)
 	f, ctx := setupPausedParentFailedChildInit(t)
 	assertChildRemainsInInitAfterPausedTick(t, f, ctx)
 
-	result, err := f.MoveWork(ctx, "child-work", "complete", interfaces.WorkStateChangeSourceCLI, "")
+	result, err := f.MoveWork(ctx, "child-work", "complete", work.WorkStateChangeSourceCLI, "")
 	if err != nil {
 		t.Fatalf("MoveWork while paused: %v", err)
 	}
@@ -363,14 +365,14 @@ func setupPausedParentFailedChildInit(t *testing.T) (factory.Factory, context.Co
 	}
 
 	ctx := context.Background()
-	if _, err := submitWorkRequests(ctx, f, []interfaces.SubmitRequest{
+	if _, err := submitWorkRequests(ctx, f, []work.SubmitRequest{
 		{WorkID: "parent-work", WorkTypeID: "task", TraceID: "trace-parent"},
 		{
 			WorkID:     "child-work",
 			WorkTypeID: "task",
 			TraceID:    "trace-child",
-			Relations: []interfaces.Relation{{
-				Type:          interfaces.RelationDependsOn,
+			Relations: []work.Relation{{
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  "parent-work",
 				RequiredState: "complete",
 			}},
@@ -382,7 +384,7 @@ func setupPausedParentFailedChildInit(t *testing.T) (factory.Factory, context.Co
 		t.Fatalf("Tick inject: %v", err)
 	}
 
-	if _, err := f.MoveWork(ctx, "parent-work", "failed", interfaces.WorkStateChangeSourceCLI, ""); err != nil {
+	if _, err := f.MoveWork(ctx, "parent-work", "failed", work.WorkStateChangeSourceCLI, ""); err != nil {
 		t.Fatalf("MoveWork parent to failed: %v", err)
 	}
 	if err := f.Pause(ctx); err != nil {

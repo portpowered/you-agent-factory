@@ -12,12 +12,13 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"go.uber.org/zap"
 )
@@ -445,7 +446,7 @@ func (s *Server) getEvents(
 	}
 }
 
-func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenResponse {
+func tokenToResponse(t *factorytoken.Token, includeHistory bool) factoryapi.TokenResponse {
 	resp := factoryapi.TokenResponse{
 		Id:                       t.ID,
 		PlaceId:                  t.PlaceID,
@@ -510,7 +511,7 @@ func categorizeStatusTokens(marking *petri.MarkingSnapshot, net *state.Net) (fac
 			continue
 		}
 
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			resourceID, resourceState := state.SplitPlaceID(token.PlaceID)
 			if _, ok := resourceTotals[resourceID]; !ok {
 				resourceTotals[resourceID]++

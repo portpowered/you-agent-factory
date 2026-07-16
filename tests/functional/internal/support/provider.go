@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -24,12 +24,12 @@ func ProviderErrorCorpusEntry(t *testing.T, name string) workerprovider.Provider
 	return entry
 }
 
-func AcceptedProviderResponse() interfaces.InferenceResponse {
-	return interfaces.InferenceResponse{Content: "COMPLETE"}
+func AcceptedProviderResponse() workerexecution.InferenceResponse {
+	return workerexecution.InferenceResponse{Content: "COMPLETE"}
 }
 
-func RejectedProviderResponse(content string) interfaces.InferenceResponse {
-	return interfaces.InferenceResponse{Content: content}
+func RejectedProviderResponse(content string) workerexecution.InferenceResponse {
+	return workerexecution.InferenceResponse{Content: content}
 }
 
 func CursorProviderSuccessStdout(result string) []byte {
@@ -77,8 +77,8 @@ func ProviderCommandRequestsForWorker(runner *testutil.ProviderCommandRunner, wo
 	return requests
 }
 
-func ProviderCallsForWorker(provider *testutil.MockProvider, workerType string) []interfaces.ProviderInferenceRequest {
-	var calls []interfaces.ProviderInferenceRequest
+func ProviderCallsForWorker(provider *testutil.MockProvider, workerType string) []workerexecution.ProviderInferenceRequest {
+	var calls []workerexecution.ProviderInferenceRequest
 	for _, call := range provider.Calls() {
 		if call.WorkerType == workerType {
 			calls = append(calls, call)

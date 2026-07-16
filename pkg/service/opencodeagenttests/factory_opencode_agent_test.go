@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestBuildFactoryService_RejectsOpenCodeAgentOnNonOpenCodeRunner(t *testing.T) {
@@ -40,7 +40,7 @@ You are a helpful assistant.
 func TestBuildFactoryService_AllowsOpenCodeAgentWithOpenCodeFactoryRunner(t *testing.T) {
 	dir := t.TempDir()
 	cfg := factoryfixtures.MinimalFactoryConfig()
-	cfg["runner"] = interfaces.RunnerIDOpenCode
+	cfg["runner"] = workerexecution.RunnerIDOpenCode
 	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
 	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
 type: MODEL_WORKER
@@ -54,7 +54,7 @@ You are a helpful assistant.
 
 	_, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
 		Dir:                                     dir,
-		RunnerID:                                interfaces.RunnerIDOpenCode,
+		RunnerID:                                workerexecution.RunnerIDOpenCode,
 		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	}))

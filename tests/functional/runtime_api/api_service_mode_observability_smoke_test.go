@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -184,17 +186,17 @@ type publicBlockingExecutor struct {
 	release <-chan struct{}
 }
 
-func (executor *publicBlockingExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (executor *publicBlockingExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	select {
 	case <-executor.release:
 	case <-ctx.Done():
-		return interfaces.WorkResult{}, ctx.Err()
+		return workerexecution.WorkResult{}, ctx.Err()
 	}
-	return interfaces.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 type publicStaticOutcomeExecutor struct{}
 
-func (publicStaticOutcomeExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+func (publicStaticOutcomeExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }

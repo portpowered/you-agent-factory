@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func duplicateIdentifierTargets(cfg *interfaces.FactoryConfig) []Target {
@@ -817,7 +819,7 @@ func ManagedRuntimeDependencyTargets(cfg *interfaces.FactoryConfig) []Target {
 		return nil
 	}
 
-	resourceByName := make(map[string]interfaces.ResourceConfig, len(cfg.Resources))
+	resourceByName := make(map[string]factoryresource.Config, len(cfg.Resources))
 	var targets []Target
 	for i, resource := range cfg.Resources {
 		if strings.TrimSpace(resource.Name) == "" {
@@ -832,8 +834,8 @@ func ManagedRuntimeDependencyTargets(cfg *interfaces.FactoryConfig) []Target {
 	return targets
 }
 
-func managedRuntimeResourceTargets(index int, resource interfaces.ResourceConfig) []Target {
-	if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+func managedRuntimeResourceTargets(index int, resource factoryresource.Config) []Target {
+	if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 		return nil
 	}
 	basePath := fmt.Sprintf("resources[%d](%s)", index, resource.Name)
@@ -879,13 +881,13 @@ func managedRuntimeResourceTargets(index int, resource interfaces.ResourceConfig
 
 func managedRuntimeWorkerTargets(
 	workerIndex int,
-	worker interfaces.WorkerConfig,
-	resourceByName map[string]interfaces.ResourceConfig,
+	worker workerconfig.Config,
+	resourceByName map[string]factoryresource.Config,
 ) []Target {
 	if !interfaces.IsInferenceWorkerType(worker.Type) {
 		return nil
 	}
-	if strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
+	if strings.TrimSpace(worker.ModelLocality) != workerconfig.ModelLocalityLocal {
 		return nil
 	}
 
@@ -900,10 +902,10 @@ func managedRuntimeWorkerTargets(
 		)}
 	}
 
-	var matchedResource *interfaces.ResourceConfig
+	var matchedResource *factoryresource.Config
 	for _, requirement := range worker.Resources {
 		resource, ok := resourceByName[strings.TrimSpace(requirement.Name)]
-		if !ok || strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if !ok || strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		if canonicalManagedRuntimeIdentity(resource.Model) != canonicalManagedRuntimeIdentity(modelIdentity) {

@@ -8,18 +8,177 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factoryapi.FactoryEvent {
+	t.Helper()
+	canonical := history.CanonicalEvents()
+	generated := make([]factoryapi.FactoryEvent, len(canonical))
+	for index, event := range canonical {
+		if err := event.Decode(&generated[index]); err != nil {
+			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		}
+	}
+	return generated
+}
+
+func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+	)
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		event.Payload[0] = 'X'
+		event.Context.EventTime = time.Unix(10, 0).UTC()
+	})
+
+	history.RecordInitialStructure()
+
+	events := generatedHistoryEvents(t, history)
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	if events[0].Context.EventTime != time.Unix(0, 0).UTC() {
+		t.Fatalf("canonical event time mutated through recorder: %s", events[0].Context.EventTime)
+	}
+	if _, err := events[0].Payload.AsInitialStructureRequestEventPayload(); err != nil {
+		t.Fatalf("canonical payload mutated through recorder: %v", err)
+	}
+}
+
+func TestFactoryEventHistory_InitialStructureAndRunRequestUseFactoryOwnedPayloads(t *testing.T) {
+	recordedAt := time.Date(2026, 7, 15, 23, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return recordedAt })
+	editable, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":         "editable-factory",
+		"unknownField": "preserved",
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	history.SetInitialStructureFactory(editable)
+	(*editable)[0] = 'X'
+
+	var canonical []interfaces.FactoryEvent
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		canonical = append(canonical, event)
+	})
+	history.RecordInitialStructure()
+	history.RecordRunRequest()
+
+	if len(canonical) != 2 {
+		t.Fatalf("canonical event count = %d, want 2", len(canonical))
+	}
+	if canonical[0].Type != interfaces.FactoryEventTypeInitialStructureRequest || canonical[1].Type != interfaces.FactoryEventTypeRunRequest {
+		t.Fatalf("canonical event types = [%s, %s], want initial structure then run request", canonical[0].Type, canonical[1].Type)
+	}
+
+	var initial interfaces.InitialStructureRequestEventPayload
+	if err := canonical[0].DecodePayload(&initial); err != nil {
+		t.Fatalf("decode canonical initial structure payload: %v", err)
+	}
+	var initialFactory map[string]any
+	if err := initial.Factory.Decode(&initialFactory); err != nil {
+		t.Fatalf("decode canonical initial Factory snapshot: %v", err)
+	}
+	if initialFactory["name"] != "editable-factory" || initialFactory["unknownField"] != "preserved" {
+		t.Fatalf("initial Factory snapshot = %#v, want detached editable document", initialFactory)
+	}
+
+	var run interfaces.RunRequestEventPayload
+	if err := canonical[1].DecodePayload(&run); err != nil {
+		t.Fatalf("decode canonical run request payload: %v", err)
+	}
+	if !run.RecordedAt.Equal(recordedAt) || run.Factory == nil {
+		t.Fatalf("run request payload = %#v, want recorded time and Factory snapshot", run)
+	}
+	var generated factoryapi.FactoryEvent
+	if err := canonical[1].Decode(&generated); err != nil {
+		t.Fatalf("decode run request at generated boundary: %v", err)
+	}
+	if _, err := generated.Payload.AsRunRequestEventPayload(); err != nil {
+		t.Fatalf("generated run request payload compatibility: %v", err)
+	}
+}
+
+func TestFactoryEventHistory_FactoryChangeUsesFactoryOwnedPayloadAndRetainsPublicWireShape(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 23, 15, 0, 0, time.FixedZone("Factory/Local", 2*60*60))
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":         "replacement-factory",
+		"unknownField": "preserved",
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	metadata := map[string]string{"source": "activation"}
+	sourceDirectory := "/tmp/replacement"
+
+	history.RecordFactoryChange(4, interfaces.FactoryChangeEventPayload{
+		Factory:         snapshot,
+		Metadata:        &metadata,
+		SourceDirectory: &sourceDirectory,
+	}, eventTime)
+
+	assertCanonicalFactoryChangeEvent(t, history.CanonicalEvents(), sourceDirectory)
+	assertPublicFactoryChangeEvent(t, generatedHistoryEvents(t, history))
+}
+
+func assertCanonicalFactoryChangeEvent(t *testing.T, canonical []interfaces.FactoryEvent, sourceDirectory string) {
+	t.Helper()
+	if len(canonical) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(canonical))
+	}
+	event := canonical[0]
+	if event.Type != interfaces.FactoryEventTypeFactoryChange || event.Context.Tick != 4 {
+		t.Fatalf("canonical event = %#v, want FACTORY_CHANGE at tick 4", event)
+	}
+	var payload interfaces.FactoryChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		t.Fatalf("decode canonical Factory change payload: %v", err)
+	}
+	var factory map[string]any
+	if err := payload.Factory.Decode(&factory); err != nil {
+		t.Fatalf("decode replacement Factory snapshot: %v", err)
+	}
+	if factory["name"] != "replacement-factory" || factory["unknownField"] != "preserved" {
+		t.Fatalf("replacement Factory snapshot = %#v, want preserved owner fields", factory)
+	}
+	if payload.Metadata == nil || (*payload.Metadata)["source"] != "activation" || payload.SourceDirectory == nil || *payload.SourceDirectory != sourceDirectory {
+		t.Fatalf("canonical Factory change payload = %#v, want metadata and source directory", payload)
+	}
+	if event.Context.EventTime.Location() != time.UTC {
+		t.Fatalf("canonical event time location = %s, want UTC", event.Context.EventTime.Location())
+	}
+}
+
+func assertPublicFactoryChangeEvent(t *testing.T, publicEvents []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(publicEvents) != 1 {
+		t.Fatalf("public event count = %d, want 1", len(publicEvents))
+	}
+	publicPayload, err := publicEvents[0].Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated Factory change payload: %v", err)
+	}
+	if publicPayload.Factory.Name != "replacement-factory" || publicPayload.Metadata == nil || (*publicPayload.Metadata)["source"] != "activation" {
+		t.Fatalf("public Factory change payload = %#v, want compatible generated shape", publicPayload)
+	}
+}
 
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "codex-cli",
@@ -36,7 +195,7 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -101,7 +260,7 @@ func TestFactoryEventHistory_RecordInitialStructure_IncludesEditableFactoryDocum
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -198,7 +357,7 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -231,7 +390,7 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesNonSuccessRouteArra
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -265,7 +424,7 @@ func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureR
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workers: []workerconfig.Config{{Name: "cron-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "poll-for-work",
 			Kind:           interfaces.WorkstationKindCron,
@@ -283,7 +442,7 @@ func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureR
 	history := NewFactoryEventHistory(net, func() time.Time { return time.Unix(0, 0).UTC() })
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -310,7 +469,7 @@ func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureR
 
 func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnumPointerValues(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:             "  MODEL_WORKER  ",
 				ExecutorProvider: "  local-claude  ",
@@ -335,7 +494,7 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -351,21 +510,21 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 	}
 
 	worker := (*payload.Factory.Workers)[0]
-	if got, want := stringValueForEventHistoryTest(worker.ExecutorProvider), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerProviderPtr(runtimeConfig.Workers["builder"].ExecutorProvider)); got != want {
+	if got, want := stringValueForEventHistoryTest(worker.ExecutorProvider), "SCRIPT_WRAP"; got != want {
 		t.Fatalf("worker executor provider = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(worker.ModelProvider), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerModelProviderPtr(runtimeConfig.Workers["builder"].ModelProvider)); got != want {
+	if got, want := stringValueForEventHistoryTest(worker.ModelProvider), "CODEX"; got != want {
 		t.Fatalf("worker model provider = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(worker.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerTypePtr(runtimeConfig.Workers["builder"].Type)); got != want {
+	if got, want := stringValueForEventHistoryTest(worker.Type), "INFERENCE_WORKER"; got != want {
 		t.Fatalf("worker type = %q, want %q", got, want)
 	}
 
 	workstation := (*payload.Factory.Workstations)[0]
-	if got, want := stringValueForEventHistoryTest(workstation.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkstationTypePtr(runtimeConfig.Workstations["Build"].Type)); got != want {
+	if got, want := stringValueForEventHistoryTest(workstation.Type), "LOGICAL_MOVE"; got != want {
 		t.Fatalf("workstation type = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(workstation.Behavior), stringValueForEventHistoryTest(interfaces.GeneratedPublicWorkstationKindPtr(runtimeConfig.Workstations["Build"].Kind)); got != want {
+	if got, want := stringValueForEventHistoryTest(workstation.Behavior), "REPEATER"; got != want {
 		t.Fatalf("workstation behavior = %q, want %q", got, want)
 	}
 }
@@ -376,23 +535,23 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassific
 		func() time.Time { return time.Unix(0, 0).UTC() },
 	)
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:                  "dispatch-1",
 		TransitionID:                "t-review",
-		Outcome:                     interfaces.OutcomeAccepted,
+		Outcome:                     workerexecution.OutcomeAccepted,
 		SelectedClassificationLabel: "approved",
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-1",
 		TransitionID:    "t-review",
-		Outcome:         interfaces.OutcomeAccepted,
-		ConsumedTokens:  []interfaces.Token{{ID: "token-1", Color: interfaces.TokenColor{WorkID: "work-1", TraceID: "trace-1"}}},
+		Outcome:         workerexecution.OutcomeAccepted,
+		ConsumedTokens:  []factorytoken.Token{{ID: "token-1", Color: factorytoken.Color{WorkID: "work-1", TraceID: "trace-1"}}},
 		OutputMutations: nil,
 	}
 
 	history.RecordWorkstationResponse(3, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -411,25 +570,25 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 		func() time.Time { return time.Unix(0, 0).UTC() },
 	)
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "t-review",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "t-review",
-		Outcome:      interfaces.OutcomeAccepted,
-		ConsumedTokens: []interfaces.Token{{
+		Outcome:      workerexecution.OutcomeAccepted,
+		ConsumedTokens: []factorytoken.Token{{
 			ID:    "token-1",
-			Color: interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+			Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
 		}},
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationMove,
-			Token: &interfaces.Token{
+			Token: &factorytoken.Token{
 				ID:      "token-terminal",
 				PlaceID: "task:complete",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-1",
 					WorkTypeID: "task",
 					Name:       "Write docs",
@@ -441,7 +600,7 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 
 	history.RecordWorkstationResponse(3, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -461,11 +620,11 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 type eventHistoryRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 type eventHistoryDefinitionOnlyRuntimeConfig struct {
-	Workers      map[string]*interfaces.WorkerConfig
+	Workers      map[string]*workerconfig.Config
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-func (c eventHistoryDefinitionOnlyRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (c eventHistoryDefinitionOnlyRuntimeConfig) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := c.Workers[name]
 	return worker, ok
 }

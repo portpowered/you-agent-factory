@@ -33,7 +33,7 @@ Batch 005 uses the two active implementation heads. Batch 006 retains the
 authoritative reservations from the inventory: every detailed directive file
 under `pkg/api/**`, `pkg/apisurface/**`, `pkg/cli/**`, `pkg/mcp/**`,
 `pkg/workers/**`, `pkg/factory/sessions/execution/**`, `pkg/interfaces/**`,
-`pkg/internal/cursorstorage/**`, and `pkg/replay/**`; its named Work-family
+`pkg/platform/cursors/**`, `pkg/platform/replay/**`, and `pkg/factory/replay/**`; its named Work-family
 roots contain no registered directive file. Batch 007 reserves every detailed
 directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`.
 Batch 008 reserves every detailed directive file under `pkg/runtimehost/**`

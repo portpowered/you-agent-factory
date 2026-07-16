@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkerTaxonomyAndProjectsLegacyRuntimeTypes(t *testing.T) {
@@ -108,11 +110,11 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *te
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "executor",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "omnivoice",
-			ModelProvider: string(interfaces.ModelProviderClaude),
+			ModelProvider: string(modelprovider.Claude),
 		}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
@@ -210,7 +212,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_PreservesAgentWorkerToolPolicyOnSaveRou
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 	}
-	if runtimeCfg.Workers[0].AgentTools == nil || runtimeCfg.Workers[0].AgentTools.Policy != interfaces.AgentWorkerToolPolicyReadOnly {
+	if runtimeCfg.Workers[0].AgentTools == nil || runtimeCfg.Workers[0].AgentTools.Policy != workerconfig.AgentToolPolicyReadOnly {
 		t.Fatalf("runtime agent tool policy = %#v, want READ_ONLY", runtimeCfg.Workers[0].AgentTools)
 	}
 

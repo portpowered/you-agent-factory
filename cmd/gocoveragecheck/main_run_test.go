@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 func TestExecuteReportsPassingCoverage(t *testing.T) {
@@ -521,7 +521,7 @@ func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 		t.Fatal("run() unexpectedly succeeded")
 	}
 
-	want := "run go test coverage lane: exit status 7"
+	want := "run go test coverage shard 1/1: exit status 7"
 	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("run() error = %q, want prefix %q", err.Error(), want)
 	}

@@ -8,9 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,7 +33,7 @@ limits:
 ---
 Execute the script.
 `)
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     workID,
 		WorkTypeID: "task",
 		TraceID:    traceID,
@@ -61,8 +62,8 @@ Execute the script.
 		t.Fatal("missing first timeout dispatch after retry signal")
 	}
 	first := workDispatches[0]
-	if first.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first timeout dispatch outcome = %s, want %s", first.Outcome, interfaces.OutcomeFailed)
+	if first.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("first timeout dispatch outcome = %s, want %s", first.Outcome, workerexecution.OutcomeFailed)
 	}
 	if first.Reason != "execution timeout" {
 		t.Fatalf("first timeout dispatch reason = %q, want %q", first.Reason, "execution timeout")
@@ -70,11 +71,11 @@ Execute the script.
 	if first.FailureMetadata == nil {
 		t.Fatal("first timeout dispatch FailureMetadata is nil, want timeout metadata")
 	}
-	if first.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("first timeout dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	if first.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("first timeout dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
 	}
-	if first.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("first timeout dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if first.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("first timeout dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
 		t.Fatalf("first timeout dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)
@@ -99,8 +100,8 @@ Execute the script.
 		t.Fatalf("final timeout companion dispatch count = %d, want at least 2", len(finalDispatches))
 	}
 	last := finalDispatches[len(finalDispatches)-1]
-	if last.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("last timeout companion dispatch outcome = %s, want %s", last.Outcome, interfaces.OutcomeAccepted)
+	if last.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("last timeout companion dispatch outcome = %s, want %s", last.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if runner.CallCount() < 2 {
 		t.Fatalf("timeout companion runner call count = %d, want at least 2", runner.CallCount())

@@ -6,27 +6,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork(t *testing.T) {
 	dir := support.ScaffoldFactory(t, retryableFailureFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 
 	runner := testutil.NewProviderCommandRunner(repeatedThrottleCommandResults(12)...)
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		support.ConfigureWorkerCommands(t, cfg, runner, nil)
 	}, factory.WithServiceMode())
 
-	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
+	server.SubmitRuntimeWork(t, work.SubmitRequest{
 		Name:       "throttled-task",
 		WorkTypeID: "task",
 		Payload:    json.RawMessage(`{"title":"force throttle exhaustion"}`),

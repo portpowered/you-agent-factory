@@ -3,12 +3,16 @@ package maptests
 import (
 	"context"
 	"fmt"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"strings"
 	"testing"
 	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestConfigMapping_ResourceUsage(t *testing.T) {
@@ -32,10 +36,10 @@ func resourceUsageFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{
+		Resources: []factoryresource.Config{
 			{Name: "gpu", Capacity: 2},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "gpu-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -48,7 +52,7 @@ func resourceUsageFactoryConfig() *interfaces.FactoryConfig {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factoryresource.Config{
 					{Name: "gpu", Capacity: 1},
 				},
 			},
@@ -80,10 +84,10 @@ func twoWorkstationsSharingResourceFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{
+		Resources: []factoryresource.Config{
 			{Name: "gpu", Capacity: 1},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "worker-a"},
 			{Name: "worker-b"},
 		},
@@ -97,7 +101,7 @@ func twoWorkstationsSharingResourceFactoryConfig() *interfaces.FactoryConfig {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "processing", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factoryresource.Config{
 					{Name: "gpu", Capacity: 1},
 				},
 			},
@@ -110,7 +114,7 @@ func twoWorkstationsSharingResourceFactoryConfig() *interfaces.FactoryConfig {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factoryresource.Config{
 					{Name: "gpu", Capacity: 1},
 				},
 			},
@@ -138,7 +142,7 @@ func TestConfigMapping_ValidationRejectsNonexistentResource(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factoryresource.Config{
 					{Name: "nonexistent-gpu", Capacity: 1},
 				},
 			},
@@ -216,7 +220,7 @@ func TestConfigMapping_ValidationRejectsInvalidResourceCount(t *testing.T) {
 				},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{
+		Resources: []factoryresource.Config{
 			{Name: "gpu", Capacity: 2},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -228,7 +232,7 @@ func TestConfigMapping_ValidationRejectsInvalidResourceCount(t *testing.T) {
 				Outputs: []interfaces.IOConfig{
 					{StateName: "complete", WorkTypeName: "task"},
 				},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factoryresource.Config{
 					{Name: "gpu", Capacity: 0},
 				},
 			},
@@ -251,10 +255,10 @@ func TestConfigMapping_WorkerResourcesBecomeEnforcedTransitionRequirements(t *te
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Resources: []interfaces.ResourceConfig{{Name: "local-model", Capacity: 2}},
-		Workers: []interfaces.WorkerConfig{{
+		Resources: []factoryresource.Config{{Name: "local-model", Capacity: 2}},
+		Workers: []workerconfig.Config{{
 			Name:      "tts-worker",
-			Resources: []interfaces.ResourceConfig{{Name: "local-model", Capacity: 1}},
+			Resources: []factoryresource.Config{{Name: "local-model", Capacity: 1}},
 		}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "speak",
@@ -390,7 +394,7 @@ func TestConfigMapping_ValidationRejectsNonexistentWorker(t *testing.T) {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "real-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -429,7 +433,7 @@ func TestConfigMapping_ValidationAcceptsValidWorkerReference(t *testing.T) {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "executor"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -466,7 +470,7 @@ func cronRequiredInputFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workers: []workerconfig.Config{{Name: "cron-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name:           "daily-refresh",
@@ -487,26 +491,26 @@ func cronRequiredInputFactoryConfig() *interfaces.FactoryConfig {
 	}
 }
 
-func configMapperWorkToken(id string, workType string, state string) *interfaces.Token {
-	return &interfaces.Token{
+func configMapperWorkToken(id string, workType string, state string) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:      id,
 		PlaceID: fmt.Sprintf("%s:%s", workType, state),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     id,
 			WorkTypeID: workType,
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 		},
 	}
 }
 
-func configMapperCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *interfaces.Token {
-	return &interfaces.Token{
+func configMapperCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:      id,
 		PlaceID: interfaces.SystemTimePendingPlaceID,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     id,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
 				interfaces.TimeWorkTagKeyCronWorkstation: workstation,

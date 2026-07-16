@@ -7,15 +7,17 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestService_PullModel_ReportsSuccessfulAlreadyPresentOutcome(t *testing.T) {
@@ -151,14 +153,14 @@ func TestService_PullModel_ProjectsModelHostResult(t *testing.T) {
 		ReadinessSnapshot: modelhost.ReadinessSnapshot{
 			Identity: modelhost.Identity{
 				Name:       "OMNIVOICE_Q4_K_M",
-				Locality:   factoryapi.WorkerModelLocalityLocal,
+				Locality:   managedruntime.LocalityLocal,
 				SourceKind: "MANAGED_RUNTIME",
 				SourceID:   "managed:omnivoice",
 			},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateInstalled,
 		},
-		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		PullOutcome:   managedruntime.PullOutcomeInstalledSuccessfully,
 		LegacyOutcome: "PULLED",
 		CachePath:     "/tmp/cache",
 		Revision:      "rev1",
@@ -418,11 +420,11 @@ func (p *stubPullAssetPuller) PullModel(context.Context, *factoryconfig.LoadedFa
 	return p.result, p.err
 }
 
-func (p *stubPullAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *stubPullAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *stubPullAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p *stubPullAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return p.cache, nil
 }
 
@@ -437,11 +439,11 @@ func (p *cancelBlockingPullAssetPuller) PullModel(ctx context.Context, _ *factor
 	return apisurface.ModelPullResult{}, ctx.Err()
 }
 
-func (p *cancelBlockingPullAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *cancelBlockingPullAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *cancelBlockingPullAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p *cancelBlockingPullAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return localmodels.CacheLayout{}, nil
 }
 

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -14,8 +14,8 @@ import (
 func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunner(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"provider server alignment"}`))
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
-	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 
 	runner := testutil.NewProviderCommandRunner(
 		workers.CommandResult{Stdout: []byte("step one complete. COMPLETE")},
@@ -26,7 +26,7 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerProviderCommandRunne
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			support.ConfigureWorkerCommands(t, cfg, runner, nil)
+			cfg.ProviderCommandRunnerOverride = runner
 		},
 	)
 
@@ -50,7 +50,7 @@ func TestServiceConfigOverrideAlignment_FunctionalHTTPServerScriptCommandRunner(
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			support.ConfigureWorkerCommands(t, cfg, nil, runner)
+			cfg.CommandRunnerOverride = runner
 		},
 	)
 

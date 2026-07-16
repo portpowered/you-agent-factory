@@ -6,9 +6,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
@@ -147,7 +148,7 @@ func TestConfigMapping_WorkstationKindPollerUsesImplicitFailureRouting(t *testin
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "poller-worker",
 			Type: interfaces.WorkerTypeScript,
 		}},
@@ -189,19 +190,19 @@ func TestConfigMapping_ModelInvokeWorkstationUsesImplicitFailureRouting(t *testi
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "tts-worker",
 			Type: interfaces.WorkerTypeModel,
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 					Required:     true,
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []workerconfig.ModelOperationSlot{{
 					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},
@@ -244,7 +245,7 @@ func TestConfigMapping_ClassifierRoutesBecomeLabeledAcceptedArcs(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "classifier"}},
+		Workers: []workerconfig.Config{{Name: "classifier"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "classify-task",
 			Type:           interfaces.WorkstationTypeClassify,
@@ -293,7 +294,7 @@ func TestConfigMapping_ClassifierWithoutOnFailureGetsImplicitFailureArc(t *testi
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "classifier"}},
+		Workers: []workerconfig.Config{{Name: "classifier"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "classify-task",
 			Type:           interfaces.WorkstationTypeClassify,
@@ -334,7 +335,7 @@ func TestConfigMapping_RejectsNonClassifierWithoutOutputs(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "process-task",
 			Type:           interfaces.WorkstationTypeModel,
@@ -364,7 +365,7 @@ func TestConfigMapping_RejectsNonClassifierClassificationRoutes(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "process-task",
 			Type:           interfaces.WorkstationTypeModel,
@@ -462,7 +463,7 @@ func TestConfigMapping_AuthoredWorkstationTransitionsUseMatchingIDAndName(t *tes
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "reviewer"},
 			{Name: "publisher"},
 		},

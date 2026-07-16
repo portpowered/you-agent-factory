@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"flag"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,7 +28,7 @@ const modulePath = "github.com/portpowered/infinite-you"
 const defaultPackageCoverageBaselinePath = "docs/internal/development/go-coverage-package-baseline.txt"
 const defaultFunctionalPackageCoverageBaselinePath = "docs/internal/development/go-functional-coverage-package-baseline.txt"
 const defaultPackageCoverageMin = 80.0
-const defaultFunctionalCoverageJobs = 2
+const defaultCoverageJobs = 2
 
 var (
 	defaultCoveragePatterns           = []string{"./cmd/factory", "./pkg/..."}
@@ -76,7 +78,9 @@ type packageCoverageSummary struct {
 }
 
 type coverageBlock struct {
+	canonicalPath  string
 	importPath     string
+	rangeSpec      string
 	statementCount int
 	executionCount int
 }
@@ -136,7 +140,7 @@ func parseConfig() config {
 	var cfg config
 	flag.StringVar(&cfg.covermode, "covermode", "count", "go test -covermode value")
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
-	flag.IntVar(&cfg.jobs, "jobs", 0, "go test -p value; functional coverage defaults to 2 and unit coverage uses the Go default")
+	flag.IntVar(&cfg.jobs, "jobs", 0, "number of isolated coverage shards; defaults to 2")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
 	flag.StringVar(&cfg.updateManifest, "update-manifest", "", "monotonically add or raise floors in an existing package-minimum manifest")
 	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
@@ -207,25 +211,24 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
+	repoRoot, err := repoRootDir()
+	if err != nil {
+		return coverageResult{}, err
+	}
 	mergedTestArgs := []string{
 		"test",
 		fmt.Sprintf("-coverpkg=%s", strings.Join(coverPackages, ",")),
-	}
-	if jobs := cfg.testJobs(); jobs > 0 {
-		mergedTestArgs = append(mergedTestArgs, fmt.Sprintf("-p=%d", jobs))
+		"-p=1",
 	}
 	if cfg.short {
 		mergedTestArgs = append(mergedTestArgs, "-short")
 	}
 	mergedTestArgs = append(mergedTestArgs,
-		fmt.Sprintf("-coverprofile=%s", profilePath),
 		fmt.Sprintf("-covermode=%s", cfg.covermode),
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
-	mergedTestArgs = append(mergedTestArgs, testPackages...)
 
-	_, _, err = runGoTestCoverageLane(mergedTestArgs, "run go test coverage lane")
-	if err != nil {
+	if err := runGoTestCoverageShards(mergedTestArgs, testPackages, cfg.testJobs(), profilePath, repoRoot, coverPackages); err != nil {
 		return coverageResult{}, err
 	}
 
@@ -246,10 +249,6 @@ func run(cfg config) (coverageResult, error) {
 		return coverageResult{}, fmt.Errorf("summarize go coverage: %w", err)
 	}
 
-	repoRoot, err := repoRootDir()
-	if err != nil {
-		return coverageResult{}, err
-	}
 	legacyPackageGateEnabled := !cfg.totalOnly && cfg.generateManifest == "" && cfg.updateManifest == "" && strings.TrimSpace(cfg.packageManifest) == ""
 	baselinePackages := map[string]struct{}{}
 	if legacyPackageGateEnabled {
@@ -282,10 +281,7 @@ func (cfg config) testJobs() int {
 	if cfg.jobs > 0 {
 		return cfg.jobs
 	}
-	if cfg.suite == "functional" {
-		return defaultFunctionalCoverageJobs
-	}
-	return 0
+	return defaultCoverageJobs
 }
 
 func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]struct{}, error) {
@@ -311,6 +307,45 @@ func runGoTestCoverageLane(args []string, failurePrefix string) (string, string,
 		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
 	}
 	return stdout.String(), stderr.String(), nil
+}
+
+func runGoTestCoverageShards(baseArgs []string, testPackages []string, jobs int, profilePath string, repoRoot string, coverPackages []string) error {
+	if jobs < 1 {
+		jobs = 1
+	}
+	if jobs > len(testPackages) {
+		jobs = len(testPackages)
+	}
+	shardDir, err := os.MkdirTemp("", "go-coverage-shards-*")
+	if err != nil {
+		return fmt.Errorf("create go coverage shard directory: %w", err)
+	}
+	defer os.RemoveAll(shardDir)
+
+	shards := make([][]string, jobs)
+	for index, testPackage := range testPackages {
+		shards[index%jobs] = append(shards[index%jobs], testPackage)
+	}
+	profiles := make([]string, jobs)
+	errs := make([]error, jobs)
+	var wait sync.WaitGroup
+	for index, packages := range shards {
+		profiles[index] = filepath.Join(shardDir, fmt.Sprintf("shard-%d.out", index+1))
+		args := append(slices.Clone(baseArgs), fmt.Sprintf("-coverprofile=%s", profiles[index]))
+		args = append(args, packages...)
+		wait.Add(1)
+		go func(index int, args []string) {
+			defer wait.Done()
+			_, _, errs[index] = runGoTestCoverageLane(args, fmt.Sprintf("run go test coverage shard %d/%d", index+1, jobs))
+		}(index, args)
+	}
+	wait.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return mergeCoverageProfiles(profiles, profilePath, repoRoot, coverPackages)
 }
 
 func mergeGoTestFailureDetail(stderr string, stdout string) string {
@@ -454,7 +489,7 @@ func isBackendCoveragePackage(importPath string) bool {
 		return false
 	case importPath == modulePath+"/pkg/transports/mcp/generated":
 		return false
-	case strings.HasPrefix(importPath, modulePath+"/pkg/testutil"):
+	case strings.HasPrefix(importPath, modulePath+"/internal/testutil"):
 		return false
 	default:
 		return true
@@ -538,15 +573,17 @@ func readPackageCoverageBaseline(path string) (map[string]struct{}, error) {
 }
 
 func readCoverageProfileTotals(profilePath string, repoRoot string) (map[string]packageCoverageTotals, error) {
-	profileData, err := os.ReadFile(profilePath)
+	profile, err := os.Open(profilePath)
 	if err != nil {
 		return nil, fmt.Errorf("read go coverage profile: %w", err)
 	}
-	packageTotals, err := parseCoverageProfile(profileData, repoRoot)
+	defer profile.Close()
+
+	_, coverageBlocks, err := scanCoverageProfile(profile, repoRoot)
 	if err != nil {
 		return nil, err
 	}
-	return packageTotals, nil
+	return coverageTotals(coverageBlocks), nil
 }
 
 func calculateTotalCoverage(packageTotals map[string]packageCoverageTotals, coverPackages []string) (float64, string) {
@@ -634,44 +671,56 @@ func findZeroCoveragePackagesFromSummaries(summaries []packageCoverageSummary, b
 }
 
 func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packageCoverageTotals, error) {
-	lines := strings.Split(strings.TrimSpace(string(profileData)), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
-		return nil, errors.New("parse go coverage profile: empty profile")
+	_, coverageBlocks, err := scanCoverageProfile(bytes.NewReader(profileData), repoRoot)
+	if err != nil {
+		return nil, err
 	}
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "mode:") {
-		return nil, errors.New("parse go coverage profile: missing mode header")
+	return coverageTotals(coverageBlocks), nil
+}
+
+func scanCoverageProfile(profile io.Reader, repoRoot string) (string, map[string]coverageBlock, error) {
+	scanner := bufio.NewScanner(profile)
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	if !scanner.Scan() || strings.TrimSpace(scanner.Text()) == "" {
+		return "", nil, errors.New("parse go coverage profile: empty profile")
+	}
+	header := strings.TrimSpace(scanner.Text())
+	if !strings.HasPrefix(header, "mode:") {
+		return "", nil, errors.New("parse go coverage profile: missing mode header")
 	}
 
 	coverageBlocks := make(map[string]coverageBlock)
-	for index, rawLine := range lines[1:] {
-		line := strings.TrimSpace(rawLine)
+	lineNumber := 1
+	for scanner.Scan() {
+		lineNumber++
+		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue
 		}
 
 		fields := strings.Fields(line)
 		if len(fields) != 3 {
-			return nil, fmt.Errorf("parse go coverage profile: malformed line %d", index+2)
+			return "", nil, fmt.Errorf("parse go coverage profile: malformed line %d", lineNumber)
 		}
 
 		filePathWithRanges := fields[0]
 		rangeSeparator := strings.LastIndex(filePathWithRanges, ":")
 		if rangeSeparator < 0 {
-			return nil, fmt.Errorf("parse go coverage profile: malformed file range on line %d", index+2)
+			return "", nil, fmt.Errorf("parse go coverage profile: malformed file range on line %d", lineNumber)
 		}
 
 		statementCount, err := strconv.Atoi(fields[1])
 		if err != nil {
-			return nil, fmt.Errorf("parse go coverage profile statements on line %d: %w", index+2, err)
+			return "", nil, fmt.Errorf("parse go coverage profile statements on line %d: %w", lineNumber, err)
 		}
 		executionCount, err := strconv.Atoi(fields[2])
 		if err != nil {
-			return nil, fmt.Errorf("parse go coverage profile execution count on line %d: %w", index+2, err)
+			return "", nil, fmt.Errorf("parse go coverage profile execution count on line %d: %w", lineNumber, err)
 		}
 
 		importPath, err := coverageImportPath(filePathWithRanges[:rangeSeparator], repoRoot)
 		if err != nil {
-			return nil, fmt.Errorf("parse go coverage profile import path on line %d: %w", index+2, err)
+			return "", nil, fmt.Errorf("parse go coverage profile import path on line %d: %w", lineNumber, err)
 		}
 		if executionCount > 0 {
 			executionCount = 1
@@ -681,18 +730,29 @@ func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packa
 		rangeSpec := filePathWithRanges[rangeSeparator+1:]
 		canonicalFilePath, err := coverageCanonicalFilePath(filePath, repoRoot)
 		if err != nil {
-			return nil, fmt.Errorf("parse go coverage profile canonical path on line %d: %w", index+2, err)
+			return "", nil, fmt.Errorf("parse go coverage profile canonical path on line %d: %w", lineNumber, err)
 		}
-		blockKey := fmt.Sprintf("%s:%s %d", canonicalFilePath, rangeSpec, statementCount)
+		blockKey := canonicalFilePath + ":" + rangeSpec
 		block := coverageBlocks[blockKey]
+		if block.statementCount != 0 && block.statementCount != statementCount {
+			return "", nil, fmt.Errorf("parse go coverage profile: source block %s has inconsistent statement counts %d and %d", blockKey, block.statementCount, statementCount)
+		}
+		block.canonicalPath = canonicalFilePath
 		block.importPath = importPath
+		block.rangeSpec = rangeSpec
 		block.statementCount = statementCount
 		if executionCount > block.executionCount {
 			block.executionCount = executionCount
 		}
 		coverageBlocks[blockKey] = block
 	}
+	if err := scanner.Err(); err != nil {
+		return "", nil, fmt.Errorf("parse go coverage profile: %w", err)
+	}
+	return header, coverageBlocks, nil
+}
 
+func coverageTotals(coverageBlocks map[string]coverageBlock) map[string]packageCoverageTotals {
 	packageTotals := make(map[string]packageCoverageTotals)
 	for _, block := range coverageBlocks {
 		totals := packageTotals[block.importPath]
@@ -703,7 +763,86 @@ func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packa
 		packageTotals[block.importPath] = totals
 	}
 
-	return packageTotals, nil
+	return packageTotals
+}
+
+func canonicalizeCoverageProfile(profilePath string, repoRoot string, coverPackages []string) error {
+	return mergeCoverageProfiles([]string{profilePath}, profilePath, repoRoot, coverPackages)
+}
+
+func mergeCoverageProfiles(profilePaths []string, outputPath string, repoRoot string, coverPackages []string) error {
+	coverageBlocks := make(map[string]coverageBlock)
+	header := ""
+	for _, profilePath := range profilePaths {
+		profile, err := os.Open(profilePath)
+		if err != nil {
+			return fmt.Errorf("read go coverage profile: %w", err)
+		}
+		profileHeader, profileBlocks, scanErr := scanCoverageProfile(profile, repoRoot)
+		closeErr := profile.Close()
+		if scanErr != nil {
+			return scanErr
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close go coverage profile: %w", closeErr)
+		}
+		if header == "" {
+			header = profileHeader
+		} else if header != profileHeader {
+			return fmt.Errorf("merge go coverage profiles: mode headers differ: %q and %q", header, profileHeader)
+		}
+		for key, block := range profileBlocks {
+			merged := coverageBlocks[key]
+			if merged.statementCount != 0 && merged.statementCount != block.statementCount {
+				return fmt.Errorf("merge go coverage profiles: source block %s has inconsistent statement counts %d and %d", key, merged.statementCount, block.statementCount)
+			}
+			if block.executionCount > merged.executionCount {
+				merged.executionCount = block.executionCount
+			}
+			merged.canonicalPath = block.canonicalPath
+			merged.importPath = block.importPath
+			merged.rangeSpec = block.rangeSpec
+			merged.statementCount = block.statementCount
+			coverageBlocks[key] = merged
+		}
+	}
+
+	selected := make(map[string]struct{}, len(coverPackages))
+	for _, importPath := range selectedCoveragePackages(coverPackages) {
+		selected[importPath] = struct{}{}
+	}
+	keys := make([]string, 0, len(coverageBlocks))
+	for key, block := range coverageBlocks {
+		if _, ok := selected[block.importPath]; ok {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+
+	output, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("rewrite canonical go coverage profile: %w", err)
+	}
+	writer := bufio.NewWriter(output)
+	_, writeErr := fmt.Fprintln(writer, header)
+	for _, key := range keys {
+		if writeErr != nil {
+			break
+		}
+		block := coverageBlocks[key]
+		_, writeErr = fmt.Fprintf(writer, "%s:%s %d %d\n", block.canonicalPath, block.rangeSpec, block.statementCount, block.executionCount)
+	}
+	if writeErr == nil {
+		writeErr = writer.Flush()
+	}
+	closeErr := output.Close()
+	if writeErr != nil {
+		return fmt.Errorf("rewrite canonical go coverage profile: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close canonical go coverage profile: %w", closeErr)
+	}
+	return nil
 }
 
 func coverageCanonicalFilePath(filePath string, repoRoot string) (string, error) {

@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestFailureClassForError_ModelhostLeaseDenied(t *testing.T) {
@@ -19,7 +20,7 @@ func TestFailureClassForError_ModelhostLeaseDenied(t *testing.T) {
 	err := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+			ReadinessState: managedruntime.ReadinessStateFailed,
 			FailureClass:   modelhost.FailureClassCapacityExhausted,
 		},
 		Cause: modelhost.ErrCapacityExhausted,
@@ -35,7 +36,7 @@ func TestFailureClassForError_ModelhostMissingReadiness(t *testing.T) {
 	err := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			ReadinessState: managedruntime.ReadinessStateMissing,
 			FailureClass:   modelhost.FailureClassMissingAssets,
 		},
 		Cause: modelhost.ErrRuntimeNotReady,
@@ -51,7 +52,7 @@ func TestFailureClassForError_ModelhostRuntimeFailure(t *testing.T) {
 	err := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+			ReadinessState: managedruntime.ReadinessStateFailed,
 			FailureClass:   modelhost.FailureClassProcessCrash,
 		},
 		Cause: modelhost.ErrProcessCrash,
@@ -66,11 +67,26 @@ func TestFailureClassForError_ManagedRuntimeInvocationMissing(t *testing.T) {
 
 	err := &apisurface.ManagedRuntimeInvocationError{
 		Identity:       "OMNIVOICE_Q4_K_M",
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+		ReadinessState: managedruntime.ReadinessStateMissing,
 		Cause:          apisurface.ErrManagedRuntimeMissing,
 	}
 	if got := failureClassForError(err); got != FailureClassModelNotReady {
 		t.Fatalf("failureClassForError = %q, want %q", got, FailureClassModelNotReady)
+	}
+}
+
+func TestFailureClassForError_ManagedRuntimeInvocationWithoutCauseUsesReadiness(t *testing.T) {
+	t.Parallel()
+
+	err := &apisurface.ManagedRuntimeInvocationError{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: managedruntime.ReadinessStateFailed,
+	}
+	if got := failureClassForError(err); got != FailureClassModelRuntime {
+		t.Fatalf("failureClassForError = %q, want %q", got, FailureClassModelRuntime)
+	}
+	if got := recoveryActionForError(err); got == "" {
+		t.Fatal("expected recovery action for failed managed runtime")
 	}
 }
 
@@ -93,7 +109,7 @@ func TestFailureMetadataForError_ModelhostLeaseDeniedIsThrottle(t *testing.T) {
 	if metadata == nil {
 		t.Fatal("expected failure metadata")
 	}
-	if metadata.Family != interfaces.WorkFailureFamilyThrottle || metadata.Type != interfaces.WorkFailureTypeThrottled {
+	if metadata.Family != workerexecution.WorkFailureFamilyThrottle || metadata.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("metadata = %#v, want throttle family", metadata)
 	}
 }
@@ -112,10 +128,10 @@ func TestModelhostOperationalFailureClass_MissingAssets(t *testing.T) {
 func TestRecoveryActionForReadiness_ReturnsActionableGuidance(t *testing.T) {
 	t.Parallel()
 
-	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateMISSING); got == "" {
+	if got := recoveryActionForReadiness(managedruntime.ReadinessStateMissing); got == "" {
 		t.Fatal("expected recovery action for missing runtime")
 	}
-	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateLOADING); got == "" {
+	if got := recoveryActionForReadiness(managedruntime.ReadinessStateLoading); got == "" {
 		t.Fatal("expected recovery action for loading runtime")
 	}
 }

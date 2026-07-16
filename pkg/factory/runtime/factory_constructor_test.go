@@ -6,15 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestNew_RequiresNet(t *testing.T) {
@@ -62,7 +65,7 @@ func TestNew_InlineDispatchWithNoopExecutorCompletesWorkflow(t *testing.T) {
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		_, _ = submitWorkRequests(ctx, f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-1"}})
+		_, _ = submitWorkRequests(ctx, f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-1"}})
 	}()
 
 	if err := f.Run(ctx); err != nil {
@@ -89,7 +92,7 @@ func TestNew_InlineDispatchExecutorPanicRoutesFailedWork(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-panic",
 		WorkTypeID: "task",
 		TraceID:    "trace-panic",
@@ -121,8 +124,8 @@ func TestNew_InlineDispatchExecutorPanicRoutesFailedWork(t *testing.T) {
 		t.Fatalf("dispatch history count = %d, want 1", len(snapshot.DispatchHistory))
 	}
 	completed := snapshot.DispatchHistory[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, interfaces.OutcomeFailed)
+	if completed.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(completed.Reason, "executor panic:") || !strings.Contains(completed.Reason, "simulated catastrophic panic") {
 		t.Fatalf("dispatch reason = %q, want panic-derived failure message", completed.Reason)
@@ -140,7 +143,7 @@ func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailur
 	}
 	tickable := tickableFactory(t, f)
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-missing-executor",
 		WorkTypeID: "task",
 		TraceID:    "trace-missing-executor",
@@ -159,8 +162,8 @@ func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailur
 		t.Fatalf("dispatch history count = %d, want 1", len(snap.DispatchHistory))
 	}
 	completed := snap.DispatchHistory[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, interfaces.OutcomeFailed)
+	if completed.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(completed.Reason, `no executor registered for worker type "mock"`) {
 		t.Fatalf("dispatch reason = %q, want missing executor error", completed.Reason)
@@ -169,7 +172,7 @@ func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailur
 
 func TestNew_CompletesWorkflowThroughActiveSubsystems(t *testing.T) {
 	f := newPassingInlineRuntime(t)
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-active-path",
 		WorkTypeID: "task",
 		TraceID:    "trace-active-path",
@@ -210,7 +213,7 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		factory.WithInlineDispatch(),
 		factory.WithWorkerExecutor("mock", &passExecutor{}),
 		factory.WithRuntimeConfig(runtimeProjectionConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"mock": {
 					Type:             interfaces.WorkerTypeModel,
 					ExecutorProvider: "codex-cli",
@@ -233,11 +236,12 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		t.Fatalf("events = %#v, want %d startup events", events, runtimePreWorkEventCount)
 	}
 	for i, wantType := range runtimeStartupEventTypes() {
-		if events[i].Type != wantType {
+		if string(events[i].Type) != string(wantType) {
 			t.Fatalf("events[%d].Type = %q, want %q", i, events[i].Type, wantType)
 		}
 	}
-	payload, err := events[1].Payload.AsInitialStructureRequestEventPayload()
+	generatedEvent := runtimeGeneratedFactoryEvent(t, events[1])
+	payload, err := generatedEvent.Payload.AsInitialStructureRequestEventPayload()
 	if err != nil {
 		t.Fatalf("initial structure payload: %v", err)
 	}
@@ -270,7 +274,7 @@ func TestSubmit_AssignsTraceIDWhenMissing(t *testing.T) {
 	}
 
 	tickable := tickableFactory(t, f)
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := tickable.Tick(context.Background()); err != nil {
@@ -293,7 +297,7 @@ func TestSubmit_AssignsTraceIDWhenMissing(t *testing.T) {
 
 func TestNew_WithClockStampsDispatchesDeterministically(t *testing.T) {
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	clock := replay.NewDeterministicClock(base, time.Second)
+	clock := platformclock.NewDeterministic(base, time.Second)
 	f, err := New(
 		factory.WithNet(buildSimpleNet()),
 		factory.WithInlineDispatch(),
@@ -306,7 +310,7 @@ func TestNew_WithClockStampsDispatchesDeterministically(t *testing.T) {
 	}
 
 	tickable := tickableFactory(t, f)
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-clock"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-clock"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := tickable.Tick(context.Background()); err != nil {

@@ -97,7 +97,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: test-unit required-functional-check test-functional test-stress test-release test-unit-coverage test-functional-coverage
+.PHONY: test-unit test-functional functional-boundary-check test-stress test-release test-unit-coverage test-functional-coverage
 .PHONY: mcp-contract-check
 .PHONY: backend-dependency-graph
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-contract-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
@@ -221,11 +221,12 @@ test-full:
 test-unit:
 	$(GO) run ./cmd/unitlane -jobs $(UNIT_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
 
-required-functional-check:
-	$(GO) run ./cmd/requiredfunctionalcheck -root .
-
-test-functional: required-functional-check
+test-functional:
+	$(MAKE) functional-boundary-check
 	$(GO) run ./cmd/functionallane -jobs $(FUNCTIONAL_DEFAULT_JOBS) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+functional-boundary-check:
+	$(GO) run ./cmd/functionalboundarycheck
 
 test-stress:
 	$(GO) test -short $(STRESS_DEFAULT_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -310,7 +311,7 @@ test-coverage-go:
 test-unit-coverage:
 	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
 
-test-functional-coverage: required-functional-check
+test-functional-coverage:
 	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),)
 
 script-timeout-companion-smoke-100:
@@ -323,7 +324,7 @@ current-factory-watcher-switch-smoke:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/bootstrap_portability -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
 provider-parity-smoke:
-	$(GO) test ./pkg/workers/provider/parityfixtures ./tests/functional/providers -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
+	$(GO) test ./internal/testutil/providerparity ./tests/functional/providers -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
 
 javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
@@ -341,9 +342,9 @@ response-stream-stress-smoke:
 	$(GO) test ./pkg/factory/sessions/responseeventstore -run $(RESPONSE_STREAM_STRESS_SMOKE_TEST) -count=1 -timeout $(RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT)
 
 artifact-contract-closeout:
-	$(GO) test ./pkg/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./internal/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(MAKE) release-surface-smoke
-	$(GO) test ./pkg/transports/http ./pkg/config ./pkg/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/transports/http ./pkg/config ./pkg/factory/replay ./pkg/platform/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:

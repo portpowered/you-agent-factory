@@ -1,8 +1,7 @@
 package validation
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // Severity classifies how a validation target should be treated by callers.
@@ -90,25 +89,6 @@ func (r Result) BlockingTargets() []Target {
 // HasBlockingTargets reports whether the result contains save-blocking targets.
 func (r Result) HasBlockingTargets() bool {
 	return len(r.BlockingTargets()) > 0
-}
-
-// FactoryValidationResult maps canonical targets onto the validate-only API
-// response shape used by POST /factory-validations.
-func (r Result) FactoryValidationResult() factoryapi.FactoryValidationResult {
-	return factoryapi.FactoryValidationResult{
-		Targets: ToValidationTargets(r.Targets),
-	}
-}
-
-// TopologyValidationErrorInput returns the message and API targets used to build
-// apisurface.TopologyValidationError via apisurface.NewTopologyValidationError.
-// message is used when non-empty; otherwise DefaultTopologyValidationMessage is
-// returned.
-func (r Result) TopologyValidationErrorInput(message string) (string, []factoryapi.FactoryValidationTarget) {
-	if message == "" {
-		message = DefaultTopologyValidationMessage
-	}
-	return message, ToValidationTargets(r.Targets)
 }
 
 // DefaultTopologyValidationMessage is the operator-facing save rejection message

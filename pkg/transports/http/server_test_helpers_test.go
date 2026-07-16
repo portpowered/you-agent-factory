@@ -18,17 +18,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
-
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
 const defaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.DefaultSessionID
@@ -62,7 +63,7 @@ func newTestServerWithCodexRoot(root string) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
 }
@@ -77,7 +78,7 @@ func newTestServerWithCursorRoot(root string) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, logger, ServerOptions{CursorSessionsRoot: root})
 }
@@ -86,7 +87,7 @@ func newTestServerWithProviderSessionRoots(codexRoot, cursorRoot string) *Server
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, logger, ServerOptions{
 		CodexSessionsRoot:  codexRoot,
@@ -209,9 +210,9 @@ func providerSessionDetailURLFromEventRef(ref factoryapi.LoadableProviderSession
 
 // loadableProviderSessionRefFromEventMetadata mirrors dispatch/event projection of
 // canonical provider-session metadata onto the loadable detail contract.
-func loadableProviderSessionRefFromEventMetadata(session interfaces.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
+func loadableProviderSessionRefFromEventMetadata(session workerexecution.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
 	return factoryapi.LoadableProviderSessionRef{
-		Provider: factoryapi.LoadableProviderSessionProvider(interfaces.CanonicalProviderSessionProvider(session.Provider)),
+		Provider: factoryapi.LoadableProviderSessionProvider(workerexecution.CanonicalProviderSessionProvider(session.Provider)),
 		Kind:     factoryapi.LoadableProviderSessionKind(session.Kind),
 		Id:       session.ID,
 	}
@@ -299,8 +300,8 @@ func assertJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	}
 }
 
-func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*interfaces.Token {
-	tokens := make(map[string]*interfaces.Token, count)
+func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*factorytoken.Token {
+	tokens := make(map[string]*factorytoken.Token, count)
 	for i := 1; i <= count; i++ {
 		suffix := string(rune('0' + i))
 		id := "tok-" + prefix + "-" + suffix
@@ -309,12 +310,12 @@ func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*int
 	return tokens
 }
 
-func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *interfaces.Token {
+func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *factorytoken.Token {
 	return listWorkTokenWithTraces(id, workID, "", placeID, workTypeID, "", "", now)
 }
 
-func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *interfaces.Token {
-	color := interfaces.TokenColor{
+func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *factorytoken.Token {
+	color := factorytoken.Color{
 		WorkID:                 workID,
 		WorkTypeID:             workTypeID,
 		TraceID:                traceID,
@@ -326,20 +327,20 @@ func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, cur
 	return listWorkTokenWithColor(id, workID, placeID, workTypeID, now, color)
 }
 
-func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color interfaces.TokenColor) *interfaces.Token {
+func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color factorytoken.Color) *factorytoken.Token {
 	if color.WorkID == "" {
 		color.WorkID = workID
 	}
 	if color.WorkTypeID == "" {
 		color.WorkTypeID = workTypeID
 	}
-	return &interfaces.Token{
+	return &factorytoken.Token{
 		ID:        id,
 		PlaceID:   placeID,
 		Color:     color,
 		CreatedAt: now,
 		EnteredAt: now,
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         make(map[string]int),
 			ConsecutiveFailures: make(map[string]int),
 			PlaceVisits:         make(map[string]int),
@@ -369,7 +370,7 @@ func listWorkFilterTopology() *state.Net {
 	}
 }
 
-func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []work.WorkContentPart) {
 	t.Helper()
 	if content == nil {
 		t.Fatalf("content = nil, want %#v", want)
@@ -420,7 +421,7 @@ func assertFactorySessionInvocation(
 		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
-	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != wantResult.Status {
+	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != factoryapi.InvocationTerminalStatus(wantResult.Status) {
 		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
 	}
 	assertGeneratedWorkContentParts(t, response.PrimaryResult, wantResult.PrimaryResult)
@@ -434,25 +435,25 @@ func assertFactorySessionInvocation(
 	}
 }
 
-func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	switch want.Type {
-	case interfaces.WorkContentPartTypeText:
+	case work.WorkContentPartTypeText:
 		assertGeneratedTextContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeImage:
+	case work.WorkContentPartTypeImage:
 		assertGeneratedImageContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeAudio:
+	case work.WorkContentPartTypeAudio:
 		assertGeneratedAudioContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeJSON:
+	case work.WorkContentPartTypeJSON:
 		assertGeneratedJSONContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeBinary:
+	case work.WorkContentPartTypeBinary:
 		assertGeneratedBinaryContentPart(t, got, index, want)
 	default:
 		t.Fatalf("unsupported expected content type %q", want.Type)
 	}
 }
 
-func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkTextContentPart()
 	if err != nil {
@@ -464,7 +465,7 @@ func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkImageContentPart()
 	if err != nil {
@@ -476,7 +477,7 @@ func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPar
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkAudioContentPart()
 	if err != nil {
@@ -488,7 +489,7 @@ func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPar
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkJsonContentPart()
 	if err != nil {
@@ -504,7 +505,7 @@ func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkBinaryContentPart()
 	if err != nil {
@@ -516,7 +517,7 @@ func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPa
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want interfaces.WorkContentPart) {
+func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want work.WorkContentPart) {
 	t.Helper()
 
 	if derefString(slot) != want.Slot ||
@@ -617,7 +618,7 @@ func namedFactoryPayloadJSON(project, workType string) string {
 	}`, project, project, workType, workType, workType)
 }
 
-func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {
+func submittedRequestNamed(t *testing.T, requests []work.SubmitRequest, name string) work.SubmitRequest {
 	t.Helper()
 	for _, request := range requests {
 		if request.Name == name {
@@ -625,7 +626,7 @@ func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, na
 		}
 	}
 	t.Fatalf("submit request %q not found in %#v", name, requests)
-	return interfaces.SubmitRequest{}
+	return work.SubmitRequest{}
 }
 
 func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factoryapi.Work {
@@ -639,19 +640,19 @@ func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factor
 	return factoryapi.Work{}
 }
 
-func assertSubmittedChildRelations(t *testing.T, relations []interfaces.Relation) {
+func assertSubmittedChildRelations(t *testing.T, relations []work.Relation) {
 	t.Helper()
 
 	var foundParentChild bool
 	var foundDependsOn bool
 	for _, relation := range relations {
 		switch relation.Type {
-		case interfaces.RelationParentChild:
+		case work.RelationParentChild:
 			foundParentChild = true
 			if relation.TargetWorkID != "batch-request-api-parent-child-parent" {
 				t.Fatalf("parent-child target = %q, want batch-request-api-parent-child-parent", relation.TargetWorkID)
 			}
-		case interfaces.RelationDependsOn:
+		case work.RelationDependsOn:
 			foundDependsOn = true
 			if relation.TargetWorkID != "batch-request-api-parent-child-prerequisite" {
 				t.Fatalf("depends_on target = %q, want batch-request-api-parent-child-prerequisite", relation.TargetWorkID)
@@ -761,7 +762,7 @@ func runUpsertValidationFailureCases(t *testing.T, cases []upsertValidationFailu
 			if mf == nil {
 				mf = &testutil.MockFactory{}
 			}
-			mf.Marking = &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}
+			mf.Marking = &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}
 			srv := newTestServer(mf)
 
 			rec := upsertWorkRequest(t, srv, tc.path, tc.body)

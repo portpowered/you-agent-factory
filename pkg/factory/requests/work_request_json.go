@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type canonicalWorkRequestJSON struct {
@@ -29,14 +29,14 @@ type canonicalWorkRequestEntry struct {
 // ParseCanonicalWorkRequestJSON parses a public FACTORY_REQUEST_BATCH JSON
 // payload and rejects retired aliases that must not be accepted on public
 // submit boundaries.
-func ParseCanonicalWorkRequestJSON(data []byte) (interfaces.WorkRequest, error) {
+func ParseCanonicalWorkRequestJSON(data []byte) (work.WorkRequest, error) {
 	if err := ValidateCanonicalWorkRequestJSON(data); err != nil {
-		return interfaces.WorkRequest{}, err
+		return work.WorkRequest{}, err
 	}
 
-	var request interfaces.WorkRequest
+	var request work.WorkRequest
 	if err := json.Unmarshal(data, &request); err != nil {
-		return interfaces.WorkRequest{}, err
+		return work.WorkRequest{}, err
 	}
 	return request, nil
 }

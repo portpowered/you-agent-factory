@@ -7,11 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+
+	"github.com/portpowered/infinite-you/pkg/work"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 type staticInferencer struct {
@@ -76,7 +85,7 @@ type stubRunner struct {
 	calls    int
 }
 
-func (runner *stubRunner) Execute(ctx context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (runner *stubRunner) Execute(ctx context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	runner.mu.Lock()
 	runner.calls++
 	runner.mu.Unlock()
@@ -86,18 +95,18 @@ func (runner *stubRunner) Execute(ctx context.Context, _ interfaces.RunnerExecut
 		case <-timer.C:
 		case <-ctx.Done():
 			timer.Stop()
-			return interfaces.RunnerExecutionResult{}, ctx.Err()
+			return workerexecution.RunnerExecutionResult{}, ctx.Err()
 		}
 	}
 	if runner.err != nil {
-		return interfaces.RunnerExecutionResult{}, runner.err
+		return workerexecution.RunnerExecutionResult{}, runner.err
 	}
-	return interfaces.RunnerExecutionResult{Content: runner.response}, nil
+	return workerexecution.RunnerExecutionResult{Content: runner.response}, nil
 }
 
-func testAgentRunRequest() interfaces.WorkstationExecutionRequest {
-	return interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+func testAgentRunRequest() workerexecution.WorkstationExecutionRequest {
+	return workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-1",
 			TransitionID:    "transition-1",
 			WorkerType:      "agent-worker",
@@ -163,8 +172,8 @@ func TestAgentRunExecutor_MapsSuccessfulCompletionToWorkResult(t *testing.T) {
 	}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			Workers: map[string]*workerconfig.Config{
+				"agent-worker": {Type: workertaxonomy.WorkerTypeAgent},
 			},
 		},
 		&stubRunner{response: "unused"},
@@ -175,8 +184,8 @@ func TestAgentRunExecutor_MapsSuccessfulCompletionToWorkResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if result.Output != "final answer" {
 		t.Fatalf("Output = %q, want final answer", result.Output)
@@ -192,8 +201,8 @@ func TestAgentRunExecutor_HarnessFailureSurfacesAgentRunFailureClass(t *testing.
 	harness := &recordingHarnessAdapter{err: errors.New("loop failed")}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			Workers: map[string]*workerconfig.Config{
+				"agent-worker": {Type: workertaxonomy.WorkerTypeAgent},
 			},
 		},
 		&stubRunner{},
@@ -204,8 +213,8 @@ func TestAgentRunExecutor_HarnessFailureSurfacesAgentRunFailureClass(t *testing.
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassHarnessRuntime {
 		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassHarnessRuntime)
@@ -221,11 +230,11 @@ func TestAgentRunExecutor_ModelhostLeaseDeniedSurfacesAgentRunLeaseFailureClass(
 	harness := &recordingHarnessAdapter{err: modelhost.ErrCapacityExhausted}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"agent-worker": {
-					Type:          interfaces.WorkerTypeAgent,
+					Type:          workertaxonomy.WorkerTypeAgent,
 					Model:         "OMNIVOICE_Q4_K_M",
-					ModelLocality: interfaces.ModelLocalityLocal,
+					ModelLocality: workerconfig.ModelLocalityLocal,
 				},
 			},
 		},
@@ -237,8 +246,8 @@ func TestAgentRunExecutor_ModelhostLeaseDeniedSurfacesAgentRunLeaseFailureClass(
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassLeaseDenied {
 		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassLeaseDenied)
@@ -254,7 +263,7 @@ func TestAgentRunExecutor_ModelhostReadinessFailureSurfacesAgentRunModelNotReady
 	readinessErr := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			ReadinessState: managedruntime.ReadinessStateMissing,
 			FailureClass:   modelhost.FailureClassMissingAssets,
 		},
 		Cause: modelhost.ErrRuntimeNotReady,
@@ -262,11 +271,11 @@ func TestAgentRunExecutor_ModelhostReadinessFailureSurfacesAgentRunModelNotReady
 	harness := &recordingHarnessAdapter{err: readinessErr}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"agent-worker": {
-					Type:          interfaces.WorkerTypeAgent,
+					Type:          workertaxonomy.WorkerTypeAgent,
 					Model:         "OMNIVOICE_Q4_K_M",
-					ModelLocality: interfaces.ModelLocalityLocal,
+					ModelLocality: workerconfig.ModelLocalityLocal,
 				},
 			},
 		},
@@ -288,8 +297,8 @@ func TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass(t *testing.T) {
 
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			Workers: map[string]*workerconfig.Config{
+				"agent-worker": {Type: workertaxonomy.WorkerTypeAgent},
 			},
 		},
 		&stubRunner{response: "slow", delay: 200 * time.Millisecond},
@@ -302,8 +311,8 @@ func TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassTimeout {
 		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassTimeout)
@@ -311,10 +320,10 @@ func TestAgentRunExecutor_TimeoutSurfacesAgentRunTimeoutClass(t *testing.T) {
 }
 
 type staticRuntimeConfig struct {
-	Workers map[string]*interfaces.WorkerConfig
+	Workers map[string]*workerconfig.Config
 }
 
-func (cfg staticRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (cfg staticRuntimeConfig) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := cfg.Workers[name]
 	return worker, ok
 }
@@ -334,8 +343,8 @@ func TestAgentRunExecutor_MissingWorkerConfigFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "worker config not found: agent-worker" {
 		t.Fatalf("Error = %q", result.Error)
@@ -345,17 +354,17 @@ func TestAgentRunExecutor_MissingWorkerConfigFails(t *testing.T) {
 func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 	t.Parallel()
 
-	worker := &interfaces.WorkerConfig{StopToken: "<COMPLETE>"}
-	if got := evaluateAgentRunOutcome("done <COMPLETE>", worker); got != interfaces.OutcomeAccepted {
+	worker := &workerconfig.Config{StopToken: "<COMPLETE>"}
+	if got := evaluateAgentRunOutcome("done <COMPLETE>", worker); got != workerexecution.OutcomeAccepted {
 		t.Fatalf("stop token outcome = %s, want ACCEPTED", got)
 	}
-	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != interfaces.OutcomeContinue {
+	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != workerexecution.OutcomeContinue {
 		t.Fatalf("continue outcome = %s, want CONTINUE", got)
 	}
-	if got := evaluateAgentRunOutcome("review cannot proceed <REJECTED>", worker); got != interfaces.OutcomeRejected {
+	if got := evaluateAgentRunOutcome("review cannot proceed <REJECTED>", worker); got != workerexecution.OutcomeRejected {
 		t.Fatalf("rejected outcome = %s, want REJECTED", got)
 	}
-	if got := evaluateAgentRunOutcome("plain output", nil); got != interfaces.OutcomeAccepted {
+	if got := evaluateAgentRunOutcome("plain output", nil); got != workerexecution.OutcomeAccepted {
 		t.Fatalf("nil worker outcome = %s, want ACCEPTED", got)
 	}
 }
@@ -374,8 +383,8 @@ func TestWithAgentRunLogger_ConfiguresExecutor(t *testing.T) {
 	logger := spyLogger{}
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			Workers: map[string]*workerconfig.Config{
+				"agent-worker": {Type: workertaxonomy.WorkerTypeAgent},
 			},
 		},
 		&stubRunner{},
@@ -389,18 +398,18 @@ func TestWithAgentRunLogger_ConfiguresExecutor(t *testing.T) {
 func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	t.Parallel()
 
-	var recorded []factoryapi.FactoryEvent
+	var recorded []workerexecution.AgentRunResponseEvent
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			Workers: map[string]*workerconfig.Config{
+				"agent-worker": {Type: workertaxonomy.WorkerTypeAgent},
 			},
 		},
 		&stubRunner{response: "done"},
 		WithAgentRunHarness(&recordingHarnessAdapter{
 			result: HarnessResult{FinalText: "done"},
 		}),
-		WithAgentRunEventRecorder(func(event factoryapi.FactoryEvent) {
+		WithAgentRunEventRecorder(func(event workerexecution.AgentRunResponseEvent) {
 			recorded = append(recorded, event)
 		}),
 		WithAgentRunClock(func() time.Time {
@@ -412,20 +421,17 @@ func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if len(recorded) != 1 {
 		t.Fatalf("recorded events = %d, want 1", len(recorded))
 	}
-	if recorded[0].Type != factoryapi.FactoryEventTypeAgentRunResponse {
-		t.Fatalf("event type = %s, want %s", recorded[0].Type, factoryapi.FactoryEventTypeAgentRunResponse)
-	}
-	payload, err := recorded[0].Payload.AsAgentRunResponseEventPayload()
+	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(recorded[0].Payload.Diagnostics)
 	if err != nil {
-		t.Fatalf("AsAgentRunResponseEventPayload: %v", err)
+		t.Fatalf("decode diagnostics: %v", err)
 	}
-	if payload.Diagnostics == nil || payload.Diagnostics.AgentRun == nil {
-		t.Fatalf("payload diagnostics = %#v, want agentRun inspection", payload.Diagnostics)
+	if diagnostics == nil || diagnostics.AgentRun == nil {
+		t.Fatalf("payload diagnostics = %#v, want agentRun inspection", diagnostics)
 	}
 }

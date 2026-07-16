@@ -4,28 +4,37 @@ import (
 	"fmt"
 	"strings"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 type managedRuntimeProjection struct {
-	summary          factoryapi.ModelSummary
-	baseDiagnostics  factoryapi.StringMap
+	summary          managedRuntimeSummary
+	baseDiagnostics  map[string]string
 	cacheInspection  *RuntimeCacheInspection
 	sourceResolution *ManagedRuntimeSourceResolution
 	includeInspect   bool
 }
 
-func buildManagedRuntime(summary factoryapi.ModelSummary, diagnostics factoryapi.StringMap) factoryapi.ManagedRuntime {
+type managedRuntimeSummary struct {
+	name       string
+	locality   managedruntime.Locality
+	readiness  managedruntime.ReadinessState
+	lifecycle  managedruntime.LifecycleState
+	operations []managedruntime.Operation
+}
+
+func buildManagedRuntime(summary managedRuntimeSummary, diagnostics map[string]string) managedruntime.Runtime {
 	return buildManagedRuntimeProjection(managedRuntimeProjection{
 		summary:         summary,
 		baseDiagnostics: diagnostics,
 	})
 }
 
-func buildManagedRuntimeProjection(input managedRuntimeProjection) factoryapi.ManagedRuntime {
+func buildManagedRuntimeProjection(input managedRuntimeProjection) managedruntime.Runtime {
 	readiness, lifecycle := managedRuntimeStates(input)
 	managedDiagnostics := managedRuntimeDiagnostics(input.summary, input.baseDiagnostics, readiness, lifecycle)
 	for key, value := range managedRuntimeSourceDiagnostics(managedRuntimeSourceResolutionValue(input)) {
@@ -36,31 +45,31 @@ func buildManagedRuntimeProjection(input managedRuntimeProjection) factoryapi.Ma
 			managedDiagnostics[key] = value
 		}
 	}
-	return factoryapi.ManagedRuntime{
-		Identity:            input.summary.Name,
+	return managedruntime.Runtime{
+		Identity:            input.summary.name,
 		ReadinessState:      readiness,
 		LifecycleState:      lifecycle,
-		Locality:            input.summary.ProviderLocality,
-		SupportedOperations: input.summary.Operations,
-		Diagnostics:         &managedDiagnostics,
+		Locality:            input.summary.locality,
+		SupportedOperations: input.summary.operations,
+		Diagnostics:         managedDiagnostics,
 	}
 }
 
-func managedRuntimeStates(input managedRuntimeProjection) (factoryapi.ManagedRuntimeReadinessState, factoryapi.ManagedRuntimeLifecycleState) {
+func managedRuntimeStates(input managedRuntimeProjection) (managedruntime.ReadinessState, managedruntime.LifecycleState) {
 	if input.cacheInspection != nil && input.cacheInspection.Supported {
 		inspection := *input.cacheInspection
 		if inspection.Installed {
-			return factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED
+			return managedruntime.ReadinessStateReady, managedruntime.LifecycleStateInstalled
 		}
 		if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
-			return factoryapi.ManagedRuntimeReadinessStateFAILED, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+			return managedruntime.ReadinessStateFailed, managedruntime.LifecycleStateNotInstalled
 		}
 		if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
-			return factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING
+			return managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateInstalling
 		}
-		return factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+		return managedruntime.ReadinessStateMissing, managedruntime.LifecycleStateNotInstalled
 	}
-	return managedRuntimeReadinessFromStatus(input.summary.Status), managedRuntimeLifecycleFromLoadState(input.summary.LoadState)
+	return input.summary.readiness, input.summary.lifecycle
 }
 
 func managedRuntimeSourceResolutionValue(input managedRuntimeProjection) ManagedRuntimeSourceResolution {
@@ -70,38 +79,16 @@ func managedRuntimeSourceResolutionValue(input managedRuntimeProjection) Managed
 	return ManagedRuntimeSourceResolution{}
 }
 
-func managedRuntimeReadinessFromStatus(status factoryapi.ModelStatus) factoryapi.ManagedRuntimeReadinessState {
-	switch status {
-	case factoryapi.ModelStatusREADY:
-		return factoryapi.ManagedRuntimeReadinessStateREADY
-	case factoryapi.ModelStatusUNAVAILABLE:
-		return factoryapi.ManagedRuntimeReadinessStateMISSING
-	default:
-		return factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED
-	}
-}
-
-func managedRuntimeLifecycleFromLoadState(loadState factoryapi.ModelLoadState) factoryapi.ManagedRuntimeLifecycleState {
-	switch loadState {
-	case factoryapi.UNLOADED:
-		return factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
-	case factoryapi.NOTAPPLICABLE:
-		return factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE
-	default:
-		return factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE
-	}
-}
-
 func managedRuntimeDiagnostics(
-	summary factoryapi.ModelSummary,
-	diagnostics factoryapi.StringMap,
-	readiness factoryapi.ManagedRuntimeReadinessState,
-	lifecycle factoryapi.ManagedRuntimeLifecycleState,
-) factoryapi.StringMap {
-	result := factoryapi.StringMap{
+	summary managedRuntimeSummary,
+	diagnostics map[string]string,
+	readiness managedruntime.ReadinessState,
+	lifecycle managedruntime.LifecycleState,
+) map[string]string {
+	result := map[string]string{
 		"readinessState": string(readiness),
 		"lifecycleState": string(lifecycle),
-		"locality":       string(summary.ProviderLocality),
+		"locality":       string(summary.locality),
 	}
 	for key, value := range diagnostics {
 		result[key] = value
@@ -109,7 +96,7 @@ func managedRuntimeDiagnostics(
 	return result
 }
 
-func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfaces.FactoryConfig) *interfaces.ResourceConfig {
+func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfaces.FactoryConfig) *factoryresource.Config {
 	if factoryCfg == nil || !aggregate.hasModelScoped {
 		return nil
 	}
@@ -117,7 +104,7 @@ func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfac
 		if canonicalModelName(resource.Model) != canonicalModelName(aggregate.name) {
 			continue
 		}
-		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		copied := resource
@@ -132,20 +119,15 @@ func ManagedRuntimeReadinessForFactory(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
 	opts CatalogOptions,
-) (factoryapi.ManagedRuntime, error) {
+) (managedruntime.Runtime, error) {
 	if runtimeCfg == nil {
-		return factoryapi.ManagedRuntime{}, fmt.Errorf("runtime config is not available")
+		return managedruntime.Runtime{}, fmt.Errorf("runtime config is not available")
 	}
-	catalog := BuildCatalogWithOptions(runtimeCfg, opts)
 	key := CanonicalModelName(modelName)
 	if key == "" {
-		return factoryapi.ManagedRuntime{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+		return managedruntime.Runtime{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
 	}
-	entry, ok := catalog[key]
-	if !ok {
-		return factoryapi.ManagedRuntime{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
-	}
-	return entry.Summary.ManagedRuntime, nil
+	return managedRuntimeForCatalog(runtimeCfg, modelName, opts)
 }
 
 // EnsureManagedRuntimeReadyForInvocation classifies one managed runtime using
@@ -155,12 +137,12 @@ func EnsureManagedRuntimeReadyForInvocation(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
 	opts CatalogOptions,
-) (factoryapi.ManagedRuntime, error) {
+) (managedruntime.Runtime, error) {
 	managed, err := ManagedRuntimeReadinessForFactory(runtimeCfg, modelName, opts)
 	if err != nil {
-		return factoryapi.ManagedRuntime{}, err
+		return managedruntime.Runtime{}, err
 	}
-	if invocationErr := apisurface.InvocationErrorFromManagedRuntime(managed); invocationErr != nil {
+	if invocationErr := managedruntime.InvocationErrorForRuntime(managed); invocationErr != nil {
 		return managed, invocationErr
 	}
 	return managed, nil

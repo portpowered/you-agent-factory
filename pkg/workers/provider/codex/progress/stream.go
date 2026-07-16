@@ -9,21 +9,24 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
 const (
-	ProgressRetainedTextBytes     = 4096
-	ProgressRetainedProgressBytes = 1024
-	ProgressMetadataRunnerIDKey   = "runner_id"
-	ProgressMetadataWorkIDKey     = "work_id"
+	ProgressRetainedTextBytes      = 4096
+	ProgressRetainedProgressBytes  = 1024
+	ProgressMetadataRunnerIDKey    = "runner_id"
+	ProgressMetadataWorkIDKey      = "work_id"
 	ProgressMetadataWorkstationKey = "workstation_name"
-	ProgressMetadataTextBytesKey  = "text_bytes"
-	ProgressMetadataTruncatedKey  = "payload_truncated"
-	ProgressMetadataRawBytesKey   = "raw_bytes"
-	ProgressMetadataRawSHA256Key  = "raw_sha256"
-	ProgressMetadataDiagnosticKey = "diagnostic_class"
+	ProgressMetadataTextBytesKey   = "text_bytes"
+	ProgressMetadataTruncatedKey   = "payload_truncated"
+	ProgressMetadataRawBytesKey    = "raw_bytes"
+	ProgressMetadataRawSHA256Key   = "raw_sha256"
+	ProgressMetadataDiagnosticKey  = "diagnostic_class"
 )
 
 const (
@@ -33,8 +36,8 @@ const (
 )
 
 const (
-	progressFragmentKind  = "PROGRESS_FRAGMENT"
-	responseFragmentKind  = "RESPONSE_FRAGMENT"
+	progressFragmentKind    = "PROGRESS_FRAGMENT"
+	responseFragmentKind    = "RESPONSE_FRAGMENT"
 	normalizedTypeUnknown   = "UNKNOWN"
 	normalizedTypeStarted   = "STARTED"
 	normalizedTypeProgress  = "PROGRESS"
@@ -57,7 +60,7 @@ type ProgressFragment struct {
 	Kind               string
 	Type               string
 	Payload            string
-	ProviderSessionRef *interfaces.ProviderSessionMetadata
+	ProviderSessionRef *workerexecution.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
 }
@@ -72,7 +75,7 @@ func IsCommand(command string) bool {
 	if extension == ".exe" || extension == ".cmd" || extension == ".bat" {
 		base = strings.TrimSuffix(base, filepath.Ext(base))
 	}
-	return strings.EqualFold(base, string(interfaces.ModelProviderCodex))
+	return strings.EqualFold(base, string(modelprovider.Codex))
 }
 
 // ProgressStream observes Codex subprocess stdout/stderr and publishes
@@ -86,14 +89,14 @@ type ProgressStream struct {
 
 	pendingSSEEvent string
 	pendingSSEData  []string
-	providerSession *interfaces.ProviderSessionMetadata
+	providerSession *workerexecution.ProviderSessionMetadata
 	hasher          hash.Hash
 }
 
 // NewProgressStream constructs a Codex-owned stdout/stderr observer for one invocation.
 func NewProgressStream(req workerprocess.CommandRequest, publisher ProgressPublisher) *ProgressStream {
 	return &ProgressStream{
-		req:       interfaces.CloneSubprocessExecutionRequest(req),
+		req:       workerexecution.CloneSubprocessExecutionRequest(req),
 		publisher: publisher,
 		hasher:    sha256.New(),
 	}
@@ -174,10 +177,10 @@ func (s *ProgressStream) publishStructuredEvent(raw string, fallbackEventType st
 		return false
 	}
 	if normalized.ProviderSessionRef != nil {
-		s.providerSession = interfaces.CloneProviderSessionMetadata(normalized.ProviderSessionRef)
+		s.providerSession = workerexecution.CloneProviderSessionMetadata(normalized.ProviderSessionRef)
 	}
 	if normalized.ProviderSessionRef == nil {
-		normalized.ProviderSessionRef = interfaces.CloneProviderSessionMetadata(s.providerSession)
+		normalized.ProviderSessionRef = workerexecution.CloneProviderSessionMetadata(s.providerSession)
 	}
 	normalized.DispatchID = strings.TrimSpace(s.req.DispatchID)
 	normalized.Metadata = mergeStringMaps(baseFragmentMetadata(s.req), normalized.Metadata)
@@ -302,7 +305,7 @@ func classifyStructuredEvent(externalEventType string) (string, string) {
 	}
 }
 
-func providerSessionFromStructuredEvent(payload map[string]any) *interfaces.ProviderSessionMetadata {
+func providerSessionFromStructuredEvent(payload map[string]any) *workerexecution.ProviderSessionMetadata {
 	candidates := []struct {
 		kind  string
 		value string
@@ -315,8 +318,8 @@ func providerSessionFromStructuredEvent(payload map[string]any) *interfaces.Prov
 		if strings.TrimSpace(candidate.value) == "" {
 			continue
 		}
-		return &interfaces.ProviderSessionMetadata{
-			Provider: interfaces.CanonicalProviderSessionProvider(string(interfaces.ModelProviderCodex)),
+		return &workerexecution.ProviderSessionMetadata{
+			Provider: workerexecution.CanonicalProviderSessionProvider(string(modelprovider.Codex)),
 			Kind:     candidate.kind,
 			ID:       strings.TrimSpace(candidate.value),
 		}
@@ -391,7 +394,7 @@ func boundedPayload(payload string, limit int) string {
 
 func baseFragmentMetadata(req workerprocess.CommandRequest) map[string]string {
 	metadata := map[string]string{
-		ProgressMetadataRunnerIDKey: string(interfaces.ModelProviderCodex),
+		ProgressMetadataRunnerIDKey: string(modelprovider.Codex),
 	}
 	if workID := primaryWorkID(req.Execution.WorkIDs); workID != "" {
 		metadata[ProgressMetadataWorkIDKey] = workID
@@ -513,7 +516,7 @@ func (s *ProgressStream) publishResponseEvent(eventType string, externalEventTyp
 		Kind:               responseFragmentKind,
 		Type:               eventType,
 		Payload:            boundedPayload(payload, ProgressRetainedTextBytes),
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(s.providerSession),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(s.providerSession),
 		ExternalEventType:  strings.TrimSpace(externalEventType),
 		Metadata:           mergeStringMaps(baseFragmentMetadata(s.req), metadata),
 	})
@@ -525,7 +528,7 @@ func (s *ProgressStream) publishProgressEvent(eventType string, externalEventTyp
 		Kind:               progressFragmentKind,
 		Type:               eventType,
 		Payload:            boundedPayload(payload, ProgressRetainedProgressBytes),
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(s.providerSession),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(s.providerSession),
 		ExternalEventType:  strings.TrimSpace(externalEventType),
 		Metadata:           mergeStringMaps(baseFragmentMetadata(s.req), metadata),
 	})

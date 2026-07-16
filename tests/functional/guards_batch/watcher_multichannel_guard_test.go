@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,11 +26,11 @@ func TestMultiChannelGuard_FileDropToCompletion(t *testing.T) {
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
-	h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("completer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.RunUntilComplete(t, 10*time.Second)
 
@@ -47,10 +49,10 @@ func TestMultiChannelGuard_ExecutionIDPropagation(t *testing.T) {
 	testutil.WriteSeedExecutionFile(t, dir, "chapter", wantExecutionID, []byte(`{"title": "Execution ID propagation test"}`))
 
 	var submissionsMu sync.Mutex
-	var chapterSubmission interfaces.FactorySubmissionRecord
+	var chapterSubmission work.FactorySubmissionRecord
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 			if record.Request.WorkTypeID != "chapter" {
 				return
 			}
@@ -65,11 +67,11 @@ func TestMultiChannelGuard_ExecutionIDPropagation(t *testing.T) {
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
-	h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("completer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.RunUntilComplete(t, 10*time.Second)
 
@@ -112,7 +114,7 @@ func TestMultiChannelGuard_GuardBlocksUntilAllPagesComplete(t *testing.T) {
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
 	h.SetCustomExecutor("processor", &gatedProcessor{release: releaseCh})
-	h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("completer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -160,7 +162,7 @@ func TestMultiChannelGuard_DynamicExecDirWithGuard(t *testing.T) {
 	}
 
 	var submissionsMu sync.Mutex
-	var chapterSubmission interfaces.FactorySubmissionRecord
+	var chapterSubmission work.FactorySubmissionRecord
 
 	proc := &execDirObservingProcessor{
 		factoryDir:      dir,
@@ -168,7 +170,7 @@ func TestMultiChannelGuard_DynamicExecDirWithGuard(t *testing.T) {
 	}
 
 	h := support.NewGuardsBatchHarness(t, dir,
-		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 			if record.Request.WorkTypeID != "chapter" {
 				return
 			}
@@ -183,7 +185,7 @@ func TestMultiChannelGuard_DynamicExecDirWithGuard(t *testing.T) {
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
 	h.SetCustomExecutor("processor", proc)
-	h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("completer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()

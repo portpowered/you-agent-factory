@@ -3,14 +3,14 @@
 package projections
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -18,12 +18,15 @@ const (
 	tokenKindWork     = "work"
 )
 
-// ReconstructFactoryWorldState applies canonical factory events in tick order
-// and returns the reconstructed world state at selectedTick. Events after the
-// selected tick are ignored.
-func ReconstructFactoryWorldState(events []factoryapi.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
+// ReconstructCanonicalFactoryWorldState applies the Factory-owned event
+// envelope directly. Generated event conversion belongs at compatibility and
+// transport boundaries, not in the canonical reducer.
+func ReconstructCanonicalFactoryWorldState(events []interfaces.FactoryEvent, selectedTick int) (interfaces.FactoryWorldState, error) {
 	reducer := newFactoryWorldReducer(selectedTick)
-	ordered := append([]factoryapi.FactoryEvent(nil), events...)
+	ordered := make([]interfaces.FactoryEvent, len(events))
+	for index, event := range events {
+		ordered[index] = event.Clone()
+	}
 	sort.SliceStable(ordered, func(i, j int) bool {
 		left := ordered[i]
 		right := ordered[j]
@@ -66,13 +69,13 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 	return &factoryWorldReducer{
 		stateValue: interfaces.FactoryWorldState{
 			Tick:                          selectedTick,
-			PayloadLineage:                interfaces.WorkPayloadLineageProjection{},
+			PayloadLineage:                work.WorkPayloadLineageProjection{},
 			WorkRequestsByID:              make(map[string]interfaces.WorkRequestPayload),
-			RelationsByWorkID:             make(map[string][]interfaces.FactoryRelation),
-			WorkItemsByID:                 make(map[string]interfaces.FactoryWorkItem),
-			ActiveWorkItemsByID:           make(map[string]interfaces.FactoryWorkItem),
+			RelationsByWorkID:             make(map[string][]work.FactoryRelation),
+			WorkItemsByID:                 make(map[string]work.FactoryWorkItem),
+			ActiveWorkItemsByID:           make(map[string]work.FactoryWorkItem),
 			TerminalWorkByID:              make(map[string]interfaces.FactoryTerminalWork),
-			FailedWorkItemsByID:           make(map[string]interfaces.FactoryWorkItem),
+			FailedWorkItemsByID:           make(map[string]work.FactoryWorkItem),
 			FailureDetailsByWorkID:        make(map[string]interfaces.FactoryWorldFailureDetail),
 			InferenceAttemptsByDispatchID: make(map[string]map[string]interfaces.FactoryWorldInferenceAttempt),
 			ScriptRequestsByDispatchID:    make(map[string]map[string]interfaces.FactoryWorldScriptRequest),
@@ -94,53 +97,59 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity world-state replay keeps canonical event routing on one reducer switch.
-func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
+func (r *factoryWorldReducer) apply(event interfaces.FactoryEvent) error {
 	r.stateValue.EventTime = event.Context.EventTime
 	switch event.Type {
-	case factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-		factoryapi.FactoryEventTypeFactoryChange:
+	case interfaces.FactoryEventTypeRunRequest,
+		interfaces.FactoryEventTypeInitialStructureRequest,
+		interfaces.FactoryEventTypeFactoryChange:
 		return r.applyStructureEvent(event)
-	case factoryapi.FactoryEventTypeWorkRequest:
+	case interfaces.FactoryEventTypeWorkRequest:
 		return r.applyWorkRequestEvent(event)
-	case factoryapi.FactoryEventTypeRelationshipChangeRequest:
+	case interfaces.FactoryEventTypeRelationshipChangeRequest:
 		return r.applyRelationshipChangeEvent(event)
-	case factoryapi.FactoryEventTypeDispatchRequest:
+	case interfaces.FactoryEventTypeDispatchRequest:
 		return r.applyDispatchRequestEvent(event)
-	case factoryapi.FactoryEventTypeInferenceRequest:
-		return r.applyInferenceRequestEvent(event)
-	case factoryapi.FactoryEventTypeInferenceResponse:
-		return r.applyInferenceResponseEvent(event)
-	case factoryapi.FactoryEventTypeScriptRequest:
-		return r.applyScriptRequestEvent(event)
-	case factoryapi.FactoryEventTypeScriptResponse:
-		return r.applyScriptResponseEvent(event)
-	case factoryapi.FactoryEventTypeAgentRunResponse:
-		return r.applyAgentRunResponseEvent(event)
-	case factoryapi.FactoryEventTypeDispatchResponse:
+	case interfaces.FactoryEventTypeDispatchResponse:
 		return r.applyDispatchResponseEvent(event)
-	case factoryapi.FactoryEventTypeFactoryStateResponse:
+	case interfaces.FactoryEventTypeFactoryStateResponse:
 		return r.applyFactoryStateResponseEvent(event)
-	case factoryapi.FactoryEventTypeWorkStateChange:
+	case interfaces.FactoryEventTypeWorkStateChange:
 		return r.applyWorkStateChangeEvent(event)
-	case factoryapi.FactoryEventTypeRunResponse:
+	case interfaces.FactoryEventTypeRunResponse:
 		return nil
-	}
-	if handled, err := r.applyOrchestratorLifecycleEvent(event); handled {
+	case interfaces.FactoryEventTypeInferenceRequest,
+		interfaces.FactoryEventTypeInferenceResponse,
+		interfaces.FactoryEventTypeScriptRequest,
+		interfaces.FactoryEventTypeScriptResponse,
+		interfaces.FactoryEventTypeAgentRunResponse:
+		return r.applyWorkerExecutionEvent(event)
+	case interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeSessionPaused,
+		interfaces.FactoryEventTypeSessionResumed,
+		interfaces.FactoryEventTypeSessionResultUpdated,
+		interfaces.FactoryEventTypeSessionCompleted:
+		_, err := r.applySessionLifecycleEvent(event)
 		return err
-	}
-	if handled, err := r.applySessionLifecycleEvent(event); handled {
+	case interfaces.FactoryEventTypeDispatchQueued,
+		interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventTypeDispatchReconciled:
+		_, err := r.applyDispatchLifecycleEvent(event)
 		return err
-	}
-	if handled, err := r.applyDispatchLifecycleEvent(event); handled {
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+		interfaces.FactoryEventTypeJavaScriptCheckpointRef,
+		interfaces.FactoryEventTypeJavaScriptPhaseChange,
+		interfaces.FactoryEventTypeArtifactCreated:
+		_, err := r.applyOrchestratorLifecycleEvent(event)
 		return err
 	}
 	return nil
 }
 
-func (r *factoryWorldReducer) applyWorkStateChangeEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsWorkStateChangeEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyWorkStateChangeEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.WorkStateChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.recordWorkStateChange(event, payload)
@@ -148,127 +157,83 @@ func (r *factoryWorldReducer) applyWorkStateChangeEvent(event factoryapi.Factory
 	return nil
 }
 
-func (r *factoryWorldReducer) applyStructureEvent(event factoryapi.FactoryEvent) error {
+func (r *factoryWorldReducer) applyStructureEvent(event interfaces.FactoryEvent) error {
 	switch event.Type {
-	case factoryapi.FactoryEventTypeRunRequest:
-		payload, err := event.Payload.AsRunRequestEventPayload()
-		if err != nil {
+	case interfaces.FactoryEventTypeRunRequest:
+		var payload interfaces.RunRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
 			return err
 		}
 		if !r.hasTopology() {
 			if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 				return err
 			}
-			r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{
-				Factory: payload.Factory,
-			}))
 		}
-	case factoryapi.FactoryEventTypeInitialStructureRequest:
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
+	case interfaces.FactoryEventTypeInitialStructureRequest:
+		var payload interfaces.InitialStructureRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
 			return err
 		}
 		if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 			return err
 		}
-		r.applyInitialStructure(initialStructureFromGenerated(payload))
-	case factoryapi.FactoryEventTypeFactoryChange:
-		payload, err := event.Payload.AsFactoryChangeEventPayload()
-		if err != nil {
+	case interfaces.FactoryEventTypeFactoryChange:
+		var payload interfaces.FactoryChangeEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
 			return err
 		}
 		if err := r.applyCanonicalFactory(payload.Factory); err != nil {
 			return err
 		}
-		r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload(payload)))
 	}
 	return nil
 }
 
-func (r *factoryWorldReducer) applyWorkRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsWorkRequestEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyWorkRequestEvent(event interfaces.FactoryEvent) error {
+	var payload work.WorkRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
+	}
+	if payload.Type == "" {
+		return fmt.Errorf("decode %s factory event payload: missing work request type", event.Type)
 	}
 	r.applyWorkRequest(event.Context, payload)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyRelationshipChangeEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyRelationshipChangeEvent(event interfaces.FactoryEvent) error {
+	var payload work.RelationshipChangeRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
+	}
+	if payload.Relation.Type == "" {
+		return fmt.Errorf("decode %s factory event payload: missing relationship type", event.Type)
 	}
 	r.applyRelationshipChange(event.Context, payload)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyDispatchRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchRequestEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchRequestEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.DispatchRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.applyDispatchCreated(event, payload)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyInferenceRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsInferenceRequestEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyInferenceRequest(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyInferenceResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsInferenceResponseEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyInferenceResponse(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyScriptRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsScriptRequestEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyScriptRequest(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyScriptResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsScriptResponseEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyScriptResponse(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyAgentRunResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsAgentRunResponseEventPayload()
-	if err != nil {
-		return err
-	}
-	r.applyAgentRunResponse(event, payload)
-	return nil
-}
-
-func (r *factoryWorldReducer) applyDispatchResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchResponseEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchResponseEvent(event interfaces.FactoryEvent) error {
+	var payload workerexecution.DispatchResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.applyDispatchCompleted(event, payload)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyFactoryStateResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsFactoryStateResponseEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyFactoryStateResponseEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactoryStateResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.applyFactoryStateChange(payload)
@@ -292,37 +257,29 @@ func (r *factoryWorldReducer) applyInitialStructure(payload interfaces.InitialSt
 	}
 }
 
-func (r *factoryWorldReducer) applyCanonicalFactory(factory factoryapi.Factory) error {
-	clone, err := cloneGeneratedFactory(factory)
+func (r *factoryWorldReducer) applyCanonicalFactory(snapshot *interfaces.FactorySnapshot) error {
+	if snapshot == nil {
+		return fmt.Errorf("decode Factory snapshot for world projection: snapshot is required")
+	}
+	topology, err := initialStructureFromSnapshot(snapshot)
 	if err != nil {
 		return err
 	}
-	r.stateValue.Factory = &clone
+	r.stateValue.Factory = snapshot.Clone()
+	r.applyInitialStructure(topology)
 	return nil
 }
 
-func cloneGeneratedFactory(factory factoryapi.Factory) (factoryapi.Factory, error) {
-	encoded, err := json.Marshal(factory)
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone canonical factory graph: %w", err)
-	}
-	var clone factoryapi.Factory
-	if err := json.Unmarshal(encoded, &clone); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone canonical factory graph: %w", err)
-	}
-	return clone, nil
-}
-
-func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventContext, payload factoryapi.WorkRequestEventPayload) {
-	requestID := stringValue(context.RequestId)
+func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventContext, payload work.WorkRequestEventPayload) {
+	requestID := stringValue(context.RequestID)
 	if requestID == "" {
-		requestID = firstRequestID(payload.Works)
+		requestID = firstWorkRequestID(payload.Works)
 	}
 	if requestID == "" {
 		return
 	}
-	traceID := firstString(context.TraceIds)
-	workItems := factoryWorkItemsFromGenerated(payload.Works)
+	traceID := firstString(context.TraceIDs)
+	workItems := factoryWorkItemsFromRequest(payload.Works)
 	for i := range workItems {
 		if workItems[i].TraceID == "" {
 			workItems[i].TraceID = traceID
@@ -333,10 +290,10 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 	}
 	r.stateValue.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
 		RequestID:     requestID,
-		Type:          interfaces.WorkRequestType(payload.Type),
+		Type:          work.WorkRequestType(payload.Type),
 		TraceID:       traceID,
-		Source:        stringValue(payload.Source),
-		ParentLineage: cloneStringSlice(sliceValue(payload.ParentLineage)),
+		Source:        payload.Source,
+		ParentLineage: cloneStringSlice(payload.ParentLineage),
 		WorkItems:     cloneWorkItems(workItems),
 	}
 	for _, item := range workItems {
@@ -346,17 +303,20 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 		r.addWorkToken(item.ID, item.PlaceID, item)
 		r.addTraceWork(item.TraceID, item.ID)
 	}
-	for _, relation := range r.factoryRelationsFromGenerated(payload.Relations, context) {
+	for _, relation := range r.factoryRelationsFromRequest(payload.Relations, context) {
 		r.addRelation(relation)
 	}
 }
 
-func (r *factoryWorldReducer) applyRelationshipChange(context factoryapi.FactoryEventContext, payload factoryapi.RelationshipChangeRequestEventPayload) {
-	r.addRelation(r.factoryRelationFromGenerated(payload.Relation, context))
+func (r *factoryWorldReducer) applyRelationshipChange(context interfaces.FactoryEventContext, payload work.RelationshipChangeRequestEventPayload) {
+	r.addRelation(r.factoryRelationFromRequest(payload.Relation, context))
 }
 
-func (r *factoryWorldReducer) applyFactoryStateChange(payload factoryapi.FactoryStateResponseEventPayload) {
-	r.stateValue.FactoryStatePrevious = factoryStateString(payload.PreviousState)
+func (r *factoryWorldReducer) applyFactoryStateChange(payload interfaces.FactoryStateResponseEventPayload) {
+	r.stateValue.FactoryStatePrevious = ""
+	if payload.PreviousState != nil {
+		r.stateValue.FactoryStatePrevious = string(*payload.PreviousState)
+	}
 	r.stateValue.FactoryState = string(payload.State)
 	r.stateValue.FactoryStateReason = stringValue(payload.Reason)
 }
@@ -367,33 +327,33 @@ func (r *factoryWorldReducer) state() interfaces.FactoryWorldState {
 	return r.stateValue
 }
 
-func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.Relation, context factoryapi.FactoryEventContext) interfaces.FactoryRelation {
-	requestItems := r.requestWorkItems(stringValue(context.RequestId))
-	targetWorkID := stringValue(relation.TargetWorkId)
+func (r *factoryWorldReducer) factoryRelationFromRequest(relation work.WorkRequestEventRelation, context interfaces.FactoryEventContext) work.FactoryRelation {
+	requestItems := r.requestWorkItems(stringValue(context.RequestID))
+	targetWorkID := relation.TargetWorkID
 	if targetWorkID == "" {
 		targetWorkID = workIDForRequestName(requestItems, relation.TargetWorkName)
 	}
 	sourceWorkID := workIDForRequestName(requestItems, relation.SourceWorkName)
 	if sourceWorkID == "" {
-		sourceWorkID = sourceWorkIDFromContext(context, targetWorkID)
+		sourceWorkID = sourceWorkIDFromCanonicalContext(context, targetWorkID)
 	}
-	return factoryRelationFromGenerated(
+	return factoryRelationFromRequest(
 		relation,
-		stringValue(context.RequestId),
-		firstString(context.TraceIds),
+		stringValue(context.RequestID),
+		firstString(context.TraceIDs),
 		sourceWorkID,
 		targetWorkID,
 	)
 }
 
-func (r *factoryWorldReducer) requestWorkItems(requestID string) []interfaces.FactoryWorkItem {
+func (r *factoryWorldReducer) requestWorkItems(requestID string) []work.FactoryWorkItem {
 	if requestID == "" {
 		return nil
 	}
 	return r.stateValue.WorkRequestsByID[requestID].WorkItems
 }
 
-func workIDForRequestName(items []interfaces.FactoryWorkItem, workName string) string {
+func workIDForRequestName(items []work.FactoryWorkItem, workName string) string {
 	if workName == "" {
 		return ""
 	}
@@ -405,8 +365,8 @@ func workIDForRequestName(items []interfaces.FactoryWorkItem, workName string) s
 	return ""
 }
 
-func sourceWorkIDFromContext(context factoryapi.FactoryEventContext, targetWorkID string) string {
-	for _, workID := range sliceValue(context.WorkIds) {
+func sourceWorkIDFromCanonicalContext(context interfaces.FactoryEventContext, targetWorkID string) string {
+	for _, workID := range sliceValue(context.WorkIDs) {
 		if workID != "" && workID != targetWorkID {
 			return workID
 		}
@@ -414,7 +374,7 @@ func sourceWorkIDFromContext(context factoryapi.FactoryEventContext, targetWorkI
 	return ""
 }
 
-func (r *factoryWorldReducer) addWorkToken(tokenID string, placeID string, item interfaces.FactoryWorkItem) {
+func (r *factoryWorldReducer) addWorkToken(tokenID string, placeID string, item work.FactoryWorkItem) {
 	if tokenID == "" || placeID == "" {
 		return
 	}
@@ -475,18 +435,20 @@ func (r *factoryWorldReducer) seedResourceTokens(resource interfaces.FactoryReso
 	}
 }
 
-func (r *factoryWorldReducer) consumeResourceUnits(resources *[]factoryapi.Resource) []interfaces.FactoryResourceUnit {
-	generated := resourceUnitsFromGenerated(resources)
-	if len(generated) == 0 {
+func (r *factoryWorldReducer) consumeResourceUnits(resources *[]interfaces.DispatchResourceRef) []interfaces.FactoryResourceUnit {
+	if resources == nil || len(*resources) == 0 {
 		return nil
 	}
-	consumed := make([]interfaces.FactoryResourceUnit, 0, len(generated))
-	for _, resource := range generated {
-		tokenID := r.firstAvailableResourceTokenID(resource.ResourceID)
+	consumed := make([]interfaces.FactoryResourceUnit, 0, len(*resources))
+	for _, resource := range *resources {
+		if resource.Name == "" {
+			continue
+		}
+		tokenID := r.firstAvailableResourceTokenID(resource.Name)
 		unit := interfaces.FactoryResourceUnit{
-			ResourceID: resource.ResourceID,
+			ResourceID: resource.Name,
 			TokenID:    tokenID,
-			PlaceID:    resourceAvailablePlaceID(resource.ResourceID),
+			PlaceID:    resourceAvailablePlaceID(resource.Name),
 		}
 		if tokenID != "" {
 			r.removeToken(tokenID)
@@ -496,10 +458,10 @@ func (r *factoryWorldReducer) consumeResourceUnits(resources *[]factoryapi.Resou
 	return consumed
 }
 
-func (r *factoryWorldReducer) releaseResourceUnits(consumed []interfaces.FactoryResourceUnit, resources *[]factoryapi.Resource) {
+func (r *factoryWorldReducer) releaseResourceUnits(consumed []interfaces.FactoryResourceUnit, resources *[]workerexecution.DispatchResourceEventRef) {
 	released := make([]bool, len(consumed))
-	for _, resource := range resourceUnitsFromGenerated(resources) {
-		index := firstConsumedResourceIndex(consumed, released, resource.ResourceID)
+	for _, resource := range sliceValue(resources) {
+		index := firstConsumedResourceIndex(consumed, released, resource.Name)
 		if index < 0 {
 			continue
 		}
@@ -558,7 +520,7 @@ type worldStateWorkerMetadata struct {
 }
 
 func resourceAvailablePlaceID(resourceID string) string {
-	return generatedPlaceID(resourceID, interfaces.ResourceStateAvailable)
+	return topologyPlaceID(resourceID, interfaces.ResourceStateAvailable)
 }
 
 func resourceTokenID(resourceID string, index int) string {
@@ -581,7 +543,7 @@ func (r *factoryWorldReducer) initialPlaceForWorkType(workTypeID string) string 
 	return fallback
 }
 
-func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome factoryapi.WorkOutcome, workTypeID string) string {
+func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome workerexecution.WorkOutcome, workTypeID string) string {
 	workstation, ok := r.topologyWorkstation(workstationID)
 	if !ok {
 		return ""
@@ -591,7 +553,7 @@ func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome f
 
 func (r *factoryWorldReducer) outputPlaceForOutcome(
 	workstation interfaces.FactoryWorkstation,
-	outcome factoryapi.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	workTypeID string,
 ) string {
 	routes, ok := routedOutputPlaces(workstation, outcome)
@@ -601,25 +563,25 @@ func (r *factoryWorldReducer) outputPlaceForOutcome(
 	if route := r.matchOutputRoute(routes, workTypeID); route != "" {
 		return route
 	}
-	if outcome == factoryapi.WorkOutcomeFailed {
+	if outcome == workerexecution.OutcomeFailed {
 		return r.failedPlaceForWorkType(workTypeID)
 	}
 	return ""
 }
 
-func routedOutputPlaces(workstation interfaces.FactoryWorkstation, outcome factoryapi.WorkOutcome) ([]string, bool) {
+func routedOutputPlaces(workstation interfaces.FactoryWorkstation, outcome workerexecution.WorkOutcome) ([]string, bool) {
 	switch outcome {
-	case factoryapi.WorkOutcomeContinue:
+	case workerexecution.OutcomeContinue:
 		if len(workstation.ContinuePlaceIDs) == 0 {
 			return nil, false
 		}
 		return workstation.ContinuePlaceIDs, true
-	case factoryapi.WorkOutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		if len(workstation.RejectionPlaceIDs) == 0 {
 			return nil, false
 		}
 		return workstation.RejectionPlaceIDs, true
-	case factoryapi.WorkOutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		if len(workstation.FailurePlaceIDs) > 0 {
 			return workstation.FailurePlaceIDs, true
 		}
@@ -681,14 +643,14 @@ func placeIDMatchesWorkType(placeID string, workTypeID string) bool {
 	return prefix == workTypeID
 }
 
-func (r *factoryWorldReducer) terminalWorkForCompletion(outcome factoryapi.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
+func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
 	for _, workID := range sortedStrings(workIDs) {
 		item, ok := r.stateValue.WorkItemsByID[workID]
 		if !ok || item.PlaceID == "" {
 			continue
 		}
 		category := r.placeCats[item.PlaceID]
-		if category == "TERMINAL" || category == "FAILED" || outcome == factoryapi.WorkOutcomeFailed {
+		if category == "TERMINAL" || category == "FAILED" || outcome == workerexecution.OutcomeFailed {
 			return &interfaces.FactoryTerminalWork{WorkItem: item, Status: category}
 		}
 	}
@@ -799,7 +761,7 @@ func removeString(values []string, target string) []string {
 	return out
 }
 
-func (r *factoryWorldReducer) addRelation(relation interfaces.FactoryRelation) {
+func (r *factoryWorldReducer) addRelation(relation work.FactoryRelation) {
 	if relation.SourceWorkID == "" || relation.TargetWorkID == "" {
 		return
 	}
@@ -836,20 +798,20 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func cloneWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
+func cloneWorkItems(input []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(input) == 0 {
 		return nil
 	}
-	out := make([]interfaces.FactoryWorkItem, len(input))
+	out := make([]work.FactoryWorkItem, len(input))
 	for i, item := range input {
 		out[i] = item
 		out[i].Tags = cloneStringMap(item.Tags)
-		out[i].Content = append([]interfaces.WorkContentPart(nil), item.Content...)
+		out[i].Content = append([]work.WorkContentPart(nil), item.Content...)
 	}
 	return out
 }
 
-func sortedWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
+func sortedWorkItems(input []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(input) == 0 {
 		return nil
 	}
@@ -903,7 +865,7 @@ func sortedStrings(values []string) []string {
 	return deduped
 }
 
-func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfaces.FactoryWorkItem) interfaces.FactoryWorkItem {
+func mergeFactoryWorkItem(existing work.FactoryWorkItem, incoming work.FactoryWorkItem) work.FactoryWorkItem {
 	if incoming.ID == "" {
 		incoming.ID = existing.ID
 	}
@@ -929,7 +891,7 @@ func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfac
 		incoming.PreviousChainingTraceIDs = append([]string(nil), existing.PreviousChainingTraceIDs...)
 	}
 	if incoming.Content == nil {
-		incoming.Content = append([]interfaces.WorkContentPart(nil), existing.Content...)
+		incoming.Content = append([]work.WorkContentPart(nil), existing.Content...)
 	}
 	if incoming.ParentID == "" {
 		incoming.ParentID = existing.ParentID
@@ -1012,33 +974,34 @@ func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryP
 	}
 	return interfaces.FactoryPlace{}, false
 }
-func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
-	if handled, err := r.applyOrchestratorProgressEvent(event); handled {
-		return true, err
-	}
+func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event interfaces.FactoryEvent) (bool, error) {
 	switch event.Type {
-	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten:
+		_, err := r.applyOrchestratorProgressEvent(event)
+		return true, err
+	case interfaces.FactoryEventTypeJavaScriptCheckpointRef:
 		return true, r.applyJavaScriptCheckpointRefEvent(event)
-	case factoryapi.FactoryEventTypeJavaScriptPhaseChange:
+	case interfaces.FactoryEventTypeJavaScriptPhaseChange:
 		return true, r.applyJavaScriptPhaseChangeEvent(event)
-	case factoryapi.FactoryEventTypeArtifactCreated:
+	case interfaces.FactoryEventTypeArtifactCreated:
 		return true, r.applyArtifactCreatedEvent(event)
 	default:
 		return false, nil
 	}
 }
 
-func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsJavaScriptCheckpointRefEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.JavaScriptCheckpointRefEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	checkpoint := interfaces.FactorySessionJavaScriptCheckpointRef{
-		ID: payload.CheckpointId,
+		ID: payload.CheckpointID,
 		ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{
-			ID:         payload.ArtifactRef.Id,
-			Kind:       string(payload.ArtifactRef.Kind),
-			Visibility: string(payload.ArtifactRef.Visibility),
+			ID:         payload.ArtifactRef.ID,
+			Kind:       payload.ArtifactRef.Kind,
+			Visibility: payload.ArtifactRef.Visibility,
 		},
 	}
 	if payload.ArtifactRef.ContentHash != nil {
@@ -1063,9 +1026,9 @@ func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event factoryapi
 	return nil
 }
 
-func (r *factoryWorldReducer) applyJavaScriptPhaseChangeEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsJavaScriptPhaseChangeEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyJavaScriptPhaseChangeEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.JavaScriptPhaseChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	runtime := r.ensureJavaScriptRuntime()
@@ -1081,9 +1044,9 @@ func (r *factoryWorldReducer) applyJavaScriptPhaseChangeEvent(event factoryapi.F
 	return nil
 }
 
-func (r *factoryWorldReducer) applyArtifactCreatedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsArtifactCreatedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyArtifactCreatedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.ArtifactCreatedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	artifact := projectArtifactCreatedPayload(payload)
@@ -1101,12 +1064,12 @@ func (r *factoryWorldReducer) ensureJavaScriptRuntime() *interfaces.FactorySessi
 	return r.stateValue.JavaScriptRuntime
 }
 
-func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayload) interfaces.FactorySessionArtifactState {
+func projectArtifactCreatedPayload(payload interfaces.ArtifactCreatedEventPayload) interfaces.FactorySessionArtifactState {
 	artifact := payload.Artifact
 	state := interfaces.FactorySessionArtifactState{
-		ID:         artifact.Id,
-		Kind:       string(artifact.Kind),
-		Visibility: string(artifact.Visibility),
+		ID:         artifact.ID,
+		Kind:       artifact.Kind,
+		Visibility: artifact.Visibility,
 	}
 	if artifact.Label != nil {
 		state.Label = *artifact.Label
@@ -1123,10 +1086,10 @@ func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayloa
 	if artifact.SizeBytes != nil {
 		state.SizeBytes = *artifact.SizeBytes
 	}
-	if counts := artifactRedactionCountsFromAPI(artifact.RedactionCounts); len(counts) > 0 {
+	if counts := artifactRedactionCountsFromDomain(artifact.RedactionCounts); len(counts) > 0 {
 		state.RedactionCounts = counts
 	}
-	if metadata := artifactCaptureMetadataFromAPI(artifact.CaptureMetadata); len(metadata) > 0 {
+	if metadata := artifactCaptureMetadataFromDomain(artifact.CaptureMetadata); len(metadata) > 0 {
 		state.CaptureMetadata = metadata
 	}
 	if payload.CapturedAt != nil {
@@ -1135,7 +1098,7 @@ func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayloa
 	return state
 }
 
-func artifactRedactionCountsFromAPI(counts *factoryapi.FactoryArtifactRedactionCounts) map[string]int {
+func artifactRedactionCountsFromDomain(counts *interfaces.FactoryArtifactRedactionCounts) map[string]int {
 	if counts == nil {
 		return nil
 	}
@@ -1152,7 +1115,7 @@ func artifactRedactionCountsFromAPI(counts *factoryapi.FactoryArtifactRedactionC
 	return redactions
 }
 
-func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureMetadata) map[string]string {
+func artifactCaptureMetadataFromDomain(metadata *interfaces.FactoryArtifactCaptureMetadata) map[string]string {
 	if metadata == nil {
 		return nil
 	}
@@ -1160,11 +1123,11 @@ func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureM
 	if metadata.CapturedAt != nil {
 		capture["capturedAt"] = metadata.CapturedAt.UTC().Format(time.RFC3339)
 	}
-	if metadata.SourceDispatchId != nil {
-		capture["sourceDispatchId"] = *metadata.SourceDispatchId
+	if metadata.SourceDispatchID != nil {
+		capture["sourceDispatchId"] = *metadata.SourceDispatchID
 	}
-	if metadata.MimeType != nil {
-		capture["mimeType"] = *metadata.MimeType
+	if metadata.MIMEType != nil {
+		capture["mimeType"] = *metadata.MIMEType
 	}
 	return capture
 }

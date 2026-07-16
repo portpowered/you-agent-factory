@@ -2,10 +2,13 @@ package engine
 
 import (
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // Option configures a FactoryEngine.
@@ -29,7 +32,7 @@ func WithClock(clock factory.Clock) Option {
 
 // WithDispatchHandler registers a callback invoked for each WorkDispatch produced
 // during a tick. The runtime uses this to forward dispatches to the WorkerPool.
-func WithDispatchHandler(fn func(interfaces.WorkDispatch)) Option {
+func WithDispatchHandler(fn func(work.WorkDispatch)) Option {
 	return func(e *FactoryEngine) {
 		e.dispatchHandler = fn
 	}
@@ -54,7 +57,7 @@ func WithTokenTransformer(transformer *token_transformer.Transformer) Option {
 
 // WithResultBuffer sets the runtime-owned work result buffer used to collect
 // worker completions before transition processing.
-func WithResultBuffer(buffer *buffers.TypedBuffer[interfaces.WorkResult]) Option {
+func WithResultBuffer(buffer *buffers.TypedBuffer[workerexecution.WorkResult]) Option {
 	return func(e *FactoryEngine) {
 		if buffer != nil {
 			e.runtimeState.ResultBuffer = buffer
@@ -74,7 +77,7 @@ func WithSubmissionHook(hook factory.SubmissionHook) Option {
 
 // WithSubmissionRecorder registers a callback invoked after a submission hook
 // returns work and before the engine injects that work into the marking.
-func WithSubmissionRecorder(fn func(interfaces.FactorySubmissionRecord)) Option {
+func WithSubmissionRecorder(fn func(work.FactorySubmissionRecord)) Option {
 	return func(e *FactoryEngine) {
 		e.recordSubmission = fn
 	}
@@ -82,7 +85,7 @@ func WithSubmissionRecorder(fn func(interfaces.FactorySubmissionRecord)) Option 
 
 // WithWorkRequestRecorder registers a callback invoked once for each request
 // batch observed before its work items are injected into the marking.
-func WithWorkRequestRecorder(fn func(int, interfaces.WorkRequestRecord)) Option {
+func WithWorkRequestRecorder(fn func(int, work.WorkRequestRecord)) Option {
 	return func(e *FactoryEngine) {
 		e.recordWorkRequest = fn
 	}
@@ -90,7 +93,7 @@ func WithWorkRequestRecorder(fn func(int, interfaces.WorkRequestRecord)) Option 
 
 // WithWorkInputRecorder registers a callback invoked after a submit request is
 // converted to a runtime token and injected into the marking.
-func WithWorkInputRecorder(fn func(int, interfaces.SubmitRequest, interfaces.Token)) Option {
+func WithWorkInputRecorder(fn func(int, work.SubmitRequest, factorytoken.Token)) Option {
 	return func(e *FactoryEngine) {
 		e.recordWorkInput = fn
 	}
@@ -114,7 +117,7 @@ func WithCompletionRecorder(fn func(interfaces.FactoryCompletionRecord)) Option 
 
 // WithWorkstationResponseRecorder registers a callback invoked after a worker
 // result has been routed and a completed dispatch summary is available.
-func WithWorkstationResponseRecorder(fn func(int, interfaces.WorkResult, interfaces.CompletedDispatch)) Option {
+func WithWorkstationResponseRecorder(fn func(int, workerexecution.WorkResult, interfaces.CompletedDispatch)) Option {
 	return func(e *FactoryEngine) {
 		e.recordResponse = fn
 	}

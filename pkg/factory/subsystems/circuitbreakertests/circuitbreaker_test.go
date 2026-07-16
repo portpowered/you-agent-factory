@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 // helper to build a minimal net with one work type having states: init, processing, complete, failed.
@@ -39,14 +40,14 @@ func buildTestNet() *state.Net {
 	}
 }
 
-func makeToken(id, placeID string, createdAt time.Time) *interfaces.Token {
-	return &interfaces.Token{
+func makeToken(id, placeID string, createdAt time.Time) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:        id,
 		PlaceID:   placeID,
-		Color:     interfaces.TokenColor{WorkID: id, WorkTypeID: "task"},
+		Color:     factorytoken.Color{WorkID: id, WorkTypeID: "task"},
 		CreatedAt: createdAt,
 		EnteredAt: createdAt,
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         make(map[string]int),
 			ConsecutiveFailures: make(map[string]int),
 			PlaceVisits:         make(map[string]int),
@@ -540,16 +541,16 @@ func buildTimeExpiryNet() *state.Net {
 	}
 }
 
-func makeCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *interfaces.Token {
-	return &interfaces.Token{
+func makeCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:        id,
 		PlaceID:   interfaces.SystemTimePendingPlaceID,
 		CreatedAt: dueAt,
 		EnteredAt: dueAt,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     id,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
 				interfaces.TimeWorkTagKeyCronWorkstation: workstation,

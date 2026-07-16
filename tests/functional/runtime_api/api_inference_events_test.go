@@ -7,13 +7,17 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,7 +25,7 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	support.SkipLongFunctional(t, "slow inference-event artifact sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordPath := filepath.Join(t.TempDir(), "inference-events.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-inference-events",
 		WorkTypeID: "task",
 		TraceID:    "trace-inference-events",
@@ -29,8 +33,8 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -46,13 +50,13 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	}
 	assertFirstInferenceAttemptOrder(t, events)
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertInferenceEventsRecordedInArtifact(t, events, artifact.Events)
+	assertInferenceEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 }
 
 func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 	support.SkipLongFunctional(t, "slow inference-event script-worker sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-script-no-inference",
 		WorkTypeID: "task",
 		TraceID:    "trace-script-no-inference",
@@ -83,15 +87,15 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 	support.SkipLongFunctional(t, "slow inference-event stream-projection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{
+		[]workerexecution.InferenceResponse{
 			{},
 			{},
 			{Content: "Step one recovered. COMPLETE"},
 			{Content: "Step two done. COMPLETE"},
 		},
 		[]error{
-			workers.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
-			workers.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
+			workers.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
+			workers.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
 			nil,
 			nil,
 		},
@@ -547,20 +551,20 @@ type DashboardThrottlePause struct {
 }
 
 type InferenceAttempt struct {
-	Attempt            int                       `json:"attempt"`
-	DispatchId         string                    `json:"dispatch_id"`
-	DurationMillis     int64                     `json:"duration_millis,omitempty"`
-	FailureDetail      *interfaces.FailureDetail `json:"failureDetail,omitempty"`
-	ExitCode           *int                      `json:"exit_code,omitempty"`
-	InferenceRequestId string                    `json:"inference_request_id"`
-	Outcome            string                    `json:"outcome,omitempty"`
-	Prompt             string                    `json:"prompt"`
-	RequestTime        string                    `json:"request_time"`
-	Response           string                    `json:"response,omitempty"`
-	ResponseTime       string                    `json:"response_time,omitempty"`
-	TransitionId       string                    `json:"transition_id"`
-	WorkingDirectory   string                    `json:"working_directory,omitempty"`
-	Worktree           string                    `json:"worktree,omitempty"`
+	Attempt            int                            `json:"attempt"`
+	DispatchId         string                         `json:"dispatch_id"`
+	DurationMillis     int64                          `json:"duration_millis,omitempty"`
+	FailureDetail      *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
+	ExitCode           *int                           `json:"exit_code,omitempty"`
+	InferenceRequestId string                         `json:"inference_request_id"`
+	Outcome            string                         `json:"outcome,omitempty"`
+	Prompt             string                         `json:"prompt"`
+	RequestTime        string                         `json:"request_time"`
+	Response           string                         `json:"response,omitempty"`
+	ResponseTime       string                         `json:"response_time,omitempty"`
+	TransitionId       string                         `json:"transition_id"`
+	WorkingDirectory   string                         `json:"working_directory,omitempty"`
+	Worktree           string                         `json:"worktree,omitempty"`
 }
 
 type DashboardSessionRuntime struct {
@@ -588,7 +592,7 @@ func (fs *functionalAPIServer) GetDashboard(t *testing.T) DashboardResponse {
 
 	snapshot := fs.GetEngineStateSnapshot(t)
 	events := fs.GetFactoryEvents(t)
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)
 	}
@@ -655,7 +659,7 @@ func dashboardInferenceAttemptsByDispatchID(input map[string]map[string]interfac
 				Attempt:            attempt.Attempt,
 				DispatchId:         attempt.DispatchID,
 				DurationMillis:     attempt.DurationMillis,
-				FailureDetail:      interfaces.CloneFailureDetail(attempt.FailureDetail),
+				FailureDetail:      workerexecution.CloneFailureDetail(attempt.FailureDetail),
 				ExitCode:           copyIntPointer(attempt.ExitCode),
 				InferenceRequestId: attempt.InferenceRequestID,
 				Outcome:            attempt.Outcome,

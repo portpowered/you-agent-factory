@@ -1,13 +1,14 @@
 package requests
 
 import (
+	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.T) {
-	record := WorkRequestRecordFromSubmitRequests("request-record", "api", []interfaces.SubmitRequest{{
+	record := WorkRequestRecordFromSubmitRequests("request-record", "api", []work.SubmitRequest{{
 		WorkID:      "work-1",
 		WorkTypeID:  "task",
 		Name:        "draft",
@@ -30,7 +31,7 @@ func TestWorkRequestRecordFromSubmitRequests_UsesSharedTraceFallback(t *testing.
 }
 
 func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testing.T) {
-	requests := []interfaces.SubmitRequest{
+	requests := []work.SubmitRequest{
 		{
 			RequestID:                "request-shared",
 			WorkID:                   "work-1",
@@ -43,7 +44,8 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 			Tags:                     map[string]string{"scope": "alpha"},
 			TargetState:              "queued",
 			ExecutionID:              "exec-1",
-			Relations:                []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
+			Relations:                []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
+			InvocationArguments:      &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{"input": {Values: []string{"first"}}}},
 		},
 		{
 			RequestID:   "request-shared",
@@ -65,14 +67,18 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	requests[0].Payload[0] = 'X'
 	requests[0].Tags["scope"] = "mutated"
 	requests[0].Relations[0].TargetWorkID = "mutated"
+	requests[0].InvocationArguments.Arguments["input"] = work.InvocationArgument{Values: []string{"mutated"}}
 	assertCanonicalFirstWorkClones(t, workRequest.Works[0])
+	if got := workRequest.Works[0].InvocationArguments.Arguments["input"].Values; !reflect.DeepEqual(got, []string{"first"}) {
+		t.Fatalf("invocation arguments = %#v, want detached input argument", got)
+	}
 }
 
-func assertCanonicalBatchEnvelope(t *testing.T, workRequest interfaces.WorkRequest) {
+func assertCanonicalBatchEnvelope(t *testing.T, workRequest work.WorkRequest) {
 	t.Helper()
 
-	if workRequest.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("work request type = %q, want %q", workRequest.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if workRequest.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("work request type = %q, want %q", workRequest.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if workRequest.RequestID != "request-shared" {
 		t.Fatalf("work request ID = %q, want request-shared", workRequest.RequestID)
@@ -85,7 +91,7 @@ func assertCanonicalBatchEnvelope(t *testing.T, workRequest interfaces.WorkReque
 	}
 }
 
-func assertCanonicalFirstWork(t *testing.T, first interfaces.Work) {
+func assertCanonicalFirstWork(t *testing.T, first work.Work) {
 	t.Helper()
 
 	if first.Name != "draft" {
@@ -111,7 +117,7 @@ func assertCanonicalFirstWork(t *testing.T, first interfaces.Work) {
 	}
 }
 
-func assertCanonicalSecondWork(t *testing.T, second interfaces.Work) {
+func assertCanonicalSecondWork(t *testing.T, second work.Work) {
 	t.Helper()
 
 	if second.Name != "draft-2" {
@@ -125,7 +131,7 @@ func assertCanonicalSecondWork(t *testing.T, second interfaces.Work) {
 	}
 }
 
-func assertCanonicalFirstWorkClones(t *testing.T, first interfaces.Work) {
+func assertCanonicalFirstWorkClones(t *testing.T, first work.Work) {
 	t.Helper()
 
 	if string(first.Payload.([]byte)) != `{"title":"first"}` {
@@ -140,7 +146,7 @@ func assertCanonicalFirstWorkClones(t *testing.T, first interfaces.Work) {
 }
 
 func TestWorkRequestFromSubmitRequests_LegacyTraceFallbackAndRequestIDInheritance(t *testing.T) {
-	requests := []interfaces.SubmitRequest{
+	requests := []work.SubmitRequest{
 		{
 			RequestID:  "request-shared",
 			WorkID:     "work-1",
@@ -186,8 +192,8 @@ func TestWorkRequestFromSubmitRequests_LegacyTraceFallbackAndRequestIDInheritanc
 
 func TestWorkRequestFromSubmitRequests_EmptyBatchReturnsCanonicalEnvelope(t *testing.T) {
 	workRequest := WorkRequestFromSubmitRequests(nil)
-	if workRequest.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("work request type = %q, want %q", workRequest.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if workRequest.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("work request type = %q, want %q", workRequest.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if workRequest.RequestID != "" {
 		t.Fatalf("work request ID = %q, want empty", workRequest.RequestID)
@@ -198,14 +204,14 @@ func TestWorkRequestFromSubmitRequests_EmptyBatchReturnsCanonicalEnvelope(t *tes
 }
 
 func TestWorkRequestFromSubmitRequests_EmptyMutableInputsNormalizeToNil(t *testing.T) {
-	workRequest := WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	workRequest := WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		RequestID:  "request-shared",
 		WorkID:     "work-1",
 		Name:       "draft",
 		WorkTypeID: "task",
 		Payload:    []byte{},
 		Tags:       map[string]string{},
-		Relations:  []interfaces.Relation{},
+		Relations:  []work.Relation{},
 	}})
 
 	if len(workRequest.Works) != 1 {

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // Hermetic S02 failure-baseline fixtures for invalid @you/goal factory topology

@@ -6,16 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestExecutorReviewStateReconcile_ReviewCompletionCollapsesDuplicateReviewInit(t *testing.T) {
 	dir := scaffoldExecutorReviewReconcileFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,
@@ -129,7 +131,7 @@ func submitExecutorReviewDuplicateAndStalePattern(
 	// Submit each work item in its own batch so shared lane names are not
 	// uniquified by WorkRequestFromSubmitRequests (duplicate review residue
 	// keeps the same Color.Name as the active task/review dispatch).
-	requests := []interfaces.SubmitRequest{
+	requests := []work.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "task",
@@ -176,7 +178,7 @@ func submitExecutorReviewDuplicateAndStalePattern(
 		},
 	}
 	for _, req := range requests {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 }
 

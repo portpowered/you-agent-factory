@@ -3,7 +3,7 @@ package responsestream
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // EventKind identifies internal session response-stream record semantics.
@@ -135,7 +135,7 @@ type Event struct {
 
 	// ProviderSessionRef correlates one stream record with a Provider Session
 	// identity without promoting the record into canonical factory history.
-	ProviderSessionRef *interfaces.ProviderSessionMetadata
+	ProviderSessionRef *workerexecution.ProviderSessionMetadata
 
 	// Payload carries the transient progress or response fragment body.
 	Payload string

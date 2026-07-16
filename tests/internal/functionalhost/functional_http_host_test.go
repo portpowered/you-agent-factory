@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestFunctionalHTTPHost_ExposesReadyStatusAndBoundedShutdown(t *testing.T) {

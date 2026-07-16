@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
-	wantNames := []string{"@you/deep-research", "@you/fusion", "@you/goal", "@you/subagent", "@you/tts"}
+	wantNames := []string{"@you/deep-research", "@you/fusion", "@you/goal", "@you/quorum", "@you/subagent", "@you/tts"}
 	if got := factorypackages.Names(); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("Names() = %v, want %v", got, wantNames)
 	}

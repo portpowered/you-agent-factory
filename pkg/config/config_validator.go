@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // Severity classifies the importance of a validation finding.
@@ -111,9 +113,9 @@ type ConfigValidatorOption func(*ConfigValidator)
 
 // ConfigValidator runs all registered validation rules against a factory config.
 type ConfigValidator struct {
-	requiredToolChecker              RequiredToolChecker
-	requireDefaultHandlingWorkType   bool
-	rules                            []validationRule
+	requiredToolChecker            RequiredToolChecker
+	requireDefaultHandlingWorkType bool
+	rules                          []validationRule
 }
 
 // NewConfigValidator creates a ConfigValidator with all built-in validation rules.
@@ -283,9 +285,9 @@ func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
 		}
 
 		switch strings.TrimSpace(resource.Type) {
-		case "", interfaces.ResourceTypeInvocationSlot:
+		case "", factoryresource.TypeInvocationSlot:
 			continue
-		case interfaces.ResourceTypeModel:
+		case factoryresource.TypeModel:
 			if strings.TrimSpace(resource.Model) == "" {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
@@ -310,7 +312,7 @@ func ruleResourceDefinitions(cfg *interfaces.FactoryConfig) []Finding {
 					Rule:     "resource-model-load-policy",
 				})
 			}
-		case interfaces.ResourceTypeProviderQuota:
+		case factoryresource.TypeProviderQuota:
 			if strings.TrimSpace(resource.Provider) == "" {
 				findings = append(findings, Finding{
 					Severity: SeverityError,
@@ -755,7 +757,7 @@ func ruleWorkerModelOperations(cfg *interfaces.FactoryConfig) []Finding {
 	return findings
 }
 
-func validateModelOperationSlots(slots []interfaces.ModelOperationSlot, path string, direction string) []Finding {
+func validateModelOperationSlots(slots []workerconfig.ModelOperationSlot, path string, direction string) []Finding {
 	if len(slots) == 0 {
 		return nil
 	}
@@ -799,7 +801,7 @@ func ruleModelInvokeWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 		return nil
 	}
 
-	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
+	workersByName := make(map[string]workerconfig.Config, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		workersByName[worker.Name] = worker
 	}
@@ -812,7 +814,7 @@ func ruleModelInvokeWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 	return findings
 }
 
-func validateModelInvokeWorkstation(workstation interfaces.FactoryWorkstationConfig, workstationIndex int, workersByName map[string]interfaces.WorkerConfig) []Finding {
+func validateModelInvokeWorkstation(workstation interfaces.FactoryWorkstationConfig, workstationIndex int, workersByName map[string]workerconfig.Config) []Finding {
 	basePath := fmt.Sprintf("workstations[%d](%s)", workstationIndex, workstation.Name)
 	operationName := strings.TrimSpace(workstation.Operation)
 	if !interfaces.IsInferenceRunWorkstationType(workstation.Type) {
@@ -870,12 +872,12 @@ func requiredInferenceRunWorkstationFindings(workstation interfaces.FactoryWorks
 	return findings
 }
 
-func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, worker interfaces.WorkerConfig, basePath string, operationName string) ([]Finding, interfaces.ModelOperation, bool) {
+func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, worker workerconfig.Config, basePath string, operationName string) ([]Finding, workerconfig.ModelOperation, bool) {
 	if strings.TrimSpace(worker.Type) != "" && !interfaces.IsInferenceWorkerType(worker.Type) {
-		return nil, interfaces.ModelOperation{}, false
+		return nil, workerconfig.ModelOperation{}, false
 	}
 	if operationName == "" {
-		return nil, interfaces.ModelOperation{}, false
+		return nil, workerconfig.ModelOperation{}, false
 	}
 
 	operation, found := findWorkerOperation(worker.Operations, operationName)
@@ -885,7 +887,7 @@ func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, 
 			Path:     basePath + ".operation",
 			Message:  fmt.Sprintf("worker %q does not declare requested operation %q", workstation.WorkerTypeName, operationName),
 			Rule:     "workstation-model-invoke-operation-mismatch",
-		}}, interfaces.ModelOperation{}, false
+		}}, workerconfig.ModelOperation{}, false
 	}
 	if len(operation.Inputs) == 0 || len(operation.Outputs) == 0 {
 		return []Finding{{
@@ -893,22 +895,22 @@ func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, 
 			Path:     basePath + ".operation",
 			Message:  fmt.Sprintf("worker %q operation %q has an incompatible content contract; inference-run workstations require at least one input slot and one output slot", workstation.WorkerTypeName, operationName),
 			Rule:     "workstation-model-invoke-content-contract",
-		}}, interfaces.ModelOperation{}, false
+		}}, workerconfig.ModelOperation{}, false
 	}
 
 	return nil, operation, true
 }
 
-func findWorkerOperation(operations []interfaces.ModelOperation, name string) (interfaces.ModelOperation, bool) {
+func findWorkerOperation(operations []workerconfig.ModelOperation, name string) (workerconfig.ModelOperation, bool) {
 	for _, operation := range operations {
 		if strings.TrimSpace(operation.Name) == name {
 			return operation, true
 		}
 	}
-	return interfaces.ModelOperation{}, false
+	return workerconfig.ModelOperation{}, false
 }
 
-func validateModelOperationBindings(bindings []interfaces.ModelOperationBinding, inputs []interfaces.ModelOperationSlot, path string) []Finding {
+func validateModelOperationBindings(bindings []interfaces.ModelOperationBinding, inputs []workerconfig.ModelOperationSlot, path string) []Finding {
 	if len(bindings) == 0 {
 		return nil
 	}

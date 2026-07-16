@@ -9,17 +9,22 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
+
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
@@ -38,13 +43,10 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 		},
 	})
 
-	mode := factoryapi.AUDIOSTREAM
-	result, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	result, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
-		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
+		Options:   &modelinference.Options{ResponseMode: modelinference.ResponseModeAudioStream},
 	})
 	if err != nil {
 		t.Fatalf("InvokeModel: %v", err)
@@ -55,7 +57,7 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	if len(result.Bindings) != 1 || result.Bindings[0].Slot != "text" {
 		t.Fatalf("bindings = %#v, want one text binding", result.Bindings)
 	}
-	if len(result.Content) != 1 || result.Content[0].Type != interfaces.WorkContentPartTypeAudio ||
+	if len(result.Content) != 1 || result.Content[0].Type != work.WorkContentPartTypeAudio ||
 		result.StreamFile != audioPath || result.StreamContentType != "audio/wav" {
 		t.Fatalf("result content = %#v stream=%q type=%q, want audio output", result.Content, result.StreamFile, result.StreamContentType)
 	}
@@ -69,7 +71,7 @@ func TestService_InvokeModel_ReturnsNotFoundWhenModelDoesNotExist(t *testing.T) 
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "MISSING", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	_, err := svc.InvokeModel(context.Background(), "MISSING", modelinference.Request{Operation: "TTS"})
 	if err == nil || !errors.Is(err, apisurface.ErrModelNotFound) {
 		t.Fatalf("InvokeModel error = %v, want ErrModelNotFound", err)
 	}
@@ -84,11 +86,9 @@ func TestService_InvokeModel_ReturnsManagedRuntimeMissingWhenCacheNotReady(t *te
 		ModelHost:     missingCacheInspectHost{},
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	})
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
@@ -129,11 +129,9 @@ func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
 		Logger:        logger,
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	})
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
@@ -181,11 +179,11 @@ func TestService_InvokeModel_PropagatesCancellationAndDeadlines(t *testing.T) {
 				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 				ModelHost:     readyInvokeHost{},
 				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
-					return invocationExecutorFunc(func(got context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+					return invocationExecutorFunc(func(got context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 						if got != ctx {
 							t.Fatal("executor received a different context")
 						}
-						return interfaces.WorkResult{}, got.Err()
+						return workerexecution.WorkResult{}, got.Err()
 					}), nil
 				},
 			})
@@ -208,26 +206,26 @@ func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testin
 	}{
 		{
 			name: "provider timeout",
-			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{}, workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", context.DeadlineExceeded)
+			execute: func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{}, workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timed out", context.DeadlineExceeded)
 			},
 			wantClass: apisurface.InferenceFailureClassTimeout,
 		},
 		{
 			name: "provider failure",
-			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{}, workerprovider.NewProviderError(interfaces.WorkFailureTypeUnknown, "provider failed", errors.New("provider failure"))
+			execute: func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{}, workerprovider.NewProviderError(workerexecution.WorkFailureTypeUnknown, "provider failed", errors.New("provider failure"))
 			},
 			wantClass: apisurface.InferenceFailureClassRuntimeFailure,
 		},
 		{
 			name: "failed work result",
-			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{
-					Outcome: interfaces.OutcomeFailed,
+			execute: func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{
+					Outcome: workerexecution.OutcomeFailed,
 					Error:   "provider timed out",
-					FailureMetadata: &interfaces.WorkFailureMetadata{
-						Type: interfaces.WorkFailureTypeTimeout,
+					FailureMetadata: &workerexecution.WorkFailureMetadata{
+						Type: workerexecution.WorkFailureTypeTimeout,
 					},
 				}, nil
 			},
@@ -246,7 +244,10 @@ func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testin
 			})
 
 			_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", directInvokeRequest(t))
-			failure, ok := apisurface.AsInferenceFailure(err)
+			failure, ok := apisurface.ClassifyInferenceFailure(err, apisurface.InferenceFailureContext{
+				ModelName: "OMNIVOICE_Q4_K_M",
+				Operation: "TTS",
+			})
 			if !ok || failure.Class != tt.wantClass {
 				t.Fatalf("InvokeModel error = %v, want %s InferenceFailure", err, tt.wantClass)
 			}
@@ -258,7 +259,6 @@ func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	mode := factoryapi.AUDIOSTREAM
 	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     readyInvokeHost{},
@@ -270,12 +270,10 @@ func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(
 		},
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
-		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
+		Options:   &modelinference.Options{ResponseMode: modelinference.ResponseModeAudioStream},
 	})
 	if err == nil || !errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode) {
 		t.Fatalf("InvokeModel error = %v, want unsupported audio stream mode", err)
@@ -300,11 +298,9 @@ func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
 		},
 	})
 
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	})
 	if err != nil {
 		t.Fatalf("InvokeModel: %v", err)
@@ -317,14 +313,14 @@ func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
 type readyInvokeHost struct{}
 
 func (readyInvokeHost) ResolveIdentity(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.Identity, error) {
-	return modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal}, nil
+	return modelhost.Identity{Name: modelName, Locality: managedruntime.LocalityLocal}, nil
 }
 
 func (readyInvokeHost) InspectReadiness(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.ReadinessSnapshot, error) {
 	return modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+		Identity:       modelhost.Identity{Name: modelName, Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateInstalled,
 	}, nil
 }
 
@@ -349,18 +345,18 @@ type stubInvocationExecutor struct {
 	output     string
 }
 
-type invocationExecutorFunc func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error)
+type invocationExecutorFunc func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error)
 
-func (f invocationExecutorFunc) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (f invocationExecutorFunc) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	return f(ctx, request)
 }
 
-func (s stubInvocationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (s stubInvocationExecutor) Execute(_ context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	if request.WorkerType != s.workerName {
-		return interfaces.WorkResult{}, errors.New("unexpected worker")
+		return workerexecution.WorkResult{}, errors.New("unexpected worker")
 	}
-	return interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+	return workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  s.output,
 	}, nil
 }
@@ -371,44 +367,33 @@ type capturingInvocationExecutor struct {
 	output           string
 }
 
-func (s capturingInvocationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (s capturingInvocationExecutor) Execute(_ context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	if request.WorkerType != s.workerName {
-		return interfaces.WorkResult{}, errors.New("unexpected worker")
+		return workerexecution.WorkResult{}, errors.New("unexpected worker")
 	}
 	*s.capturedRunnerID = request.RunnerID
-	return interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+	return workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  s.output,
 	}, nil
 }
 
-func mustGeneratedInvokeTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
-	t.Helper()
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeTextUpper,
-		Text: text,
-		Slot: stringPtr("text"),
-	}); err != nil {
-		t.Fatalf("build text content part: %v", err)
-	}
-	return part
+func invokeTextPart(text string) work.WorkContentPart {
+	return work.WorkContentPart{Type: work.WorkContentPartTypeText, Text: text, Slot: "text"}
 }
 
-func directInvokeRequest(t *testing.T) factoryapi.ModelInvocationRequest {
+func directInvokeRequest(t *testing.T) modelinference.Request {
 	t.Helper()
-	return factoryapi.ModelInvocationRequest{
+	return modelinference.Request{
 		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
+		Content:   []work.WorkContentPart{invokeTextPart("hello world")},
 	}
 }
 
 func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 	t.Helper()
-	body, err := json.Marshal([]interfaces.WorkContentPart{{
-		Type:        interfaces.WorkContentPartTypeAudio,
+	body, err := json.Marshal([]work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
 		File:        audioPath,
 		ContentType: "audio/wav",
 	}})
@@ -416,8 +401,4 @@ func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 		t.Fatalf("marshal audio content: %v", err)
 	}
 	return string(body)
-}
-
-func stringPtr(value string) *string {
-	return &value
 }

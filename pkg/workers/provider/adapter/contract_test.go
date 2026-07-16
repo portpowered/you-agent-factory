@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -19,7 +21,7 @@ type recordingAdapter struct {
 func (a *recordingAdapter) Identity() adapter.Identity { return a.identity }
 
 func (a *recordingAdapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
-	return adapter.CommandBuildResult{Request: interfaces.SubprocessExecutionRequest{
+	return adapter.CommandBuildResult{Request: workerexecution.SubprocessExecutionRequest{
 		Command:    "fake-provider",
 		Args:       []string{"run", input.Request.Model},
 		Stdin:      []byte(input.Request.UserMessage),
@@ -33,7 +35,7 @@ func (a *recordingAdapter) NewDecoder(_ context.Context, _ adapter.DecoderContex
 }
 
 func (a *recordingAdapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
-	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{Content: string(input.CommandResult.Stdout)}}, nil
+	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{Content: string(input.CommandResult.Stdout)}}, nil
 }
 
 func (a *recordingAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
@@ -49,8 +51,8 @@ func (a *recordingAdapter) ClassifyFailure(_ context.Context, input adapter.Fail
 		return adapter.FailureResult{}
 	}
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family:  interfaces.WorkFailureFamilyRetryable,
-		Type:    interfaces.WorkFailureTypeInternalServerError,
+		Family:  workerexecution.WorkFailureFamilyRetryable,
+		Type:    workerexecution.WorkFailureTypeInternalServerError,
 		Message: "provider failed",
 		Retry:   adapter.RetryGuidance{Retryable: true},
 	}}
@@ -87,8 +89,8 @@ func TestAdapterContract_BuildsCommandWithoutExecutingIt(t *testing.T) {
 
 	ctx := context.Background()
 	fake := &recordingAdapter{identity: "fake"}
-	command, err := fake.BuildCommand(ctx, adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-1"},
+	command, err := fake.BuildCommand(ctx, adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
 		Model:    "model-1", UserMessage: "private prompt",
 	}})
 	if err != nil {

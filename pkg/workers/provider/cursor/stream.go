@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -26,7 +26,7 @@ const (
 type StreamFragment struct {
 	Kind            StreamFragmentKind
 	Payload         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 type StreamParser struct {
@@ -162,18 +162,18 @@ func (p *StreamParser) consumeResultEvent(event map[string]any) {
 	p.emit(StreamFragmentKindProgress, streamResultDiagnostic(subtype, resultText), session)
 }
 
-func (p *StreamParser) emit(kind StreamFragmentKind, payload string, session *interfaces.ProviderSessionMetadata) {
+func (p *StreamParser) emit(kind StreamFragmentKind, payload string, session *workerexecution.ProviderSessionMetadata) {
 	if p == nil || p.observer == nil || strings.TrimSpace(payload) == "" {
 		return
 	}
 	p.observer(StreamFragment{
 		Kind:            kind,
 		Payload:         payload,
-		ProviderSession: interfaces.CloneProviderSessionMetadata(session),
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(session),
 	})
 }
 
-func (p *StreamParser) emitResponse(payload string, session *interfaces.ProviderSessionMetadata) {
+func (p *StreamParser) emitResponse(payload string, session *workerexecution.ProviderSessionMetadata) {
 	if p == nil || strings.TrimSpace(payload) == "" {
 		return
 	}
@@ -181,7 +181,7 @@ func (p *StreamParser) emitResponse(payload string, session *interfaces.Provider
 	p.emittedResponse += payload
 }
 
-func (p *StreamParser) emitResultResponse(resultText string, session *interfaces.ProviderSessionMetadata) {
+func (p *StreamParser) emitResultResponse(resultText string, session *workerexecution.ProviderSessionMetadata) {
 	if strings.TrimSpace(resultText) == "" {
 		p.emit(StreamFragmentKindProgress, "Cursor result completed", session)
 		return
@@ -249,7 +249,7 @@ func splitNonEmptyLines(stdout []byte) []string {
 	return lines
 }
 
-func streamProviderSession(provider string, event map[string]any) *interfaces.ProviderSessionMetadata {
+func streamProviderSession(provider string, event map[string]any) *workerexecution.ProviderSessionMetadata {
 	return canonicalProviderSession(provider, rawStringField(event, "session_id"))
 }
 

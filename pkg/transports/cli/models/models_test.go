@@ -15,10 +15,10 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -105,8 +105,8 @@ func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
 			Worker:           "tts-worker",
 			Operation:        request.Operation,
 			ProviderLocality: string(factoryapi.WorkerModelLocalityLocal),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeAudio,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeAudio,
 				File: "artifacts/output.wav",
 			}},
 		}, nil
@@ -421,8 +421,8 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 			ModelName: modelName,
 			Worker:    "tts-worker",
 			Operation: request.Operation,
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeAudio,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeAudio,
 				File: "artifacts/sensitive-generated-output.wav",
 			}},
 		}, nil

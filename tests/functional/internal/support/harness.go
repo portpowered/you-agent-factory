@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // NewGuardsBatchHarness builds a service-mode harness for guards_batch tests
@@ -92,7 +93,7 @@ type TokenIdentitySet struct {
 }
 
 func DeriveTokenIdentities(
-	consumedTokens []interfaces.Token,
+	consumedTokens []factorytoken.Token,
 	outputMutations []interfaces.TokenMutationRecord,
 ) TokenIdentitySet {
 	var identities TokenIdentitySet
@@ -109,8 +110,8 @@ func DeriveTokenIdentities(
 	return identities
 }
 
-func addWorkTokenIdentity(identities *TokenIdentitySet, token interfaces.Token) {
-	if token.Color.DataType == interfaces.DataTypeResource {
+func addWorkTokenIdentity(identities *TokenIdentitySet, token factorytoken.Token) {
+	if token.Color.DataType == factorytoken.DataTypeResource {
 		return
 	}
 	if token.Color.WorkID != "" {

@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.T) {
@@ -252,13 +253,13 @@ func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *
 }
 
 func TestGetFactorySessionEvents_LivePetriSessionRemainsCompatible(t *testing.T) {
-	closed := make(chan factoryapi.FactoryEvent)
+	closed := make(chan interfaces.FactoryEvent)
 	close(closed)
 	srv := newAPITestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"session-beta": {
 				FactoryEventStream: &interfaces.FactoryEventStream{
-					History: []factoryapi.FactoryEvent{{Id: "event-1", Type: factoryapi.FactoryEventTypeWorkRequest}},
+					History: []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-1", Type: factoryapi.FactoryEventTypeWorkRequest})},
 					Events:  closed,
 				},
 			},
@@ -394,7 +395,7 @@ type apiLiveProviderBlockingFixtureProvider struct {
 	release      chan struct{}
 }
 
-func (p *apiLiveProviderBlockingFixtureProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *apiLiveProviderBlockingFixtureProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	if p.inferStarted == nil {
 		p.inferStarted = make(chan struct{})
@@ -409,11 +410,11 @@ func (p *apiLiveProviderBlockingFixtureProvider) Infer(ctx context.Context, _ in
 	close(started)
 	select {
 	case <-ctx.Done():
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	case <-release:
-		return interfaces.InferenceResponse{
+		return workerexecution.InferenceResponse{
 			Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -697,7 +698,7 @@ func assertAPILiveProviderDispatchFailureDetail(
 		t.Fatalf("failureDetail = %#v, want typed provider failure", failure)
 	}
 	if failure.Reason != factoryapi.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("failure reason = %q, want %q", failure.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+		t.Fatalf("failure reason = %q, want %q", failure.Reason, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	if failure.Message != "Provider rejected the request as invalid." {
 		t.Fatalf("failure message = %#v, want sanitized provider failure", failure.Message)

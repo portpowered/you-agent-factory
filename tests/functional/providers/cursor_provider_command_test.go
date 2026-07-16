@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -34,8 +35,8 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(interfaces.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
+	if req.Command != string(modelprovider.Cursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
@@ -63,8 +64,8 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 	}
 
 	req := runner.LastRequest()
-	if req.Command != string(interfaces.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
+	if req.Command != string(modelprovider.Cursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-f", "-p"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
@@ -93,8 +94,8 @@ Process the input task.
 
 	h.Assert().HasTokenInPlace("task:complete")
 	req := runner.LastRequest()
-	if req.Command != string(interfaces.ModelProviderCursor) {
-		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
+	if req.Command != string(modelprovider.Cursor) {
+		t.Fatalf("command = %q, want %q", req.Command, modelprovider.Cursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p", "--model", "test-cursor-model"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
@@ -103,15 +104,15 @@ Process the input task.
 func submitCursorProviderSmokeWork(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-cursor-provider-smoke",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "cursor-provider-smoke",
 			WorkTypeID: "task",
 			TraceID:    "trace-cursor-provider-smoke",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "cursor provider smoke"},
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "cursor provider smoke"},
 			},
 		}},
 	})
@@ -122,7 +123,7 @@ func buildCursorModelWorkerConfig(model string, skipPermissions bool) string {
 		"---",
 		"type: MODEL_WORKER",
 		"model: " + model,
-		"modelProvider: " + string(interfaces.ModelProviderCursor),
+		"modelProvider: " + string(modelprovider.Cursor),
 		"stopToken: COMPLETE",
 	}
 	if skipPermissions {

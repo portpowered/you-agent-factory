@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -17,7 +17,7 @@ func TestFailedImmutability_CannotBeReDispatched(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "broken"}`))
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{{}},
+		[]workerexecution.InferenceResponse{{}},
 		[]error{errors.New("build error")},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -47,7 +47,7 @@ func TestFailedImmutability_ReviewerFailure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "risky-change"}`))
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{
+		[]workerexecution.InferenceResponse{
 			support.AcceptedProviderResponse(),
 			{},
 		},
@@ -78,7 +78,7 @@ func TestFailedImmutability_NoDuplicateTokens(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "a"}`))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "b"}`))
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{{}, {}},
+		[]workerexecution.InferenceResponse{{}, {}},
 		[]error{
 			errors.New("crash"),
 			errors.New("crash"),

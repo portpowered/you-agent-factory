@@ -7,16 +7,17 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/load"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestBlockingLoadValidation_EquivalentCanonicalTargetsForCrossPathInvalidFixture(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -222,7 +223,7 @@ func TestLoadFromCanonicalJSON_MatchesLoadFromFactoryDirForInlineFactory(t *test
 }
 
 func TestLoadFromCanonicalJSON_RejectsCrossPathInvalidFixture(t *testing.T) {
-	_, err := load.LoadFromCanonicalJSON([]byte(factoryvalidation.CrossPathInvalidFactoryJSON), load.LoadOptions{})
+	_, err := load.LoadFromCanonicalJSON([]byte(factoryfixtures.CrossPathInvalidFactoryJSON), load.LoadOptions{})
 	if err == nil {
 		t.Fatal("expected cross-path invalid factory to fail load")
 	}
@@ -235,7 +236,7 @@ func TestLoadFromFactoryDir_RejectsCrossPathInvalidFixture(t *testing.T) {
 	factoryDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
-		[]byte(factoryvalidation.CrossPathInvalidFactoryJSON),
+		[]byte(factoryfixtures.CrossPathInvalidFactoryJSON),
 		0o644,
 	); err != nil {
 		t.Fatalf("WriteFile(factory.json): %v", err)

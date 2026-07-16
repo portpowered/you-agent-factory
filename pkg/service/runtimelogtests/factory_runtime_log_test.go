@@ -9,12 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
@@ -237,7 +238,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		RequestID:  "request-log-context",
 		WorkID:     "work-log-context",
 		WorkTypeID: "task",
@@ -299,7 +300,7 @@ func TestFactoryService_RunWritesWorkerPoolLifecycleEventsToRuntimeLog(t *testin
 	work, logPath := runRuntimeLogFixture(t, runtimeLogFixtureOptions{
 		runtimeInstanceID: "runtime-worker-pool-log-test",
 		workFileName:      "initial-work.json",
-		work: interfaces.SubmitRequest{
+		work: work.SubmitRequest{
 			RequestID:  "request-worker-pool-log",
 			WorkID:     "work-worker-pool-log",
 			WorkTypeID: "task",
@@ -361,7 +362,7 @@ func TestFactoryService_RunWritesCommandRunnerEventsWithOutputsToRuntimeLog(t *t
 		runtimeInstanceID: "runtime-command-runner-log-test",
 		workFileName:      "initial-work.json",
 		scriptArgs:        []string{"--mode", "fixture"},
-		work: interfaces.SubmitRequest{
+		work: work.SubmitRequest{
 			RequestID:  "request-command-runner-log",
 			WorkID:     "work-command-runner-log",
 			WorkTypeID: "task",
@@ -431,7 +432,7 @@ func TestFactoryService_RunDeduplicatesEnvPayloadBetweenRecordDiagnosticsAndRunt
 		runtimeInstanceID: "runtime-env-dedupe-test",
 		workFileName:      "initial-work.json",
 		scriptArgs:        []string{"--mode", "fixture"},
-		work: interfaces.SubmitRequest{
+		work: work.SubmitRequest{
 			RequestID:  "request-env-dedupe",
 			WorkID:     "work-env-dedupe",
 			WorkTypeID: "task",
@@ -516,7 +517,7 @@ func TestFactoryService_RunWritesEndToEndCorrelatedWorkLogSmoke(t *testing.T) {
 		runtimeInstanceID: "runtime-work-log-smoke-test",
 		workFileName:      "initial-work.json",
 		scriptArgs:        []string{"--mode", "smoke"},
-		work: interfaces.SubmitRequest{
+		work: work.SubmitRequest{
 			RequestID:  "request-work-log-smoke",
 			WorkID:     "work-log-smoke",
 			WorkTypeID: "task",
@@ -545,20 +546,20 @@ func TestFactoryService_RunWritesEndToEndCorrelatedWorkLogSmoke(t *testing.T) {
 type runtimeLogFixtureOptions struct {
 	runtimeInstanceID     string
 	workFileName          string
-	work                  interfaces.SubmitRequest
+	work                  work.SubmitRequest
 	scriptArgs            []string
 	logger                *zap.Logger
 	verbose               bool
 	commandRunnerOverride workers.CommandRunner
 }
 
-func runRuntimeLogFixture(t *testing.T, opts runtimeLogFixtureOptions) (interfaces.SubmitRequest, string) {
+func runRuntimeLogFixture(t *testing.T, opts runtimeLogFixtureOptions) (work.SubmitRequest, string) {
 	t.Helper()
 	work, logPath, _ := runRuntimeLogAndReplayFixture(t, opts)
 	return work, logPath
 }
 
-func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) (interfaces.SubmitRequest, string, string) {
+func runRuntimeLogAndReplayFixture(t *testing.T, opts runtimeLogFixtureOptions) (work.SubmitRequest, string, string) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -670,7 +671,7 @@ func requireRuntimeLogMessage(t *testing.T, path, message string) map[string]any
 	return nil
 }
 
-func assertRuntimeLogWorkContext(t *testing.T, record map[string]any, eventName string, work interfaces.SubmitRequest) {
+func assertRuntimeLogWorkContext(t *testing.T, record map[string]any, eventName string, work work.SubmitRequest) {
 	t.Helper()
 	if record["request_id"] != work.RequestID {
 		t.Fatalf("%s request_id = %#v, want %q in record %#v", eventName, record["request_id"], work.RequestID, record)
@@ -690,7 +691,7 @@ func runVerboseRuntimeLogFixture(t *testing.T, verbose bool) (string, *observer.
 		runtimeInstanceID: "runtime-verbose-command-log-test",
 		workFileName:      "initial-work.json",
 		scriptArgs:        []string{"--mode", "fixture"},
-		work: interfaces.SubmitRequest{
+		work: work.SubmitRequest{
 			RequestID:  "request-verbose-command-log",
 			WorkID:     "work-verbose-command-log",
 			WorkTypeID: "task",
@@ -708,7 +709,7 @@ func runVerboseRuntimeLogFixture(t *testing.T, verbose bool) (string, *observer.
 	return string(data), observed
 }
 
-func assertReplayCorrelationForWork(t *testing.T, recordPath string, work interfaces.SubmitRequest) string {
+func assertReplayCorrelationForWork(t *testing.T, recordPath string, work work.SubmitRequest) string {
 	t.Helper()
 	artifact, err := replay.Load(recordPath)
 	if err != nil {
@@ -755,7 +756,7 @@ func assertReplayCorrelationForWork(t *testing.T, recordPath string, work interf
 	return dispatchID
 }
 
-func assertRuntimeLogCorrelationForWork(t *testing.T, data string, work interfaces.SubmitRequest, dispatchID string) {
+func assertRuntimeLogCorrelationForWork(t *testing.T, data string, work work.SubmitRequest, dispatchID string) {
 	t.Helper()
 	records := parseRuntimeLogRecords(t, data)
 	requiredEvents := map[string]struct {

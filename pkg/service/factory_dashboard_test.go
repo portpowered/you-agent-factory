@@ -14,16 +14,87 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestPortableRecordingArtifacts_CanonicalizesAndDeduplicatesArtifacts(t *testing.T) {
+	capturedAt := time.Date(2026, time.July, 16, 17, 0, 0, 0, time.UTC)
+	checkpointAt := capturedAt.Add(time.Minute)
+	label, hash := "first", "hash-first"
+	size, secrets := int64(24), int32(2)
+	artifacts := []factoryapi.FactoryArtifact{
+		{
+			Id: "artifact-first", Kind: "dispatch", Visibility: "operator", Label: &label, ContentHash: &hash, SizeBytes: &size,
+			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt},
+			RedactionCounts: &factoryapi.FactoryArtifactRedactionCounts{Secrets: &secrets},
+		},
+		{Id: "artifact-checkpoint", Kind: "checkpoint", Visibility: "operator"},
+		{Id: "artifact-first", Kind: "replacement", Visibility: "internal"},
+	}
+
+	actual := portableRecordingArtifacts(artifacts, &recording.CanonicalCheckpoint{ArtifactID: "artifact-checkpoint", Timestamp: checkpointAt})
+	if len(actual) != 2 {
+		t.Fatalf("artifact count = %d, want 2", len(actual))
+	}
+	if actual[0].Kind != "replacement" || actual[0].Visibility != "internal" {
+		t.Fatalf("duplicate artifact = %#v, want replacement values", actual[0])
+	}
+	if actual[1].CreatedAt != checkpointAt {
+		t.Fatalf("checkpoint artifact timestamp = %s, want %s", actual[1].CreatedAt, checkpointAt)
+	}
+	if actual[0].Label != "" || actual[0].ContentHash != "" || actual[0].SizeBytes != 0 || actual[0].SecretsRedacted != 0 {
+		t.Fatalf("duplicate artifact retained stale fields: %#v", actual[0])
+	}
+}
+
+func TestPortableRecordingStatusAndResultReflectSessionFinality(t *testing.T) {
+	durableSucceeded := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+	if status := portableRecordingStatus(factoryapi.FactorySessionRuntime{LifecycleControlStatus: &durableSucceeded}); status != "SUCCEEDED" {
+		t.Fatalf("durable status = %q, want SUCCEEDED", status)
+	}
+	if status := portableRecordingStatus(factoryapi.FactorySessionRuntime{Status: factoryapi.FactorySessionStatusFINISHED}); status != "SUCCEEDED" {
+		t.Fatalf("finished status = %q, want SUCCEEDED", status)
+	}
+	if status := portableRecordingStatus(factoryapi.FactorySessionRuntime{Status: "RUNNING"}); status != "RUNNING" {
+		t.Fatalf("running status = %q, want RUNNING", status)
+	}
+
+	for _, test := range []struct {
+		status, wantStatus, wantReason string
+		wantRetryable                  bool
+	}{
+		{status: "SUCCEEDED", wantStatus: "FINAL"},
+		{status: "FAILED", wantStatus: "UNAVAILABLE", wantReason: "RESULT_UNAVAILABLE"},
+		{status: "RUNNING", wantStatus: "NOT_READY", wantReason: "RESULT_NOT_READY", wantRetryable: true},
+	} {
+		result := portableRecordingResult(test.status)
+		if result.Mode != "final" || result.Status != test.wantStatus {
+			t.Fatalf("result for %s = %#v", test.status, result)
+		}
+		if test.wantReason == "" {
+			if result.Availability != nil {
+				t.Fatalf("availability for %s = %#v, want nil", test.status, result.Availability)
+			}
+			continue
+		}
+		if result.Availability == nil || result.Availability.Reason != test.wantReason || result.Availability.Retryable != test.wantRetryable {
+			t.Fatalf("availability for %s = %#v", test.status, result.Availability)
+		}
+	}
+}
 
 func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	dir := t.TempDir()
@@ -60,9 +131,9 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	assertDashboardRenderDataActive(t, active.RenderData, "dashboard-world-active")
 	assertSimpleDashboardActiveOutput(t, active)
 
-	provider.respond(interfaces.InferenceResponse{
+	provider.respond(workerexecution.InferenceResponse{
 		Content: "COMPLETE",
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-dashboard-success",
@@ -77,11 +148,11 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 
 	submitDashboardWorldViewWork(t, svc, "dashboard-world-failed", "trace-dashboard-failed")
 	provider.nextDispatch(t)
-	provider.respond(interfaces.InferenceResponse{}, workers.NewProviderErrorWithSession(
-		interfaces.WorkFailureTypePermanentBadRequest,
+	provider.respond(workerexecution.InferenceResponse{}, workers.NewProviderErrorWithSession(
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		"provider rejected dashboard world-view work",
 		errors.New("provider rejected"),
-		&interfaces.ProviderSessionMetadata{
+		&workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-dashboard-failed",
@@ -105,7 +176,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 	}
 
 	type starterObservation struct {
-		submitResult interfaces.WorkRequestSubmitResult
+		submitResult work.WorkRequestSubmitResult
 		submitErr    error
 		stream       *interfaces.FactoryEventStream
 		streamErr    error
@@ -127,7 +198,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		Logger:            zap.NewNop(),
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
 			observation := starterObservation{}
-			workRequest := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+			workRequest := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 				WorkID:     "starter-task",
 				Name:       "starter-task",
 				WorkTypeID: "task",
@@ -314,7 +385,7 @@ func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 
 	// Create a valid work file.
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    json.RawMessage(`{"title":"test"}`),
 	}
@@ -364,14 +435,14 @@ func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 	_ = apiStarted
 }
 
-func dashboardProjectionEventsForTest(t *testing.T, dispatch interfaces.WorkDispatch) []factoryapi.FactoryEvent {
+func dashboardProjectionEventsForTest(t *testing.T, dispatch work.WorkDispatch) []factoryapi.FactoryEvent {
 	t.Helper()
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "COMPLETE",
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-future-completion",
@@ -431,26 +502,26 @@ func dashboardInitialStructureEventForTest(t *testing.T) factoryapi.FactoryEvent
 	}
 }
 
-func dashboardProjectionDispatchForTest() interfaces.WorkDispatch {
-	token := interfaces.Token{
+func dashboardProjectionDispatchForTest() work.WorkDispatch {
+	token := factorytoken.Token{
 		ID:      "work-selected",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Name:       "Selected Tick Work",
 			RequestID:  "request-selected",
 			WorkID:     "work-selected",
 			WorkTypeID: "task",
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			TraceID:    "trace-selected",
 		},
 	}
-	return interfaces.WorkDispatch{
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-selected",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
 		InputTokens:     workers.InputTokens(token),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 2,
 			RequestID:           "request-selected",
 			TraceID:             "trace-selected",
@@ -573,11 +644,11 @@ type capturingCommandRunner struct {
 }
 
 func (r *capturingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-	r.request = workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req))
+	r.request = workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req))
 	return workers.CommandResult{Stdout: []byte("ok")}, nil
 }
 
-func mustLoadWorkerConfig(t *testing.T, dir string) *interfaces.WorkerConfig {
+func mustLoadWorkerConfig(t *testing.T, dir string) *workerconfig.Config {
 	t.Helper()
 	def, err := config.LoadWorkerConfig(dir)
 	if err != nil {
@@ -600,60 +671,60 @@ type blockingInferenceProvider struct {
 	content   string
 }
 
-func (p *blockingInferenceProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *blockingInferenceProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	<-p.releaseCh
-	return interfaces.InferenceResponse{Content: p.content}, nil
+	return workerexecution.InferenceResponse{Content: p.content}, nil
 }
 
 type dashboardWorldViewProvider struct {
-	requests  chan interfaces.ProviderInferenceRequest
+	requests  chan workerexecution.ProviderInferenceRequest
 	responses chan dashboardWorldViewProviderResponse
 }
 
 type dashboardWorldViewProviderResponse struct {
-	response interfaces.InferenceResponse
+	response workerexecution.InferenceResponse
 	err      error
 }
 
 func newDashboardWorldViewProvider() *dashboardWorldViewProvider {
 	return &dashboardWorldViewProvider{
-		requests:  make(chan interfaces.ProviderInferenceRequest, 2),
+		requests:  make(chan workerexecution.ProviderInferenceRequest, 2),
 		responses: make(chan dashboardWorldViewProviderResponse, 2),
 	}
 }
 
-func (p *dashboardWorldViewProvider) Infer(ctx context.Context, request interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *dashboardWorldViewProvider) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	select {
 	case p.requests <- request:
 	case <-ctx.Done():
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 	select {
 	case response := <-p.responses:
 		return response.response, response.err
 	case <-ctx.Done():
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 }
 
-func (p *dashboardWorldViewProvider) nextDispatch(t *testing.T) interfaces.ProviderInferenceRequest {
+func (p *dashboardWorldViewProvider) nextDispatch(t *testing.T) workerexecution.ProviderInferenceRequest {
 	t.Helper()
 	select {
 	case request := <-p.requests:
 		return request
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for provider dispatch")
-		return interfaces.ProviderInferenceRequest{}
+		return workerexecution.ProviderInferenceRequest{}
 	}
 }
 
-func (p *dashboardWorldViewProvider) respond(response interfaces.InferenceResponse, err error) {
+func (p *dashboardWorldViewProvider) respond(response workerexecution.InferenceResponse, err error) {
 	p.responses <- dashboardWorldViewProviderResponse{response: response, err: err}
 }
 
 func submitDashboardWorldViewWork(t *testing.T, svc *FactoryService, workID, traceID string) {
 	t.Helper()
-	err := submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err := submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkID:     workID,
 		WorkTypeID: "task",
 		TraceID:    traceID,
@@ -732,7 +803,7 @@ func assertDashboardRenderDataCompleted(t *testing.T, renderData dashboardrender
 		t.Fatalf("provider sessions = %#v, want %q", session.ProviderSessions, providerSessionID)
 	}
 	assertRenderDataPlaceOccupancyContainsWork(t, renderData, "task:complete", "dashboard-world-active")
-	if len(session.DispatchHistory) != 1 || session.DispatchHistory[0].Result.Outcome != string(interfaces.OutcomeAccepted) {
+	if len(session.DispatchHistory) != 1 || session.DispatchHistory[0].Result.Outcome != string(workerexecution.OutcomeAccepted) {
 		t.Fatalf("dispatch history = %#v, want one accepted completion", session.DispatchHistory)
 	}
 	if !dispatchHistoryContainsWork(t, session.DispatchHistory, "dashboard-world-active") {

@@ -14,8 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/root"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"

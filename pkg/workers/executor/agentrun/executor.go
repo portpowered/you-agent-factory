@@ -5,10 +5,15 @@ import (
 	"strings"
 	"time"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -25,7 +30,7 @@ type AgentRunExecutor struct {
 var _ workstationRequestExecutor = (*AgentRunExecutor)(nil)
 
 type workstationRequestExecutor interface {
-	Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error)
+	Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error)
 }
 
 // AgentRunExecutorOption configures an AgentRunExecutor.
@@ -77,17 +82,18 @@ func NewAgentRunExecutor(
 	return executor
 }
 
-func (executor *AgentRunExecutor) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	start := executor.clockNow()
 	workerType := workerTypeForExecutionRequest(request)
 	workerDef, ok := executor.runtimeConfig.Worker(workerType)
 	if !ok {
 		return missingWorkerWorkResult(request.Dispatch, workerType, time.Since(start)), nil
 	}
+	workerDef = effectiveAgentRunWorkerDefinition(request, workerDef)
 
 	baseReq := agentRunInferenceRequest(request, workerDef)
 	inferencer := newRunnerInferencer(executor.runner, baseReq)
-	toolPolicy := interfaces.EffectiveAgentWorkerToolPolicy(workerDef.AgentTools)
+	toolPolicy := workerconfig.EffectiveAgentToolPolicy(workerDef.AgentTools)
 	toolRecorder := NewToolDiagnosticRecorder()
 	harnessResult, err := executor.harness.Execute(ctx, HarnessInput{
 		SystemPrompt: request.SystemPrompt,
@@ -113,7 +119,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 			harnessResult.FinalText,
 		)
 		result.Diagnostics = agentRunDiagnostics(toolMetadata)
-		result.Metrics = interfaces.WorkMetrics{Duration: time.Since(start)}
+		result.Metrics = workerexecution.WorkMetrics{Duration: time.Since(start)}
 		executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
 		return result, nil
 	}
@@ -124,27 +130,41 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 			harnessResult.FinalText,
 		)
 		result.Diagnostics = agentRunDiagnostics(toolMetadata)
-		result.Metrics = interfaces.WorkMetrics{Duration: time.Since(start)}
+		result.Metrics = workerexecution.WorkMetrics{Duration: time.Since(start)}
 		executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
 		return result, nil
 	}
 
 	outcome := evaluateAgentRunOutcome(harnessResult.FinalText, workerDef)
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   request.Dispatch.DispatchID,
 		TransitionID: request.Dispatch.TransitionID,
 		Outcome:      outcome,
 		Output:       harnessResult.FinalText,
 		Diagnostics:  agentRunDiagnostics(toolMetadata),
-		Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+		Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 	}
 	executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
 	return result, nil
 }
 
+func effectiveAgentRunWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *workerconfig.Config) *workerconfig.Config {
+	if workerDef == nil || (request.Model == "" && request.ModelProvider == "") {
+		return workerDef
+	}
+	effective := *workerDef
+	if request.Model != "" {
+		effective.Model = request.Model
+	}
+	if request.ModelProvider != "" {
+		effective.ModelProvider = request.ModelProvider
+	}
+	return &effective
+}
+
 func (executor *AgentRunExecutor) recordAgentRunResponse(
-	dispatch interfaces.WorkDispatch,
-	result interfaces.WorkResult,
+	dispatch work.WorkDispatch,
+	result workerexecution.WorkResult,
 	duration time.Duration,
 	transcript []messages.Message,
 ) {
@@ -162,22 +182,22 @@ func (executor *AgentRunExecutor) clockNow() time.Time {
 }
 
 func agentRunInferenceRequest(
-	request interfaces.WorkstationExecutionRequest,
-	workerDef *interfaces.WorkerConfig,
-) interfaces.ProviderInferenceRequest {
-	req := interfaces.ProviderInferenceRequest{
-		Dispatch:          interfaces.CloneWorkDispatch(request.Dispatch),
+	request workerexecution.WorkstationExecutionRequest,
+	workerDef *workerconfig.Config,
+) workerexecution.ProviderInferenceRequest {
+	req := workerexecution.ProviderInferenceRequest{
+		Dispatch:          work.CloneWorkDispatch(request.Dispatch),
 		WorkerType:        request.WorkerType,
 		WorkstationType:   request.WorkstationType,
 		RunnerID:          request.RunnerID,
 		ProjectID:         request.ProjectID,
 		InputTokens:       cloneRawInputTokens(request.InputTokens),
 		ModelOperation:    request.ModelOperation,
-		ModelBindings:     interfaces.CloneResolvedModelOperationBindings(request.ModelBindings),
+		ModelBindings:     workerexecution.CloneResolvedModelOperationBindings(request.ModelBindings),
 		SystemPrompt:      request.SystemPrompt,
 		UserMessage:       request.UserMessage,
 		OutputSchema:      request.OutputSchema,
-		ToolExecutionMode: interfaces.RunnerToolExecutionModeRequired,
+		ToolExecutionMode: workerexecution.RunnerToolExecutionModeRequired,
 		EnvVars:           cloneEnvVars(request.EnvVars),
 		Worktree:          request.Worktree,
 		WorkingDirectory:  request.WorkingDirectory,
@@ -191,53 +211,53 @@ func agentRunInferenceRequest(
 	return req
 }
 
-func evaluateAgentRunOutcome(output string, workerDef *interfaces.WorkerConfig) interfaces.WorkOutcome {
+func evaluateAgentRunOutcome(output string, workerDef *workerconfig.Config) workerexecution.WorkOutcome {
 	if workerDef == nil || workerDef.StopToken == "" {
-		return interfaces.OutcomeAccepted
+		return workerexecution.OutcomeAccepted
 	}
 	if workerprovider.ContainsStopToken(output, workerDef.StopToken) {
-		return interfaces.OutcomeAccepted
+		return workerexecution.OutcomeAccepted
 	}
 	if strings.Contains(output, "<CONTINUE>") {
-		return interfaces.OutcomeContinue
+		return workerexecution.OutcomeContinue
 	}
-	return interfaces.OutcomeRejected
+	return workerexecution.OutcomeRejected
 }
 
 func agentRunFailureWorkResult(
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	err error,
 	duration time.Duration,
 	toolPolicy string,
 	toolRecorder *ToolDiagnosticRecorder,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	failureDiagnostics := agentRunFailureDiagnostics(err)
 	if toolRecorder != nil {
 		failureDiagnostics = mergeToolDiagnostics(failureDiagnostics, toolPolicy, toolRecorder)
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Error:           formatAgentRunError(err),
-		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadataForError(err)),
+		FailureMetadata: workerexecution.CloneWorkFailureMetadata(failureMetadataForError(err)),
 		Diagnostics:     agentRunDiagnostics(failureDiagnostics),
-		Metrics:         interfaces.WorkMetrics{Duration: duration},
+		Metrics:         workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
-func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string, duration time.Duration) interfaces.WorkResult {
-	return interfaces.WorkResult{
+func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, duration time.Duration) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "worker config not found: " + workerType,
 		Diagnostics:  agentRunDiagnostics(nil),
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
-func workerTypeForExecutionRequest(request interfaces.WorkstationExecutionRequest) string {
+func workerTypeForExecutionRequest(request workerexecution.WorkstationExecutionRequest) string {
 	if request.WorkerType != "" {
 		return request.WorkerType
 	}

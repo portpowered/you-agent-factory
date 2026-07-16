@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 )
@@ -478,7 +478,7 @@ func TestRunCommand_RuntimeMetricsFlags(t *testing.T) {
 		t.Fatalf("find run: %v", err)
 	}
 
-	defaults := logging.DefaultRuntimeMetricsConfig()
+	defaults := platformmetrics.DefaultRuntimeMetricsConfig()
 	tests := []struct {
 		name    string
 		def     string
@@ -542,7 +542,7 @@ func TestRunCommand_RuntimeMetricsFlagsMapToRunConfig(t *testing.T) {
 	if got.RuntimeMetricsDir != "logs/metrics" {
 		t.Fatalf("runtime metrics dir = %q, want unchanged root logs/metrics", got.RuntimeMetricsDir)
 	}
-	want := logging.RuntimeMetricsConfig{MaxSize: 21, MaxBackups: 22, MaxAge: 23, Compress: true}
+	want := platformmetrics.RuntimeMetricsConfig{MaxSize: 21, MaxBackups: 22, MaxAge: 23, Compress: true}
 	if got.RuntimeMetricsConfig != want {
 		t.Fatalf("runtime metrics config = %#v, want %#v", got.RuntimeMetricsConfig, want)
 	}

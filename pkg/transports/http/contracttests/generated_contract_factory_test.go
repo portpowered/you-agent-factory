@@ -7,8 +7,9 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	factorysessioncursors "github.com/portpowered/infinite-you/pkg/factory/sessions/cursors"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
@@ -519,7 +520,7 @@ func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackend
 			previous := identityScopeFromFixtureMap(scenario.Previous)
 			current := identityScopeFromFixtureMap(scenario.Current)
 
-			reason, ok := sessionpersistence.ClassifyIdentityMismatch(previous, current)
+			reason, ok := factorysessioncursors.ClassifyIdentityMismatch(previous, current)
 			if !ok {
 				t.Fatal("ClassifyIdentityMismatch = false, want mismatch")
 			}
@@ -528,15 +529,15 @@ func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackend
 			}
 
 			if previous.BackendScopeID == current.BackendScopeID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonBackendScopeChanged) {
+				scenario.WantClassification == string(factorysessioncursors.ReasonBackendScopeChanged) {
 				t.Fatal("backend scope classification requires backendScopeId change")
 			}
 			if previous.StreamGenerationID == current.StreamGenerationID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) {
+				scenario.WantClassification == string(factorysessioncursors.ReasonStreamGenerationChanged) {
 				t.Fatal("stream generation classification requires streamGenerationId change")
 			}
 			if previous.BackendScopeID != current.BackendScopeID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) &&
+				scenario.WantClassification == string(factorysessioncursors.ReasonStreamGenerationChanged) &&
 				previous.FactorySessionID == current.FactorySessionID {
 				if previous.BackendScopeID == current.BackendScopeID {
 					t.Fatal("stream-only classification should not change backendScopeId")
@@ -587,18 +588,18 @@ func TestSessionPersistenceHardeningGateEvidence_RecoveryOutcomesControlCheckpoi
 		t.Fatal("stale cursor recovery outcome checkpointReusable = true, want false")
 	}
 
-	staleDiagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(staleResponse)
+	staleDiagnostic, ok := factorysessioncursors.InvalidationFromPreflight(apisurface.FactorySessionCursorPreflightResult(staleResponse))
 	if !ok {
 		t.Fatal("stale cursor recovery outcome missing invalidation diagnostic")
 	}
-	if staleDiagnostic.Reason != sessionpersistence.ReasonCursorStale {
-		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, sessionpersistence.ReasonCursorStale)
+	if staleDiagnostic.Reason != factorysessioncursors.ReasonCursorStale {
+		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, factorysessioncursors.ReasonCursorStale)
 	}
-	if staleDiagnostic.RecoveryAction != sessionpersistence.RecoveryReplayWithoutCursor {
+	if staleDiagnostic.RecoveryAction != factorysessioncursors.RecoveryReplayWithoutCursor {
 		t.Fatalf(
 			"stale cursor diagnostic recovery = %q, want %q",
 			staleDiagnostic.RecoveryAction,
-			sessionpersistence.RecoveryReplayWithoutCursor,
+			factorysessioncursors.RecoveryReplayWithoutCursor,
 		)
 	}
 }
@@ -718,7 +719,7 @@ func assertSyncPreflightInvalidationDiagnostic(
 ) {
 	t.Helper()
 
-	diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response)
+	diagnostic, ok := factorysessioncursors.InvalidationFromPreflight(apisurface.FactorySessionCursorPreflightResult(response))
 	switch response.ReasonCode {
 	case factoryapi.Ok:
 		if ok {
@@ -731,8 +732,8 @@ func assertSyncPreflightInvalidationDiagnostic(
 	}
 }
 
-func identityScopeFromFixtureMap(payload map[string]any) sessionpersistence.IdentityScope {
-	return sessionpersistence.IdentityScope{
+func identityScopeFromFixtureMap(payload map[string]any) factorysessioncursors.IdentityScope {
+	return factorysessioncursors.IdentityScope{
 		BackendScopeID:      stringFixtureValue(payload, "backendScopeId"),
 		LogicalSessionKeyID: stringFixtureValue(payload, "logicalSessionKeyId"),
 		FactorySessionID:    stringFixtureValue(payload, "factorySessionId"),

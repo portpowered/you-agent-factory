@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
-	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestReconstructFactoryWorldState_BuildsCanonicalWorkPayloadLineage(t *testing.T) {
@@ -74,7 +75,7 @@ func TestReconstructFactoryWorldState_WorkPayloadLineageMarksIncompleteConsumedH
 	}
 
 	consumed := state.PayloadLineage.ResolveConsumedInputSnapshot("dispatch-missing", "work-missing")
-	if consumed.Status != interfaces.WorkPayloadResolutionUnavailable {
+	if consumed.Status != work.WorkPayloadResolutionUnavailable {
 		t.Fatalf("consumed missing snapshot = %#v, want unavailable", consumed)
 	}
 	if consumed.Reason == "" {
@@ -91,25 +92,25 @@ func TestReconstructFactoryWorldState_ReplayFixturePreservesConsumedAndChainedPa
 	}
 
 	consumed := state.PayloadLineage.ResolveConsumedInputSnapshot("dispatch-follow-up", "work-child")
-	if consumed.Status != interfaces.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
+	if consumed.Status != work.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
 		t.Fatalf("consumed child snapshot = %#v, want resolved dispatch-time snapshot", consumed)
 	}
 	assertLineageTextContent(t, consumed.Snapshot.WorkItem, "child-v1")
-	if consumed.Snapshot.SourceKind != interfaces.WorkPayloadSnapshotKindDispatchOutput {
+	if consumed.Snapshot.SourceKind != work.WorkPayloadSnapshotKindDispatchOutput {
 		t.Fatalf("consumed child source kind = %q, want DISPATCH_RESPONSE_OUTPUT", consumed.Snapshot.SourceKind)
 	}
 
 	selected := state.PayloadLineage.ResolveSelectedWorkSnapshot("work-child")
-	if selected.Status != interfaces.WorkPayloadResolutionResolved || selected.Snapshot == nil {
+	if selected.Status != work.WorkPayloadResolutionResolved || selected.Snapshot == nil {
 		t.Fatalf("selected child snapshot = %#v, want resolved latest snapshot", selected)
 	}
 	assertLineageTextContent(t, selected.Snapshot.WorkItem, "child-v2")
 
 	output := state.PayloadLineage.ResolveOutputWorkSnapshot("dispatch-review", "work-child")
-	if output.Status != interfaces.WorkPayloadResolutionResolved || output.Snapshot == nil {
+	if output.Status != work.WorkPayloadResolutionResolved || output.Snapshot == nil {
 		t.Fatalf("output child snapshot = %#v, want resolved output snapshot", output)
 	}
-	if output.Snapshot.Continuity != interfaces.WorkPayloadContinuityNewDownstreamWork {
+	if output.Snapshot.Continuity != work.WorkPayloadContinuityNewDownstreamWork {
 		t.Fatalf("output child continuity = %q, want NEW_DOWNSTREAM_WORK", output.Snapshot.Continuity)
 	}
 	if output.Snapshot.LogicalWorkID != "work-child" {
@@ -120,7 +121,7 @@ func TestReconstructFactoryWorldState_ReplayFixturePreservesConsumedAndChainedPa
 	}
 
 	missing := state.PayloadLineage.ResolveConsumedInputSnapshot("dispatch-missing", "work-missing")
-	if missing.Status != interfaces.WorkPayloadResolutionUnavailable {
+	if missing.Status != work.WorkPayloadResolutionUnavailable {
 		t.Fatalf("missing consumed snapshot = %#v, want unavailable", missing)
 	}
 	if missing.Reason == "" {
@@ -150,7 +151,7 @@ func workPayloadLineageProjectionEvents(t *testing.T, t0 time.Time) []factoryapi
 	}
 }
 
-func canonicalLineageProjectionWorkItems() (interfaces.FactoryWorkItem, interfaces.FactoryWorkItem, interfaces.FactoryWorkItem, interfaces.FactoryWorkItem) {
+func canonicalLineageProjectionWorkItems() (workdomain.FactoryWorkItem, workdomain.FactoryWorkItem, workdomain.FactoryWorkItem, workdomain.FactoryWorkItem) {
 	initial := projectionWorkItem("work-1", "Draft", "trace-1", "task:init", "draft-v1")
 	continued := projectionWorkItem("work-1", "Draft", "trace-1", "task:complete", "draft-v2")
 	downstream := projectionWorkItem("work-2", "Follow up", "trace-2", "task:complete", "follow-up-v1")
@@ -175,21 +176,21 @@ func downstreamLineageProjectionEvents(t *testing.T, t0 time.Time) []factoryapi.
 	}
 }
 
-func projectionWorkItem(id, displayName, traceID, placeID, text string) interfaces.FactoryWorkItem {
-	return interfaces.FactoryWorkItem{
+func projectionWorkItem(id, displayName, traceID, placeID, text string) workdomain.FactoryWorkItem {
+	return workdomain.FactoryWorkItem{
 		ID:          id,
 		WorkTypeID:  "task",
 		DisplayName: displayName,
 		TraceID:     traceID,
 		PlaceID:     placeID,
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []workdomain.WorkContentPart{{
+			Type: workdomain.WorkContentPartTypeText,
 			Text: text,
 		}},
 	}
 }
 
-func lineageWorkRequestEvent(t *testing.T, t0 time.Time, tick int, id, requestID string, traceIDs, workIDs []string, item interfaces.FactoryWorkItem) factoryapi.FactoryEvent {
+func lineageWorkRequestEvent(t *testing.T, t0 time.Time, tick int, id, requestID string, traceIDs, workIDs []string, item workdomain.FactoryWorkItem) factoryapi.FactoryEvent {
 	t.Helper()
 
 	return generatedProjectionEvent(
@@ -209,7 +210,7 @@ func lineageWorkRequestEvent(t *testing.T, t0 time.Time, tick int, id, requestID
 	)
 }
 
-func lineageWorkstationRequestEvent(tick int, t0 time.Time, dispatchID, transitionID, workstationName, tokenID string, item interfaces.FactoryWorkItem) factoryapi.FactoryEvent {
+func lineageWorkstationRequestEvent(tick int, t0 time.Time, dispatchID, transitionID, workstationName, tokenID string, item workdomain.FactoryWorkItem) factoryapi.FactoryEvent {
 	return workstationRequestEvent(tick, t0.Add(time.Duration(tick)*time.Second), interfaces.WorkstationRequestPayload{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
@@ -222,7 +223,7 @@ func lineageWorkstationRequestEvent(tick int, t0 time.Time, dispatchID, transiti
 	})
 }
 
-func lineageDispatchResponseEvent(t *testing.T, t0 time.Time, tick int, dispatchID, id, transitionID string, traceIDs, workIDs []string, items ...interfaces.FactoryWorkItem) factoryapi.FactoryEvent {
+func lineageDispatchResponseEvent(t *testing.T, t0 time.Time, tick int, dispatchID, id, transitionID string, traceIDs, workIDs []string, items ...workdomain.FactoryWorkItem) factoryapi.FactoryEvent {
 	t.Helper()
 
 	outputs := make([]factoryapi.Work, 0, len(items))
@@ -248,10 +249,10 @@ func lineageDispatchResponseEvent(t *testing.T, t0 time.Time, tick int, dispatch
 	)
 }
 
-func assertSelectedDownstreamSnapshot(t *testing.T, selected interfaces.WorkPayloadResolution) {
+func assertSelectedDownstreamSnapshot(t *testing.T, selected work.WorkPayloadResolution) {
 	t.Helper()
 
-	if selected.Status != interfaces.WorkPayloadResolutionResolved || selected.Snapshot == nil {
+	if selected.Status != work.WorkPayloadResolutionResolved || selected.Snapshot == nil {
 		t.Fatalf("selected downstream snapshot = %#v, want resolved latest snapshot", selected)
 	}
 	assertLineageTextContent(t, selected.Snapshot.WorkItem, "child-v2")
@@ -260,17 +261,17 @@ func assertSelectedDownstreamSnapshot(t *testing.T, selected interfaces.WorkPayl
 	}
 }
 
-func assertConsumedDownstreamSnapshot(t *testing.T, consumed interfaces.WorkPayloadResolution) {
+func assertConsumedDownstreamSnapshot(t *testing.T, consumed work.WorkPayloadResolution) {
 	t.Helper()
 
-	if consumed.Status != interfaces.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
+	if consumed.Status != work.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
 		t.Fatalf("consumed downstream snapshot = %#v, want resolved dispatch-time snapshot", consumed)
 	}
 	assertLineageTextContent(t, consumed.Snapshot.WorkItem, "child-v1")
-	if consumed.Snapshot.SourceKind != interfaces.WorkPayloadSnapshotKindDispatchOutput {
+	if consumed.Snapshot.SourceKind != work.WorkPayloadSnapshotKindDispatchOutput {
 		t.Fatalf("consumed downstream source kind = %q, want DISPATCH_RESPONSE_OUTPUT", consumed.Snapshot.SourceKind)
 	}
-	if consumed.Snapshot.Continuity != interfaces.WorkPayloadContinuityNewDownstreamWork {
+	if consumed.Snapshot.Continuity != work.WorkPayloadContinuityNewDownstreamWork {
 		t.Fatalf("consumed downstream continuity = %q, want NEW_DOWNSTREAM_WORK", consumed.Snapshot.Continuity)
 	}
 	if len(consumed.Snapshot.ParentWorkIDs) != 1 || consumed.Snapshot.ParentWorkIDs[0] != "work-root" {
@@ -278,47 +279,47 @@ func assertConsumedDownstreamSnapshot(t *testing.T, consumed interfaces.WorkPayl
 	}
 }
 
-func assertInitialSubmittedSnapshot(t *testing.T, initial interfaces.WorkPayloadResolution) {
+func assertInitialSubmittedSnapshot(t *testing.T, initial work.WorkPayloadResolution) {
 	t.Helper()
 
-	if initial.Status != interfaces.WorkPayloadResolutionResolved || initial.Snapshot == nil {
+	if initial.Status != work.WorkPayloadResolutionResolved || initial.Snapshot == nil {
 		t.Fatalf("initial snapshot = %#v, want resolved work-request snapshot", initial)
 	}
-	if initial.Snapshot.SourceKind != interfaces.WorkPayloadSnapshotKindWorkRequest {
+	if initial.Snapshot.SourceKind != work.WorkPayloadSnapshotKindWorkRequest {
 		t.Fatalf("initial source kind = %q, want WORK_REQUEST", initial.Snapshot.SourceKind)
 	}
 	assertLineageTextContent(t, initial.Snapshot.WorkItem, "draft-v1")
 }
 
-func assertConsumedCanonicalSnapshot(t *testing.T, consumed interfaces.WorkPayloadResolution) {
+func assertConsumedCanonicalSnapshot(t *testing.T, consumed work.WorkPayloadResolution) {
 	t.Helper()
 
-	if consumed.Status != interfaces.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
+	if consumed.Status != work.WorkPayloadResolutionResolved || consumed.Snapshot == nil {
 		t.Fatalf("consumed snapshot = %#v, want resolved dispatch-time snapshot", consumed)
 	}
 	assertLineageTextContent(t, consumed.Snapshot.WorkItem, "draft-v1")
 }
 
-func assertSelectedCanonicalSnapshot(t *testing.T, selected interfaces.WorkPayloadResolution) {
+func assertSelectedCanonicalSnapshot(t *testing.T, selected work.WorkPayloadResolution) {
 	t.Helper()
 
-	if selected.Status != interfaces.WorkPayloadResolutionResolved || selected.Snapshot == nil {
+	if selected.Status != work.WorkPayloadResolutionResolved || selected.Snapshot == nil {
 		t.Fatalf("selected snapshot = %#v, want resolved latest snapshot", selected)
 	}
 	assertLineageTextContent(t, selected.Snapshot.WorkItem, "draft-v3")
-	if selected.Snapshot.SourceKind != interfaces.WorkPayloadSnapshotKindWorkRequest {
+	if selected.Snapshot.SourceKind != work.WorkPayloadSnapshotKindWorkRequest {
 		t.Fatalf("selected source kind = %q, want later WORK_REQUEST snapshot", selected.Snapshot.SourceKind)
 	}
 }
 
-func assertSameWorkOutputSnapshot(t *testing.T, resolved interfaces.WorkPayloadResolution) {
+func assertSameWorkOutputSnapshot(t *testing.T, resolved work.WorkPayloadResolution) {
 	t.Helper()
 
-	if resolved.Status != interfaces.WorkPayloadResolutionResolved || resolved.Snapshot == nil {
+	if resolved.Status != work.WorkPayloadResolutionResolved || resolved.Snapshot == nil {
 		t.Fatalf("same-work output snapshot = %#v, want resolved response output snapshot", resolved)
 	}
 	assertLineageTextContent(t, resolved.Snapshot.WorkItem, "draft-v2")
-	if resolved.Snapshot.Continuity != interfaces.WorkPayloadContinuitySameWorkID {
+	if resolved.Snapshot.Continuity != work.WorkPayloadContinuitySameWorkID {
 		t.Fatalf("same-work output continuity = %q, want SAME_WORK_ID_CONTINUATION", resolved.Snapshot.Continuity)
 	}
 	if resolved.Snapshot.LogicalWorkID != "work-1" {
@@ -326,14 +327,14 @@ func assertSameWorkOutputSnapshot(t *testing.T, resolved interfaces.WorkPayloadR
 	}
 }
 
-func assertNewDownstreamOutputSnapshot(t *testing.T, resolved interfaces.WorkPayloadResolution) {
+func assertNewDownstreamOutputSnapshot(t *testing.T, resolved work.WorkPayloadResolution) {
 	t.Helper()
 
-	if resolved.Status != interfaces.WorkPayloadResolutionResolved || resolved.Snapshot == nil {
+	if resolved.Status != work.WorkPayloadResolutionResolved || resolved.Snapshot == nil {
 		t.Fatalf("new downstream output snapshot = %#v, want resolved response output snapshot", resolved)
 	}
 	assertLineageTextContent(t, resolved.Snapshot.WorkItem, "follow-up-v1")
-	if resolved.Snapshot.Continuity != interfaces.WorkPayloadContinuityNewDownstreamWork {
+	if resolved.Snapshot.Continuity != work.WorkPayloadContinuityNewDownstreamWork {
 		t.Fatalf("new downstream continuity = %q, want NEW_DOWNSTREAM_WORK", resolved.Snapshot.Continuity)
 	}
 	if len(resolved.Snapshot.ParentWorkIDs) != 1 || resolved.Snapshot.ParentWorkIDs[0] != "work-1" {
@@ -383,7 +384,7 @@ func lastProjectionFixtureTick(events []factoryapi.FactoryEvent) int {
 	return tick
 }
 
-func generatedLineageWorkForProjectionTest(t *testing.T, item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
+func generatedLineageWorkForProjectionTest(t *testing.T, item workdomain.FactoryWorkItem, requestID string) factoryapi.Work {
 	t.Helper()
 	work := generatedWorkForProjectionTest(item, requestID)
 	if len(item.Content) == 0 {
@@ -392,9 +393,9 @@ func generatedLineageWorkForProjectionTest(t *testing.T, item interfaces.Factory
 	parts := make([]factoryapi.WorkContentPart, 0, len(item.Content))
 	for _, part := range item.Content {
 		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
+		case workdomain.WorkContentPartTypeText:
 			parts = append(parts, workTextContentPartForProjectionTest(t, part.Text))
-		case interfaces.WorkContentPartTypeImage:
+		case workdomain.WorkContentPartTypeImage:
 			parts = append(parts, workImageContentPartForProjectionTest(t, part.File))
 		default:
 			t.Fatalf("unsupported test content part type %q", part.Type)
@@ -404,9 +405,9 @@ func generatedLineageWorkForProjectionTest(t *testing.T, item interfaces.Factory
 	return work
 }
 
-func assertLineageTextContent(t *testing.T, item interfaces.FactoryWorkItem, want string) {
+func assertLineageTextContent(t *testing.T, item workdomain.FactoryWorkItem, want string) {
 	t.Helper()
-	if len(item.Content) != 1 || item.Content[0].Type != interfaces.WorkContentPartTypeText || item.Content[0].Text != want {
+	if len(item.Content) != 1 || item.Content[0].Type != workdomain.WorkContentPartTypeText || item.Content[0].Text != want {
 		t.Fatalf("work item content = %#v, want one text part %q", item.Content, want)
 	}
 }

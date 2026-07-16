@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestMoveWork_RejectsDuplicateRequestId(t *testing.T) {
@@ -21,7 +21,7 @@ func TestMoveWork_RejectsDuplicateRequestId(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if _, err := submitWorkRequests(ctx, f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(ctx, f, []work.SubmitRequest{{
 		WorkID:     "work-idempotent",
 		WorkTypeID: "task",
 		TraceID:    "trace-idempotent",
@@ -32,12 +32,12 @@ func TestMoveWork_RejectsDuplicateRequestId(t *testing.T) {
 		t.Fatalf("Tick: %v", err)
 	}
 
-	if _, err := f.MoveWork(ctx, "work-idempotent", "complete", interfaces.WorkStateChangeSourceAPI, "move-req-dup"); err != nil {
+	if _, err := f.MoveWork(ctx, "work-idempotent", "complete", work.WorkStateChangeSourceAPI, "move-req-dup"); err != nil {
 		t.Fatalf("first MoveWork: %v", err)
 	}
-	if _, err := f.MoveWork(ctx, "work-idempotent", "complete", interfaces.WorkStateChangeSourceAPI, "move-req-dup"); err != nil {
-		if !errors.Is(err, interfaces.ErrMoveWorkRequestAlreadyApplied) {
-			t.Fatalf("second MoveWork error = %v, want %v", err, interfaces.ErrMoveWorkRequestAlreadyApplied)
+	if _, err := f.MoveWork(ctx, "work-idempotent", "complete", work.WorkStateChangeSourceAPI, "move-req-dup"); err != nil {
+		if !errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied) {
+			t.Fatalf("second MoveWork error = %v, want %v", err, work.ErrMoveWorkRequestAlreadyApplied)
 		}
 	} else {
 		t.Fatal("second MoveWork succeeded, want duplicate requestId conflict")

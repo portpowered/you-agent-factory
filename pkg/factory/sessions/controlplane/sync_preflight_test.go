@@ -4,10 +4,9 @@ import (
 	"context"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 type syncPreflightTestHost struct {
@@ -15,7 +14,7 @@ type syncPreflightTestHost struct {
 	targetErr   error
 	backendID   string
 	streamGenID string
-	events      []factoryapi.FactoryEvent
+	events      []interfaces.FactoryEvent
 }
 
 func (h *syncPreflightTestHost) ResolveSyncPreflightTarget(_ string, _ *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error) {
@@ -30,7 +29,7 @@ func (h *syncPreflightTestHost) StreamGenerationID(_ *factorysessions.LiveSessio
 	return h.streamGenID
 }
 
-func (h *syncPreflightTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []factoryapi.FactoryEvent {
+func (h *syncPreflightTestHost) LiveSessionEvents(_ *factorysessions.LiveSession) []interfaces.FactoryEvent {
 	return h.events
 }
 
@@ -47,8 +46,8 @@ func TestGetLiveFactorySessionSyncPreflight_DurableSessionReturnsNotFound(t *tes
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionSyncPreflight: %v", err)
 	}
-	if response.ReasonCode != factoryapi.SessionNotFound {
-		t.Fatalf("reasonCode = %q, want session_not_found", response.ReasonCode)
+	if response.Reason != factorysessions.SyncPreflightReasonSessionNotFound {
+		t.Fatalf("reason = %q, want session_not_found", response.Reason)
 	}
 }
 
@@ -74,11 +73,11 @@ func TestGetLiveFactorySessionSyncPreflight_RemappedDefaultReturnsLogicalSession
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionSyncPreflight: %v", err)
 	}
-	if response.ReasonCode != factoryapi.LogicalSessionRemap {
-		t.Fatalf("reasonCode = %q, want logical_session_remap", response.ReasonCode)
+	if response.Reason != factorysessions.SyncPreflightReasonLogicalSessionRemap {
+		t.Fatalf("reason = %q, want logical_session_remap", response.Reason)
 	}
-	if response.FactorySessionId == nil || *response.FactorySessionId != "session-successor" {
-		t.Fatalf("factorySessionId = %#v, want session-successor", response.FactorySessionId)
+	if response.FactorySessionID == nil || *response.FactorySessionID != "session-successor" {
+		t.Fatalf("factorySessionId = %#v, want session-successor", response.FactorySessionID)
 	}
 }
 
@@ -88,7 +87,7 @@ func TestGetLiveFactorySessionSyncPreflight_StaleCursorReturnsCursorStale(t *tes
 	session := factorysessions.NewLiveSession("session-live", "", "", "", factorysessions.TargetRef{}, nil, false, "")
 	host := &syncPreflightTestHost{
 		target: controlplane.SyncPreflightTarget{Session: session},
-		events: []factoryapi.FactoryEvent{{Id: "evt-1", Context: factoryapi.FactoryEventContext{Sequence: 1}}},
+		events: []interfaces.FactoryEvent{{Id: "evt-1", Context: interfaces.FactoryEventContext{Sequence: 1}}},
 	}
 	afterSequence := 99
 	response, err := controlplane.GetLiveFactorySessionSyncPreflight(
@@ -101,8 +100,8 @@ func TestGetLiveFactorySessionSyncPreflight_StaleCursorReturnsCursorStale(t *tes
 	if err != nil {
 		t.Fatalf("GetLiveFactorySessionSyncPreflight: %v", err)
 	}
-	if response.ReasonCode != factoryapi.CursorStale {
-		t.Fatalf("reasonCode = %q, want cursor_stale", response.ReasonCode)
+	if response.Reason != factorysessions.SyncPreflightReasonCursorStale {
+		t.Fatalf("reason = %q, want cursor_stale", response.Reason)
 	}
 }
 

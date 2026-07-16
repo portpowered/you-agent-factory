@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,7 +20,7 @@ func TestExecutorContext_InputTokenColors(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
 	payload := []byte(`{"feature": "dark mode", "priority": "high"}`)
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "code-change",
 		Payload:    payload,
 		Tags:       map[string]string{"team": "frontend", "sprint": "42"},
@@ -72,12 +73,12 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	sweMock := h.MockWorker("swe",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("reviewer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "needs unit tests"},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "needs unit tests"},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -112,23 +113,23 @@ func TestExecutorContext_ParentLineage(t *testing.T) {
 	support.SkipLongFunctional(t, "slow executor-context parent-lineage sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID:  "code-change",
 		WorkID:      "prereq-work-99",
 		TargetState: "complete",
 		Payload:     []byte(`{"feature": "prerequisite"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "code-change",
 		WorkID:     "child-work-1",
 		Payload:    []byte(`{"feature": "login page"}`),
-		Relations: []interfaces.Relation{
+		Relations: []work.Relation{
 			{
-				Type:         interfaces.RelationParentChild,
+				Type:         work.RelationParentChild,
 				TargetWorkID: "parent-prd-42",
 			},
 			{
-				Type:          interfaces.RelationDependsOn,
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  "prereq-work-99",
 				RequiredState: "complete",
 			},
@@ -168,12 +169,12 @@ func TestExecutorContext_ParentLineage(t *testing.T) {
 	foundDependsOn := false
 	for _, rel := range color.Relations {
 		switch rel.Type {
-		case interfaces.RelationParentChild:
+		case work.RelationParentChild:
 			foundParent = true
 			if rel.TargetWorkID != "parent-prd-42" {
 				t.Errorf("expected parent TargetWorkID %q, got %q", "parent-prd-42", rel.TargetWorkID)
 			}
-		case interfaces.RelationDependsOn:
+		case work.RelationDependsOn:
 			foundDependsOn = true
 			if rel.TargetWorkID != "prereq-work-99" {
 				t.Errorf("expected depends-on TargetWorkID %q, got %q", "prereq-work-99", rel.TargetWorkID)

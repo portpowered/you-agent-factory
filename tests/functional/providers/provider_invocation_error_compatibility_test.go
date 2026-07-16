@@ -3,7 +3,8 @@ package providers
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -45,18 +46,18 @@ func TestInvocationErrorCompatibility_CodexReportingPathsPreserveStableWorkFailu
 		streamMessage string
 		exitStderr    string
 		exitCode      int
-		wantType      interfaces.WorkFailureType
+		wantType      workerexecution.WorkFailureType
 	}{
-		{name: "auth", streamMessage: "unexpected status 401", exitStderr: "ERROR: unexpected status 401\n", exitCode: 1, wantType: interfaces.WorkFailureTypeAuthFailure},
-		{name: "invalid_request", streamMessage: "unexpected status 400", exitStderr: "ERROR: unexpected status 400\n", exitCode: 1, wantType: interfaces.WorkFailureTypePermanentBadRequest},
-		{name: "throttle", streamMessage: "unexpected status 429", exitStderr: "ERROR: unexpected status 429\n", exitCode: 1, wantType: interfaces.WorkFailureTypeThrottled},
-		{name: "capacity", streamMessage: "selected model is at capacity", exitStderr: "ERROR: selected model is at capacity\n", exitCode: 1, wantType: interfaces.WorkFailureTypeThrottled},
-		{name: "usage_limit", streamMessage: "you've hit your usage limit", exitStderr: "ERROR: you've hit your usage limit\n", exitCode: 1, wantType: interfaces.WorkFailureTypeThrottled},
-		{name: "timeout", streamMessage: "command timed out", exitStderr: "ERROR: command timed out\n", exitCode: 124, wantType: interfaces.WorkFailureTypeTimeout},
-		{name: "disconnect", streamMessage: "unexpected status 502", exitStderr: "ERROR: unexpected status 502\n", exitCode: 1, wantType: interfaces.WorkFailureTypeInternalServerError},
-		{name: "server", streamMessage: "unexpected status 503", exitStderr: "ERROR: unexpected status 503\n", exitCode: 1, wantType: interfaces.WorkFailureTypeInternalServerError},
-		{name: "malformed", streamMessage: "operation failed with private transcript details", exitStderr: `ERROR: {"type":"error","error":{"message":"private transcript"}}` + "\n", exitCode: 1, wantType: interfaces.WorkFailureTypeUnknown},
-		{name: "unknown", streamMessage: "cleanup detail that is not a recognized provider failure", exitStderr: "", exitCode: 17, wantType: interfaces.WorkFailureTypeUnknown},
+		{name: "auth", streamMessage: "unexpected status 401", exitStderr: "ERROR: unexpected status 401\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeAuthFailure},
+		{name: "invalid_request", streamMessage: "unexpected status 400", exitStderr: "ERROR: unexpected status 400\n", exitCode: 1, wantType: workerexecution.WorkFailureTypePermanentBadRequest},
+		{name: "throttle", streamMessage: "unexpected status 429", exitStderr: "ERROR: unexpected status 429\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeThrottled},
+		{name: "capacity", streamMessage: "selected model is at capacity", exitStderr: "ERROR: selected model is at capacity\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeThrottled},
+		{name: "usage_limit", streamMessage: "you've hit your usage limit", exitStderr: "ERROR: you've hit your usage limit\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeThrottled},
+		{name: "timeout", streamMessage: "command timed out", exitStderr: "ERROR: command timed out\n", exitCode: 124, wantType: workerexecution.WorkFailureTypeTimeout},
+		{name: "disconnect", streamMessage: "unexpected status 502", exitStderr: "ERROR: unexpected status 502\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeInternalServerError},
+		{name: "server", streamMessage: "unexpected status 503", exitStderr: "ERROR: unexpected status 503\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeInternalServerError},
+		{name: "malformed", streamMessage: "operation failed with private transcript details", exitStderr: `ERROR: {"type":"error","error":{"message":"private transcript"}}` + "\n", exitCode: 1, wantType: workerexecution.WorkFailureTypeUnknown},
+		{name: "unknown", streamMessage: "cleanup detail that is not a recognized provider failure", exitStderr: "", exitCode: 17, wantType: workerexecution.WorkFailureTypeUnknown},
 	}
 
 	for _, tc := range testCases {
@@ -87,13 +88,13 @@ func TestInvocationErrorCompatibility_CodexReportingPathsPreserveStableWorkFailu
 
 func TestInvocationErrorCompatibility_CodexUnknownExitFallbackKeepsStableTypeWithAuditedMessage(t *testing.T) {
 	providerErr := provider.NormalizeProviderExitFailure(
-		string(interfaces.ModelProviderCodex),
+		string(modelprovider.Codex),
 		provider.CommandResult{ExitCode: 7, Stderr: []byte("configured stderr")},
 		nil,
 		nil,
 	)
-	if providerErr.Type != interfaces.WorkFailureTypeUnknown {
-		t.Fatalf("Type = %q, want stable %q", providerErr.Type, interfaces.WorkFailureTypeUnknown)
+	if providerErr.Type != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("Type = %q, want stable %q", providerErr.Type, workerexecution.WorkFailureTypeUnknown)
 	}
 	if providerErr.Message != codexUnknownFailureMessage {
 		t.Fatalf("Message = %q, want audited %q", providerErr.Message, codexUnknownFailureMessage)

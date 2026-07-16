@@ -1,23 +1,24 @@
 package runtimetests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"testing"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 )
 
 func TestLoadRuntimeConfig_ResolvesPublicWorkerModelProviderToCLICommand(t *testing.T) {
 	cases := []struct {
 		name     string
 		public   string
-		internal interfaces.ModelProvider
+		internal modelprovider.ID
 	}{
-		{name: "CLAUDE", public: "CLAUDE", internal: interfaces.ModelProviderClaude},
-		{name: "CODEX", public: "CODEX", internal: interfaces.ModelProviderCodex},
-		{name: "CURSOR", public: "CURSOR", internal: interfaces.ModelProviderCursor},
-		{name: "GEMINI", public: "GEMINI", internal: interfaces.ModelProviderGemini},
-		{name: "KIRO", public: "KIRO", internal: interfaces.ModelProviderKiro},
-		{name: "OPENCODE", public: "OPENCODE", internal: interfaces.ModelProviderOpenCode},
+		{name: "CLAUDE", public: "CLAUDE", internal: modelprovider.Claude},
+		{name: "CODEX", public: "CODEX", internal: modelprovider.Codex},
+		{name: "CURSOR", public: "CURSOR", internal: modelprovider.Cursor},
+		{name: "GEMINI", public: "GEMINI", internal: modelprovider.Gemini},
+		{name: "KIRO", public: "KIRO", internal: modelprovider.Kiro},
+		{name: "OPENCODE", public: "OPENCODE", internal: modelprovider.OpenCode},
 	}
 
 	for _, tc := range cases {
@@ -67,7 +68,7 @@ func TestLoadRuntimeConfig_ResolvesPublicWorkerModelProviderToCLICommand(t *test
 			if !ok {
 				t.Fatal("expected inline executor worker definition")
 			}
-			if got := interfaces.ModelProvider(workerDef.ModelProvider); got != tc.internal {
+			if got := modelprovider.ID(workerDef.ModelProvider); got != tc.internal {
 				t.Fatalf("runtime modelProvider = %q, want %q", got, tc.internal)
 			}
 		})

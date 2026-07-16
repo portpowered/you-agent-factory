@@ -12,14 +12,20 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
-	"github.com/portpowered/infinite-you/pkg/workers/agypty"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
 func TestScriptWrapProvider_OpenCodeNegotiatedAdapterPublishesProductionStream(t *testing.T) {
@@ -38,9 +44,9 @@ func TestScriptWrapProvider_OpenCodeNegotiatedAdapterPublishesProductionStream(t
 		}),
 	)
 
-	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: privatePrompt,
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-production"},
+	response, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode), UserMessage: privatePrompt,
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-opencode-production"},
 	})
 	if err != nil {
 		t.Fatalf("Infer() error = %v", err)
@@ -83,9 +89,9 @@ func TestScriptWrapProvider_OpenCodeProductionProgressRunnerUsesCanonicalAdapter
 		}),
 	)
 
-	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private production prompt",
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-production-runner"},
+	response, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode), UserMessage: "private production prompt",
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-opencode-production-runner"},
 	})
 	if err != nil {
 		t.Fatalf("Infer() error = %v", err)
@@ -113,9 +119,9 @@ func TestScriptWrapProvider_OpenCodePublishesSafeProductionFallback(t *testing.T
 		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
 	)
 
-	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: privatePrompt,
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-fallback"},
+	response, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode), UserMessage: privatePrompt,
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-opencode-fallback"},
 	})
 	if err != nil || response.Content != "fallback answer" {
 		t.Fatalf("Infer() = %#v, %v", response, err)
@@ -140,9 +146,9 @@ func TestScriptWrapProvider_OpenCodePublishesSafeProductionFallback(t *testing.T
 }
 
 func TestScriptWrapProvider_OpenCodeRejectsUnsupportedRequiredCapabilitiesBeforeExecution(t *testing.T) {
-	for _, capability := range []interfaces.RunnerOptionalCapability{
-		interfaces.RunnerOptionalCapabilityImageInput,
-		interfaces.RunnerOptionalCapabilityWorktree,
+	for _, capability := range []workerexecution.RunnerOptionalCapability{
+		workerexecution.RunnerOptionalCapabilityImageInput,
+		workerexecution.RunnerOptionalCapabilityWorktree,
 	} {
 		t.Run(string(capability), func(t *testing.T) {
 			runner := &recordingProviderExec{result: CommandResult{Stdout: []byte("must not execute")}}
@@ -151,9 +157,9 @@ func TestScriptWrapProvider_OpenCodeRejectsUnsupportedRequiredCapabilitiesBefore
 				WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
 			)
 
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
-				RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{capability},
+			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.OpenCode), UserMessage: "private prompt",
+				RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{capability},
 			})
 			assertOpenCodePermanentBadRequest(t, err)
 			if runner.calls != 0 {
@@ -172,10 +178,10 @@ func TestScriptWrapProvider_OpenCodeRejectsRequiredStructuredOutputWhenKnownFina
 		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
-		Dispatch:                     interfaces.WorkDispatch{DispatchID: "dispatch-required-final-only"},
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode), UserMessage: "private prompt",
+		Dispatch:                     work.WorkDispatch{DispatchID: "dispatch-required-final-only"},
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{workerexecution.RunnerOptionalCapabilityStructuredOutput},
 	})
 	assertOpenCodePermanentBadRequest(t, err)
 	if runner.calls != 0 {
@@ -196,15 +202,15 @@ func TestScriptWrapProvider_OpenCodeRequiredStructuredOutputProhibitsStaleFallba
 		WithOpenCodeCapabilityResolver(resolver),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode), UserMessage: "private prompt",
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{workerexecution.RunnerOptionalCapabilityStructuredOutput},
 	})
 	assertOpenCodePermanentBadRequest(t, err)
 	if len(runner.requests) != 1 || !reflect.DeepEqual(runner.requests[0].Args, []string{"run", "--format", "json", "private prompt"}) {
 		t.Fatalf("runner requests = %#v, want one structured attempt", runner.requests)
 	}
-	decision, resolveErr := resolver.Resolve(context.Background(), string(interfaces.ModelProviderOpenCode))
+	decision, resolveErr := resolver.Resolve(context.Background(), string(modelprovider.OpenCode))
 	if resolveErr != nil || decision.Mode != opencodeadapter.ModeStructured {
 		t.Fatalf("cached decision = %#v, %v; required stream must not downgrade", decision, resolveErr)
 	}
@@ -213,7 +219,7 @@ func TestScriptWrapProvider_OpenCodeRequiredStructuredOutputProhibitsStaleFallba
 func assertOpenCodePermanentBadRequest(t *testing.T, err error) {
 	t.Helper()
 	var providerErr *ProviderError
-	if !errors.As(err, &providerErr) || providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+	if !errors.As(err, &providerErr) || providerErr.Type != workerexecution.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("error = %T %v, want permanent bad request", err, err)
 	}
 }
@@ -258,9 +264,9 @@ func TestScriptWrapProvider_CursorDiagnosticsUseInjectedDispatchLogger(t *testin
 		zap.String("runtime_instance_id", "runtime-cursor-1"),
 		zap.String("session_id", "factory-session-cursor-1"),
 	)
-	request := interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCursor), Model: "cursor-model", WorkerType: "agent",
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-cursor-1", WorkerType: "agent", WorkstationName: "implementation"},
+	request := workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Cursor), Model: "cursor-model", WorkerType: "agent",
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-cursor-1", WorkerType: "agent", WorkstationName: "implementation"},
 	}
 
 	for _, tc := range []struct {
@@ -317,7 +323,7 @@ func cursorTerminalLogRecord(t *testing.T, logs string, failure bool) map[string
 
 func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonicalFailure(t *testing.T) {
 	scriptDir := t.TempDir()
-	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	scriptPath := filepath.Join(scriptDir, string(modelprovider.Cursor))
 	writeProviderOutputFixture(t, scriptPath, []byte("{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":true,\"result\":\"Request timed out\",\"session_id\":\"cursor-session-error\"}\n"), nil, 0)
 	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
@@ -333,16 +339,16 @@ func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonica
 		WithInferenceProgressPublisher(publish),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-error-flagged-success"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-error-flagged-success"},
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "private prompt",
 	})
 	providerErr, ok := err.(*ProviderError)
 	if !ok {
 		t.Fatalf("error = %T, want *ProviderError", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeTimeout || providerErr.Message != "Request timed out" {
+	if providerErr.Type != workerexecution.WorkFailureTypeTimeout || providerErr.Message != "Request timed out" {
 		t.Fatalf("provider error = %#v, want canonical timeout", providerErr)
 	}
 
@@ -381,16 +387,16 @@ func TestScriptWrapProvider_Infer_CursorZeroExitTerminalFailureCarriesCanonicalR
 		}),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-zero-exit-failure"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-zero-exit-failure"},
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "private prompt",
 	})
 	providerErr, ok := err.(*ProviderError)
 	if !ok {
 		t.Fatalf("error = %T, want *ProviderError", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeTimeout || providerErr.Message != "Cursor terminal request timed out" {
+	if providerErr.Type != workerexecution.WorkFailureTypeTimeout || providerErr.Message != "Cursor terminal request timed out" {
 		t.Fatalf("provider error = %#v, want canonical terminal timeout", providerErr)
 	}
 	if providerErr.ProviderSession == nil || providerErr.ProviderSession.ID != "cursor-final-session" {
@@ -415,9 +421,9 @@ func TestScriptWrapProvider_Infer_CursorMalformedStructuredOutputDoesNotPublishP
 		}),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-malformed-structured"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-malformed-structured"},
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   privatePrompt,
 	})
 	providerErr, ok := err.(*ProviderError)
@@ -446,8 +452,8 @@ func TestScriptWrapProvider_Infer_CursorParsesStreamJSONResult(t *testing.T) {
 	}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
-	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Cursor),
 		Model:         "gpt-5",
 		UserMessage:   "run the tests",
 	})
@@ -490,9 +496,9 @@ func TestScriptWrapProvider_Infer_CursorPublishesTerminalCompletionMarker(t *tes
 		}),
 	)
 
-	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-success"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	resp, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-success"},
+		ModelProvider: string(modelprovider.Cursor),
 		Model:         "gpt-5",
 		UserMessage:   "run the tests",
 	})
@@ -518,9 +524,9 @@ func TestScriptWrapProvider_Infer_CursorPublishesTerminalCompletionMarker(t *tes
 
 func TestScriptWrapProvider_Infer_CursorCompletionPublisherPreservesFinalResponse(t *testing.T) {
 	stdout := cursorpkg.SuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
-	req := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-success"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	req := workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-success"},
+		ModelProvider: string(modelprovider.Cursor),
 		Model:         "gpt-5",
 		UserMessage:   "run the tests",
 	}
@@ -568,9 +574,9 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 		}),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-malformed-json"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-malformed-json"},
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "run the tests",
 	})
 	if err == nil {
@@ -580,7 +586,7 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeUnknown {
+	if providerErr.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", providerErr.Type)
 	}
 	if providerErr.Message != string(stderr) || strings.Contains(providerErr.Message, privateMalformedContent) {
@@ -615,15 +621,15 @@ func TestScriptWrapProvider_Infer_CursorParseFailureUsesStderrParserResult(t *te
 		result: CommandResult{Stdout: stdout, Stderr: stderr},
 	}))
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "private prompt",
 	})
 	providerErr, ok := err.(*ProviderError)
 	if !ok {
 		t.Fatalf("error = %T, want *ProviderError", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeAuthFailure || providerErr.Message != string(stderr) {
+	if providerErr.Type != workerexecution.WorkFailureTypeAuthFailure || providerErr.Message != string(stderr) {
 		t.Fatalf("provider error = %#v, want canonical stderr authentication result", providerErr)
 	}
 	if providerErr.Cause == nil {
@@ -643,8 +649,8 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsEx
 	}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "run the tests",
 	})
 	if err == nil {
@@ -654,7 +660,7 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsEx
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeInternalServerError {
+	if providerErr.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("error type = %q, want internal_server_error", providerErr.Type)
 	}
 	if providerErr.Message != "ERROR: unexpected status 500 from cursor upstream" {
@@ -682,9 +688,9 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePublishesTerminalFailureMarke
 		}),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-failure"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-failure"},
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "run the tests",
 	})
 	if err == nil {
@@ -707,9 +713,9 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePublishesTerminalFailureMarke
 func TestScriptWrapProvider_Infer_CursorFailurePublisherPreservesProviderError(t *testing.T) {
 	stdout := []byte("partial json output")
 	stderr := []byte("noise before\nERROR: unexpected status 500 from cursor upstream")
-	req := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-failure"},
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	req := workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-cursor-failure"},
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "run the tests",
 	}
 
@@ -758,9 +764,9 @@ func TestScriptWrapProvider_Infer_CursorFailurePublisherPreservesProviderError(t
 }
 
 func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalResponse(t *testing.T) {
-	req := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-claude-success"},
-		ModelProvider: string(interfaces.ModelProviderClaude),
+	req := workerexecution.ProviderInferenceRequest{
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-claude-success"},
+		ModelProvider: string(modelprovider.Claude),
 		Model:         "claude-sonnet-4-5-20250514",
 		SessionID:     "claude-session-123",
 		UserMessage:   "fix it",
@@ -797,7 +803,7 @@ func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalRespons
 	}
 }
 
-func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics, wantStdout, wantStderr string) {
+func assertCursorFailureExcerpts(t *testing.T, diagnostics *workerexecution.WorkDiagnostics, wantStdout, wantStderr string) {
 	t.Helper()
 	if diagnostics == nil || diagnostics.Provider == nil {
 		t.Fatal("expected provider diagnostics with failure excerpts")
@@ -811,9 +817,9 @@ func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagn
 	}
 }
 
-func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics) {
+func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *workerexecution.WorkDiagnostics) {
 	t.Helper()
-	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	safe := workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
 	if safe == nil || safe.Provider == nil {
 		t.Fatal("expected safe provider diagnostics")
 	}
@@ -828,7 +834,7 @@ func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkD
 	}
 }
 
-func assertEquivalentInferenceResponse(t *testing.T, got, want interfaces.InferenceResponse) {
+func assertEquivalentInferenceResponse(t *testing.T, got, want workerexecution.InferenceResponse) {
 	t.Helper()
 	if got.Content != want.Content {
 		t.Fatalf("content = %q, want %q", got.Content, want.Content)
@@ -853,7 +859,7 @@ func assertEquivalentProviderError(t *testing.T, got, want *ProviderError) {
 	assertEquivalentWorkDiagnostics(t, got.Diagnostics, want.Diagnostics)
 }
 
-func assertEquivalentWorkDiagnostics(t *testing.T, got, want *interfaces.WorkDiagnostics) {
+func assertEquivalentWorkDiagnostics(t *testing.T, got, want *workerexecution.WorkDiagnostics) {
 	t.Helper()
 	if (got == nil) != (want == nil) {
 		t.Fatalf("diagnostics presence = %#v, want %#v", got, want)
@@ -876,7 +882,7 @@ func assertEquivalentWorkDiagnostics(t *testing.T, got, want *interfaces.WorkDia
 	assertEquivalentCommandDiagnostic(t, got.Command, want.Command)
 }
 
-func assertEquivalentCommandDiagnostic(t *testing.T, got, want *interfaces.CommandDiagnostic) {
+func assertEquivalentCommandDiagnostic(t *testing.T, got, want *workerexecution.CommandDiagnostic) {
 	t.Helper()
 	if (got == nil) != (want == nil) {
 		t.Fatalf("command diagnostics presence = %#v, want %#v", got, want)
@@ -912,9 +918,9 @@ func TestScriptWrapProviderExecuteAgyTimeoutWithPartialDoesNotReturnSuccessOrCom
 			published = append(published, fragment)
 		}),
 	)
-	_, err := provider.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
-		ModelProvider:    string(interfaces.ModelProviderAgy),
+	_, err := provider.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+		ModelProvider:    string(modelprovider.Agy),
 		WorkingDirectory: ".",
 		UserMessage:      "plan the goal",
 	})
@@ -943,9 +949,9 @@ func TestScriptWrapProviderExecuteAgyUsesPTYAdapterPath(t *testing.T) {
 		WithAgyFactoryRoot(factoryRoot),
 		WithAgyPTYAllocator(mock),
 	)
-	response, err := provider.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-cli"},
-		ModelProvider:    string(interfaces.ModelProviderAgy),
+	response, err := provider.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-cli"},
+		ModelProvider:    string(modelprovider.Agy),
 		WorkingDirectory: ".",
 		UserMessage:      "plan the goal",
 	})

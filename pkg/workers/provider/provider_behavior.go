@@ -9,8 +9,12 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -50,8 +54,8 @@ func (c *ProviderBuildContext) registerCleanup(cleanup func()) {
 }
 
 type providerBehavior interface {
-	BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error)
-	BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest
+	BuildArgs(ctx context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error)
+	BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest
 }
 
 type sharedNonCodexProviderBehavior struct{}
@@ -91,28 +95,28 @@ type piProviderBehavior struct {
 
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
-	case string(interfaces.ModelProviderCodex):
+	case string(modelprovider.Codex):
 		return codexProviderBehavior{logger: logger}
-	case string(interfaces.ModelProviderGemini):
+	case string(modelprovider.Gemini):
 		return geminiProviderBehavior{logger: logger}
-	case string(interfaces.ModelProviderKiro):
+	case string(modelprovider.Kiro):
 		return kiroProviderBehavior{logger: logger}
-	case string(interfaces.ModelProviderCursor):
+	case string(modelprovider.Cursor):
 		return cursorProviderBehavior{logger: logger}
-	case string(interfaces.ModelProviderOpenCode):
+	case string(modelprovider.OpenCode):
 		return openCodeProviderBehavior{logger: logger}
-	case string(interfaces.ModelProviderPi):
+	case string(modelprovider.Pi):
 		return piProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
 }
 
-func (sharedNonCodexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+func (sharedNonCodexProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
 	return buildBaseProviderCommandRequest(req, args)
 }
 
-func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
+func (b claudeProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	if err := unsupportedImageContentError(req.InputTokens, "model provider claude"); err != nil {
 		return nil, err
@@ -141,7 +145,7 @@ func (b claudeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	return args, nil
 }
 
-func (b codexProviderBehavior) BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
+func (b codexProviderBehavior) BuildArgs(ctx context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
 	if err := validateCodexOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -170,7 +174,7 @@ func (b codexProviderBehavior) BuildArgs(ctx context.Context, req interfaces.Pro
 	return args, nil
 }
 
-func (b codexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+func (b codexProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
 	commandReq := buildBaseProviderCommandRequest(req, args)
 	// Codex CLI reliably preserves multiline prompts when they are streamed
 	// over stdin instead of passed as a positional argument.
@@ -183,7 +187,7 @@ func (b codexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInfere
 // the subprocess attempt so dispatch-scoped image files remain available.
 func BuildCodexStructuredCommand(
 	ctx context.Context,
-	req interfaces.ProviderInferenceRequest,
+	req workerexecution.ProviderInferenceRequest,
 	skipPermissions bool,
 	materializeOpts *materialize.Options,
 ) (CommandRequest, func(), error) {
@@ -199,7 +203,7 @@ func BuildCodexStructuredCommand(
 	return behavior.BuildCommandRequest(req, args), cleanup, nil
 }
 
-func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
+func (b geminiProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateGeminiOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -216,7 +220,7 @@ func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	return args, nil
 }
 
-func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
+func (b kiroProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateKiroOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -233,11 +237,11 @@ func (b kiroProviderBehavior) BuildArgs(_ context.Context, req interfaces.Provid
 	return args, nil
 }
 
-func (kiroProviderBehavior) BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+func (kiroProviderBehavior) BuildCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
 	return buildBaseProviderCommandRequest(req, args)
 }
 
-func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
+func (b cursorProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error) {
 	if err := validateCursorOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -286,7 +290,7 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	return args, nil
 }
 
-func buildCursorPrompt(req interfaces.ProviderInferenceRequest) string {
+func buildCursorPrompt(req workerexecution.ProviderInferenceRequest) string {
 	prompt := strings.TrimSpace(req.UserMessage)
 	if strings.TrimSpace(req.SystemPrompt) != "" {
 		prompt = buildKiroPrompt(req)
@@ -314,7 +318,7 @@ func (b cursorProviderBehavior) writeTempFile(tempDir, prompt string) (string, e
 	return path, nil
 }
 
-func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
+func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateOpenCodeOptionalCapabilities(req); err != nil {
 		return nil, err
 	}
@@ -338,7 +342,7 @@ func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Pr
 	return args, nil
 }
 
-func (b piProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, _ bool, _ *ProviderBuildContext) ([]string, error) {
+func (b piProviderBehavior) BuildArgs(_ context.Context, req workerexecution.ProviderInferenceRequest, _ bool, _ *ProviderBuildContext) ([]string, error) {
 	logger := logging.EnsureLogger(b.logger)
 	args := []string{"--print", "--mode", "json", "--approve"}
 	if req.Model != "" {
@@ -355,13 +359,13 @@ func (b piProviderBehavior) BuildArgs(_ context.Context, req interfaces.Provider
 	return args, nil
 }
 
-func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
-	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
-		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
-		interfaces.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
-		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
+func validateGeminiOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
+	unsupported := map[workerexecution.RunnerOptionalCapability]string{
+		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
+		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the gemini runner in v1",
+		workerexecution.RunnerOptionalCapabilitySessionResume:    "session resume is not supported by the gemini runner in v1",
+		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the gemini runner in v1",
+		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the gemini runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {
@@ -374,9 +378,9 @@ func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 	return nil
 }
 
-func validateCodexOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
+func validateCodexOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
 	for _, capability := range req.RequiredOptionalCapabilities {
-		if capability == interfaces.RunnerOptionalCapabilityWorktree {
+		if capability == workerexecution.RunnerOptionalCapabilityWorktree {
 			return errors.New("worktree selection is not supported by the codex runner in v1")
 		}
 	}
@@ -386,12 +390,12 @@ func validateCodexOptionalCapabilities(req interfaces.ProviderInferenceRequest) 
 	return nil
 }
 
-func validateKiroOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
-	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the kiro runner in v1",
-		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
-		interfaces.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
+func validateKiroOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
+	unsupported := map[workerexecution.RunnerOptionalCapability]string{
+		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the kiro runner in v1",
+		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the kiro runner in v1",
+		workerexecution.RunnerOptionalCapabilityWorkingDirectory: "working directory is not supported by the kiro runner in v1",
+		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the kiro runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {
@@ -401,11 +405,11 @@ func validateKiroOptionalCapabilities(req interfaces.ProviderInferenceRequest) e
 	return nil
 }
 
-func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
-	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
-		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the cursor-cli runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the cursor-cli runner in v1",
+func validateCursorOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
+	unsupported := map[workerexecution.RunnerOptionalCapability]string{
+		workerexecution.RunnerOptionalCapabilityImageInput:       "image input is not supported by the cursor-cli runner in v1",
+		workerexecution.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the cursor-cli runner in v1",
+		workerexecution.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the cursor-cli runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {
@@ -415,10 +419,10 @@ func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 	return nil
 }
 
-func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
-	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput: "image input is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:   "worktree selection is not supported by the opencode runner in v1",
+func validateOpenCodeOptionalCapabilities(req workerexecution.ProviderInferenceRequest) error {
+	unsupported := map[workerexecution.RunnerOptionalCapability]string{
+		workerexecution.RunnerOptionalCapabilityImageInput: "image input is not supported by the opencode runner in v1",
+		workerexecution.RunnerOptionalCapabilityWorktree:   "worktree selection is not supported by the opencode runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {
@@ -428,7 +432,7 @@ func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceReques
 	return nil
 }
 
-func buildKiroPrompt(req interfaces.ProviderInferenceRequest) string {
+func buildKiroPrompt(req workerexecution.ProviderInferenceRequest) string {
 	systemPrompt := strings.TrimSpace(req.SystemPrompt)
 	userMessage := strings.TrimSpace(req.UserMessage)
 	switch {
@@ -441,7 +445,7 @@ func buildKiroPrompt(req interfaces.ProviderInferenceRequest) string {
 	}
 }
 
-func buildBaseProviderCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest {
+func buildBaseProviderCommandRequest(req workerexecution.ProviderInferenceRequest, args []string) CommandRequest {
 	commandReq := workerprocess.SubprocessRequestBase(req.Dispatch)
 	commandReq.Command = string(req.ModelProvider)
 	commandReq.Args = append([]string(nil), args...)
@@ -467,7 +471,7 @@ func formatCombinedProviderOutput(result CommandResult) string {
 	}, "\n")
 }
 
-func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, buildCtx *ProviderBuildContext) ([]string, error) {
+func codexImageArgs(ctx context.Context, req workerexecution.ProviderInferenceRequest, buildCtx *ProviderBuildContext) ([]string, error) {
 	tokens := cloneInputTokens(req.InputTokens)
 	if len(tokens) == 0 {
 		return nil, nil
@@ -483,7 +487,7 @@ func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest
 	var args []string
 	for tokenIndex, token := range tokens {
 		for partIndex, part := range token.Color.Content {
-			if part.Type != interfaces.WorkContentPartTypeImage {
+			if part.Type != work.WorkContentPartTypeImage {
 				continue
 			}
 			contentURL, err := codexImageContentURL(part)
@@ -504,7 +508,7 @@ func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest
 	return args, nil
 }
 
-func codexImageContentURL(part interfaces.WorkContentPart) (string, error) {
+func codexImageContentURL(part work.WorkContentPart) (string, error) {
 	if strings.TrimSpace(part.URL) != "" {
 		return part.URL, nil
 	}
@@ -536,7 +540,7 @@ func formatProviderOutputOrDefault(result CommandResult, fallback string) string
 
 // WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
 // provider error using the same FailureMetadata projection as WorkResult.
-func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFailureDecision {
+func WorkFailureDecisionFromProviderError(err *ProviderError) workerexecution.WorkFailureDecision {
 	return WorkFailureDecisionFromMetadata(WorkFailureMetadataFromError(err))
 }
 
@@ -544,9 +548,9 @@ func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFai
 // generalized failure metadata carried across runtime boundaries.
 // The normalized type is canonical when present; family remains a fallback for
 // older or partial metadata that omitted type.
-func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
+func WorkFailureDecisionFromMetadata(metadata *workerexecution.WorkFailureMetadata) workerexecution.WorkFailureDecision {
 	if metadata == nil {
-		return interfaces.WorkFailureDecision{}
+		return workerexecution.WorkFailureDecision{}
 	}
 	if metadata.Type != "" {
 		return providerFailurePolicyForReason(metadata.Type).Decision
@@ -555,57 +559,57 @@ func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) i
 }
 
 type providerFailurePolicy struct {
-	Family   interfaces.WorkFailureFamily
-	Decision interfaces.WorkFailureDecision
+	Family   workerexecution.WorkFailureFamily
+	Decision workerexecution.WorkFailureDecision
 }
 
-func providerFailurePolicyForReason(reason interfaces.WorkFailureType) providerFailurePolicy {
+func providerFailurePolicyForReason(reason workerexecution.WorkFailureType) providerFailurePolicy {
 	switch reason {
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return providerFailurePolicy{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Decision: interfaces.WorkFailureDecision{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Decision: workerexecution.WorkFailureDecision{
 				Retryable:             true,
 				TriggersThrottlePause: true,
 			},
 		}
-	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeInternalServerError, workerexecution.WorkFailureTypeTimeout:
 		return providerFailurePolicy{
-			Family:   interfaces.WorkFailureFamilyRetryable,
-			Decision: interfaces.WorkFailureDecision{Retryable: true},
+			Family:   workerexecution.WorkFailureFamilyRetryable,
+			Decision: workerexecution.WorkFailureDecision{Retryable: true},
 		}
-	case interfaces.WorkFailureTypeAuthFailure,
-		interfaces.WorkFailureTypePermanentBadRequest,
-		interfaces.WorkFailureTypeUnknown,
-		interfaces.WorkFailureTypeMisconfigured,
-		interfaces.WorkFailureTypeMissingExecutable,
-		interfaces.WorkFailureTypeCommandLineTooLong:
+	case workerexecution.WorkFailureTypeAuthFailure,
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypeUnknown,
+		workerexecution.WorkFailureTypeMisconfigured,
+		workerexecution.WorkFailureTypeMissingExecutable,
+		workerexecution.WorkFailureTypeCommandLineTooLong:
 		return providerFailurePolicy{
-			Family:   interfaces.WorkFailureFamilyTerminal,
-			Decision: interfaces.WorkFailureDecision{Terminal: true},
+			Family:   workerexecution.WorkFailureFamilyTerminal,
+			Decision: workerexecution.WorkFailureDecision{Terminal: true},
 		}
 	default:
 		return providerFailurePolicy{
-			Family:   interfaces.WorkFailureFamilyTerminal,
-			Decision: interfaces.WorkFailureDecision{Terminal: true},
+			Family:   workerexecution.WorkFailureFamilyTerminal,
+			Decision: workerexecution.WorkFailureDecision{Terminal: true},
 		}
 	}
 }
 
-func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
+func providerFailureDecisionForFamily(family workerexecution.WorkFailureFamily) workerexecution.WorkFailureDecision {
 	switch family {
-	case interfaces.WorkFailureFamilyRetryable:
-		return interfaces.WorkFailureDecision{Retryable: true}
-	case interfaces.WorkFailureFamilyThrottle:
-		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
-	case interfaces.WorkFailureFamilyTerminal:
-		return interfaces.WorkFailureDecision{Terminal: true}
+	case workerexecution.WorkFailureFamilyRetryable:
+		return workerexecution.WorkFailureDecision{Retryable: true}
+	case workerexecution.WorkFailureFamilyThrottle:
+		return workerexecution.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
+	case workerexecution.WorkFailureFamilyTerminal:
+		return workerexecution.WorkFailureDecision{Terminal: true}
 	default:
-		return interfaces.WorkFailureDecision{Terminal: true}
+		return workerexecution.WorkFailureDecision{Terminal: true}
 	}
 }
 
-func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
+func providerErrorFamilyForType(errorType workerexecution.WorkFailureType) workerexecution.WorkFailureFamily {
 	return providerFailurePolicyForReason(errorType).Family
 }
 

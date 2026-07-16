@@ -10,12 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,14 +26,14 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_resource"))
 	artifactPath := filepath.Join(t.TempDir(), "factory-only-serialization.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "factory-only serialization smoke",
 		WorkID:     "work-factory-only-serialization-smoke",
 		WorkTypeID: "task",
 		TraceID:    "trace-factory-only-serialization-smoke",
 		Payload:    []byte(`{"title":"factory-only serialization smoke"}`),
 	})
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"exec-worker": {
 			{Content: "first pass needs another iteration"},
 			{Content: "second pass needs another iteration"},
@@ -121,7 +123,11 @@ func assertFactoryOnlyPayloadCoversRepresentativeConfig(t *testing.T, factory fa
 func assertFactoryOnlyPayloadProjectsInitialTopology(t *testing.T, factory factoryapi.Factory) {
 	t.Helper()
 
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(factory)
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		t.Fatalf("capture recorded Factory: %v", err)
+	}
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(snapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}

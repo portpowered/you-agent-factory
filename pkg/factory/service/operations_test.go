@@ -5,20 +5,20 @@ import (
 	"errors"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 type operationsFactory struct {
 	lifecycleObserverFactory
 
-	submitResult interfaces.WorkRequestSubmitResult
+	submitResult work.WorkRequestSubmitResult
 	submitErr    error
-	moveResult   interfaces.OperatorMoveResult
+	moveResult   work.OperatorMoveResult
 	moveErr      error
 	subscribeErr error
 	snapshotErr  error
@@ -33,14 +33,14 @@ type operationsFactory struct {
 	snapshotCalls  int
 }
 
-func (f *operationsFactory) SubmitWorkRequest(_ context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (f *operationsFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	f.submitCalls++
 	if f.submitErr != nil {
-		return interfaces.WorkRequestSubmitResult{}, f.submitErr
+		return work.WorkRequestSubmitResult{}, f.submitErr
 	}
 	if f.submitResult.Works == nil && len(request.Works) > 0 {
-		return interfaces.WorkRequestSubmitResult{
-			Works: []interfaces.WorkRequestSubmittedWork{{
+		return work.WorkRequestSubmitResult{
+			Works: []work.WorkRequestSubmittedWork{{
 				WorkID: request.Works[0].WorkID,
 			}},
 		}, nil
@@ -48,13 +48,13 @@ func (f *operationsFactory) SubmitWorkRequest(_ context.Context, request interfa
 	return f.submitResult, nil
 }
 
-func (f *operationsFactory) MoveWork(_ context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (f *operationsFactory) MoveWork(_ context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	f.moveCalls++
 	if f.moveErr != nil {
-		return interfaces.OperatorMoveResult{}, f.moveErr
+		return work.OperatorMoveResult{}, f.moveErr
 	}
 	if f.moveResult.WorkID == "" {
-		return interfaces.OperatorMoveResult{WorkID: workID, ToState: stateName}, nil
+		return work.OperatorMoveResult{WorkID: workID, ToState: stateName}, nil
 	}
 	return f.moveResult, nil
 }
@@ -73,7 +73,7 @@ func (f *operationsFactory) SubscribeFactoryEvents(_ context.Context, reconnect 
 		}
 	}
 	return &interfaces.FactoryEventStream{
-		Events:             make(chan factoryapi.FactoryEvent),
+		Events:             make(chan interfaces.FactoryEvent),
 		StreamGenerationID: "gen-1",
 	}, nil
 }
@@ -101,10 +101,10 @@ func (f *operationsFactory) WaitToComplete() <-chan struct{} {
 func TestRuntimeOperations_ReportUnavailableWithoutBundle(t *testing.T) {
 	t.Parallel()
 
-	if _, err := factoryservice.SubmitWorkRequest(context.Background(), nil, interfaces.WorkRequest{}); !errors.Is(err, factoryservice.ErrRuntimeNotAvailable) {
+	if _, err := factoryservice.SubmitWorkRequest(context.Background(), nil, work.WorkRequest{}); !errors.Is(err, factoryservice.ErrRuntimeNotAvailable) {
 		t.Fatalf("SubmitWorkRequest error = %v, want ErrRuntimeNotAvailable", err)
 	}
-	if _, err := factoryservice.MoveWork(context.Background(), nil, "work-1", "done", interfaces.WorkStateChangeSourceAPI, "req-1"); !errors.Is(err, factoryservice.ErrRuntimeNotAvailable) {
+	if _, err := factoryservice.MoveWork(context.Background(), nil, "work-1", "done", work.WorkStateChangeSourceAPI, "req-1"); !errors.Is(err, factoryservice.ErrRuntimeNotAvailable) {
 		t.Fatalf("MoveWork error = %v, want ErrRuntimeNotAvailable", err)
 	}
 	if _, err := factoryservice.SubscribeFactoryEvents(context.Background(), nil, nil, interfaces.FactoryEventReconnectScope{}); !errors.Is(err, factoryservice.ErrRuntimeNotAvailable) {
@@ -137,8 +137,8 @@ func newOperationsTestBundle() (*operationsFactory, *factoryservice.Bundle, chan
 
 func assertSubmitDelegated(t *testing.T, bundle *factoryservice.Bundle) {
 	t.Helper()
-	submitResult, err := factoryservice.SubmitWorkRequest(context.Background(), bundle, interfaces.WorkRequest{
-		Works: []interfaces.Work{{WorkID: "work-1"}},
+	submitResult, err := factoryservice.SubmitWorkRequest(context.Background(), bundle, work.WorkRequest{
+		Works: []work.Work{{WorkID: "work-1"}},
 	})
 	if err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
@@ -150,7 +150,7 @@ func assertSubmitDelegated(t *testing.T, bundle *factoryservice.Bundle) {
 
 func assertMoveDelegated(t *testing.T, bundle *factoryservice.Bundle) {
 	t.Helper()
-	moveResult, err := factoryservice.MoveWork(context.Background(), bundle, "work-1", "done", interfaces.WorkStateChangeSourceAPI, "req-1")
+	moveResult, err := factoryservice.MoveWork(context.Background(), bundle, "work-1", "done", work.WorkStateChangeSourceAPI, "req-1")
 	if err != nil {
 		t.Fatalf("MoveWork: %v", err)
 	}

@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 const packagedGoalMockWorkerAcceptedSummary = "mock worker accepted"

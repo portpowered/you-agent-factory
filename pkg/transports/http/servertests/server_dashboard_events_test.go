@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -160,8 +160,8 @@ func TestGetDashboardUI_FallbacksToIndexForClientRoutes(t *testing.T) {
 func TestCompatibilityGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	historical := testHistoricalFactoryEvents(t, eventTime)
-	liveEvents := make(chan factoryapi.FactoryEvent, 1)
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical, Events: liveEvents}}
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical), Events: liveEvents}}
 
 	logger, _ := zap.NewDevelopment()
 	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
@@ -378,7 +378,7 @@ func assertHistoricalEventsReplay(t *testing.T, reader *bufio.Reader, historical
 	}
 }
 
-func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan factoryapi.FactoryEvent, eventTime time.Time) {
+func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan interfaces.FactoryEvent, eventTime time.Time) {
 	t.Helper()
 
 	live := testAPIFactoryEvent(t, factoryapi.FactoryEventTypeDispatchRequest, "factory-event/dispatch-created/dispatch-1", factoryapi.FactoryEventContext{
@@ -386,7 +386,7 @@ func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan f
 		EventTime:  time.Date(2026, 4, 8, 12, 0, 2, 0, time.UTC),
 		DispatchId: stringPointerForAPIServerTest("dispatch-1"),
 	}, factoryapi.DispatchRequestEventPayload{TransitionId: "review", Inputs: []factoryapi.DispatchConsumedWorkRef{}})
-	liveEvents <- live
+	liveEvents <- testutil.FactoryEvent(t, live)
 
 	fourth := readAPISSEFactoryEvent(t, reader)
 	if fourth.Id != live.Id || fourth.Type != factoryapi.FactoryEventTypeDispatchRequest || fourth.Context.Tick != 2 {
@@ -397,8 +397,8 @@ func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan f
 func TestCompatibilityGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t *testing.T) {
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	historical := testHistoricalFactoryEvents(t, eventTime)
-	liveEvents := make(chan factoryapi.FactoryEvent, 1)
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical, Events: liveEvents}}
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical), Events: liveEvents}}
 
 	logger, _ := zap.NewDevelopment()
 	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
@@ -426,11 +426,11 @@ func TestCompatibilityGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t 
 }
 
 func TestCompatibilityGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
-	liveEvents := make(chan factoryapi.FactoryEvent)
+	liveEvents := make(chan interfaces.FactoryEvent)
 	mf := &testutil.MockFactory{
 		FactoryEventStream: &interfaces.FactoryEventStream{
-			History: []factoryapi.FactoryEvent{
-				testAPIFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}}),
+			History: []interfaces.FactoryEvent{
+				testutil.FactoryEvent(t, testAPIFactoryEvent(t, factoryapi.FactoryEventTypeInitialStructureRequest, "factory-event/initial-structure/0", factoryapi.FactoryEventContext{Tick: 0, EventTime: time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)}, factoryapi.InitialStructureRequestEventPayload{Factory: factoryapi.Factory{Name: "factory"}})),
 			},
 			Events: liveEvents,
 		},
@@ -468,8 +468,8 @@ func TestCompatibilityGetEvents_ClientDisconnectCancelsSubscription(t *testing.T
 func TestCompatibilityGetEvents_ReconnectAfterSequenceSkipsAcknowledgedHistory(t *testing.T) {
 	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
 	historical := testHistoricalFactoryEventsWithSequence(t, eventTime)
-	liveEvents := make(chan factoryapi.FactoryEvent, 1)
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical, Events: liveEvents}}
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical), Events: liveEvents}}
 
 	logger, _ := zap.NewDevelopment()
 	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
@@ -498,7 +498,7 @@ func TestCompatibilityGetEvents_ReconnectAfterSequenceSkipsAcknowledgedHistory(t
 
 func TestCompatibilityGetEvents_InvalidReconnectCursorReturnsBadRequest(t *testing.T) {
 	historical := testHistoricalFactoryEvents(t, time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC))
-	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical}}
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: testutil.FactoryEvents(t, historical)}}
 
 	logger, _ := zap.NewDevelopment()
 	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())

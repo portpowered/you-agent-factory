@@ -8,12 +8,16 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -45,7 +49,7 @@ func newThinEventSmokeHarness(t *testing.T) thinEventSmokeHarness {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordPath := filepath.Join(t.TempDir(), "thin-event-reducer-views.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-thin-event-reducers",
 		WorkTypeID: "task",
 		TraceID:    "trace-thin-event-reducers",
@@ -107,7 +111,7 @@ func assertThinEventSmokeActiveSnapshot(t *testing.T, active thinEventSmokeActiv
 	assertRawThinDispatchRequestEvent(t, active.events[active.dispatchReqIdx])
 	assertRawInferenceEventUsesContextDispatchIdentity(t, active.requestEvent, active.requestPayload.InferenceRequestId)
 
-	activeState, err := projections.ReconstructFactoryWorldState(active.events, active.requestEvent.Context.Tick)
+	activeState, err := factoryeventprojection.ReconstructFactoryWorldState(active.events, active.requestEvent.Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState active tick %d: %v", active.requestEvent.Context.Tick, err)
 	}
@@ -166,7 +170,8 @@ func loadThinEventSmokeFinalSnapshot(
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
 	artifact := testutil.LoadReplayArtifact(t, smoke.recordPath)
-	assertInferenceEventsRecordedInArtifact(t, liveEvents, artifact.Events)
+	generatedArtifactEvents := testutil.GeneratedFactoryEvents(t, artifact.Events)
+	assertInferenceEventsRecordedInArtifact(t, liveEvents, generatedArtifactEvents)
 	responseEventIdx := indexOfFunctionalInferenceResponseForRequest(liveEvents, active.dispatchID, active.requestPayload.InferenceRequestId)
 	if responseEventIdx < 0 {
 		t.Fatalf("live events = %v, want inference response for dispatch %s request %s", functionalEventTypes(liveEvents), active.dispatchID, active.requestPayload.InferenceRequestId)
@@ -175,7 +180,7 @@ func loadThinEventSmokeFinalSnapshot(
 	if err != nil {
 		t.Fatalf("decode final inference response payload: %v", err)
 	}
-	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, support.LastFactoryEventTick(artifact.Events))
+	finalState, err := factoryeventprojection.ReconstructFactoryWorldState(generatedArtifactEvents, support.LastFactoryEventTick(generatedArtifactEvents))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState final tick: %v", err)
 	}
@@ -288,8 +293,8 @@ func assertThinEventSmokeFinalViews(
 }
 
 type blockingFunctionalInferenceProvider struct {
-	responses        []interfaces.InferenceResponse
-	firstCallStarted chan interfaces.ProviderInferenceRequest
+	responses        []workerexecution.InferenceResponse
+	firstCallStarted chan workerexecution.ProviderInferenceRequest
 	releaseFirst     chan struct{}
 	releaseOnce      sync.Once
 	mu               sync.Mutex
@@ -299,16 +304,16 @@ type blockingFunctionalInferenceProvider struct {
 var _ workers.Provider = (*blockingFunctionalInferenceProvider)(nil)
 
 func newBlockingFunctionalInferenceProvider(
-	responses ...interfaces.InferenceResponse,
+	responses ...workerexecution.InferenceResponse,
 ) *blockingFunctionalInferenceProvider {
 	return &blockingFunctionalInferenceProvider{
 		responses:        responses,
-		firstCallStarted: make(chan interfaces.ProviderInferenceRequest, 1),
+		firstCallStarted: make(chan workerexecution.ProviderInferenceRequest, 1),
 		releaseFirst:     make(chan struct{}),
 	}
 }
 
-func (p *blockingFunctionalInferenceProvider) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *blockingFunctionalInferenceProvider) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	index := p.index
 	p.index++
@@ -322,17 +327,17 @@ func (p *blockingFunctionalInferenceProvider) Infer(ctx context.Context, req int
 		select {
 		case <-p.releaseFirst:
 		case <-ctx.Done():
-			return interfaces.InferenceResponse{}, ctx.Err()
+			return workerexecution.InferenceResponse{}, ctx.Err()
 		}
 	}
 
 	if index < len(p.responses) {
 		return p.responses[index], nil
 	}
-	return interfaces.InferenceResponse{Content: "default mock response"}, nil
+	return workerexecution.InferenceResponse{Content: "default mock response"}, nil
 }
 
-func (p *blockingFunctionalInferenceProvider) WaitForFirstCall(t *testing.T, timeout time.Duration) interfaces.ProviderInferenceRequest {
+func (p *blockingFunctionalInferenceProvider) WaitForFirstCall(t *testing.T, timeout time.Duration) workerexecution.ProviderInferenceRequest {
 	t.Helper()
 
 	select {
@@ -341,7 +346,7 @@ func (p *blockingFunctionalInferenceProvider) WaitForFirstCall(t *testing.T, tim
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting %s for first provider call", timeout)
 	}
-	return interfaces.ProviderInferenceRequest{}
+	return workerexecution.ProviderInferenceRequest{}
 }
 
 func (p *blockingFunctionalInferenceProvider) ReleaseFirst() {
@@ -350,16 +355,16 @@ func (p *blockingFunctionalInferenceProvider) ReleaseFirst() {
 	})
 }
 
-func thinReducerInferenceResponse(sessionID string, content string) interfaces.InferenceResponse {
-	return interfaces.InferenceResponse{
+func thinReducerInferenceResponse(sessionID string, content string) workerexecution.InferenceResponse {
+	return workerexecution.InferenceResponse{
 		Content: content,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       sessionID,
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{
 				Provider: "codex",
 				Model:    "gpt-5.4",
 				RequestMetadata: map[string]string{

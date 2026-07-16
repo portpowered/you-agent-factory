@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
@@ -52,7 +54,7 @@ func ShouldFormatInvocationMetadata(workstation *interfaces.FactoryWorkstationCo
 // BackendLabelFromWorker derives the packaged TTS backend identifier from the
 // loaded on-disk worker configuration. An empty or nil worker falls back to the
 // packaged factory defaults.
-func BackendLabelFromWorker(worker *interfaces.WorkerConfig) string {
+func BackendLabelFromWorker(worker *workerconfig.Config) string {
 	model := DefaultModelName
 	backend := DefaultBackendName
 	if worker != nil {
@@ -69,7 +71,7 @@ func BackendLabelFromWorker(worker *interfaces.WorkerConfig) string {
 // MetadataContentFromWorkerOutput parses a MODEL_INVOKE TTS worker output payload
 // and returns canonical text work content for invocation primary-result selection.
 // When backendLabel is empty, the packaged factory default backend label is used.
-func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel string) ([]interfaces.WorkContentPart, error) {
+func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel string) ([]work.WorkContentPart, error) {
 	audioParts, err := audioPartsFromInferenceOutput(output)
 	if err != nil {
 		return nil, err
@@ -108,18 +110,18 @@ func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel st
 		return nil, fmt.Errorf("marshal tts invocation metadata: %w", err)
 	}
 
-	return []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: string(encoded),
 	}}, nil
 }
 
-func audioPartsFromInferenceOutput(output string) ([]interfaces.WorkContentPart, error) {
-	parts, err := workerinference.WorkContentFromInferenceOutput(output, interfaces.ModelOperation{
+func audioPartsFromInferenceOutput(output string) ([]work.WorkContentPart, error) {
+	parts, err := workerinference.WorkContentFromInferenceOutput(output, workerconfig.ModelOperation{
 		Name: "TTS",
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []workerconfig.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 		}},
 	})
 	if err != nil {
@@ -132,10 +134,10 @@ func audioPartsFromInferenceOutput(output string) ([]interfaces.WorkContentPart,
 	return audio, nil
 }
 
-func audioPartsOnly(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
-	audio := make([]interfaces.WorkContentPart, 0, len(parts))
+func audioPartsOnly(parts []work.WorkContentPart) []work.WorkContentPart {
+	audio := make([]work.WorkContentPart, 0, len(parts))
 	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeAudio {
+		if part.Type.Normalized() == work.WorkContentPartTypeAudio {
 			audio = append(audio, part)
 		}
 	}

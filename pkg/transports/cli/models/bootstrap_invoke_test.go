@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -106,8 +106,8 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 					Worker:           "tts-worker",
 					Operation:        request.Operation,
 					ProviderLocality: string(factoryapi.WorkerModelLocalityLocal),
-					Content: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					Content: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "hello",
 					}},
 				}, nil

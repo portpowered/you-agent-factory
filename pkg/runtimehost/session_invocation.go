@@ -6,16 +6,19 @@ import (
 	"strings"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
@@ -27,7 +30,21 @@ func (fs *Host) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
-	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
+	return sessionInvocationAPI{owner: fs.sessionInvocationOwner()}.InvokeFactorySession(ctx, sessionID, request)
+}
+
+// sessionInvocationAPI is the bounded transport compatibility adapter for the
+// Factory Session-owned invocation collaborator.
+type sessionInvocationAPI struct {
+	owner sessioninvocation.SessionInvoker
+}
+
+func (a sessionInvocationAPI) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	return a.owner.InvokeFactorySession(ctx, sessionID, factorysession.InvocationRequestFromAPI(request))
 }
 
 func (fs *Host) sessionInvocationOwner() sessioninvocation.SessionInvoker {
@@ -84,8 +101,8 @@ func (fs *Host) sessionInvocationFactoryConfig(sessionID string) (*interfaces.Fa
 	return runtimeCfg.FactoryConfig(), nil
 }
 
-func (fs *Host) submitOwnedSessionInvocationWork(ctx context.Context, sessionID string, request interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return fs.SubmitWorkRequestForSession(ctx, sessionID, factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{request}))
+func (fs *Host) submitOwnedSessionInvocationWork(ctx context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+	return fs.SubmitWorkRequestForSession(ctx, sessionID, factoryrequests.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}))
 }
 
 func (fs *Host) observeSessionInvocation(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
@@ -131,7 +148,7 @@ func (fs *Host) sessionInvocationWorldState(
 	if err != nil {
 		return interfaces.FactoryWorldState{}, err
 	}
-	return projections.ReconstructFactoryWorldState(events, selectedTick)
+	return projections.ReconstructCanonicalFactoryWorldState(events, selectedTick)
 }
 
 func (fs *Host) recordInvocationMetric(name string, labels map[string]string) {
@@ -149,7 +166,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil
 	}
-	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	tokens := make([]*factorytoken.Token, 0, len(snapshot.Marking.Tokens))
 	for _, token := range snapshot.Marking.Tokens {
 		tokens = append(tokens, token)
 	}
@@ -168,13 +185,13 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 	})
 	for _, wantState := range []string{"blocked", "needs-human"} {
 		for _, token := range tokens {
-			if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+			if token == nil || token.Color.DataType == factorytoken.DataTypeResource {
 				continue
 			}
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
 				continue
 			}
-			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
+			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, work.FactoryWorkItem{
 				ID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
 				DisplayName: token.Color.Name, PlaceID: token.PlaceID,
 			}, sessionID)
@@ -191,7 +208,7 @@ func tokenStateName(placeID string) string {
 	return trimmed
 }
 
-func tokenPlaceID(token *interfaces.Token) string {
+func tokenPlaceID(token *factorytoken.Token) string {
 	if token == nil {
 		return ""
 	}

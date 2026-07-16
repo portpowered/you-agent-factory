@@ -3,22 +3,26 @@ package workers
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestStandardWorkstationType_Kind(t *testing.T) {
 	s := &StandardWorkstationType{}
-	if s.Kind() != interfaces.WorkstationKindStandard {
-		t.Errorf("expected %q, got %q", interfaces.WorkstationKindStandard, s.Kind())
+	if s.Kind() != workertaxonomy.WorkstationKindStandard {
+		t.Errorf("expected %q, got %q", workertaxonomy.WorkstationKindStandard, s.Kind())
 	}
 }
 
 func TestStandardWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 	s := &StandardWorkstationType{}
 
-	outcomes := []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed}
+	outcomes := []workerexecution.WorkOutcome{workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected, workerexecution.OutcomeFailed}
 	for _, outcome := range outcomes {
-		result := interfaces.WorkResult{Outcome: outcome}
+		result := workerexecution.WorkResult{Outcome: outcome}
 		action := s.HandleResult(result)
 		if action != ActionAdvance {
 			t.Errorf("outcome %q: expected %q, got %q", outcome, ActionAdvance, action)
@@ -28,13 +32,13 @@ func TestStandardWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 
 func TestWorkstationTypeRegistry_DefaultHasStandard(t *testing.T) {
 	r := NewWorkstationTypeRegistry()
-	if !r.IsValid(interfaces.WorkstationKindStandard) {
+	if !r.IsValid(workertaxonomy.WorkstationKindStandard) {
 		t.Error("expected standard type to be registered by default")
 	}
-	if !r.IsValid(interfaces.WorkstationKindCron) {
+	if !r.IsValid(workertaxonomy.WorkstationKindCron) {
 		t.Error("expected cron type to be registered by default")
 	}
-	if !r.IsValid(interfaces.WorkstationKindPoller) {
+	if !r.IsValid(workertaxonomy.WorkstationKindPoller) {
 		t.Error("expected poller type to be registered by default")
 	}
 }
@@ -48,12 +52,12 @@ func TestWorkstationTypeRegistry_UnknownTypeInvalid(t *testing.T) {
 
 func TestWorkstationTypeRegistry_Get(t *testing.T) {
 	r := NewWorkstationTypeRegistry()
-	s, ok := r.Get(interfaces.WorkstationKindStandard)
+	s, ok := r.Get(workertaxonomy.WorkstationKindStandard)
 	if !ok {
 		t.Fatal("expected standard type to be found")
 	}
-	if s.Kind() != interfaces.WorkstationKindStandard {
-		t.Errorf("expected %q, got %q", interfaces.WorkstationKindStandard, s.Kind())
+	if s.Kind() != workertaxonomy.WorkstationKindStandard {
+		t.Errorf("expected %q, got %q", workertaxonomy.WorkstationKindStandard, s.Kind())
 	}
 
 	_, ok = r.Get("nonexistent")
@@ -89,16 +93,16 @@ func TestWorkstationTypeRegistry_Kinds(t *testing.T) {
 	}
 	foundStandard, foundRepeater, foundCron, foundPoller := false, false, false, false
 	for _, k := range kinds {
-		if k == interfaces.WorkstationKindStandard {
+		if k == workertaxonomy.WorkstationKindStandard {
 			foundStandard = true
 		}
-		if k == interfaces.WorkstationKindRepeater {
+		if k == workertaxonomy.WorkstationKindRepeater {
 			foundRepeater = true
 		}
-		if k == interfaces.WorkstationKindCron {
+		if k == workertaxonomy.WorkstationKindCron {
 			foundCron = true
 		}
-		if k == interfaces.WorkstationKindPoller {
+		if k == workertaxonomy.WorkstationKindPoller {
 			foundPoller = true
 		}
 	}
@@ -118,8 +122,8 @@ func TestWorkstationTypeRegistry_Kinds(t *testing.T) {
 
 func TestRepeaterWorkstationType_Kind(t *testing.T) {
 	r := &RepeaterWorkstationType{}
-	if r.Kind() != interfaces.WorkstationKindRepeater {
-		t.Errorf("expected %q, got %q", interfaces.WorkstationKindRepeater, r.Kind())
+	if r.Kind() != workertaxonomy.WorkstationKindRepeater {
+		t.Errorf("expected %q, got %q", workertaxonomy.WorkstationKindRepeater, r.Kind())
 	}
 }
 
@@ -127,17 +131,17 @@ func TestRepeaterWorkstationType_HandleResult(t *testing.T) {
 	r := &RepeaterWorkstationType{}
 
 	tests := []struct {
-		outcome interfaces.WorkOutcome
+		outcome workerexecution.WorkOutcome
 		want    PostResultAction
 	}{
-		{interfaces.OutcomeContinue, ActionRepeat},
-		{interfaces.OutcomeRejected, ActionAdvance},
-		{interfaces.OutcomeAccepted, ActionAdvance},
-		{interfaces.OutcomeFailed, ActionAdvance},
+		{workerexecution.OutcomeContinue, ActionRepeat},
+		{workerexecution.OutcomeRejected, ActionAdvance},
+		{workerexecution.OutcomeAccepted, ActionAdvance},
+		{workerexecution.OutcomeFailed, ActionAdvance},
 	}
 
 	for _, tt := range tests {
-		result := interfaces.WorkResult{Outcome: tt.outcome}
+		result := workerexecution.WorkResult{Outcome: tt.outcome}
 		got := r.HandleResult(result)
 		if got != tt.want {
 			t.Errorf("outcome %q: expected %q, got %q", tt.outcome, tt.want, got)
@@ -147,12 +151,12 @@ func TestRepeaterWorkstationType_HandleResult(t *testing.T) {
 
 func TestCronWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 	c := &CronWorkstationType{}
-	if c.Kind() != interfaces.WorkstationKindCron {
-		t.Errorf("expected %q, got %q", interfaces.WorkstationKindCron, c.Kind())
+	if c.Kind() != workertaxonomy.WorkstationKindCron {
+		t.Errorf("expected %q, got %q", workertaxonomy.WorkstationKindCron, c.Kind())
 	}
 
-	for _, outcome := range []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed} {
-		result := interfaces.WorkResult{Outcome: outcome}
+	for _, outcome := range []workerexecution.WorkOutcome{workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected, workerexecution.OutcomeFailed} {
+		result := workerexecution.WorkResult{Outcome: outcome}
 		if got := c.HandleResult(result); got != ActionAdvance {
 			t.Errorf("outcome %q: expected %q, got %q", outcome, ActionAdvance, got)
 		}
@@ -161,12 +165,12 @@ func TestCronWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 
 func TestPollerWorkstationType_HandleResult_AlwaysAdvances(t *testing.T) {
 	p := &PollerWorkstationType{}
-	if p.Kind() != interfaces.WorkstationKindPoller {
-		t.Errorf("expected %q, got %q", interfaces.WorkstationKindPoller, p.Kind())
+	if p.Kind() != workertaxonomy.WorkstationKindPoller {
+		t.Errorf("expected %q, got %q", workertaxonomy.WorkstationKindPoller, p.Kind())
 	}
 
-	for _, outcome := range []interfaces.WorkOutcome{interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected, interfaces.OutcomeFailed} {
-		result := interfaces.WorkResult{Outcome: outcome}
+	for _, outcome := range []workerexecution.WorkOutcome{workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected, workerexecution.OutcomeFailed} {
+		result := workerexecution.WorkResult{Outcome: outcome}
 		if got := p.HandleResult(result); got != ActionAdvance {
 			t.Errorf("outcome %q: expected %q, got %q", outcome, ActionAdvance, got)
 		}
@@ -180,7 +184,7 @@ type mockWorkstationType struct {
 }
 
 func (m *mockWorkstationType) Kind() interfaces.WorkstationKind { return m.kind }
-func (m *mockWorkstationType) HandleResult(_ interfaces.WorkResult) PostResultAction {
+func (m *mockWorkstationType) HandleResult(_ workerexecution.WorkResult) PostResultAction {
 	if m.action == "" {
 		return ActionAdvance
 	}

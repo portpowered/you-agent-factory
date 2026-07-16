@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const validationRoot = "factory"
@@ -66,10 +65,10 @@ func InvocationReturnTargets(cfg *interfaces.FactoryConfig) []Target {
 	}
 
 	policy := strings.TrimSpace(cfg.InvocationReturn.Policy)
-	switch factoryapi.InvocationReturnPolicy(policy) {
-	case factoryapi.InvocationReturnPolicySubmittedWorkTerminal:
+	switch policy {
+	case interfaces.InvocationReturnPolicySubmittedWorkTerminal:
 		return nil
-	case factoryapi.InvocationReturnPolicyExplicit:
+	case interfaces.InvocationReturnPolicyExplicit:
 		return explicitInvocationReturnTargets(cfg)
 	default:
 		return []Target{invocationReturnTarget(
@@ -161,9 +160,9 @@ func WorkPropagationTargets(cfg *interfaces.FactoryConfig) []Target {
 		}
 
 		mode := strings.TrimSpace(string(workstation.WorkPropagation.Mode))
-		switch factoryapi.WorkPropagationMode(mode) {
-		case factoryapi.WorkPropagationModeOutputAsPayload,
-			factoryapi.WorkPropagationModePreserveInput:
+		switch interfaces.WorkPropagationMode(mode) {
+		case interfaces.WorkPropagationModeOutputAsPayload,
+			interfaces.WorkPropagationModePreserveInput:
 			continue
 		default:
 			basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
@@ -173,8 +172,8 @@ func WorkPropagationTargets(cfg *interfaces.FactoryConfig) []Target {
 				Message: fmt.Sprintf(
 					"unsupported workPropagation.mode %q (supported: %q, %q)",
 					workstation.WorkPropagation.Mode,
-					factoryapi.WorkPropagationModeOutputAsPayload,
-					factoryapi.WorkPropagationModePreserveInput,
+					interfaces.WorkPropagationModeOutputAsPayload,
+					interfaces.WorkPropagationModePreserveInput,
 				),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,

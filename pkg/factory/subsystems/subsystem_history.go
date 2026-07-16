@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // HistorySubsystem reads WorkResults from the RuntimeStateSnapshot and computes
@@ -44,7 +46,7 @@ func (h *HistorySubsystem) Execute(_ context.Context, snapshot *interfaces.Engin
 		return nil, nil
 	}
 
-	histories := make([]interfaces.TokenHistory, len(snapshot.Results))
+	histories := make([]factorytoken.History, len(snapshot.Results))
 	for i := range snapshot.Results {
 		result := &snapshot.Results[i]
 		consumedTokens := consumedTokensForResult(snapshot, result)
@@ -58,8 +60,8 @@ func (h *HistorySubsystem) Execute(_ context.Context, snapshot *interfaces.Engin
 // buildHistory creates a TokenHistory with updated TotalVisits and ConsecutiveFailures.
 // Consumed token histories are merged from the candidate work lineage stored in
 // the runtime dispatch snapshot.
-func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResult, candidateID string) interfaces.TokenHistory {
-	history := interfaces.TokenHistory{
+func buildHistory(consumedTokens []factorytoken.Token, result *workerexecution.WorkResult, candidateID string) factorytoken.History {
+	history := factorytoken.History{
 		TotalVisits:         make(map[string]int),
 		ConsecutiveFailures: make(map[string]int),
 		PlaceVisits:         make(map[string]int),
@@ -96,10 +98,10 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 	history.TotalVisits[result.TransitionID]++
 
 	switch result.Outcome {
-	case interfaces.OutcomeAccepted, interfaces.OutcomeContinue, interfaces.OutcomeRejected:
+	case workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue, workerexecution.OutcomeRejected:
 		// Reset consecutive failures — the worker didn't fail.
 		history.ConsecutiveFailures[result.TransitionID] = 0
-	case interfaces.OutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		// Increment consecutive failures.
 		history.ConsecutiveFailures[result.TransitionID]++
 	}
@@ -111,12 +113,12 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 // propagated by a transition. Authored input order is canonical, so the first
 // non-resource input arc is the candidate while later inputs may be generated
 // companions or other supporting work.
-func candidateWorkID(net *state.Net, transitionID string, consumedTokens []interfaces.Token) string {
+func candidateWorkID(net *state.Net, transitionID string, consumedTokens []factorytoken.Token) string {
 	if net != nil {
 		if transition := net.Transitions[transitionID]; transition != nil {
 			for _, arc := range transition.InputArcs {
 				for _, token := range consumedTokens {
-					if token.PlaceID == arc.PlaceID && token.Color.DataType != interfaces.DataTypeResource && token.Color.WorkID != "" {
+					if token.PlaceID == arc.PlaceID && token.Color.DataType != factorytoken.DataTypeResource && token.Color.WorkID != "" {
 						return token.Color.WorkID
 					}
 				}
@@ -125,19 +127,19 @@ func candidateWorkID(net *state.Net, transitionID string, consumedTokens []inter
 	}
 
 	for _, token := range consumedTokens {
-		if token.Color.DataType != interfaces.DataTypeResource && token.Color.WorkID != "" {
+		if token.Color.DataType != factorytoken.DataTypeResource && token.Color.WorkID != "" {
 			return token.Color.WorkID
 		}
 	}
 	return ""
 }
 
-func candidateLineageTokens(consumedTokens []interfaces.Token, candidateID string) []interfaces.Token {
+func candidateLineageTokens(consumedTokens []factorytoken.Token, candidateID string) []factorytoken.Token {
 	if candidateID == "" {
 		return consumedTokens
 	}
 
-	lineage := make([]interfaces.Token, 0, len(consumedTokens))
+	lineage := make([]factorytoken.Token, 0, len(consumedTokens))
 	for _, token := range consumedTokens {
 		if token.Color.WorkID == candidateID || token.Color.ParentID == candidateID {
 			lineage = append(lineage, token)
@@ -146,7 +148,7 @@ func candidateLineageTokens(consumedTokens []interfaces.Token, candidateID strin
 	return lineage
 }
 
-func consumedTokensForResult(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *interfaces.WorkResult) []interfaces.Token {
+func consumedTokensForResult(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *workerexecution.WorkResult) []factorytoken.Token {
 	if snapshot == nil || snapshot.Dispatches == nil {
 		return nil
 	}
@@ -161,23 +163,23 @@ func consumedTokensForResult(snapshot *interfaces.EngineStateSnapshot[petri.Mark
 
 // evaluateStopWords checks whether the executor output contains any of the
 // configured stop words. Returns ACCEPTED if a stop word is found, FAILED otherwise.
-func evaluateStopWords(stopWords []string, output string) interfaces.WorkOutcome {
+func evaluateStopWords(stopWords []string, output string) workerexecution.WorkOutcome {
 	for _, sw := range stopWords {
 		if strings.Contains(output, sw) {
-			return interfaces.OutcomeAccepted
+			return workerexecution.OutcomeAccepted
 		}
 	}
-	return interfaces.OutcomeFailed
+	return workerexecution.OutcomeFailed
 }
 
-func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColor {
+func firstNonResourceInput(inputs []factorytoken.Color) *factorytoken.Color {
 	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		if inputs[i].DataType != factorytoken.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
 			return &inputs[i]
 		}
 	}
 	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource {
+		if inputs[i].DataType != factorytoken.DataTypeResource {
 			return &inputs[i]
 		}
 	}
@@ -185,10 +187,10 @@ func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColo
 }
 
 func applyPackagedTTSInvocationMetadata(
-	token *interfaces.Token,
+	token *factorytoken.Token,
 	workstation *interfaces.FactoryWorkstationConfig,
 	workerOutput string,
-	inputColors []interfaces.TokenColor,
+	inputColors []factorytoken.Color,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,
 ) error {
 	if token == nil || !tts.ShouldFormatInvocationMetadata(workstation) {
@@ -220,7 +222,7 @@ func applyPackagedTTSInvocationMetadata(
 }
 
 func applyPackagedGoalInvocationSummary(
-	token *interfaces.Token,
+	token *factorytoken.Token,
 	workstation *interfaces.FactoryWorkstationConfig,
 	workerOutput string,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,
@@ -252,7 +254,7 @@ func applyPackagedGoalInvocationSummary(
 }
 
 func applyPackagedSubagentInvocationResponse(
-	token *interfaces.Token,
+	token *factorytoken.Token,
 	workstation *interfaces.FactoryWorkstationConfig,
 	workerOutput string,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,

@@ -3,7 +3,7 @@ package workflowpolicy
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 // BuildPreview projects preview/session-start policy metadata from one request.
@@ -48,11 +48,11 @@ func effectiveTimeoutMillis(requested, policyMax *int64) *int64 {
 }
 
 func resolveRunnerDecision(requested string, policy EffectivePolicy) *RunnerDecision {
-	normalized := interfaces.NormalizeRunnerID(requested)
+	normalized := workerrunner.NormalizeRunnerID(requested)
 	decision := &RunnerDecision{
 		Requested: requested,
 		Resolved:  normalized,
-		Allowed:   interfaces.IsBuiltInRunnerID(normalized),
+		Allowed:   workerrunner.IsBuiltInRunnerID(normalized),
 	}
 	if !decision.Allowed {
 		decision.Diagnostic = &Diagnostic{
@@ -65,7 +65,7 @@ func resolveRunnerDecision(requested string, policy EffectivePolicy) *RunnerDeci
 		return decision
 	}
 	for _, allowed := range policy.AllowedRunners {
-		if interfaces.NormalizeRunnerID(allowed) == normalized {
+		if workerrunner.NormalizeRunnerID(allowed) == normalized {
 			return decision
 		}
 	}

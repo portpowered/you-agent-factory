@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -131,8 +131,8 @@ func TestFactorySessionSSEReconnect_KeepsEventStreamFramingAndTargetSession(t *t
 			BackendScopeID:      "b08-sse-other-backend-scope",
 			LogicalSessionKeyID: "b08-sse-other-logical-key",
 			FactorySessionID:    otherSessionID,
-			History: []factoryapi.FactoryEvent{
-				testAPIFactoryEvent(
+			History: []interfaces.FactoryEvent{
+				testutil.FactoryEvent(t, testAPIFactoryEvent(
 					t,
 					factoryapi.FactoryEventTypeRunRequest,
 					otherEventID,
@@ -147,9 +147,9 @@ func TestFactorySessionSSEReconnect_KeepsEventStreamFramingAndTargetSession(t *t
 						RecordedAt: factorySessionSSEFixtureEventTime,
 						Factory:    factoryapi.Factory{Name: "other-session-factory"},
 					},
-				),
+				)),
 			},
-			Events: make(chan factoryapi.FactoryEvent, 1),
+			Events: make(chan interfaces.FactoryEvent, 1),
 		},
 	}
 

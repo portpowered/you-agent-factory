@@ -7,8 +7,16 @@ import (
 	"strings"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
@@ -39,10 +47,10 @@ func canonicalWorkerTestPath(value string) string {
 }
 
 func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"branch": "feature-xyz", "worktree": "/tmp/wt-1"},
 			},
@@ -66,10 +74,10 @@ func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
 }
 
 func TestResolveTemplateFields_Env(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"project": "inventory-service", "branch": "main"},
 			},
@@ -107,10 +115,10 @@ func TestResolveTemplateFields_Env(t *testing.T) {
 }
 
 func TestResolveTemplateFields_ProjectVariableUsesTag(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags: map[string]string{
 					"branch":  "feature/runtime-project",
@@ -142,8 +150,8 @@ func TestResolveTemplateFields_ProjectVariableUsesTag(t *testing.T) {
 }
 
 func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefault(t *testing.T) {
-	tokens := []interfaces.Token{
-		{ID: "tok-1", Color: interfaces.TokenColor{
+	tokens := []factorytoken.Token{
+		{ID: "tok-1", Color: factorytoken.Color{
 			WorkID: "work-1",
 			Tags: map[string]string{
 				factory_context.ProjectTagKey: "token-project",
@@ -194,8 +202,8 @@ func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefau
 }
 
 func TestResolveTemplateFields_InvalidTemplate(t *testing.T) {
-	tokens := []interfaces.Token{
-		{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}},
+	tokens := []factorytoken.Token{
+		{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}},
 	}
 
 	_, err := workerprompting.ResolveTemplateFields(
@@ -214,10 +222,10 @@ func TestResolveTemplateFields_InvalidTemplate(t *testing.T) {
 }
 
 func TestResolveTemplateFields_MissingTagKey(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"existing": "value"},
 			},
@@ -243,10 +251,10 @@ func TestResolveTemplateFields_MissingTagKey(t *testing.T) {
 }
 
 func TestResolveTemplateFields_WorkIDAndPayload(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-42",
 				WorkTypeID: "stories",
 				Payload:    []byte("some payload"),
@@ -276,8 +284,8 @@ func TestResolveTemplateFields_WorkIDAndPayload(t *testing.T) {
 }
 
 func TestResolveTemplateFields_EnvInvalidTemplate(t *testing.T) {
-	tokens := []interfaces.Token{
-		{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}},
+	tokens := []factorytoken.Token{
+		{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}},
 	}
 
 	_, err := workerprompting.ResolveTemplateFields(
@@ -299,10 +307,10 @@ func TestResolveTemplateFields_EnvInvalidTemplate(t *testing.T) {
 }
 
 func TestResolveTemplateFields_Worktree(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"branch": "feature-xyz"},
 			},
@@ -326,10 +334,10 @@ func TestResolveTemplateFields_Worktree(t *testing.T) {
 }
 
 func TestResolveTemplateFields_ResolvesExplicitRuntimeFieldsTogether(t *testing.T) {
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags: map[string]string{
 					"branch":  "feature-xyz",
@@ -451,18 +459,18 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 	setTestWorkingDirectory(t, projectRoot)
 
 	mock := &wsMockExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	}
 
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Name:             "standard",
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "do work",
 					WorkingDirectory: `/worktrees/{{ index (index .Inputs 0).Tags "branch" }}`,
 				},
@@ -472,12 +480,12 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID: "t-1",
 		WorkerType:   "worker-a",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"branch": "feature-abc"},
 			},
@@ -489,7 +497,7 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Errorf("expected ACCEPTED, got %s", result.Outcome)
 	}
 
@@ -506,17 +514,17 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 
 func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 	mock := &wsMockExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	}
 
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:           interfaces.WorkstationTypeModel,
+					Type:           workertaxonomy.WorkstationTypeModel,
 					PromptTemplate: "do work",
 					Env: map[string]string{
 						"PROJECT": `{{ index (index .Inputs 0).Tags "project" }}`,
@@ -528,12 +536,12 @@ func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID: "t-1",
 		WorkerType:   "worker-a",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"project": "myapp"},
 			},
@@ -545,7 +553,7 @@ func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Errorf("expected ACCEPTED, got %s", result.Outcome)
 	}
 
@@ -559,13 +567,13 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
 					Name:             "standard",
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "do work",
 					WorkingDirectory: `{{ .InvalidSyntax`,
 				},
@@ -575,12 +583,12 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(interfaces.Token{
-			ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"},
+		InputTokens: InputTokens(factorytoken.Token{
+			ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"},
 		}),
 	}
 
@@ -593,7 +601,7 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 		t.Fatal("executor should not be called when parameterized field resolution fails")
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
+	if result.Outcome != workerexecution.OutcomeFailed {
 		t.Errorf("expected FAILED, got %s", result.Outcome)
 	}
 

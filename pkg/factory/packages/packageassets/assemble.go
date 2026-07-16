@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/promptassets"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (

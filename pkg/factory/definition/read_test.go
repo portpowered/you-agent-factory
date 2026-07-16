@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type stubDefinitionHost struct {
@@ -53,9 +53,12 @@ func (h stubDefinitionHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedF
 func (h stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession) string {
 	return h.sessionPersistRoot
 }
+func (h stubDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validateDefinitionSnapshotForTest(snapshot, h.WorkstationLoader())
+}
 
-func (h stubDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (h stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (h stubDefinitionHost) WithActivationLock(fn func() error) error {
@@ -66,8 +69,16 @@ func (h stubDefinitionHost) RequireIdleRuntimeForSession(context.Context, string
 	return nil
 }
 
-func (h stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (h stubDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return nil
+}
+
+func mustFactorySnapshot(factory factoryapi.Factory) *interfaces.FactorySnapshot {
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		panic(err)
+	}
+	return snapshot
 }
 
 func (h stubDefinitionHost) ReplaceFactoryLayoutAtDir(string, *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
@@ -148,11 +159,15 @@ func TestService_GetCurrentNamedFactory_ReadsPersistedPointerAndPayload(t *testi
 	if err != nil {
 		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
-	if current.Name != "alpha" {
-		t.Fatalf("current factory name = %q, want alpha", current.Name)
+	mapped, err := factorySnapshotForCompatibilityTest(current)
+	if err != nil {
+		t.Fatalf("map GetCurrentNamedFactory result: %v", err)
 	}
-	if current.Id == nil || *current.Id != "alpha" {
-		t.Fatalf("current factory id = %#v, want alpha", current.Id)
+	if mapped.Name != "alpha" {
+		t.Fatalf("current factory name = %q, want alpha", mapped.Name)
+	}
+	if mapped.Id == nil || *mapped.Id != "alpha" {
+		t.Fatalf("current factory id = %#v, want alpha", mapped.Id)
 	}
 }
 
@@ -184,8 +199,12 @@ func TestService_GetCurrentNamedFactory_FallsBackToLiveRuntimeWhenPointerMissing
 	if err != nil {
 		t.Fatalf("GetCurrentNamedFactory: %v", err)
 	}
-	if current.Name != apisurface.DefaultCurrentFactoryName {
-		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	mapped, err := factorySnapshotForCompatibilityTest(current)
+	if err != nil {
+		t.Fatalf("map GetCurrentNamedFactory result: %v", err)
+	}
+	if mapped.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", mapped.Name, apisurface.DefaultCurrentFactoryName)
 	}
 }
 
@@ -295,7 +314,7 @@ func TestService_CurrentFactoryDefinitionVersionAtRoot_UsesFileModTimeForDefault
 	if err != nil {
 		t.Fatalf("CurrentFactoryDefinitionVersionAtRoot: %v", err)
 	}
-	if got.Logical.Int64() != modTime.UnixNano() || !got.Physical.Equal(modTime) {
+	if got.Logical != modTime.UnixNano() || !got.Physical.Equal(modTime) {
 		t.Fatalf("version = %#v, want logical=%d physical=%s", got, modTime.UnixNano(), modTime)
 	}
 }

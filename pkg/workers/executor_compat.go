@@ -3,8 +3,10 @@ package workers
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -42,10 +44,10 @@ func NewWorkerPool(logger logging.Logger) *WorkerPool {
 	return workerexecutor.NewWorkerPool(logger)
 }
 
-func PanicAsFailedResult(dispatch interfaces.WorkDispatch, recovered any, duration time.Duration) interfaces.WorkResult {
+func PanicAsFailedResult(dispatch work.WorkDispatch, recovered any, duration time.Duration) workerexecution.WorkResult {
 	return workerexecutor.PanicAsFailedResult(dispatch, recovered, duration)
 }
 
-func WorkLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+func WorkLogFields(metadata work.ExecutionMetadata, keysAndValues ...any) []any {
 	return workerexecutor.WorkLogFields(metadata, keysAndValues...)
 }

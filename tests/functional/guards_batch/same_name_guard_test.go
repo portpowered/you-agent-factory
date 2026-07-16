@@ -8,11 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -82,18 +84,18 @@ func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 
 func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "plan",
 		TraceID:    "trace-same-name-plan",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "task",
 		TraceID:    "trace-same-name-task",
@@ -124,18 +126,18 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 
 func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "plan",
 		TraceID:    "trace-same-name-plan",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "beta",
 		WorkTypeID: "task",
 		TraceID:    "trace-same-name-task",
@@ -173,7 +175,7 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 	dir := scaffoldLaterMatchingSameNameGuardFactory(t)
 
 	h := support.NewGuardsBatchHarness(t, dir)
-	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	matcher := h.MockWorker("matcher", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	submitLaterMatchingSameNameGuardWork(h)
 
@@ -238,12 +240,12 @@ Match the later token.
 }
 
 func submitLaterMatchingSameNameGuardWork(h *testutil.ServiceTestHarness) {
-	for _, req := range []interfaces.SubmitRequest{
+	for _, req := range []work.SubmitRequest{
 		{Name: "zeta", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-same-name-idea-zeta"},
 		{Name: "alpha", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-same-name-task-alpha"},
 		{Name: "zeta", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-same-name-task-zeta"},
 	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 }
 

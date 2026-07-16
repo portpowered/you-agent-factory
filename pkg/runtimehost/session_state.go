@@ -8,9 +8,9 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -157,21 +157,21 @@ func (h *Host) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
 	}
 }
 
-func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
+func runtimeMetricsPath(sink *platformmetrics.RuntimeMetricsSink) string {
 	if sink == nil {
 		return ""
 	}
 	return sink.Path()
 }
 
-func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
+func runtimeMetricsRootDir(sink *platformmetrics.RuntimeMetricsSink) string {
 	if sink == nil {
 		return ""
 	}
 	return sink.RootDir()
 }
 
-func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
+func runtimeMetricsStartTime(sink *platformmetrics.RuntimeMetricsSink) time.Time {
 	if sink == nil {
 		return time.Time{}
 	}
