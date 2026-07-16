@@ -49,15 +49,5 @@ func (s *Service) hostedWorkersConfig() hostedworkers.Config {
 	if s == nil {
 		return hostedworkers.Config{}
 	}
-	hostedClock := s.cfg.HostedClock
-	if hostedClock == nil {
-		hostedClock = s.cfg.Clock
-	}
-	return hostedworkers.Config{
-		Logger:         s.cfg.Logger,
-		Clock:          hostedClock,
-		HTTPClient:     s.cfg.HostedHTTPClient,
-		SecretResolver: s.cfg.HostedSecretResolver,
-		LinearEndpoint: s.cfg.HostedLinearEndpoint,
-	}
+	return s.cfg.HostedWorkers
 }

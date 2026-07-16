@@ -400,9 +400,9 @@ func NewFactoryServiceCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
+	hostedWorkers hostedworkers.Config,
 ) FactoryServiceCollaborators {
 	startupLocalModels := NewLocalModelDomain(cfg)
-	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
 		LocalModels: startupLocalModels,
@@ -683,7 +683,10 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		return nil, err
 	}
 	clock := ServiceClockForCompose(cfg, load)
-	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	hostedWorkers := NewHostedWorkersConfig(cfg, root.BaseLogger, clock)
+	collaborators := NewFactoryServiceCollaborators(
+		cfg, clock, root.BaseLogger, NewFactorySessionsRegistry(), hostedWorkers,
+	)
 	return ComposeFactoryCore(
 		ctx,
 		cfg,
@@ -691,7 +694,7 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		collaborators,
 		load,
 		clock,
-		NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 }
 

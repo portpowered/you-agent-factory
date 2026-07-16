@@ -145,15 +145,12 @@ func NewWorkersSchedulerService(
 		defaultFactoryDir = cfg.Dir
 	}
 	return workersservice.New(workersservice.Config{
-		Logger:               logger,
-		Clock:                supervisorClock,
-		CommandRunner:        runner,
-		WorkflowID:           workflowID,
-		DefaultFactoryDir:    defaultFactoryDir,
-		HostedHTTPClient:     hostedWorkers.HTTPClient,
-		HostedSecretResolver: hostedWorkers.SecretResolver,
-		HostedLinearEndpoint: hostedWorkers.LinearEndpoint,
-		HostedClock:          hostedWorkers.Clock,
+		Logger:            logger,
+		Clock:             supervisorClock,
+		CommandRunner:     runner,
+		WorkflowID:        workflowID,
+		DefaultFactoryDir: defaultFactoryDir,
+		HostedWorkers:     hostedWorkers,
 	})
 }
 

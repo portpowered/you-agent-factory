@@ -37,9 +37,9 @@ func NewCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
+	hostedWorkers hostedworkers.Config,
 ) Collaborators {
 	startupLocalModels := NewLocalModelDomain(cfg)
-	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
 	return Collaborators{
 		Sessions:         sessions,
 		LocalModels:      startupLocalModels,
@@ -222,7 +222,8 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		return nil, err
 	}
 	clock := ClockForCompose(cfg, load)
-	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry())
+	hostedWorkers := HostedWorkers(cfg, root.BaseLogger, clock)
+	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry(), hostedWorkers)
 	return ComposeCore(
 		ctx,
 		cfg,
@@ -230,6 +231,6 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		collaborators,
 		load,
 		clock,
-		HostedWorkers(cfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 }
