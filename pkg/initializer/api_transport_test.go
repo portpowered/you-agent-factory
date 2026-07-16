@@ -28,7 +28,7 @@ func TestInitializeAPITransport_RejectsMissingFactoryConfig(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &initializer.Config{Dir: t.TempDir()}
+	cfg := composedInitializerConfig(t, &initializer.Config{Dir: t.TempDir()})
 
 	_, errInit := initializer.InitializeAPITransport(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, service.FactoryServiceConfigFromRuntimeHost(cfg))
@@ -51,7 +51,7 @@ func TestInitializeAPITransport_ComposesHandlerDependenciesWithoutFactoryService
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	transport, err := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: dir})
+	transport, err := initializer.InitializeAPITransport(ctx, composedInitializerConfig(t, &initializer.Config{Dir: dir}))
 	if err != nil {
 		t.Fatalf("InitializeAPITransport: %v", err)
 	}
@@ -141,6 +141,7 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 			return srv.Serve(ctx, apiListener)
 		},
 	}
+	svcCfg = composedInitializerConfig(t, svcCfg)
 	transport, err := initializer.InitializeAPITransport(ctx, svcCfg)
 	if err != nil {
 		t.Fatalf("InitializeAPITransport: %v", err)

@@ -18,14 +18,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 )
+
+func composedInitializerConfig(t *testing.T, cfg *initializer.Config) *initializer.Config {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	configured := *cfg
+	configured.WorkerApplication = components
+	return &configured
+}
 
 func TestInitialize_RejectsMissingFactoryConfig(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &initializer.Config{Dir: t.TempDir()}
+	cfg := composedInitializerConfig(t, &initializer.Config{Dir: t.TempDir()})
 
 	services, errInit := initializer.Initialize(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, service.FactoryServiceConfigFromRuntimeHost(cfg))
@@ -72,7 +84,7 @@ func TestInitialize_RejectsInvalidFactoryConfig(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	cfg := &initializer.Config{Dir: dir}
+	cfg := composedInitializerConfig(t, &initializer.Config{Dir: dir})
 
 	services, errInit := initializer.Initialize(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, service.FactoryServiceConfigFromRuntimeHost(cfg))
@@ -98,7 +110,7 @@ func TestInitialize_ComposesDomainServicesWithoutFactoryService(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	services, err := initializer.Initialize(ctx, &initializer.Config{Dir: dir})
+	services, err := initializer.Initialize(ctx, composedInitializerConfig(t, &initializer.Config{Dir: dir}))
 	if err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}
@@ -184,6 +196,7 @@ func TestInitialize_MatchesBuildFactoryServiceOperatorDefaults(t *testing.T) {
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 		Logger:                                  zap.NewNop(),
 	}
+	cfg = composedInitializerConfig(t, cfg)
 
 	services, err := initializer.Initialize(ctx, cfg)
 	if err != nil {
@@ -218,7 +231,7 @@ func TestInitialize_GetCurrentFactoryForSession_DefaultSession(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	services, err := initializer.Initialize(ctx, &initializer.Config{Dir: dir})
+	services, err := initializer.Initialize(ctx, composedInitializerConfig(t, &initializer.Config{Dir: dir}))
 	if err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}

@@ -29,6 +29,9 @@ Production command runners must remain blocking without taking lifecycle ownersh
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected
 graph-owned transport and perform the same idempotent reverse-order shutdown.
+`initializer.BuildCore` must require the valid worker application composed at
+that outer boundary; it must not fill in a missing component with production
+defaults before loading configuration or starting lifecycle work.
 Production-shaped functional runs replace process side effects through the typed
 `pkg/wire.FunctionalEdges` input. Apply those edges to an invocation-local config
 copy before calling the shared application builders; do not add CLI flags,
