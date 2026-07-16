@@ -3,6 +3,21 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Review-gated factories that must revise rejected work should preserve the
+  original input on the work-stage route, retain non-empty worker output in the
+  `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
+  `RejectionFeedback` from the retry prompt. This keeps the request, candidate,
+  and reviewer feedback available without weakening the approval-only terminal
+  return contract. Focused coverage belongs with the packaged invocation tests.
+- Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
+  as production code. Keep topology fixtures readable by delegating independent
+  identity, routing, and validation assertions to named test helpers.
+- Adding an embedded packaged-factory definition also adds two measured backend
+  packages to the unit and functional coverage manifests: record the definition
+  package's observed numeric floor and the wrapper package's documented
+  measurement exception when it has no executable statements. Verify both with
+  `make test-unit-coverage` and `make test-functional-coverage`.
+
 ## CLI run and submit command contracts
 
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
@@ -189,7 +204,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   validation shared by validate-only and save pre-check flows. It validates the
   authored policy and invocation-signature vocabulary declared by
   `pkg/factory/contracts/factory_config.go`; generated OpenAPI enums are only
-  converted at config and transport boundaries.
+  converted at config and transport boundaries. It also validates explicit
+  model-worker `modelProvider` values; permit only supported providers, the
+  symbolic `DEFAULT`, or an exact interpolation reference to a declared
+  invocation parameter so invalid materialized worker edits fail before runtime.
+  Keep established public aliases such as `openai` accepted through the same
+  canonicalization helper; validation must not turn a permissive legacy alias
+  into an incompatibility.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/work` owns canonical `Work`, `WorkRequest`, `WorkContentPart`, invocation
@@ -806,6 +827,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch. Resolution
   never repairs legacy prompts, so installed files remain customer-owned and
   byte-for-byte unchanged by `you run --named` lookup.
+- Packaged `@you/review` uses that same catalog, assembly, and editable
+  materialization path. Its `reviewable-work` lifecycle routes `init` through
+  `execute-review-work` to `in-review`, then through `review-review-work` to
+  the explicit invocation-return terminal `approved` state. The reviewer uses
+  `decision-envelope`: accepted envelopes carry the approved candidate in
+  `output`, rejection returns to `init` with feedback, and failures route to
+  `failed`. Keep this approval-only topology and explicit return policy aligned
+  when changing packaged-factory plumbing.
 - `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
   and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`
@@ -908,6 +937,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Complement with `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
   and `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` for
   transitioner and topology-level routing proofs.
+- Named `@you/review` CLI invocation coverage lives in
+  `tests/functional/smoke/cli_named_review_invocation_smoke_test.go`. Materialize
+  the package beneath an isolated home, run the built CLI with scripted mock
+  workers, and use a durable reviewer counter to prove a rejection precedes
+  approval. Run the same gate for default configuration, edited materialized
+  worker configuration, and `--default-worker-model-provider` /
+  `--default-worker-model` operator overrides.
 - Named `@you/goal` operator-control smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
   proving API and CLI pause/resume buffering, ordered post-resume drain via
@@ -1096,5 +1132,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   in `invocationSignature`, or live session pages will fall back to legacy UI
   flows even when backend runtime validation already accepts the factory.
 - Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. Stable provider command identity lives in `pkg/models/provider`; worker and model invocation exchange `pkg/workers/execution` requests, results, provider sessions, and normalized failures, while `pkg/workers/diagnostics` owns the safe generated projection. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` when a process-wide host is configured, otherwise through the local manager fallback. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. See `docs/architecture/model-host.md`.
+- When a shared merge introduces a backend package-coverage floor that the reviewed head no longer reaches, use the failing CI profile's exact reported value to make the smallest manifest adjustment; do not run the manifest updater against the whole repository because it can ratchet unrelated package floors.
+- `pkg/workers/mockworker/runner.go` preserves the original provider command, args,
+  and worker identity in `YOU_MOCK_WORKER_*` script environment variables before a
+  script mock replaces the command. Functional CLI tests can capture those values
+  to prove effective provider/model selection without allowing a live provider;
+  retain a behavioral output sequence as well so selection assertions do not
+  replace workflow-result coverage.
 - A named factory whose submitted Work fans out into derived terminal Work must define an explicit `invocationReturn` targeting the final Work type and terminal state. The default submitted-work return policy cannot follow a fan-out to a separately derived merge result.
 - Structured invocation input is normalized into the submitted Work's canonical text content at `pkg/factory/sessions/invocation/session_owner.go`; `WorkRequestFromSubmitRequests` and `NormalizeWorkRequest` must preserve cloned invocation arguments so fan-out-derived Work can render the original request without relying on a transient `${input}` placeholder. Use `workPropagation.mode: PRESERVE_INPUT` plus a dedicated processing-state route when a final fan-in must consume that original Work alongside derived branch results.

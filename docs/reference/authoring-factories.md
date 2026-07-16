@@ -279,22 +279,65 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal`, `@you/quorum`, and `@you/tts` also use the
+First-party built-ins such as `@you/goal`, `@you/quorum`, `@you/review`, and `@you/tts` also use the
 named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
+you run --named @you/review "Draft the release notes"
 you run --named @you/quorum "Compare the two proposed release plans."
 you run --named @you/tts --output primary "Read the release summary."
 ```
 
 Start with `@you/goal` when you want a goal-oriented factory you can run
 immediately and customize on disk instead of authoring `factory.json` from
-scratch. Start with `@you/tts` when you need the inference-oriented packaged
+scratch. Start with `@you/review` when every result must pass an independent
+review before it can be returned. Start with `@you/tts` when you need the inference-oriented packaged
 TTS example. See `you docs run` for named-Factory invocation inputs and stdout
 result modes, `you docs sessions` for stopped-run inspection and recovery, and
 `you docs models` for TTS readiness, direct invocation, and audio or JSON
 result choices.
+
+### Built-in `@you/review` approval gate
+
+`@you/review` accepts one required request input:
+
+```bash
+you config init
+you run --named @you/review "Draft the release notes"
+```
+
+It always runs `review-work-executor` and then the independent
+`review-work-reviewer`. The reviewer returns either an accepted decision with
+the candidate output or a rejected decision with actionable feedback. A
+rejection returns the same request to the work stage with the prior candidate
+and feedback; only a later approval becomes the invocation result. Work or
+review failure ends at `reviewable-work:failed` and has no successful primary
+result.
+
+The materialized factory is editable at
+`~/.you-agent-factory/you-agent-factories/@you/review`. Its two workers accept
+the standard agent-worker fields, including `modelProvider` (`CODEX` or
+`CLAUDE`) and `model`, either in `factory.json` or their split `AGENTS.md`
+front matter. Omit them to use normal operator defaults; `YOU_DEFAULT_WORKER_MODEL_PROVIDER`,
+`YOU_DEFAULT_WORKER_MODEL`, and the global `--default-worker-model-provider` /
+`--default-worker-model` flags retain the documented `file < env < flag`
+precedence for omitted worker values. Configure both roles when they must use
+the same provider/model, or configure them independently when the reviewer
+needs a different model. Unsupported provider values are rejected by normal
+factory validation:
+
+```bash
+you factory config validate ~/.you-agent-factory/you-agent-factories/@you/review
+```
+
+You can customize the worker and workstation prompts, but preserve the review
+workstation's `decision-envelope` format, `onRejection` route to
+`reviewable-work:init`, and explicit `invocationReturn` for
+`reviewable-work:approved`; those are the approval-only completion contract.
+For a stopped run, inspect and recover it with `you docs sessions`; the package
+uses the standard invocation recovery codes and adds no review-specific resume
+command.
 
 ### Built-in `@you/goal` repeater
 

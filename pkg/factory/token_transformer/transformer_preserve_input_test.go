@@ -57,6 +57,9 @@ func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
 	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
 		t.Fatalf("content = %#v, want preserved input content", token.Color.Content)
 	}
+	if token.Color.Tags["_last_output"] != "worker-output" {
+		t.Fatalf("last output = %#v, want worker-output", token.Color.Tags)
+	}
 }
 
 func TestOutputToken_PreserveInput_CrossType_CopiesConsumedPayload(t *testing.T) {

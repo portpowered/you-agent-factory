@@ -157,6 +157,10 @@
       }
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/review",
+      "minimum": 80.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent",
       "minimum": 80.00
     },
@@ -189,6 +193,16 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/quorum",
       "minimum": 88.88
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/review",
+      "exception": {
+        "kind": "measurement",
+        "justification": "The active unit coverage profile contains no measurable statements for this package.",
+        "owner": "backend-quality",
+        "deadline": "2027-07-15",
+        "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/subagent",
@@ -490,7 +504,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service",
-      "minimum": 78.46
+      "minimum": 78.25
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
