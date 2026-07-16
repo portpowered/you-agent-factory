@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -197,12 +196,12 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 
 func TestExecutorReviewStateLifecycle_ThreeNamedLanesExposePlannerClassificationEvidence(t *testing.T) {
 	cases := []struct {
-		laneName         string
-		items            []queueWorkSnapshot
-		wantCause        executorReviewMismatchCause
-		wantDisp         executorReviewPlannerDisposition
-		requireSpawned   bool
-		requireReviews   bool
+		laneName          string
+		items             []queueWorkSnapshot
+		wantCause         executorReviewMismatchCause
+		wantDisp          executorReviewPlannerDisposition
+		requireSpawned    bool
+		requireReviews    bool
 		requireFailedTask bool
 	}{
 		{
@@ -443,23 +442,19 @@ func submitExecutorReviewProcessResiduePattern(
 	}
 }
 
-func executorReviewProjectionView(t *testing.T, h *testutil.ServiceTestHarness) (interfaces.FactoryWorldView, interfaces.FactoryWorldState, error) {
+func executorReviewCustomerWorldView(t *testing.T, h *testutil.ServiceTestHarness) (interfaces.FactoryWorldView, error) {
 	t.Helper()
 
 	ctx := context.Background()
 	events, err := h.GetFactoryEvents(ctx)
 	if err != nil {
-		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
+		return interfaces.FactoryWorldView{}, err
 	}
 	snapshot, err := h.GetEngineStateSnapshot()
 	if err != nil {
-		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
+		return interfaces.FactoryWorldView{}, err
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
-	if err != nil {
-		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
-	}
-	return projections.BuildFactoryWorldView(worldState), worldState, nil
+	return testutil.BuildFactoryWorldView(events, snapshot.TickCount, snapshot.ActiveThrottlePauses)
 }
 
 func assertExecutorReviewProjectionMatchesRuntime(t *testing.T, h *testutil.ServiceTestHarness) {
@@ -469,21 +464,21 @@ func assertExecutorReviewProjectionMatchesRuntime(t *testing.T, h *testutil.Serv
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
-	_, worldState, err := executorReviewProjectionView(t, h)
+	worldView, err := executorReviewCustomerWorldView(t, h)
 	if err != nil {
-		t.Fatalf("executorReviewProjectionView: %v", err)
+		t.Fatalf("executorReviewCustomerWorldView: %v", err)
 	}
 
 	for placeID, tokenIDs := range runtimeSnap.Marking.PlaceTokens {
-		occ, ok := worldState.PlaceOccupancyByID[placeID]
+		count, ok := worldView.Runtime.PlaceTokenCounts[placeID]
 		if !ok {
 			if len(tokenIDs) == 0 {
 				continue
 			}
-			t.Fatalf("projection missing occupancy for runtime place %q with %d tokens", placeID, len(tokenIDs))
+			t.Fatalf("customer world view missing runtime place %q with %d tokens", placeID, len(tokenIDs))
 		}
-		if len(tokenIDs) != occ.TokenCount {
-			t.Fatalf("place %q runtime tokens = %d, replay projection = %d", placeID, len(tokenIDs), occ.TokenCount)
+		if len(tokenIDs) != count {
+			t.Fatalf("place %q runtime tokens = %d, customer world view = %d", placeID, len(tokenIDs), count)
 		}
 	}
 }
@@ -501,22 +496,22 @@ func assertExecutorReviewReplayProjectionIdempotent(t *testing.T, h *testutil.Se
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
 
-	first, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	first, err := testutil.BuildFactoryWorldView(events, snapshot.TickCount, snapshot.ActiveThrottlePauses)
 	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState first: %v", err)
+		t.Fatalf("BuildFactoryWorldView first: %v", err)
 	}
-	second, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	second, err := testutil.BuildFactoryWorldView(events, snapshot.TickCount, snapshot.ActiveThrottlePauses)
 	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState second: %v", err)
+		t.Fatalf("BuildFactoryWorldView second: %v", err)
 	}
 
-	for placeID, occ := range first.PlaceOccupancyByID {
-		again, ok := second.PlaceOccupancyByID[placeID]
+	for placeID, count := range first.Runtime.PlaceTokenCounts {
+		again, ok := second.Runtime.PlaceTokenCounts[placeID]
 		if !ok {
-			t.Fatalf("second replay missing place %q", placeID)
+			t.Fatalf("second customer world view missing place %q", placeID)
 		}
-		if occ.TokenCount != again.TokenCount {
-			t.Fatalf("replay place %q token count changed: first=%d second=%d", placeID, occ.TokenCount, again.TokenCount)
+		if count != again {
+			t.Fatalf("customer world view place %q token count changed: first=%d second=%d", placeID, count, again)
 		}
 	}
 }
