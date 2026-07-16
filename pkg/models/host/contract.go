@@ -13,6 +13,8 @@ import (
 )
 
 var (
+	// ErrInvalidDependencies classifies model-host construction failures.
+	ErrInvalidDependencies = errors.New("model host dependencies are invalid")
 	// ErrCancelled reports that a model host operation was cancelled.
 	ErrCancelled = errors.New("model host operation cancelled")
 	// ErrUnsupportedRuntime reports that the managed runtime identity is unsupported.
@@ -30,6 +32,17 @@ var (
 	// ErrRuntimeNotReady reports that lease acquisition requires a ready runtime.
 	ErrRuntimeNotReady = errors.New("model host runtime not ready")
 )
+
+// Dependencies carries the required process, pull, and cache edges for a
+// catalog-backed model host. Source resolution, health checking, server-start
+// building, diagnostics, and lease policy are package-local optional behavior
+// configured through Options.
+type Dependencies struct {
+	AssetPuller     AssetPuller
+	CacheInspector  CacheInspector
+	ProcessLauncher ProcessLauncher
+	Options         Options
+}
 
 // Host is the process-wide model host contract for local managed runtime capacity.
 type Host interface {
@@ -134,10 +147,20 @@ type AssetPullResult struct {
 	DownloadedFiles []PullDownloadedFile
 }
 
-// AssetGateway integrates pull and cache inspection for the model host boundary.
-type AssetGateway interface {
+// AssetPuller performs managed-runtime asset pulls for the model host boundary.
+type AssetPuller interface {
 	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (AssetPullResult, error)
+}
+
+// CacheInspector inspects installed managed-runtime assets for the model host boundary.
+type CacheInspector interface {
 	InspectRuntimeCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (CacheInspection, error)
+}
+
+// AssetGateway is the legacy combined pull and cache boundary.
+type AssetGateway interface {
+	AssetPuller
+	CacheInspector
 }
 
 // ReadinessError blocks host operations because the runtime is not ready.

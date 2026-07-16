@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -61,9 +63,12 @@ func (stubHandle) Invoke(context.Context, InvocationRequest) (interfaces.Inferen
 func TestManager_ReusesLoadedHandleForRepeatExecution(t *testing.T) {
 	runtime := &countingLocalRuntime{}
 	cache := CacheLayout{ModelName: "OMNIVOICE_Q4_K_M", CachePath: t.TempDir()}
-	manager := NewManager(staticCatalogAssetPuller{cache: cache}, runtime, Hooks{})
-	if manager == nil {
-		t.Fatal("NewManager returned nil")
+	manager, err := NewManagedRuntime(ManagedRuntimeDependencies{
+		AssetPuller: staticCatalogAssetPuller{cache: cache},
+		Runtime:     runtime,
+	})
+	if err != nil {
+		t.Fatalf("NewManagedRuntime: %v", err)
 	}
 
 	factoryCfg := managerTestFactoryConfig()
@@ -89,6 +94,34 @@ func TestManager_ReusesLoadedHandleForRepeatExecution(t *testing.T) {
 	}
 	if got := runtime.loadCount(); got != 1 {
 		t.Fatalf("load count = %d, want 1", got)
+	}
+}
+
+func TestNewManagedRuntime_ValidatesDependenciesBeforeRuntimeMutation(t *testing.T) {
+	puller := staticCatalogAssetPuller{}
+	runtime := &countingLocalRuntime{}
+	tests := []struct {
+		name string
+		deps ManagedRuntimeDependencies
+		want string
+	}{
+		{name: "asset and cache edge", deps: ManagedRuntimeDependencies{Runtime: runtime}, want: "asset puller and cache resolver is required"},
+		{name: "invocation runtime", deps: ManagedRuntimeDependencies{AssetPuller: puller}, want: "local invocation runtime is required"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			manager, err := NewManagedRuntime(tc.deps)
+			if manager != nil {
+				t.Fatal("manager constructed with a missing required dependency")
+			}
+			if !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want classified error containing %q", err, tc.want)
+			}
+		})
+	}
+	if got := runtime.loadCount(); got != 0 {
+		t.Fatalf("runtime loads during validation = %d, want 0", got)
 	}
 }
 

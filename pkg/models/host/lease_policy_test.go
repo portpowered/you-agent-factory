@@ -222,7 +222,7 @@ func TestCatalogHost_ResourcePressureEvictsIdleRuntime(t *testing.T) {
 		},
 	})
 	host.maxLoadedRuntimes = 1
-	host.assets = stubAssetGateway{
+	host.cacheInspector = stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true, InstalledFileCount: 2, CachePath: t.TempDir()},
 			"OTHER_MODEL":      {Supported: true, Installed: true, InstalledFileCount: 2, CachePath: t.TempDir()},
