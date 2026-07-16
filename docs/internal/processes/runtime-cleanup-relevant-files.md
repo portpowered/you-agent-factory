@@ -96,6 +96,12 @@ enter only through the temporary outer projection compatibility path; decoding
 the snapshot's public topology shape remains an explicit compatibility helper
 until that final transport-shaped projection adapter migrates.
 
+JavaScript checkpoint/phase and artifact world-state reduction also consumes
+Factory-owned event payloads. Keep checkpoint timestamps UTC-normalized, detach
+phase history slices, and translate artifact redaction/capture metadata from
+Factory contracts; generated unions belong only at the outer compatibility
+entrypoint while that adapter remains.
+
 Initial-structure and run-request producers carry the Factory-owned detached
 `FactorySnapshot` inside Factory-owned payloads. Runtime composition should
 hand the editable snapshot to event history without decoding it through a

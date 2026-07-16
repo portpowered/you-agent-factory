@@ -59,6 +59,66 @@ func TestFactoryWorldReducerAppliesCanonicalStructureAndStateEvents(t *testing.T
 	}
 }
 
+func TestFactoryWorldReducerAppliesCanonicalJavaScriptAndArtifactEvents(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 6, 0, 0, 0, time.FixedZone("UTC+2", 2*60*60))
+	hash, label, summary := "sha256:checkpoint", "after-plan", "planning complete"
+	size, secrets := int64(128), int32(2)
+	dispatchID, mimeType := "dispatch-1", "application/json"
+	phases := []string{"plan", "review"}
+	reducer := newFactoryWorldReducer(3)
+
+	checkpoint := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeJavaScriptCheckpointRef, interfaces.FactoryEventContext{EventTime: eventTime, Tick: 1}, interfaces.JavaScriptCheckpointRefEventPayload{
+		CheckpointID: "checkpoint-1", Label: &label, Summary: &summary, Timestamp: &eventTime,
+		ArtifactRef: interfaces.FactoryArtifactRef{ID: "artifact-checkpoint", Kind: "CHECKPOINT", Visibility: "INTERNAL_CHECKPOINT", ContentHash: &hash, SizeBytes: &size},
+	})
+	phase := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeJavaScriptPhaseChange, interfaces.FactoryEventContext{EventTime: eventTime, Tick: 2}, interfaces.JavaScriptPhaseChangeEventPayload{
+		ArgsDigest: &hash, ChildDispatchCounts: interfaces.FactorySessionChildDispatchCounts{Queued: 1, Running: 2, Completed: 3},
+		Phase: "review", Phases: phases, ScriptStatus: interfaces.FactorySessionJavaScriptScriptStatusRunning,
+	})
+	artifact := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeArtifactCreated, interfaces.FactoryEventContext{EventTime: eventTime, Tick: 3}, interfaces.ArtifactCreatedEventPayload{
+		Artifact: interfaces.FactoryArtifact{
+			ID: "artifact-result", Kind: "FINAL_RESULT", Visibility: "PUBLIC", Label: &label, Summary: &summary,
+			ContentHash: &hash, SizeBytes: &size, RedactionCounts: &interfaces.FactoryArtifactRedactionCounts{Secrets: &secrets},
+			CaptureMetadata: &interfaces.FactoryArtifactCaptureMetadata{CapturedAt: &eventTime, SourceDispatchID: &dispatchID, MIMEType: &mimeType},
+		},
+		CapturedAt: &eventTime,
+	})
+
+	for _, event := range []interfaces.FactoryEvent{checkpoint, phase, artifact} {
+		handled, err := reducer.applyOrchestratorLifecycleEvent(event)
+		if err != nil || !handled {
+			t.Fatalf("apply canonical %s event: handled=%t err=%v", event.Type, handled, err)
+		}
+	}
+	phases[0] = "mutated"
+	assertCanonicalJavaScriptRuntime(t, reducer.stateValue.JavaScriptRuntime, hash)
+	assertCanonicalArtifactProjection(t, reducer.stateValue.JavaScriptRuntime, dispatchID, mimeType)
+}
+
+func assertCanonicalJavaScriptRuntime(t *testing.T, runtime *interfaces.FactorySessionJavaScriptRuntimeState, hash string) {
+	t.Helper()
+	if runtime == nil || runtime.Phase != "review" || runtime.ScriptStatus != "RUNNING" || runtime.Phases[0] != "plan" {
+		t.Fatalf("JavaScript runtime = %#v", runtime)
+	}
+	if runtime.QueuedDispatches != 1 || runtime.RunningDispatches != 2 || runtime.CompletedDispatches != 3 {
+		t.Fatalf("child dispatch counts = %#v", runtime)
+	}
+	if len(runtime.Checkpoints) != 1 || runtime.Checkpoints[0].Timestamp.Location() != time.UTC || runtime.Checkpoints[0].ArtifactRef.ContentHash != hash {
+		t.Fatalf("checkpoint projection = %#v", runtime.Checkpoints)
+	}
+}
+
+func assertCanonicalArtifactProjection(t *testing.T, runtime *interfaces.FactorySessionJavaScriptRuntimeState, dispatchID, mimeType string) {
+	t.Helper()
+	if len(runtime.Artifacts) != 1 || runtime.Artifacts[0].CapturedAt.Location() != time.UTC || runtime.Artifacts[0].RedactionCounts["secrets"] != 2 {
+		t.Fatalf("artifact projection = %#v", runtime.Artifacts)
+	}
+	if runtime.Artifacts[0].CaptureMetadata["sourceDispatchId"] != dispatchID || runtime.Artifacts[0].CaptureMetadata["mimeType"] != mimeType {
+		t.Fatalf("artifact capture metadata = %#v", runtime.Artifacts[0].CaptureMetadata)
+	}
+}
+
 func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *testing.T) {
 	t.Parallel()
 	eventTime := time.Date(2026, time.July, 16, 5, 0, 0, 0, time.UTC)

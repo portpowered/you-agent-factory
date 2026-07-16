@@ -157,7 +157,7 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		}
 		return r.applyWorkerExecutionEvent(canonicalEvent)
 	}
-	if handled, err := r.applyOrchestratorLifecycleEvent(event); handled {
+	if handled, err := r.applyGeneratedOrchestratorLifecycleEvent(event); handled {
 		return err
 	}
 	switch interfaces.FactoryEventType(event.Type) {
@@ -185,6 +185,24 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return err
 	}
 	return nil
+}
+
+func (r *factoryWorldReducer) applyGeneratedOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
+	switch interfaces.FactoryEventType(event.Type) {
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+		interfaces.FactoryEventTypeJavaScriptCheckpointRef,
+		interfaces.FactoryEventTypeJavaScriptPhaseChange,
+		interfaces.FactoryEventTypeArtifactCreated:
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return true, err
+		}
+		_, err = r.applyOrchestratorLifecycleEvent(canonicalEvent)
+		return true, err
+	default:
+		return false, nil
+	}
 }
 
 func (r *factoryWorldReducer) applyWorkStateChangeEvent(event interfaces.FactoryEvent) error {
@@ -1014,40 +1032,34 @@ func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryP
 	}
 	return interfaces.FactoryPlace{}, false
 }
-func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
-	switch interfaces.FactoryEventType(event.Type) {
+func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event interfaces.FactoryEvent) (bool, error) {
+	switch event.Type {
 	case interfaces.FactoryEventTypeOrchestratorPhaseChanged,
 		interfaces.FactoryEventTypeOrchestratorCheckpointWritten:
-		canonicalEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return true, err
-		}
-		_, err = r.applyOrchestratorProgressEvent(canonicalEvent)
+		_, err := r.applyOrchestratorProgressEvent(event)
 		return true, err
-	}
-	switch event.Type {
-	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
+	case interfaces.FactoryEventTypeJavaScriptCheckpointRef:
 		return true, r.applyJavaScriptCheckpointRefEvent(event)
-	case factoryapi.FactoryEventTypeJavaScriptPhaseChange:
+	case interfaces.FactoryEventTypeJavaScriptPhaseChange:
 		return true, r.applyJavaScriptPhaseChangeEvent(event)
-	case factoryapi.FactoryEventTypeArtifactCreated:
+	case interfaces.FactoryEventTypeArtifactCreated:
 		return true, r.applyArtifactCreatedEvent(event)
 	default:
 		return false, nil
 	}
 }
 
-func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsJavaScriptCheckpointRefEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.JavaScriptCheckpointRefEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	checkpoint := interfaces.FactorySessionJavaScriptCheckpointRef{
-		ID: payload.CheckpointId,
+		ID: payload.CheckpointID,
 		ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{
-			ID:         payload.ArtifactRef.Id,
-			Kind:       string(payload.ArtifactRef.Kind),
-			Visibility: string(payload.ArtifactRef.Visibility),
+			ID:         payload.ArtifactRef.ID,
+			Kind:       payload.ArtifactRef.Kind,
+			Visibility: payload.ArtifactRef.Visibility,
 		},
 	}
 	if payload.ArtifactRef.ContentHash != nil {
@@ -1072,9 +1084,9 @@ func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event factoryapi
 	return nil
 }
 
-func (r *factoryWorldReducer) applyJavaScriptPhaseChangeEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsJavaScriptPhaseChangeEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyJavaScriptPhaseChangeEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.JavaScriptPhaseChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	runtime := r.ensureJavaScriptRuntime()
@@ -1090,9 +1102,9 @@ func (r *factoryWorldReducer) applyJavaScriptPhaseChangeEvent(event factoryapi.F
 	return nil
 }
 
-func (r *factoryWorldReducer) applyArtifactCreatedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsArtifactCreatedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyArtifactCreatedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.ArtifactCreatedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	artifact := projectArtifactCreatedPayload(payload)
@@ -1110,12 +1122,12 @@ func (r *factoryWorldReducer) ensureJavaScriptRuntime() *interfaces.FactorySessi
 	return r.stateValue.JavaScriptRuntime
 }
 
-func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayload) interfaces.FactorySessionArtifactState {
+func projectArtifactCreatedPayload(payload interfaces.ArtifactCreatedEventPayload) interfaces.FactorySessionArtifactState {
 	artifact := payload.Artifact
 	state := interfaces.FactorySessionArtifactState{
-		ID:         artifact.Id,
-		Kind:       string(artifact.Kind),
-		Visibility: string(artifact.Visibility),
+		ID:         artifact.ID,
+		Kind:       artifact.Kind,
+		Visibility: artifact.Visibility,
 	}
 	if artifact.Label != nil {
 		state.Label = *artifact.Label
@@ -1132,10 +1144,10 @@ func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayloa
 	if artifact.SizeBytes != nil {
 		state.SizeBytes = *artifact.SizeBytes
 	}
-	if counts := artifactRedactionCountsFromAPI(artifact.RedactionCounts); len(counts) > 0 {
+	if counts := artifactRedactionCountsFromDomain(artifact.RedactionCounts); len(counts) > 0 {
 		state.RedactionCounts = counts
 	}
-	if metadata := artifactCaptureMetadataFromAPI(artifact.CaptureMetadata); len(metadata) > 0 {
+	if metadata := artifactCaptureMetadataFromDomain(artifact.CaptureMetadata); len(metadata) > 0 {
 		state.CaptureMetadata = metadata
 	}
 	if payload.CapturedAt != nil {
@@ -1144,7 +1156,7 @@ func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayloa
 	return state
 }
 
-func artifactRedactionCountsFromAPI(counts *factoryapi.FactoryArtifactRedactionCounts) map[string]int {
+func artifactRedactionCountsFromDomain(counts *interfaces.FactoryArtifactRedactionCounts) map[string]int {
 	if counts == nil {
 		return nil
 	}
@@ -1161,7 +1173,7 @@ func artifactRedactionCountsFromAPI(counts *factoryapi.FactoryArtifactRedactionC
 	return redactions
 }
 
-func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureMetadata) map[string]string {
+func artifactCaptureMetadataFromDomain(metadata *interfaces.FactoryArtifactCaptureMetadata) map[string]string {
 	if metadata == nil {
 		return nil
 	}
@@ -1169,11 +1181,11 @@ func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureM
 	if metadata.CapturedAt != nil {
 		capture["capturedAt"] = metadata.CapturedAt.UTC().Format(time.RFC3339)
 	}
-	if metadata.SourceDispatchId != nil {
-		capture["sourceDispatchId"] = *metadata.SourceDispatchId
+	if metadata.SourceDispatchID != nil {
+		capture["sourceDispatchId"] = *metadata.SourceDispatchID
 	}
-	if metadata.MimeType != nil {
-		capture["mimeType"] = *metadata.MimeType
+	if metadata.MIMEType != nil {
+		capture["mimeType"] = *metadata.MIMEType
 	}
 	return capture
 }

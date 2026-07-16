@@ -362,6 +362,38 @@ type FactorySessionChildDispatchCounts struct {
 	Running   int `json:"running"`
 }
 
+// FactorySessionJavaScriptScriptStatus describes the observable state of a
+// JavaScript orchestrator script within one Factory Session.
+type FactorySessionJavaScriptScriptStatus string
+
+const (
+	FactorySessionJavaScriptScriptStatusFailed   FactorySessionJavaScriptScriptStatus = "FAILED"
+	FactorySessionJavaScriptScriptStatusFinished FactorySessionJavaScriptScriptStatus = "FINISHED"
+	FactorySessionJavaScriptScriptStatusIdle     FactorySessionJavaScriptScriptStatus = "IDLE"
+	FactorySessionJavaScriptScriptStatusPaused   FactorySessionJavaScriptScriptStatus = "PAUSED"
+	FactorySessionJavaScriptScriptStatusRunning  FactorySessionJavaScriptScriptStatus = "RUNNING"
+)
+
+// JavaScriptCheckpointRefEventPayload records a customer-visible checkpoint
+// reference while raw VM checkpoint bodies remain orchestrator-owned.
+type JavaScriptCheckpointRefEventPayload struct {
+	ArtifactRef  FactoryArtifactRef `json:"artifactRef"`
+	CheckpointID string             `json:"checkpointId"`
+	Label        *string            `json:"label,omitempty"`
+	Summary      *string            `json:"summary,omitempty"`
+	Timestamp    *time.Time         `json:"timestamp,omitempty"`
+}
+
+// JavaScriptPhaseChangeEventPayload records the current JavaScript workflow
+// phase and its child-dispatch progress.
+type JavaScriptPhaseChangeEventPayload struct {
+	ArgsDigest          *string                              `json:"argsDigest,omitempty"`
+	ChildDispatchCounts FactorySessionChildDispatchCounts    `json:"childDispatchCounts"`
+	Phase               string                               `json:"phase"`
+	Phases              []string                             `json:"phases"`
+	ScriptStatus        FactorySessionJavaScriptScriptStatus `json:"scriptStatus"`
+}
+
 // FactorySessionStartedEventPayload records session execution start facts.
 // Session and orchestrator identity remain authoritative in event context.
 type FactorySessionStartedEventPayload struct {
