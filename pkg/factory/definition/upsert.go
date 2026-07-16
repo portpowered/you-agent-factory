@@ -6,46 +6,41 @@ import (
 	"fmt"
 	"os"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
-
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
-// SaveUpsertNamedAndActivateForSession persists one named factory definition
-// for a live session and activates it as the session current factory.
-func (s *Service) SaveUpsertNamedAndActivateForSession(
+// SaveUpsertNamedSnapshotAndActivateForSession persists one named Factory
+// definition for a live session and activates it as the session current Factory.
+func (s *Service) SaveUpsertNamedSnapshotAndActivateForSession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
+	request EditableFactory,
+) (EditableFactory, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
+		return EditableFactory{}, fmt.Errorf("factory definition service is required")
 	}
-	snapshot, err := interfaces.NewFactorySnapshot(request)
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
+	if request.Snapshot == nil {
+		return EditableFactory{}, fmt.Errorf("editable factory snapshot is required")
 	}
-	if err := s.ValidateUpsertNamedFactoryRequest(string(request.Name), snapshot); err != nil {
-		return factoryapi.Factory{}, err
+	if err := s.ValidateUpsertNamedFactoryRequest(request.Name, request.Snapshot); err != nil {
+		return EditableFactory{}, err
 	}
 
 	session, err := s.host.RequireSession(sessionID)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return EditableFactory{}, err
 	}
 	sessionRootDir := s.host.SessionFactoryPersistRoot(session)
 
 	replaceExisting, err := namedFactoryExistsAtSessionRoot(sessionRootDir, request.Name)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return EditableFactory{}, err
 	}
 
-	var saved factoryapi.Factory
+	var saved EditableFactory
 	err = s.host.WithActivationLock(func() error {
 		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
@@ -57,7 +52,7 @@ func (s *Service) SaveUpsertNamedAndActivateForSession(
 		}
 
 		nextVersion := s.NextEditableFactoryVersion(currentVersion, s.host.SaveNow())
-		prepared, err := s.PreparePersistedFactoryPayload(string(request.Name), snapshot, nextVersion)
+		prepared, err := s.PreparePersistedFactoryPayload(request.Name, request.Snapshot, nextVersion)
 		if err != nil {
 			return err
 		}
@@ -84,28 +79,27 @@ func (s *Service) SaveUpsertNamedAndActivateForSession(
 		return finalizeErr
 	})
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return EditableFactory{}, err
 	}
 	return saved, nil
 }
 
 func (s *Service) upsertCurrentVersionAtSessionRoot(
 	sessionRootDir string,
-	request factoryapi.Factory,
+	request EditableFactory,
 	replaceExisting bool,
 ) (*interfaces.FactoryVersion, error) {
 	if !replaceExisting {
 		return nil, nil
 	}
-	version, err := s.CurrentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
+	version, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
 	if err != nil {
 		return nil, err
 	}
-	domainVersion := factoryVersionFromAPIValue(version)
-	if err := s.RequireFreshEditableFactoryVersion(factoryVersionFromAPI(request.Version), domainVersion); err != nil {
+	if err := s.RequireFreshEditableFactoryVersion(request.Version, version); err != nil {
 		return nil, err
 	}
-	return &domainVersion, nil
+	return &version, nil
 }
 
 func (s *Service) finalizeUpsertNamedAndActivateForSession(
@@ -114,10 +108,10 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 	sessionID string,
 	sessionRootDir string,
 	factoryDir string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	if err := configpersist.WriteCurrentFactoryPointer(sessionRootDir, string(request.Name)); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("write session current factory pointer: %w", err)
+	request EditableFactory,
+) (EditableFactory, error) {
+	if err := configpersist.WriteCurrentFactoryPointer(sessionRootDir, request.Name); err != nil {
+		return EditableFactory{}, fmt.Errorf("write session current factory pointer: %w", err)
 	}
 
 	if err := s.host.ActivateSessionEditableFactory(
@@ -126,35 +120,30 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 		sessionID,
 		sessionRootDir,
 		factoryDir,
-		string(request.Name),
-		string(request.Name),
+		request.Name,
+		request.Name,
 	); err != nil {
-		return factoryapi.Factory{}, err
+		return EditableFactory{}, err
 	}
 
 	runtimeCfg, err := s.host.SessionRuntimeConfig(sessionID)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return EditableFactory{}, err
 	}
-	snapshot, err := s.SerializeNamedFactoryUpsertResponse(string(request.Name), runtimeCfg)
+	snapshot, err := s.SerializeNamedFactoryUpsertResponse(request.Name, runtimeCfg)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return EditableFactory{}, err
 	}
-	serialized, err := factorysnapshot.ToAPI(snapshot)
+	version, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("map upsert factory snapshot: %w", err)
+		return EditableFactory{}, err
 	}
-	version, err := s.CurrentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	serialized.Version = &version
-	return *serialized, nil
+	return EditableFactory{Name: request.Name, Snapshot: snapshot, Version: &version}, nil
 }
 
 func namedFactoryExistsAtSessionRoot(
 	sessionRootDir string,
-	name factoryapi.FactoryName,
+	name string,
 ) (bool, error) {
 	_, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(name))
 	if err == nil {
@@ -169,12 +158,12 @@ func namedFactoryExistsAtSessionRoot(
 func persistUpsertNamedFactoryPrepared(
 	host Host,
 	sessionRootDir string,
-	request factoryapi.Factory,
+	request EditableFactory,
 	prepared *factoryconfig.PreparedFactoryLayoutPayload,
 	replaceExisting bool,
 ) (string, error) {
 	if replaceExisting {
-		targetDir, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(request.Name))
+		targetDir, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, request.Name)
 		if err != nil {
 			return "", mapUpsertNamedFactoryPersistError(err)
 		}
@@ -183,7 +172,7 @@ func persistUpsertNamedFactoryPrepared(
 		}
 		return targetDir, nil
 	}
-	factoryDir, err := configpersist.PersistNamedFactoryWithPrepared(sessionRootDir, string(request.Name), prepared)
+	factoryDir, err := configpersist.PersistNamedFactoryWithPrepared(sessionRootDir, request.Name, prepared)
 	if err != nil {
 		return "", mapUpsertNamedFactoryPersistError(err)
 	}
@@ -195,7 +184,7 @@ func mapUpsertNamedFactoryPersistError(err error) error {
 	case configpersist.IsNamedFactoryAlreadyExists(err):
 		return configpersist.ErrNamedFactoryAlreadyExists
 	case configpersist.IsInvalidNamedFactory(err):
-		return fmt.Errorf("%w: %w", apisurface.ErrInvalidNamedFactory, err)
+		return fmt.Errorf("%w: %w", factoryconfig.ErrInvalidNamedFactory, err)
 	default:
 		return err
 	}

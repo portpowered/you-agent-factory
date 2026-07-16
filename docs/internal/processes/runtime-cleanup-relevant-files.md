@@ -239,6 +239,10 @@ Factory definition hosts exchange detached `FactorySnapshot` values and plain
 domain names with the definition owner. Composition adapters capture generated
 Factory values before invoking that host seam and cast names back to generated
 types only when calling transport-compatible runtime activation code.
+Replace-current and named-upsert persistence consume the Factory-owned
+`EditableFactory` request and return detached snapshots plus domain versions;
+the remaining outer definition compatibility adapter captures generated
+requests and formats generated responses.
 Repository-scanning Factory Session removal gates read canonical sources such as
 `docs/reference` directly from their explicit repository root; they must not
 import CLI or HTTP packages merely to inspect those source artifacts.

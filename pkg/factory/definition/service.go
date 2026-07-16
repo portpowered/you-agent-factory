@@ -51,6 +51,70 @@ func (s *Service) Save(
 	return s.SaveReplaceCurrentForSession(ctx, sessionID, request)
 }
 
+// SaveReplaceCurrentForSession maps the generated compatibility request into
+// the Factory-owned save contract and maps its detached result back at the edge.
+func (s *Service) SaveReplaceCurrentForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	domainRequest, err := editableFactoryFromAPI(request)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	saved, err := s.SaveReplaceCurrentSnapshotForSession(ctx, sessionID, domainRequest)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return factorySnapshotToAPI(saved)
+}
+
+// SaveUpsertNamedAndActivateForSession maps the generated compatibility request
+// into the Factory-owned named-upsert contract and maps its result back.
+func (s *Service) SaveUpsertNamedAndActivateForSession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	domainRequest, err := editableFactoryFromAPI(request)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	saved, err := s.SaveUpsertNamedSnapshotAndActivateForSession(ctx, sessionID, domainRequest)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	mapped, err := factorySnapshotToAPI(saved.Snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if saved.Version != nil {
+		version := factoryVersionToAPI(*saved.Version)
+		mapped.Version = &version
+	}
+	return mapped, nil
+}
+
+func editableFactoryFromAPI(request factoryapi.Factory) (EditableFactory, error) {
+	snapshot, err := interfaces.NewFactorySnapshot(request)
+	if err != nil {
+		return EditableFactory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
+	}
+	return EditableFactory{
+		Name:     string(request.Name),
+		Snapshot: snapshot,
+		Version:  factoryVersionFromAPI(request.Version),
+	}, nil
+}
+
+func factorySnapshotToAPI(snapshot *interfaces.FactorySnapshot) (factoryapi.Factory, error) {
+	mapped, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("map editable factory snapshot: %w", err)
+	}
+	return *mapped, nil
+}
+
 // GetCurrentNamedFactory returns the durable current named-factory read model
 // resolved from the persisted pointer and canonical on-disk layout.
 func (s *Service) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error) {

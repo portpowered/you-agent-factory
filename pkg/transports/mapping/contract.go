@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -872,9 +873,9 @@ type RequestValidationError = interfaces.RequestValidationError
 // attempted while the current runtime still had active work.
 var ErrFactoryActivationRequiresIdle = errors.New("factory activation requires idle runtime")
 
-// ErrInvalidNamedFactory reports that the submitted named-factory payload could
-// not be persisted or validated as a runnable runtime config.
-var ErrInvalidNamedFactory = errors.New("invalid named factory")
+// ErrInvalidNamedFactory retains the public compatibility identity while
+// invalid persisted Factory definitions are classified by the config owner.
+var ErrInvalidNamedFactory = factoryconfig.ErrInvalidNamedFactory
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
