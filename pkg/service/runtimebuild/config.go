@@ -34,8 +34,6 @@ type Config struct {
 	SkipBuiltInRunnerPrerequisiteValidation bool
 	WorkstationLoader                       factoryconfig.WorkstationLoader
 	ProviderOverride                        workers.Provider
-	ProviderCommandRunnerOverride           workers.CommandRunner
-	CommandRunnerOverride                   workers.CommandRunner
 	WorkerApplication                       workerapplication.Components
 	LocalModelRuntimeOverride               localmodels.Runtime
 	ExtraOptions                            []factory.FactoryOption

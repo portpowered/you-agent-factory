@@ -82,6 +82,9 @@ func (s *Service) BuildSpec(
 	if s == nil || s.build == nil {
 		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
 	}
+	if !s.cfg.WorkerApplication.Valid() {
+		return SessionBuildSpec{}, fmt.Errorf("runtime build worker application is required")
+	}
 	baseLogger := s.baseLogger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()

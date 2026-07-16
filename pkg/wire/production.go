@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -40,6 +39,16 @@ type Inputs struct {
 }
 
 func provideFactoryServiceRoot(cfg *service.FactoryServiceConfig) (service.FactoryServiceRoot, error) {
+	if cfg == nil {
+		return service.FactoryServiceRoot{}, fmt.Errorf("factory service config is required")
+	}
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return service.FactoryServiceRoot{}, fmt.Errorf("construct production worker application: %w", err)
+		}
+		cfg.WorkerApplication = components
+	}
 	return service.ResolveFactoryServiceRoot(cfg)
 }
 
@@ -142,16 +151,7 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 
 	cfg := *inputs.Config
 	if !cfg.WorkerApplication.Valid() {
-		hostedClock, _ := cfg.Clock.(clockwork.Clock)
-		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
-			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
-			ScriptCommandRunner:   cfg.CommandRunnerOverride,
-			AgyPTYAllocator:       cfg.AgyPTYAllocatorOverride,
-			HostedHTTPClient:      cfg.HostedPollerHTTPClient,
-			HostedLinearEndpoint:  cfg.HostedLinearEndpoint,
-			HostedSecretResolver:  cfg.HostedPollerSecretResolver,
-			HostedClock:           hostedClock,
-		})
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
 		if err != nil {
 			return nil, fmt.Errorf("build production application graph: %w", err)
 		}

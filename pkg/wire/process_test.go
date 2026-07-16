@@ -200,9 +200,8 @@ func TestBuildProcessGraphSelectsOnlySuppliedFunctionalEdge(t *testing.T) {
 
 func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
 	t.Parallel()
-	configured := &processCommandRunner{}
 	injected := &processCommandRunner{}
-	cfg := &service.FactoryServiceConfig{ProviderCommandRunnerOverride: configured}
+	cfg := &service.FactoryServiceConfig{}
 
 	production, err := configWithFunctionalEdges(cfg, FunctionalEdges{})
 	if err != nil {
@@ -219,7 +218,7 @@ func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
 	if functional == cfg || !functional.WorkerApplication.Valid() || !functional.WorkerApplication.ProviderCommandInjected {
 		t.Fatalf("functional config = %+v, want copied config with injected provider component", functional)
 	}
-	if cfg.ProviderCommandRunnerOverride != configured {
+	if cfg.WorkerApplication.Valid() {
 		t.Fatal("functional edge selection mutated the caller-owned config")
 	}
 }
@@ -266,7 +265,7 @@ func TestConfigWithFunctionalEdgesSelectsIndependentHostedEdges(t *testing.T) {
 	if hosted.SecretResolver == nil || hosted.Clock != clock {
 		t.Fatal("hosted secret and clock edges were not selected")
 	}
-	if original.HostedPollerHTTPClient != nil || original.HostedPollerSecretResolver != nil || original.HostedPollerClock != nil {
+	if original.WorkerApplication.Valid() {
 		t.Fatal("hosted functional edge selection mutated caller-owned config")
 	}
 }

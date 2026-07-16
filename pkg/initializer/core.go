@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 )
 
 // Core is the normalized runtime graph composed before transport facades attach.
@@ -18,6 +19,18 @@ type Core = runtimehost.Core
 // BuildCore loads factory configuration and composes the normalized runtime graph
 // through pkg/initializer as the canonical composition entrypoint.
 func BuildCore(ctx context.Context, cfg *Config) (*Core, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("initializer config is required")
+	}
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return nil, fmt.Errorf("construct initializer worker application: %w", err)
+		}
+		configured := *cfg
+		configured.WorkerApplication = components
+		cfg = &configured
+	}
 	return buildCore(ctx, cfg)
 }
 

@@ -4,12 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
@@ -33,7 +31,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
@@ -381,10 +378,6 @@ type FactoryServiceConfig struct {
 	// (prompt rendering, AgentExecutor, stop-token evaluation) without
 	// shelling out to a real CLI tool.
 	ProviderOverride workers.Provider
-	// Legacy direct-service compatibility edges. Canonical process construction
-	// converts FunctionalEdges into WorkerApplication before runtime assembly.
-	ProviderCommandRunnerOverride workers.CommandRunner
-	AgyPTYAllocatorOverride       agypty.PTYAllocator
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
 	// runner prerequisite checks during startup. Tests that replace execution
 	// with mocks or custom executors use this to exercise service wiring
@@ -395,12 +388,7 @@ type FactoryServiceConfig struct {
 	// (nil, nil) from Load signals "no config available" and the
 	// workstation is skipped. Tests use this to inject workstation
 	// definitions without requiring files on disk.
-	WorkstationLoader          factoryconfig.WorkstationLoader
-	CommandRunnerOverride      workers.CommandRunner
-	HostedPollerHTTPClient     *http.Client
-	HostedPollerSecretResolver secretResolver
-	HostedLinearEndpoint       string
-	HostedPollerClock          clockwork.Clock
+	WorkstationLoader factoryconfig.WorkstationLoader
 	// WorkerApplication is the process-composed worker/provider, script, and
 	// hosted-worker component shared by every runtime session.
 	WorkerApplication workerapplication.Components

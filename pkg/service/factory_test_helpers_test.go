@@ -47,17 +47,33 @@ func buildHostedWorkersConfigForServiceTest(
 	logger *zap.Logger,
 	clock factory.Clock,
 ) hostedworkers.Config {
-	hostedClock, _ := clock.(clockwork.Clock)
-	if cfg != nil && cfg.HostedPollerClock != nil {
-		hostedClock = cfg.HostedPollerClock
+	if cfg != nil && cfg.WorkerApplication.Valid() {
+		return cfg.WorkerApplication.Hosted
 	}
+	hostedClock, _ := clock.(clockwork.Clock)
 	components, _ := workerapplication.New(logger, workerapplication.Edges{
-		HostedHTTPClient: cfg.HostedPollerHTTPClient, HostedLinearEndpoint: strings.TrimSpace(cfg.HostedLinearEndpoint),
-		HostedSecretResolver: cfg.HostedPollerSecretResolver, HostedClock: hostedClock,
+		HostedClock: hostedClock,
 	})
-	copied := *cfg
-	copied.WorkerApplication = components
-	return buildHostedWorkersConfig(&copied, logger, clock)
+	return components.Hosted
+}
+
+func serviceTestConfigWithWorkerApplication(t *testing.T, cfg *FactoryServiceConfig) *FactoryServiceConfig {
+	t.Helper()
+	configured, err := ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	return configured
+}
+
+func serviceTestConfigWithWorkerEdges(t *testing.T, cfg *FactoryServiceConfig, edges workerapplication.Edges) *FactoryServiceConfig {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, edges)
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
+	return cfg
 }
 
 // loadWorkersFromConfig preserves the package-test helper shape while

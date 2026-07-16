@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -36,9 +37,13 @@ const (
 
 func initializeWorkersSchedulerForTest(svc *FactoryService) {
 	cfg := &FactoryServiceConfig{
-		Dir:                   svc.policy.dir,
-		WorkflowID:            svc.policy.workflowID,
-		CommandRunnerOverride: svc.policy.commandRunnerOverride,
+		Dir:        svc.policy.dir,
+		WorkflowID: svc.policy.workflowID,
+	}
+	if svc.cfg != nil && svc.cfg.WorkerApplication.Valid() {
+		cfg.WorkerApplication = svc.cfg.WorkerApplication
+	} else {
+		cfg, _ = ConfigWithWorkerApplication(cfg)
 	}
 	svc.workersScheduler = NewWorkersSchedulerService(cfg, svc.clock, svc.logger, svc.hostedWorkers)
 }
@@ -76,7 +81,8 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunW
 	}
 	logCore, _ := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -127,7 +133,8 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -199,7 +206,8 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		outcomes: []pollerRunOutcome{{waitForCancel: true}},
 	}
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.NewNop(),
 	}
 	initializeWorkersSchedulerForTest(svc)
@@ -263,13 +271,12 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 	}
 
 	submitted := &aggregateSnapshotFactory{}
-	svcCfg := &FactoryServiceConfig{
-		RuntimeMode:            interfaces.RuntimeModeService,
-		HostedPollerHTTPClient: server.Client(),
-		HostedLinearEndpoint:   server.URL,
-	}
+	svcCfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		RuntimeMode: interfaces.RuntimeModeService,
+	}, workerapplication.Edges{HostedHTTPClient: server.Client(), HostedLinearEndpoint: server.URL})
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		cfg:           svcCfg,
 		logger:        zap.NewNop(),
 		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.NewNop(), nil),
 	}
@@ -388,13 +395,13 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 	}
 
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	svcCfg := &FactoryServiceConfig{
-		RuntimeMode:            interfaces.RuntimeModeService,
-		HostedPollerHTTPClient: server.Client(),
-		HostedLinearEndpoint:   server.URL,
-	}
+	svcCfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		RuntimeMode: interfaces.RuntimeModeService,
+		Logger:      zap.New(logCore),
+	}, workerapplication.Edges{HostedHTTPClient: server.Client(), HostedLinearEndpoint: server.URL})
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		cfg:           svcCfg,
 		logger:        zap.New(logCore),
 		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.New(logCore), nil),
 	}
@@ -455,6 +462,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 	svcCfg := &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		cfg:           svcCfg,
 		logger:        zap.New(logCore),
 		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.New(logCore), nil),
 	}
@@ -520,7 +528,8 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -566,7 +575,8 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.New(logCore),
 	}
 	initializeWorkersSchedulerForTest(svc)
@@ -614,7 +624,8 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 		},
 	}
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.NewNop(),
 	}
 	initializeWorkersSchedulerForTest(svc)
@@ -679,7 +690,8 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 	}
 	newFactory := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
+		cfg:    serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{}, workerapplication.Edges{ScriptCommandRunner: runner}),
 		logger: zap.NewNop(),
 	}
 	initializeWorkersSchedulerForTest(svc)
@@ -975,11 +987,9 @@ func newHostedLinearPollerServiceFixture(
 	factoryDir := t.TempDir()
 	writeHostedLinearSecretForServiceTest(t, factoryDir)
 	submitted := &aggregateSnapshotFactory{}
-	svcCfg := &FactoryServiceConfig{
-		RuntimeMode:            interfaces.RuntimeModeService,
-		HostedPollerHTTPClient: server.Client(),
-		HostedLinearEndpoint:   server.URL,
-	}
+	svcCfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		RuntimeMode: interfaces.RuntimeModeService,
+	}, workerapplication.Edges{HostedHTTPClient: server.Client(), HostedLinearEndpoint: server.URL})
 	linearCfg := &interfaces.HostedLinearWorkerConfig{
 		PollInterval: "1h",
 		Mapping: interfaces.HostedLinearWorkerMappingConfig{
@@ -1015,6 +1025,7 @@ func newHostedLinearPollerServiceFixture(
 	)
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		cfg:           svcCfg,
 		logger:        zap.NewNop(),
 		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.NewNop(), nil),
 	}
@@ -1040,12 +1051,11 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: scriptWorkRequestJSON}}},
 	}
 	submitted := &aggregateSnapshotFactory{}
-	svcCfg := &FactoryServiceConfig{
-		RuntimeMode:            interfaces.RuntimeModeService,
-		CommandRunnerOverride:  runner,
-		HostedPollerHTTPClient: server.Client(),
-		HostedLinearEndpoint:   server.URL,
-	}
+	svcCfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
+		RuntimeMode: interfaces.RuntimeModeService,
+	}, workerapplication.Edges{
+		ScriptCommandRunner: runner, HostedHTTPClient: server.Client(), HostedLinearEndpoint: server.URL,
+	})
 	hostedPoller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-hosted-ingress",
 		Kind:           interfaces.WorkstationKindPoller,
@@ -1089,6 +1099,7 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 	)
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+		cfg:           svcCfg,
 		logger:        zap.NewNop(),
 		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.NewNop(), nil),
 	}

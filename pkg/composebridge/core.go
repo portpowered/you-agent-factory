@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -18,7 +17,6 @@ import (
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -212,6 +210,9 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	if !cfg.WorkerApplication.Valid() {
+		return nil, fmt.Errorf("compose runtime worker application is required")
+	}
 	root, err := resolveRoot(cfg)
 	if err != nil {
 		return nil, err
@@ -224,25 +225,6 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		return nil, err
 	}
 	clock := ClockForCompose(cfg, load)
-	if !cfg.WorkerApplication.Valid() {
-		hostedClock, _ := clock.(clockwork.Clock)
-		if cfg.HostedPollerClock != nil {
-			hostedClock = cfg.HostedPollerClock
-		}
-		components, err := workerapplication.New(root.BaseLogger, workerapplication.Edges{
-			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
-			ScriptCommandRunner:   cfg.CommandRunnerOverride,
-			AgyPTYAllocator:       cfg.AgyPTYAllocatorOverride,
-			HostedHTTPClient:      cfg.HostedPollerHTTPClient,
-			HostedLinearEndpoint:  cfg.HostedLinearEndpoint,
-			HostedSecretResolver:  cfg.HostedPollerSecretResolver,
-			HostedClock:           hostedClock,
-		})
-		if err != nil {
-			return nil, err
-		}
-		cfg.WorkerApplication = components
-	}
 	hostedWorkers := cfg.WorkerApplication.Hosted
 	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry(), hostedWorkers)
 	return ComposeCore(

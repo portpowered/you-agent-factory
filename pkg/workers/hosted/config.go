@@ -106,8 +106,8 @@ func (c Config) secretResolver() SecretResolver {
 }
 
 func (c Config) linearEndpoint() string {
-	if c.LinearEndpoint != "" {
-		return c.LinearEndpoint
+	if endpoint := strings.TrimSpace(c.LinearEndpoint); endpoint != "" {
+		return endpoint
 	}
 	return hostedlinear.DefaultEndpoint
 }

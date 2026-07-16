@@ -138,8 +138,8 @@ func NewWorkersSchedulerService(
 	workflowID := ""
 	defaultFactoryDir := ""
 	if cfg != nil {
-		if cfg.CommandRunnerOverride != nil {
-			runner = cfg.CommandRunnerOverride
+		if cfg.WorkerApplication.ScriptCommandRunner != nil {
+			runner = cfg.WorkerApplication.ScriptCommandRunner
 		}
 		workflowID = cfg.WorkflowID
 		defaultFactoryDir = cfg.Dir
@@ -188,6 +188,11 @@ type liveSessionState struct {
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
 func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
+	configured, err := ConfigWithWorkerApplication(cfg)
+	if err != nil {
+		return nil, err
+	}
+	cfg = configured
 	core, err := BuildFactoryCore(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -205,6 +210,25 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	), nil
 }
 
+// ConfigWithWorkerApplication adapts the direct-service entrypoint into the
+// production worker application consumed by FactoryCore. Functional callers
+// must provide a preconstructed WorkerApplication instead.
+func ConfigWithWorkerApplication(cfg *FactoryServiceConfig) (*FactoryServiceConfig, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("factory service config is required")
+	}
+	if cfg.WorkerApplication.Valid() {
+		return cfg, nil
+	}
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	if err != nil {
+		return nil, fmt.Errorf("construct factory service worker application: %w", err)
+	}
+	configured := *cfg
+	configured.WorkerApplication = components
+	return &configured, nil
+}
+
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
 	if cfg != nil && cfg.ModelAssets != nil {
 		return cfg.ModelAssets
@@ -213,24 +237,22 @@ func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller
 }
 
 type serviceCoordinatorPolicy struct {
-	dir                           string
-	executionBaseDir              string
-	runtimeMode                   interfaces.RuntimeMode
-	port                          int
-	verbose                       bool
-	runtimeInstanceID             string
-	workFile                      string
-	workflowID                    string
-	mockWorkersConfig             *factoryconfig.MockWorkersConfig
-	simpleDashboardRenderer       SimpleDashboardRenderer
-	apiServerStarter              APIServerStarter
-	apiServerReady                <-chan struct{}
-	workstationLoader             factoryconfig.WorkstationLoader
-	modelCacheDir                 string
-	runnerID                      string
-	providerOverride              workers.Provider
-	providerCommandRunnerOverride workers.CommandRunner
-	commandRunnerOverride         workers.CommandRunner
+	dir                     string
+	executionBaseDir        string
+	runtimeMode             interfaces.RuntimeMode
+	port                    int
+	verbose                 bool
+	runtimeInstanceID       string
+	workFile                string
+	workflowID              string
+	mockWorkersConfig       *factoryconfig.MockWorkersConfig
+	simpleDashboardRenderer SimpleDashboardRenderer
+	apiServerStarter        APIServerStarter
+	apiServerReady          <-chan struct{}
+	workstationLoader       factoryconfig.WorkstationLoader
+	modelCacheDir           string
+	runnerID                string
+	providerOverride        workers.Provider
 }
 
 const (
@@ -293,9 +315,7 @@ func hasExplicitServiceCoordinatorReferencePolicy(policy serviceCoordinatorPolic
 		policy.apiServerStarter != nil ||
 		policy.apiServerReady != nil ||
 		policy.workstationLoader != nil ||
-		policy.providerOverride != nil ||
-		policy.providerCommandRunnerOverride != nil ||
-		policy.commandRunnerOverride != nil
+		policy.providerOverride != nil
 }
 
 func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordinatorPolicy {
@@ -303,24 +323,22 @@ func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordi
 		return serviceCoordinatorPolicy{}
 	}
 	return serviceCoordinatorPolicy{
-		dir:                           cfg.Dir,
-		executionBaseDir:              cfg.ExecutionBaseDir,
-		runtimeMode:                   cfg.RuntimeMode,
-		port:                          cfg.Port,
-		verbose:                       cfg.Verbose,
-		runtimeInstanceID:             cfg.RuntimeInstanceID,
-		workFile:                      cfg.WorkFile,
-		workflowID:                    cfg.WorkflowID,
-		mockWorkersConfig:             cfg.MockWorkersConfig,
-		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
-		apiServerStarter:              cfg.APIServerStarter,
-		apiServerReady:                cfg.APIServerReady,
-		workstationLoader:             cfg.WorkstationLoader,
-		modelCacheDir:                 cfg.ModelCacheDir,
-		runnerID:                      cfg.RunnerID,
-		providerOverride:              cfg.ProviderOverride,
-		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
-		commandRunnerOverride:         cfg.CommandRunnerOverride,
+		dir:                     cfg.Dir,
+		executionBaseDir:        cfg.ExecutionBaseDir,
+		runtimeMode:             cfg.RuntimeMode,
+		port:                    cfg.Port,
+		verbose:                 cfg.Verbose,
+		runtimeInstanceID:       cfg.RuntimeInstanceID,
+		workFile:                cfg.WorkFile,
+		workflowID:              cfg.WorkflowID,
+		mockWorkersConfig:       cfg.MockWorkersConfig,
+		simpleDashboardRenderer: cfg.SimpleDashboardRenderer,
+		apiServerStarter:        cfg.APIServerStarter,
+		apiServerReady:          cfg.APIServerReady,
+		workstationLoader:       cfg.WorkstationLoader,
+		modelCacheDir:           cfg.ModelCacheDir,
+		runnerID:                cfg.RunnerID,
+		providerOverride:        cfg.ProviderOverride,
 	}
 }
 
@@ -523,8 +541,6 @@ func hostConfigFromService(cfg *FactoryServiceConfig) factoryservice.Config {
 		SkipBuiltInRunnerPrerequisiteValidation: cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		WorkstationLoader:                       cfg.WorkstationLoader,
 		ProviderOverride:                        cfg.ProviderOverride,
-		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
-		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
 		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
 		ModelAssetsOverride:                     cfg.ModelAssets,
 		ModelHostOverride:                       cfg.ModelHostOverride,
@@ -1139,14 +1155,6 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 	if cfg == nil {
 		return runtimebuild.Config{}
 	}
-	if !cfg.WorkerApplication.Valid() {
-		components, _ := workerapplication.New(cfg.Logger, workerapplication.Edges{
-			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
-			ScriptCommandRunner:   cfg.CommandRunnerOverride,
-			AgyPTYAllocator:       cfg.AgyPTYAllocatorOverride,
-		})
-		cfg.WorkerApplication = components
-	}
 	applyOperatorDefaults := cfg != nil && cfg.ReplayPath == ""
 	operatorDefaults := operatorconfig.ResolvedDefaults{}
 	if cfg != nil {
@@ -1172,8 +1180,6 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 		SkipBuiltInRunnerPrerequisiteValidation: cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		WorkstationLoader:                       cfg.WorkstationLoader,
 		ProviderOverride:                        cfg.ProviderOverride,
-		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
-		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
 		WorkerApplication:                       cfg.WorkerApplication,
 		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
 		ExtraOptions:                            cfg.ExtraOptions,

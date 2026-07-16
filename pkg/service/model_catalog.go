@@ -19,7 +19,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
-	"go.uber.org/zap"
 )
 
 func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
@@ -181,6 +180,10 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		}
 		workflowContext = runtime.WorkflowContext(bundle.Factory)
 	}
+	workerApplication, err := fs.workerApplication()
+	if err != nil {
+		return nil, err
+	}
 	executor, err := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
@@ -191,7 +194,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
-		fs.workerApplication(),
+		workerApplication,
 		nil,
 		nil,
 		nil,
@@ -209,12 +212,11 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	return workstationExecutor.Executor, nil
 }
 
-func (fs *FactoryService) workerApplication() workerapplication.Components {
+func (fs *FactoryService) workerApplication() (workerapplication.Components, error) {
 	if fs != nil && fs.cfg != nil && fs.cfg.WorkerApplication.Valid() {
-		return fs.cfg.WorkerApplication
+		return fs.cfg.WorkerApplication, nil
 	}
-	components, _ := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
-	return components
+	return workerapplication.Components{}, fmt.Errorf("factory service worker application is required")
 }
 
 func (fs *FactoryService) factoryRunnerID() string {

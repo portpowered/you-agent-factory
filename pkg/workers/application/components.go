@@ -34,7 +34,10 @@ type Components struct {
 	Provider                *workerprovider.Factory
 	Script                  *workerexecutor.ScriptFactory
 	Hosted                  hostedworkers.Config
+	ProviderCommandRunner   workers.CommandRunner
+	ScriptCommandRunner     workers.CommandRunner
 	ProviderCommandInjected bool
+	ScriptCommandInjected   bool
 }
 
 // New constructs the shared worker application components.
@@ -71,10 +74,21 @@ func New(logger *zap.Logger, edges Edges) (Components, error) {
 	if err != nil {
 		return Components{}, fmt.Errorf("construct worker application: %w", err)
 	}
+	providerRunner := edges.ProviderCommandRunner
+	if providerRunner == nil {
+		providerRunner = workerprocess.ExecCommandRunner{}
+	}
+	scriptRunner := edges.ScriptCommandRunner
+	if scriptRunner == nil {
+		scriptRunner = workerprocess.ExecCommandRunner{}
+	}
 	return Components{
 		Provider:                providerFactory,
 		Script:                  scriptFactory,
+		ProviderCommandRunner:   providerRunner,
+		ScriptCommandRunner:     scriptRunner,
 		ProviderCommandInjected: edges.ProviderCommandRunner != nil,
+		ScriptCommandInjected:   edges.ScriptCommandRunner != nil,
 		Hosted: hostedworkers.NewConfig(hostedworkers.Config{
 			Logger: logger, Clock: edges.HostedClock, HTTPClient: edges.HostedHTTPClient,
 			SecretResolver: edges.HostedSecretResolver, LinearEndpoint: edges.HostedLinearEndpoint,
@@ -88,19 +102,31 @@ func (c Components) WithCommandRunners(providerRunner, scriptRunner workers.Comm
 	if c.Provider == nil || c.Script == nil {
 		return Components{}, fmt.Errorf("construct worker application runtime: base components are required")
 	}
-	providerFactory, err := c.Provider.WithCommandRunner(providerRunner)
-	if err != nil {
-		return Components{}, err
+	providerFactory := c.Provider
+	scriptFactory := c.Script
+	var err error
+	if providerRunner != nil {
+		providerFactory, err = c.Provider.WithCommandRunner(providerRunner)
+		if err != nil {
+			return Components{}, err
+		}
+		c.ProviderCommandRunner = providerRunner
+		c.ProviderCommandInjected = true
 	}
-	scriptFactory, err := c.Script.WithCommandRunner(scriptRunner)
-	if err != nil {
-		return Components{}, err
+	if scriptRunner != nil {
+		scriptFactory, err = c.Script.WithCommandRunner(scriptRunner)
+		if err != nil {
+			return Components{}, err
+		}
+		c.ScriptCommandRunner = scriptRunner
+		c.ScriptCommandInjected = true
 	}
 	c.Provider = providerFactory
 	c.Script = scriptFactory
-	c.ProviderCommandInjected = c.ProviderCommandInjected || providerRunner != nil
 	return c, nil
 }
 
 // Valid reports whether the reusable worker factories were constructed.
-func (c Components) Valid() bool { return c.Provider != nil && c.Script != nil }
+func (c Components) Valid() bool {
+	return c.Provider != nil && c.Script != nil && c.ProviderCommandRunner != nil && c.ScriptCommandRunner != nil
+}

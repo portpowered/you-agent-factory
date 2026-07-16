@@ -309,7 +309,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("Done. COMPLETE")
+			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("Done. COMPLETE"), nil)
 		},
 		factory.WithServiceMode(),
 	)
@@ -352,7 +352,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = runner
+			support.ConfigureWorkerCommands(t, cfg, runner, nil)
 		},
 		factory.WithServiceMode(),
 	)
