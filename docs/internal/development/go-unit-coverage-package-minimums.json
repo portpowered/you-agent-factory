@@ -422,7 +422,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/runtimehost",
-      "minimum": 34.52
+      "minimum": 30.32
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service",
