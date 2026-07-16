@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing provider-session detail coverage stayed intact during sibling-feature extraction.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -794,6 +795,125 @@ describe("ProviderSessionDetailPanel", () => {
         .getByRole("button", { name: "Collapse Assistant" })
         .getAttribute("aria-expanded"),
     ).toBe("true");
+  });
+
+  it("restores the collapsed selected-session preview while a newly selected session loads", async () => {
+    const secondSession = {
+      dispatchID: "dispatch-review-next",
+      id: "sess_next",
+      kind: "session_id",
+      provider: "codex",
+    } as const;
+    let resolveSecondSession!: (response: Response) => void;
+    const secondSessionResponse = new Promise<Response>((resolve) => {
+      resolveSecondSession = resolve;
+    });
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse(buildProviderSessionDetailResponse({ parse: {} })),
+      )
+      .mockReturnValueOnce(secondSessionResponse);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = (
+      selectedProviderSession: NonNullable<
+        ComponentProps<
+          typeof ProviderSessionDetailPanel
+        >["selectedProviderSession"]
+      >,
+    ) => (
+      <QueryClientProvider client={queryClient}>
+        <ProviderSessionDetailPanel
+          selectedProviderSession={selectedProviderSession}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(SELECTED_SESSION));
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Expand Selected Session Details",
+      }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Selected Session Details" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+
+    rerender(view(secondSession));
+
+    const loadingToggle = await screen.findByRole("button", {
+      name: "Expand Selected Session Details",
+    });
+    const loadingSection = loadingToggle.closest("section");
+    expect(loadingSection).toBeTruthy();
+    expect(
+      within(loadingSection as HTMLElement)
+        .getAllByRole("definition")
+        .map((definition) => definition.textContent),
+    ).toEqual([
+      "sess_next",
+      "Unavailable",
+      "Unavailable",
+      "Unavailable",
+      "Unavailable",
+    ]);
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading session details...",
+    );
+
+    await act(async () => {
+      resolveSecondSession(
+        jsonResponse(
+          buildProviderSessionDetailResponse({
+            parse: {
+              tokenUsage: {
+                cachedInputTokens: 60,
+                inputTokens: 200,
+                outputTokens: 50,
+                totalTokens: 250,
+              },
+            },
+            providerSession: secondSession,
+            source: {
+              relativePath: "2026/05/18/rollout-sess_next.jsonl",
+              sizeBytes: 4096,
+            },
+          }),
+        ),
+      );
+    });
+
+    const loadedToggle = await screen.findByRole("button", {
+      name: "Expand Selected Session Details",
+    });
+    const loadedSection = loadedToggle.closest("section");
+    expect(loadedSection).toBeTruthy();
+    expect(loadedToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(loadedSection as HTMLElement)
+        .getAllByRole("term")
+        .map((term) => term.textContent),
+    ).toEqual([
+      "Session ID",
+      "Input Tokens",
+      "Output Tokens",
+      "Cached Tokens",
+      "Source File",
+    ]);
+    expect(
+      within(loadedSection as HTMLElement)
+        .getAllByRole("definition")
+        .map((definition) => definition.textContent),
+    ).toEqual([
+      "sess_next",
+      "200",
+      "50",
+      "60",
+      "2026/05/18/rollout-sess_next.jsonl",
+    ]);
   });
 
   it("uses the provider-session sans stack for customer-facing content while preserving monospace raw blocks", async () => {

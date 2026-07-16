@@ -100,6 +100,7 @@ function LoadedProviderSessionDetailPanel({
             ]}
           />
         }
+        resetKey={selectedSessionResetKey}
       >
         {detail ? (
           <SelectedSessionDetails detail={detail} locale={locale} />
