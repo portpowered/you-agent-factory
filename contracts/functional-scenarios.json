@@ -306,45 +306,30 @@
       "name": "you session pause",
       "interface": "cli",
       "classification": "runnable",
-      "status": "covered",
-      "lane": "long",
+      "status": "missing",
+      "lane": "short",
       "executionClass": "deterministic",
-      "evidence": [
-        {
-          "test": "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go::TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder",
-          "boundary": "cli"
-        }
-      ]
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "cli/you.session.resume",
       "name": "you session resume",
       "interface": "cli",
       "classification": "runnable",
-      "status": "covered",
-      "lane": "long",
+      "status": "missing",
+      "lane": "short",
       "executionClass": "deterministic",
-      "evidence": [
-        {
-          "test": "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go::TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder",
-          "boundary": "cli"
-        }
-      ]
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "cli/you.session.show",
       "name": "you session show",
       "interface": "cli",
       "classification": "runnable",
-      "status": "covered",
-      "lane": "long",
+      "status": "missing",
+      "lane": "short",
       "executionClass": "deterministic",
-      "evidence": [
-        {
-          "test": "tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go::TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary",
-          "boundary": "cli"
-        }
-      ]
+      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
       "stableId": "cli/you.submit",

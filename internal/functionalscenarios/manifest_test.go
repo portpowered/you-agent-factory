@@ -45,9 +45,12 @@ func TestCheckEvidenceReferencesRejectsStaleAndInternalOnlyCitations(t *testing.
 	if err := os.MkdirAll(filepath.Dir(functionalPath), 0o755); err != nil {
 		t.Fatalf("create functional fixture directory: %v", err)
 	}
-	if err := os.WriteFile(functionalPath, []byte("package functional\n\nimport \"testing\"\n\nfunc TestGetOne(t *testing.T) {}\nfunc TestHelper() {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(functionalPath, []byte("package functional\n\nimport \"testing\"\n\nfunc TestGetOne(t *testing.T) {}\nfunc TestGetTwo(t *testing.T) {}\nfunc TestHelper() {}\n"), 0o644); err != nil {
 		t.Fatalf("write functional fixture: %v", err)
 	}
+	writeEvidenceRegistryFixture(t, root, []EvidenceDeclaration{{
+		Test: "tests/functional/api_test.go::TestGetOne", StableIDs: []string{"rest/getOne"},
+	}})
 
 	base := &Manifest{FormatVersion: ManifestFormatVersion, Scenarios: []Scenario{{
 		StableID: "rest/getOne", Interface: InterfaceREST,
@@ -76,6 +79,32 @@ func TestCheckEvidenceReferencesRejectsStaleAndInternalOnlyCitations(t *testing.
 				t.Fatalf("CheckEvidenceReferences() error = %v, want stable ID, %q, and remediation", err, test.want)
 			}
 		})
+	}
+
+	writeEvidenceRegistryFixture(t, root, []EvidenceDeclaration{
+		{Test: "tests/functional/api_test.go::TestGetOne", StableIDs: []string{"rest/getOne"}},
+		{Test: "tests/functional/api_test.go::TestGetTwo", StableIDs: []string{"rest/getTwo"}},
+	})
+	substituted := cloneManifest(t, base)
+	substituted.Scenarios[0].Evidence[0].Test = "tests/functional/api_test.go::TestGetTwo"
+	err := CheckEvidenceReferences(root, substituted)
+	if err == nil || !strings.Contains(err.Error(), `scenario "rest/getOne"`) || !strings.Contains(err.Error(), "not declared by its customer-boundary test for this component") || !strings.Contains(err.Error(), "rest/getTwo") {
+		t.Fatalf("CheckEvidenceReferences() substitution error = %v, want exact component binding diagnostic", err)
+	}
+}
+
+func writeEvidenceRegistryFixture(t *testing.T, root string, declarations []EvidenceDeclaration) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(EvidenceRegistryRelativePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create evidence registry fixture directory: %v", err)
+	}
+	payload, err := json.Marshal(EvidenceRegistry{FormatVersion: EvidenceRegistryFormatVersion, Declarations: declarations})
+	if err != nil {
+		t.Fatalf("marshal evidence registry fixture: %v", err)
+	}
+	if err := os.WriteFile(path, payload, 0o644); err != nil {
+		t.Fatalf("write evidence registry fixture: %v", err)
 	}
 }
 

@@ -161,7 +161,12 @@ paths:
         '200': {description: ok}
 `)
 	writeFixture(t, mcpPath, `{"tools":{"one":{"id":"mcp.tool.one","name":"one"}}}`)
-	return config{cliPath: cliPath, openAPIPath: openAPIPath, mcpPath: mcpPath, outputPath: "-"}
+	evidencePath := filepath.Join(root, filepath.FromSlash(functionalscenarios.EvidenceRegistryRelativePath))
+	if err := os.MkdirAll(filepath.Dir(evidencePath), 0o755); err != nil {
+		t.Fatalf("create evidence registry fixture directory: %v", err)
+	}
+	writeFixture(t, evidencePath, `{"formatVersion":1,"declarations":[]}`)
+	return config{repositoryRoot: root, cliPath: cliPath, openAPIPath: openAPIPath, mcpPath: mcpPath, outputPath: "-"}
 }
 
 func writeFixture(t *testing.T, path, contents string) {
