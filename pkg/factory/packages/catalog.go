@@ -6,6 +6,7 @@ import (
 
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
+	builtinloop "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
 	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
 )
@@ -27,6 +28,11 @@ var catalog = map[string]Definition{
 		Name:    "@you/goal",
 		Project: "builtin-goal",
 		JSON:    builtingoal.BuiltInGoalFactoryJSON,
+	},
+	"@you/loop": {
+		Name:    "@you/loop",
+		Project: "builtin-loop",
+		JSON:    builtinloop.BuiltInLoopFactoryJSON,
 	},
 	"@you/subagent": {
 		Name:    "@you/subagent",

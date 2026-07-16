@@ -1,0 +1,104 @@
+{
+  "name": "@you/loop",
+  "id": "builtin-loop",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "iteration",
+    "terminalState": "complete"
+  },
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "request",
+        "description": "Request to run immediately and again every hour.",
+        "required": true,
+        "bindings": [
+          {"kind": "POSITIONAL", "position": 1},
+          {"kind": "STDIN"}
+        ]
+      }
+    ],
+    "examples": [
+      {
+        "name": "default-hourly-loop",
+        "argv": ["Check the release dashboard"]
+      }
+    ]
+  },
+  "workTypes": [
+    {
+      "name": "loop-control",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "scheduled", "type": "PROCESSING"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    },
+    {
+      "name": "iteration",
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "loop-worker",
+      "type": "AGENT_WORKER",
+      "promptFile": "prompts/worker.md"
+    }
+  ],
+  "workstations": [
+    {
+      "name": "schedule-loop-iteration",
+      "behavior": "CRON",
+      "cron": {
+        "schedule": "0 * * * *",
+        "triggerAtStart": true
+      },
+      "workPropagation": {"mode": "PRESERVE_INPUT"},
+      "inputs": [
+        {"workType": "loop-control", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "loop-control", "state": "scheduled"},
+        {"workType": "iteration", "state": "init"}
+      ]
+    },
+    {
+      "name": "repeat-loop-iteration",
+      "behavior": "CRON",
+      "cron": {
+        "schedule": "0 * * * *"
+      },
+      "workPropagation": {"mode": "PRESERVE_INPUT"},
+      "inputs": [
+        {"workType": "loop-control", "state": "scheduled"}
+      ],
+      "outputs": [
+        {"workType": "loop-control", "state": "scheduled"},
+        {"workType": "iteration", "state": "init"}
+      ]
+    },
+    {
+      "name": "run-loop-iteration",
+      "type": "AGENT_RUN",
+      "worker": "loop-worker",
+      "workPropagation": {"mode": "PRESERVE_INPUT"},
+      "inputs": [
+        {"workType": "iteration", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "iteration", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "iteration", "state": "failed"}
+      ],
+      "promptFile": "prompts/run-loop-iteration.md"
+    }
+  ]
+}
