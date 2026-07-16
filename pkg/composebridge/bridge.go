@@ -112,7 +112,7 @@ func WireModelAssetPuller(cfg *runtimehost.Config, production LocalModelDomain) 
 
 // NewSessionsRegistry constructs the live session registry collaborator.
 func NewSessionsRegistry() *factorysessions.Registry {
-	return service.NewFactorySessionsRegistry()
+	return factorysessions.NewRegistry()
 }
 
 // NewModelServiceFromCore constructs a model service from a composed core.

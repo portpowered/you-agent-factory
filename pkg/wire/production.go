@@ -46,7 +46,7 @@ func provideBaseLogger(root service.FactoryServiceRoot) *zap.Logger {
 }
 
 func provideFactorySessionsRegistry() *factorysessions.Registry {
-	return service.NewFactorySessionsRegistry()
+	return factorysessions.NewRegistry()
 }
 
 func provideLocalModelDomain(cfg *service.FactoryServiceConfig) service.LocalModelDomain {
@@ -268,6 +268,7 @@ func assembleProductionGraph(
 		Workers:           core.WorkersScheduler(),
 		WorkerProvider:    core.RuntimeBuild(),
 		SessionRegistry:   core.Sessions(),
+		Persistence:       core.Persistence(),
 		FactorySessions:   sessions,
 		FactoryDefinition: definition,
 		DurableExecution:  core.DurableExecution(),

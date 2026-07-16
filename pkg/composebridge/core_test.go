@@ -30,7 +30,7 @@ func TestCompatibilityFacadesShareFakeDurableExecution(t *testing.T) {
 		t.Fatalf("compose fake execution: %v", err)
 	}
 	core := runtimehost.NewCore(&runtimehost.Config{}, "", zap.NewNop(), nil, nil, nil,
-		runtimehost.LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, execution)
+		runtimehost.LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, execution, nil)
 	host := runtimehost.NewHostFromCore(core)
 	svc := service.NewFactoryServiceFromRuntimeHostCore(core)
 	if host.DurableExecutionService() != execution || svc.DurableExecutionService() != execution {

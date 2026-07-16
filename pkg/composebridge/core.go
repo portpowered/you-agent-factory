@@ -14,6 +14,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -85,7 +86,7 @@ func ComposeCore(
 		}
 		cfg.Dir = resolvedDir
 	}
-	durableExecution, err := composeDurableExecution(cfg, root, clock)
+	durableExecution, persistence, err := composeDurableExecution(cfg, root, clock)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +146,7 @@ func ComposeCore(
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
 		durableExecution,
+		persistence,
 	), nil
 }
 
@@ -161,14 +163,14 @@ func composeDurableExecution(
 	cfg *runtimehost.Config,
 	root Root,
 	clock factory.Clock,
-) (factorysessionexecution.Service, error) {
+) (factorysessionexecution.Service, runtimepersist.Store, error) {
 	projectRoot := durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
 	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
 		cfg.DurableSessionPersistencePolicy,
 		projectRoot,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("compose durable session persistence: %w", err)
+		return nil, nil, fmt.Errorf("compose durable session persistence: %w", err)
 	}
 	configPath := strings.TrimSpace(cfg.SystemConfigPath)
 	if configPath == "" {
@@ -176,14 +178,14 @@ func composeDurableExecution(
 		if homeDir == "" {
 			homeDir, err = os.UserHomeDir()
 			if err != nil {
-				return nil, fmt.Errorf("resolve operator config home: %w", err)
+				return nil, nil, fmt.Errorf("resolve operator config home: %w", err)
 			}
 		}
 		configPath = defaultpaths.OperatorConfigPath(homeDir)
 	}
 	operatorConfig, err := operatorconfig.LoadFileConfig(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("compose durable session worker presets: %w", err)
+		return nil, nil, fmt.Errorf("compose durable session worker presets: %w", err)
 	}
 	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
 	workerPresets := make(map[string]workflowruntime.WorkerPreset, len(operatorConfig.WorkerPresets))
@@ -191,7 +193,7 @@ func composeDurableExecution(
 		workerPresetIDs[preset.ID] = struct{}{}
 		workerPresets[preset.ID] = workflowruntime.WorkerPreset{ModelProvider: preset.ModelProvider, Model: preset.Model, ReasoningEffort: preset.ReasoningEffort}
 	}
-	return factorysessionexecution.NewExecutionService(
+	service, err := factorysessionexecution.NewExecutionService(
 		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
 		factorysessionexecution.ServiceConfig{
 			ProjectRoot:      projectRoot,
@@ -203,6 +205,10 @@ func composeDurableExecution(
 			WorkerSettings:   workflowruntime.WorkerSettingsConfig{Presets: workerPresets, DefaultModelProvider: operatorConfig.Defaults.WorkerModelProvider, DefaultModel: operatorConfig.Defaults.WorkerModel},
 		},
 	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return service, persistence.Store(), nil
 }
 
 // BuildCore constructs the normalized runtime graph without attaching a transport host.
@@ -222,7 +228,7 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		return nil, err
 	}
 	clock := ClockForCompose(cfg, load)
-	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry())
+	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, factorysessions.NewRegistry())
 	return ComposeCore(
 		ctx,
 		cfg,
