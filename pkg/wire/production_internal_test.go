@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -31,6 +32,24 @@ type recordingRuntimeOwner struct {
 	factorysessionexecution.Service
 	sessionID string
 	records   []interfaces.TokenMutationRecord
+}
+
+func TestRuntimeHostConfigFromFactoryServiceIsCopied(t *testing.T) {
+	t.Parallel()
+
+	if got := provideRuntimeHostConfigFromFactoryService(nil); got != nil {
+		t.Fatalf("nil FactoryService config produced %#v, want nil", got)
+	}
+
+	source := &service.FactoryServiceConfig{Dir: "factory-a"}
+	got := provideRuntimeHostConfigFromFactoryService(source)
+	if got == nil || got.Dir != "factory-a" {
+		t.Fatalf("runtime host config = %#v, want an isolated copy of %#v", got, source)
+	}
+	got.Dir = "factory-b"
+	if source.Dir != "factory-a" {
+		t.Fatalf("source runtime host config was mutated to %q", source.Dir)
+	}
 }
 
 func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {
