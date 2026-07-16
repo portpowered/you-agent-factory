@@ -186,7 +186,39 @@ The UI Coverage contract also includes the Bun lcov merge/threshold pass (`merge
 
 Covered UI and browser integration lanes emit stable slow-file summaries through `ui/scripts/ui-test-cost-report.mjs`. Each main covered shard writes `ui/.vitest-report-timings/main-shard-<index>-timings.json` (kept outside `.vitest-reports` so `vitest --mergeReports` only ingests Vitest blob reports); `UI_COVERAGE_MERGE=1` merge mode prints a merged `[ui-coverage] Merged main covered pass slowest test files` summary after thresholds complete. Browser integration uses `ui/scripts/ui-integration-runner.mjs` behind `test:integration` and prints `[ui-browser-integration] Browser integration slowest test files` with per-file cost categories (`app-shell-integration`, `react-flow-graph`, `replay-timeline`, `import-export`, `script-style`, `uncategorized`). Copy those lines into closeout notes to compare runs without scraping source topology.
 
-Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and preserves the repository's aggregate and per-package coverage gates. `make test-functional-coverage` discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and reports total and per-package coverage directly from that functional-only profile over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. The functional aggregate floor is `GO_FUNCTIONAL_COVERAGE_MIN=33.1`, while every non-baselined package must meet `GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN=80.0`. Existing packages below that target are listed in `go-functional-coverage-package-baseline.txt`; new packages are intentionally absent and therefore must reach 80% instead of being added to the baseline by default. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both reports in sequence. Stress, built-CLI release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
+Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and enforces both the aggregate unit floor and `go-unit-coverage-package-minimums.json`. `make test-functional-coverage` discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and enforces both the aggregate functional floor and `go-functional-coverage-package-minimums.json` over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. Ordinary low coverage is represented by the lane manifest's numeric current floor, so the required lanes no longer depend on newline-delimited package exception lists or a shared 80% package target. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both blocking reports in sequence. Stress, built-CLI release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
+
+The deterministic current package floors are recorded in
+`go-unit-coverage-package-minimums.json` and
+`go-functional-coverage-package-minimums.json`. Each manifest uses schema
+version `1`, names its `unit` or `functional` lane, and contains an import-path-
+sorted `packages` array. A measured entry has exactly `package` and a numeric
+`minimum` written with two decimal places. A package with no measurable
+statements uses `exception` instead of `minimum`; the exception must identify a
+`measurement` or `migration` defect and include `justification`, `owner`, a
+`deadline` in `YYYY-MM-DD` form, and an objective `removalGate`. Ordinary low
+coverage is represented by a numeric floor, not an exception.
+
+Bootstrap a new lane manifest from the lane's integer statement counts with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -generate-manifest <new-file>`. Generation is create-only: it refuses to overwrite reviewed policy.
+
+Enforce a reviewed lane manifest with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -package-manifest <manifest-file>`.
+The check fails closed when a measured package is missing, an exception is
+expired, or the exact integer statement ratio is below its package floor.
+Regression diagnostics include the lane, package, expected minimum, actual
+coverage, signed delta, and the monotonic update command for ratcheting the
+reviewed manifest after coverage is restored. Aggregate `-min` enforcement
+remains independent and blocking.
+The renderer sorts entries and truncates each exact ratio downward to two
+decimal percentage points, so identical profiles produce identical bytes and a
+generated floor never exceeds its measurement. Ratchet an existing reviewed
+manifest explicitly with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file>`.
+The command reports every package as `added`, `raised`, `unchanged`, or
+`rejected` in import-path order. Any rejected decrease prevents the entire
+write; repeating the command without an added package or qualifying increase
+leaves the manifest byte-for-byte unchanged.
 
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 
