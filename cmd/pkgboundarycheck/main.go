@@ -143,7 +143,6 @@ func defaultBoundaryPolicy() boundaryPolicy {
 var documentedFactoryTransportExceptions = []string{
 	"pkg/factory/definition/host.go",
 	"pkg/factory/definition/save.go",
-	"pkg/factory/definition/serialize.go",
 	"pkg/factory/definition/service.go",
 	"pkg/factory/definition/upsert.go",
 	"pkg/factory/definition/validation.go",

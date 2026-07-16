@@ -230,6 +230,11 @@ return owner-defined contracts. The exact migration-file inventory in
 `cmd/pkgboundarycheck/main.go` is deletion-only: remove entries as the remaining
 definition and compatibility adapters move outward, and never add a new entry
 to make a reverse dependency pass.
+Factory definition serialization returns a detached
+`pkg/factory/contracts.FactorySnapshot` and domain `FactoryVersion`. Read-model
+identity changes use snapshot operations that preserve unknown JSON fields;
+generated Factory decoding and hybrid-timestamp formatting happen only in the
+outer definition service or transport mapping boundary.
 Repository-scanning Factory Session removal gates read canonical sources such as
 `docs/reference` directly from their explicit repository root; they must not
 import CLI or HTTP packages merely to inspect those source artifacts.

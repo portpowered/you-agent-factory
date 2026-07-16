@@ -6,6 +6,10 @@ import (
 	"fmt"
 )
 
+// DefaultCurrentFactoryName is the reserved identity used when the editable
+// Factory snapshot is read directly from the current Factory root.
+const DefaultCurrentFactoryName = "UNDEFINED"
+
 // FactorySnapshot is the canonical serialized Factory definition carried by
 // Factory events and projections. The Factory domain owns the snapshot bytes;
 // transport adapters decode them into generated public response types.
@@ -84,4 +88,26 @@ func (s *FactorySnapshot) Decode(destination any) error {
 		return fmt.Errorf("decode factory snapshot: %w", err)
 	}
 	return nil
+}
+
+// WithName returns a detached snapshot whose Factory name is replaced with the
+// canonical read-model identity. Unknown fields remain present in the snapshot.
+func (s *FactorySnapshot) WithName(name string) (*FactorySnapshot, error) {
+	if s == nil {
+		return nil, fmt.Errorf("set factory snapshot name: snapshot is required")
+	}
+	var object map[string]json.RawMessage
+	if err := s.Decode(&object); err != nil {
+		return nil, fmt.Errorf("set factory snapshot name: %w", err)
+	}
+	encodedName, err := json.Marshal(name)
+	if err != nil {
+		return nil, fmt.Errorf("set factory snapshot name: %w", err)
+	}
+	object["name"] = encodedName
+	updated, err := NewFactorySnapshot(object)
+	if err != nil {
+		return nil, fmt.Errorf("set factory snapshot name: %w", err)
+	}
+	return updated, nil
 }

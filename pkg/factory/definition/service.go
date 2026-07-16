@@ -7,12 +7,15 @@ import (
 	"os"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
@@ -61,7 +64,7 @@ func (s *Service) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, e
 		if errors.Is(err, os.ErrNotExist) {
 			currentRuntime := s.host.CurrentRuntimeConfig()
 			if currentRuntime != nil && sameFactoryDir(currentRuntime.FactoryDir(), rootDir) {
-				return s.serializeNamedFactory(apisurface.DefaultCurrentFactoryName, currentRuntime, true)
+				return s.serializeNamedFactoryToAPI(string(apisurface.DefaultCurrentFactoryName), currentRuntime, true)
 			}
 			return factoryapi.Factory{}, ErrCurrentFactoryNotFound
 		}
@@ -76,7 +79,7 @@ func (s *Service) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, e
 		return factoryapi.Factory{}, fmt.Errorf("load current factory %q: %w", name, err)
 	}
 
-	return s.serializeNamedFactory(factoryapi.FactoryName(name), current, true)
+	return s.serializeNamedFactoryToAPI(name, current, true)
 }
 
 // GetCurrentFactoryForSession returns the editable factory definition read model
@@ -108,7 +111,7 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 			versionRootDir = persistRoot
 		}
 	}
-	serialized, err := s.serializeNamedFactory(factoryName, runtimeCfg, true)
+	serialized, err := s.serializeNamedFactoryToAPI(string(factoryName), runtimeCfg, true)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -121,7 +124,11 @@ func (s *Service) CurrentFactoryDefinitionVersionAtRoot(rootDir string, name fac
 	if s == nil {
 		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("factory definition service is required")
 	}
-	return s.currentFactoryDefinitionVersionAtRoot(rootDir, name)
+	version, err := s.currentFactoryDefinitionVersionAtRoot(rootDir, string(name))
+	if err != nil {
+		return factoryapi.HybridLogicalTimestamp{}, err
+	}
+	return factoryVersionToAPI(version), nil
 }
 
 // SerializeNamedFactory returns the canonical editable factory read model for one
@@ -134,7 +141,59 @@ func (s *Service) SerializeNamedFactory(
 	if s == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	return s.serializeNamedFactory(name, current, inlineBundledFiles)
+	return s.serializeNamedFactoryToAPI(string(name), current, inlineBundledFiles)
+}
+
+func (s *Service) serializeNamedFactoryToAPI(
+	name string,
+	current *factoryconfig.LoadedFactoryConfig,
+	inlineBundledFiles bool,
+) (factoryapi.Factory, error) {
+	snapshot, err := s.serializeNamedFactory(name, current, inlineBundledFiles)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	generatedFactory, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("map current factory snapshot: %w", err)
+	}
+	return *generatedFactory, nil
+}
+
+func (s *Service) withCurrentFactoryVersion(
+	rootDir string,
+	name factoryapi.FactoryName,
+	serialized factoryapi.Factory,
+) (factoryapi.Factory, error) {
+	version, err := s.currentFactoryDefinitionVersionAtRoot(rootDir, string(name))
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	generatedVersion := factoryVersionToAPI(version)
+	serialized.Version = &generatedVersion
+	return serialized, nil
+}
+
+func factoryVersionFromAPI(version *factoryapi.HybridLogicalTimestamp) *interfaces.FactoryVersion {
+	if version == nil {
+		return nil
+	}
+	mapped := factoryVersionFromAPIValue(*version)
+	return &mapped
+}
+
+func factoryVersionFromAPIValue(version factoryapi.HybridLogicalTimestamp) interfaces.FactoryVersion {
+	return interfaces.FactoryVersion{
+		Logical:  version.Logical.Int64(),
+		Physical: version.Physical.UTC(),
+	}
+}
+
+func factoryVersionToAPI(version interfaces.FactoryVersion) factoryapi.HybridLogicalTimestamp {
+	return factoryapi.HybridLogicalTimestamp{
+		Logical:  apitypes.Int64String(version.Logical),
+		Physical: version.Physical.UTC(),
+	}
 }
 
 func sameFactoryDir(left, right string) bool {

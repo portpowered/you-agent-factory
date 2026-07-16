@@ -8,6 +8,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
@@ -135,16 +136,20 @@ func (s *Service) finalizeUpsertNamedAndActivateForSession(
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
-	serialized, err := s.SerializeNamedFactoryUpsertResponse(request.Name, runtimeCfg)
+	snapshot, err := s.SerializeNamedFactoryUpsertResponse(string(request.Name), runtimeCfg)
 	if err != nil {
 		return factoryapi.Factory{}, err
+	}
+	serialized, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("map upsert factory snapshot: %w", err)
 	}
 	version, err := s.CurrentFactoryDefinitionVersionAtRoot(sessionRootDir, request.Name)
 	if err != nil {
 		return factoryapi.Factory{}, err
 	}
 	serialized.Version = &version
-	return serialized, nil
+	return *serialized, nil
 }
 
 func namedFactoryExistsAtSessionRoot(

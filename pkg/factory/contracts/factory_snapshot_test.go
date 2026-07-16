@@ -120,3 +120,38 @@ func TestFactorySnapshotRejectsNonObjectJSON(t *testing.T) {
 		t.Fatal("UnmarshalJSON(null) error = nil, want Factory object validation error")
 	}
 }
+
+func TestFactorySnapshotWithNamePreservesUnknownFieldsAndDetaches(t *testing.T) {
+	t.Parallel()
+
+	snapshot := FactorySnapshot(`{"name":"old","future":{"enabled":true}}`)
+	updated, err := snapshot.WithName("alpha")
+	if err != nil {
+		t.Fatalf("WithName: %v", err)
+	}
+	var got struct {
+		Name   string          `json:"name"`
+		Future json.RawMessage `json:"future"`
+	}
+	if err := updated.Decode(&got); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if got.Name != "alpha" {
+		t.Fatalf("name = %q, want alpha", got.Name)
+	}
+	if string(got.Future) != `{"enabled":true}` {
+		t.Fatalf("future = %s", got.Future)
+	}
+	if string(snapshot) != `{"name":"old","future":{"enabled":true}}` {
+		t.Fatalf("source snapshot mutated: %s", snapshot)
+	}
+}
+
+func TestFactorySnapshotWithNameRejectsNilSnapshot(t *testing.T) {
+	t.Parallel()
+
+	var snapshot *FactorySnapshot
+	if _, err := snapshot.WithName("alpha"); err == nil {
+		t.Fatal("WithName: expected error")
+	}
+}

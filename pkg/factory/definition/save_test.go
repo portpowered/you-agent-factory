@@ -399,8 +399,14 @@ func TestService_SerializeNamedFactoryUpsertResponse_ReturnsThinBundledFiles(t *
 	if err != nil {
 		t.Fatalf("SerializeNamedFactoryUpsertResponse: %v", err)
 	}
-	if got.Name != "alpha" {
-		t.Fatalf("factory name = %q, want alpha", got.Name)
+	var decoded struct {
+		Name string `json:"name"`
+	}
+	if err := got.Decode(&decoded); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if decoded.Name != "alpha" {
+		t.Fatalf("factory name = %q, want alpha", decoded.Name)
 	}
 }
 
