@@ -61,6 +61,12 @@ content filtering and relationship name/ID fallbacks before marshaling the
 owner payload; generated union decoding belongs in boundary compatibility
 tests, not canonical history construction.
 
+Factory world-state reducers for work requests and relationship changes decode
+those same Work-owned payloads from the canonical Factory event. Preserve
+request/trace context fallbacks, detached Work content and tags, and name-based
+relationship resolution in the reducer; a generated event may be converted
+only at the temporary outer projection compatibility entrypoint.
+
 Initial-structure and run-request producers carry the Factory-owned detached
 `FactorySnapshot` inside Factory-owned payloads. Runtime composition should
 hand the editable snapshot to event history without decoding it through a

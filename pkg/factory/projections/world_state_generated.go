@@ -72,15 +72,6 @@ func generatedPlaceID(workTypeID string, stateValue string) string {
 	return fmt.Sprintf("%s:%s", workTypeID, stateValue)
 }
 
-func firstRequestID(works *[]factoryapi.Work) string {
-	for _, work := range sliceValue(works) {
-		if requestID := stringValue(work.RequestId); requestID != "" {
-			return requestID
-		}
-	}
-	return ""
-}
-
 func firstString(values *[]string) string {
 	for _, value := range sliceValue(values) {
 		if value != "" {

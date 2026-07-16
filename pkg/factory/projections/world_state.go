@@ -102,9 +102,17 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		factoryapi.FactoryEventTypeFactoryChange:
 		return r.applyStructureEvent(event)
 	case factoryapi.FactoryEventTypeWorkRequest:
-		return r.applyWorkRequestEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyWorkRequestEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeRelationshipChangeRequest:
-		return r.applyRelationshipChangeEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyRelationshipChangeEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeDispatchRequest:
 		return r.applyDispatchRequestEvent(event)
 	case factoryapi.FactoryEventTypeInferenceRequest:
@@ -203,19 +211,25 @@ func (r *factoryWorldReducer) applyStructureEvent(event factoryapi.FactoryEvent)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyWorkRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsWorkRequestEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyWorkRequestEvent(event interfaces.FactoryEvent) error {
+	var payload work.WorkRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
+	}
+	if payload.Type == "" {
+		return fmt.Errorf("decode %s factory event payload: missing work request type", event.Type)
 	}
 	r.applyWorkRequest(event.Context, payload)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyRelationshipChangeEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyRelationshipChangeEvent(event interfaces.FactoryEvent) error {
+	var payload work.RelationshipChangeRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
+	}
+	if payload.Relation.Type == "" {
+		return fmt.Errorf("decode %s factory event payload: missing relationship type", event.Type)
 	}
 	r.applyRelationshipChange(event.Context, payload)
 	return nil
@@ -319,16 +333,16 @@ func (r *factoryWorldReducer) applyCanonicalFactory(factory factoryapi.Factory) 
 	return nil
 }
 
-func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventContext, payload factoryapi.WorkRequestEventPayload) {
-	requestID := stringValue(context.RequestId)
+func (r *factoryWorldReducer) applyWorkRequest(context interfaces.FactoryEventContext, payload work.WorkRequestEventPayload) {
+	requestID := stringValue(context.RequestID)
 	if requestID == "" {
-		requestID = firstRequestID(payload.Works)
+		requestID = firstWorkRequestID(payload.Works)
 	}
 	if requestID == "" {
 		return
 	}
-	traceID := firstString(context.TraceIds)
-	workItems := factoryWorkItemsFromGenerated(payload.Works)
+	traceID := firstString(context.TraceIDs)
+	workItems := factoryWorkItemsFromRequest(payload.Works)
 	for i := range workItems {
 		if workItems[i].TraceID == "" {
 			workItems[i].TraceID = traceID
@@ -341,8 +355,8 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 		RequestID:     requestID,
 		Type:          work.WorkRequestType(payload.Type),
 		TraceID:       traceID,
-		Source:        stringValue(payload.Source),
-		ParentLineage: cloneStringSlice(sliceValue(payload.ParentLineage)),
+		Source:        payload.Source,
+		ParentLineage: cloneStringSlice(payload.ParentLineage),
 		WorkItems:     cloneWorkItems(workItems),
 	}
 	for _, item := range workItems {
@@ -352,13 +366,13 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 		r.addWorkToken(item.ID, item.PlaceID, item)
 		r.addTraceWork(item.TraceID, item.ID)
 	}
-	for _, relation := range r.factoryRelationsFromGenerated(payload.Relations, context) {
+	for _, relation := range r.factoryRelationsFromRequest(payload.Relations, context) {
 		r.addRelation(relation)
 	}
 }
 
-func (r *factoryWorldReducer) applyRelationshipChange(context factoryapi.FactoryEventContext, payload factoryapi.RelationshipChangeRequestEventPayload) {
-	r.addRelation(r.factoryRelationFromGenerated(payload.Relation, context))
+func (r *factoryWorldReducer) applyRelationshipChange(context interfaces.FactoryEventContext, payload work.RelationshipChangeRequestEventPayload) {
+	r.addRelation(r.factoryRelationFromRequest(payload.Relation, context))
 }
 
 func (r *factoryWorldReducer) applyFactoryStateChange(payload factoryapi.FactoryStateResponseEventPayload) {
@@ -373,20 +387,20 @@ func (r *factoryWorldReducer) state() interfaces.FactoryWorldState {
 	return r.stateValue
 }
 
-func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.Relation, context factoryapi.FactoryEventContext) work.FactoryRelation {
-	requestItems := r.requestWorkItems(stringValue(context.RequestId))
-	targetWorkID := stringValue(relation.TargetWorkId)
+func (r *factoryWorldReducer) factoryRelationFromRequest(relation work.WorkRequestEventRelation, context interfaces.FactoryEventContext) work.FactoryRelation {
+	requestItems := r.requestWorkItems(stringValue(context.RequestID))
+	targetWorkID := relation.TargetWorkID
 	if targetWorkID == "" {
 		targetWorkID = workIDForRequestName(requestItems, relation.TargetWorkName)
 	}
 	sourceWorkID := workIDForRequestName(requestItems, relation.SourceWorkName)
 	if sourceWorkID == "" {
-		sourceWorkID = sourceWorkIDFromContext(context, targetWorkID)
+		sourceWorkID = sourceWorkIDFromCanonicalContext(context, targetWorkID)
 	}
-	return factoryRelationFromGenerated(
+	return factoryRelationFromRequest(
 		relation,
-		stringValue(context.RequestId),
-		firstString(context.TraceIds),
+		stringValue(context.RequestID),
+		firstString(context.TraceIDs),
 		sourceWorkID,
 		targetWorkID,
 	)
@@ -411,8 +425,8 @@ func workIDForRequestName(items []work.FactoryWorkItem, workName string) string 
 	return ""
 }
 
-func sourceWorkIDFromContext(context factoryapi.FactoryEventContext, targetWorkID string) string {
-	for _, workID := range sliceValue(context.WorkIds) {
+func sourceWorkIDFromCanonicalContext(context interfaces.FactoryEventContext, targetWorkID string) string {
+	for _, workID := range sliceValue(context.WorkIDs) {
 		if workID != "" && workID != targetWorkID {
 			return workID
 		}

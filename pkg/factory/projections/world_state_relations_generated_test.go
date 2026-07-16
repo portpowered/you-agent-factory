@@ -11,7 +11,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func TestFactoryRelationsFromGenerated_PreservesRequestNameAndContextResolution(t *testing.T) {
+func TestFactoryRelationsFromRequest_PreservesRequestNameAndContextResolution(t *testing.T) {
 	reducer := newFactoryWorldReducer(1)
 	reducer.stateValue.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
 		RequestID: "request-1",
@@ -22,29 +22,29 @@ func TestFactoryRelationsFromGenerated_PreservesRequestNameAndContextResolution(
 		},
 	}
 
-	relations := []factoryapi.Relation{
+	relations := []work.WorkRequestEventRelation{
 		{
-			Type:           factoryapi.RelationTypeParentChild,
+			Type:           work.WorkRelationType("PARENT_CHILD"),
 			SourceWorkName: "child",
 			TargetWorkName: "parent",
 		},
 		{
-			Type:           factoryapi.RelationTypeDependsOn,
+			Type:           work.WorkRelationType("DEPENDS_ON"),
 			SourceWorkName: "",
 			TargetWorkName: "prerequisite",
-			RequiredState:  stringPtrForProjectionTest("complete"),
+			RequiredState:  "complete",
 		},
 		{
-			Type:           factoryapi.RelationTypeDependsOn,
+			Type:           work.WorkRelationType("DEPENDS_ON"),
 			SourceWorkName: "child",
 			TargetWorkName: "missing",
 		},
 	}
 
-	got := reducer.factoryRelationsFromGenerated(&relations, factoryapi.FactoryEventContext{
-		RequestId: stringPtrForProjectionTest("request-1"),
-		TraceIds:  &[]string{"trace-1"},
-		WorkIds:   &[]string{"work-child", "work-prerequisite"},
+	got := reducer.factoryRelationsFromRequest(relations, interfaces.FactoryEventContext{
+		RequestID: stringPtrForProjectionTest("request-1"),
+		TraceIDs:  &[]string{"trace-1"},
+		WorkIDs:   &[]string{"work-child", "work-prerequisite"},
 	})
 
 	if len(got) != 2 {
@@ -58,10 +58,10 @@ func TestFactoryRelationsFromGenerated_PreservesRequestNameAndContextResolution(
 	}
 }
 
-func TestFactoryRelationsFromGenerated_PreservesNilInput(t *testing.T) {
+func TestFactoryRelationsFromRequest_PreservesNilInput(t *testing.T) {
 	reducer := newFactoryWorldReducer(1)
 
-	if got := reducer.factoryRelationsFromGenerated(nil, factoryapi.FactoryEventContext{}); got != nil {
+	if got := reducer.factoryRelationsFromRequest(nil, interfaces.FactoryEventContext{}); got != nil {
 		t.Fatalf("nil relations = %#v, want nil", got)
 	}
 }
@@ -638,6 +638,51 @@ func TestCanonicalSessionLifecycleEventsReconstructBracketAndResult(t *testing.T
 	}
 	if reducer.stateValue.JavaScriptRuntime == nil || reducer.stateValue.JavaScriptRuntime.PrimaryResult[0].Text != "done" {
 		t.Fatalf("javascript runtime result = %#v", reducer.stateValue.JavaScriptRuntime)
+	}
+}
+
+func TestCanonicalWorkEventsReconstructRequestAndRelationships(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 3, 0, 0, 0, time.UTC)
+	requestID, traceID := "request-1", "trace-1"
+	reducer := newFactoryWorldReducer(2)
+	requestEvent := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkRequest, interfaces.FactoryEventContext{
+		EventTime: eventTime, RequestID: &requestID, Tick: 1, TraceIDs: &[]string{traceID},
+	}, work.WorkRequestEventPayload{
+		Source: "operator", Type: work.WorkRequestTypeFactoryRequestBatch,
+		ParentLineage: []string{"parent-request"},
+		Works: []work.WorkRequestEventWork{
+			{Name: "parent", WorkID: "work-parent", WorkTypeID: "task", Tags: map[string]string{"role": "parent"}},
+			{Name: "child", WorkID: "work-child", WorkTypeID: "task", Content: []work.WorkContentPart{{Type: work.WorkContentPartType("TEXT"), Text: "draft"}}},
+		},
+		Relations: []work.WorkRequestEventRelation{{
+			Type: work.WorkRelationType("PARENT_CHILD"), SourceWorkName: "child", TargetWorkName: "parent",
+		}},
+	})
+	if err := reducer.applyWorkRequestEvent(requestEvent); err != nil {
+		t.Fatalf("applyWorkRequestEvent: %v", err)
+	}
+
+	changeEvent := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeRelationshipChangeRequest, interfaces.FactoryEventContext{
+		EventTime: eventTime.Add(time.Second), RequestID: &requestID, Tick: 2, TraceIDs: &[]string{traceID}, WorkIDs: &[]string{"work-child", "work-prerequisite"},
+	}, work.RelationshipChangeRequestEventPayload{Relation: work.WorkRequestEventRelation{
+		Type: work.WorkRelationType("DEPENDS_ON"), TargetWorkID: "work-prerequisite", TargetWorkName: "prerequisite", RequiredState: "complete",
+	}})
+	if err := reducer.applyRelationshipChangeEvent(changeEvent); err != nil {
+		t.Fatalf("applyRelationshipChangeEvent: %v", err)
+	}
+
+	request := reducer.stateValue.WorkRequestsByID[requestID]
+	if request.Source != "operator" || request.TraceID != traceID || len(request.WorkItems) != 2 {
+		t.Fatalf("request projection = %#v", request)
+	}
+	child := reducer.stateValue.WorkItemsByID["work-child"]
+	if child.TraceID != traceID || len(child.Content) != 1 || child.Content[0].Type != work.WorkContentPartTypeText || child.Content[0].Text != "draft" {
+		t.Fatalf("child projection = %#v", child)
+	}
+	relations := reducer.stateValue.RelationsByWorkID["work-child"]
+	if len(relations) != 2 || relations[0].TargetWorkID != "work-parent" || relations[1].TargetWorkID != "work-prerequisite" || relations[1].RequiredState != "complete" {
+		t.Fatalf("relationship projection = %#v", relations)
 	}
 }
 

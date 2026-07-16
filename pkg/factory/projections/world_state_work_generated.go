@@ -6,20 +6,6 @@ import (
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
-func factoryWorkItemsFromGenerated(works *[]factoryapi.Work) []workdomain.FactoryWorkItem {
-	if works == nil {
-		return nil
-	}
-	out := make([]workdomain.FactoryWorkItem, 0, len(*works))
-	for _, work := range *works {
-		item := factoryWorkItemFromGenerated(work)
-		if item.ID != "" {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
 func factoryWorkItemFromGenerated(work factoryapi.Work) workdomain.FactoryWorkItem {
 	currentChainingTraceID := stringValue(work.CurrentChainingTraceId)
 	traceID := stringValue(work.TraceId)
