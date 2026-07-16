@@ -33,6 +33,11 @@
   writers before canonicalizing repeated source blocks into one sorted profile;
   keep that ordering so concurrent packages cannot corrupt the shared profile
   and the uploaded artifact matches the totals enforced by the lane.
+  Local concurrent lane scripts must redirect each background command directly
+  to its retained log, wait on that command, and replay the log afterward. Do
+  not put background commands behind live `while`/`tee` pipelines: on Windows,
+  detached descendants can inherit the pipe handle after the tested command
+  exits and prevent the repository-owned verification target from terminating.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned
