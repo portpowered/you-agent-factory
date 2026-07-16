@@ -9,21 +9,27 @@ const TRANSCRIPT_SECTION_PREVIEW_LIMIT = 3;
 
 export function ProviderSessionExpandableSection({
   children,
+  defaultExpanded,
   heading,
   locale,
   preview,
+  resetKey,
 }: {
   children: ReactNode;
+  defaultExpanded?: boolean;
   heading: string;
   locale?: string;
   preview: ReactNode;
+  resetKey?: string;
 }) {
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
     <StandardExpandableSection
+      defaultExpanded={defaultExpanded}
       heading={heading}
       preview={preview}
+      resetKey={resetKey}
       toggleLabel={({ expanded, section }) =>
         messages.transcriptToggleLabel({ expanded, section })
       }
@@ -69,9 +75,7 @@ export function TranscriptSectionPreview({
     <div className="grid gap-2">
       {previewEntries.map((entry) => (
         <div className="grid gap-1" key={entry.order}>
-          <Label>
-            {getTranscriptPreviewEntryTitle(entry, messages)}
-          </Label>
+          <Label>{getTranscriptPreviewEntryTitle(entry, messages)}</Label>
           <Text className="m-0">
             {messages.orderLabel({
               order: entry.order,

@@ -59,6 +59,11 @@ function LoadedProviderSessionDetailPanel({
       ? detailState.sessionDetail
       : null;
   const tokenUsage = detail?.parse.tokenUsage;
+  const selectedSessionResetKey = [
+    selectedProviderSession.provider,
+    selectedProviderSession.kind,
+    selectedProviderSession.id,
+  ].join(":");
 
   return (
     <section
@@ -134,14 +139,17 @@ function LoadedProviderSessionDetailPanel({
           {detailState.status === "success" ? (
             <>
               <ProviderSessionExpandableSection
+                defaultExpanded
                 heading={messages.transcriptHeading}
                 locale={locale}
                 preview={
                   <TranscriptSectionPreview detail={detail} locale={locale} />
                 }
+                resetKey={selectedSessionResetKey}
               >
                 <TranscriptSection
                   detail={detail}
+                  key={selectedSessionResetKey}
                   locale={locale}
                   showHeading={false}
                 />

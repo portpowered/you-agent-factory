@@ -7,7 +7,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { formatDateTime } from "../../../i18n/formatters";
@@ -77,8 +77,16 @@ describe("ProviderSessionDetailPanel", () => {
     });
 
     expect(screen.getAllByText("cursor_sess_01").length).toBeGreaterThan(0);
-    expandDisclosure("Expand Transcript");
-    expandDisclosure("Expand Assistant");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Transcript" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Assistant" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(screen.getByText("Hello from Cursor")).toBeTruthy();
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
       "/provider-sessions/detail?id=cursor_sess_01&kind=session_id&provider=cursor",
@@ -629,13 +637,24 @@ describe("ProviderSessionDetailPanel", () => {
 
     const transcriptTimestamp = formatDateTime("2026-05-18T14:10:04Z");
 
-    expandDisclosure("Expand Transcript");
-    expandDisclosure("Expand User");
-    expandDisclosure("Expand Assistant");
-    expandDisclosure("Expand Reasoning");
-    expandDisclosure("Expand read_file");
-    expandDisclosure("Expand call_tool_1");
-    expandDisclosure("Expand task_started");
+    const transcriptToggle = screen.getByRole("button", {
+      name: "Collapse Transcript",
+    });
+    expect(transcriptToggle.getAttribute("aria-expanded")).toBe("true");
+    for (const entryName of [
+      "User",
+      "Assistant",
+      "Reasoning",
+      "read_file",
+      "call_tool_1",
+      "task_started",
+    ]) {
+      expect(
+        screen
+          .getByRole("button", { name: `Collapse ${entryName}` })
+          .getAttribute("aria-expanded"),
+      ).toBe("true");
+    }
 
     expect(
       screen.getByText("Summarize the rollout state for this work item."),
@@ -682,6 +701,99 @@ describe("ProviderSessionDetailPanel", () => {
         content.includes("provider-session parsing verified successfully"),
       ).length,
     ).toBeGreaterThan(0);
+
+    const assistantToggle = screen.getByRole("button", {
+      name: "Collapse Assistant",
+    });
+    const assistantBodyID = assistantToggle.getAttribute("aria-controls");
+    fireEvent.click(assistantToggle);
+    expect(assistantToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(document.getElementById(assistantBodyID ?? "")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand Assistant" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Assistant" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+
+    fireEvent.click(transcriptToggle);
+    expect(transcriptToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen.queryByRole("button", { name: "Collapse Assistant" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand Transcript" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Assistant" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+  });
+
+  it("restores default-open transcript state when a different session is selected", async () => {
+    const secondSession = {
+      dispatchID: "dispatch-review-next",
+      id: "sess_next",
+      kind: "session_id",
+      provider: "codex",
+    } as const;
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse(buildProviderSessionDetailResponse({ parse: {} })),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          buildProviderSessionDetailResponse({
+            parse: {},
+            providerSession: secondSession,
+            transcript: [
+              {
+                order: 1,
+                text: "Newly selected session transcript.",
+                type: "assistant_message",
+              },
+            ],
+          }),
+        ),
+      );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = (
+      selectedProviderSession: NonNullable<
+        ComponentProps<
+          typeof ProviderSessionDetailPanel
+        >["selectedProviderSession"]
+      >,
+    ) => (
+      <QueryClientProvider client={queryClient}>
+        <ProviderSessionDetailPanel
+          selectedProviderSession={selectedProviderSession}
+        />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(view(SELECTED_SESSION));
+
+    const firstTranscriptToggle = await screen.findByRole("button", {
+      name: "Collapse Transcript",
+    });
+    fireEvent.click(firstTranscriptToggle);
+    expect(firstTranscriptToggle.getAttribute("aria-expanded")).toBe("false");
+
+    rerender(view(secondSession));
+
+    expect(
+      await screen.findByText("Newly selected session transcript."),
+    ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Transcript" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Collapse Assistant" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   it("uses the provider-session sans stack for customer-facing content while preserving monospace raw blocks", async () => {
