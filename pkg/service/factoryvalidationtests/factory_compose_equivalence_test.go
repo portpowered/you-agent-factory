@@ -11,7 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"go.uber.org/zap"
 )
 
 type commandRunnerProbe struct{}
@@ -37,6 +39,34 @@ func TestConfigWithWorkerApplicationPreservesDistinctCommandRunnerOverrides(t *t
 	}
 	if cfg.WorkerApplication.ScriptCommandRunner != scriptRunner {
 		t.Fatal("script command runner override was not preserved")
+	}
+}
+
+func TestConfigWithWorkerApplicationAppliesOverrideToPreconstructedApplication(t *testing.T) {
+	t.Parallel()
+
+	baseProviderRunner := &commandRunnerProbe{}
+	baseScriptRunner := &commandRunnerProbe{}
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+		ProviderCommandRunner: baseProviderRunner,
+		ScriptCommandRunner:   baseScriptRunner,
+	})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	overrideProviderRunner := &commandRunnerProbe{}
+	configured, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
+		WorkerApplication:              components,
+		ProviderCommandRunnerOverride: overrideProviderRunner,
+	})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if configured.WorkerApplication.ProviderCommandRunner != overrideProviderRunner {
+		t.Fatal("preconstructed worker application did not receive provider command runner override")
+	}
+	if configured.WorkerApplication.ScriptCommandRunner != baseScriptRunner {
+		t.Fatal("preconstructed worker application unexpectedly replaced script command runner")
 	}
 }
 
