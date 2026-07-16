@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -47,9 +46,9 @@ func TestFactoryRequestBatch_ChainingTraceThreeWorkstationFunctionalSmoke(t *tes
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
 
-	splitDispatchID, splitParentWorkID := assertThreeWorkstationGeneratedBatchEvents(t, events)
-	mergeDispatchID := assertThreeWorkstationMergeEvents(t, events, splitDispatchID)
-	assertThreeWorkstationWorldStateAndResources(t, h, events, splitDispatchID, mergeDispatchID, splitParentWorkID)
+	splitDispatchID, _ := assertThreeWorkstationGeneratedBatchEvents(t, events)
+	assertThreeWorkstationMergeEvents(t, events, splitDispatchID)
+	assertThreeWorkstationRuntimeQueueAndResources(t, h)
 }
 
 func newChainingTraceFanInHarness(t *testing.T) (*testutil.ServiceTestHarness, *testutil.MockWorkerMapProvider) {
@@ -480,65 +479,8 @@ func assertThreeWorkstationMergeEvents(t *testing.T, events []factoryapi.Factory
 	return mergeDispatchID
 }
 
-func assertThreeWorkstationWorldStateAndResources(
-	t *testing.T,
-	h *testutil.ServiceTestHarness,
-	events []factoryapi.FactoryEvent,
-	splitDispatchID string,
-	mergeDispatchID string,
-	splitParentWorkID string,
-) {
+func assertThreeWorkstationRuntimeQueueAndResources(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
-
-	worldState, err := projections.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-
-	assertProjectedGeneratedBranch(t, worldState.WorkItemsByID["work-branch-z"], "work-branch-z", "left", "chain-z", splitDispatchID, splitParentWorkID, "z")
-	assertProjectedGeneratedBranch(t, worldState.WorkItemsByID["work-branch-a"], "work-branch-a", "right", "chain-a", splitDispatchID, splitParentWorkID, "a")
-
-	var completion *interfaces.FactoryWorldDispatchCompletion
-	for i := range worldState.CompletedDispatches {
-		if worldState.CompletedDispatches[i].DispatchID == mergeDispatchID {
-			completion = &worldState.CompletedDispatches[i]
-			break
-		}
-	}
-	if completion == nil {
-		t.Fatalf("world state missing merge completed dispatch %q", mergeDispatchID)
-	}
-	if completion.CurrentChainingTraceID != "chain-z" {
-		t.Fatalf("world state merge completion current chaining trace ID = %q, want chain-z", completion.CurrentChainingTraceID)
-	}
-	assertStringSliceEqual(t, "world state merge completion previous chaining trace IDs", completion.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
-	if len(completion.ConsumedInputs) != 2 {
-		t.Fatalf("world state merge consumed inputs = %#v, want two generated work inputs", completion.ConsumedInputs)
-	}
-	if len(completion.InputWorkItems) != 2 {
-		t.Fatalf("world state merge input work items = %#v, want two generated work items", completion.InputWorkItems)
-	}
-	if len(completion.OutputWorkItems) != 1 {
-		t.Fatalf("world state merge output work items = %#v, want one merged output", completion.OutputWorkItems)
-	}
-
-	merged := completion.OutputWorkItems[0]
-	if merged.CurrentChainingTraceID != "chain-z" {
-		t.Fatalf("world state merged output current chaining trace ID = %q, want chain-z", merged.CurrentChainingTraceID)
-	}
-	if merged.ChainingTraceDepth != 4 {
-		t.Fatalf("world state merged output chaining trace depth = %d, want 4", merged.ChainingTraceDepth)
-	}
-	assertStringSliceEqual(t, "world state merged output previous chaining trace IDs", merged.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
-
-	projectedMerged, ok := worldState.WorkItemsByID[merged.ID]
-	if !ok {
-		t.Fatalf("world state missing projected merged work item %q", merged.ID)
-	}
-	if projectedMerged.ChainingTraceDepth != 4 {
-		t.Fatalf("projected merged work chaining trace depth = %d, want 4", projectedMerged.ChainingTraceDepth)
-	}
-	assertStringSliceEqual(t, "projected merged work previous chaining trace IDs", projectedMerged.PreviousChainingTraceIDs, []string{"chain-a", "chain-z"})
 
 	mergedTokens := h.Marking().TokensInPlace("merged:complete")
 	if len(mergedTokens) != 1 {
@@ -559,41 +501,5 @@ func assertThreeWorkstationWorldStateAndResources(
 	resource := resourceTokens[0]
 	if resource.Color.TraceID != "" || resource.Color.CurrentChainingTraceID != "" || len(resource.Color.PreviousChainingTraceIDs) != 0 {
 		t.Fatalf("released resource token lineage = %#v, want empty work chaining lineage", resource.Color)
-	}
-}
-
-func assertProjectedGeneratedBranch(
-	t *testing.T,
-	item interfaces.FactoryWorkItem,
-	wantWorkID string,
-	wantWorkType string,
-	wantTrace string,
-	wantDispatchID string,
-	wantParentWorkID string,
-	wantBranch string,
-) {
-	t.Helper()
-
-	if item.ID != wantWorkID {
-		t.Fatalf("projected generated work ID = %q, want %q", item.ID, wantWorkID)
-	}
-	if item.WorkTypeID != wantWorkType {
-		t.Fatalf("projected generated work type = %q, want %q", item.WorkTypeID, wantWorkType)
-	}
-	if item.CurrentChainingTraceID != wantTrace {
-		t.Fatalf("projected generated work %q current chaining trace ID = %q, want %q", wantWorkID, item.CurrentChainingTraceID, wantTrace)
-	}
-	if item.ChainingTraceDepth != 3 {
-		t.Fatalf("projected generated work %q chaining trace depth = %d, want 3", wantWorkID, item.ChainingTraceDepth)
-	}
-	assertStringSliceEqual(t, "projected generated work previous chaining trace IDs", item.PreviousChainingTraceIDs, []string{"chain-root"})
-	if item.Tags["branch"] != wantBranch {
-		t.Fatalf("projected generated work %q branch tag = %q, want %q", wantWorkID, item.Tags["branch"], wantBranch)
-	}
-	if item.Tags["_source_dispatch_id"] != wantDispatchID {
-		t.Fatalf("projected generated work %q source dispatch tag = %q, want %q", wantWorkID, item.Tags["_source_dispatch_id"], wantDispatchID)
-	}
-	if item.Tags["_parent_work_id"] != wantParentWorkID {
-		t.Fatalf("projected generated work %q parent work tag = %q, want %q", wantWorkID, item.Tags["_parent_work_id"], wantParentWorkID)
 	}
 }

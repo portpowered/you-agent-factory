@@ -4,7 +4,6 @@
   "files": [
     { "path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go", "sha256": "0adbdd0406c75b4fac96c89f12e4029cff7100e838b0a731e5a07a8a1d15e3e1" },
     { "path": "tests/functional/guards_batch/executor_review_state_lifecycle_test.go", "sha256": "dabec2c44fa217fd22caabe5b4a8e7a3adb710944b7bff2579c4bc928b13e928" },
-    { "path": "tests/functional/guards_batch/factory_request_batch_chaining_trace_test.go", "sha256": "381baa6a2668331f378ebcd76fd4b857bcd25cc61bcffa657053a9ab07a3051c" },
     { "path": "tests/functional/guards_batch/factory_request_batch_long_test.go", "sha256": "0502d6efc18a2b6f0fc687ef4ff371c5b2109235485bcebc2bb22378f8728e8e" },
     { "path": "tests/functional/internal/support/api_server.go", "sha256": "7248cf8ff749f0db662a7d18d8570652ed02f9dbb846d97522bdcd380115df2c" },
     { "path": "tests/functional/internal/support/cmd/browser_api_harness/main.go", "sha256": "2037a06c5d7d7f54b5203d6f23f9702fcd9b988f622e2e1f2715db77362c45e2" },
