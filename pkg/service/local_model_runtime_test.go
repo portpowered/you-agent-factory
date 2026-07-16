@@ -145,6 +145,7 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 		ModelResources:    newLocalModelResourceLimiter(),
 		LocalModels:       newManagedLocalModelManager(puller, runtime),
 	})
+	attachModelServiceForTest(t, svc)
 
 	mode := factoryapi.AUDIOSTREAM
 	request := factoryapi.ModelInvocationRequest{

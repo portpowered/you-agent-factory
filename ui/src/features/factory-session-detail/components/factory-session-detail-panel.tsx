@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: factory session detail panel composes runtime, drilldown, lifecycle, and replay sections.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: factory session detail panel composes runtime, drilldown, lifecycle, and replay sections.
 
 import { useQueryClient } from "@tanstack/react-query";
 import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";

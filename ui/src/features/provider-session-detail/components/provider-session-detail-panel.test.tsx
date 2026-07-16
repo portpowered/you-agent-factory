@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing provider-session detail coverage stayed intact during sibling-feature extraction.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/style/noExcessiveLinesPerFile: existing provider-session detail coverage stayed intact during sibling-feature extraction.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,

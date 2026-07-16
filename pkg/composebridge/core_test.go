@@ -221,7 +221,10 @@ func buildCoreForTest(ctx context.Context, cfg *runtimehost.Config) (*runtimehos
 	}
 	clock := composebridge.ClockForCompose(cfg, load)
 	sessions := factorysessions.NewRegistry()
-	localModels := composebridge.NewLocalModelDomain(cfg)
+	localModels, err := composebridge.NewLocalModelDomain(cfg)
+	if err != nil {
+		return nil, err
+	}
 	runtimeBuild, err := composebridge.NewRuntimeBuildService(cfg, clock, root.BaseLogger, &localModels, sessions)
 	if err != nil {
 		return nil, err

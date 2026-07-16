@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -38,8 +39,8 @@ func ClockForCompose(cfg *runtimehost.Config, load ConfigLoad) factory.Clock {
 }
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *runtimehost.Config) LocalModelDomain {
-	return service.NewLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(cfg))
+func NewLocalModelDomain(cfg *runtimehost.Config) (LocalModelDomain, error) {
+	return modelhost.NewLocalDomain(service.LocalModelDomainDependencies(service.FactoryServiceConfigFromRuntimeHost(cfg)))
 }
 
 // NewRuntimeBuildService constructs the runtimebuild collaborator for core composition.

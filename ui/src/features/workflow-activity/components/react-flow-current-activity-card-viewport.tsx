@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes React Flow canvas wiring with editor toolbar overlays.
+// biome-ignore lint/style/noExcessiveLinesPerFile: composes React Flow canvas wiring with editor toolbar overlays.
 import {
   type Connection,
   type Edge,

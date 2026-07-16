@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: localized session inspection copy is kept in one typed catalog.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: localized session inspection copy is kept in one typed catalog.
 import type { components } from "../../../api/generated/openapi";
 import {
   FactoryOrchestratorKind,

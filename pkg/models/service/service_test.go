@@ -2,99 +2,142 @@ package service
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
 
-func TestNewRetainsExplicitDependencies(t *testing.T) {
+func TestNewServiceRetainsExplicitDependencies(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustConstructionRuntimeConfig(t)
 	puller := localmodels.NewAssetPuller(t.TempDir())
 	logger := zap.NewNop()
 	metrics := &constructionPullMetrics{}
-	executor := func(
-		*factoryconfig.LoadedFactoryConfig,
-		*interfaces.FactoryConfig,
-		string,
-	) (workers.WorkstationRequestExecutor, error) {
-		return nil, nil
-	}
+	executor := constructionInvocationExecutor()
+	host := constructionModelHost{}
 
-	svc := New(Dependencies{
+	svc, err := NewService(Dependencies{
 		RuntimeConfig:           func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		ModelHost:               nil,
+		ModelHost:               host,
 		ModelAssetPuller:        puller,
 		Logger:                  logger,
+		Clock:                   func() time.Time { return time.Unix(123, 0) },
 		ModelPullMetrics:        metrics,
 		ModelInvocationExecutor: executor,
 		FactoryRunnerID:         "runner-a",
 	})
-
-	if svc.runtimeConfig() != runtimeCfg {
-		t.Fatal("runtime config accessor did not return the supplied config")
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
 	}
-	if svc.modelAssetPuller() != puller {
-		t.Fatal("asset puller accessor did not return the supplied puller")
+	if svc.runtimeConfig() != runtimeCfg || svc.modelHost() != host || svc.modelAssetPuller() != puller {
+		t.Fatal("NewService did not retain required dependencies")
 	}
-	if svc.logger() != logger {
-		t.Fatal("logger accessor did not return the supplied logger")
-	}
-	if svc.deps.ModelPullMetrics != metrics {
-		t.Fatal("metrics accessor did not return the supplied recorder")
-	}
-	if svc.deps.ModelInvocationExecutor == nil {
-		t.Fatal("invocation executor was not retained")
+	if svc.logger() != logger || svc.deps.ModelPullMetrics != metrics || svc.deps.ModelInvocationExecutor == nil {
+		t.Fatal("NewService did not retain optional or invocation dependencies")
 	}
 	if got := svc.factoryRunnerID(); got != "runner-a" {
 		t.Fatalf("factory runner ID = %q, want runner-a", got)
 	}
 }
 
-func TestNewAllowsOptionalDependenciesToBeOmitted(t *testing.T) {
+func TestNewServiceAppliesModelLocalDefaults(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustConstructionRuntimeConfig(t)
-	svc := New(Dependencies{
-		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+	svc, err := NewService(Dependencies{
+		RuntimeConfig:           func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:               constructionModelHost{},
+		ModelAssetPuller:        localmodels.NewAssetPuller(t.TempDir()),
+		ModelInvocationExecutor: constructionInvocationExecutor(),
 	})
-
-	models, err := svc.ListModels(context.Background())
 	if err != nil {
-		t.Fatalf("ListModels with optional dependencies omitted: %v", err)
+		t.Fatalf("NewService: %v", err)
 	}
-	if models.Results == nil {
-		t.Fatal("ListModels results = nil, want initialized empty results")
+	if svc.logger() == nil || svc.deps.Clock == nil || svc.deps.ModelPullMetrics == nil {
+		t.Fatal("NewService did not apply logger, clock, and metrics defaults")
 	}
-	if svc.logger() != nil {
-		t.Fatal("logger = non-nil, want nil when omitted")
+	if got := svc.now(); got.IsZero() {
+		t.Fatal("default clock returned the zero time")
 	}
-	if svc.factoryRunnerID() != "" {
-		t.Fatal("factory runner ID = non-empty, want empty when omitted")
+	// Exercise the no-op metrics default through the same emission boundary used
+	// by pull operations. Omitted optional collaborators must remain usable, not
+	// merely non-nil.
+	svc.recordModelPullMetric(modelPullMetricAttempts, map[string]string{"model": "test"})
+}
+
+func TestServiceNilReceiverPreservesUnavailableRuntimeErrors(t *testing.T) {
+	t.Parallel()
+
+	var svc *Service
+	assertUnavailable := func(operation string, err error) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), "runtime is not available") {
+			t.Fatalf("%s error = %v, want runtime unavailable", operation, err)
+		}
 	}
-	if svc.modelAssetPuller() == nil {
-		t.Fatal("asset puller = nil, want nil-safe default puller")
+
+	_, err := svc.ListModels(context.Background())
+	assertUnavailable("ListModels", err)
+	_, err = svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	assertUnavailable("GetModel", err)
+	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	assertUnavailable("PullModel", err)
+	_, err = svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	assertUnavailable("InvokeModel", err)
+	if _, err := svc.modelInvocationExecutor(nil, nil, "worker"); err == nil {
+		t.Fatal("nil service modelInvocationExecutor() succeeded")
+	}
+	if svc.factoryRunnerID() != "" || svc.logger() != nil || svc.modelHost() != nil {
+		t.Fatal("nil service accessors returned configured collaborators")
 	}
 }
 
-func TestNewMissingRuntimeDependencyReturnsErrorWithoutPanic(t *testing.T) {
+func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	t.Parallel()
 
-	svc := New(Dependencies{})
-	if svc == nil {
-		t.Fatal("New returned nil")
+	runtimeCfg := mustConstructionRuntimeConfig(t)
+	valid := Dependencies{
+		RuntimeConfig:           func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:               constructionModelHost{},
+		ModelAssetPuller:        localmodels.NewAssetPuller(t.TempDir()),
+		ModelInvocationExecutor: constructionInvocationExecutor(),
 	}
-	if _, err := svc.ListModels(context.Background()); err == nil {
-		t.Fatal("ListModels error = nil, want unavailable runtime error")
+	tests := []struct {
+		name       string
+		dependency string
+		mutate     func(*Dependencies)
+	}{
+		{name: "runtime lookup", dependency: "runtime configuration lookup", mutate: func(deps *Dependencies) { deps.RuntimeConfig = nil }},
+		{name: "runtime value", dependency: "runtime configuration", mutate: func(deps *Dependencies) {
+			deps.RuntimeConfig = func() *factoryconfig.LoadedFactoryConfig { return nil }
+		}},
+		{name: "model host", dependency: "model host", mutate: func(deps *Dependencies) { deps.ModelHost = nil }},
+		{name: "typed nil model host", dependency: "model host", mutate: func(deps *Dependencies) { var host *constructionModelHost; deps.ModelHost = host }},
+		{name: "asset puller", dependency: "model asset puller", mutate: func(deps *Dependencies) { deps.ModelAssetPuller = nil }},
+		{name: "invocation executor", dependency: "model invocation executor", mutate: func(deps *Dependencies) { deps.ModelInvocationExecutor = nil }},
 	}
-	if _, err := svc.InvokeModel(context.Background(), "missing", modelInvocationRequest()); err == nil {
-		t.Fatal("InvokeModel error = nil, want unavailable runtime error")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			deps := valid
+			test.mutate(&deps)
+			svc, err := NewService(deps)
+			if svc != nil {
+				t.Fatalf("NewService service = %#v, want nil", svc)
+			}
+			if !errors.Is(err, ErrInvalidDependencies) || !strings.Contains(err.Error(), test.dependency) {
+				t.Fatalf("NewService error = %v, want invalid-dependencies error naming %q", err, test.dependency)
+			}
+		})
 	}
 }
 
@@ -113,6 +156,36 @@ func mustConstructionRuntimeConfig(t *testing.T) *factoryconfig.LoadedFactoryCon
 	return runtimeCfg
 }
 
-func modelInvocationRequest() factoryapi.ModelInvocationRequest {
-	return factoryapi.ModelInvocationRequest{Operation: "TTS"}
+func constructionInvocationExecutor() ModelInvocationExecutor {
+	return func(
+		*factoryconfig.LoadedFactoryConfig,
+		*interfaces.FactoryConfig,
+		string,
+	) (workers.WorkstationRequestExecutor, error) {
+		return nil, nil
+	}
+}
+
+type constructionModelHost struct{}
+
+func (constructionModelHost) ResolveIdentity(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.Identity, error) {
+	return modelhost.Identity{}, nil
+}
+
+func (constructionModelHost) InspectReadiness(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.ReadinessSnapshot, error) {
+	return modelhost.ReadinessSnapshot{}, nil
+}
+
+func (constructionModelHost) Pull(context.Context, *factoryconfig.LoadedFactoryConfig, string) (modelhost.PullSnapshot, error) {
+	return modelhost.PullSnapshot{}, nil
+}
+
+func (constructionModelHost) AcquireLease(context.Context, *factoryconfig.LoadedFactoryConfig, string, modelhost.LeaseOptions) (modelhost.Lease, error) {
+	return modelhost.Lease{}, nil
+}
+
+func (constructionModelHost) ReleaseLease(context.Context, string) error { return nil }
+
+func (constructionModelHost) Unload(context.Context, *factoryconfig.LoadedFactoryConfig, string) error {
+	return nil
 }

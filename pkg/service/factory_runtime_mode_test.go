@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -26,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
@@ -1232,6 +1230,27 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
 	}
 
+	models := &stubModelService{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+		ModelAPI:          models,
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	assertExplicitFactoryServiceCollaborators(t, svc, alphaDir, models)
+}
+
+func TestBuildFactoryServiceWithoutModelAPIDoesNotConstructFallback(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               rootDir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -1241,6 +1260,19 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
+	if _, err := svc.ListModels(context.Background()); !errors.Is(err, errModelServiceUnavailable) {
+		t.Fatalf("ListModels error = %v, want explicit unavailable model boundary", err)
+	}
+}
+
+func assertExplicitFactoryServiceCollaborators(
+	t *testing.T,
+	svc *FactoryService,
+	alphaDir string,
+	models apisurface.ModelAPI,
+) {
+	t.Helper()
+
 	if svc.sessions == nil {
 		t.Fatal("expected explicit factorysessions.Registry collaborator")
 	}
@@ -1250,8 +1282,11 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if svc.modelService == nil {
 		t.Fatal("expected explicit model service collaborator")
 	}
-	if _, ok := svc.modelService.(*modelsservice.Service); !ok {
-		t.Fatalf("modelService type = %T, want *modelsservice.Service for production wiring", svc.modelService)
+	if svc.modelService != models {
+		t.Fatalf("modelService = %T, want exact injected collaborator %T", svc.modelService, models)
+	}
+	if _, err := svc.ListModels(context.Background()); err != nil {
+		t.Fatalf("ListModels through injected compatibility service: %v", err)
 	}
 	if svc.factorySave == nil {
 		t.Fatal("expected explicit factorysave collaborator")
@@ -1277,15 +1312,6 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	}
 	if svc.coordinatorPolicy().dir != alphaDir {
 		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
-	}
-}
-
-func TestFactoryService_ModelServiceClockUsesCompositionClock(t *testing.T) {
-	want := time.Date(2026, time.July, 10, 21, 30, 0, 0, time.UTC)
-	svc := &FactoryService{clock: clockwork.NewFakeClockAt(want)}
-
-	if got := svc.modelServiceClock(); !got.Equal(want) {
-		t.Fatalf("modelServiceClock() = %s, want %s", got, want)
 	}
 }
 
@@ -1434,6 +1460,7 @@ func TestFactoryService_ListModels_DelegatesToLocalmodelsCatalog(t *testing.T) {
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	svc := newModelCatalogServiceForTest(runtimeCfg, nil)
+	attachModelServiceForTest(t, svc)
 
 	got, err := svc.ListModels(context.Background())
 	if err != nil {
@@ -1456,6 +1483,7 @@ func TestFactoryService_GetModel_DelegatesToLocalmodelsCatalog(t *testing.T) {
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	svc := newModelCatalogServiceForTest(runtimeCfg, nil)
+	attachModelServiceForTest(t, svc)
 
 	got, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	if err != nil {
@@ -1476,6 +1504,7 @@ func TestFactoryService_PullModel_DelegatesToInjectedModelAssets(t *testing.T) {
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	puller := &recordingServiceModelAssetPuller{}
 	svc := newModelCatalogServiceForTest(runtimeCfg, puller)
+	attachModelServiceForTest(t, svc)
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
 		t.Fatalf("PullModel: %v", err)
@@ -1995,15 +2024,6 @@ func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged
 	}
 	if !reflect.DeepEqual(stub.calls, []string{"invoke"}) {
 		t.Fatalf("model calls = %#v, want invoke exactly once", stub.calls)
-	}
-}
-
-func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
-	t.Parallel()
-
-	api := wireModelServiceCollaborator(nil, nil)
-	if _, ok := api.(*modelsservice.Service); !ok {
-		t.Fatalf("wireModelServiceCollaborator(nil) type = %T, want *modelsservice.Service", api)
 	}
 }
 
@@ -2825,10 +2845,13 @@ func TestGeneratedFactoryFromRuntimeConfig_CapturesOperatorDefaultedModelWorkerF
 	}
 }
 
-func TestNewLocalModelDomain_WiresProcessWideModelHost(t *testing.T) {
-	domain := newRuntimeLocalModelDependencies(&FactoryServiceConfig{
+func TestModelOwnedLocalDomain_WiresProcessWideModelHost(t *testing.T) {
+	domain, err := modelhost.NewLocalDomain(LocalModelDomainDependencies(&FactoryServiceConfig{
 		ModelCacheDir: t.TempDir(),
-	})
+	}))
+	if err != nil {
+		t.Fatalf("modelhost.NewLocalDomain: %v", err)
+	}
 	if domain.Host == nil {
 		t.Fatal("local model domain host = nil, want process-wide modelhost.Host")
 	}

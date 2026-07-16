@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: hosted Linear validation regressions share one draft-validation seam.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: hosted Linear validation regressions share one draft-validation seam.
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
 import { EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS } from "../../../current-factory-definition/lib/worker-editable-values";
 import { getWorkerDetailMessages } from "../messages/worker-detail";

@@ -17,8 +17,9 @@ func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) 
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     installedCacheInspectHost{},
 	})
 
 	models, err := svc.ListModels(context.Background())
@@ -49,14 +50,9 @@ func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) 
 func TestService_ListModels_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
 	t.Parallel()
 
-	svc := modelsservice.New(modelsservice.Dependencies{})
-
-	_, err := svc.ListModels(context.Background())
-	if err == nil {
-		t.Fatal("ListModels: nil error, want runtime unavailable")
-	}
-	if !strings.Contains(err.Error(), "runtime is not available") {
-		t.Fatalf("ListModels error = %v, want runtime unavailable message", err)
+	svc, err := modelsservice.NewService(modelsservice.Dependencies{})
+	if svc != nil || !errors.Is(err, modelsservice.ErrInvalidDependencies) {
+		t.Fatalf("NewService = (%v, %v), want missing runtime construction error", svc, err)
 	}
 }
 
@@ -64,7 +60,7 @@ func TestService_ListModels_ReturnsInspectFailureFromModelHost(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     failingInspectHost{},
 	})
@@ -82,7 +78,7 @@ func TestService_ListModels_ProjectsManagedRuntimeFromModelHost(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     missingCacheInspectHost{},
 	})

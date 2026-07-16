@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: scanner rules stay together so guard behavior and failure output remain traceable.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: scanner rules stay together so guard behavior and failure output remain traceable.
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

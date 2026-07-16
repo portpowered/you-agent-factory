@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
@@ -24,7 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
@@ -64,7 +63,8 @@ func provideFactoryServiceFromRuntimeHostCore(
 	cfg *service.FactoryServiceConfig,
 ) *service.FactoryService {
 	serviceShell := service.FactoryServiceShell{Service: service.NewFactoryServiceFromRuntimeHostCore(core)}
-	svc := service.AttachModelServiceCollaborator(serviceShell, service.ProvideModelServiceCollaborator(serviceShell, cfg))
+	models := core.ModelService()
+	svc := service.AttachModelServiceCollaborator(serviceShell, models)
 	return service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: svc},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: svc}, cfg),
@@ -106,7 +106,7 @@ func provideRuntimeHostClock(
 	return composebridge.ClockForCompose(cfg, load)
 }
 
-func provideRuntimeHostLocalModels(cfg *runtimehost.Config) composebridge.LocalModelDomain {
+func provideRuntimeHostLocalModels(cfg *runtimehost.Config) (composebridge.LocalModelDomain, error) {
 	return composebridge.NewLocalModelDomain(cfg)
 }
 
@@ -242,6 +242,8 @@ func provideRuntimeHostCollaborators(
 	}
 }
 
+type runtimeHostCoreWithoutModels struct{ Core *runtimehost.Core }
+
 func provideRuntimeHostCore(
 	ctx context.Context,
 	cfg *runtimehost.Config,
@@ -250,8 +252,62 @@ func provideRuntimeHostCore(
 	load composebridge.ConfigLoad,
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
+) (runtimeHostCoreWithoutModels, error) {
+	core, err := composebridge.ComposeCore(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
+	return runtimeHostCoreWithoutModels{Core: core}, err
+}
+
+func provideRuntimeModelServiceDependencies(
+	inert runtimeHostCoreWithoutModels,
+	cfg *runtimehost.Config,
+) (modelsservice.Dependencies, error) {
+	core := inert.Core
+	if core == nil || core.Clock() == nil {
+		return modelsservice.Dependencies{}, errors.New("construct model service dependencies: runtime core and clock are required")
+	}
+	host := runtimehost.NewHostFromCore(core)
+	var metrics modelsservice.PullMetricsRecorder
+	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
+		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
+	}
+	runnerID := ""
+	if cfg != nil {
+		runnerID = cfg.RunnerID
+	}
+	return modelsservice.Dependencies{
+		RuntimeConfig:           host.CurrentModelRuntimeConfig,
+		ModelHost:               core.ModelHost(),
+		ModelAssetPuller:        core.ModelAssetPuller(),
+		Logger:                  core.Logger(),
+		Clock:                   core.Clock().Now,
+		ModelPullMetrics:        metrics,
+		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
+		FactoryRunnerID:         runnerID,
+	}, nil
+}
+
+func provideRuntimeModelService(
+	deps modelsservice.Dependencies,
+	cfg *runtimehost.Config,
+) (apisurface.ModelAPI, error) {
+	if cfg != nil && !isNil(cfg.ModelAPI) {
+		return cfg.ModelAPI, nil
+	}
+	models, err := modelsservice.NewService(deps)
+	if err != nil {
+		return nil, fmt.Errorf("construct model service: %w", err)
+	}
+	return models, nil
+}
+
+func provideRuntimeHostCoreWithModels(
+	inert runtimeHostCoreWithoutModels,
+	models apisurface.ModelAPI,
 ) (*runtimehost.Core, error) {
-	return composebridge.ComposeCore(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
+	if inert.Core == nil || isNil(models) {
+		return nil, errors.New("construct runtime core: model service is required")
+	}
+	return runtimehost.AttachModelService(inert.Core, models), nil
 }
 
 // Build eagerly constructs the real runtime core, domain services,
@@ -337,9 +393,10 @@ func assembleProductionGraph(
 	}
 	host := runtimehost.NewHostFromCore(core)
 	shell := runtimehost.HostShell{Host: host}
-	models := composeModelService(core, host, cfg)
-	host = runtimehost.AttachModelServiceCollaborator(shell, models)
-	shell = runtimehost.HostShell{Host: host}
+	models := core.ModelService()
+	if isNil(models) {
+		return nil, errors.New("construct production graph: runtime core model service is required")
+	}
 	host = runtimehost.AttachFactorySaveCollaborator(shell, runtimehost.ProvideFactorySaveCollaborator(shell, cfg))
 	applicationRuntime, err := runtimehost.NewApplicationRuntime(host)
 	if err != nil {
@@ -387,6 +444,7 @@ func assembleProductionGraph(
 		return nil, err
 	}
 	return &Graph{
+		core:              core,
 		Config:            bundle.RuntimeCfg,
 		Runtime:           runtimeInputs,
 		RuntimeLog:        host.RuntimeLogDiagnostics(),
@@ -421,42 +479,6 @@ type modelPullMetricsAdapter struct {
 
 func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
 	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
-}
-
-func composeModelService(
-	core *runtimehost.Core,
-	host *runtimehost.Host,
-	cfg *runtimehost.Config,
-) apisurface.ModelAPI {
-	if cfg != nil && cfg.ModelAPI != nil {
-		return cfg.ModelAPI
-	}
-	if core == nil || host == nil {
-		return modelsservice.New(modelsservice.Dependencies{})
-	}
-
-	var metrics modelsservice.PullMetricsRecorder
-	runnerID := ""
-	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
-		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
-	}
-	if cfg != nil {
-		runnerID = cfg.RunnerID
-	}
-	now := time.Now
-	if core.Clock() != nil {
-		now = core.Clock().Now
-	}
-	return modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig:           host.CurrentModelRuntimeConfig,
-		ModelHost:               core.ModelHost(),
-		ModelAssetPuller:        core.ModelAssetPuller(),
-		Logger:                  core.Logger(),
-		Clock:                   now,
-		ModelPullMetrics:        metrics,
-		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
-		FactoryRunnerID:         runnerID,
-	})
 }
 
 func buildProductionSidecars(

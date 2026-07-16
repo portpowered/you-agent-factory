@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: graph-draft conflict notification regressions share one mocked save/notify harness.
+// biome-ignore lint/style/noExcessiveLinesPerFile: graph-draft conflict notification regressions share one mocked save/notify harness.
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";

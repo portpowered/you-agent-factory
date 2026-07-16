@@ -15,7 +15,6 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
@@ -455,25 +454,13 @@ func assertJSONErrorResponse(t *testing.T, gotStatus int, header http.Header, bo
 	assertJSONError(t, rec, wantStatus, wantCode, wantMessage)
 }
 
-type listModelsWiringAssetPuller struct{}
+type listModelsAPI struct{ apisurface.ModelAPI }
 
-func (listModelsWiringAssetPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
-	return apisurface.ModelPullResult{}, nil
+func (listModelsAPI) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	return factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "OMNIVOICE_Q4_K_M"}}}, nil
 }
 
-func (listModelsWiringAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
-	return nil
-}
-
-func (listModelsWiringAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
-	return localmodels.CacheLayout{}, nil
-}
-
-func (listModelsWiringAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
-	return localmodels.RuntimeCacheInspection{Supported: true, Installed: true}, nil
-}
-
-func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
+func TestServer_ListModels_RoutesThroughInjectedModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
@@ -484,7 +471,7 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 		SystemConfigHomeDir:      dir,
 		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
 		RuntimeMetricsPolicy:     service.RuntimeMetricsPolicyDisabled,
-		ModelAssets:              listModelsWiringAssetPuller{},
+		ModelAPI:                 listModelsAPI{},
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)

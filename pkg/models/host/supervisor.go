@@ -44,6 +44,13 @@ type ProcessLauncher interface {
 	Start(ctx context.Context, spec ProcessStartSpec) (ManagedProcess, error)
 }
 
+// DefaultProcessLauncher returns the package-owned production process boundary.
+// Selecting it is inert; no subprocess is started until an explicit host
+// operation loads a managed runtime.
+func DefaultProcessLauncher() ProcessLauncher {
+	return execProcessLauncher{}
+}
+
 // HealthChecker probes model-server readiness through a health endpoint.
 type HealthChecker interface {
 	Check(ctx context.Context, healthEndpoint string) error
@@ -89,7 +96,7 @@ func defaultSupervisorConfig() SupervisorConfig {
 		ReadinessTimeout:    defaultReadinessTimeout,
 		HealthCheckInterval: defaultHealthCheckInterval,
 		HealthCheckPath:     defaultHealthCheckPath,
-		ProcessLauncher:     execProcessLauncher{},
+		ProcessLauncher:     DefaultProcessLauncher(),
 		HealthChecker:       HTTPHealthChecker{Path: defaultHealthCheckPath},
 		ServerStartBuilder:  defaultLlamaCppServerStartBuilder,
 	}

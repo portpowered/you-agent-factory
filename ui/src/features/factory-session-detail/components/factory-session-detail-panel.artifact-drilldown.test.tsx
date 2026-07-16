@@ -1,5 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: artifact drilldown states share one fetch harness and assertion seam.
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: artifact loading, download, unavailable, and error states share one end-to-end fetch harness.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: artifact loading, download, unavailable, and error states share one end-to-end fetch harness.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { render, screen, waitFor } from "@testing-library/react";

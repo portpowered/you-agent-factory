@@ -22,7 +22,10 @@ func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimeho
 		return nil, err
 	}
 	registry := provideFactorySessionsRegistry()
-	v2 := provideRuntimeHostLocalModels(cfg)
+	v2, err := provideRuntimeHostLocalModels(cfg)
+	if err != nil {
+		return nil, err
+	}
 	v3, err := provideRuntimeHostConfigLoad(cfg, v)
 	if err != nil {
 		return nil, err
@@ -48,7 +51,19 @@ func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimeho
 	config := provideRuntimeHostHostedWorkers(cfg, logger, clock)
 	serviceService := provideRuntimeHostWorkers(cfg, clock, logger, config)
 	collaborators := provideRuntimeHostCollaborators(registry, v2, runtimebuildService, serviceService, service, wireRuntimeHostPersistence)
-	core, err := provideRuntimeHostCore(ctx, cfg, v, collaborators, v3, clock, config)
+	wireRuntimeHostCoreWithoutModels, err := provideRuntimeHostCore(ctx, cfg, v, collaborators, v3, clock, config)
+	if err != nil {
+		return nil, err
+	}
+	dependencies, err := provideRuntimeModelServiceDependencies(wireRuntimeHostCoreWithoutModels, cfg)
+	if err != nil {
+		return nil, err
+	}
+	modelAPI, err := provideRuntimeModelService(dependencies, cfg)
+	if err != nil {
+		return nil, err
+	}
+	core, err := provideRuntimeHostCoreWithModels(wireRuntimeHostCoreWithoutModels, modelAPI)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +78,10 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 		return nil, err
 	}
 	registry := provideFactorySessionsRegistry()
-	v2 := provideRuntimeHostLocalModels(config)
+	v2, err := provideRuntimeHostLocalModels(config)
+	if err != nil {
+		return nil, err
+	}
 	v3, err := provideRuntimeHostConfigLoad(config, v)
 	if err != nil {
 		return nil, err
@@ -89,7 +107,19 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 	hostedworkersConfig := provideRuntimeHostHostedWorkers(config, logger, clock)
 	serviceService := provideRuntimeHostWorkers(config, clock, logger, hostedworkersConfig)
 	collaborators := provideRuntimeHostCollaborators(registry, v2, runtimebuildService, serviceService, factorysessionexecutionService, wireRuntimeHostPersistence)
-	core, err := provideRuntimeHostCore(ctx, config, v, collaborators, v3, clock, hostedworkersConfig)
+	wireRuntimeHostCoreWithoutModels, err := provideRuntimeHostCore(ctx, config, v, collaborators, v3, clock, hostedworkersConfig)
+	if err != nil {
+		return nil, err
+	}
+	dependencies, err := provideRuntimeModelServiceDependencies(wireRuntimeHostCoreWithoutModels, config)
+	if err != nil {
+		return nil, err
+	}
+	modelAPI, err := provideRuntimeModelService(dependencies, config)
+	if err != nil {
+		return nil, err
+	}
+	core, err := provideRuntimeHostCoreWithModels(wireRuntimeHostCoreWithoutModels, modelAPI)
 	if err != nil {
 		return nil, err
 	}

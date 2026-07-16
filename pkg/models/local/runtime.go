@@ -3,11 +3,13 @@ package local
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -65,6 +67,30 @@ type Manager struct {
 	hooks       Hooks
 }
 
+// ErrInvalidDependencies classifies managed local-runtime construction failures.
+var ErrInvalidDependencies = errors.New("managed local runtime dependencies are invalid")
+
+// ManagedRuntimeDependencies carries the required cache/pull and invocation
+// runtime edges. Hooks are optional local instrumentation callbacks.
+type ManagedRuntimeDependencies struct {
+	AssetPuller AssetPuller
+	Runtime     Runtime
+	Hooks       Hooks
+}
+
+// NewManagedRuntime constructs managed local invocation behavior after
+// synchronously validating its required collaborators. It does not resolve
+// assets, load a runtime, or start lifecycle work during construction.
+func NewManagedRuntime(deps ManagedRuntimeDependencies) (*Manager, error) {
+	if isNilDependency(deps.AssetPuller) {
+		return nil, missingDependencyError("asset puller and cache resolver")
+	}
+	if isNilDependency(deps.Runtime) {
+		return nil, missingDependencyError("local invocation runtime")
+	}
+	return newManager(deps.AssetPuller, deps.Runtime, deps.Hooks), nil
+}
+
 type managedLocalModelEntry struct {
 	mu     sync.Mutex
 	handle Handle
@@ -78,15 +104,29 @@ type localModelRunner struct {
 	workerDef  *interfaces.WorkerConfig
 }
 
-func NewManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks) *Manager {
-	if assetPuller == nil || runtime == nil {
-		return nil
-	}
+func newManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks) *Manager {
 	return &Manager{
 		entries:     make(map[string]*managedLocalModelEntry),
 		assetPuller: assetPuller,
 		runtime:     runtime,
 		hooks:       hooks,
+	}
+}
+
+func missingDependencyError(name string) error {
+	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
+}
+
+func isNilDependency(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -292,6 +332,12 @@ func NewOmniVoiceRuntime(runner workers.CommandRunner) Runtime {
 		runner = workers.ExecCommandRunner{}
 	}
 	return &omniVoiceLocalRuntime{runner: runner}
+}
+
+// DefaultRuntime returns the package-owned local invocation runtime. Selecting
+// it is inert; construction does not load model assets or start a process.
+func DefaultRuntime() Runtime {
+	return NewOmniVoiceRuntime(nil)
 }
 
 func (r *omniVoiceLocalRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {

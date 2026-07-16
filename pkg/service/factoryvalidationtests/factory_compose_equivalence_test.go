@@ -5,6 +5,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
@@ -58,7 +59,15 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	modelDeps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		t.Fatalf("ModelServiceDependencies: %v", err)
+	}
+	models, err := modelsservice.NewService(modelDeps)
+	if err != nil {
+		t.Fatalf("modelsservice.NewService: %v", err)
+	}
+	composed := service.AttachModelServiceCollaborator(shell, models)
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
@@ -187,7 +196,15 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	modelDeps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		t.Fatalf("ModelServiceDependencies: %v", err)
+	}
+	models, err := modelsservice.NewService(modelDeps)
+	if err != nil {
+		t.Fatalf("modelsservice.NewService: %v", err)
+	}
+	composed := service.AttachModelServiceCollaborator(shell, models)
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),

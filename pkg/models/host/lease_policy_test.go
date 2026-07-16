@@ -17,7 +17,7 @@ import (
 
 func TestCatalogHost_AllowsConcurrentLeasesWhenCapacityAllows(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfigWithLeaseCapacity(2))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {
 				Supported:          true,
@@ -49,7 +49,7 @@ func TestCatalogHost_AllowsConcurrentLeasesWhenCapacityAllows(t *testing.T) {
 
 func TestCatalogHost_RejectsLeaseWhenCapacityExhausted(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {
 				Supported:          true,
@@ -222,7 +222,7 @@ func TestCatalogHost_ResourcePressureEvictsIdleRuntime(t *testing.T) {
 		},
 	})
 	host.maxLoadedRuntimes = 1
-	host.assets = stubAssetGateway{
+	host.cacheInspector = stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {Supported: true, Installed: true, InstalledFileCount: 2, CachePath: t.TempDir()},
 			"OTHER_MODEL":      {Supported: true, Installed: true, InstalledFileCount: 2, CachePath: t.TempDir()},

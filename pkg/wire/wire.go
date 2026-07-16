@@ -28,6 +28,9 @@ func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimeho
 		provideRuntimeHostWorkers,
 		provideRuntimeHostCollaborators,
 		provideRuntimeHostCore,
+		provideRuntimeModelServiceDependencies,
+		provideRuntimeModelService,
+		provideRuntimeHostCoreWithModels,
 	)
 	return nil, nil
 }
@@ -53,6 +56,9 @@ func InjectFactoryService(
 		provideRuntimeHostWorkers,
 		provideRuntimeHostCollaborators,
 		provideRuntimeHostCore,
+		provideRuntimeModelServiceDependencies,
+		provideRuntimeModelService,
+		provideRuntimeHostCoreWithModels,
 		provideFactoryServiceFromRuntimeHostCore,
 	)
 	return nil, nil

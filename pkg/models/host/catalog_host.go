@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +19,8 @@ import (
 // CatalogHost is the catalog-backed model host implementation for process-level wiring.
 type CatalogHost struct {
 	mu                sync.Mutex
-	assets            AssetGateway
+	assetPuller       AssetPuller
+	cacheInspector    CacheInspector
 	opts              Options
 	diagnostics       Diagnostics
 	supervisor        SupervisorConfig
@@ -40,11 +42,24 @@ type trackedLease struct {
 	modelName  string
 }
 
-// NewCatalogHost constructs a process-wide model host backed by managed asset integration.
-func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
-	if assets == nil {
-		return nil
+// NewHost constructs a process-wide model host after synchronously validating
+// its required pull, cache, and process boundaries. Construction only allocates
+// host state; it does not launch a subprocess or start application lifecycle.
+func NewHost(deps Dependencies) (*CatalogHost, error) {
+	if isNilDependency(deps.AssetPuller) {
+		return nil, missingDependencyError("asset puller")
 	}
+	if isNilDependency(deps.CacheInspector) {
+		return nil, missingDependencyError("cache inspector")
+	}
+	if isNilDependency(deps.ProcessLauncher) {
+		return nil, missingDependencyError("process launcher")
+	}
+	deps.Options.Supervisor.ProcessLauncher = deps.ProcessLauncher
+	return newCatalogHost(deps.AssetPuller, deps.CacheInspector, deps.Options), nil
+}
+
+func newCatalogHost(assetPuller AssetPuller, cacheInspector CacheInspector, opts Options) *CatalogHost {
 	if opts.SourceResolver == nil {
 		opts.SourceResolver = DefaultManagedRuntimeSourceResolverAdapter()
 	}
@@ -52,7 +67,8 @@ func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
 	supervisor := normalizeSupervisorConfig(opts.Supervisor)
 	supervisor.Diagnostics = opts.Diagnostics
 	return &CatalogHost{
-		assets:            assets,
+		assetPuller:       assetPuller,
+		cacheInspector:    cacheInspector,
 		opts:              opts,
 		diagnostics:       opts.Diagnostics,
 		supervisor:        supervisor,
@@ -62,6 +78,23 @@ func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
 		idleUnloadTimers:  make(map[string]*time.Timer),
 		idleUnloadAfter:   idleUnloadAfter,
 		maxLoadedRuntimes: maxLoadedRuntimes,
+	}
+}
+
+func missingDependencyError(name string) error {
+	return fmt.Errorf("%w: %s is required", ErrInvalidDependencies, name)
+}
+
+func isNilDependency(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -111,7 +144,7 @@ func (h *CatalogHost) inspectReadiness(
 	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		return ClassifyReadiness(identity, CacheInspection{}, false), nil
 	}
-	inspection, err := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	inspection, err := h.cacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
 	if err != nil {
 		return ReadinessSnapshot{}, err
 	}
@@ -143,7 +176,7 @@ func (h *CatalogHost) Pull(
 		}
 		return pullSnapshot, &ReadinessError{Snapshot: snapshot, Cause: ErrUnsupportedRuntime}
 	}
-	pullResult, err := h.assets.PullModel(ctx, runtimeCfg, modelName)
+	pullResult, err := h.assetPuller.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
 		readiness := pullResult.Snapshot
 		var pullErr *apisurface.ManagedRuntimePullError
@@ -158,7 +191,7 @@ func (h *CatalogHost) Pull(
 	}
 	readiness := pullResult.Snapshot
 	if readiness.Identity.Name == "" {
-		inspected, inspectErr := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+		inspected, inspectErr := h.cacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
 		if inspectErr != nil {
 			return PullSnapshot{}, inspectErr
 		}
@@ -216,7 +249,7 @@ func (h *CatalogHost) prepareAcquireLease(
 		return ReadinessSnapshot{}, CacheInspection{}, "", 0, err
 	}
 	identity := h.identityFromCatalog(runtimeCfg, entry)
-	inspection, err := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	inspection, err := h.cacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
 	if err != nil {
 		return ReadinessSnapshot{}, CacheInspection{}, "", 0, err
 	}

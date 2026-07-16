@@ -7,6 +7,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -81,7 +82,21 @@ func buildModelCatalogService(t *testing.T, cfg map[string]any) *service.Factory
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	return svc
+	return attachModelService(t, svc)
+}
+
+func attachModelService(t *testing.T, svc *service.FactoryService) *service.FactoryService {
+	t.Helper()
+	shell := service.FactoryServiceShell{Service: svc}
+	deps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		t.Fatalf("ModelServiceDependencies: %v", err)
+	}
+	models, err := modelsservice.NewService(deps)
+	if err != nil {
+		t.Fatalf("modelsservice.NewService: %v", err)
+	}
+	return service.AttachModelServiceCollaborator(shell, models)
 }
 
 func modelCatalogConfig(includeResource bool) map[string]any {

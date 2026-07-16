@@ -3,7 +3,6 @@ package service_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -18,7 +17,7 @@ func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     missingCacheInspectHost{},
 	})
@@ -39,7 +38,7 @@ func TestService_GetModel_PreservesInstalledAssetReadinessFromModelHost(t *testi
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     installedCacheInspectHost{},
 	})
@@ -60,7 +59,7 @@ func TestService_GetModel_ReturnsNotFoundForUnknownModel(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, &interfaces.FactoryConfig{Name: "factory"})
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 	})
 
@@ -73,14 +72,9 @@ func TestService_GetModel_ReturnsNotFoundForUnknownModel(t *testing.T) {
 func TestService_GetModel_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
 	t.Parallel()
 
-	svc := modelsservice.New(modelsservice.Dependencies{})
-
-	_, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
-	if err == nil {
-		t.Fatal("GetModel: nil error, want runtime unavailable")
-	}
-	if !strings.Contains(err.Error(), "runtime is not available") {
-		t.Fatalf("GetModel error = %v, want runtime unavailable message", err)
+	svc, err := modelsservice.NewService(modelsservice.Dependencies{})
+	if svc != nil || !errors.Is(err, modelsservice.ErrInvalidDependencies) {
+		t.Fatalf("NewService = (%v, %v), want missing runtime construction error", svc, err)
 	}
 }
 

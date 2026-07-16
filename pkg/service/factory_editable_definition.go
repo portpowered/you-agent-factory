@@ -380,9 +380,10 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 // service build time and copied onto each factoryRuntimeBundle.
 type LocalModelDomain = factoryservice.LocalModelDomain
 
-// NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
-	return factoryservice.NewLocalModelDomain(hostConfigFromService(cfg))
+// LocalModelDomainDependencies adapts compatibility configuration to the
+// canonical model-package construction contract.
+func LocalModelDomainDependencies(cfg *FactoryServiceConfig) modelhost.LocalDomainDependencies {
+	return factoryservice.LocalModelDomainDependencies(hostConfigFromService(cfg))
 }
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
@@ -404,7 +405,10 @@ func NewFactoryServiceCollaborators(
 	if sessions == nil {
 		return FactoryServiceCollaborators{}, fmt.Errorf("construct Factory Service collaborators: Factory Session registry is required")
 	}
-	startupLocalModels := NewLocalModelDomain(cfg)
+	startupLocalModels, err := modelhost.NewLocalDomain(LocalModelDomainDependencies(cfg))
+	if err != nil {
+		return FactoryServiceCollaborators{}, err
+	}
 	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
 	runtimeBuild, err := newRuntimeBuildService(
 		cfg,

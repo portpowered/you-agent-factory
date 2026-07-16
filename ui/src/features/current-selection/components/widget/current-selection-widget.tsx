@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: widget wires all current-selection detail cards and save hooks in one mount surface.
+// biome-ignore lint/style/noExcessiveLinesPerFile: widget wires all current-selection detail cards and save hooks in one mount surface.
 import type { ReactNode } from "react";
 
 import type {

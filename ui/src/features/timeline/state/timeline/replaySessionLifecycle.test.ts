@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: session lifecycle replay cases share lifecycleEvent helper and reconstructWorldState harness.
+// biome-ignore lint/style/noExcessiveLinesPerFile: session lifecycle replay cases share lifecycleEvent helper and reconstructWorldState harness.
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
 import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
