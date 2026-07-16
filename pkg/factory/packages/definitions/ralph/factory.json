@@ -8,6 +8,22 @@
         "description": "Text request that Ralph plans and then executes.",
         "required": true,
         "bindings": [{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}]
+      },
+      {
+        "name": "planningDetail",
+        "description": "How much implementation detail the planning worker includes in the plan.",
+        "externalName": "planning-detail",
+        "choices": ["brief", "detailed"],
+        "defaultValue": "detailed",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "executionStyle",
+        "description": "Whether the execution worker favors cautious incremental changes or direct execution.",
+        "externalName": "execution-style",
+        "choices": ["cautious", "direct"],
+        "defaultValue": "cautious",
+        "bindings": [{"kind": "NAMED"}]
       }
     ]
   },

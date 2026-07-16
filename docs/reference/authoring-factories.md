@@ -308,6 +308,16 @@ visit-count loop breaker: after eight execution visits, it routes the submitted
 work to `ralph:failed`, which is observable through the usual work and dispatch
 history inspection surfaces.
 
+Use `--planning-detail brief|detailed` to control the level of detail in the
+plan, and `--execution-style cautious|direct` to guide the execution worker.
+Both default to `detailed` and `cautious`, respectively. Invalid values are
+rejected before either worker is dispatched. For example:
+
+```bash
+you run --named @you/ralph "Ship the login fix by Friday" \
+  --planning-detail detailed --execution-style cautious
+```
+
 ### Built-in `@you/goal` repeater
 
 The shipped goal factory is deliberately minimal. It defines only `goal:init`,

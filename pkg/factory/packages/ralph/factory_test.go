@@ -1,12 +1,15 @@
 package ralph
 
 import (
+	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePlanThenExecuteFactory(t *testing.T) {
@@ -49,6 +52,89 @@ func TestBuiltInFactoryJSON_LoadsRunnablePlanThenExecuteFactory(t *testing.T) {
 		if target.Severity == factoryvalidation.SeverityError {
 			t.Fatalf("validation target = %#v", target)
 		}
+	}
+}
+
+func TestBuiltInRalphFactory_AppliesValidatedPlanningAndExecutionParameters(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Ship the login fix"},
+		NamedArgs: []invocations.NamedArgumentInput{
+			{Key: "planning-detail", Values: []string{"brief"}},
+			{Key: "execution-style", Values: []string{"direct"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments: %v", err)
+	}
+	assertNormalizedArgument(t, &normalized, "planningDetail", []string{"brief"})
+	assertNormalizedArgument(t, &normalized, "executionStyle", []string{"direct"})
+
+	args := invocations.RuntimeInvocationArguments(cfg.InvocationSignature, &normalized)
+	if err := invocations.ValidateInvocationInterpolation(cfg, args, nil); err != nil {
+		t.Fatalf("ValidateInvocationInterpolation: %v", err)
+	}
+	planner, err := invocations.InterpolateWorkstationConfig(findWorkstation(t, cfg.Workstations, PackagedPlanWorkstationName), args, nil)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig(planner): %v", err)
+	}
+	executor, err := invocations.InterpolateWorkstationConfig(findWorkstation(t, cfg.Workstations, PackagedExecuteWorkstationName), args, nil)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig(executor): %v", err)
+	}
+	if !strings.Contains(planner.Body, "Planning detail: brief") {
+		t.Fatalf("planner prompt = %q, want configured planning detail", planner.Body)
+	}
+	if !strings.Contains(executor.Body, "Execution style: direct") {
+		t.Fatalf("executor prompt = %q, want configured execution style", executor.Body)
+	}
+
+	defaults, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"Ship the next fix"},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments(defaults after configured invocation): %v", err)
+	}
+	defaultArgs := invocations.RuntimeInvocationArguments(cfg.InvocationSignature, &defaults)
+	defaultPlanner, err := invocations.InterpolateWorkstationConfig(findWorkstation(t, cfg.Workstations, PackagedPlanWorkstationName), defaultArgs, nil)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig(default planner): %v", err)
+	}
+	if !strings.Contains(defaultPlanner.Body, "Planning detail: detailed") {
+		t.Fatalf("default planner prompt = %q, want unchanged planning default", defaultPlanner.Body)
+	}
+}
+
+func TestBuiltInRalphFactory_ParameterDefaultsAndInvalidValuesAreHandledBeforeDispatch(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	_, err = invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature: cfg.InvocationSignature,
+		NamedArgs: []invocations.NamedArgumentInput{{Key: "planning-detail", Values: []string{"verbose"}}},
+	})
+	var argumentErr *invocations.ArgumentError
+	if !errors.As(err, &argumentErr) {
+		t.Fatalf("NormalizeArguments(invalid planning detail) error = %v, want ArgumentError", err)
+	}
+	if argumentErr.Parameter != "planningDetail" || !strings.Contains(argumentErr.Error(), "declared choices") {
+		t.Fatalf("invalid parameter diagnostic = %#v, want actionable planningDetail choices error", argumentErr)
+	}
+}
+
+func assertNormalizedArgument(t *testing.T, normalized *invocations.NormalizedArguments, name string, want []string) {
+	t.Helper()
+	got, ok := normalized.Arguments[name]
+	if !ok || !reflect.DeepEqual(got.Values, want) {
+		t.Fatalf("argument %q = %#v, want %#v", name, got.Values, want)
 	}
 }
 
