@@ -105,6 +105,21 @@ func direct() { build := service.BuildFactoryService; build() }
 	}
 }
 
+func TestCheckFunctionalTestBoundariesRejectsDotImportOfImplementation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBoundaryFixture(t, root, `package fixture
+import . "github.com/portpowered/infinite-you/pkg/service"
+func direct() { BuildFactoryService() }
+`)
+	err := CheckFunctionalTestBoundaries(root)
+	want := `directly uses service implementation "github.com/portpowered/infinite-you/pkg/service (dot import)"`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckFunctionalTestBoundaries() error = %v, want %q", err, want)
+	}
+}
+
 func TestCheckFunctionalTestBoundariesRejectsNestedImplementationReceiver(t *testing.T) {
 	t.Parallel()
 

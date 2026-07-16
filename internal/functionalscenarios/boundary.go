@@ -111,6 +111,11 @@ type functionalBoundaryImport struct {
 	boundary string
 }
 
+type functionalBoundaryDotImport struct {
+	functionalBoundaryImport
+	line int
+}
+
 type functionalBoundaryType struct {
 	functionalBoundaryImport
 	name string
@@ -128,7 +133,8 @@ func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBound
 		return nil, fmt.Errorf("parse %s: %w", filepath.ToSlash(path), err)
 	}
 	imports := functionalBoundaryImports(parsed)
-	if len(imports) == 0 {
+	dotImports := functionalBoundaryDotImports(parsed, fileSet)
+	if len(imports) == 0 && len(dotImports) == 0 {
 		return nil, nil
 	}
 	relativePath, err := filepath.Rel(repositoryRoot, path)
@@ -140,7 +146,13 @@ func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBound
 	typeDeclarations := functionalBoundaryTypeDeclarations(parsed)
 	typedIdentifiers := functionalBoundaryTypedIdentifiers(parsed, imports, typeDeclarations)
 	structFields := functionalBoundaryStructFields(parsed, imports)
-	var violations []FunctionalBoundaryViolation
+	violations := make([]FunctionalBoundaryViolation, 0, len(dotImports))
+	for _, dotImport := range dotImports {
+		violations = append(violations, newFunctionalBoundaryViolation(
+			relativePath, dotImport.line, dotImport.functionalBoundaryImport,
+			dotImport.path+" (dot import)",
+		))
+	}
 	ast.Inspect(parsed, func(node ast.Node) bool {
 		if literal, ok := node.(*ast.CompositeLit); ok {
 			if boundaryType, found := functionalBoundaryTypeOf(literal.Type, imports, typeDeclarations); found && !allowedBoundaryType(boundaryType.name) {
@@ -533,6 +545,32 @@ func functionalBoundaryImports(file *ast.File) map[string]functionalBoundaryImpo
 		if name != "_" && name != "." {
 			imports[name] = functionalBoundaryImport{path: importPath, boundary: boundary}
 		}
+	}
+	return imports
+}
+
+// functionalBoundaryDotImports rejects dot imports from implementation
+// packages. Their unqualified exported symbols cannot be safely distinguished
+// from local declarations without type-checking the fixture package, and the
+// import itself bypasses the customer-boundary policy.
+func functionalBoundaryDotImports(file *ast.File, fileSet *token.FileSet) []functionalBoundaryDotImport {
+	var imports []functionalBoundaryDotImport
+	for _, specification := range file.Imports {
+		if specification.Name == nil || specification.Name.Name != "." {
+			continue
+		}
+		importPath, err := strconv.Unquote(specification.Path.Value)
+		if err != nil {
+			continue
+		}
+		boundary := prohibitedFunctionalBoundary(importPath)
+		if boundary == "" {
+			continue
+		}
+		imports = append(imports, functionalBoundaryDotImport{
+			functionalBoundaryImport: functionalBoundaryImport{path: importPath, boundary: boundary},
+			line:                     fileSet.Position(specification.Pos()).Line,
+		})
 	}
 	return imports
 }
