@@ -75,6 +75,9 @@ func Init(homeDir string) (Result, error) {
 		if _, err := systemconfig.EnsureLocalBackendScope(configPath); err != nil {
 			return Result{}, fmt.Errorf("create system config at %q: %w", configPath, err)
 		}
+		if err := operatorconfig.WriteBaselineClassifierWorkerPresets(configPath); err != nil {
+			return Result{}, fmt.Errorf("add baseline worker presets to operator config %q: %w", configPath, err)
+		}
 		if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
 			return Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
 		}

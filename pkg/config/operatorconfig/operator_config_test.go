@@ -1,6 +1,7 @@
 package operatorconfig
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,6 +112,37 @@ func TestParseFileConfig_ValidatesAndCanonicalizesWorkerPresets(t *testing.T) {
 	if len(cfg.WorkerPresets) != 1 || cfg.WorkerPresets[0] != want {
 		t.Fatalf("worker presets = %#v, want %#v", cfg.WorkerPresets, []WorkerPreset{want})
 	}
+}
+
+func TestBaselineClassifierWorkerPresetsAreValidAndUnique(t *testing.T) {
+	presets := BaselineClassifierWorkerPresets()
+	encoded, err := json.Marshal(struct {
+		WorkerPresets []WorkerPreset `json:"workerPresets"`
+	}{WorkerPresets: presets})
+	if err != nil {
+		t.Fatalf("Marshal baseline presets: %v", err)
+	}
+	config, err := ParseFileConfig(encoded)
+	if err != nil {
+		t.Fatalf("ParseFileConfig(baseline presets): %v", err)
+	}
+	if len(config.WorkerPresets) != 3 {
+		t.Fatalf("preset count = %d, want 3", len(config.WorkerPresets))
+	}
+	for _, id := range []string{ClassifierSmallPresetID, ClassifierMediumPresetID, ClassifierLargePresetID} {
+		if !containsPreset(config.WorkerPresets, id) {
+			t.Fatalf("baseline presets do not include %q: %#v", id, config.WorkerPresets)
+		}
+	}
+}
+
+func containsPreset(presets []WorkerPreset, id string) bool {
+	for _, preset := range presets {
+		if preset.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func TestParseFileConfig_MissingWorkerPresetsIsBackwardCompatible(t *testing.T) {

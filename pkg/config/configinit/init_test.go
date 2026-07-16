@@ -45,6 +45,7 @@ func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
 		t.Fatalf("LoadFileConfig(created): %v", err)
 	}
+	assertBaselineClassifierWorkerPresets(t, configPath)
 
 	scope, err := systemconfig.EnsureLocalBackendScope(configPath)
 	if err != nil {
@@ -52,6 +53,27 @@ func TestInit_FreshHomeCreatesOperatorSystemConfig(t *testing.T) {
 	}
 	if scope.Outcome != systemconfig.OutcomeReused {
 		t.Fatalf("backend scope outcome = %q, want %q", scope.Outcome, systemconfig.OutcomeReused)
+	}
+}
+
+func assertBaselineClassifierWorkerPresets(t *testing.T, configPath string) {
+	t.Helper()
+
+	config, err := operatorconfig.LoadFileConfig(configPath)
+	if err != nil {
+		t.Fatalf("LoadFileConfig(%q): %v", configPath, err)
+	}
+	want := map[string]operatorconfig.WorkerPreset{}
+	for _, preset := range operatorconfig.BaselineClassifierWorkerPresets() {
+		want[preset.ID] = preset
+	}
+	if len(config.WorkerPresets) != len(want) {
+		t.Fatalf("worker preset count = %d, want %d", len(config.WorkerPresets), len(want))
+	}
+	for _, preset := range config.WorkerPresets {
+		if expected, ok := want[preset.ID]; !ok || preset != expected {
+			t.Fatalf("worker preset %q = %#v, want %#v", preset.ID, preset, expected)
+		}
 	}
 }
 

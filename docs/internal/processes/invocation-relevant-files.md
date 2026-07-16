@@ -3,6 +3,14 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## Operator worker preset initialization
+
+- `pkg/config/configinit/init.go` creates baseline operator configuration only
+  for a new home. Keep existing `~/.you-agent-factory/config.json` files
+  untouched on later initialization runs; baseline packaged-factory presets
+  belong in `pkg/config/operatorconfig`, where parsing and JavaScript child
+  worker resolution already own their validation and runtime projection.
+
 ## CLI run and submit command contracts
 
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives

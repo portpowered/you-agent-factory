@@ -23,7 +23,29 @@ const (
 	// EnvDefaultWorkerModel is the environment variable for the default worker
 	// model override.
 	EnvDefaultWorkerModel = "YOU_DEFAULT_WORKER_MODEL"
+
+	// ClassifierSmallPresetID is the baseline low-cost preset used by
+	// @you/classifier for simple requests.
+	ClassifierSmallPresetID = "classifier-small"
+	// ClassifierMediumPresetID is the baseline preset used by
+	// @you/classifier for moderately complex requests.
+	ClassifierMediumPresetID = "classifier-medium"
+	// ClassifierLargePresetID is the baseline highest-capability preset used by
+	// @you/classifier for complex requests.
+	ClassifierLargePresetID = "classifier-large"
 )
+
+// BaselineClassifierWorkerPresets returns isolated validated defaults for the
+// packaged classifier. The provider and model choices are explicit so a fresh
+// operator configuration can resolve packaged-factory workers without relying
+// on symbolic defaults.
+func BaselineClassifierWorkerPresets() []WorkerPreset {
+	return []WorkerPreset{
+		{ID: ClassifierSmallPresetID, ModelProvider: "CODEX", Model: "gpt-5-mini", ReasoningEffort: "low"},
+		{ID: ClassifierMediumPresetID, ModelProvider: "CODEX", Model: "gpt-5", ReasoningEffort: "medium"},
+		{ID: ClassifierLargePresetID, ModelProvider: "CODEX", Model: "gpt-5.4", ReasoningEffort: "high"},
+	}
+}
 
 // Source identifies which precedence layer supplied an effective default value.
 type Source string
