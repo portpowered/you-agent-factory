@@ -74,10 +74,20 @@ func TestBuiltInQuorumFactory_UsesIndependentBranchesAndGatedMerge(t *testing.T)
 		if output.Color.WorkID == "request-work" || output.Color.ParentID != "request-work" {
 			t.Fatalf("branch %d lineage = %#v, want a distinct child of request-work", index, output.Color)
 		}
+		ApplyWorkRelations(output, &split, input)
+		if !sameRelations(output.Color.Relations, []interfaces.Relation{{Type: interfaces.RelationParentChild, TargetWorkID: "request-work"}}) {
+			t.Fatalf("branch %d relations = %#v, want public parent relation", index, output.Color.Relations)
+		}
 	}
 	mergeTransition := net.Transitions["merge-quorum"]
 	if len(mergeTransition.InputArcs) != 2 {
 		t.Fatalf("merge input arcs = %#v, want both completed branch Work items before dispatch", mergeTransition.InputArcs)
+	}
+	mergeOutput := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "quorum-merge"}}
+	ApplyWorkRelations(mergeOutput, &merge, []interfaces.TokenColor{{WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"}, {WorkID: "branch-b-work", WorkTypeID: "quorum-branch-b"}})
+	wantDependencies := []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"}, {Type: interfaces.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"}}
+	if !sameRelations(mergeOutput.Color.Relations, wantDependencies) {
+		t.Fatalf("merge relations = %#v, want dependencies on both branch results", mergeOutput.Color.Relations)
 	}
 }
 
@@ -99,6 +109,10 @@ func workstationsByName(workstations []interfaces.FactoryWorkstationConfig) map[
 }
 
 func sameRoutes(got, want []interfaces.IOConfig) bool {
+	return reflect.DeepEqual(got, want)
+}
+
+func sameRelations(got, want []interfaces.Relation) bool {
 	return reflect.DeepEqual(got, want)
 }
 
