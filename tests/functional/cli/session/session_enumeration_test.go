@@ -16,13 +16,19 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	cli "github.com/portpowered/infinite-you/pkg/transports/cli"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
 
@@ -119,6 +125,203 @@ func TestNamedLoopCLI_RemainsScheduledAndDispatchesOncePerFakeClockBoundary(t *t
 	case <-time.After(time.Second):
 		t.Fatal("@you/loop invocation did not stop after cancellation")
 	}
+}
+
+func TestNamedLoopCLI_ModelFlagsReachScheduledWorkerAcrossFakeClockBoundary(t *testing.T) {
+	start := time.Date(2028, time.January, 1, 12, 0, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	projectDir := t.TempDir()
+	homeDir := t.TempDir()
+	provider := testutil.NewMockProvider()
+	support.SetWorkingDirectory(t, projectDir)
+	if _, err := factoryconfig.PersistNamedFactory(filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"), "@you/loop", builtinloop.BuiltInLoopFactoryJSON); err != nil {
+		t.Fatalf("PersistNamedFactory(@you/loop): %v", err)
+	}
+
+	var captured *service.FactoryService
+	runtimeReady := make(chan struct{})
+	command := newLoopFlagCLICommand(t, homeDir, fakeClock, provider, &captured, runtimeReady)
+	command.SetArgs([]string{
+		"run",
+		"--default-worker-model-provider", "cursor",
+		"--default-worker-model", "loop-flag-model",
+		"--named", "@you/loop",
+		"--no-record",
+		"Check the release dashboard",
+		"--period", "1h",
+		"--worktree", "loop-flag-worktree",
+	})
+	invocationCtx, cancelInvocation := context.WithCancel(t.Context())
+	command.SetContext(invocationCtx)
+	commandDone := make(chan error, 1)
+	go func() { commandDone <- command.Execute() }()
+
+	select {
+	case <-runtimeReady:
+	case err := <-commandDone:
+		t.Fatalf("you run --named @you/loop ended before scheduled dispatch: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("you run --named @you/loop did not start its Factory Session runtime")
+	}
+	select {
+	case err := <-commandDone:
+		t.Fatalf("you run --named @you/loop ended before scheduled dispatch: %v", err)
+	default:
+	}
+	waitForLoopDispatchResponses(t, captured, 2)
+	assertFlaggedLoopProviderRequests(t, provider, 1)
+	waitForLoopFakeClockWaiter(t, fakeClock)
+	fakeClock.Advance(time.Hour - time.Second)
+	assertLoopDispatchResponseCount(t, captured, 2)
+	assertFlaggedLoopProviderRequests(t, provider, 1)
+	fakeClock.Advance(time.Second)
+	waitForLoopDispatchResponses(t, captured, 4)
+	assertFlaggedLoopProviderRequests(t, provider, 2)
+	assertLoopSessionRunning(t, captured)
+
+	cancelInvocation()
+	select {
+	case err := <-commandDone:
+		if err != nil && err != context.Canceled {
+			t.Fatalf("you run --named @you/loop: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("you run --named @you/loop did not stop after cancellation")
+	}
+}
+
+func newLoopFlagCLICommand(
+	t *testing.T,
+	homeDir string,
+	fakeClock *clockwork.FakeClock,
+	provider *testutil.MockProvider,
+	captured **service.FactoryService,
+	runtimeReady chan<- struct{},
+) *cobra.Command {
+	t.Helper()
+	return cli.NewRootCommandWithOptions(cli.RootCommandOptions{
+		HomeDir: func() (string, error) { return homeDir, nil },
+		RunFactory: func(ctx context.Context, cfg runcli.RunConfig) error {
+			svc, err := wire.InjectFactoryService(ctx, &service.FactoryServiceConfig{
+				Dir:              cfg.Dir,
+				Port:             1,
+				RuntimeMode:      interfaces.RuntimeModeService,
+				Clock:            fakeClock,
+				Logger:           zap.NewNop(),
+				ProviderOverride: provider,
+				OperatorDefaults: cfg.OperatorDefaults,
+				APIServerStarter: func(ctx context.Context, _ apisurface.APISurface, _ int, _ *zap.Logger) error {
+					<-ctx.Done()
+					return nil
+				},
+			})
+			if err != nil {
+				return err
+			}
+			*captured = svc
+			runDone := make(chan error, 1)
+			go func() { runDone <- svc.Run(ctx) }()
+			if err := waitForLoopRuntime(ctx, svc); err != nil {
+				return err
+			}
+			close(runtimeReady)
+			request := loopInvocationRequest(t, cfg)
+			invokeErr := invokeLoopWhenSidecarsReady(ctx, svc, request)
+			if invokeErr != nil && invokeErr != context.Canceled {
+				return invokeErr
+			}
+			if runErr := <-runDone; runErr != nil && runErr != context.Canceled {
+				return runErr
+			}
+			return nil
+		},
+	})
+}
+
+func invokeLoopWhenSidecarsReady(
+	ctx context.Context,
+	svc *service.FactoryService,
+	request factoryapi.InvocationRequest,
+) error {
+	for {
+		_, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, request)
+		if err == nil || !strings.Contains(err.Error(), "Factory Session sidecars are unavailable") {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
+func waitForLoopRuntime(ctx context.Context, svc *service.FactoryService) error {
+	timeout := time.NewTimer(time.Second)
+	defer timeout.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		_, err := svc.GetCurrentFactoryForSession(context.Background(), factorysessions.DefaultSessionID)
+		if err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout.C:
+			return fmt.Errorf("wait for CLI Factory Session runtime: %w", err)
+		case <-ticker.C:
+		}
+	}
+}
+
+func loopInvocationRequest(t *testing.T, cfg runcli.RunConfig) factoryapi.InvocationRequest {
+	t.Helper()
+	if cfg.InvocationNormalizedArguments == nil {
+		t.Fatal("CLI did not normalize @you/loop invocation arguments")
+	}
+	args := map[string]any{}
+	for name, argument := range cfg.InvocationNormalizedArguments.Arguments {
+		if len(argument.Values) != 1 {
+			t.Fatalf("CLI argument %q values = %#v, want one value", name, argument.Values)
+		}
+		args[name] = argument.Values[0]
+	}
+	return factoryapi.InvocationRequest{Args: &args}
+}
+
+func assertFlaggedLoopProviderRequests(t *testing.T, provider *testutil.MockProvider, want int) {
+	t.Helper()
+	requests := provider.Calls()
+	if len(requests) != want {
+		t.Fatalf("flagged loop provider request count = %d, want %d", len(requests), want)
+	}
+	for index, request := range requests {
+		if request.Worktree != "loop-flag-worktree" || request.ModelProvider != string(interfaces.ModelProviderCursor) || request.Model != "loop-flag-model" {
+			t.Fatalf("flagged loop provider request %d = %#v, want CLI-selected model and configured worktree", index, request)
+		}
+		if request.Dispatch.WorkstationName != "run-loop-iteration" {
+			t.Fatalf("flagged loop provider request %d dispatch = %#v, want iteration worker dispatch", index, request.Dispatch)
+		}
+		if !hasLoopRequestLineage(request.InputTokens, "Check the release dashboard") {
+			t.Fatalf("flagged loop provider request %d inputs = %#v, want submitted request lineage", index, request.InputTokens)
+		}
+	}
+}
+
+func hasLoopRequestLineage(inputTokens []any, want string) bool {
+	for _, inputToken := range inputTokens {
+		token, ok := inputToken.(interfaces.Token)
+		if !ok || token.Color.InvocationArguments == nil {
+			continue
+		}
+		argument, ok := token.Color.InvocationArguments.Arguments["request"]
+		if ok && len(argument.Values) == 1 && argument.Values[0] == want {
+			return true
+		}
+	}
+	return false
 }
 
 func assertLoopProviderRequests(t *testing.T, provider *testutil.MockProvider, want int) {

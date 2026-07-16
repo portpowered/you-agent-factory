@@ -19,6 +19,12 @@ primary-result behavior.
   between `interfaces.SubmitRequest` and `interfaces.Work`. Otherwise a
   session-scoped scheduler can retain a literal `${parameter}` in later worker
   dispatches even though pre-submission interpolation validation passed.
+- For a long-lived packaged invocation, prove CLI flag behavior through a
+  `cli.NewRootCommandWithOptions` `RunFactory` test seam rather than only
+  capturing `RunConfig`: let the real `you run --named` parser resolve the
+  flags, then build the injected fake-clock/provider service from that resolved
+  config and observe startup plus a later scheduled worker request. The loop
+  example lives in `tests/functional/cli/session/session_enumeration_test.go`.
 
 ## CLI run and submit command contracts
 
