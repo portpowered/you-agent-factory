@@ -511,6 +511,9 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 	if timeout <= 0 {
 		timeout = s.timeout
 	}
+	if readErr := s.callerCancellationError(timeout); readErr != nil {
+		return FactorySessionSSEFrame{}, readErr
+	}
 	if s.pending == nil {
 		done := make(chan factorySessionSSEReadResult, 1)
 		s.pending = done
@@ -529,6 +532,9 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 	select {
 	case result := <-s.pending:
 		s.pending = nil
+		if readErr := s.callerCancellationError(timeout); readErr != nil {
+			return FactorySessionSSEFrame{}, readErr
+		}
 		if result.err != nil {
 			if errors.Is(result.err, context.Canceled) {
 				return FactorySessionSSEFrame{}, s.readError(
@@ -558,6 +564,13 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 			s.ctx.Err(),
 		)
 	}
+}
+
+func (s *FactorySessionSSEStream) callerCancellationError(timeout time.Duration) *FactorySessionSSEReadError {
+	if s.ctx == nil || s.ctx.Err() == nil {
+		return nil
+	}
+	return s.readError(FactorySessionSSEReadOutcomeCallerCanceled, timeout, s.ctx.Err())
 }
 
 func (s *FactorySessionSSEStream) readError(

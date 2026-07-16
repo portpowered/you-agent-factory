@@ -122,6 +122,31 @@ func TestTryReadNextSSEFrame_PreservesAllProtocolFields(t *testing.T) {
 	}
 }
 
+func TestFactorySessionSSEStream_CanceledContextWinsOverPendingEOF(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	pending := make(chan factorySessionSSEReadResult, 1)
+	pending <- factorySessionSSEReadResult{}
+	stream := &FactorySessionSSEStream{
+		t:         t,
+		timeout:   time.Second,
+		ctx:       ctx,
+		pending:   pending,
+		sessionID: "factory-session-canceled",
+	}
+
+	_, err := stream.TryReadNextFrame(time.Second)
+	var readErr *FactorySessionSSEReadError
+	if !errors.As(err, &readErr) {
+		t.Fatalf("error = %T %v, want FactorySessionSSEReadError", err, err)
+	}
+	if readErr.Outcome != FactorySessionSSEReadOutcomeCallerCanceled || !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want CALLER_CANCELED wrapping context.Canceled", err)
+	}
+}
+
 func TestFirstNonEmptyFactorySessionSSEString_ReturnsFirstTrimmedValue(t *testing.T) {
 	t.Parallel()
 
