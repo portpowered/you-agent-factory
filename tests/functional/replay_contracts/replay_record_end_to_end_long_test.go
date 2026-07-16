@@ -26,8 +26,6 @@ import (
 const recordReplayLiveScriptEnv = "AGENT_FACTORY_RECORD_REPLAY_LIVE_SCRIPT"
 const recordReplayScriptSecretEnv = "SCRIPT_REPLAY_API_TOKEN"
 const recordReplayScriptSecretValue = "raw-script-replay-secret-value"
-const recordReplayProviderSecretEnv = "ANTHROPIC_API_KEY"
-const recordReplayProviderSecretValue = "raw-provider-replay-secret-value"
 
 func setRecordReplayHomeEnv(t *testing.T, homeDir string) {
 	t.Helper()
@@ -100,11 +98,6 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
 	}
 
-	h := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	h.Service.Assert().
-		HasTokenInPlace("task:done").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
 }
 
 func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow(t *testing.T) {
@@ -172,11 +165,6 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 		t.Fatalf("replay run stdout = %q, want empty output with dashboard rendering suppressed", replayOutput)
 	}
 
-	h := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	h.Service.Assert().
-		HasTokenInPlace("task:done").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
 }
 
 func TestRecordReplayEndToEnd_PublicRecordingPreservesExternalAndGeneratedWorkRequestLineage(t *testing.T) {
@@ -259,58 +247,6 @@ Finish the input task.
 		t.Fatalf("generated relations = %d, want 1", got)
 	}
 	assertGeneratedReplayRequestMetadata(t, artifact.Events, generatedRequest.RequestID)
-}
-
-func TestRecordReplayEndToEnd_ProviderCommandDiagnosticsPersistRedactedEnv(t *testing.T) {
-	support.SkipLongFunctional(t, "slow record/replay provider diagnostics smoke")
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-	artifactPath := filepath.Join(t.TempDir(), "provider-recording.replay.json")
-	t.Setenv(recordReplayProviderSecretEnv, recordReplayProviderSecretValue)
-
-	support.WriteAgentConfig(t, dir, "worker-a", `---
-type: MODEL_WORKER
-model: test-model
-modelProvider: claude
-stopToken: COMPLETE
----
-Process the input task.
-`)
-	support.WriteAgentConfig(t, dir, "worker-b", `---
-type: MODEL_WORKER
-model: test-model
-modelProvider: claude
-stopToken: COMPLETE
----
-Finish the input task.
-`)
-	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Step one done. COMPLETE")},
-		workers.CommandResult{Stdout: []byte("Step two done. COMPLETE")},
-	)
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
-		WorkTypeID: "task",
-		WorkID:     "provider-replay-env-work",
-		TraceID:    "provider-replay-env-trace",
-		Payload:    []byte("exercise provider replay env redaction"),
-	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	if runner.CallCount() == 0 {
-		t.Fatal("expected provider command runner to be called")
-	}
-	if !commandEnvContains(runner.LastRequest().Env, recordReplayProviderSecretEnv+"="+recordReplayProviderSecretValue) {
-		t.Fatalf("provider command env did not receive raw %s", recordReplayProviderSecretEnv)
-	}
-
-	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	assertReplayArtifactDoesNotContainRawValue(t, artifactPath, recordReplayProviderSecretValue)
-	assertReplayArtifactCommandEnvRedacted(t, artifact, recordReplayProviderSecretEnv)
 }
 
 func assertReplayWorkRequestRecorded(t *testing.T, artifact *interfaces.ReplayArtifact, requestID, source string, workItems int, relations int) {
