@@ -438,10 +438,10 @@
       "package": "github.com/portpowered/infinite-you/pkg/runtimehost",
       "minimum": 34.64
     },
-      {
-        "package": "github.com/portpowered/infinite-you/pkg/service",
-        "minimum": 78.25
-      },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/service",
+      "minimum": 78.25
+    },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
       "minimum": 75.00
