@@ -21,6 +21,14 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
+	assertFixFactoryIdentity(t, cfg)
+	workstations := fixWorkstationsByName(cfg)
+	assertFixWorkflowTopology(t, cfg, workstations)
+	assertFixFactoryValidation(t, cfg)
+}
+
+func assertFixFactoryIdentity(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	if cfg.Name != PackagedFactoryName || cfg.Project != PackagedFactoryProject {
 		t.Fatalf("factory identity = %q/%q, want %q/%q", cfg.Name, cfg.Project, PackagedFactoryName, PackagedFactoryProject)
 	}
@@ -30,11 +38,18 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 	if cfg.InvocationReturn == nil || cfg.InvocationReturn.WorkTypeName != PackagedWorkTypeName || cfg.InvocationReturn.TerminalState != "complete" {
 		t.Fatalf("invocationReturn = %#v, want explicit fix:complete", cfg.InvocationReturn)
 	}
+}
 
+func fixWorkstationsByName(cfg *interfaces.FactoryConfig) map[string]interfaces.FactoryWorkstationConfig {
 	workstations := map[string]interfaces.FactoryWorkstationConfig{}
 	for _, workstation := range cfg.Workstations {
 		workstations[workstation.Name] = workstation
 	}
+	return workstations
+}
+
+func assertFixWorkflowTopology(t *testing.T, cfg *interfaces.FactoryConfig, workstations map[string]interfaces.FactoryWorkstationConfig) {
+	t.Helper()
 	for _, name := range []string{PackagedPlanWorkstationName, PackagedImplementWorkstationName, PackagedReviewWorkstationName} {
 		workstation, ok := workstations[name]
 		if !ok {
@@ -55,7 +70,10 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 	}
 	assertFixRoute(t, workstations[PackagedReviewWorkstationName].OnRejection, "implement")
 	assertFixRoute(t, workstations[PackagedReviewWorkstationName].Outputs, "complete")
+}
 
+func assertFixFactoryValidation(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	for _, target := range factoryvalidation.Validate(cfg).Targets {
 		if target.Severity == factoryvalidation.SeverityError {
 			t.Fatalf("validation target = %#v", target)
