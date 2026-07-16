@@ -310,6 +310,20 @@ func TestStartCronIntervalWatcher_SubmitsAtConfiguredInterval(t *testing.T) {
 	assertNoCronWorkRequestQueued(t, requests)
 }
 
+func TestStartCronIntervalWatcher_RejectsInvalidDependenciesAndInterval(t *testing.T) {
+	svc := workersservice.New(workersservice.Config{})
+	if err := svc.StartCronIntervalWatcher(nil, nil, nil, "", nil, interfaces.FactoryWorkstationConfig{}, time.Minute); err == nil {
+		t.Fatal("StartCronIntervalWatcher accepted missing dependencies")
+	}
+	runtimeCfg := newCronLoadedRuntimeConfig(t, "factory-alpha", &interfaces.FactoryConfig{}, nil)
+	var sidecars sync.WaitGroup
+	if err := svc.StartCronIntervalWatcher(context.Background(), &sidecars, runtimeCfg, "factory-alpha", func(context.Context, interfaces.WorkRequest) error {
+		return nil
+	}, cronWorkstationConfigForTest("repeat"), 0); err == nil {
+		t.Fatal("StartCronIntervalWatcher accepted a non-positive interval")
+	}
+}
+
 func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
 	t.Helper()
 	select {

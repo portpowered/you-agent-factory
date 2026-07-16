@@ -131,6 +131,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/loop",
+      "minimum": 75.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent",
       "minimum": 80.00
     },

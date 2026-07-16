@@ -25,6 +25,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
@@ -48,6 +49,7 @@ import (
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -72,6 +74,171 @@ func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *test
 	}
 	if defaultPath == sessionPath {
 		t.Fatalf("session-scoped paths matched: %q", defaultPath)
+	}
+}
+
+func TestInvocationRecurrenceConfigurationValidation(t *testing.T) {
+	startup := interfaces.FactoryWorkstationConfig{Name: "startup", Kind: interfaces.WorkstationKindCron}
+	repeat := interfaces.FactoryWorkstationConfig{Name: "repeat", Kind: interfaces.WorkstationKindCron}
+	cfg := &interfaces.FactoryConfig{
+		InvocationRecurrence: &interfaces.InvocationRecurrenceConfig{
+			PeriodArgument: "period", StartupWorkstation: startup.Name, RepeatWorkstation: repeat.Name,
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{startup, repeat},
+	}
+	if invocationRecurrence(nil) != nil {
+		t.Fatal("nil Factory config unexpectedly has invocation recurrence")
+	}
+	if invocationRecurrence(cfg) != cfg.InvocationRecurrence {
+		t.Fatal("invocation recurrence did not preserve the authored capability")
+	}
+	if err := validateInvocationRecurrence(cfg, cfg.InvocationRecurrence); err != nil {
+		t.Fatalf("validateInvocationRecurrence(valid): %v", err)
+	}
+	for _, tc := range []struct {
+		name        string
+		workstation string
+		want        string
+	}{
+		{name: "empty", want: "workstation is required"},
+		{name: "missing", workstation: "missing", want: "workstation is missing"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := recurrenceWorkstation(cfg, tc.workstation); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("recurrenceWorkstation(%q) error = %v, want %q", tc.workstation, err, tc.want)
+			}
+		})
+	}
+	nonCron := *cfg
+	nonCron.Workstations = []interfaces.FactoryWorkstationConfig{{Name: startup.Name, Kind: interfaces.WorkstationKindStandard}, repeat}
+	if _, err := recurrenceWorkstation(&nonCron, startup.Name); err == nil || !strings.Contains(err.Error(), "must be CRON") {
+		t.Fatalf("recurrenceWorkstation(non-cron) error = %v", err)
+	}
+	missingPeriod := *cfg.InvocationRecurrence
+	missingPeriod.PeriodArgument = ""
+	if err := validateInvocationRecurrence(cfg, &missingPeriod); err == nil || !strings.Contains(err.Error(), "period argument") {
+		t.Fatalf("validateInvocationRecurrence(missing period) error = %v", err)
+	}
+	missingStartup := *cfg.InvocationRecurrence
+	missingStartup.StartupWorkstation = "missing"
+	if err := validateInvocationRecurrence(cfg, &missingStartup); err == nil || !strings.Contains(err.Error(), "workstation is missing") {
+		t.Fatalf("validateInvocationRecurrence(missing startup) error = %v", err)
+	}
+	missingRepeat := *cfg.InvocationRecurrence
+	missingRepeat.RepeatWorkstation = "missing"
+	if err := validateInvocationRecurrence(cfg, &missingRepeat); err == nil || !strings.Contains(err.Error(), "workstation is missing") {
+		t.Fatalf("validateInvocationRecurrence(missing repeat) error = %v", err)
+	}
+}
+
+func TestInvocationRecurrencePeriodValidation(t *testing.T) {
+	recurrence := &interfaces.InvocationRecurrenceConfig{PeriodArgument: "period"}
+	arguments := func(values ...string) *workinvocation.NormalizedArguments {
+		return &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{"period": {Values: values}}}
+	}
+	for _, tc := range []struct {
+		name  string
+		value *workinvocation.NormalizedArguments
+		want  time.Duration
+		err   string
+	}{
+		{name: "missing arguments", err: "period is required"},
+		{name: "missing period", value: &workinvocation.NormalizedArguments{}, err: "period must have exactly one value"},
+		{name: "multiple values", value: arguments("1h", "24h"), err: "period must have exactly one value"},
+		{name: "malformed", value: arguments("hour"), err: "must be a positive duration"},
+		{name: "nonpositive", value: arguments("0s"), err: "must be a positive duration"},
+		{name: "valid", value: arguments("24h"), want: 24 * time.Hour},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := invocationRecurrencePeriod(recurrence, tc.value)
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("invocationRecurrencePeriod() error = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil || got != tc.want {
+				t.Fatalf("invocationRecurrencePeriod() = (%s, %v), want (%s, nil)", got, err, tc.want)
+			}
+		})
+	}
+	if _, err := invocationRecurrencePeriod(nil, arguments("1h")); err == nil || !strings.Contains(err.Error(), "period argument") {
+		t.Fatalf("invocationRecurrencePeriod(nil) error = %v", err)
+	}
+}
+
+func TestFactoryServiceInvocationRecurrenceHooksIgnoreFactoriesWithoutCapability(t *testing.T) {
+	service := &FactoryService{}
+	if err := service.configureInvocationRecurrence(context.Background(), "session", &interfaces.FactoryConfig{}, nil); err != nil {
+		t.Fatalf("configureInvocationRecurrence(without capability): %v", err)
+	}
+	if err := service.triggerInvocationRecurrence(context.Background(), "session", &interfaces.FactoryConfig{}, nil); err != nil {
+		t.Fatalf("triggerInvocationRecurrence(without capability): %v", err)
+	}
+}
+
+func TestFactoryServiceInvocationRecurrenceHooksRejectUnavailableRuntime(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		InvocationRecurrence: &interfaces.InvocationRecurrenceConfig{
+			PeriodArgument: "period", StartupWorkstation: "startup", RepeatWorkstation: "repeat",
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{Name: "startup", Kind: interfaces.WorkstationKindCron},
+			{Name: "repeat", Kind: interfaces.WorkstationKindCron},
+		},
+	}
+	arguments := &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{
+		"period": {Values: []string{"1h"}},
+	}}
+	service := &FactoryService{}
+	if err := service.configureInvocationRecurrence(context.Background(), "missing-session", cfg, arguments); err == nil || !strings.Contains(err.Error(), "runtime is unavailable") {
+		t.Fatalf("configureInvocationRecurrence() error = %v, want unavailable runtime", err)
+	}
+	if err := service.triggerInvocationRecurrence(context.Background(), "missing-session", cfg, arguments); err == nil || !strings.Contains(err.Error(), "runtime is unavailable") {
+		t.Fatalf("triggerInvocationRecurrence() error = %v, want unavailable runtime", err)
+	}
+}
+
+func TestFactoryServiceInvocationRecurrenceHooksRequireSchedulerAfterRuntimeStarts(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	startup := interfaces.FactoryWorkstationConfig{Name: "startup", Kind: interfaces.WorkstationKindCron}
+	repeat := interfaces.FactoryWorkstationConfig{Name: "repeat", Kind: interfaces.WorkstationKindCron}
+	cfg := &interfaces.FactoryConfig{
+		InvocationRecurrence: &interfaces.InvocationRecurrenceConfig{
+			PeriodArgument: "period", StartupWorkstation: startup.Name, RepeatWorkstation: repeat.Name,
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{startup, repeat},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, t.TempDir(), cfg, nil, map[string]*interfaces.FactoryWorkstationConfig{
+		startup.Name: &startup,
+		repeat.Name:  &repeat,
+	})
+	sessions := factorysessions.NewRegistry()
+	sessions.Upsert(factorysessions.NewLiveSession(
+		"session", "", "", "", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &factoryservice.Handle{Bundle: &factoryservice.Bundle{RuntimeCfg: runtimeCfg}, SidecarContext: ctx}}, false, "",
+	), true)
+	arguments := &workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{
+		"period": {Values: []string{"1h"}},
+	}}
+	service := &FactoryService{sessions: sessions, workersScheduler: workersservice.New(workersservice.Config{})}
+	if err := service.configureInvocationRecurrence(ctx, "session", cfg, arguments); err == nil || !strings.Contains(err.Error(), "dependencies are required") {
+		t.Fatalf("configureInvocationRecurrence() error = %v, want cron watcher dependency failure", err)
+	}
+	if err := service.triggerInvocationRecurrence(ctx, "session", cfg, arguments); err == nil || !strings.Contains(err.Error(), "cron submitter is required") {
+		t.Fatalf("triggerInvocationRecurrence() error = %v, want cron submission failure", err)
+	}
+}
+
+func TestFactoryServiceRecurrenceRuntimeRequiresStartedSidecars(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessions.Upsert(factorysessions.NewLiveSession(
+		"session", "", "", "", factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &factoryservice.Handle{Bundle: &factoryservice.Bundle{}}}, false, "",
+	), true)
+	if _, _, err := (&FactoryService{sessions: sessions}).recurrenceRuntime("session"); err == nil || !strings.Contains(err.Error(), "sidecars are unavailable") {
+		t.Fatalf("recurrenceRuntime() error = %v, want unavailable sidecars", err)
 	}
 }
 
