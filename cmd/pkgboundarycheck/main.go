@@ -144,7 +144,6 @@ var documentedFactoryTransportExceptions = []string{
 	"pkg/factory/definition/save.go",
 	"pkg/factory/definition/service.go",
 	"pkg/factory/definition/upsert.go",
-	"pkg/factory/definition/validation.go",
 }
 
 type config struct {

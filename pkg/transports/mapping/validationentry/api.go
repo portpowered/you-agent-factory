@@ -12,7 +12,34 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+// ValidateEditableFactorySnapshot maps a detached Factory-owned definition at
+// the transport boundary, then returns the established public save error shape.
+func ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot, workstationLoader factoryconfig.WorkstationLoader) error {
+	if snapshot == nil {
+		return fmt.Errorf("%w: Factory snapshot is required", apisurface.ErrInvalidNamedFactory)
+	}
+	var submitted factoryapi.Factory
+	if err := snapshot.Decode(&submitted); err != nil {
+		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
+	}
+	result, err := ValidateFactoryAPI(context.Background(), submitted, factoryvalidation.Options{
+		Profile:           factoryvalidation.ProfilePrePersist,
+		WorkstationLoader: workstationLoader,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
+	}
+	if !result.HasBlockingTargets() {
+		return nil
+	}
+	return apisurface.NewTopologyValidationError(
+		"Factory topology contains invalid graph references.",
+		apisurface.FactoryValidationTargetsToAPI(result.BlockingTargets()),
+	)
+}
 
 // ValidateFactoryAPI is the single pre-mutation validator for OpenAPI factory
 // payloads. Each invocation maps the payload once via FactoryConfigFromOpenAPI,

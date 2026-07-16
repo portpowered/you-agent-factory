@@ -2,6 +2,7 @@ package validationentry_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
@@ -13,6 +14,47 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
+
+func TestValidateEditableFactorySnapshot_PreservesPublicValidationError(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+
+	err = validationentry.ValidateEditableFactorySnapshot(snapshot, nil)
+	if !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
+	}
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) || len(topologyErr.Targets) == 0 {
+		t.Fatalf("error = %#v, want topology targets", err)
+	}
+}
+
+func TestValidateEditableFactorySnapshot_ValidAndMissing(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	if err := validationentry.ValidateEditableFactorySnapshot(snapshot, nil); err != nil {
+		t.Fatalf("ValidateEditableFactorySnapshot(valid): %v", err)
+	}
+	if err := validationentry.ValidateEditableFactorySnapshot(nil, nil); !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
+		t.Fatalf("ValidateEditableFactorySnapshot(nil) error = %v, want ErrInvalidNamedFactory", err)
+	}
+}
 
 func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T) {
 	t.Parallel()

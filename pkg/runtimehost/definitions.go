@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // FactoryDefinitionService owns current-factory read models for the phase-one
@@ -140,6 +141,10 @@ func (dh factoryDefinitionHost) SessionFactoryPersistRoot(session *factorysessio
 		return ""
 	}
 	return sessionFactoryPersistRoot(dh.Host.factoryRootDir, session)
+}
+
+func (dh factoryDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, dh.WorkstationLoader())
 }
 
 func (dh factoryDefinitionHost) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {

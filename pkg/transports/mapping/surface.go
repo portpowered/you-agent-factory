@@ -10,6 +10,10 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+// ErrInvalidNamedFactoryName retains the public compatibility identity while
+// canonical named-factory validation remains owned by config.
+var ErrInvalidNamedFactoryName = factoryconfig.ErrInvalidNamedFactoryName
+
 // ErrFactoryResponseEventStreamExpired reports that the completed session's
 // ephemeral response-event retention window elapsed before subscription.
 var ErrFactoryResponseEventStreamExpired = errors.New("factory response event stream expired")

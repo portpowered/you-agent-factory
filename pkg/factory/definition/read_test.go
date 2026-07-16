@@ -53,6 +53,9 @@ func (h stubDefinitionHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedF
 func (h stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession) string {
 	return h.sessionPersistRoot
 }
+func (h stubDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validateDefinitionSnapshotForTest(snapshot, h.WorkstationLoader())
+}
 
 func (h stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
 	return mustFactorySnapshot(factoryapi.Factory{}), nil

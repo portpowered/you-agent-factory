@@ -418,6 +418,13 @@ collections to generated `FactoryValidationTarget` values only while assembling
 CLI or HTTP output. Do not expose generated result helpers from the validation
 owner or store generated transport targets in Factory Session errors.
 
+Editable Factory-definition validation crosses that boundary with a detached
+`FactorySnapshot`. The definition owner validates canonical names and invokes
+the validation seam; service and runtime-host composition decode the snapshot
+through `pkg/transports/mapping/validationentry`, preserving generated taxonomy
+aliases and public topology-error targets without importing transport packages
+back into `pkg/factory/definition`.
+
 Live Factory Session summaries and discovered targets retain `LiveSession`,
 `Target`, and `TargetRef` as their owner-defined values. Convert those values,
 including canonical runtime session identity and optional target names, through

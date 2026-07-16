@@ -20,6 +20,7 @@ type Host interface {
 	RequireSession(sessionID string) (*factorysessions.LiveSession, error)
 	SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error)
 	SessionFactoryPersistRoot(session *factorysessions.LiveSession) string
+	ValidateEditableFactorySnapshot(snapshot *factorycontracts.FactorySnapshot) error
 
 	GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*factorycontracts.FactorySnapshot, error)
 	WithActivationLock(fn func() error) error

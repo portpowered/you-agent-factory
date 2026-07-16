@@ -10,6 +10,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 type validationDefinitionHost struct {
@@ -38,6 +39,10 @@ func (validationDefinitionHost) SessionRuntimeConfig(string) (*factoryconfig.Loa
 
 func (validationDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession) string {
 	return ""
+}
+
+func (h validationDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, h.WorkstationLoader())
 }
 
 func (validationDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
@@ -79,16 +84,18 @@ func (validationDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
+	snapshot := mustFactorySnapshot(submitted)
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
-	}).ValidateEditableFactoryTopology(submitted)
+	}).ValidateEditableFactoryTopology(snapshot)
 }
 
 func validateUpsertNamedFactoryRequest(
 	request factoryapi.Factory,
 	workstationLoader factoryconfig.WorkstationLoader,
 ) error {
+	snapshot := mustFactorySnapshot(request)
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
-	}).ValidateUpsertNamedFactoryRequest(request)
+	}).ValidateUpsertNamedFactoryRequest(string(request.Name), snapshot)
 }

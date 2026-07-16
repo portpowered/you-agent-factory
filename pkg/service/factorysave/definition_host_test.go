@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 var testDefinitionService = factorydefinition.New(stubDefinitionHost{})
@@ -34,6 +35,9 @@ func (stubDefinitionHost) SessionRuntimeConfig(string) (*factoryconfig.LoadedFac
 }
 func (stubDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSession) string {
 	return ""
+}
+func (h stubDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, h.WorkstationLoader())
 }
 
 func (stubDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
@@ -193,6 +197,10 @@ func (h saveDefinitionHostAdapter) SessionRuntimeConfig(sessionID string) (*fact
 
 func (h saveDefinitionHostAdapter) SessionFactoryPersistRoot(session *factorysessions.LiveSession) string {
 	return factorydefinition.SessionFactoryPersistRoot(h.rootDir, session)
+}
+
+func (h saveDefinitionHostAdapter) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, h.WorkstationLoader())
 }
 
 func (h saveDefinitionHostAdapter) GetCurrentFactorySnapshotForSession(ctx context.Context, sessionID string) (*interfaces.FactorySnapshot, error) {

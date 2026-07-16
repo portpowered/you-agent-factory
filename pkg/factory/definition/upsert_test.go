@@ -194,6 +194,10 @@ func (h *upsertDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveSe
 	return h.sessionRootDir
 }
 
+func (h *upsertDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validateDefinitionSnapshotForTest(snapshot, h.WorkstationLoader())
+}
+
 func (h *upsertDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
 	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }

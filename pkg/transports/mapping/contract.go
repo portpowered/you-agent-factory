@@ -872,10 +872,6 @@ type RequestValidationError = interfaces.RequestValidationError
 // attempted while the current runtime still had active work.
 var ErrFactoryActivationRequiresIdle = errors.New("factory activation requires idle runtime")
 
-// ErrInvalidNamedFactoryName reports that the requested named-factory name is
-// not a safe canonical layout segment.
-var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
-
 // ErrInvalidNamedFactory reports that the submitted named-factory payload could
 // not be persisted or validated as a runnable runtime config.
 var ErrInvalidNamedFactory = errors.New("invalid named factory")

@@ -26,7 +26,11 @@ func (s *Service) SaveUpsertNamedAndActivateForSession(
 	if s == nil || s.host == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	if err := s.ValidateUpsertNamedFactoryRequest(request); err != nil {
+	snapshot, err := interfaces.NewFactorySnapshot(request)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
+	}
+	if err := s.ValidateUpsertNamedFactoryRequest(string(request.Name), snapshot); err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -53,10 +57,6 @@ func (s *Service) SaveUpsertNamedAndActivateForSession(
 		}
 
 		nextVersion := s.NextEditableFactoryVersion(currentVersion, s.host.SaveNow())
-		snapshot, err := interfaces.NewFactorySnapshot(request)
-		if err != nil {
-			return fmt.Errorf("capture editable factory snapshot: %w", err)
-		}
 		prepared, err := s.PreparePersistedFactoryPayload(string(request.Name), snapshot, nextVersion)
 		if err != nil {
 			return err

@@ -20,6 +20,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *testing.T) {
@@ -31,7 +32,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 	}
 
 	svc := New(stubDefinitionHost{})
-	saveErr := svc.ValidateEditableFactoryTopology(factory)
+	saveErr := svc.ValidateEditableFactoryTopology(mustFactorySnapshot(factory))
 	var topologyErr *apisurface.TopologyValidationError
 	if !errors.As(saveErr, &topologyErr) {
 		t.Fatalf("ValidateEditableFactoryTopology error = %v, want topology validation error", saveErr)
@@ -360,7 +361,7 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, interfaces.FactoryVersion{}); err == nil {
 		t.Fatal("PreparePersistedFactoryPayload: expected error for nil service")
 	}
-	if err := svc.ValidateEditableFactoryTopology(factoryapi.Factory{}); err == nil {
+	if err := svc.ValidateEditableFactoryTopology(nil); err == nil {
 		t.Fatal("ValidateEditableFactoryTopology: expected error for nil service")
 	}
 	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), "session", factoryapi.Factory{}); err == nil {
@@ -377,12 +378,18 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.T) {
 	t.Parallel()
 
-	err := New(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest(factoryapi.Factory{
-		Name: "bad/name",
-	})
+	err := New(stubDefinitionHost{}).ValidateUpsertNamedFactoryRequest("bad/name", nil)
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactoryName) {
 		t.Fatalf("ValidateUpsertNamedFactoryRequest error = %v, want invalid named factory name", err)
 	}
+}
+
+func validateDefinitionSnapshotForTest(snapshot *interfaces.FactorySnapshot, loader factoryconfig.WorkstationLoader) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, loader)
+}
+
+func (h *splitLayoutSaveHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validateDefinitionSnapshotForTest(snapshot, h.WorkstationLoader())
 }
 
 func TestService_SerializeNamedFactoryUpsertResponse_ReturnsThinBundledFiles(t *testing.T) {

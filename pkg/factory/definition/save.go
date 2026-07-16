@@ -72,7 +72,11 @@ func (s *Service) prepareEditableFactoryDefinitionSave(
 	sanitized := request
 	sanitized.Name = current.Name
 	sanitized.Version = nil
-	if err := s.ValidateEditableFactoryTopology(sanitized); err != nil {
+	snapshot, err := interfaces.NewFactorySnapshot(sanitized)
+	if err != nil {
+		return "", factoryapi.Factory{}, fmt.Errorf("capture editable factory snapshot: %w", err)
+	}
+	if err := s.ValidateEditableFactoryTopology(snapshot); err != nil {
 		return "", factoryapi.Factory{}, err
 	}
 	return sessionRootDir, sanitized, nil
