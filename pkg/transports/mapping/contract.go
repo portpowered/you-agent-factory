@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -903,15 +904,15 @@ var ErrModelNotFound = errors.New("model not found")
 
 // ErrModelNotAvailable reports that a discovered local model exists but its
 // required local assets are not present in the managed cache.
-var ErrModelNotAvailable = errors.New("model not available")
+var ErrModelNotAvailable = modelassets.ErrNotAvailable
 
 // ErrModelPullUnsupported reports that the requested model does not support
 // managed local asset pulls in the current runtime or platform.
-var ErrModelPullUnsupported = errors.New("model pull is not supported")
+var ErrModelPullUnsupported = modelassets.ErrPullUnsupported
 
 // ErrManagedRuntimeSourceFetchFailed reports that required managed runtime
 // assets could not be fetched from the configured backend source.
-var ErrManagedRuntimeSourceFetchFailed = errors.New("managed runtime source fetch failed")
+var ErrManagedRuntimeSourceFetchFailed = modelassets.ErrSourceFetchFailed
 
 // ErrModelInvocationUnsupportedMode reports that the requested direct
 // invocation response mode is not valid for the selected operation output.
@@ -936,28 +937,11 @@ type ModelInvocationResult struct {
 
 // ModelPullDownloadedFile describes one cached artifact materialized by a
 // managed local-model asset pull.
-type ModelPullDownloadedFile struct {
-	Path   string
-	Bytes  int64
-	SHA256 string
-}
+type ModelPullDownloadedFile = modelassets.DownloadedFile
 
 // ModelPullResult carries the service-owned result of pulling one model into
 // the managed local cache.
-type ModelPullResult struct {
-	ModelName          string
-	ProviderLocality   string
-	Outcome            string
-	CachePath          string
-	Revision           string
-	DownloadedFiles    []ModelPullDownloadedFile
-	ManagedPullOutcome string
-	ReadinessState     string
-	LifecycleState     string
-	SourceKind         string
-	SourceID           string
-	ResolverNotes      string
-}
+type ModelPullResult = modelassets.PullResult
 
 // TopologyValidationError carries validation targets that the graph editor can
 // map back to form fields, nodes, edges, or save-level messages.

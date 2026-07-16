@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,8 +21,31 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+func TestPullErrorPreservesResultAndCause(t *testing.T) {
+	cause := errors.Join(context.DeadlineExceeded, ErrSourceFetchFailed)
+	err := &PullError{
+		Result: PullResult{
+			ModelName:          "voice-model",
+			ManagedPullOutcome: "TIMED_OUT",
+			ReadinessState:     "FAILED",
+		},
+		Cause: cause,
+	}
+
+	got, ok := AsPullError(err)
+	if !ok || got != err {
+		t.Fatalf("AsPullError() = (%v, %v), want original error", got, ok)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) || !errors.Is(err, ErrSourceFetchFailed) {
+		t.Fatalf("PullError does not preserve cause: %v", err)
+	}
+	want := `managed runtime pull for "voice-model" failed with outcome TIMED_OUT (readiness FAILED)`
+	if err.Error() != want {
+		t.Fatalf("PullError.Error() = %q, want %q", err.Error(), want)
+	}
+}
 
 func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	baseBytes := []byte("base-gguf")
@@ -189,7 +213,7 @@ func TestPullModel_ReturnsUnsupportedWhenRuntimeHasNoMatchingModelResource(t *te
 	puller := newModelAssetPullerForTest(t.TempDir())
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{})
 	_, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
-	if err == nil || !strings.Contains(err.Error(), apisurface.ErrModelPullUnsupported.Error()) {
+	if err == nil || !strings.Contains(err.Error(), ErrPullUnsupported.Error()) {
 		t.Fatalf("PullModel error = %v, want unsupported", err)
 	}
 }

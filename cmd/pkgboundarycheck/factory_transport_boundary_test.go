@@ -85,6 +85,17 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"pkg/models/assets/puller.go",
+		"pkg/models/local/puller.go",
+	} {
+		writeGoImportFile(t, repoRoot, path, "models", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	}
+	stderr.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
+		t.Fatal("run() error = nil, want migrated model asset pull imports rejected")
+	}
+
+	for _, path := range []string{
 		"pkg/workers/provider/parityfixtures/mode_parity.go",
 		"pkg/workers/provider/parityfixtures/suite.go",
 		"pkg/workers/provider/parityfixtures/transport.go",

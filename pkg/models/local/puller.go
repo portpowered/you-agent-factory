@@ -8,12 +8,11 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/models/assets"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // AssetPuller resolves managed local model assets and pull outcomes.
 type AssetPuller interface {
-	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error)
+	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (assets.PullResult, error)
 	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) error
 	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error)
 	InspectRuntimeCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error)
@@ -28,7 +27,7 @@ func NewAssetPuller(cacheDir string) AssetPuller {
 	return assetPuller{inner: assets.NewPuller(cacheDir, runtime.GOOS, runtime.GOARCH)}
 }
 
-func (p assetPuller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+func (p assetPuller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (assets.PullResult, error) {
 	return p.inner.PullModel(ctx, runtimeCfg, modelName)
 }
 
