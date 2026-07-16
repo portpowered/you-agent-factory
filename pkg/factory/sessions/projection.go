@@ -96,7 +96,7 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 	}
 	artifacts := projectedSessionArtifacts(ctx, kind)
 	if artifacts != nil {
-		runtime.Artifacts = artifacts
+		runtime.Artifacts = apisurface.WorkflowArtifactsToAPI(*artifacts)
 	}
 	runtime.StopSummary = apisurface.BuildFactorySessionStopSummary(sessionIDFromProjectionContext(ctx), ctx.Snapshot, ctx.JavaScript)
 	return runtime
@@ -148,7 +148,7 @@ func projectedSessionStreamIdentity(
 func projectedSessionArtifacts(
 	ctx ProjectionContext,
 	kind string,
-) *[]factoryapi.FactoryArtifact {
+) *[]interfaces.FactoryArtifact {
 	switch kind {
 	case interfaces.OrchestratorKindJavaScript:
 		if ctx.JavaScript == nil {

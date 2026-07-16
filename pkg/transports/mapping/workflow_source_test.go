@@ -78,6 +78,56 @@ func TestWorkflowSessionResultMappingPreservesDomainProjection(t *testing.T) {
 	assertDurableWorkflowResult(t, input)
 }
 
+func TestWorkflowArtifactsToAPIPreservesSessionProjection(t *testing.T) {
+	capturedAt := time.Date(2026, 7, 16, 3, 20, 0, 0, time.UTC)
+	auditMode := "FULL"
+	contentHash := "sha256:artifact"
+	label := "Review output"
+	mimeType := "application/json"
+	sizeBytes := int64(128)
+	sourceDispatchID := "dispatch-1"
+	summary := "Detached customer-visible result"
+	paths, secrets, tokens := int32(1), int32(2), int32(3)
+
+	mapped := apisurface.WorkflowArtifactsToAPI([]interfaces.FactoryArtifact{{
+		AuditMode:   &auditMode,
+		ContentHash: &contentHash,
+		ID:          "artifact-1",
+		Kind:        "CHILD_RESULT",
+		Label:       &label,
+		SizeBytes:   &sizeBytes,
+		Summary:     &summary,
+		Visibility:  "PUBLIC",
+		CaptureMetadata: &interfaces.FactoryArtifactCaptureMetadata{
+			CapturedAt: &capturedAt, MIMEType: &mimeType, SourceDispatchID: &sourceDispatchID,
+		},
+		RedactionCounts: &interfaces.FactoryArtifactRedactionCounts{
+			Paths: &paths, Secrets: &secrets, Tokens: &tokens,
+		},
+	}})
+	if mapped == nil || len(*mapped) != 1 {
+		t.Fatalf("mapped artifacts = %#v, want one", mapped)
+	}
+	artifact := (*mapped)[0]
+	if artifact.Id != "artifact-1" || artifact.Kind != factoryapi.FactoryArtifactKindCHILDRESULT ||
+		artifact.Visibility != factoryapi.FactoryArtifactVisibilityPUBLIC || artifact.AuditMode == nil ||
+		*artifact.AuditMode != factoryapi.FactoryArtifactAuditModeFULL {
+		t.Fatalf("artifact identity = %#v", artifact)
+	}
+	if artifact.CaptureMetadata == nil || artifact.CaptureMetadata.CapturedAt == nil ||
+		!artifact.CaptureMetadata.CapturedAt.Equal(capturedAt) || artifact.CaptureMetadata.SourceDispatchId == nil ||
+		*artifact.CaptureMetadata.SourceDispatchId != sourceDispatchID || artifact.CaptureMetadata.MimeType == nil ||
+		*artifact.CaptureMetadata.MimeType != mimeType {
+		t.Fatalf("capture metadata = %#v", artifact.CaptureMetadata)
+	}
+	if artifact.RedactionCounts == nil || artifact.RedactionCounts.Paths == nil ||
+		*artifact.RedactionCounts.Paths != paths || artifact.RedactionCounts.Secrets == nil ||
+		*artifact.RedactionCounts.Secrets != secrets || artifact.RedactionCounts.Tokens == nil ||
+		*artifact.RedactionCounts.Tokens != tokens {
+		t.Fatalf("redaction counts = %#v", artifact.RedactionCounts)
+	}
+}
+
 func assertLiveWorkflowResult(t *testing.T, live factoryapi.FactorySessionLiveResult, timestamp time.Time) {
 	t.Helper()
 	if live.Status != factoryapi.FactorySessionStatusFINISHED || live.CheckpointRefs == nil || len(*live.CheckpointRefs) != 1 {

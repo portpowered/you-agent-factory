@@ -329,3 +329,9 @@ values to generated live-session, durable-result, and Factory-event response
 models. Factory Session callers may assemble the domain input, but generated
 status, checkpoint, artifact, and Work content values must not flow back into
 the orchestrator result package.
+
+Live Factory Session artifact projection follows that placement rule as well.
+`pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
+Factory-owned `FactoryArtifact` metadata, including capture and redaction
+details. `pkg/transports/mapping.WorkflowArtifactsToAPI` performs the generated
+OpenAPI conversion only when assembling the public runtime response.

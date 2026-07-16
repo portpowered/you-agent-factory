@@ -89,6 +89,61 @@ func WorkflowArtifactRefToAPI(ref *interfaces.FactoryArtifactRef) *factoryapi.Fa
 	}
 }
 
+// WorkflowArtifactsToAPI maps session-owned artifact projections at the public boundary.
+func WorkflowArtifactsToAPI(artifacts []interfaces.FactoryArtifact) *[]factoryapi.FactoryArtifact {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	projected := make([]factoryapi.FactoryArtifact, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		projected = append(projected, factoryapi.FactoryArtifact{
+			AuditMode:       artifactAuditModeToAPI(artifact.AuditMode),
+			CaptureMetadata: artifactCaptureMetadataToAPI(artifact.CaptureMetadata),
+			ContentHash:     artifact.ContentHash,
+			Id:              artifact.ID,
+			Kind:            factoryapi.FactoryArtifactKind(artifact.Kind),
+			Label:           artifact.Label,
+			RedactionCounts: artifactRedactionCountsToAPI(artifact.RedactionCounts),
+			SizeBytes:       artifact.SizeBytes,
+			Summary:         artifact.Summary,
+			Visibility:      factoryapi.FactoryArtifactVisibility(artifact.Visibility),
+		})
+	}
+	return &projected
+}
+
+func artifactAuditModeToAPI(value *string) *factoryapi.FactoryArtifactAuditMode {
+	if value == nil {
+		return nil
+	}
+	converted := factoryapi.FactoryArtifactAuditMode(*value)
+	return &converted
+}
+
+func artifactCaptureMetadataToAPI(
+	metadata *interfaces.FactoryArtifactCaptureMetadata,
+) *factoryapi.FactoryArtifactCaptureMetadata {
+	if metadata == nil {
+		return nil
+	}
+	return &factoryapi.FactoryArtifactCaptureMetadata{
+		CapturedAt:       metadata.CapturedAt,
+		MimeType:         metadata.MIMEType,
+		SourceDispatchId: metadata.SourceDispatchID,
+	}
+}
+
+func artifactRedactionCountsToAPI(
+	counts *interfaces.FactoryArtifactRedactionCounts,
+) *factoryapi.FactoryArtifactRedactionCounts {
+	if counts == nil {
+		return nil
+	}
+	return &factoryapi.FactoryArtifactRedactionCounts{
+		Paths: counts.Paths, Secrets: counts.Secrets, Tokens: counts.Tokens,
+	}
+}
+
 // NormalizeWorkflowSourceRequest is the shared API, CLI, MCP, and website entry
 // point for workflow source lookup and artifact-root validation.
 func NormalizeWorkflowSourceRequest(req workflowsource.Request, ctx workflowsource.Context) workflowsource.Resolution {
