@@ -10,6 +10,7 @@ Use this map when changing the public REST contract.
 - When migrating a functional validation scenario away from a direct service build, use `internal/builtcliacceptance` to run `you factory config validate` and assert its non-zero exit plus public validation code and detail. Remove that file's hash-baseline entry only after the full-tree guard passes for the changed file; do not preserve service error assertions as a substitute for the CLI contract.
 - For a functional init-scaffold regression that only needs to prove the generated factory is valid, use the built `you factory config validate <factory-dir>` customer interface instead of directly building `FactoryService`; keep service execution assertions behind a permitted public driver or move implementation-contract checks to their owning package.
 - For a functional REST submit/query scenario, compose the server with `support.StartFunctionalAPIServer` through `startFunctionalServer`, then submit and observe work through the generated HTTP helpers. Do not construct a transport `Server`, inject a `MockFactory`, or call `Handler().ServeHTTP` directly from `tests/functional`.
+- When a functional worker-completion regression only needs bounded completion and runtime-log artifact assertions, use `testutil.NewServiceTestHarness` with its mock-worker and runtime-log options rather than directly constructing, running, or querying `FactoryService`. The harness keeps the service implementation behind an approved test seam while exposing explicit completion assertions.
 
 ## Package staging artifacts
 

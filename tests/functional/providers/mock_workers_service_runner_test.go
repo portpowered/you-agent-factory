@@ -1,17 +1,12 @@
 package providers
 
 import (
-	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -45,36 +40,14 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 			logDir := t.TempDir()
 			runtimeID := strings.ReplaceAll(tt.name, " ", "-")
 
-			svc, err := service.BuildFactoryService(context.Background(), testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
-				Dir:                      dir,
-				MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
-				RuntimeLogDir:            logDir,
-				RuntimeInstanceID:        runtimeID,
-				RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyEnabled,
-			}))
-			if err != nil {
-				t.Fatalf("BuildFactoryService: %v", err)
-			}
-
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := svc.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				t.Fatalf("Run: %v", err)
-			}
-
-			snapshot, err := svc.GetEngineStateSnapshot(context.Background())
-			if err != nil {
-				t.Fatalf("GetEngineStateSnapshot: %v", err)
-			}
-			if got := len(snapshot.Marking.TokensInPlace(tt.donePlace)); got != 1 {
-				t.Fatalf("%s token count = %d, want 1", tt.donePlace, got)
-			}
-			if len(snapshot.DispatchHistory) != 1 {
-				t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
-			}
-			if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeAccepted {
-				t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeAccepted)
-			}
+			harness := testutil.NewServiceTestHarness(t, dir,
+				testutil.WithMockWorkersConfig(config.NewEmptyMockWorkersConfig()),
+				testutil.WithRuntimeLogDir(logDir),
+				testutil.WithRuntimeInstanceID(runtimeID),
+				testutil.WithRuntimeFileLoggingEnabled(true),
+			)
+			harness.RunUntilComplete(t, 5*time.Second)
+			harness.Assert().PlaceTokenCount(tt.donePlace, 1)
 
 			record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, runtimeID), workers.WorkLogEventCommandRunnerCompleted)
 			if _, ok := record["stdout"]; ok {
