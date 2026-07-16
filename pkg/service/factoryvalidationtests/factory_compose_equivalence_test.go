@@ -42,6 +42,30 @@ func TestConfigWithWorkerApplicationPreservesDistinctCommandRunnerOverrides(t *t
 	}
 }
 
+func TestConfigWithWorkerApplicationRejectsNilConfig(t *testing.T) {
+	t.Parallel()
+
+	if _, err := service.ConfigWithWorkerApplication(nil); err == nil {
+		t.Fatal("ConfigWithWorkerApplication(nil) succeeded")
+	}
+}
+
+func TestConfigWithWorkerApplicationKeepsPreconstructedApplicationWithoutOverrides(t *testing.T) {
+	t.Parallel()
+
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	configured, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{WorkerApplication: components})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if configured.WorkerApplication.Provider != components.Provider || configured.WorkerApplication.Script != components.Script {
+		t.Fatal("ConfigWithWorkerApplication unexpectedly replaced the supplied worker factories")
+	}
+}
+
 func TestConfigWithWorkerApplicationAppliesOverrideToPreconstructedApplication(t *testing.T) {
 	t.Parallel()
 
@@ -56,7 +80,7 @@ func TestConfigWithWorkerApplicationAppliesOverrideToPreconstructedApplication(t
 	}
 	overrideProviderRunner := &commandRunnerProbe{}
 	configured, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
-		WorkerApplication:              components,
+		WorkerApplication:             components,
 		ProviderCommandRunnerOverride: overrideProviderRunner,
 	})
 	if err != nil {
