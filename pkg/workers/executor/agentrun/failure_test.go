@@ -10,6 +10,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -75,6 +76,21 @@ func TestFailureClassForError_ManagedRuntimeInvocationMissing(t *testing.T) {
 	}
 }
 
+func TestFailureClassForError_ManagedRuntimeInvocationWithoutCauseUsesReadiness(t *testing.T) {
+	t.Parallel()
+
+	err := &apisurface.ManagedRuntimeInvocationError{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+	}
+	if got := failureClassForError(err); got != FailureClassModelRuntime {
+		t.Fatalf("failureClassForError = %q, want %q", got, FailureClassModelRuntime)
+	}
+	if got := recoveryActionForError(err); got == "" {
+		t.Fatal("expected recovery action for failed managed runtime")
+	}
+}
+
 func TestAgentRunFailureDiagnostics_IncludesRecoveryAction(t *testing.T) {
 	t.Parallel()
 
@@ -113,10 +129,10 @@ func TestModelhostOperationalFailureClass_MissingAssets(t *testing.T) {
 func TestRecoveryActionForReadiness_ReturnsActionableGuidance(t *testing.T) {
 	t.Parallel()
 
-	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateMISSING); got == "" {
+	if got := recoveryActionForReadiness(managedruntime.ReadinessStateMissing); got == "" {
 		t.Fatal("expected recovery action for missing runtime")
 	}
-	if got := recoveryActionForReadiness(factoryapi.ManagedRuntimeReadinessStateLOADING); got == "" {
+	if got := recoveryActionForReadiness(managedruntime.ReadinessStateLoading); got == "" {
 		t.Fatal("expected recovery action for loading runtime")
 	}
 }

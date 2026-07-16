@@ -66,7 +66,6 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoImportFile(t, repoRoot, "pkg/models/host/contract.go", "modelhost", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
-	writeGoImportFile(t, repoRoot, "pkg/workers/executor/agentrun/failure.go", "agentrun", "github.com/portpowered/infinite-you/pkg/transports/mapping")
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
@@ -77,6 +76,12 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	stderr.Reset()
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
 		t.Fatal("run() error = nil, want migrated worker inference import rejected")
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/workers/executor/agentrun/failure.go", "agentrun", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	stderr.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
+		t.Fatal("run() error = nil, want migrated agent-run failure import rejected")
 	}
 }
 

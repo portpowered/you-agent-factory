@@ -8,8 +8,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 const (
@@ -124,11 +123,10 @@ func recoveryActionForError(err error) string {
 	}
 	var readinessErr *modelhost.ReadinessError
 	if errors.As(err, &readinessErr) {
-		return recoveryActionForReadiness(readinessErr.Snapshot.ReadinessState)
+		return recoveryActionForReadiness(managedruntime.ReadinessState(readinessErr.Snapshot.ReadinessState))
 	}
-	var invocationErr *apisurface.ManagedRuntimeInvocationError
-	if errors.As(err, &invocationErr) {
-		return recoveryActionForReadiness(invocationErr.ReadinessState)
+	if readiness, ok := managedruntime.ReadinessStateFromError(err); ok {
+		return recoveryActionForReadiness(readiness)
 	}
 	if errors.Is(err, modelhost.ErrProcessCrash) {
 		return "resolve the managed runtime failure before retrying the agent run"
@@ -136,15 +134,15 @@ func recoveryActionForError(err error) string {
 	return ""
 }
 
-func recoveryActionForReadiness(readiness factoryapi.ManagedRuntimeReadinessState) string {
+func recoveryActionForReadiness(readiness managedruntime.ReadinessState) string {
 	switch readiness {
-	case factoryapi.ManagedRuntimeReadinessStateMISSING:
+	case managedruntime.ReadinessStateMissing:
 		return "pull or install the managed runtime before retrying the agent run"
-	case factoryapi.ManagedRuntimeReadinessStateLOADING:
+	case managedruntime.ReadinessStateLoading:
 		return "wait for the managed runtime to finish loading before retrying the agent run"
-	case factoryapi.ManagedRuntimeReadinessStateFAILED:
+	case managedruntime.ReadinessStateFailed:
 		return "resolve the managed runtime failure before retrying the agent run"
-	case factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED:
+	case managedruntime.ReadinessStateUnsupported:
 		return "use a supported managed runtime configuration for the agent worker"
 	default:
 		return ""
@@ -159,9 +157,8 @@ func modelhostFailureClass(err error) (string, bool) {
 	if errors.As(err, &readinessErr) {
 		return readinessFailureClass(readinessErr), true
 	}
-	var invocationErr *apisurface.ManagedRuntimeInvocationError
-	if errors.As(err, &invocationErr) {
-		return managedRuntimeInvocationFailureClass(invocationErr), true
+	if class, ok := managedRuntimeInvocationFailureClass(err); ok {
+		return class, true
 	}
 	if errors.Is(err, modelhost.ErrProcessCrash) ||
 		errors.Is(err, modelhost.ErrUnsupportedRuntime) ||
@@ -181,8 +178,8 @@ func readinessFailureClass(err *modelhost.ReadinessError) string {
 	case modelhost.FailureClassMissingAssets, modelhost.FailureClassLoadingTimeout:
 		return FailureClassModelNotReady
 	default:
-		switch err.Snapshot.ReadinessState {
-		case factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeReadinessStateLOADING:
+		switch managedruntime.ReadinessState(err.Snapshot.ReadinessState) {
+		case managedruntime.ReadinessStateMissing, managedruntime.ReadinessStateLoading:
 			return FailureClassModelNotReady
 		default:
 			return FailureClassModelRuntime
@@ -190,13 +187,16 @@ func readinessFailureClass(err *modelhost.ReadinessError) string {
 	}
 }
 
-func managedRuntimeInvocationFailureClass(err *apisurface.ManagedRuntimeInvocationError) string {
-	switch {
-	case errors.Is(err, apisurface.ErrManagedRuntimeMissing),
-		errors.Is(err, apisurface.ErrManagedRuntimeLoading):
-		return FailureClassModelNotReady
+func managedRuntimeInvocationFailureClass(err error) (string, bool) {
+	readiness, ok := managedruntime.ReadinessStateFromError(err)
+	if !ok {
+		return "", false
+	}
+	switch readiness {
+	case managedruntime.ReadinessStateMissing, managedruntime.ReadinessStateLoading:
+		return FailureClassModelNotReady, true
 	default:
-		return FailureClassModelRuntime
+		return FailureClassModelRuntime, true
 	}
 }
 

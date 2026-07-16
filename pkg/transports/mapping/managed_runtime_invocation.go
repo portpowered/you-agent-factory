@@ -4,24 +4,25 @@ import (
 	"errors"
 	"fmt"
 
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ErrManagedRuntimeMissing reports that invocation requires a managed runtime
 // that is not installed in the managed cache yet.
-var ErrManagedRuntimeMissing = errors.New("managed runtime missing")
+var ErrManagedRuntimeMissing = managedruntime.ErrMissing
 
 // ErrManagedRuntimeLoading reports that invocation must wait for managed
 // runtime load or preparation to finish.
-var ErrManagedRuntimeLoading = errors.New("managed runtime loading")
+var ErrManagedRuntimeLoading = managedruntime.ErrLoading
 
 // ErrManagedRuntimeFailed reports that the managed runtime is in a failed state
 // and must be recovered before invocation can proceed.
-var ErrManagedRuntimeFailed = errors.New("managed runtime failed")
+var ErrManagedRuntimeFailed = managedruntime.ErrFailed
 
 // ErrManagedRuntimeUnsupported reports that the managed runtime identity is not
 // supported for invocation in the current factory configuration.
-var ErrManagedRuntimeUnsupported = errors.New("managed runtime unsupported")
+var ErrManagedRuntimeUnsupported = managedruntime.ErrUnsupported
 
 // ManagedRuntimeInvocationError carries managed-runtime readiness context for
 // invocation surfaces without exposing backend-specific cache vocabulary.
@@ -54,6 +55,15 @@ func (e *ManagedRuntimeInvocationError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+// ManagedRuntimeReadinessState exposes the domain readiness carried by this
+// transport-boundary error.
+func (e *ManagedRuntimeInvocationError) ManagedRuntimeReadinessState() managedruntime.ReadinessState {
+	if e == nil {
+		return ""
+	}
+	return managedruntime.ReadinessState(e.ReadinessState)
 }
 
 // InvocationErrorFromManagedRuntime maps one managed-runtime readiness projection

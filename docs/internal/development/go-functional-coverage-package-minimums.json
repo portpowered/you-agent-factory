@@ -401,6 +401,10 @@
       "minimum": 22.20
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/models/managedruntime",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/models/provider",
       "minimum": 100.00
     },

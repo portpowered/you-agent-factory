@@ -162,7 +162,6 @@ var documentedDomainTransportExceptions = []string{
 	"pkg/models/service/catalog.go",
 	"pkg/models/service/invoke.go",
 	"pkg/models/service/pull.go",
-	"pkg/workers/executor/agentrun/failure.go",
 	"pkg/workers/provider/parityfixtures/mode_parity.go",
 	"pkg/workers/provider/parityfixtures/suite.go",
 	"pkg/workers/provider/parityfixtures/transport.go",

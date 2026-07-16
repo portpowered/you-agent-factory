@@ -263,6 +263,10 @@ import CLI or HTTP packages merely to inspect those source artifacts.
 Packaged Factory observability classifies stable domain failure evidence and
 must not import transport-mapping error sentinels merely to recognize their
 customer-safe text.
+Managed-runtime readiness states, invocation-blocking sentinels, and the narrow
+readiness-error seam belong in `pkg/models/managedruntime`. Worker policy should
+classify that model-owned seam; `pkg/transports/mapping` may preserve historical
+error identity by aliasing its public compatibility sentinels to the model owner.
 
 The same check rejects recreation or import of converged roots and reports the
 canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,
