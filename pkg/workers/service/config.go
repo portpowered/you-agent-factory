@@ -24,4 +24,6 @@ type Config struct {
 	HostedSecretResolver hostedworkers.SecretResolver
 	// HostedLinearEndpoint overrides the default Linear API endpoint for hosted pollers.
 	HostedLinearEndpoint string
+	// HostedClock controls only hosted poll cadence and restart backoff.
+	HostedClock clockwork.Clock
 }

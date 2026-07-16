@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -19,6 +22,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
 type processRunnerFunc func(context.Context) error
@@ -193,6 +197,30 @@ func TestConfigWithFunctionalEdgesSelectsIndependentWorkerEdges(t *testing.T) {
 	}
 	if built.AgyPTYAllocatorOverride != allocator {
 		t.Fatal("Agy PTY edge was not selected independently")
+	}
+}
+
+func TestConfigWithFunctionalEdgesSelectsIndependentHostedEdges(t *testing.T) {
+	t.Parallel()
+	httpClient := &http.Client{Timeout: 17 * time.Second}
+	clock := clockwork.NewFakeClock()
+	resolver := hostedworkers.SecretResolver(func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
+		return "functional-secret", nil
+	})
+	original := &service.FactoryServiceConfig{}
+
+	built := configWithFunctionalEdges(original, FunctionalEdges{
+		HostedHTTPClient: httpClient, HostedLinearEndpoint: "https://linear.test/graphql",
+		HostedSecretResolver: resolver, HostedClock: clock,
+	})
+	if built == original || built.HostedPollerHTTPClient != httpClient || built.HostedLinearEndpoint != "https://linear.test/graphql" {
+		t.Fatalf("hosted HTTP edges were not selected: %+v", built)
+	}
+	if built.HostedPollerSecretResolver == nil || built.HostedPollerClock != clock {
+		t.Fatal("hosted secret and clock edges were not selected")
+	}
+	if original.HostedPollerHTTPClient != nil || original.HostedPollerSecretResolver != nil || original.HostedPollerClock != nil {
+		t.Fatal("hosted functional edge selection mutated caller-owned config")
 	}
 }
 

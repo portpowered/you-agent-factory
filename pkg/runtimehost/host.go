@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
@@ -328,13 +329,11 @@ type Config struct {
 	// used by repository-owned hosted pollers such as the built-in Linear
 	// integration.
 	HostedPollerHTTPClient *http.Client
-	// HostedPollerSecretResolver, when non-nil, resolves hosted-worker
-	// auth.secretRef values at runtime instead of using the default env/file
-	// lookup behavior.
+	// HostedPollerSecretResolver overrides the production env/file lookup.
 	HostedPollerSecretResolver secretResolver
-	// HostedLinearEndpoint overrides the Linear GraphQL endpoint for tests.
-	// Empty uses the official default endpoint.
+	// HostedLinearEndpoint overrides Linear GraphQL; empty uses the official endpoint.
 	HostedLinearEndpoint string
+	HostedPollerClock    clockwork.Clock // Nil uses the graph clock or a real clock.
 	// ModelCacheDir optionally overrides the default managed local-model cache
 	// directory under ~/.agent-factory/models.
 	ModelCacheDir string

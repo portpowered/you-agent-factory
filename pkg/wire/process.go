@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
+	"github.com/jonboulle/clockwork"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -12,6 +14,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
@@ -21,6 +24,10 @@ type FunctionalEdges struct {
 	ProviderCommandRunner workers.CommandRunner
 	ScriptCommandRunner   workers.CommandRunner
 	AgyPTYAllocator       agypty.PTYAllocator
+	HostedHTTPClient      *http.Client
+	HostedLinearEndpoint  string
+	HostedSecretResolver  hostedworkers.SecretResolver
+	HostedClock           clockwork.Clock
 }
 
 // MCPExecutionRequest contains the transport inputs that select the durable
@@ -173,7 +180,7 @@ func configWithFunctionalEdges(
 	cfg *service.FactoryServiceConfig,
 	edges FunctionalEdges,
 ) *service.FactoryServiceConfig {
-	if cfg == nil || (isNil(edges.ProviderCommandRunner) && isNil(edges.ScriptCommandRunner) && isNil(edges.AgyPTYAllocator)) {
+	if cfg == nil || !hasFunctionalEdges(edges) {
 		return cfg
 	}
 	copied := *cfg
@@ -186,7 +193,24 @@ func configWithFunctionalEdges(
 	if !isNil(edges.AgyPTYAllocator) {
 		copied.AgyPTYAllocatorOverride = edges.AgyPTYAllocator
 	}
+	if edges.HostedHTTPClient != nil {
+		copied.HostedPollerHTTPClient = edges.HostedHTTPClient
+	}
+	if edges.HostedLinearEndpoint != "" {
+		copied.HostedLinearEndpoint = edges.HostedLinearEndpoint
+	}
+	if edges.HostedSecretResolver != nil {
+		copied.HostedPollerSecretResolver = edges.HostedSecretResolver
+	}
+	if edges.HostedClock != nil {
+		copied.HostedPollerClock = edges.HostedClock
+	}
 	return &copied
+}
+
+func hasFunctionalEdges(edges FunctionalEdges) bool {
+	return !isNil(edges.ProviderCommandRunner) || !isNil(edges.ScriptCommandRunner) || !isNil(edges.AgyPTYAllocator) ||
+		edges.HostedHTTPClient != nil || edges.HostedLinearEndpoint != "" || edges.HostedSecretResolver != nil || edges.HostedClock != nil
 }
 
 func buildMCPProcessGraph(

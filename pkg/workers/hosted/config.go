@@ -2,7 +2,9 @@ package hostedworkers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -23,6 +25,64 @@ type Config struct {
 	HTTPClient     *http.Client
 	SecretResolver SecretResolver
 	LinearEndpoint string
+}
+
+// LinearPollerDependencies contains the complete construction input for one
+// hosted Linear poller. Runtime and submission collaborators are required;
+// side-effect edges use the same defaults as production when omitted.
+type LinearPollerDependencies struct {
+	Config        Config
+	RuntimeConfig interfaces.RuntimeConfigLookup
+	Workstation   interfaces.FactoryWorkstationConfig
+	Worker        *interfaces.WorkerConfig
+	Submitter     Submitter
+}
+
+// LinearPoller is a validated hosted Linear component ready for supervision.
+type LinearPoller struct {
+	config        Config
+	runtimeConfig interfaces.RuntimeConfigLookup
+	workstation   interfaces.FactoryWorkstationConfig
+	worker        *interfaces.WorkerConfig
+	submitter     Submitter
+}
+
+// NewLinearPoller validates required dependencies and applies production
+// defaults before any poller goroutine is started.
+func NewLinearPoller(deps LinearPollerDependencies) (*LinearPoller, error) {
+	switch {
+	case deps.RuntimeConfig == nil:
+		return nil, fmt.Errorf("construct hosted linear poller: runtime config is required")
+	case deps.Worker == nil:
+		return nil, fmt.Errorf("construct hosted linear poller: worker is required")
+	case deps.Worker.Auth == nil || strings.TrimSpace(deps.Worker.Auth.SecretRef) == "":
+		return nil, fmt.Errorf("construct hosted linear poller %q: auth.secretRef is required", deps.Worker.Name)
+	case deps.Worker.Linear == nil:
+		return nil, fmt.Errorf("construct hosted linear poller %q: linear config is required", deps.Worker.Name)
+	case deps.Submitter == nil:
+		return nil, fmt.Errorf("construct hosted linear poller: submitter is required")
+	}
+	if _, err := hostedlinear.PollInterval(deps.Worker.Linear); err != nil {
+		return nil, fmt.Errorf("construct hosted linear poller %q: %w", deps.Worker.Name, err)
+	}
+
+	config := deps.Config.withProductionDefaults()
+	return &LinearPoller{
+		config:        config,
+		runtimeConfig: deps.RuntimeConfig,
+		workstation:   deps.Workstation,
+		worker:        deps.Worker,
+		submitter:     deps.Submitter,
+	}, nil
+}
+
+func (c Config) withProductionDefaults() Config {
+	c.Logger = c.logger()
+	c.Clock = c.supervisorClock()
+	c.HTTPClient = c.httpClient()
+	c.SecretResolver = c.secretResolver()
+	c.LinearEndpoint = c.linearEndpoint()
+	return c
 }
 
 func (c Config) httpClient() *http.Client {

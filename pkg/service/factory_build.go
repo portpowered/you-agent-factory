@@ -153,6 +153,7 @@ func NewWorkersSchedulerService(
 		HostedHTTPClient:     hostedWorkers.HTTPClient,
 		HostedSecretResolver: hostedWorkers.SecretResolver,
 		HostedLinearEndpoint: hostedWorkers.LinearEndpoint,
+		HostedClock:          hostedWorkers.Clock,
 	})
 }
 
@@ -643,6 +644,9 @@ func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clo
 		hostedCfg.HTTPClient = cfg.HostedPollerHTTPClient
 		hostedCfg.SecretResolver = cfg.HostedPollerSecretResolver
 		hostedCfg.LinearEndpoint = strings.TrimSpace(cfg.HostedLinearEndpoint)
+		if cfg.HostedPollerClock != nil {
+			hostedCfg.Clock = cfg.HostedPollerClock
+		}
 	}
 	return hostedCfg
 }
