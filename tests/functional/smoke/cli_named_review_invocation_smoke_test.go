@@ -14,6 +14,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/review"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -77,7 +78,7 @@ func runNamedReviewInvocationCLIJSON(
 
 	homeDir := t.TempDir()
 	factoryDir, err := factoryconfig.PersistNamedFactory(
-		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
+		defaultpaths.NamedFactoriesRoot(homeDir),
 		review.PackagedFactoryName,
 		review.BuiltInFactoryJSON,
 	)
@@ -107,7 +108,7 @@ func runNamedReviewInvocationCLIJSON(
 	defer cancel()
 	cmd := exec.CommandContext(ctx, buildYouCLIBinary(t), args...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

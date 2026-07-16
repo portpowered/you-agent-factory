@@ -691,7 +691,7 @@ func TestFailureBaseline_NamedPath_RunNamedGoalSurfacesPercentEncodedFactoryDir(
 	if filepath.Base(got.Dir) != "goal" {
 		t.Fatalf("run dir base = %q, want goal hierarchical leaf", filepath.Base(got.Dir))
 	}
-	if !strings.Contains(got.Dir, filepath.Join(".you-agent-factory", "you-agent-factories")) {
+	if !strings.Contains(got.Dir, filepath.Join(".you-agent-factory", "factories")) {
 		t.Fatalf("run dir = %q, want global named-factory root layout", got.Dir)
 	}
 }

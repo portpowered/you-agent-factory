@@ -16,6 +16,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -419,7 +420,7 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 	if err != nil {
 		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
 	}
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 	namedFactoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", canonical)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(alpha): %v", err)
@@ -458,7 +459,7 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 		mockWorkersPath,
 	)
 	cmd.Dir = unrelatedWorkingDir
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout

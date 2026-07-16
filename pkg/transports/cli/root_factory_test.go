@@ -558,13 +558,16 @@ func TestFactoryListCommand_HelpDocumentsProjectAndGlobalRoots(t *testing.T) {
 	help := out.String()
 	for _, want := range []string{
 		"project-local named factories from ./factory",
-		"~/.you-agent-factory/you-agent-factories",
+		"~/.you-agent-factory/factories",
 		"never merges project-local and global entries",
-		"you factory list --dir ~/.you-agent-factory/you-agent-factories",
+		"you factory list --dir ~/.you-agent-factory/factories",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory list help missing %q:\n%s", want, help)
 		}
+	}
+	if strings.Contains(help, "~/.you-agent-factory/you-agent-factories") {
+		t.Fatalf("factory list help advertises retired global root:\n%s", help)
 	}
 }
 

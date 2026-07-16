@@ -247,6 +247,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/config/operatorconfig` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
+- When global named-factory guidance changes, update the handwritten CLI help in
+  `pkg/transports/cli/root_factory.go` and `root_work.go`, the authored
+  `contracts/cli/commands.json` records, and `docs/reference/authoring-factories.md`
+  plus `config.md`. Run `make cli-manifest-generate` and
+  `make contracts-generate` for derived CLI artifacts, then update intentional
+  CLI baselines and run `make docs-reference-smoke`.
 - Persisted local `backendScopeID` values live in the same
   `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
   logic in `pkg/config/systemconfig`, resolve it during `service.BuildFactoryCore`
@@ -1008,6 +1014,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invocation result.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/goal` batch
   invocation, stdout primary-result, and response-stream guidance.
+- `pkg/config/defaultpaths/default_paths.go` owns the canonical shared named-factory
+  root for both `you config init` materialization and `you run --named` lookup;
+  use `defaultpaths.NamedFactoriesRoot` instead of duplicating the home-relative
+  directory in runtime code or tests. `configinit.Init` inventories legacy
+  factory identities from their hierarchical directories and migrates them from
+  `LegacyNamedFactoriesRoot` before packaged installation, even when an edited
+  `factory.json` is temporarily invalid. Migration must preflight conflicts and
+  never overwrite the canonical customer-owned copy or silently install a
+  packaged replacement for an invalid legacy edit.
   `docs/reference/sessions.md` owns operator controls and inspect-first recovery;
   `docs/reference/authoring-factories.md` owns named Factory authoring and
   materialization. Prove packaged guidance through the installed command in

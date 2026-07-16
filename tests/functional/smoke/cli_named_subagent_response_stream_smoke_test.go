@@ -12,6 +12,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -225,7 +226,7 @@ func runNamedSubagentPrimaryOnlyInvocationCLI(
 
 	homeDir := t.TempDir()
 	if _, err := factoryconfig.PersistNamedFactory(
-		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
+		defaultpaths.NamedFactoriesRoot(homeDir),
 		subagent.PackagedFactoryName,
 		subagent.BuiltInFactoryJSON,
 	); err != nil {
@@ -256,7 +257,7 @@ func runNamedSubagentPrimaryOnlyInvocationCLI(
 		requestText,
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
@@ -275,7 +276,7 @@ func runNamedSubagentResponseStreamInvocationCLI(
 
 	homeDir := t.TempDir()
 	if _, err := factoryconfig.PersistNamedFactory(
-		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
+		defaultpaths.NamedFactoriesRoot(homeDir),
 		subagent.PackagedFactoryName,
 		subagent.BuiltInFactoryJSON,
 	); err != nil {
@@ -309,7 +310,7 @@ func runNamedSubagentResponseStreamInvocationCLI(
 
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf

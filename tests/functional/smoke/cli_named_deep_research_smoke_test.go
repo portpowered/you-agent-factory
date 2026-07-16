@@ -5,14 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -66,7 +65,7 @@ func TestNamedDeepResearchCLI_InvokesConfiguredBoundedResearchWithApprovedFlags(
 func runNamedDeepResearchCLI(t *testing.T, invocationArgs ...string) factoryapi.InvocationResponse {
 	t.Helper()
 	homeDir := t.TempDir()
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 	if _, err := factoryconfig.PersistNamedFactory(globalRoot, packagedDeepResearchFactoryName, deepresearch.BuiltInFactoryJSON); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/deep-research): %v", err)
 	}
@@ -85,7 +84,7 @@ func runNamedDeepResearchCLI(t *testing.T, invocationArgs ...string) factoryapi.
 	)
 	cmd.Args = append(cmd.Args, invocationArgs...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
