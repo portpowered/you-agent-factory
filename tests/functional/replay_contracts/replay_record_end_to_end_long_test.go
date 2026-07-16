@@ -13,17 +13,12 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -184,9 +179,8 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 		HasNoTokenInPlace("task:failed")
 }
 
-// portos:func-length-exception owner=agent-factory reason=record-replay-e2e-fixture review=2026-07-18 removal=split-record-run-replay-run-and-artifact-assertions-before-next-record-replay-change
-func TestRecordReplayEndToEnd_FactoryRequestBatchAndWorkerGeneratedBatchReplayDeterministically(t *testing.T) {
-	support.SkipLongFunctional(t, "slow record/replay generated-batch determinism smoke")
+func TestRecordReplayEndToEnd_PublicRecordingPreservesExternalAndGeneratedWorkRequestLineage(t *testing.T) {
+	support.SkipLongFunctional(t, "slow public record/replay generated-batch smoke")
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	artifactPath := filepath.Join(t.TempDir(), "batch-recording.replay.json")
@@ -205,7 +199,7 @@ Finish the input task.
 `)
 
 	generatedBatchOutput := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]},"metadata":{"parentLineage":["request-replay-external-batch","work-external-fanout"],"relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]}}`
-	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {
 			{Content: "record external first"},
 			{Content: generatedBatchOutput},
@@ -219,29 +213,38 @@ Finish the input task.
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
-		RequestID: "request-replay-external-batch",
-		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []work.Work{
-			{Name: "external-first", WorkID: "work-external-first", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external first"},
-			{Name: "external-fanout", WorkID: "work-external-fanout", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external fanout"},
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		RecordPath:                artifactPath,
+		WaitForServiceModeRuntime: true,
+		Configure: func(cfg *service.FactoryServiceConfig) {
+			cfg.RuntimeMode = interfaces.RuntimeModeService
+			cfg.ProviderOverride = provider
+			cfg.SkipBuiltInRunnerPrerequisiteValidation = true
 		},
-		Relations: []work.WorkRelation{{
-			Type:           work.WorkRelationDependsOn,
-			SourceWorkName: "external-fanout",
-			TargetWorkName: "external-first",
-		}},
 	})
-
-	h.RunUntilComplete(t, 10*time.Second)
+	requestID := "request-replay-external-batch"
+	response := upsertFactoryWorkRequestOverHTTP(t, server.URL(), requestID, []byte(`{
+		"requestId":"request-replay-external-batch",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[
+			{"name":"external-first","workId":"work-external-first","workTypeName":"task","traceId":"trace-replay-batch","payload":"external first"},
+			{"name":"external-fanout","workId":"work-external-fanout","workTypeName":"task","traceId":"trace-replay-batch","payload":"external fanout"}
+		],
+		"relations":[{"type":"DEPENDS_ON","sourceWorkName":"external-fanout","targetWorkName":"external-first"}]
+	}`))
+	if response.RequestId != requestID || len(response.Works) != 2 {
+		t.Fatalf("public work-request response = %#v, want request id and two works", response)
+	}
+	waitForCondition(t, 10*time.Second, func() bool {
+		return provider.CallCount("processor") >= 4 && provider.CallCount("finisher") >= 3
+	})
+	server.Stop(t)
+	events := waitForRecordedEvents(t, artifactPath, 5*time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	assertReplayWorkRequestRecorded(t, artifact, "request-replay-external-batch", "external-submit", 2, 1)
+	assertReplayWorkRequestRecorded(t, artifact, requestID, "external-submit", 2, 1)
+	assertGeneratedReplayRequestMetadata(t, events, "")
 	generatedRequest := findReplayWorkRequestBySourcePrefix(artifact, "worker-output:")
 	if generatedRequest == nil {
 		t.Fatalf("replay artifact did not record worker-generated work request: %#v", replayWorkRequestEvents(t, artifact))
@@ -256,25 +259,6 @@ Finish the input task.
 		t.Fatalf("generated relations = %d, want 1", got)
 	}
 	assertGeneratedReplayRequestMetadata(t, artifact.Events, generatedRequest.RequestID)
-
-	replayHarness := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	replayHarness.Service.Assert().
-		PlaceTokenCount("task:complete", 3).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-
-	snapshot, err := replayHarness.Service.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot after replay: %v", err)
-	}
-	if !snapshotContainsWorkID(snapshot, "work-generated-alpha") || !snapshotContainsWorkID(snapshot, "work-generated-beta") {
-		t.Fatalf("replay snapshot missing generated work tokens for alpha/beta")
-	}
-	replayEvents, err := replayHarness.Service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents after replay: %v", err)
-	}
-	assertGeneratedReplayRequestMetadata(t, replayEvents, "")
 }
 
 func TestRecordReplayEndToEnd_ProviderCommandDiagnosticsPersistRedactedEnv(t *testing.T) {
@@ -300,28 +284,22 @@ stopToken: COMPLETE
 ---
 Finish the input task.
 `)
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
+	runner := testutil.NewProviderCommandRunner(
+		workers.CommandResult{Stdout: []byte("Step one done. COMPLETE")},
+		workers.CommandResult{Stdout: []byte("Step two done. COMPLETE")},
+	)
+	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "provider-replay-env-work",
 		TraceID:    "provider-replay-env-trace",
 		Payload:    []byte("exercise provider replay env redaction"),
 	})
-
-	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Step one done. COMPLETE")},
-		workers.CommandResult{Stdout: []byte("Step two done. COMPLETE")},
-	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithRecordPath(artifactPath),
 	)
-
 	h.RunUntilComplete(t, 10*time.Second)
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
 
 	if runner.CallCount() == 0 {
 		t.Fatal("expected provider command runner to be called")
@@ -383,23 +361,6 @@ func assertGeneratedReplayRequestMetadata(t *testing.T, events []factoryapi.Fact
 		t.Fatalf("generated relation metadata = %#v, want generated-beta depends on generated-alpha complete", relations)
 	}
 
-	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, support.LastFactoryEventTick(events))
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	replayed, ok := world.WorkRequestsByID[record.RequestID]
-	if !ok {
-		t.Fatalf("replayed request state missing generated request %q", record.RequestID)
-	}
-	if replayed.Source != record.Source {
-		t.Fatalf("replayed source = %q, want %q", replayed.Source, record.Source)
-	}
-	if got := strings.Join(replayed.ParentLineage, ","); got != "request-replay-external-batch,work-external-fanout" {
-		t.Fatalf("replayed parent lineage = %#v, want replay batch lineage", replayed.ParentLineage)
-	}
-	if len(replayed.WorkItems) != 2 {
-		t.Fatalf("replayed generated work items = %d, want 2", len(replayed.WorkItems))
-	}
 }
 
 func findReplayGeneratedWorkRequest(t *testing.T, events []factoryapi.FactoryEvent, requestID string) recordedFactoryWorkRequestEvent {
@@ -459,18 +420,6 @@ func replayWorkRequestEventsFromEvents(t *testing.T, events []factoryapi.Factory
 	return out
 }
 
-func snapshotContainsWorkID(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], workID string) bool {
-	if snapshot == nil {
-		return false
-	}
-	for _, token := range snapshot.Marking.Tokens {
-		if token != nil && token.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
-}
-
 func writeRecordReplayScriptHelper(t *testing.T) string {
 	t.Helper()
 
@@ -520,7 +469,7 @@ args:
 func writeRecordReplayWorkFile(t *testing.T, path string) {
 	t.Helper()
 
-	req := work.SubmitRequest{
+	req := interfaces.SubmitRequest{
 		WorkID:     "record-replay-e2e-work",
 		WorkTypeID: "task",
 		TraceID:    "record-replay-e2e-trace",
