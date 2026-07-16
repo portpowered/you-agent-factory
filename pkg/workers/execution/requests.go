@@ -100,6 +100,8 @@ type WorkstationExecutionRequest struct {
 	InputTokens              []any                           `json:"input_tokens,omitempty"`
 	ModelOperation           string                          `json:"model_operation,omitempty"`
 	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
+	Model                    string                          `json:"model,omitempty"`
+	ModelProvider            string                          `json:"model_provider,omitempty"`
 	SystemPrompt             string                          `json:"system_prompt,omitempty"`
 	UserMessage              string                          `json:"user_message,omitempty"`
 	OutputSchema             string                          `json:"output_schema,omitempty"`

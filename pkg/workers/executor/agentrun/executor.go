@@ -10,7 +10,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -90,6 +89,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 	if !ok {
 		return missingWorkerWorkResult(request.Dispatch, workerType, time.Since(start)), nil
 	}
+	workerDef = effectiveAgentRunWorkerDefinition(request, workerDef)
 
 	baseReq := agentRunInferenceRequest(request, workerDef)
 	inferencer := newRunnerInferencer(executor.runner, baseReq)
@@ -146,6 +146,20 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request workerexe
 	}
 	executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
 	return result, nil
+}
+
+func effectiveAgentRunWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *workerconfig.Config) *workerconfig.Config {
+	if workerDef == nil || (request.Model == "" && request.ModelProvider == "") {
+		return workerDef
+	}
+	effective := *workerDef
+	if request.Model != "" {
+		effective.Model = request.Model
+	}
+	if request.ModelProvider != "" {
+		effective.ModelProvider = request.ModelProvider
+	}
+	return &effective
 }
 
 func (executor *AgentRunExecutor) recordAgentRunResponse(

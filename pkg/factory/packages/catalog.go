@@ -7,6 +7,7 @@ import (
 	builtindeepresearch "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch"
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
+	builtinquorum "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/quorum"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
 	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
 )
@@ -33,6 +34,11 @@ var catalog = map[string]Definition{
 		Name:    "@you/goal",
 		Project: "builtin-goal",
 		JSON:    builtingoal.BuiltInGoalFactoryJSON,
+	},
+	"@you/quorum": {
+		Name:    "@you/quorum",
+		Project: "builtin-quorum",
+		JSON:    builtinquorum.BuiltInFactoryJSON,
 	},
 	"@you/subagent": {
 		Name:    "@you/subagent",

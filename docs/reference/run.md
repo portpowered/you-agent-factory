@@ -67,6 +67,35 @@ Use `--named` for a persisted Factory and still provide its required input:
 you run --named team-review "Review the release notes"
 ```
 
+## Built-in `@you/quorum`
+
+`@you/quorum` is the supported named factory for one request that is evaluated
+by two independent branch roles and then synthesized by a final merge role.
+It has a logical split, branch A, branch B, and final merge. The complete
+fan-out/fan-in workflow preserves the original request and both branch outputs;
+the final merge is gated until both branches finish.
+
+Install packaged factories with `you config init`, then invoke it through the
+same named-factory path:
+
+```bash
+you run --named @you/quorum "Compare the two proposed release plans."
+```
+
+The branch workers use `branchProvider` and `branchModel`; the final merge
+worker uses `mergeProvider` and `mergeModel`. Pass their supported CLI names as
+`--branch-provider`, `--branch-model`, `--merge-provider`, and `--merge-model`.
+Both roles default to `CODEX` with model `gpt-5`; provider overrides accept
+`CODEX` or `CLAUDE`. Named CLI values take precedence over those packaged
+parameter defaults without changing the fixed two-branch fan-in order.
+
+```bash
+you run --named @you/quorum \
+  --branch-provider CODEX --branch-model gpt-5 \
+  --merge-provider CLAUDE --merge-model claude-sonnet-4-20250514 \
+  "Compare the two proposed release plans."
+```
+
 Project-local named Factories are resolved before operator-level named
 Factories. Use `you run --named team-review --help` to inspect a named Factory's
 signature.
