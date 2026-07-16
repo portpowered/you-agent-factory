@@ -78,6 +78,13 @@ test results.
 ## Shared Support
 
 - Cross-package functional helpers belong in `tests/functional/internal/support`.
+- `tests/functional/internal/support.StartComposedFunctionalHTTPHost` is the
+  approved deterministic composition seam for new runtime-boundary scenarios.
+  It starts the Wire-built product graph but returns only a base URL, HTTP
+  client, public `/status` readiness, and bounded shutdown controls. Use
+  generated REST clients, documented HTTP endpoints, or canonical SSE helpers
+  from that host; do not add service, handler, runtime, projection, or engine
+  captures to it.
 - `tests/functional/internal/support.StartFunctionalAPIServer` is the
   canonical Wire-backed HTTP harness for backend transport regressions: it
   builds runtime services through `compose.InjectFactoryService`, so runtime
