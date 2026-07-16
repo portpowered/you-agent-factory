@@ -127,6 +127,51 @@ func TestNamedClassifierRouting_RealCLIUsesNamedFactoryForEachTier(t *testing.T)
 	}
 }
 
+func TestNamedClassifierRouting_RealCLIModelOverridesPreserveEachTier(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow named @you/classifier CLI override routing smoke")
+	}
+
+	binaryPath := buildYouCLIBinary(t)
+	for _, tc := range []struct {
+		label             string
+		wantPrimaryResult string
+	}{
+		{label: "small", wantPrimaryResult: "small result"},
+		{label: "medium", wantPrimaryResult: "medium result"},
+		{label: "large", wantPrimaryResult: "large result"},
+	} {
+		t.Run(tc.label, func(t *testing.T) {
+			response, err := runNamedClassifierRoutingCLIJSON(t, binaryPath, tc.label,
+				"--default-worker-model-provider", "CLAUDE",
+				"--default-worker-model", "claude-sonnet-4-20250514",
+			)
+			if err != nil {
+				t.Fatalf("you run --named %s with model overrides: %v", classifier.PackagedFactoryName, err)
+			}
+			if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+				t.Fatalf("status = %q, want COMPLETED", response.Status)
+			}
+			if got := invocationPrimaryResultText(t, response); got != tc.wantPrimaryResult {
+				t.Fatalf("primaryResult = %q, want %q", got, tc.wantPrimaryResult)
+			}
+		})
+	}
+}
+
+func TestNamedClassifierRouting_RealCLIRejectsUnsupportedProviderBeforeDispatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow named @you/classifier CLI override validation smoke")
+	}
+
+	_, err := runNamedClassifierRoutingCLIJSON(t, buildYouCLIBinary(t), "small",
+		"--default-worker-model-provider", "not-a-provider",
+	)
+	if err == nil {
+		t.Fatal("you run with an unsupported model provider succeeded")
+	}
+}
+
 func startNamedClassifierRoutingServer(t *testing.T, classification string) *support.FunctionalAPIServer {
 	return startNamedClassifierRoutingServerWithCustomization(t, classification, nil)
 }
@@ -226,7 +271,7 @@ func writeClassifierRoutingMockWorkers(t *testing.T, classification string) stri
 	}, "mock-workers-packaged-classifier-routing.json")
 }
 
-func runNamedClassifierRoutingCLIJSON(t *testing.T, binaryPath, classification string) (factoryapi.InvocationResponse, error) {
+func runNamedClassifierRoutingCLIJSON(t *testing.T, binaryPath, classification string, operatorOverrideArgs ...string) (factoryapi.InvocationResponse, error) {
 	t.Helper()
 
 	homeDir := t.TempDir()
@@ -239,16 +284,16 @@ func runNamedClassifierRoutingCLIJSON(t *testing.T, binaryPath, classification s
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(
-		ctx,
-		binaryPath,
-		"--json", "run",
+	args := []string{"--json", "run"}
+	args = append(args, operatorOverrideArgs...)
+	args = append(args,
 		"--named", classifier.PackagedFactoryName,
 		"--with-mock-workers", "--no-record",
 		"--server", fmt.Sprintf("http://127.0.0.1:%d", port),
 		"--quiet", writeClassifierRoutingMockWorkers(t, classification),
 		"classifier CLI routing "+classification,
 	)
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = t.TempDir()
 	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	var stdout, stderr strings.Builder
