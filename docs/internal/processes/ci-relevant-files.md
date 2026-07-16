@@ -57,3 +57,6 @@
   approved service-test harness, keep that runtime assertion and remove any
   duplicate direct projection reconstruction before deleting the file's
   baseline entry; projection-specific behavior belongs with its owner.
+  When a functional scenario needs a customer read-model from canonical events
+  it already observed, use `testutil.BuildFactoryWorldView` instead of
+  importing `pkg/factory/projections` from `tests/functional`.

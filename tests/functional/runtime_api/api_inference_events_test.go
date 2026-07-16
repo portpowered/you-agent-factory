@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -588,11 +587,10 @@ func (fs *functionalAPIServer) GetDashboard(t *testing.T) DashboardResponse {
 
 	snapshot := fs.GetEngineStateSnapshot(t)
 	events := fs.GetFactoryEvents(t)
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldView, err := testutil.BuildFactoryWorldView(events, snapshot.TickCount, snapshot.ActiveThrottlePauses)
 	if err != nil {
-		t.Fatalf("reconstruct world state: %v", err)
+		t.Fatalf("reconstruct customer world view: %v", err)
 	}
-	worldView := projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, snapshot.ActiveThrottlePauses)
 	return dashboardResponseFromWorldView(worldView)
 }
 

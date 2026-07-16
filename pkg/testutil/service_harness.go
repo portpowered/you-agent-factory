@@ -12,6 +12,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -701,6 +702,21 @@ func cloneMarkingSnapshot(snapshot *petri.MarkingSnapshot) *petri.MarkingSnapsho
 // GetFactoryEvents returns the canonical factory event history recorded by the service.
 func (h *ServiceTestHarness) GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error) {
 	return h.svc.GetFactoryEvents(ctx)
+}
+
+// BuildFactoryWorldView reconstructs the customer-visible factory read model
+// from canonical events already observed by a functional test. It keeps
+// projection implementation access inside the approved test harness seam.
+func BuildFactoryWorldView(
+	events []factoryapi.FactoryEvent,
+	tickCount int,
+	activeThrottlePauses []interfaces.ActiveThrottlePause,
+) (interfaces.FactoryWorldView, error) {
+	worldState, err := projections.ReconstructFactoryWorldState(events, tickCount)
+	if err != nil {
+		return interfaces.FactoryWorldView{}, err
+	}
+	return projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, activeThrottlePauses), nil
 }
 
 // MoveWork applies a synchronous operator relocation through the service layer.
