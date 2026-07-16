@@ -217,6 +217,10 @@
       "minimum": 58.73
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/quorum",
+      "minimum": 72.22
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/subagent",
       "minimum": 16.00
     },
