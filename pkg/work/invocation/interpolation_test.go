@@ -2,10 +2,40 @@ package invocation
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+func TestInterpolateWorkstationConfig_RejectsUnsafeWorktree(t *testing.T) {
+	for _, worktree := range []string{"/absolute", "C:\\absolute", "../outside", "..\\outside", ".."} {
+		t.Run(worktree, func(t *testing.T) {
+			_, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
+				Worktree: "${worktree}",
+			}, &interfaces.InvocationArguments{Arguments: map[string]interfaces.InvocationArgument{
+				"worktree": {Values: []string{worktree}},
+			}}, nil)
+			if err == nil || !strings.Contains(err.Error(), "workstation.worktree") {
+				t.Fatalf("InterpolateWorkstationConfig error = %v, want actionable worktree validation error", err)
+			}
+		})
+	}
+}
+
+func TestInterpolateWorkstationConfig_AcceptsRelativeWorktree(t *testing.T) {
+	workstation, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
+		Worktree: "${worktree}",
+	}, &interfaces.InvocationArguments{Arguments: map[string]interfaces.InvocationArgument{
+		"worktree": {Values: []string{"release/dashboard"}},
+	}}, nil)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig: %v", err)
+	}
+	if workstation.Worktree != "release/dashboard" {
+		t.Fatalf("worktree = %q, want relative worktree", workstation.Worktree)
+	}
+}
 
 func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{

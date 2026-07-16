@@ -16,12 +16,35 @@
           {"kind": "POSITIONAL", "position": 1},
           {"kind": "STDIN"}
         ]
+      },
+      {
+        "name": "period",
+        "description": "Optional recurrence period. The packaged hourly loop currently accepts 1h.",
+        "externalName": "period",
+        "defaultValue": "1h",
+        "choices": ["1h"],
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
+      },
+      {
+        "name": "worktree",
+        "description": "Optional relative factory worktree name for every loop iteration.",
+        "externalName": "worktree",
+        "typeHint": "DIRECTORY_PATH",
+        "bindings": [
+          {"kind": "NAMED"}
+        ]
       }
     ],
     "examples": [
       {
         "name": "default-hourly-loop",
         "argv": ["Check the release dashboard"]
+      },
+      {
+        "name": "hourly-loop-in-worktree",
+        "argv": ["Check the release dashboard", "--period", "1h", "--worktree", "release-dashboard"]
       }
     ]
   },
@@ -88,6 +111,7 @@
       "name": "run-loop-iteration",
       "type": "AGENT_RUN",
       "worker": "loop-worker",
+      "worktree": "${worktree}",
       "workPropagation": {"mode": "PRESERVE_INPUT"},
       "inputs": [
         {"workType": "iteration", "state": "init"}

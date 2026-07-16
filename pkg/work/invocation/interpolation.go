@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
@@ -163,6 +164,9 @@ func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfi
 	if next.Worktree, err = interpolateInvocationField(next.Worktree, args, "workstation.worktree", false, readFile); err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
+	if err := validateInterpolatedWorktreeName(next.Worktree); err != nil {
+		return interfaces.FactoryWorkstationConfig{}, err
+	}
 	for key, value := range next.Env {
 		resolved, err := interpolateInvocationField(value, args, fmt.Sprintf("workstation.env[%q]", key), false, readFile)
 		if err != nil {
@@ -171,6 +175,29 @@ func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfi
 		next.Env[key] = resolved
 	}
 	return next, nil
+}
+
+// validateInterpolatedWorktreeName rejects unsafe worktree names before a
+// worker is dispatched. Empty worktrees remain valid because worktree use is
+// optional for an authored workstation.
+func validateInterpolatedWorktreeName(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	normalized := strings.ReplaceAll(name, "\\", "/")
+	if path.IsAbs(normalized) || isWindowsAbsolutePath(normalized) {
+		return &ArgumentError{Code: ArgumentErrorCodeInvalidInterpolation, Message: fmt.Sprintf("workstation.worktree value %q must be relative", name)}
+	}
+	cleaned := path.Clean(normalized)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return &ArgumentError{Code: ArgumentErrorCodeInvalidInterpolation, Message: fmt.Sprintf("workstation.worktree value %q must not traverse outside the factory", name)}
+	}
+	return nil
+}
+
+func isWindowsAbsolutePath(value string) bool {
+	return len(value) >= 3 && ((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= 'A' && value[0] <= 'Z')) && value[1] == ':' && value[2] == '/'
 }
 
 func validateInvocationOutputContract(output *interfaces.InvocationOutputContractConfig, args *interfaces.InvocationArguments, readFile FileReader) error {
