@@ -115,3 +115,70 @@ func TestInit_LegacyMigrationIsIdempotentAndPreservesCanonicalEdits(t *testing.T
 	}
 	assertDirectorySnapshotUnchanged(t, canonicalDir, beforeSnapshot)
 }
+
+func TestInit_RejectsLegacyRootThatIsNotADirectory(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	legacyRoot := defaultpaths.LegacyNamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(filepath.Dir(legacyRoot), 0o755); err != nil {
+		t.Fatalf("MkdirAll(legacy parent): %v", err)
+	}
+	if err := os.WriteFile(legacyRoot, []byte("not a factory directory\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy root): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected legacy root validation error")
+	}
+	if !strings.Contains(err.Error(), "path is not a directory") {
+		t.Fatalf("Init() error = %q, want non-directory guidance", err)
+	}
+}
+
+func TestInit_ReportsInvalidLegacyFactoryInventory(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	legacyRoot := defaultpaths.LegacyNamedFactoriesRoot(homeDir)
+	if err := os.MkdirAll(legacyRoot, 0o755); err != nil {
+		t.Fatalf("MkdirAll(legacy root): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRoot, ".current-factory"), []byte("../outside-root\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy current pointer): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected legacy inventory validation error")
+	}
+	if !strings.Contains(err.Error(), "list legacy global factories") {
+		t.Fatalf("Init() error = %q, want legacy inventory guidance", err)
+	}
+}
+
+func TestInit_ReportsCanonicalDestinationInspectionFailure(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	definition, ok := factorypackages.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("expected @you/goal packaged definition")
+	}
+	if _, err := factoryconfig.PersistNamedFactory(defaultpaths.LegacyNamedFactoriesRoot(homeDir), definition.Name, definition.JSON); err != nil {
+		t.Fatalf("PersistNamedFactory(legacy): %v", err)
+	}
+	canonicalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if err := os.WriteFile(canonicalRoot, []byte("not a factory root directory\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(canonical root): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected canonical destination inspection error")
+	}
+	if !strings.Contains(err.Error(), "create canonical parent for legacy factory") {
+		t.Fatalf("Init() error = %q, want canonical parent guidance", err)
+	}
+}

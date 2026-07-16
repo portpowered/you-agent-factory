@@ -72,6 +72,15 @@ func TestService_PreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanon
 	}
 }
 
+func TestService_PreparePersistedFactoryPayload_RejectsMissingSnapshot(t *testing.T) {
+	t.Parallel()
+
+	_, err := New(stubDefinitionHost{}).PreparePersistedFactoryPayload("alpha", nil, interfaces.FactoryVersion{})
+	if err == nil || !strings.Contains(err.Error(), "editable factory snapshot is required") {
+		t.Fatalf("PreparePersistedFactoryPayload() error = %v, want missing snapshot guidance", err)
+	}
+}
+
 func TestService_PrepareEditableFactoryPersistView_UsesSameNormalizationAsPersist(t *testing.T) {
 	t.Parallel()
 

@@ -101,6 +101,41 @@ func TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite(t *testing.T) {
 	}
 }
 
+func TestMigratedInstall_LegacyNamedFactoryMovesToCanonicalRoot(t *testing.T) {
+	t.Parallel()
+
+	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
+	session := harness.NewSession(t)
+	definition, ok := factorypackages.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("expected @you/goal packaged definition")
+	}
+	legacyDir, err := factoryconfig.PersistNamedFactory(defaultpaths.LegacyNamedFactoriesRoot(session.HomeDir), definition.Name, definition.JSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(legacy): %v", err)
+	}
+	markerPath := filepath.Join(legacyDir, "customer-edit.txt")
+	if err := os.WriteFile(markerPath, []byte("preserve this edit\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer edit): %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := session.Run(ctx, "config", "init")
+	session.RequireSuccess(t, "migrated-install-legacy-named-factory", result, err)
+
+	canonicalDir, err := factoryconfig.MapNamedFactoryDir(defaultpaths.NamedFactoriesRoot(session.HomeDir), definition.Name)
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(canonical): %v", err)
+	}
+	if _, err := os.Stat(legacyDir); !os.IsNotExist(err) {
+		t.Fatalf("legacy factory directory still exists: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(canonicalDir, "customer-edit.txt")); err != nil || string(got) != "preserve this edit\n" {
+		t.Fatalf("migrated customer edit = %q, %v; want preserved content", got, err)
+	}
+}
+
 func TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption(t *testing.T) {
 	t.Parallel()
 
