@@ -4,8 +4,8 @@ package quorum
 import (
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtinquorum "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/quorum"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // BuiltInFactoryJSON is the canonical runnable @you/quorum definition.

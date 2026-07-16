@@ -7,10 +7,13 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedQuorumFactory(t *testing.T) {
@@ -77,7 +80,7 @@ func assertQuorumLineageAndDependencies(t *testing.T, cfg *interfaces.FactoryCon
 		t.Fatalf("split output arcs = %#v, want preserved request and two derived Work outputs", splitTransition.OutputArcs)
 	}
 	transformer := token_transformer.New(net.Places, net.WorkTypes)
-	input := []interfaces.TokenColor{{WorkID: "request-work", WorkTypeID: "task", DataType: interfaces.DataTypeWork, RequestID: "request-1"}}
+	input := []factorytoken.Color{{WorkID: "request-work", WorkTypeID: "task", DataType: factorytoken.DataTypeWork, RequestID: "request-1"}}
 	for index := 1; index < len(splitTransition.OutputArcs); index++ {
 		output, err := transformer.OutputToken(token_transformer.OutputTokenInput{ArcIndex: index, Arcs: splitTransition.OutputArcs, InputColors: input})
 		if err != nil {
@@ -87,7 +90,7 @@ func assertQuorumLineageAndDependencies(t *testing.T, cfg *interfaces.FactoryCon
 			t.Fatalf("branch %d lineage = %#v, want a distinct child of request-work", index, output.Color)
 		}
 		ApplyWorkRelations(output, &split, input)
-		if !sameRelations(output.Color.Relations, []interfaces.Relation{{Type: interfaces.RelationParentChild, TargetWorkID: "request-work"}}) {
+		if !sameRelations(output.Color.Relations, []work.Relation{{Type: work.RelationParentChild, TargetWorkID: "request-work"}}) {
 			t.Fatalf("branch %d relations = %#v, want public parent relation", index, output.Color.Relations)
 		}
 	}
@@ -95,9 +98,9 @@ func assertQuorumLineageAndDependencies(t *testing.T, cfg *interfaces.FactoryCon
 	if len(mergeTransition.InputArcs) != 3 {
 		t.Fatalf("merge input arcs = %#v, want original request and both completed branch Work items before dispatch", mergeTransition.InputArcs)
 	}
-	mergeOutput := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "quorum-merge"}}
-	ApplyWorkRelations(mergeOutput, &merge, []interfaces.TokenColor{{WorkID: "request-work", WorkTypeID: "task"}, {WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"}, {WorkID: "branch-b-work", WorkTypeID: "quorum-branch-b"}})
-	wantDependencies := []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"}, {Type: interfaces.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"}}
+	mergeOutput := &factorytoken.Token{Color: factorytoken.Color{WorkTypeID: "quorum-merge"}}
+	ApplyWorkRelations(mergeOutput, &merge, []factorytoken.Color{{WorkID: "request-work", WorkTypeID: "task"}, {WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"}, {WorkID: "branch-b-work", WorkTypeID: "quorum-branch-b"}})
+	wantDependencies := []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"}, {Type: work.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"}}
 	if !sameRelations(mergeOutput.Color.Relations, wantDependencies) {
 		t.Fatalf("merge relations = %#v, want dependencies on both branch results", mergeOutput.Color.Relations)
 	}
@@ -124,7 +127,7 @@ func sameRoutes(got, want []interfaces.IOConfig) bool {
 	return reflect.DeepEqual(got, want)
 }
 
-func sameRelations(got, want []interfaces.Relation) bool {
+func sameRelations(got, want []work.Relation) bool {
 	return reflect.DeepEqual(got, want)
 }
 
@@ -218,7 +221,7 @@ func TestIsPackagedFactory_MatchesBuiltInQuorumIdentity(t *testing.T) {
 }
 
 func TestApplyWorkRelations_OnlyEmitsRelationsForEligibleQuorumWork(t *testing.T) {
-	branchInputs := []interfaces.TokenColor{
+	branchInputs := []factorytoken.Color{
 		{WorkID: "", WorkTypeID: "quorum-branch-a"},
 		{WorkID: "request-work", WorkTypeID: "task"},
 		{WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"},
@@ -226,11 +229,11 @@ func TestApplyWorkRelations_OnlyEmitsRelationsForEligibleQuorumWork(t *testing.T
 	}
 
 	ApplyWorkRelations(nil, &interfaces.FactoryWorkstationConfig{Name: PackagedSplitWorkstationName}, nil)
-	ApplyWorkRelations(&interfaces.Token{}, nil, nil)
+	ApplyWorkRelations(&factorytoken.Token{}, nil, nil)
 
-	for _, output := range []*interfaces.Token{
-		{Color: interfaces.TokenColor{WorkTypeID: "task", ParentID: "request-work"}},
-		{Color: interfaces.TokenColor{WorkTypeID: "quorum-branch-a"}},
+	for _, output := range []*factorytoken.Token{
+		{Color: factorytoken.Color{WorkTypeID: "task", ParentID: "request-work"}},
+		{Color: factorytoken.Color{WorkTypeID: "quorum-branch-a"}},
 	} {
 		ApplyWorkRelations(output, &interfaces.FactoryWorkstationConfig{Name: PackagedSplitWorkstationName}, nil)
 		if len(output.Color.Relations) != 0 {
@@ -238,17 +241,17 @@ func TestApplyWorkRelations_OnlyEmitsRelationsForEligibleQuorumWork(t *testing.T
 		}
 	}
 
-	nonMerge := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "task"}}
+	nonMerge := &factorytoken.Token{Color: factorytoken.Color{WorkTypeID: "task"}}
 	ApplyWorkRelations(nonMerge, &interfaces.FactoryWorkstationConfig{Name: PackagedMergeWorkstationName}, branchInputs)
 	if len(nonMerge.Color.Relations) != 0 {
 		t.Fatalf("non-merge relations = %#v, want none", nonMerge.Color.Relations)
 	}
 
-	merge := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "quorum-merge"}}
+	merge := &factorytoken.Token{Color: factorytoken.Color{WorkTypeID: "quorum-merge"}}
 	ApplyWorkRelations(merge, &interfaces.FactoryWorkstationConfig{Name: PackagedMergeWorkstationName}, branchInputs)
-	want := []interfaces.Relation{
-		{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"},
-		{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"},
+	want := []work.Relation{
+		{Type: work.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"},
+		{Type: work.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"},
 	}
 	if !sameRelations(merge.Color.Relations, want) {
 		t.Fatalf("merge relations = %#v, want %#v", merge.Color.Relations, want)
@@ -263,7 +266,7 @@ func assertArgumentValues(t *testing.T, arguments map[string]invocations.Normali
 	}
 }
 
-func workerByName(workers []interfaces.WorkerConfig, name string) (*interfaces.WorkerConfig, bool) {
+func workerByName(workers []workerconfig.Config, name string) (*workerconfig.Config, bool) {
 	for index := range workers {
 		if workers[index].Name == name {
 			return &workers[index], true

@@ -781,9 +781,9 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 // topology to the shipped package. Customer factories own their relations,
 // even if they independently choose the same workstation or Work type names.
 func applyPackagedQuorumWorkRelations(
-	output *interfaces.Token,
+	output *factorytoken.Token,
 	workstation *interfaces.FactoryWorkstationConfig,
-	inputs []interfaces.TokenColor,
+	inputs []factorytoken.Color,
 	runtimeConfig interfaces.RuntimeWorkstationLookup,
 ) {
 	factoryConfigLookup, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)

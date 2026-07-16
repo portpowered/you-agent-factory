@@ -1,6 +1,10 @@
 package quorum
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import (
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
+)
 
 const (
 	// PackagedSplitWorkstationName is the logical fan-out boundary for quorum Work.
@@ -12,15 +16,15 @@ const (
 // ApplyWorkRelations records the public lineage edges introduced by the fixed
 // quorum topology. The split creates two children of the request; the merge
 // result depends on both branch results in its authored input order.
-func ApplyWorkRelations(output *interfaces.Token, workstation *interfaces.FactoryWorkstationConfig, inputs []interfaces.TokenColor) {
+func ApplyWorkRelations(output *factorytoken.Token, workstation *interfaces.FactoryWorkstationConfig, inputs []factorytoken.Color) {
 	if output == nil || workstation == nil {
 		return
 	}
 	switch workstation.Name {
 	case PackagedSplitWorkstationName:
 		if output.Color.ParentID != "" && output.Color.WorkTypeID != "task" {
-			output.Color.Relations = []interfaces.Relation{{
-				Type:         interfaces.RelationParentChild,
+			output.Color.Relations = []work.Relation{{
+				Type:         work.RelationParentChild,
 				TargetWorkID: output.Color.ParentID,
 			}}
 		}
@@ -32,16 +36,16 @@ func ApplyWorkRelations(output *interfaces.Token, workstation *interfaces.Factor
 	}
 }
 
-func dependenciesForBranchInputs(inputs []interfaces.TokenColor) []interfaces.Relation {
-	relations := make([]interfaces.Relation, 0, 2)
+func dependenciesForBranchInputs(inputs []factorytoken.Color) []work.Relation {
+	relations := make([]work.Relation, 0, 2)
 	for _, input := range inputs {
 		if input.WorkID == "" {
 			continue
 		}
 		switch input.WorkTypeID {
 		case "quorum-branch-a", "quorum-branch-b":
-			relations = append(relations, interfaces.Relation{
-				Type:          interfaces.RelationDependsOn,
+			relations = append(relations, work.Relation{
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  input.WorkID,
 				RequiredState: "complete",
 			})

@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -242,7 +243,7 @@ func resolveStructuredSessionInvocationInput(
 
 // structuredInvocationContent preserves the primary positional argument as the
 // submitted Work content so routed Work can expose the original request.
-func structuredInvocationContent(signature *interfaces.InvocationSignatureConfig, normalized workinvocation.NormalizedArguments) []interfaces.WorkContentPart {
+func structuredInvocationContent(signature *interfaces.InvocationSignatureConfig, normalized workinvocation.NormalizedArguments) []work.WorkContentPart {
 	if signature == nil {
 		return nil
 	}
@@ -254,7 +255,7 @@ func structuredInvocationContent(signature *interfaces.InvocationSignatureConfig
 		if !ok || len(argument.Values) != 1 {
 			return nil
 		}
-		return []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: argument.Values[0]}}
+		return []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: argument.Values[0]}}
 	}
 	return nil
 }

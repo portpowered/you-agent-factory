@@ -88,7 +88,7 @@ func NormalizeWorkRequest(req workdomain.WorkRequest, opts workdomain.WorkReques
 				factory.CloneRuntimeRelations(relIndex[work.Name]),
 				work.RuntimeRelations,
 			),
-			InvocationArguments: interfaces.CloneInvocationArguments(work.InvocationArguments),
+			InvocationArguments: workdomain.CloneInvocationArguments(work.InvocationArguments),
 		})
 	}
 	return normalized, nil
@@ -221,7 +221,7 @@ func WorkRequestFromSubmitRequests(requests []workdomain.SubmitRequest) workdoma
 			Tags:                     factory.CloneRuntimeTags(req.Tags),
 			ExecutionID:              req.ExecutionID,
 			RuntimeRelations:         factory.CloneRuntimeRelations(req.Relations),
-			InvocationArguments:      interfaces.CloneInvocationArguments(req.InvocationArguments),
+			InvocationArguments:      work.CloneInvocationArguments(req.InvocationArguments),
 		})
 	}
 

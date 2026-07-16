@@ -92,9 +92,9 @@ func TestCalculateMutations_CustomerQuorumNamesDoNotGainPackagedRelations(t *tes
 		"quorum-merge:complete": {ID: "quorum-merge:complete", TypeID: "quorum-merge", State: "complete"},
 	}
 	workTypes := map[string]*state.WorkType{"quorum-merge": {ID: "quorum-merge"}}
-	inputs := []interfaces.Token{
-		{Color: interfaces.TokenColor{WorkID: "branch-a", WorkTypeID: "quorum-branch-a"}},
-		{Color: interfaces.TokenColor{WorkID: "branch-b", WorkTypeID: "quorum-branch-b"}},
+	inputs := []factorytoken.Token{
+		{Color: factorytoken.Color{WorkID: "branch-a", WorkTypeID: "quorum-branch-a"}},
+		{Color: factorytoken.Color{WorkID: "branch-b", WorkTypeID: "quorum-branch-b"}},
 	}
 
 	for _, testCase := range []struct {
@@ -111,7 +111,7 @@ func TestCalculateMutations_CustomerQuorumNamesDoNotGainPackagedRelations(t *tes
 				workstation: &interfaces.FactoryWorkstationConfig{Name: "merge-quorum"},
 				arcs:        []petri.Arc{{ID: "merge-output", PlaceID: "quorum-merge:complete"}},
 				consumed:    inputs,
-				result:      resolvedWorkResult{outcome: interfaces.OutcomeAccepted},
+				result:      resolvedWorkResult{outcome: workerexecution.OutcomeAccepted},
 				now:         now,
 				inputColors: tokenColorsFromTokens(inputs),
 				transformer: token_transformer.New(places, workTypes),
