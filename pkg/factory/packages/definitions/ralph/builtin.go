@@ -17,11 +17,6 @@ var promptAssets embed.FS
 // assembled from its declarative definition and package-owned prompt assets.
 var BuiltInRalphFactoryJSON = mustAssembleBuiltInRalphFactoryJSON()
 
-// FactoryJSON returns the authored factory scaffold without assembled prompts.
-func FactoryJSON() []byte {
-	return append([]byte(nil), factoryJSON...)
-}
-
 func mustAssembleBuiltInRalphFactoryJSON() []byte {
 	payload, err := packageassets.Assemble(packageassets.Definition{
 		Package:     "@you/ralph",

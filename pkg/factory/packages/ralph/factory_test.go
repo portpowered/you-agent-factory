@@ -28,9 +28,12 @@ func TestBuiltInFactoryJSON_LoadsRunnablePlanThenExecuteFactory(t *testing.T) {
 	executor := findWorkstation(t, cfg.Workstations, PackagedExecuteWorkstationName)
 	assertRoute(t, planner.Inputs, "init")
 	assertRoute(t, planner.Outputs, "execute")
+	assertRoute(t, planner.OnFailure, "failed")
 	assertRoute(t, executor.Inputs, "execute")
 	assertRoute(t, executor.Outputs, "complete")
 	assertRoute(t, executor.OnContinue, "execute")
+	assertRoute(t, executor.OnFailure, "failed")
+	assertLoopBreaker(t, cfg.Workstations)
 	if executor.Kind != interfaces.WorkstationKindRepeater {
 		t.Fatalf("executor kind = %q, want %q", executor.Kind, interfaces.WorkstationKindRepeater)
 	}
@@ -46,6 +49,20 @@ func TestBuiltInFactoryJSON_LoadsRunnablePlanThenExecuteFactory(t *testing.T) {
 		if target.Severity == factoryvalidation.SeverityError {
 			t.Fatalf("validation target = %#v", target)
 		}
+	}
+}
+
+func assertLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+
+	loopBreaker := findWorkstation(t, workstations, PackagedLoopBreakerName)
+	assertRoute(t, loopBreaker.Inputs, "execute")
+	assertRoute(t, loopBreaker.Outputs, "failed")
+	if loopBreaker.Type != interfaces.WorkstationTypeLogical {
+		t.Fatalf("loop breaker type = %q, want %q", loopBreaker.Type, interfaces.WorkstationTypeLogical)
+	}
+	if len(loopBreaker.Guards) != 1 || loopBreaker.Guards[0].Type != interfaces.GuardTypeVisitCount || loopBreaker.Guards[0].Workstation != PackagedExecuteWorkstationName || loopBreaker.Guards[0].MaxVisits != 8 {
+		t.Fatalf("loop breaker guards = %#v, want visit count for %q at 8", loopBreaker.Guards, PackagedExecuteWorkstationName)
 	}
 }
 

@@ -11,4 +11,5 @@ const (
 	PackagedWorkTypeName           = "ralph"
 	PackagedPlanWorkstationName    = "plan-ralph"
 	PackagedExecuteWorkstationName = "execute-ralph"
+	PackagedLoopBreakerName        = "execute-ralph-loop-breaker"
 )

@@ -303,7 +303,10 @@ other packaged factories. It first plans that request, then gives the planner's
 output to a repeating execution workstation. The execution worker continues
 while it returns `<CONTINUE>` and completes the invocation by returning
 `<COMPLETE>`. Its explicit `invocationReturn` selects `ralph:complete` as the
-customer-visible result.
+customer-visible result. Ralph bounds non-converging execution with a
+visit-count loop breaker: after eight execution visits, it routes the submitted
+work to `ralph:failed`, which is observable through the usual work and dispatch
+history inspection surfaces.
 
 ### Built-in `@you/goal` repeater
 

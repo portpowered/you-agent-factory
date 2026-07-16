@@ -49,6 +49,18 @@
       "onFailure": [{"workType": "ralph", "state": "failed"}],
       "workPropagation": {"mode": "OUTPUT_AS_PAYLOAD"},
       "promptFile": "prompts/executor.md"
+    },
+    {
+      "name": "execute-ralph-loop-breaker",
+      "type": "LOGICAL_MOVE",
+      "worker": "",
+      "guards": [{
+        "type": "VISIT_COUNT",
+        "workstation": "execute-ralph",
+        "maxVisits": 8
+      }],
+      "inputs": [{"workType": "ralph", "state": "execute"}],
+      "outputs": [{"workType": "ralph", "state": "failed"}]
     }
   ]
 }
