@@ -58,9 +58,6 @@ func Init(homeDir string) (Result, error) {
 
 	configPath := defaultpaths.OperatorConfigPath(homeDir)
 	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot); err != nil {
-		return Result{}, err
-	}
 
 	if err := ensureSystemConfigParentIsDirectory(configPath); err != nil {
 		return Result{}, err
@@ -81,6 +78,10 @@ func Init(homeDir string) (Result, error) {
 		if _, err := operatorconfig.LoadFileConfig(configPath); err != nil {
 			return Result{}, fmt.Errorf("validate created operator config %q: %w", configPath, err)
 		}
+	}
+
+	if err := migrateLegacyNamedFactories(homeDir, namedFactoriesRoot); err != nil {
+		return Result{}, err
 	}
 
 	packagedFactories, err := ensurePackagedDefaultFactories(namedFactoriesRoot)
