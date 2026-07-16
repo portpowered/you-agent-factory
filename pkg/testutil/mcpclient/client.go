@@ -104,6 +104,27 @@ func (c *Client) Ping(ctx context.Context) error {
 	return nil
 }
 
+// ListTools discovers the tools published by the attached MCP server.
+func (c *Client) ListTools(ctx context.Context) (*mcp.ListToolsResult, error) {
+	result, err := c.session.ListTools(ctx, nil)
+	if err != nil {
+		return nil, clientError(StageProtocolExchange, "list tools", err)
+	}
+	return result, nil
+}
+
+// CallTool invokes one discovered tool through the SDK session.
+func (c *Client) CallTool(ctx context.Context, name string, arguments any) (*mcp.CallToolResult, error) {
+	result, err := c.session.CallTool(ctx, &mcp.CallToolParams{
+		Name:      name,
+		Arguments: arguments,
+	})
+	if err != nil {
+		return nil, clientError(StageProtocolExchange, "call tool", err)
+	}
+	return result, nil
+}
+
 // DecodeTextResult decodes the single text item used by the current server.
 func DecodeTextResult(result *mcp.CallToolResult, target any) error {
 	if result == nil {
