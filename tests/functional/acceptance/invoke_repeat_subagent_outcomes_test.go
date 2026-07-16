@@ -298,7 +298,7 @@ func writeProjectFactoryJSON(workDir string, payload []byte) error {
 func materializedNamedFactoryDir(t *testing.T, homeDir, factoryName string) string {
 	t.Helper()
 
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
 	dir, err := factoryconfig.MapNamedFactoryDir(globalRoot, factoryName)
 	if err != nil {
 		t.Fatalf("MapNamedFactoryDir(%q): %v", factoryName, err)
