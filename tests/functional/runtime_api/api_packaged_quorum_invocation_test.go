@@ -89,6 +89,7 @@ func startPackagedQuorumInvocationServer(t *testing.T, runner workers.CommandRun
 type quorumGatedCommandRunner struct {
 	mu             sync.Mutex
 	requests       map[string]workers.CommandRequest
+	callCounts     map[string]int
 	mergePrompt    string
 	startedA       chan struct{}
 	startedB       chan struct{}
@@ -100,6 +101,7 @@ type quorumGatedCommandRunner struct {
 func newQuorumGatedCommandRunner() *quorumGatedCommandRunner {
 	return &quorumGatedCommandRunner{
 		requests:       make(map[string]workers.CommandRequest),
+		callCounts:     make(map[string]int),
 		startedA:       make(chan struct{}),
 		startedB:       make(chan struct{}),
 		releaseBranchB: make(chan struct{}),
@@ -109,6 +111,7 @@ func newQuorumGatedCommandRunner() *quorumGatedCommandRunner {
 func (r *quorumGatedCommandRunner) Run(ctx context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
 	r.mu.Lock()
 	r.requests[request.WorkstationName] = request
+	r.callCounts[request.WorkstationName]++
 	r.mu.Unlock()
 	switch request.WorkstationName {
 	case "run-quorum-branch-a":
@@ -208,8 +211,5 @@ func (r *quorumGatedCommandRunner) waitForBranchStarts(t *testing.T) {
 func (r *quorumGatedCommandRunner) callCount(workstation string) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.requests[workstation]; ok {
-		return 1
-	}
-	return 0
+	return r.callCounts[workstation]
 }
