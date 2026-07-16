@@ -94,7 +94,7 @@ func TestBuiltInFactoryWorkflow_AcceptsApprovedExecutionFlagsWithoutExpandingCap
 	if !outcome.OK {
 		t.Fatalf("workflow failure = %#v", outcome.Failure)
 	}
-	children := completedChildDispatches(outcome.Records)
+	children := completedSpecialistDispatches(outcome.Records)
 	if len(children) != 2 {
 		t.Fatalf("completed child dispatches = %#v, want two specialists", children)
 	}
@@ -146,8 +146,8 @@ func TestBuiltInFactoryWorkflow_CompletesWithoutDelegation(t *testing.T) {
 	if !outcome.OK {
 		t.Fatalf("workflow failure = %#v", outcome.Failure)
 	}
-	if got := completedChildDispatches(outcome.Records); len(got) != 0 {
-		t.Fatalf("completed child dispatches = %#v, want none", got)
+	if got := completedSpecialistDispatches(outcome.Records); len(got) != 0 {
+		t.Fatalf("completed specialist dispatches = %#v, want none", got)
 	}
 	assertLeadSynthesis(t, outcome, "Explain event sourcing", 2, 0)
 }
@@ -157,7 +157,7 @@ func TestBuiltInFactoryWorkflow_DelegatesBoundedSpecialistsAndSynthesizes(t *tes
 	if !outcome.OK {
 		t.Fatalf("workflow failure = %#v", outcome.Failure)
 	}
-	children := completedChildDispatches(outcome.Records)
+	children := completedSpecialistDispatches(outcome.Records)
 	if len(children) != 2 {
 		t.Fatalf("completed child dispatches = %#v, want two bounded specialists", children)
 	}
@@ -171,6 +171,24 @@ func TestBuiltInFactoryWorkflow_DelegatesBoundedSpecialistsAndSynthesizes(t *tes
 	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines", 2, 2)
 }
 
+func TestBuiltInFactoryWorkflow_LeadSynthesisConsumesSpecialistFindings(t *testing.T) {
+	topic := "Compare event sourcing versus state machines"
+	delegated := runPackagedWorkflow(t, map[string]any{"topic": topic, "maxSubagents": 1})
+	withoutSpecialists := runPackagedWorkflow(t, map[string]any{"topic": topic, "maxSubagents": 0})
+	if !delegated.OK || !withoutSpecialists.OK {
+		t.Fatalf("workflow outcomes = delegated %#v, without specialists %#v", delegated.Failure, withoutSpecialists.Failure)
+	}
+
+	delegatedLead := leadSynthesisText(t, delegated)
+	withoutSpecialistsLead := leadSynthesisText(t, withoutSpecialists)
+	if !strings.Contains(delegatedLead, "research-specialist-technical") {
+		t.Fatalf("delegated lead synthesis = %q, want the specialist finding supplied to the lead", delegatedLead)
+	}
+	if delegatedLead == withoutSpecialistsLead {
+		t.Fatalf("lead synthesis = %q, want specialist findings to change the lead result", delegatedLead)
+	}
+}
+
 func TestBuiltInFactoryWorkflow_ConfiguresBreadthAndSpecialistCap(t *testing.T) {
 	outcome := runPackagedWorkflow(t, map[string]any{
 		"topic": "Compare event sourcing versus state machines", "researchDepth": 3, "maxSubagents": 1,
@@ -178,7 +196,7 @@ func TestBuiltInFactoryWorkflow_ConfiguresBreadthAndSpecialistCap(t *testing.T) 
 	if !outcome.OK {
 		t.Fatalf("workflow failure = %#v", outcome.Failure)
 	}
-	if children := completedChildDispatches(outcome.Records); len(children) != 1 || children[0].Label != "research-specialist-technical" {
+	if children := completedSpecialistDispatches(outcome.Records); len(children) != 1 || children[0].Label != "research-specialist-technical" {
 		t.Fatalf("completed child dispatches = %#v, want one technical specialist", children)
 	}
 	assertLeadSynthesis(t, outcome, "Compare event sourcing versus state machines", 3, 1)
@@ -243,6 +261,38 @@ func completedChildDispatches(records []workflowruntime.RuntimeRecord) []*workfl
 	return completed
 }
 
+func completedSpecialistDispatches(records []workflowruntime.RuntimeRecord) []*workflowruntime.ChildDispatchRecord {
+	completed := completedChildDispatches(records)
+	specialists := make([]*workflowruntime.ChildDispatchRecord, 0, len(completed))
+	for _, child := range completed {
+		if child.Label != "lead-research-synthesis" {
+			specialists = append(specialists, child)
+		}
+	}
+	return specialists
+}
+
+func leadSynthesisText(t *testing.T, outcome workflowruntime.Outcome) string {
+	t.Helper()
+	var result map[string]any
+	if err := json.Unmarshal(outcome.Value.JSON, &result); err != nil {
+		t.Fatalf("unmarshal workflow result: %v", err)
+	}
+	synthesis, ok := result["synthesis"].(map[string]any)
+	if !ok {
+		t.Fatalf("synthesis = %#v, want object", result["synthesis"])
+	}
+	leadResult, ok := synthesis["leadResult"].(map[string]any)
+	if !ok {
+		t.Fatalf("leadResult = %#v, want lead output", synthesis["leadResult"])
+	}
+	text, ok := leadResult["text"].(string)
+	if !ok {
+		t.Fatalf("lead output text = %#v, want string", leadResult["text"])
+	}
+	return text
+}
+
 func assertLeadSynthesis(t *testing.T, outcome workflowruntime.Outcome, topic string, wantDepth, wantSpecialists int) {
 	t.Helper()
 	var result map[string]any
@@ -252,13 +302,15 @@ func assertLeadSynthesis(t *testing.T, outcome workflowruntime.Outcome, topic st
 	if result["topic"] != topic || result["role"] != "lead-researcher" || result["researchDepth"] != float64(wantDepth) {
 		t.Fatalf("workflow result = %#v, want lead synthesis for %q", result, topic)
 	}
-	synthesis, ok := result["synthesis"].(map[string]any)
-	if !ok {
-		t.Fatalf("synthesis = %#v, want object", result["synthesis"])
+	if !strings.Contains(leadSynthesisText(t, outcome), topic) {
+		t.Fatalf("lead synthesis = %q, want topic %q", leadSynthesisText(t, outcome), topic)
 	}
-	findings, ok := synthesis["specialistFindings"].([]any)
-	if !ok || len(findings) != wantSpecialists {
-		t.Fatalf("specialistFindings = %#v, want %d findings", synthesis["specialistFindings"], wantSpecialists)
+	children := completedChildDispatches(outcome.Records)
+	if len(children) != wantSpecialists+1 {
+		t.Fatalf("completed child dispatches = %#v, want %d specialists plus lead", children, wantSpecialists)
+	}
+	if children[len(children)-1].Label != "lead-research-synthesis" {
+		t.Fatalf("last dispatch label = %q, want lead-research-synthesis", children[len(children)-1].Label)
 	}
 	execution, ok := result["execution"].(map[string]any)
 	if !ok || execution["modelProvider"] != "CODEX" || execution["model"] != "gpt-5" || execution["reasoningEffort"] != "medium" {

@@ -260,10 +260,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   selectable model and reasoning values with the package `defaultPolicy`
   allowlists before specialist dispatch can begin.
 - Packaged JavaScript workflows can use `parallel([...])` with literal
-  `agent.run` specifications for bounded specialist dispatches. Keep the
-  factory `defaultPolicy.maxAgents` and `concurrency` explicit, and prove both
-  a no-delegation completion and completed child-dispatch synthesis through the
-  materialized workflow runtime.
+  `agent.run` specifications for bounded specialist dispatches, followed by a
+  lead `agent.run` whose computed prompt consumes their completed outputs.
+  Computed supported agent fields are runtime-normalized and policy-validated
+  before dispatch; literal non-string fields remain a source-validation error.
+  Keep the factory `defaultPolicy.maxAgents` and `concurrency` explicit (the
+  lead consumes one total dispatch slot in addition to any specialists), and
+  prove both a no-delegation completion and specialist-informed lead synthesis
+  through the materialized workflow runtime.
 - Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
   approved compatibility-only command metadata belongs in
   `contracts/cli/deprecated-commands.json`, while its classification, successor,

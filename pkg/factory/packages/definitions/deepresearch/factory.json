@@ -127,7 +127,7 @@
       },
       "defaultPolicy": {
         "mode": "READ_ONLY",
-        "maxAgents": 2,
+        "maxAgents": 3,
         "concurrency": 2,
         "maxDepth": 1,
         "maxRetries": 0,
