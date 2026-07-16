@@ -43,6 +43,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -4984,5 +4985,124 @@ func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.
 	}
 	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
 		t.Fatalf("forwarded request = %#v", invoker.request)
+	}
+}
+
+func TestInvokeJavaScriptFactorySession_UsesDurableResultAndTypedArguments(t *testing.T) {
+	t.Parallel()
+	requestID := "deep-research-invocation-001"
+	service := &FactoryService{durableExecution: factorysessionexecution.NewFakeService(factorysessionexecution.WithFakeScenarios(factorysessionexecution.FakeScenario{
+		ID:        "deep-research",
+		RequestID: requestID,
+		Session: factorysessionexecution.SessionReadResult{
+			SessionID: "dur-sess-deep-research-001",
+			Status:    factorysessionexecution.LifecycleStatusSucceeded,
+		},
+		Result: factorysessionexecution.ResultReadResult{
+			SessionID: "dur-sess-deep-research-001", SessionStatus: factorysessionexecution.LifecycleStatusSucceeded,
+			ResultStatus:  factorysessionexecution.ResultStatusFinal,
+			PrimaryResult: json.RawMessage(`[{"type":"text","text":"Synthesized research result"}]`),
+		},
+	}))}
+	result, err := service.invokeJavaScriptFactorySession(context.Background(), "~default", deepResearchInvocationConfig(), factoryapi.InvocationRequest{
+		RequestId: &requestID,
+		Args:      &map[string]any{"topic": "event sourcing", "researchDepth": "3", "maxSubagents": "1"},
+	})
+	if err != nil {
+		t.Fatalf("invoke JavaScript factory session: %v", err)
+	}
+	if result.Status != factoryapi.InvocationTerminalStatusCompleted || result.SessionID != "dur-sess-deep-research-001" {
+		t.Fatalf("result = %#v, want completed durable-session result", result)
+	}
+	if len(result.PrimaryResult) != 1 || result.PrimaryResult[0].Text != "Synthesized research result" {
+		t.Fatalf("primary result = %#v", result.PrimaryResult)
+	}
+}
+
+func TestJavaScriptInvocationArgs_CoercesSchemaTypedSignatureArguments(t *testing.T) {
+	t.Parallel()
+	resolved, err := sessionInvocationInputForTest(deepResearchInvocationConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	args, err := javascriptInvocationArgs(deepResearchInvocationConfig(), resolved)
+	if err != nil {
+		t.Fatalf("javascriptInvocationArgs: %v", err)
+	}
+	if depth, ok := args["researchDepth"].(int); !ok || depth != 3 {
+		t.Fatalf("researchDepth = %#v, want int(3)", args["researchDepth"])
+	}
+	if limit, ok := args["maxSubagents"].(int); !ok || limit != 1 {
+		t.Fatalf("maxSubagents = %#v, want int(1)", args["maxSubagents"])
+	}
+}
+
+func TestCoerceJavaScriptArgument_ValidatesDeclaredScalarTypes(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		value      string
+		schemaType string
+		want       any
+		wantErr    string
+	}{
+		{name: "number", value: "1.5", schemaType: "number", want: 1.5},
+		{name: "boolean", value: "true", schemaType: "boolean", want: true},
+		{name: "invalid integer", value: "three", schemaType: "integer", wantErr: "argument \"researchDepth\" must be an integer"},
+		{name: "invalid number", value: "one", schemaType: "number", wantErr: "argument \"researchDepth\" must be a number"},
+		{name: "invalid boolean", value: "yes", schemaType: "boolean", wantErr: "argument \"researchDepth\" must be a boolean"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := coerceJavaScriptArgument("researchDepth", tt.value, tt.schemaType)
+			if tt.wantErr != "" {
+				if err == nil || err.Error() != tt.wantErr {
+					t.Fatalf("coerceJavaScriptArgument() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("coerceJavaScriptArgument() error = %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("coerceJavaScriptArgument() = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestJavaScriptInvocationResult_TimesOutWithoutDurableResult(t *testing.T) {
+	t.Parallel()
+	result, err := javaScriptInvocationResult("request-1", factorysessionexecution.SyncStartResult{
+		AsyncStartResult: factorysessionexecution.AsyncStartResult{SessionID: "session-1"},
+		SyncOutcome:      factorysessionexecution.SyncOutcomeTimedOut,
+	})
+	if err != nil {
+		t.Fatalf("javaScriptInvocationResult() error = %v", err)
+	}
+	if result.Status != factoryapi.InvocationTerminalStatusTimedOut || result.ErrorCode != string(factoryapi.INVOCATIONTIMEDOUT) {
+		t.Fatalf("result = %#v, want timed-out invocation diagnostic", result)
+	}
+}
+
+func sessionInvocationInputForTest(cfg *interfaces.FactoryConfig) (*workinvocation.NormalizedArguments, error) {
+	resolved, err := sessioninvocation.ResolveSessionInvocationInput(cfg, factoryapi.InvocationRequest{
+		Args: &map[string]any{"topic": "event sourcing", "researchDepth": "3", "maxSubagents": "1"},
+	})
+	return resolved.NormalizedArguments, err
+}
+
+func deepResearchInvocationConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		Name: "@you/deep-research",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+			{Name: "topic", Required: true, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}}},
+			{Name: "researchDepth", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
+			{Name: "maxSubagents", Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "NAMED"}}},
+		}},
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{Kind: interfaces.OrchestratorKindJavaScript, JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+			InlineSource: &interfaces.FactoryOrchestratorJavaScriptInlineSource{Inline: `meta({ name: "deep-research", version: 1 }); final("done");`},
+			ArgsSchema:   json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"},"researchDepth":{"type":"integer"},"maxSubagents":{"type":"integer"}}}`),
+		}},
 	}
 }

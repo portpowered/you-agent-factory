@@ -1,4 +1,5 @@
 bin/
+.artifacts/
 .playwright-mcp/
 tests/adhoc/.playwright-mcp/
 .DS_Store

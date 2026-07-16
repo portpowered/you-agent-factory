@@ -1,6 +1,7 @@
 package workflowsource
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,11 +19,13 @@ const (
 )
 
 type lookupCandidate struct {
-	stage     LookupStage
-	sourceRef string
-	filePath  string
-	content   string
-	agents    map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	stage         LookupStage
+	sourceRef     string
+	filePath      string
+	content       string
+	agents        map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	argsSchema    json.RawMessage
+	defaultPolicy json.RawMessage
 }
 
 func lookupWorkflowByName(ctx Context, name string, allowFactoryLookup bool) (Resolution, bool) {
@@ -146,10 +149,12 @@ func factoryWorkflowCandidate(factoryName, factoryDir string, jsCfg *interfaces.
 	if jsCfg.InlineSource != nil && strings.TrimSpace(jsCfg.InlineSource.Inline) != "" {
 		content := jsCfg.InlineSource.Inline
 		return lookupCandidate{
-			stage:     LookupStageNamedJavaScript,
-			sourceRef: fmt.Sprintf("factory:%s:inline", factoryName),
-			content:   content,
-			agents:    jsCfg.Agents,
+			stage:         LookupStageNamedJavaScript,
+			sourceRef:     fmt.Sprintf("factory:%s:inline", factoryName),
+			content:       content,
+			agents:        jsCfg.Agents,
+			argsSchema:    append(json.RawMessage(nil), jsCfg.ArgsSchema...),
+			defaultPolicy: append(json.RawMessage(nil), jsCfg.DefaultPolicy...),
 		}, true
 	}
 
@@ -163,11 +168,13 @@ func factoryWorkflowCandidate(factoryName, factoryDir string, jsCfg *interfaces.
 		return lookupCandidate{}, false
 	}
 	return lookupCandidate{
-		stage:     LookupStageNamedJavaScript,
-		sourceRef: fmt.Sprintf("factory:%s:%s", factoryName, filepath.ToSlash(sourceRef)),
-		filePath:  filepath.Join(factoryDir, filepath.FromSlash(sourceRef)),
-		content:   content,
-		agents:    jsCfg.Agents,
+		stage:         LookupStageNamedJavaScript,
+		sourceRef:     fmt.Sprintf("factory:%s:%s", factoryName, filepath.ToSlash(sourceRef)),
+		filePath:      filepath.Join(factoryDir, filepath.FromSlash(sourceRef)),
+		content:       content,
+		agents:        jsCfg.Agents,
+		argsSchema:    append(json.RawMessage(nil), jsCfg.ArgsSchema...),
+		defaultPolicy: append(json.RawMessage(nil), jsCfg.DefaultPolicy...),
 	}, true
 }
 
@@ -379,6 +386,8 @@ func resolutionFromCandidate(requestKind Kind, requestValue string, candidate lo
 		Dialect:          dialectForLoaded(loaded),
 		Content:          content,
 		Agents:           candidate.agents,
+		ArgsSchema:       append(json.RawMessage(nil), candidate.argsSchema...),
+		DefaultPolicy:    append(json.RawMessage(nil), candidate.defaultPolicy...),
 		Found:            true,
 	}
 }

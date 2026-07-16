@@ -45,7 +45,7 @@ func initializeWorkersSchedulerForTest(svc *FactoryService) {
 	} else {
 		cfg, _ = ConfigWithWorkerApplication(cfg)
 	}
-	svc.workersScheduler = NewWorkersSchedulerService(cfg, svc.clock, svc.logger, svc.hostedWorkers)
+	svc.workersScheduler = workersservice.NewWorkersSchedulerService(workersSchedulerServiceConfig(cfg, svc.clock, svc.logger, svc.hostedWorkers))
 }
 
 func TestFactoryService_StartLiveRuntimeSidecars_RequiresInitializedWorkerSidecarOwner(t *testing.T) {

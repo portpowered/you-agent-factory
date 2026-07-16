@@ -122,10 +122,20 @@ func (a *sourceAnalyzer) validateAgentRunCall(call *js.CallExpr) {
 			a.addIssue(shapeIssueCode("agent.run"), `agent.run() requires an object argument with a string "prompt" property`, call)
 			continue
 		}
-		if found && !isStringLiteral(value) {
-			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string literal`, field), call)
+		if found && !isAgentRunStringValue(value) {
+			a.addIssue(shapeIssueCode("agent.run"), fmt.Sprintf(`agent.run() requires %q to be a string value`, field), call)
 		}
 	}
+}
+
+// Agent request fields may be computed from invocation arguments and completed
+// child results. Runtime normalizes and policy-validates their resolved string
+// values before dispatch; literal non-strings remain a static validation error.
+func isAgentRunStringValue(value js.IExpr) bool {
+	if isLiteralExpr(value) {
+		return isStringLiteral(value)
+	}
+	return true
 }
 
 func staticPropertyName(property js.Property) (string, bool) {
