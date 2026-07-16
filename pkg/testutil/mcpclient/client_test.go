@@ -262,6 +262,17 @@ func (r *frameRecorder) frames() [][]byte {
 	return append([][]byte(nil), r.recorded...)
 }
 
+func (r *frameRecorder) responseCount() int {
+	count := 0
+	for _, encoded := range r.frames() {
+		var frame rpcFrame
+		if json.Unmarshal(encoded, &frame) == nil && frame.ID != nil && frame.Method == "" {
+			count++
+		}
+	}
+	return count
+}
+
 type recordingWriter struct {
 	destination io.WriteCloser
 	recorder    *frameRecorder
@@ -277,12 +288,20 @@ func (w *recordingWriter) Close() error { return w.destination.Close() }
 type recordingReader struct {
 	source   io.ReadCloser
 	recorder *frameRecorder
+	gate     <-chan struct{}
 }
 
 func (r *recordingReader) Read(data []byte) (int, error) {
 	n, err := r.source.Read(data)
 	if n > 0 {
 		r.recorder.record(data[:n])
+		if r.recorder.responseCount() > 1 {
+			select {
+			case <-r.gate:
+			case <-time.After(testTimeout):
+				return 0, context.DeadlineExceeded
+			}
+		}
 	}
 	return n, err
 }
