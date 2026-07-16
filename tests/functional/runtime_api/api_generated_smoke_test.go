@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -464,6 +465,9 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
+	_ = stream.next(5 * time.Second) // RUN_REQUEST
+	_ = stream.next(5 * time.Second) // INITIAL_STRUCTURE_REQUEST
 
 	firstWorkID := "work-generated-api-batch-first"
 	secondWorkID := "work-generated-api-batch-second"
@@ -495,6 +499,10 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 			t.Fatalf("PUT /work-requests works[%d] = %#v, want %#v", i, work, wantWorks[i])
 		}
 	}
+	replayed := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
+	if !reflect.DeepEqual(replayed, resp) {
+		t.Fatalf("replayed PUT /work-requests response = %#v, want original %#v", replayed, resp)
+	}
 
 	items := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
 	for _, item := range items {
@@ -502,31 +510,101 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 			t.Fatalf("generated batch work %s work type = %q, want task", stringPointerValue(item.WorkId), stringPointerValue(item.WorkTypeName))
 		}
 	}
+	assertPublicBatchDurableOutcomes(t, server.URL(), firstWorkID, secondWorkID)
+	assertPublicBatchDependencyAndIdempotency(t, stream, request.RequestId, firstWorkID, secondWorkID)
+}
 
-	snapshot := server.GetEngineStateSnapshot(t)
-	var firstSeen bool
-	var secondSeen bool
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil {
-			continue
-		}
-		switch token.Color.WorkID {
-		case firstWorkID:
-			firstSeen = true
-		case secondWorkID:
-			secondSeen = true
-			if len(token.Color.Relations) != 1 {
-				t.Fatalf("second runtime relations = %d, want 1", len(token.Color.Relations))
-			}
-			relation := token.Color.Relations[0]
-			if relation.TargetWorkID != firstWorkID || relation.RequiredState != "complete" {
-				t.Fatalf("second runtime relation = %#v, want dependency on first completion", relation)
-			}
+func assertPublicBatchDurableOutcomes(t *testing.T, baseURL, firstWorkID, secondWorkID string) {
+	t.Helper()
+
+	workList := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	counts := map[string]int{}
+	for _, work := range workList.Results {
+		if workID := stringPointerValue(work.WorkId); workID == firstWorkID || workID == secondWorkID {
+			counts[workID]++
 		}
 	}
-	if !firstSeen || !secondSeen {
-		t.Fatalf("runtime snapshot missing generated API batch tokens: first=%v second=%v", firstSeen, secondSeen)
+	if counts[firstWorkID] != 1 || counts[secondWorkID] != 1 {
+		t.Fatalf("public durable batch work counts = %#v, want one outcome for each batch work", counts)
 	}
+}
+
+func assertPublicBatchDependencyAndIdempotency(
+	t *testing.T,
+	stream *factoryEventHTTPStream,
+	requestID string,
+	firstWorkID string,
+	secondWorkID string,
+) {
+	t.Helper()
+
+	requestEvents := 0
+	relationEvents := 0
+	firstTerminalSequence := -1
+	secondDispatchSequence := -1
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		event := stream.next(time.Until(deadline))
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkRequest:
+			if support.StringPointerValue(event.Context.RequestId) == requestID {
+				requestEvents++
+				payload, err := event.Payload.AsWorkRequestEventPayload()
+				if err != nil {
+					t.Fatalf("decode public WORK_REQUEST event: %v", err)
+				}
+				if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch || len(support.FactoryWorksValue(payload.Works)) != 2 {
+					t.Fatalf("public WORK_REQUEST payload = %#v, want two-work FACTORY_REQUEST_BATCH", payload)
+				}
+			}
+		case factoryapi.FactoryEventTypeRelationshipChangeRequest:
+			if support.StringPointerValue(event.Context.RequestId) == requestID {
+				relationEvents++
+				payload, err := event.Payload.AsRelationshipChangeRequestEventPayload()
+				if err != nil {
+					t.Fatalf("decode public RELATIONSHIP_CHANGE_REQUEST event: %v", err)
+				}
+				if payload.Relation.Type != factoryapi.RelationTypeDependsOn || payload.Relation.SourceWorkName != "second" || support.StringPointerValue(payload.Relation.TargetWorkId) != firstWorkID {
+					t.Fatalf("public dependency relation = %#v, want second DEPENDS_ON first", payload.Relation)
+				}
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err == nil && payload.Outcome == factoryapi.WorkOutcomeAccepted && publicEventWorkIDsContain(event.Context.WorkIds, firstWorkID) {
+				firstTerminalSequence = event.Context.Sequence
+			}
+		case factoryapi.FactoryEventTypeDispatchRequest:
+			payload, err := event.Payload.AsDispatchRequestEventPayload()
+			if err == nil && publicDispatchInputsContainWork(payload, secondWorkID) {
+				secondDispatchSequence = event.Context.Sequence
+			}
+		}
+		if requestEvents == 1 && relationEvents == 1 && firstTerminalSequence >= 0 && secondDispatchSequence > firstTerminalSequence {
+			return
+		}
+	}
+	t.Fatalf("public batch events = requests:%d relations:%d first-terminal:%d second-dispatch:%d; want one request, one relation, and dependency ordering", requestEvents, relationEvents, firstTerminalSequence, secondDispatchSequence)
+}
+
+func publicDispatchInputsContainWork(payload factoryapi.DispatchRequestEventPayload, workID string) bool {
+	for _, input := range payload.Inputs {
+		if input.WorkId == workID {
+			return true
+		}
+	}
+	return false
+}
+
+func publicEventWorkIDsContain(workIDs *[]string, want string) bool {
+	if workIDs == nil {
+		return false
+	}
+	for _, workID := range *workIDs {
+		if workID == want {
+			return true
+		}
+	}
+	return false
 }
 
 func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
