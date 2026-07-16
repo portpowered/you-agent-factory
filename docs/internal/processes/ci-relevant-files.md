@@ -42,3 +42,6 @@
   a failed CI result has a direct local rerun. In `pwsh` summary steps, write
   expanded GitHub expressions as plain text rather than surrounding them with
   PowerShell backticks, which can escape the closing quote after expansion.
+  Compiled-binary release-smoke commands must use a named timeout that leaves
+  room for Windows process startup and teardown; keep service-readiness bounds
+  separate so a slow command cannot mask a service startup regression.
