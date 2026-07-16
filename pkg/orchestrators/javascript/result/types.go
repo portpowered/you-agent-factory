@@ -61,6 +61,15 @@ type LiveSessionResult struct {
 	ResultArtifactRef *interfaces.FactoryArtifactRef
 }
 
+// PartialSessionResult is the transport-independent checkpoint-backed read
+// projection for one live JavaScript Factory Session.
+type PartialSessionResult struct {
+	SessionID                string
+	Phase                    string
+	CheckpointRefs           []interfaces.FactorySessionJavaScriptCheckpointEventRef
+	PartialResultArtifactRef *interfaces.FactoryArtifactRef
+}
+
 // ResultStatus describes customer-visible result availability for one
 // JavaScript Factory Session projection.
 type ResultStatus string

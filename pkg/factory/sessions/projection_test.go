@@ -766,11 +766,11 @@ func TestProjectSessionResultAndPartialResult_ReferenceCheckpointArtifactsOnly(t
 	}
 
 	result := ProjectSessionResult("session-js", ctx, store)
-	if result.ResultArtifactRef == nil || result.ResultArtifactRef.Id != "artifact-ckpt-1" {
+	if result.ResultArtifactRef == nil || result.ResultArtifactRef.ID != "artifact-ckpt-1" {
 		t.Fatalf("result artifact ref = %#v", result.ResultArtifactRef)
 	}
 	partial := ProjectSessionPartialResult("session-js", ctx, store)
-	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.Id != "artifact-ckpt-1" {
+	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.ID != "artifact-ckpt-1" {
 		t.Fatalf("partial result artifact ref = %#v", partial.PartialResultArtifactRef)
 	}
 	if partial.Phase != "review" {

@@ -330,6 +330,13 @@ models. Factory Session callers may assemble the domain input, but generated
 status, checkpoint, artifact, and Work content values must not flow back into
 the orchestrator result package.
 
+Checkpoint-backed live and partial result reads follow that boundary too.
+`pkg/factory/sessions.ProjectSessionResult` returns the JavaScript result
+owner's detached live projection, while `ProjectSessionPartialResult` returns
+its detached checkpoint-backed partial projection. Convert those values through
+`pkg/transports/mapping` only when the control plane assembles generated public
+responses.
+
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
 Factory-owned `FactoryArtifact` metadata, including capture and redaction

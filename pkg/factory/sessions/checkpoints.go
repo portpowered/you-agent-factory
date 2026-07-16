@@ -8,8 +8,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -141,7 +139,7 @@ func ProjectSessionResult(
 	sessionID string,
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
-) factoryapi.FactorySessionLiveResult {
+) workflowresult.LiveSessionResult {
 	runtime := ProjectRuntimeContract(ctx)
 	input := workflowresult.SessionResultInput{
 		SessionID: sessionID,
@@ -163,7 +161,7 @@ func ProjectSessionResult(
 	if input.ResultArtifact == nil {
 		input.ResultArtifact = finalResultArtifactRef(input.Artifacts)
 	}
-	return apisurface.BuildWorkflowSessionLiveResult(input)
+	return workflowresult.BuildLiveSessionResult(input)
 }
 
 func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) *interfaces.FactoryArtifactRef {
@@ -226,21 +224,21 @@ func ProjectSessionPartialResult(
 	sessionID string,
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
-) factoryapi.FactorySessionPartialResult {
+) workflowresult.PartialSessionResult {
 	runtime := ProjectRuntimeContract(ctx)
 	phase := ""
 	if runtime.JavaScript != nil && runtime.JavaScript.Phase != nil {
 		phase = strings.TrimSpace(*runtime.JavaScript.Phase)
 	}
-	result := factoryapi.FactorySessionPartialResult{
-		SessionId: sessionID,
+	result := workflowresult.PartialSessionResult{
+		SessionID: sessionID,
 		Phase:     phase,
 	}
 	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {
-		publicRefs := apisurface.WorkflowCheckpointRefsToAPI(checkpointRefs)
-		result.CheckpointRefs = &publicRefs
+		result.CheckpointRefs = checkpointRefs
 		if latest := checkpointRefs[len(checkpointRefs)-1]; latest.ArtifactRef != nil {
-			result.PartialResultArtifactRef = apisurface.WorkflowArtifactRefToAPI(latest.ArtifactRef)
+			copied := *latest.ArtifactRef
+			result.PartialResultArtifactRef = &copied
 		}
 	}
 	return result

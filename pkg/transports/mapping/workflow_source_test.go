@@ -75,6 +75,21 @@ func TestWorkflowSessionResultMappingPreservesDomainProjection(t *testing.T) {
 
 	live := apisurface.BuildWorkflowSessionLiveResult(input)
 	assertLiveWorkflowResult(t, live, timestamp)
+	partial := apisurface.WorkflowSessionPartialResultToAPI(workflowresult.PartialSessionResult{
+		SessionID:                input.SessionID,
+		Phase:                    "review",
+		CheckpointRefs:           input.CheckpointRefs,
+		PartialResultArtifactRef: input.ResultArtifact,
+	})
+	if partial.SessionId != input.SessionID || partial.Phase != "review" {
+		t.Fatalf("partial result = %#v", partial)
+	}
+	if partial.CheckpointRefs == nil || len(*partial.CheckpointRefs) != 1 || (*partial.CheckpointRefs)[0].Id != "checkpoint-1" {
+		t.Fatalf("partial checkpoint refs = %#v", partial.CheckpointRefs)
+	}
+	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.Id != "artifact-result-1" {
+		t.Fatalf("partial artifact ref = %#v", partial.PartialResultArtifactRef)
+	}
 	assertDurableWorkflowResult(t, input)
 }
 

@@ -103,7 +103,7 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 		t.Fatalf("artifact ids differ: %q vs %q", (*durableResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
 	}
 	liveResult := factorysessions.ProjectSessionResult(sessionID, ctx, factorysessions.NewJavaScriptCheckpointStore())
-	if liveResult.ResultArtifactRef == nil || liveResult.ResultArtifactRef.Id != (*eventPayload.ArtifactIds)[0] {
+	if liveResult.ResultArtifactRef == nil || liveResult.ResultArtifactRef.ID != (*eventPayload.ArtifactIds)[0] {
 		t.Fatalf("live result artifact = %#v, want id %q", liveResult.ResultArtifactRef, (*eventPayload.ArtifactIds)[0])
 	}
 }

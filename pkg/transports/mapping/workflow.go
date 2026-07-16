@@ -10,7 +10,12 @@ import (
 
 // BuildWorkflowSessionLiveResult projects the live terminal session result read shape.
 func BuildWorkflowSessionLiveResult(input workflowresult.SessionResultInput) factoryapi.FactorySessionLiveResult {
-	result := workflowresult.BuildLiveSessionResult(input)
+	return WorkflowSessionLiveResultToAPI(workflowresult.BuildLiveSessionResult(input))
+}
+
+// WorkflowSessionLiveResultToAPI maps one JavaScript result-owner projection
+// to the generated live Factory Session result contract.
+func WorkflowSessionLiveResultToAPI(result workflowresult.LiveSessionResult) factoryapi.FactorySessionLiveResult {
 	response := factoryapi.FactorySessionLiveResult{
 		SessionId: result.SessionID,
 		Status:    factoryapi.FactorySessionStatus(result.Status),
@@ -19,6 +24,21 @@ func BuildWorkflowSessionLiveResult(input workflowresult.SessionResultInput) fac
 		response.CheckpointRefs = &refs
 	}
 	response.ResultArtifactRef = WorkflowArtifactRefToAPI(result.ResultArtifactRef)
+	return response
+}
+
+// WorkflowSessionPartialResultToAPI maps one JavaScript result-owner partial
+// projection to the generated live Factory Session partial-result contract.
+func WorkflowSessionPartialResultToAPI(result workflowresult.PartialSessionResult) factoryapi.FactorySessionPartialResult {
+	response := factoryapi.FactorySessionPartialResult{
+		SessionId: result.SessionID,
+		Phase:     result.Phase,
+	}
+	if len(result.CheckpointRefs) > 0 {
+		refs := WorkflowCheckpointRefsToAPI(result.CheckpointRefs)
+		response.CheckpointRefs = &refs
+	}
+	response.PartialResultArtifactRef = WorkflowArtifactRefToAPI(result.PartialResultArtifactRef)
 	return response
 }
 

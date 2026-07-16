@@ -36,7 +36,8 @@ func GetLiveFactorySessionResult(
 	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
 		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
 	}
-	return factorysessions.ProjectSessionResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session)), nil
+	result := factorysessions.ProjectSessionResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session))
+	return apisurface.WorkflowSessionLiveResultToAPI(result), nil
 }
 
 // GetLiveFactorySessionPartialResult returns checkpoint-backed partial JavaScript results.
@@ -59,5 +60,6 @@ func GetLiveFactorySessionPartialResult(
 	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
 		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
 	}
-	return factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session)), nil
+	result := factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session))
+	return apisurface.WorkflowSessionPartialResultToAPI(result), nil
 }
