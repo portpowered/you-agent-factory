@@ -13,6 +13,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -429,10 +430,10 @@ func (f compatibilityFactorySave) Save(ctx context.Context, sessionID string, mo
 }
 
 type compatibilityInvocationAPI struct {
-	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+	invoke func(context.Context, string, sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error)
 }
 
-func (f compatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+func (f compatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return f.invoke(ctx, sessionID, request)
 }
 
@@ -480,7 +481,7 @@ func TestHostCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
 		}
 		return factoryapi.Factory{}, sentinel
 	}}
-	host.sessionInvoker = compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	host.sessionInvoker = compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 		calls["invocation"]++
 		if gotCtx != ctx || sessionID != "session-1" {
 			t.Fatalf("invocation args = (%v, %q, %#v)", gotCtx, sessionID, request)
@@ -534,7 +535,7 @@ func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1" && mode == factoryapi.FactorySaveModeReplaceCurrent, "factory-definition args = (%v, %q, %q)", gotCtx, sessionID, mode)
 			return factoryapi.Factory{}, validation
 		}},
-		sessionInvoker: compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		sessionInvoker: compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 			calls["invocation"]++
 			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1", "invocation args = (%v, %q)", gotCtx, sessionID)
 			return wantInvocation, nil

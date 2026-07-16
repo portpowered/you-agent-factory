@@ -158,7 +158,7 @@ var _ apisurface.SessionAPISurface = (*Host)(nil)
 // InvocationAPI returns the canonical invocation collaborator used by the
 // compatibility facade and composed HTTP surface.
 func (h *Host) InvocationAPI() apisurface.InvocationAPI {
-	return h.sessionInvocationOwner()
+	return sessionInvocationAPI{owner: h.sessionInvocationOwner()}
 }
 
 // DurableExecutionAPI returns the canonical durable-start collaborator used by

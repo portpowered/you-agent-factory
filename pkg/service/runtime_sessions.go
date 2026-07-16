@@ -2173,7 +2173,7 @@ func (fs *FactoryService) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
-	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
+	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, factorysession.InvocationRequestFromAPI(request))
 }
 
 func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvoker {

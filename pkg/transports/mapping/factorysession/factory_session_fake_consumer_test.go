@@ -129,3 +129,35 @@ func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTer
 		})
 	}
 }
+
+func TestInvocationRequestFromAPI_PreservesPublicInputAtDomainBoundary(t *testing.T) {
+	requestID := "request-1"
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	timeoutMillis := int64(2500)
+	part := factoryapi.WorkContentPart{}
+	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
+		Type: factoryapi.WorkContentPartTypeText,
+		Text: "hello",
+	}); err != nil {
+		t.Fatalf("FromWorkTextContentPart: %v", err)
+	}
+	content := factoryapi.WorkContent{part}
+	args := map[string]any{"prompt": "hello"}
+
+	mapped := factorysession.InvocationRequestFromAPI(factoryapi.InvocationRequest{
+		Args: &args, Content: &content, RequestId: &requestID,
+		SourceKind: &sourceKind, TimeoutMillis: &timeoutMillis,
+	})
+	args["prompt"] = "mutated"
+	requestID = "mutated"
+	timeoutMillis = 1
+	if !mapped.ContentProvided || len(mapped.Content) != 1 || mapped.Content[0].Text != "hello" {
+		t.Fatalf("mapped content = %#v, provided=%v", mapped.Content, mapped.ContentProvided)
+	}
+	if mapped.RequestID == nil || *mapped.RequestID != "request-1" || mapped.SourceKind == nil || string(*mapped.SourceKind) != "text" {
+		t.Fatalf("mapped identity/source = %#v", mapped)
+	}
+	if mapped.Args == nil || (*mapped.Args)["prompt"] != "hello" || mapped.TimeoutMillis == nil || *mapped.TimeoutMillis != 2500 {
+		t.Fatalf("mapped args/timeout = %#v", mapped)
+	}
+}

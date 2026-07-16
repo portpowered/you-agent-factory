@@ -389,3 +389,12 @@ returns the Factory Session-owned `SyncPreflightResult`; only
 identity to the generated HTTP response. Runtime hosts should expose
 `FactoryEventHistory.CanonicalEvents` to this path rather than round-tripping
 history through a generated event union.
+
+Factory Session invocation input follows the same direction. The invocation
+owner accepts its detached `InvocationRequest`, including canonical Work
+content, structured arguments, request identity, source kind, and timeout.
+Service and runtime-host compatibility adapters convert generated
+`InvocationRequest` values through `pkg/transports/mapping/factorysession`
+before invoking domain normalization, validation, submission, waiting, or
+telemetry policy; generated request and Work-content models must not enter the
+Factory Session invocation owner.

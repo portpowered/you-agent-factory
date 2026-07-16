@@ -4958,7 +4958,7 @@ func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegraded
 type forwardingSessionInvoker struct {
 	ctx       context.Context
 	sessionID string
-	request   factoryapi.InvocationRequest
+	request   sessioninvocation.InvocationRequest
 	result    sessioninvocation.FactoryInvocationResult
 	err       error
 }
@@ -4966,7 +4966,7 @@ type forwardingSessionInvoker struct {
 func (s *forwardingSessionInvoker) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.InvocationRequest,
+	request sessioninvocation.InvocationRequest,
 ) (sessioninvocation.FactoryInvocationResult, error) {
 	s.ctx = ctx
 	s.sessionID = sessionID
@@ -4997,7 +4997,7 @@ func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.
 	if invoker.ctx != ctx || invoker.sessionID != "session-1" {
 		t.Fatalf("forwarded ctx/session = %#v/%q", invoker.ctx, invoker.sessionID)
 	}
-	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
+	if invoker.request.RequestID == nil || *invoker.request.RequestID != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
 		t.Fatalf("forwarded request = %#v", invoker.request)
 	}
 }

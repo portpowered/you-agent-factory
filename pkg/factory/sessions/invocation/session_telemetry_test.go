@@ -64,9 +64,9 @@ func TestSessionOwnerTelemetry_NormalizationFailurePreservesStableLabels(t *test
 		Telemetry: recording.telemetry(),
 	})
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		Args: &map[string]any{},
-	})
+	}))
 	var argumentErr *workinvocation.ArgumentError
 	if !errors.As(err, &argumentErr) || argumentErr.Code != workinvocation.ArgumentErrorCodeMissingRequiredInput {
 		t.Fatalf("error = %v, want %s", err, workinvocation.ArgumentErrorCodeMissingRequiredInput)
@@ -107,9 +107,9 @@ func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
 		Telemetry: recording.telemetry(),
 	})
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		Args: &map[string]any{"apiKey": []any{"super-secret", "second-secret"}},
-	})
+	}))
 	if err == nil {
 		t.Fatal("InvokeFactorySession error = nil, want interpolation failure")
 	}
@@ -147,10 +147,10 @@ func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T
 
 	source := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "do not log this payload")
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		SourceKind: &source,
 		Content:    &content,
-	})
+	}))
 	if err == nil || !strings.Contains(err.Error(), "resolve invocation work type:") {
 		t.Fatalf("InvokeFactorySession error = %v, want wrapped Work-type resolution error", err)
 	}
@@ -370,9 +370,9 @@ func invokePackagedSessionOwner(t *testing.T, owner *SessionOwner) FactoryInvoca
 	t.Helper()
 	source := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "hello")
-	result, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	result, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		SourceKind: &source, Content: &content,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}

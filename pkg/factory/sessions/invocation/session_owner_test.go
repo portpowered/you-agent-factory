@@ -11,6 +11,7 @@ import (
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -47,11 +48,11 @@ func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *
 		},
 	})
 
-	got, err := owner.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{
+	got, err := owner.InvokeFactorySession(ctx, "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		RequestId:  &requestID,
 		SourceKind: &sourceKind,
 		Content:    &content,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
@@ -79,7 +80,7 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	var submitted workdomain.SubmitRequest
 	owner := successfulSessionOwner(cfg, func(request workdomain.SubmitRequest) { submitted = request })
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}})
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}}))
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {
 					return SessionInvocationObservation{}, nil
 				},
 			})
-			if _, err := owner.InvokeFactorySession(context.Background(), "session-1", tt.request); err == nil {
+			if _, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(tt.request)); err == nil {
 				t.Fatal("InvokeFactorySession error = nil, want validation failure")
 			}
 			if submitCalls != 0 {
@@ -148,7 +149,7 @@ func TestSessionOwner_RejectsInterpolationFailureBeforeSubmittingWork(t *testing
 		},
 	})
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}})
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}}))
 	var argumentErr *workinvocation.ArgumentError
 	if !errors.As(err, &argumentErr) || argumentErr.Code != workinvocation.ArgumentErrorCodeInvalidInterpolation {
 		t.Fatalf("error = %v, want INVALID_INTERPOLATION", err)
@@ -174,7 +175,7 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	})
 	sourceKind := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "hello")
-	_, err := owner.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{SourceKind: &sourceKind, Content: &content})
+	_, err := owner.InvokeFactorySession(ctx, "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{SourceKind: &sourceKind, Content: &content}))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
@@ -231,6 +232,21 @@ func sessionOwnerTextContent(t *testing.T, text string) factoryapi.WorkContent {
 		t.Fatalf("build text content: %v", err)
 	}
 	return factoryapi.WorkContent{part}
+}
+
+func sessionOwnerInvocationRequest(request factoryapi.InvocationRequest) InvocationRequest {
+	result := InvocationRequest{
+		Args:            request.Args,
+		Content:         contentcontract.PartsFromGenerated(request.Content),
+		ContentProvided: request.Content != nil,
+		RequestID:       request.RequestId,
+		TimeoutMillis:   request.TimeoutMillis,
+	}
+	if request.SourceKind != nil {
+		sourceKind := InvocationInputSourceKind(*request.SourceKind)
+		result.SourceKind = &sourceKind
+	}
+	return result
 }
 
 func assertSessionOwnerEqual[T comparable](t *testing.T, field string, got, want T) {

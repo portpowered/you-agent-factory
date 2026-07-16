@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
@@ -30,7 +31,21 @@ func (fs *Host) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
-	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
+	return sessionInvocationAPI{owner: fs.sessionInvocationOwner()}.InvokeFactorySession(ctx, sessionID, request)
+}
+
+// sessionInvocationAPI is the bounded transport compatibility adapter for the
+// Factory Session-owned invocation collaborator.
+type sessionInvocationAPI struct {
+	owner sessioninvocation.SessionInvoker
+}
+
+func (a sessionInvocationAPI) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	return a.owner.InvokeFactorySession(ctx, sessionID, factorysession.InvocationRequestFromAPI(request))
 }
 
 func (fs *Host) sessionInvocationOwner() sessioninvocation.SessionInvoker {

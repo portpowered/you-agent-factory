@@ -1426,7 +1426,7 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 	if invoker.ctx != ctx || invoker.sessionID != "session-1" {
 		t.Fatalf("forwarded ctx/session = %#v/%q", invoker.ctx, invoker.sessionID)
 	}
-	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
+	if invoker.request.RequestID == nil || *invoker.request.RequestID != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
 		t.Fatalf("forwarded request = %#v", invoker.request)
 	}
 }

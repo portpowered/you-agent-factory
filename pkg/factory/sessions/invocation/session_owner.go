@@ -7,12 +7,10 @@ import (
 	"os"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -20,13 +18,31 @@ import (
 // structured API argument carrier rather than compatibility content.
 const StructuredArgumentsInputSource workinvocation.InputSourceLabel = "signature_args"
 
+// InvocationInputSourceKind identifies the transport-independent source
+// category supplied for one Factory Session invocation.
+type InvocationInputSourceKind string
+
+const InvocationInputSourceKindText InvocationInputSourceKind = "text"
+
+// InvocationRequest carries one normalized transport request into the Factory
+// Session invocation owner. ContentProvided distinguishes an omitted content
+// field from an explicitly supplied empty content value for validation.
+type InvocationRequest struct {
+	Args            *map[string]any
+	Content         []work.WorkContentPart
+	ContentProvided bool
+	RequestID       *string
+	SourceKind      *InvocationInputSourceKind
+	TimeoutMillis   *int64
+}
+
 // FactoryInvocationResult is the shared domain outcome constructed by the
 // Factory Session invocation owner.
 type FactoryInvocationResult = interfaces.FactoryInvocationResult
 
 // SessionInvoker is the canonical Factory Session invocation boundary.
 type SessionInvoker interface {
-	InvokeFactorySession(context.Context, string, factoryapi.InvocationRequest) (FactoryInvocationResult, error)
+	InvokeFactorySession(context.Context, string, InvocationRequest) (FactoryInvocationResult, error)
 }
 
 // SessionInvocationWaitInput carries the submitted invocation identity and
@@ -85,7 +101,7 @@ func NewSessionOwner(deps SessionOwnerDependencies) *SessionOwner {
 func (o *SessionOwner) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.InvocationRequest,
+	request InvocationRequest,
 ) (FactoryInvocationResult, error) {
 	if o == nil || o.deps.FactoryConfig == nil || o.deps.SubmitWork == nil || o.deps.Observe == nil {
 		return FactoryInvocationResult{}, fmt.Errorf("factory session invocation owner dependencies are unavailable")
@@ -121,7 +137,7 @@ func (o *SessionOwner) InvokeFactorySession(
 		return FactoryInvocationResult{}, err
 	}
 	submitResult, err := o.deps.SubmitWork(ctx, sessionID, work.SubmitRequest{
-		RequestID:           trimmedStringValue(request.RequestId),
+		RequestID:           trimmedStringValue(request.RequestID),
 		WorkTypeID:          workTypeName,
 		Content:             resolved.Content,
 		InvocationArguments: workinvocation.RuntimeInvocationArguments(factoryCfg.InvocationSignature, resolved.NormalizedArguments),
@@ -156,7 +172,7 @@ type ResolvedSessionInvocationInput struct {
 
 // ResolveSessionInvocationInput applies the shared compatibility-content and
 // structured-argument contract used by API and CLI invocation paths.
-func ResolveSessionInvocationInput(cfg *interfaces.FactoryConfig, request factoryapi.InvocationRequest) (ResolvedSessionInvocationInput, error) {
+func ResolveSessionInvocationInput(cfg *interfaces.FactoryConfig, request InvocationRequest) (ResolvedSessionInvocationInput, error) {
 	content, err := sessionInvocationCompatibilityContent(request)
 	if err != nil {
 		return ResolvedSessionInvocationInput{}, err
@@ -220,20 +236,20 @@ func resolveStructuredSessionInvocationInput(
 	return ResolvedSessionInvocationInput{Source: source, NormalizedArguments: &normalized}, nil
 }
 
-func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]work.WorkContentPart, error) {
-	if request.Content == nil {
-		if request.SourceKind != nil && *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+func sessionInvocationCompatibilityContent(request InvocationRequest) ([]work.WorkContentPart, error) {
+	if !request.ContentProvided {
+		if request.SourceKind != nil && *request.SourceKind != InvocationInputSourceKindText {
 			return nil, &interfaces.RequestValidationError{Message: "sourceKind must be text"}
 		}
 		return nil, nil
 	}
-	if request.SourceKind == nil || *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+	if request.SourceKind == nil || *request.SourceKind != InvocationInputSourceKindText {
 		return nil, &interfaces.RequestValidationError{Message: "sourceKind must be text"}
 	}
-	return contentcontract.PartsFromGenerated(request.Content), nil
+	return work.CloneWorkContentParts(request.Content), nil
 }
 
-func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]workinvocation.NamedArgumentInput, error) {
+func sessionInvocationStructuredArgs(request InvocationRequest) ([]workinvocation.NamedArgumentInput, error) {
 	if request.Args == nil {
 		return nil, nil
 	}
@@ -267,7 +283,7 @@ func normalizeSessionInvocationError(err error) error {
 }
 
 // SessionInvocationSourceHint reports a low-cardinality source before full normalization.
-func SessionInvocationSourceHint(request factoryapi.InvocationRequest) workinvocation.InputSourceLabel {
+func SessionInvocationSourceHint(request InvocationRequest) workinvocation.InputSourceLabel {
 	if request.Args != nil {
 		return StructuredArgumentsInputSource
 	}
