@@ -38,7 +38,8 @@ func TestInjectWireCoreReturnsCompleteProcessComposition(t *testing.T) {
 
 	core := InjectWireCore()
 	if core.BuildCLICommand == nil || core.BuildProcessGraph == nil || core.InitializeProcess == nil ||
-		core.BuildMCPExecution == nil || core.BuildSessionExecution == nil || core.BuildModelInvocation == nil {
+		core.BuildMCPExecution == nil || core.BuildSessionExecution == nil || core.BuildModelInvocation == nil ||
+		core.BuildWorkerApplication == nil || core.BuildRunSessionExecution == nil {
 		t.Fatalf("InjectWireCore() returned incomplete composition: %+v", core)
 	}
 	if command := core.BuildCLICommand(cli.RootCommandOptions{}); command == nil || command.Name() != "you" {

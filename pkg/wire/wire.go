@@ -9,7 +9,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+)
+
+var WorkerApplicationSet = wire.NewSet(
+	provideProviderCommandEdge,
+	provideScriptCommandEdge,
+	provideProviderPTYEdge,
+	provideWorkerProviderFactory,
+	provideWorkerScriptFactory,
+	provideWorkerHostedConfig,
+	provideWorkerApplication,
 )
 
 // InjectWireCore is the wireinject entry for the process composition surface.
@@ -21,9 +33,18 @@ func InjectWireCore() WireCore {
 		provideMCPExecutionBuilder,
 		provideSessionExecutionBuilder,
 		provideModelInvocationBuilder,
+		provideWorkerApplicationBuilder,
+		provideRunSessionExecutionBuilder,
 		wire.Struct(new(WireCore), "*"),
 	)
 	return WireCore{}
+}
+
+// InjectWorkerApplication is the wireinject entry for process-selected worker
+// factories and their production or functional side-effect edges.
+func InjectWorkerApplication(logger *zap.Logger, edges FunctionalEdges) (workerapplication.Components, error) {
+	wire.Build(WorkerApplicationSet)
+	return workerapplication.Components{}, nil
 }
 
 // InjectCLICommand is the wireinject entry for the Cobra CLI command tree.

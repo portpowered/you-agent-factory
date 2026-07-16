@@ -58,6 +58,7 @@ type Dependencies struct {
 	BuildSessionExecution sessionexecutioncli.ServiceBuilder
 	BuildModelInvocation  modelscli.InvocationBuilder
 	BuildMCPExecution     wire.MCPExecutionBuilder
+	FunctionalEdges       wire.FunctionalEdges
 }
 
 type processDependencies struct {
@@ -109,11 +110,17 @@ func selectMode(request startupcli.Request) (Mode, SidecarPolicy, error) {
 }
 
 func dependenciesFromWireCore(core wire.WireCore, overrides Dependencies) processDependencies {
+	runtimeMCPGraph := overrides.BuildMCPExecution == nil
 	if overrides.BuildMCPExecution != nil {
 		core.BuildMCPExecution = overrides.BuildMCPExecution
 	}
 	if overrides.BuildSessionExecution != nil {
 		core.BuildSessionExecution = overrides.BuildSessionExecution
+	} else {
+		core.BuildSessionExecution = wire.SessionExecutionBuilderWithEdges(
+			core.BuildWorkerApplication,
+			overrides.FunctionalEdges,
+		)
 	}
 	if overrides.BuildModelInvocation != nil {
 		core.BuildModelInvocation = overrides.BuildModelInvocation
@@ -122,7 +129,13 @@ func dependenciesFromWireCore(core wire.WireCore, overrides Dependencies) proces
 	if graphBuilder == nil {
 		graphBuilder = productionGraphBuilder{
 			buildGraph: core.BuildProcessGraph,
-			buildMCP:   core.BuildMCPExecution,
+			dependencies: wire.ProcessGraphDependencies{
+				BuildMCPExecution:      core.BuildMCPExecution,
+				BuildWorkerApplication: core.BuildWorkerApplication,
+				BuildSessionExecution:  core.BuildRunSessionExecution,
+				FunctionalEdges:        overrides.FunctionalEdges,
+				RuntimeMCPGraph:        runtimeMCPGraph,
+			},
 		}
 	}
 	processInitializer := overrides.Initializer

@@ -27,7 +27,6 @@ import (
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
-	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -76,7 +75,7 @@ func provideRuntimeHostRoot(cfg *runtimehost.Config) (composebridge.Root, error)
 		return composebridge.Root{}, fmt.Errorf("runtime host config is required")
 	}
 	if !cfg.WorkerApplication.Valid() {
-		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		components, err := InjectWorkerApplication(cfg.Logger, FunctionalEdges{})
 		if err != nil {
 			return composebridge.Root{}, fmt.Errorf("construct production worker application: %w", err)
 		}

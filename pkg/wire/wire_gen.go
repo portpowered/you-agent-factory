@@ -11,7 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/workers/application"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // Injectors from wire.go:
@@ -24,14 +26,39 @@ func InjectWireCore() WireCore {
 	mcpExecutionBuilder := provideMCPExecutionBuilder()
 	serviceBuilder := provideSessionExecutionBuilder()
 	invocationBuilder := provideModelInvocationBuilder()
+	workerApplicationBuilder := provideWorkerApplicationBuilder()
+	runSessionExecutionBuilder := provideRunSessionExecutionBuilder()
 	return WireCore{
-		BuildCLICommand:       cliCommandBuilder,
-		BuildProcessGraph:     processGraphBuilder,
-		InitializeProcess:     processInitializer,
-		BuildMCPExecution:     mcpExecutionBuilder,
-		BuildSessionExecution: serviceBuilder,
-		BuildModelInvocation:  invocationBuilder,
+		BuildCLICommand:          cliCommandBuilder,
+		BuildProcessGraph:        processGraphBuilder,
+		InitializeProcess:        processInitializer,
+		BuildMCPExecution:        mcpExecutionBuilder,
+		BuildSessionExecution:    serviceBuilder,
+		BuildModelInvocation:     invocationBuilder,
+		BuildWorkerApplication:   workerApplicationBuilder,
+		BuildRunSessionExecution: runSessionExecutionBuilder,
 	}
+}
+
+// InjectWorkerApplication is the wireinject entry for process-selected worker
+// factories and their production or functional side-effect edges.
+func InjectWorkerApplication(logger *zap.Logger, edges FunctionalEdges) (application.Components, error) {
+	wireProviderCommandEdge := provideProviderCommandEdge(edges)
+	wireProviderPTYEdge, err := provideProviderPTYEdge(edges)
+	if err != nil {
+		return application.Components{}, err
+	}
+	factory, err := provideWorkerProviderFactory(wireProviderCommandEdge, wireProviderPTYEdge)
+	if err != nil {
+		return application.Components{}, err
+	}
+	wireScriptCommandEdge := provideScriptCommandEdge(edges)
+	scriptFactory, err := provideWorkerScriptFactory(wireScriptCommandEdge)
+	if err != nil {
+		return application.Components{}, err
+	}
+	config := provideWorkerHostedConfig(logger, edges)
+	return provideWorkerApplication(factory, scriptFactory, config, wireProviderCommandEdge, wireScriptCommandEdge, edges), nil
 }
 
 // InjectCLICommand is the wireinject entry for the Cobra CLI command tree.

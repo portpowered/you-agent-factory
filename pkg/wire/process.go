@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
+	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
@@ -37,7 +40,7 @@ type ProcessGraphBuilder func(
 	context.Context,
 	startupcli.Request,
 	initializer.ProcessPolicy,
-	MCPExecutionBuilder,
+	ProcessGraphDependencies,
 ) (*initializer.ProcessGraph, error)
 
 // ProcessInitializer starts and owns an already-constructed process graph.
@@ -47,12 +50,14 @@ type ProcessInitializer func(context.Context, *initializer.ProcessGraph) error
 // builders retain request-specific construction boundaries without requiring
 // root to assemble each production dependency independently.
 type WireCore struct {
-	BuildCLICommand       CLICommandBuilder
-	BuildProcessGraph     ProcessGraphBuilder
-	InitializeProcess     ProcessInitializer
-	BuildMCPExecution     MCPExecutionBuilder
-	BuildSessionExecution sessionexecutioncli.ServiceBuilder
-	BuildModelInvocation  modelscli.InvocationBuilder
+	BuildCLICommand          CLICommandBuilder
+	BuildProcessGraph        ProcessGraphBuilder
+	InitializeProcess        ProcessInitializer
+	BuildMCPExecution        MCPExecutionBuilder
+	BuildSessionExecution    sessionexecutioncli.ServiceBuilder
+	BuildModelInvocation     modelscli.InvocationBuilder
+	BuildWorkerApplication   WorkerApplicationBuilder
+	BuildRunSessionExecution RunSessionExecutionBuilder
 }
 
 func provideCLICommandBuilder() CLICommandBuilder {
@@ -60,7 +65,16 @@ func provideCLICommandBuilder() CLICommandBuilder {
 }
 
 func provideProcessGraphBuilder() ProcessGraphBuilder {
-	return BuildProcessGraphWithMCPBuilder
+	return buildProcessGraphFromDependencies
+}
+
+func buildProcessGraphFromDependencies(
+	ctx context.Context,
+	request startupcli.Request,
+	policy initializer.ProcessPolicy,
+	dependencies ProcessGraphDependencies,
+) (*initializer.ProcessGraph, error) {
+	return buildProcessGraphWithDependencies(ctx, request, policy, dependencies, buildProcessApplicationRunner)
 }
 
 func provideProcessInitializer() ProcessInitializer {
@@ -72,11 +86,39 @@ func provideMCPExecutionBuilder() MCPExecutionBuilder {
 }
 
 func provideSessionExecutionBuilder() sessionexecutioncli.ServiceBuilder {
-	return BuildSessionExecutionService
+	return SessionExecutionBuilderWithEdges(InjectWorkerApplication, FunctionalEdges{})
 }
 
 func provideModelInvocationBuilder() modelscli.InvocationBuilder {
 	return BuildModelInvocation
+}
+
+// WorkerApplicationBuilder constructs the process-wide worker factories and
+// side-effect edges selected before runtime construction.
+type WorkerApplicationBuilder func(*zap.Logger, FunctionalEdges) (workerapplication.Components, error)
+
+// RunSessionExecutionBuilder constructs JavaScript Factory Session execution
+// from the same worker application used by the surrounding process graph.
+type RunSessionExecutionBuilder func(
+	context.Context,
+	sessionexecutioncli.ServiceRequest,
+	workerapplication.Components,
+) (sessionexecutioncli.ServiceOwner, error)
+
+// ProcessGraphDependencies are the construction capabilities and functional
+// edges selected by the startup root for one inert process graph.
+type ProcessGraphDependencies struct {
+	BuildMCPExecution      MCPExecutionBuilder
+	BuildWorkerApplication WorkerApplicationBuilder
+	BuildSessionExecution  RunSessionExecutionBuilder
+	FunctionalEdges        FunctionalEdges
+	RuntimeMCPGraph        bool
+}
+
+func provideWorkerApplicationBuilder() WorkerApplicationBuilder { return InjectWorkerApplication }
+
+func provideRunSessionExecutionBuilder() RunSessionExecutionBuilder {
+	return BuildSessionExecutionWithApplication
 }
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
@@ -140,9 +182,8 @@ func buildMCPExecutionService(
 // BuildProcessGraph constructs the concrete application graph selected by the
 // process root without starting transports, sidecars, or runtime loops.
 func BuildProcessGraph(ctx context.Context, request startupcli.Request, policy initializer.ProcessPolicy) (*initializer.ProcessGraph, error) {
-	return buildProcessGraph(
-		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
-		BuildMCPExecutionService, true,
+	return buildProcessGraphWithDependencies(
+		ctx, request, policy, productionProcessGraphDependencies(), buildProcessApplicationRunner,
 	)
 }
 
@@ -155,9 +196,11 @@ func BuildProcessGraphWithFunctionalEdges(
 	policy initializer.ProcessPolicy,
 	edges FunctionalEdges,
 ) (*initializer.ProcessGraph, error) {
-	return buildProcessGraph(
-		ctx, request, policy, edges, buildProcessApplicationRunner,
-		BuildMCPExecutionService, true,
+	return buildProcessGraphWithDependencies(
+		ctx, request, policy, ProcessGraphDependencies{
+			BuildMCPExecution: BuildMCPExecutionService, BuildWorkerApplication: InjectWorkerApplication,
+			BuildSessionExecution: BuildSessionExecutionWithApplication, FunctionalEdges: edges, RuntimeMCPGraph: true,
+		}, buildProcessApplicationRunner,
 	)
 }
 
@@ -170,10 +213,19 @@ func BuildProcessGraphWithMCPBuilder(
 	policy initializer.ProcessPolicy,
 	buildMCP MCPExecutionBuilder,
 ) (*initializer.ProcessGraph, error) {
-	return buildProcessGraph(
-		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
-		buildMCP, false,
+	return buildProcessGraphWithDependencies(
+		ctx, request, policy, ProcessGraphDependencies{
+			BuildMCPExecution: buildMCP, BuildWorkerApplication: InjectWorkerApplication,
+			BuildSessionExecution: BuildSessionExecutionWithApplication,
+		}, buildProcessApplicationRunner,
 	)
+}
+
+func productionProcessGraphDependencies() ProcessGraphDependencies {
+	return ProcessGraphDependencies{
+		BuildMCPExecution: BuildMCPExecutionService, BuildWorkerApplication: InjectWorkerApplication,
+		BuildSessionExecution: BuildSessionExecutionWithApplication, RuntimeMCPGraph: true,
+	}
 }
 
 type processRunnerBuilder func(
@@ -190,14 +242,12 @@ func buildProcessApplicationRunner(
 	return buildApplicationRunner(ctx, cfg, mode)
 }
 
-func buildProcessGraph(
+func buildProcessGraphWithDependencies(
 	ctx context.Context,
 	request startupcli.Request,
 	policy initializer.ProcessPolicy,
-	edges FunctionalEdges,
+	dependencies ProcessGraphDependencies,
 	buildRunner processRunnerBuilder,
-	buildMCP MCPExecutionBuilder,
-	runtimeMCPGraph bool,
 	invocationBuilders ...runcli.InvocationBootstrapBuilder,
 ) (*initializer.ProcessGraph, error) {
 	switch request.Kind {
@@ -208,6 +258,9 @@ func buildProcessGraph(
 		runConfig, err := applyRunProcessPolicy(*request.RunConfig, policy)
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
+		}
+		if javascriptRunConfig(runConfig) {
+			return buildJavaScriptRunGraph(ctx, runConfig, policy, dependencies)
 		}
 		applicationMode, err := applicationModeForProcess(policy.Mode)
 		if err != nil {
@@ -222,13 +275,13 @@ func buildProcessGraph(
 			buildCtx context.Context,
 			cfg *service.FactoryServiceConfig,
 		) (runcli.RuntimeRunner, error) {
-			configured, err := configWithFunctionalEdges(cfg, edges, &sharedWorkerApplication)
+			configured, err := configWithProcessDependencies(cfg, dependencies, &sharedWorkerApplication)
 			if err != nil {
 				return nil, err
 			}
 			return buildRunner(buildCtx, configured, applicationMode)
 		}, func(buildCtx context.Context, cfg *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
-			configured, err := configWithFunctionalEdges(cfg, edges, &sharedWorkerApplication)
+			configured, err := configWithProcessDependencies(cfg, dependencies, &sharedWorkerApplication)
 			if err != nil {
 				return nil, err
 			}
@@ -239,15 +292,34 @@ func buildProcessGraph(
 		}
 		return &initializer.ProcessGraph{Policy: policy, Run: application}, nil
 	case startupcli.KindMCPServe:
-		return buildMCPProcessGraph(ctx, request.MCP, policy, buildMCP, runtimeMCPGraph)
+		return buildMCPProcessGraph(ctx, request.MCP, policy, dependencies.BuildMCPExecution, dependencies.RuntimeMCPGraph)
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
 	}
 }
 
-func configWithFunctionalEdges(
-	cfg *service.FactoryServiceConfig,
+// buildProcessGraph retains the narrow package-test seam while production root
+// construction supplies the complete dependency bundle above.
+func buildProcessGraph(
+	ctx context.Context,
+	request startupcli.Request,
+	policy initializer.ProcessPolicy,
 	edges FunctionalEdges,
+	buildRunner processRunnerBuilder,
+	buildMCP MCPExecutionBuilder,
+	runtimeMCPGraph bool,
+	invocationBuilders ...runcli.InvocationBootstrapBuilder,
+) (*initializer.ProcessGraph, error) {
+	return buildProcessGraphWithDependencies(ctx, request, policy, ProcessGraphDependencies{
+		BuildMCPExecution: buildMCP, BuildWorkerApplication: InjectWorkerApplication,
+		BuildSessionExecution: BuildSessionExecutionWithApplication, FunctionalEdges: edges,
+		RuntimeMCPGraph: runtimeMCPGraph,
+	}, buildRunner, invocationBuilders...)
+}
+
+func configWithProcessDependencies(
+	cfg *service.FactoryServiceConfig,
+	dependencies ProcessGraphDependencies,
 	shared ...*workerapplication.Components,
 ) (*service.FactoryServiceConfig, error) {
 	if cfg == nil {
@@ -258,19 +330,16 @@ func configWithFunctionalEdges(
 		copied.WorkerApplication = *shared[0]
 		return &copied, nil
 	}
+	edges := dependencies.FunctionalEdges
 	hostedClock := edges.HostedClock
 	if hostedClock == nil {
 		hostedClock, _ = cfg.Clock.(clockwork.Clock)
 	}
-	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
-		ProviderCommandRunner: edges.ProviderCommandRunner,
-		ScriptCommandRunner:   edges.ScriptCommandRunner,
-		AgyPTYAllocator:       edges.AgyPTYAllocator,
-		HostedHTTPClient:      edges.HostedHTTPClient,
-		HostedLinearEndpoint:  edges.HostedLinearEndpoint,
-		HostedSecretResolver:  edges.HostedSecretResolver,
-		HostedClock:           hostedClock,
-	})
+	if dependencies.BuildWorkerApplication == nil {
+		return nil, fmt.Errorf("construct worker application: builder is required")
+	}
+	edges.HostedClock = hostedClock
+	components, err := dependencies.BuildWorkerApplication(cfg.Logger, edges)
 	if err != nil {
 		return nil, err
 	}
@@ -279,6 +348,73 @@ func configWithFunctionalEdges(
 		*shared[0] = components
 	}
 	return &copied, nil
+}
+
+func configWithFunctionalEdges(
+	cfg *service.FactoryServiceConfig,
+	edges FunctionalEdges,
+	shared ...*workerapplication.Components,
+) (*service.FactoryServiceConfig, error) {
+	return configWithProcessDependencies(cfg, ProcessGraphDependencies{
+		BuildWorkerApplication: InjectWorkerApplication, FunctionalEdges: edges,
+	}, shared...)
+}
+
+type sessionRunApplication struct{ config sessionexecutioncli.RunConfig }
+
+func (application sessionRunApplication) Run(ctx context.Context) error {
+	return sessionexecutioncli.RunSync(ctx, application.config)
+}
+
+func javascriptRunConfig(cfg runcli.RunConfig) bool {
+	switch strings.ToLower(filepath.Ext(strings.TrimSpace(cfg.FactoryConfigPath))) {
+	case ".js", ".mjs", ".cjs":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildJavaScriptRunGraph(
+	ctx context.Context,
+	cfg runcli.RunConfig,
+	policy initializer.ProcessPolicy,
+	dependencies ProcessGraphDependencies,
+) (*initializer.ProcessGraph, error) {
+	if dependencies.BuildWorkerApplication == nil || dependencies.BuildSessionExecution == nil {
+		return nil, fmt.Errorf("construct JavaScript run graph: worker application and session execution builders are required")
+	}
+	sourcePath, err := filepath.Abs(strings.TrimSpace(cfg.FactoryConfigPath))
+	if err != nil {
+		return nil, fmt.Errorf("construct JavaScript run graph: resolve workflow source: %w", err)
+	}
+	components, err := dependencies.BuildWorkerApplication(cfg.Logger, dependencies.FunctionalEdges)
+	if err != nil {
+		return nil, fmt.Errorf("construct JavaScript run graph: %w", err)
+	}
+	childExecutorMode := factorysessionexecution.ChildExecutorModeLive
+	if cfg.MockWorkersEnabled {
+		childExecutorMode = factorysessionexecution.ChildExecutorModeFake
+	}
+	serviceRequest := sessionexecutioncli.ServiceRequest{
+		ExecutionBackendConfig: sessionexecutioncli.ExecutionBackendConfig{
+			Provider: string(factorysessionexecution.ExecutionProviderJavaScriptRuntime), ProjectRoot: filepath.Dir(sourcePath),
+		},
+		ChildExecutorMode: childExecutorMode,
+	}
+	execution, err := dependencies.BuildSessionExecution(ctx, serviceRequest, components)
+	if err != nil {
+		return nil, fmt.Errorf("construct JavaScript run graph: %w", err)
+	}
+	application := sessionRunApplication{config: sessionexecutioncli.RunConfig{
+		StartConfig: sessionexecutioncli.StartConfig{
+			Mode: sessionexecutioncli.ExecutionModeSync, RequestID: "run-" + uuid.NewString(),
+			WorkflowFile: sourcePath, ChildExecutorMode: childExecutorMode,
+		},
+		ExecutionBackendConfig: serviceRequest.ExecutionBackendConfig,
+		JSON:                   cfg.JSONOutput, Output: cfg.Output, Service: execution,
+	}}
+	return &initializer.ProcessGraph{Policy: policy, Run: application}, nil
 }
 
 func buildMCPProcessGraph(
@@ -305,8 +441,7 @@ func buildMCPProcessGraph(
 	} else {
 		execution, buildErr := buildMCP(ctx, MCPExecutionRequest{
 			FixtureCatalogPath: intent.FixtureCatalogPath,
-			RuntimeBacked:      intent.RuntimeBacked,
-			ProjectRoot:        intent.ProjectRoot,
+			RuntimeBacked:      intent.RuntimeBacked, ProjectRoot: intent.ProjectRoot,
 		})
 		if buildErr != nil {
 			return nil, fmt.Errorf("construct MCP graph: %w", buildErr)
@@ -366,10 +501,7 @@ func (runner *wireInvocationRunner) InvokeModel(
 	return runner.Service.InvokeModel(ctx, modelName, request)
 }
 
-func completeInvocationServiceFacade(
-	core *runtimehost.Core,
-	cfg *service.FactoryServiceConfig,
-) *service.FactoryService {
+func completeInvocationServiceFacade(core *runtimehost.Core, cfg *service.FactoryServiceConfig) *service.FactoryService {
 	return provideFactoryServiceFromRuntimeHostCore(core, cfg)
 }
 

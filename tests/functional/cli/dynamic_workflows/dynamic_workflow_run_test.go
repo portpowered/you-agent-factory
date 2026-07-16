@@ -2,8 +2,8 @@ package session
 
 import (
 	"bytes"
-	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/root"
@@ -23,18 +23,7 @@ func BasicCliInputWithArgs(t *testing.T, args []string) root.Input {
 	}
 }
 
-type functionalEdgeGraphBuilder struct {
-	edges wire.FunctionalEdges
-}
-
-func (builder functionalEdgeGraphBuilder) Build(
-	ctx context.Context,
-	request root.GraphRequest,
-) (*root.ApplicationGraph, error) {
-	return wire.BuildProcessGraphWithFunctionalEdges(ctx, request.Startup, request.Policy, builder.edges)
-}
-
-func TestSessionEnumeration(t *testing.T) {
+func TestRunJavaScriptFactoryDispatchesThroughInjectedProviderCommandRunner(t *testing.T) {
 	// Arrange
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dynamic"))
 
@@ -42,9 +31,10 @@ func TestSessionEnumeration(t *testing.T) {
 
 	// Act
 
-	dependencies := root.Dependencies{GraphBuilder: functionalEdgeGraphBuilder{edges: wire.FunctionalEdges{
-		ProviderCommandRunner: support.NewStaticSuccessCommandRunner("<SUCCESS>"),
-	}}}
+	runner := support.NewRecordingCommandRunner("<SUCCESS>")
+	dependencies := root.Dependencies{FunctionalEdges: wire.FunctionalEdges{
+		ProviderCommandRunner: runner,
+	}}
 
 	// Enumerate the server configs
 	output := bytes.Buffer{}
@@ -56,11 +46,42 @@ func TestSessionEnumeration(t *testing.T) {
 
 	// Assert
 
-	if !bytes.Contains(output.Bytes(), []byte(dir)) {
-		t.Errorf("expected output to contain copied fixture directory %q, got: %s", dir, output.String())
+	if !strings.Contains(output.String(), "Factory session ") || !strings.Contains(output.String(), " completed (SUCCEEDED).") {
+		t.Errorf("expected successful Factory Session output, got: %s", output.String())
 	}
 
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", exitCode)
+		t.Fatalf("expected exit code 0, got %d; stderr=%s", exitCode, stderr.String())
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("provider command runner call count = %d, want 1", runner.CallCount())
+	}
+}
+
+func TestRunJavaScriptFactoryWithMockWorkersUsesFakeChildExecutor(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dynamic"))
+	support.SetWorkingDirectory(t, dir)
+
+	runner := support.NewRecordingCommandRunner("unexpected live provider execution")
+	dependencies := root.Dependencies{FunctionalEdges: wire.FunctionalEdges{
+		ProviderCommandRunner: runner,
+	}}
+	var output bytes.Buffer
+	var stderr bytes.Buffer
+	input := BasicCliInputWithArgs(t, []string{
+		"you", "run", "--factory", "./basic.js", "--with-mock-workers",
+	})
+	input.Stdout = &output
+	input.Stderr = &stderr
+
+	exitCode := root.Run(input, dependencies)
+	if exitCode != root.ExitSuccess {
+		t.Fatalf("exit code = %d, want success; stdout=%q stderr=%q", exitCode, output.String(), stderr.String())
+	}
+	if !strings.Contains(output.String(), " completed (SUCCEEDED).") {
+		t.Fatalf("stdout = %q, want successful Factory Session", output.String())
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider command runner call count = %d, want 0 for fake child execution", runner.CallCount())
 	}
 }

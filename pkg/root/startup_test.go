@@ -9,6 +9,7 @@ import (
 
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
 func TestExecuteWithDependencies_SelectsStartupModesAndSidecars(t *testing.T) {
@@ -128,10 +129,11 @@ func TestExecuteStartup_ProductionInvocationConstructionFailurePreventsInitializ
 		DisableDefaultRecording:  true,
 	}
 	initializer := &recordingInitializer{}
+	dependencies := dependenciesFromWireCore(wire.InjectWireCore(), Dependencies{Initializer: initializer})
 
 	err := executeStartup(context.Background(), startupcli.Request{
 		Kind: startupcli.KindRun, Run: startupcli.RunIntent{WorkerSidecarsEnabled: true}, RunConfig: &runConfig,
-	}, processDependencies{graphBuilder: productionGraphBuilder{}, initializer: initializer})
+	}, dependencies)
 	if err == nil {
 		t.Fatal("executeStartup() error = nil, want invocation bootstrap construction failure")
 	}
