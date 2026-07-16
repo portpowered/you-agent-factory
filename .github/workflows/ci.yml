@@ -145,9 +145,21 @@ jobs:
         run: make typecheck
 
   windows-go-tests:
-    name: Windows Short Go Suite
+    name: Windows Go ${{ matrix.label }}
     runs-on: windows-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Unit
+            command: make test-unit
+          - label: Functional
+            command: make test-functional
+          - label: Stress
+            command: make test-stress
+          - label: Release
+            command: make test-release
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -170,12 +182,94 @@ jobs:
         shell: pwsh
         run: choco install make --no-progress -y
 
-      - name: Run Windows short Go suite
+      - name: Report local rerun command
         shell: pwsh
-        run: make test
+        run: |
+          "## Windows Go ${{ matrix.label }}" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "- Local rerun: ${{ matrix.command }}" >> $env:GITHUB_STEP_SUMMARY
 
-  verify-build-contracts:
-    name: Build, Lint, and API
+      - name: Run Windows Go ${{ matrix.label }} suite
+        shell: pwsh
+        run: ${{ matrix.command }}
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install dashboard dependencies
+        run: make ui-deps
+
+      - name: Build production artifacts
+        run: make verify-build
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Go from go.mod
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Bun for the dashboard workspace
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Restore Bun package cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-${{ hashFiles('ui/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-${{ env.BUN_VERSION }}-
+
+      - name: Install dashboard dependencies
+        run: make ui-deps
+
+      - name: Run lint verification
+        timeout-minutes: 30
+        run: make verify-lint
+
+  api:
+    name: API
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -213,77 +307,46 @@ jobs:
       - name: Install dashboard dependencies
         run: make ui-deps
 
-      - name: Build dashboard bundle
-        run: make ui-build
+      - name: Run API contract verification
+        timeout-minutes: 30
+        run: make verify-api
 
-      - name: Upload dashboard dist artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-dashboard-dist
-          path: ui/dist/
-          if-no-files-found: error
-          retention-days: 1
+  build-lint-api-compatibility:
+    name: Build, Lint, and API
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - build
+      - lint
+      - api
+    if: ${{ always() }}
+    steps:
+      - name: Reconcile legacy required status
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          API_RESULT: ${{ needs.api.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Build, Lint, and API compatibility status"
+            echo
+            echo "- Build: ${BUILD_RESULT}"
+            echo "- Lint: ${LINT_RESULT}"
+            echo "- API: ${API_RESULT}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Build backend binaries
-        run: make build
+          if [[ "$BUILD_RESULT" != "success" || "$LINT_RESULT" != "success" || "$API_RESULT" != "success" ]]; then
+            echo "Build, Lint, and API must all succeed; got Build=${BUILD_RESULT}, Lint=${LINT_RESULT}, API=${API_RESULT}." >&2
+            exit 1
+          fi
 
-      - name: Run dashboard lint verification
-        timeout-minutes: 10
-        run: make ui-lint
-
-      - name: Run component package verification harness
-        timeout-minutes: 15
-        run: make ui-components-verify
-
-      - name: Run dashboard deadcode verification
-        timeout-minutes: 10
-        run: make ui-deadcode
-
-      - name: Run Go vet verification
-        timeout-minutes: 10
-        run: make vet
-
-      - name: Run backend size verification
-        timeout-minutes: 10
-        run: make backend-size
-
-      - name: Run pkg maintainability verification
-        timeout-minutes: 10
-        run: make pkg-maint
-
-      - name: Run pkg file-count verification
-        timeout-minutes: 10
-        run: make pkg-file-count
-
-      - name: Run README structure verification
-        timeout-minutes: 10
-        run: make readme-check
-
-      - name: Run backend deadcode verification
-        timeout-minutes: 10
-        run: make deadcode
-
-      - name: Run contract validation and drift smoke verification
-        timeout-minutes: 10
-        run: make contracts-smoke
-
-      - name: Run API smoke verification
-        timeout-minutes: 10
-        run: make api-smoke
-
-      - name: Run API package pack and export-resolution smoke verification
-        timeout-minutes: 10
-        run: make api-package-pack-smoke
-
-      - name: Run factory composition Wire verification
-        timeout-minutes: 10
-        run: make wire-smoke
+          echo "Independent Build, Lint, and API checks succeeded."
 
   release-surface-smoke:
     name: Release Surface Smoke
     runs-on: ubuntu-latest
-    needs:
-      - verify-build-contracts
     timeout-minutes: 20
     steps:
       - name: Check out repository
@@ -329,8 +392,6 @@ jobs:
   pr-inference-approval:
     name: PR Inference Approval
     runs-on: ubuntu-latest
-    needs:
-      - verify-build-contracts
     timeout-minutes: 35
     env:
       INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS: "1"
@@ -785,7 +846,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - classify-pr-impact
-      - verify-build-contracts
     timeout-minutes: 25
     steps:
       - name: Report lane routing
@@ -839,15 +899,6 @@ jobs:
         if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
         timeout-minutes: 10
         run: make ui-deps
-
-      # The browser harness can reuse a normalized dist bundle because the
-      # preview proxy handles the per-lane API origin at runtime.
-      - name: Download dashboard dist artifact
-        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: ui-dashboard-dist
-          path: ui/dist
 
       # Playwright recommends against caching browser binaries in CI because restore
       # time is usually comparable to a fresh download on hosted runners.
@@ -920,7 +971,6 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - classify-pr-impact
-      - verify-build-contracts
     if: always()
     timeout-minutes: 35
     strategy:
@@ -957,9 +1007,6 @@ jobs:
           if [[ "${{ needs.classify-pr-impact.result }}" != "success" ]]; then
             decision="blocked-upstream"
             reason="Not executed because Classify PR Impact did not complete successfully."
-          elif [[ "${{ needs.verify-build-contracts.result }}" != "success" ]]; then
-            decision="blocked-upstream"
-            reason="Not executed because Build, Lint, and API did not complete successfully."
           fi
           {
             echo "## Backend ${{ matrix.label }} Coverage"
@@ -973,14 +1020,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check out repository
-        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Go from go.mod
-        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -989,7 +1036,7 @@ jobs:
 
       - name: Run backend ${{ matrix.suite }} coverage
         id: run_backend_coverage
-        if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         continue-on-error: true
         shell: bash
         timeout-minutes: 15
@@ -1005,7 +1052,7 @@ jobs:
           go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
 
       - name: Report lane execution
-        if: always() && needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
+        if: always() && needs.classify-pr-impact.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         shell: bash
         run: |
           artifact_name="backend-${{ matrix.suite }}-coverage-report"
