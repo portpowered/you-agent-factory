@@ -97,6 +97,7 @@ func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 			return nil, nil
 		},
 		BuildMCPExecutionService,
+		false,
 		func(context.Context, *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
 			calls++
 			return nil, wantErr
@@ -172,7 +173,7 @@ func TestBuildProcessGraphSelectsOnlySuppliedFunctionalEdge(t *testing.T) {
 			) (runcli.RuntimeRunner, error) {
 				built = cfg
 				return processRunnerFunc(func(context.Context) error { return nil }), nil
-			}, BuildMCPExecutionService)
+			}, BuildMCPExecutionService, false)
 			if err != nil {
 				t.Fatalf("buildProcessGraph() error = %v", err)
 			}
@@ -268,7 +269,7 @@ func TestBuildMCPExecutionServiceSelectsRequestedBackingService(t *testing.T) {
 				t.Fatalf("BuildMCPExecutionService() error = %v", err)
 			}
 			if test.wantRuntime {
-				if _, ok := service.(*factorysessionexecution.JavaScriptRuntimeService); !ok {
+				if _, ok := runtimeOwnedExecution(service); !ok {
 					t.Fatalf("service type = %T, want runtime service", service)
 				}
 			} else if _, ok := service.(*factorysessionexecution.FakeService); !ok {
@@ -306,7 +307,7 @@ func TestBuildSessionExecutionServiceSelectsRequestedBackingService(t *testing.T
 				t.Fatalf("BuildSessionExecutionService() error = %v", err)
 			}
 			if test.wantRuntime {
-				if _, ok := service.(*factorysessionexecution.JavaScriptRuntimeService); !ok {
+				if _, ok := runtimeOwnedExecution(service); !ok {
 					t.Fatalf("service type = %T, want runtime service", service)
 				}
 			} else if _, ok := service.(*factorysessionexecution.FakeService); !ok {
@@ -360,15 +361,31 @@ func TestRuntimeBackedMCPAndCLIExecutionConsumeOneWireCore(t *testing.T) {
 			if calls != 1 || core == nil {
 				t.Fatalf("runtime core builds = %d, core = %p, want one completed Wire core", calls, core)
 			}
-			if service != core.DurableExecution() {
+			owned, ok := service.(ownedExecutionService)
+			if !ok || owned.Service != core.DurableExecution() {
 				t.Fatal("runtime-backed compatibility path replaced the Wire-owned durable execution service")
 			}
-			owner, ok := service.(interface{ PersistenceStore() runtimepersist.Store })
+			if owned.graph == nil || owned.graph.SessionRegistry != core.Sessions() || owned.graph.Persistence != core.Persistence() || owned.graph.WorkerProvider != core.RuntimeBuild() {
+				t.Fatal("runtime-backed compatibility path did not retain the completed Wire graph")
+			}
+			owner, ok := owned.Service.(interface{ PersistenceStore() runtimepersist.Store })
 			if !ok || owner.PersistenceStore() == nil || owner.PersistenceStore() != core.Persistence() {
 				t.Fatal("runtime-backed compatibility path did not retain the Wire-owned persistence store")
 			}
+			if err := owned.Close(); err != nil {
+				t.Fatalf("close retained runtime graph: %v", err)
+			}
 		})
 	}
+}
+
+func runtimeOwnedExecution(service factorysessionexecution.Service) (*factorysessionexecution.JavaScriptRuntimeService, bool) {
+	owned, ok := service.(ownedExecutionService)
+	if !ok {
+		return nil, false
+	}
+	runtime, ok := owned.Service.(*factorysessionexecution.JavaScriptRuntimeService)
+	return runtime, ok
 }
 
 func copiedSessionExecutionFactory(t *testing.T) string {
@@ -417,6 +434,40 @@ func TestBuildProcessGraphUsesExactInjectedMCPExecutionService(t *testing.T) {
 	}
 	if err := initializer.RunProcess(context.Background(), graph); err != nil {
 		t.Fatalf("RunProcess() error = %v", err)
+	}
+}
+
+func TestBuildProcessGraphRuntimeMCPRetainsCompletedWireGraph(t *testing.T) {
+	t.Parallel()
+	var output bytes.Buffer
+	process, err := BuildProcessGraph(context.Background(), startupcli.Request{
+		Kind: startupcli.KindMCPServe,
+		MCP: startupcli.MCPIntent{
+			RuntimeBacked: true,
+			ProjectRoot:   copiedSessionExecutionFactory(t),
+			Stdin:         strings.NewReader(""),
+			Stdout:        &output,
+		},
+	}, initializer.ProcessPolicy{Mode: initializer.ProcessModeMCPServe})
+	if err != nil {
+		t.Fatalf("BuildProcessGraph() error = %v", err)
+	}
+	application, ok := process.MCP.(*initializer.Application)
+	if !ok {
+		t.Fatalf("MCP application type = %T, want initializer application", process.MCP)
+	}
+	graph, ok := application.Graph().(*Graph)
+	if !ok {
+		t.Fatalf("MCP graph type = %T, want complete wire graph", application.Graph())
+	}
+	if graph.SessionRegistry == nil || graph.Persistence == nil || graph.WorkerProvider == nil || graph.DurableExecution == nil {
+		t.Fatal("runtime MCP graph dropped a completed Factory Session collaborator")
+	}
+	if graph.Transport.DurableExecution != graph.DurableExecution {
+		t.Fatal("runtime MCP transport did not consume the graph-owned durable execution service")
+	}
+	if err := graph.Close(); err != nil {
+		t.Fatalf("close runtime MCP graph: %v", err)
 	}
 }
 
@@ -479,7 +530,7 @@ func TestBuildProcessGraphAppliesRootPolicyBeforeConstructionAndLifecycle(t *tes
 				built = cfg
 				builtMode = mode
 				return processRunnerFunc(func(context.Context) error { return nil }), nil
-			}, BuildMCPExecutionService)
+			}, BuildMCPExecutionService, false)
 			if err != nil {
 				t.Fatalf("buildProcessGraph() error = %v", err)
 			}

@@ -75,7 +75,7 @@ func buildMCPExecutionService(
 func BuildProcessGraph(ctx context.Context, request startupcli.Request, policy initializer.ProcessPolicy) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(
 		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
-		BuildMCPExecutionService,
+		BuildMCPExecutionService, true,
 	)
 }
 
@@ -90,7 +90,7 @@ func BuildProcessGraphWithFunctionalEdges(
 ) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(
 		ctx, request, policy, edges, buildProcessApplicationRunner,
-		BuildMCPExecutionService,
+		BuildMCPExecutionService, true,
 	)
 }
 
@@ -105,7 +105,7 @@ func BuildProcessGraphWithMCPBuilder(
 ) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(
 		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
-		buildMCP,
+		buildMCP, false,
 	)
 }
 
@@ -130,6 +130,7 @@ func buildProcessGraph(
 	edges FunctionalEdges,
 	buildRunner processRunnerBuilder,
 	buildMCP MCPExecutionBuilder,
+	runtimeMCPGraph bool,
 	invocationBuilders ...runcli.InvocationBootstrapBuilder,
 ) (*initializer.ProcessGraph, error) {
 	switch request.Kind {
@@ -162,7 +163,7 @@ func buildProcessGraph(
 		}
 		return &initializer.ProcessGraph{Policy: policy, Run: application}, nil
 	case startupcli.KindMCPServe:
-		return buildMCPProcessGraph(ctx, request.MCP, policy, buildMCP)
+		return buildMCPProcessGraph(ctx, request.MCP, policy, buildMCP, runtimeMCPGraph)
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
 	}
@@ -185,6 +186,7 @@ func buildMCPProcessGraph(
 	intent startupcli.MCPIntent,
 	policy initializer.ProcessPolicy,
 	buildMCP MCPExecutionBuilder,
+	runtimeMCPGraph bool,
 ) (*initializer.ProcessGraph, error) {
 	if policy.Mode != initializer.ProcessModeMCPServe || policy.Sidecars != (initializer.SidecarPolicy{}) {
 		return nil, fmt.Errorf("construct MCP graph: incompatible process policy %+v", policy)
@@ -192,15 +194,25 @@ func buildMCPProcessGraph(
 	if buildMCP == nil {
 		return nil, fmt.Errorf("construct MCP graph: execution service builder is required")
 	}
-	execution, err := buildMCP(ctx, MCPExecutionRequest{
-		FixtureCatalogPath: intent.FixtureCatalogPath,
-		RuntimeBacked:      intent.RuntimeBacked,
-		ProjectRoot:        intent.ProjectRoot,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("construct MCP graph: %w", err)
+	var graph *Graph
+	var err error
+	if intent.RuntimeBacked && runtimeMCPGraph {
+		projectRoot, rootErr := resolveSessionExecutionProjectRoot(intent.ProjectRoot)
+		if rootErr != nil {
+			return nil, fmt.Errorf("construct MCP graph: %w", rootErr)
+		}
+		graph, err = buildRuntimeBackedSessionExecutionGraph(ctx, projectRoot, intent.Stdin, intent.Stdout, InjectRuntimeCore)
+	} else {
+		execution, buildErr := buildMCP(ctx, MCPExecutionRequest{
+			FixtureCatalogPath: intent.FixtureCatalogPath,
+			RuntimeBacked:      intent.RuntimeBacked,
+			ProjectRoot:        intent.ProjectRoot,
+		})
+		if buildErr != nil {
+			return nil, fmt.Errorf("construct MCP graph: %w", buildErr)
+		}
+		graph, err = Build(ctx, Inputs{MCPExecution: execution, MCPInput: intent.Stdin, MCPOutput: intent.Stdout})
 	}
-	graph, err := Build(ctx, Inputs{MCPExecution: execution, MCPInput: intent.Stdin, MCPOutput: intent.Stdout})
 	if err != nil {
 		return nil, fmt.Errorf("construct MCP graph: %w", err)
 	}

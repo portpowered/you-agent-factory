@@ -66,12 +66,16 @@ non-cancellation failures, report them in declared lifecycle-plan order rather
 than arrival order so goroutine scheduling cannot change terminal precedence.
 
 The production `you mcp serve` branch follows the same ownership path even
-though it does not activate run sidecars. Resolve the selected fixture-backed
-or runtime-backed durable execution service before startup, retain that exact
-instance in `wire.Graph`, construct the MCP stdio lifecycle from the request's
-explicit reader and writer, and let `pkg/initializer` start, wait for, stop, and
-close that graph. Do not return a separately composed MCP application from the
-process graph builder.
+though it does not activate run sidecars. Fixture-backed MCP may construct its
+narrow fake execution edge, but runtime-backed MCP must construct and retain
+the completed `wire.Graph`, including its registry, persistence, runtime-build,
+durable-execution, and startup-bundle cleanup ownership. Construct the MCP
+stdio lifecycle from the request's explicit reader and writer, and let
+`pkg/initializer` start, wait for, stop, and close that graph. Runtime-backed
+CLI session execution follows the same rule by retaining its complete graph in
+the returned closable execution owner; it must not discard the graph after
+extracting durable execution. Do not return a separately composed MCP
+application from the process graph builder.
 
 Factory Session selectors at that graph-owned transport boundary must round-trip
 the canonical ID returned by list responses. Registry aliases such as

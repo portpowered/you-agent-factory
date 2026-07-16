@@ -3,10 +3,12 @@ package wire
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
@@ -54,28 +56,69 @@ func buildSessionExecutionService(
 	return service, nil
 }
 
-// buildRuntimeBackedSessionExecutionService adapts a completed Wire runtime
-// core to the narrow durable-execution contract used by CLI and MCP. It never
-// constructs persistence or execution independently of that shared graph.
+// buildRuntimeBackedSessionExecutionService retains the complete application
+// graph behind the narrow durable-execution contract used by CLI commands.
+// Callers that own a command lifecycle may close the returned service to
+// release the graph's construction resources.
 func buildRuntimeBackedSessionExecutionService(
 	ctx context.Context,
 	projectRoot string,
 	buildCore runtimeSessionExecutionCoreBuilder,
 ) (factorysessionexecution.Service, error) {
-	if buildCore == nil {
-		return nil, fmt.Errorf("construct runtime-backed execution service: runtime core builder is required")
+	graph, err := buildRuntimeBackedSessionExecutionGraph(ctx, projectRoot, strings.NewReader(""), io.Discard, buildCore)
+	if err != nil {
+		return nil, err
 	}
-	core, err := buildCore(ctx, &runtimehost.Config{
+	return ownedExecutionService{Service: graph.DurableExecution, graph: graph}, nil
+
+}
+
+// buildRuntimeBackedSessionExecutionGraph constructs the single shared
+// application graph used by runtime-backed MCP and CLI execution paths.
+func buildRuntimeBackedSessionExecutionGraph(
+	ctx context.Context,
+	projectRoot string,
+	input io.Reader,
+	output io.Writer,
+	buildCore runtimeSessionExecutionCoreBuilder,
+) (*Graph, error) {
+	if buildCore == nil {
+		return nil, fmt.Errorf("construct runtime-backed execution graph: runtime core builder is required")
+	}
+	cfg := &runtimehost.Config{
 		Dir: projectRoot, ExecutionBaseDir: projectRoot,
 		Logger: zap.NewNop(), Clock: factory.EnsureClock(nil),
-	})
+	}
+	core, err := buildCore(ctx, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("construct runtime-backed execution service: %w", err)
+		return nil, fmt.Errorf("construct runtime-backed execution graph: %w", err)
 	}
 	if core == nil || core.DurableExecution() == nil {
-		return nil, fmt.Errorf("construct runtime-backed execution service: shared runtime core durable execution is required")
+		return nil, fmt.Errorf("construct runtime-backed execution graph: shared runtime core durable execution is required")
 	}
-	return core.DurableExecution(), nil
+	resources := &resourceSet{}
+	if bundle := core.StartupBundle(); bundle != nil {
+		resources.add("runtime core", closeFunc(func() error {
+			return composebridge.CloseRuntimeBundleSinks(bundle.LogSink, bundle.MetricsSink)
+		}))
+	}
+	graph, err := assembleProductionGraph(core, cfg, Inputs{MCPInput: input, MCPOutput: output}, resources)
+	if err != nil {
+		return nil, failProductionBuild(resources, err)
+	}
+	return graph, nil
+}
+
+type ownedExecutionService struct {
+	factorysessionexecution.Service
+	graph *Graph
+}
+
+func (service ownedExecutionService) Close() error {
+	if service.graph == nil {
+		return nil
+	}
+	return service.graph.Close()
 }
 
 func normalizeSessionExecutionProvider(value string) (factorysessionexecution.ExecutionProvider, error) {
