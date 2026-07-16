@@ -48,6 +48,10 @@ properties:
             - $ref: './FactoryInvocationSignature.yaml'
         description: >-
             Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
+    invocationRecurrence:
+        allOf:
+            - $ref: './FactoryInvocationRecurrence.yaml'
+        description: Optional session-scoped recurrence capability activated by invocation.
     guards:
         type: array
         description: Root-level guards that apply across the factory instead of one specific workstation or input.

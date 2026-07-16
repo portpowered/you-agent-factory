@@ -138,21 +138,30 @@ const (
 
 // FactoryConfig is the specification of a factory as a JSON file.
 type FactoryConfig struct {
-	Name                string                          `json:"name"`
-	Project             string                          `json:"project,omitempty"`
-	Version             *FactoryVersion                 `json:"version,omitempty"`
-	Runner              string                          `json:"runner,omitempty"`
-	Guards              []FactoryGuardConfig            `json:"guards,omitempty"`
-	InputTypes          []InputTypeConfig               `json:"input_types,omitempty"`
-	InvocationReturn    *InvocationReturnConfig         `json:"invocation_return,omitempty"`
-	InvocationSignature *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
-	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
-	WorkTypes           []WorkTypeConfig                `json:"work_types"`
-	Resources           []ResourceConfig                `json:"resources"`
-	ResourceManifest    *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
-	Layout              *FactoryLayoutConfig            `json:"layout,omitempty"`
-	Workers             []WorkerConfig                  `json:"workers"`
-	Workstations        []FactoryWorkstationConfig      `json:"workstations"`
+	Name                 string                          `json:"name"`
+	Project              string                          `json:"project,omitempty"`
+	Version              *FactoryVersion                 `json:"version,omitempty"`
+	Runner               string                          `json:"runner,omitempty"`
+	Guards               []FactoryGuardConfig            `json:"guards,omitempty"`
+	InputTypes           []InputTypeConfig               `json:"input_types,omitempty"`
+	InvocationReturn     *InvocationReturnConfig         `json:"invocation_return,omitempty"`
+	InvocationSignature  *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
+	InvocationRecurrence *InvocationRecurrenceConfig     `json:"invocationRecurrence,omitempty"`
+	Orchestrator         *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
+	WorkTypes            []WorkTypeConfig                `json:"work_types"`
+	Resources            []ResourceConfig                `json:"resources"`
+	ResourceManifest     *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
+	Layout               *FactoryLayoutConfig            `json:"layout,omitempty"`
+	Workers              []WorkerConfig                  `json:"workers"`
+	Workstations         []FactoryWorkstationConfig      `json:"workstations"`
+}
+
+// InvocationRecurrenceConfig declares generic invocation-triggered recurrence.
+// The referenced cron workstations remain authored package/factory topology.
+type InvocationRecurrenceConfig struct {
+	PeriodArgument     string `json:"periodArgument"`
+	StartupWorkstation string `json:"startupWorkstation"`
+	RepeatWorkstation  string `json:"repeatWorkstation"`
 }
 
 // FactoryVersion is the durable optimistic-concurrency metadata stored with a

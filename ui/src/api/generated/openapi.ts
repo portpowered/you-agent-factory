@@ -4036,6 +4036,8 @@ export interface components {
       invocationReturn?: components["schemas"]["InvocationReturn"];
       /** @description Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior. */
       invocationSignature?: components["schemas"]["FactoryInvocationSignature"];
+      /** @description Optional session-scoped recurrence capability activated by invocation. */
+      invocationRecurrence?: components["schemas"]["FactoryInvocationRecurrence"];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -5018,6 +5020,15 @@ export interface components {
     FactoryOrchestratorJavaScriptAgent: {
       /** @description Operator worker preset inherited by child calls using this agent id. */
       preset: string;
+    };
+    /** @description Optional session-scoped recurrence capability for an invocation. The runtime triggers the startup workstation after the first submitted Work and starts the repeat workstation at the validated duration supplied by periodArgument. */
+    FactoryInvocationRecurrence: {
+      /** @description Invocation-signature parameter that supplies the recurrence duration. */
+      periodArgument: string;
+      /** @description Cron workstation triggered once after the invocation Work is submitted. */
+      startupWorkstation: string;
+      /** @description Cron workstation triggered at each recurrence boundary. */
+      repeatWorkstation: string;
     };
     /**
      * @description Factory-level guard condition attached at the root factory definition.

@@ -2,7 +2,7 @@ agents	Agent orientation: read order, work submission, command matrix, planner v
 authoring-factories	Practical factory authoring workflow, runnable examples, mock workers, and replay.	
 run	Supported local, one-shot, batch, continuous, and mock-worker run shapes.	
 config	Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.	
-loop	The supported @you/loop packaged Factory: recurring request invocation, cadence, worktree isolation, and session recovery.	
+loop	The supported @you/loop packaged Factory: recurring request invocation, cadence, worktree isolation, and session recovery.
 mock-workers	Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.	
 record-replay	Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.	
 guards	Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.	

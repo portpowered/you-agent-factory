@@ -1254,6 +1254,9 @@ type Factory struct {
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 
+	// InvocationRecurrence Optional session-scoped recurrence capability activated by invocation.
+	InvocationRecurrence *FactoryInvocationRecurrence `json:"invocationRecurrence,omitempty"`
+
 	// InvocationReturn Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
 	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
 
@@ -1699,6 +1702,18 @@ type FactoryInvocationParameterTypeHint string
 
 // FactoryInvocationParameterValueMode Declares how one invocation parameter consumes one or more string values.
 type FactoryInvocationParameterValueMode string
+
+// FactoryInvocationRecurrence Optional session-scoped recurrence capability for an invocation. The runtime triggers the startup workstation after the first submitted Work and starts the repeat workstation at the validated duration supplied by periodArgument.
+type FactoryInvocationRecurrence struct {
+	// PeriodArgument Invocation-signature parameter that supplies the recurrence duration.
+	PeriodArgument string `json:"periodArgument"`
+
+	// RepeatWorkstation Cron workstation triggered at each recurrence boundary.
+	RepeatWorkstation string `json:"repeatWorkstation"`
+
+	// StartupWorkstation Cron workstation triggered once after the invocation Work is submitted.
+	StartupWorkstation string `json:"startupWorkstation"`
+}
 
 // FactoryInvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
 type FactoryInvocationSignature struct {

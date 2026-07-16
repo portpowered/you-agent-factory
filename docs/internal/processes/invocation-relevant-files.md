@@ -10,10 +10,13 @@ primary-result behavior.
   session sidecar must consume the submitted invocation Work (for example, a
   startup cron tick); firing it before submission can race and drop the first
   eligible iteration.
-- `pkg/service/runtime_sessions.go` owns the `@you/loop` interval watcher and
-  its post-submission startup tick. Keep both attached to the Factory Session
-  sidecar context so stop and replacement cancel and join them with the
-  session lifecycle.
+- `pkg/service/runtime_sessions.go` consumes the generic
+  `invocationRecurrence` capability declared in factory configuration. The
+  packaged factory owns its period argument and startup/repeat workstation
+  references; service code must not branch on a package name or workstation
+  string. Keep its watcher and post-submission startup tick attached to the
+  Factory Session sidecar context so stop and replacement cancel and join them
+  with the session lifecycle.
 - Runtime-only invocation arguments must survive both directions of the
   canonical submit bridge: `pkg/factory/requests/work_request.go` copies them
   between `interfaces.SubmitRequest` and `interfaces.Work`. Otherwise a

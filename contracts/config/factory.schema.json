@@ -348,6 +348,30 @@
       ],
       "type": "string"
     },
+    "FactoryInvocationRecurrence": {
+      "additionalProperties": false,
+      "description": "Optional session-scoped recurrence capability for an invocation. The runtime triggers the startup workstation after the first submitted Work and starts the repeat workstation at the validated duration supplied by periodArgument.",
+      "properties": {
+        "periodArgument": {
+          "description": "Invocation-signature parameter that supplies the recurrence duration.",
+          "type": "string"
+        },
+        "repeatWorkstation": {
+          "description": "Cron workstation triggered at each recurrence boundary.",
+          "type": "string"
+        },
+        "startupWorkstation": {
+          "description": "Cron workstation triggered once after the invocation Work is submitted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "periodArgument",
+        "startupWorkstation",
+        "repeatWorkstation"
+      ],
+      "type": "object"
+    },
     "FactoryInvocationSignature": {
       "additionalProperties": false,
       "description": "Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.",
@@ -2194,6 +2218,14 @@
         "$ref": "#/$defs/InputType"
       },
       "type": "array"
+    },
+    "invocationRecurrence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/FactoryInvocationRecurrence"
+        }
+      ],
+      "description": "Optional session-scoped recurrence capability activated by invocation."
     },
     "invocationReturn": {
       "allOf": [

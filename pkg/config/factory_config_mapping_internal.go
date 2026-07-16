@@ -29,6 +29,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	}
 	cfg.InvocationReturn = invocationReturnInternalFromAPI(apiCfg.InvocationReturn)
 	cfg.InvocationSignature = invocationSignatureInternalFromAPI(apiCfg.InvocationSignature)
+	cfg.InvocationRecurrence = invocationRecurrenceInternalFromAPI(apiCfg.InvocationRecurrence)
 	orchestrator, err := orchestratorInternalFromAPI(apiCfg.Orchestrator)
 	if err != nil {
 		return interfaces.FactoryConfig{}, err
@@ -61,6 +62,17 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 		cfg.Workstations = workstations
 	}
 	return cfg, nil
+}
+
+func invocationRecurrenceInternalFromAPI(value *factoryapi.FactoryInvocationRecurrence) *interfaces.InvocationRecurrenceConfig {
+	if value == nil {
+		return nil
+	}
+	return &interfaces.InvocationRecurrenceConfig{
+		PeriodArgument:     value.PeriodArgument,
+		StartupWorkstation: value.StartupWorkstation,
+		RepeatWorkstation:  value.RepeatWorkstation,
+	}
 }
 
 // FactoryConfigFromOpenAPI converts the generated OpenAPI factory model into

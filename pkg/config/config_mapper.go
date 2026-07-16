@@ -815,23 +815,32 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		return nil, nil
 	}
 	cloned := &interfaces.FactoryConfig{
-		Name:                cfg.Name,
-		Project:             cfg.Project,
-		Version:             cloneFactoryVersion(cfg.Version),
-		Runner:              cfg.Runner,
-		Guards:              cloneFactoryGuardConfigs(cfg.Guards),
-		InputTypes:          cloneInputTypeConfigs(cfg.InputTypes),
-		InvocationReturn:    cloneInvocationReturnConfig(cfg.InvocationReturn),
-		InvocationSignature: cloneInvocationSignatureConfig(cfg.InvocationSignature),
-		Orchestrator:        cloneFactoryOrchestratorConfig(cfg.Orchestrator),
-		WorkTypes:           cloneWorkTypeConfigs(cfg.WorkTypes),
-		Resources:           cloneResourceConfigs(cfg.Resources),
-		ResourceManifest:    clonePortableResourceManifestConfig(cfg.ResourceManifest),
-		Layout:              cloneFactoryLayoutConfig(cfg.Layout),
-		Workers:             cloneWorkerConfigs(cfg.Workers),
-		Workstations:        cloneWorkstationConfigs(cfg.Workstations),
+		Name:                 cfg.Name,
+		Project:              cfg.Project,
+		Version:              cloneFactoryVersion(cfg.Version),
+		Runner:               cfg.Runner,
+		Guards:               cloneFactoryGuardConfigs(cfg.Guards),
+		InputTypes:           cloneInputTypeConfigs(cfg.InputTypes),
+		InvocationReturn:     cloneInvocationReturnConfig(cfg.InvocationReturn),
+		InvocationSignature:  cloneInvocationSignatureConfig(cfg.InvocationSignature),
+		InvocationRecurrence: cloneInvocationRecurrenceConfig(cfg.InvocationRecurrence),
+		Orchestrator:         cloneFactoryOrchestratorConfig(cfg.Orchestrator),
+		WorkTypes:            cloneWorkTypeConfigs(cfg.WorkTypes),
+		Resources:            cloneResourceConfigs(cfg.Resources),
+		ResourceManifest:     clonePortableResourceManifestConfig(cfg.ResourceManifest),
+		Layout:               cloneFactoryLayoutConfig(cfg.Layout),
+		Workers:              cloneWorkerConfigs(cfg.Workers),
+		Workstations:         cloneWorkstationConfigs(cfg.Workstations),
 	}
 	return cloned, nil
+}
+
+func cloneInvocationRecurrenceConfig(config *interfaces.InvocationRecurrenceConfig) *interfaces.InvocationRecurrenceConfig {
+	if config == nil {
+		return nil
+	}
+	cloned := *config
+	return &cloned
 }
 
 func cloneFactoryVersion(version *interfaces.FactoryVersion) *interfaces.FactoryVersion {

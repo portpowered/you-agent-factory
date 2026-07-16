@@ -147,20 +147,32 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	}
 
 	return factoryapi.Factory{
-		Name:                factoryReferenceName(cfg),
-		Id:                  stringPtrIfNotEmpty(cfg.Project),
-		Version:             hybridLogicalTimestampPtr(cfg.Version),
-		Guards:              factoryGuardsAPIFromInternal(cfg.Guards),
-		InputTypes:          inputTypesAPIFromInternal(cfg.InputTypes),
-		InvocationReturn:    invocationReturnAPIFromInternal(cfg.InvocationReturn),
-		InvocationSignature: invocationSignatureAPIFromInternal(cfg.InvocationSignature),
-		Orchestrator:        orchestratorAPIFromInternal(cfg),
-		WorkTypes:           workTypesAPIFromInternal(cfg.WorkTypes),
-		Resources:           resourcesAPIFromInternal(cfg.Resources),
-		SupportingFiles:     resourceManifestAPIFromInternal(cfg.ResourceManifest),
-		Layout:              factoryLayoutAPIFromInternal(cfg.Layout),
-		Workers:             workersAPIFromInternal(cfg.Workers, cfg.Workstations),
-		Workstations:        workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
+		Name:                 factoryReferenceName(cfg),
+		Id:                   stringPtrIfNotEmpty(cfg.Project),
+		Version:              hybridLogicalTimestampPtr(cfg.Version),
+		Guards:               factoryGuardsAPIFromInternal(cfg.Guards),
+		InputTypes:           inputTypesAPIFromInternal(cfg.InputTypes),
+		InvocationReturn:     invocationReturnAPIFromInternal(cfg.InvocationReturn),
+		InvocationSignature:  invocationSignatureAPIFromInternal(cfg.InvocationSignature),
+		InvocationRecurrence: invocationRecurrenceAPIFromInternal(cfg.InvocationRecurrence),
+		Orchestrator:         orchestratorAPIFromInternal(cfg),
+		WorkTypes:            workTypesAPIFromInternal(cfg.WorkTypes),
+		Resources:            resourcesAPIFromInternal(cfg.Resources),
+		SupportingFiles:      resourceManifestAPIFromInternal(cfg.ResourceManifest),
+		Layout:               factoryLayoutAPIFromInternal(cfg.Layout),
+		Workers:              workersAPIFromInternal(cfg.Workers, cfg.Workstations),
+		Workstations:         workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
+	}
+}
+
+func invocationRecurrenceAPIFromInternal(value *interfaces.InvocationRecurrenceConfig) *factoryapi.FactoryInvocationRecurrence {
+	if value == nil {
+		return nil
+	}
+	return &factoryapi.FactoryInvocationRecurrence{
+		PeriodArgument:     value.PeriodArgument,
+		StartupWorkstation: value.StartupWorkstation,
+		RepeatWorkstation:  value.RepeatWorkstation,
 	}
 }
 

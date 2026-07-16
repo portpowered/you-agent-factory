@@ -165,7 +165,7 @@ type FactoryService struct {
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
 	durableExecution         factorysessionexecution.Service
-	loopIntervalSessions     sync.Map
+	recurrenceSessions       sync.Map
 }
 
 func composedDurableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {

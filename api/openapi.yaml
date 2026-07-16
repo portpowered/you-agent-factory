@@ -8177,6 +8177,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/FactoryInvocationSignature'
           description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
+        invocationRecurrence:
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationRecurrence'
+          description: Optional session-scoped recurrence capability activated by invocation.
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -10013,6 +10017,24 @@ components:
           type: string
           minLength: 1
           description: Operator worker preset inherited by child calls using this agent id.
+    FactoryInvocationRecurrence:
+      type: object
+      description: Optional session-scoped recurrence capability for an invocation. The runtime triggers the startup workstation after the first submitted Work and starts the repeat workstation at the validated duration supplied by periodArgument.
+      additionalProperties: false
+      required:
+        - periodArgument
+        - startupWorkstation
+        - repeatWorkstation
+      properties:
+        periodArgument:
+          type: string
+          description: Invocation-signature parameter that supplies the recurrence duration.
+        startupWorkstation:
+          type: string
+          description: Cron workstation triggered once after the invocation Work is submitted.
+        repeatWorkstation:
+          type: string
+          description: Cron workstation triggered at each recurrence boundary.
     FactoryGuardType:
       type: string
       description: Factory-level guard condition attached at the root factory definition.

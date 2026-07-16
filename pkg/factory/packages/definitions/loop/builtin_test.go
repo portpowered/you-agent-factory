@@ -41,6 +41,9 @@ func assertLoopInvocationSignature(t *testing.T, cfg *interfaces.FactoryConfig) 
 	if cfg.InvocationSignature == nil || len(cfg.InvocationSignature.Parameters) != 3 {
 		t.Fatalf("invocation signature = %#v, want request, period, and worktree parameters", cfg.InvocationSignature)
 	}
+	if got := cfg.InvocationRecurrence; got == nil || got.PeriodArgument != "period" || got.StartupWorkstation != "schedule-loop-iteration" || got.RepeatWorkstation != "repeat-loop-iteration" {
+		t.Fatalf("invocation recurrence = %#v, want loop recurrence capability", got)
+	}
 	request := cfg.InvocationSignature.Parameters[0]
 	if request.Name != "request" || !request.Required {
 		t.Fatalf("request parameter = %#v, want required request", request)

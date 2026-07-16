@@ -1,0 +1,20 @@
+type: object
+description: >-
+  Optional session-scoped recurrence capability for an invocation. The runtime
+  triggers the startup workstation after the first submitted Work and starts
+  the repeat workstation at the validated duration supplied by periodArgument.
+additionalProperties: false
+required:
+  - periodArgument
+  - startupWorkstation
+  - repeatWorkstation
+properties:
+  periodArgument:
+    type: string
+    description: Invocation-signature parameter that supplies the recurrence duration.
+  startupWorkstation:
+    type: string
+    description: Cron workstation triggered once after the invocation Work is submitted.
+  repeatWorkstation:
+    type: string
+    description: Cron workstation triggered at each recurrence boundary.

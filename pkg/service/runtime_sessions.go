@@ -621,7 +621,7 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	}
 
 	fs.unregisterLiveSession(sessionID)
-	fs.loopIntervalSessions.Delete(sessionID)
+	fs.recurrenceSessions.Delete(sessionID)
 	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		return err
 	}
@@ -2190,41 +2190,46 @@ func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvo
 		SubmitWork:    fs.submitSessionInvocationWork,
 		Observe:       fs.observeSessionInvocation,
 		Telemetry:     fs.sessionInvocationTelemetry(),
-		BeforeSubmit:  fs.configureLoopInterval,
-		AfterSubmit:   fs.triggerLoopStartup,
+		BeforeSubmit:  fs.configureInvocationRecurrence,
+		AfterSubmit:   fs.triggerInvocationRecurrence,
 		SpecialCase:   serviceSessionInvocationSpecialCase{},
 	})
 }
 
-func (fs *FactoryService) configureLoopInterval(
+func (fs *FactoryService) configureInvocationRecurrence(
 	_ context.Context,
 	sessionID string,
 	cfg *interfaces.FactoryConfig,
 	arguments *workinvocation.NormalizedArguments,
 ) error {
-	if cfg == nil || cfg.Name != "@you/loop" {
+	recurrence := invocationRecurrence(cfg)
+	if recurrence == nil {
 		return nil
 	}
-	if _, loaded := fs.loopIntervalSessions.LoadOrStore(sessionID, struct{}{}); loaded {
+	if err := validateInvocationRecurrence(cfg, recurrence); err != nil {
+		return err
+	}
+	if _, loaded := fs.recurrenceSessions.LoadOrStore(sessionID, struct{}{}); loaded {
 		return nil
 	}
-	if err := fs.startLoopInterval(sessionID, cfg, arguments); err != nil {
-		fs.loopIntervalSessions.Delete(sessionID)
+	if err := fs.startInvocationRecurrence(sessionID, cfg, recurrence, arguments); err != nil {
+		fs.recurrenceSessions.Delete(sessionID)
 		return err
 	}
 	return nil
 }
 
-func (fs *FactoryService) startLoopInterval(
+func (fs *FactoryService) startInvocationRecurrence(
 	sessionID string,
 	cfg *interfaces.FactoryConfig,
+	recurrence *interfaces.InvocationRecurrenceConfig,
 	arguments *workinvocation.NormalizedArguments,
 ) error {
-	period, err := loopInvocationPeriod(arguments)
+	period, err := invocationRecurrencePeriod(recurrence, arguments)
 	if err != nil {
 		return err
 	}
-	handle, sidecarCtx, err := fs.loopIntervalRuntime(sessionID)
+	handle, sidecarCtx, err := fs.recurrenceRuntime(sessionID)
 	if err != nil {
 		return err
 	}
@@ -2232,7 +2237,7 @@ func (fs *FactoryService) startLoopInterval(
 	if err != nil {
 		return err
 	}
-	workstation, err := loopWorkstation(cfg, "repeat-loop-iteration")
+	workstation, err := recurrenceWorkstation(cfg, recurrence.RepeatWorkstation)
 	if err != nil {
 		return err
 	}
@@ -2247,73 +2252,100 @@ func (fs *FactoryService) startLoopInterval(
 		workstation,
 		period,
 	); err != nil {
-		return fmt.Errorf("loop period: %w", err)
+		return fmt.Errorf("invocation recurrence: %w", err)
 	}
 	return nil
 }
 
-func (fs *FactoryService) loopIntervalRuntime(sessionID string) (*liveRuntimeHandle, context.Context, error) {
+func (fs *FactoryService) recurrenceRuntime(sessionID string) (*liveRuntimeHandle, context.Context, error) {
 	handle := liveSessionHandle(fs.sessionByID(sessionID))
 	if handle == nil || handle.Bundle == nil {
-		return nil, nil, fmt.Errorf("loop period: Factory Session runtime is unavailable")
+		return nil, nil, fmt.Errorf("invocation recurrence: Factory Session runtime is unavailable")
 	}
 	handle.SidecarMu.Lock()
 	sidecarCtx := handle.SidecarContext
 	handle.SidecarMu.Unlock()
 	if sidecarCtx == nil {
-		return nil, nil, fmt.Errorf("loop period: Factory Session sidecars are unavailable")
+		return nil, nil, fmt.Errorf("invocation recurrence: Factory Session sidecars are unavailable")
 	}
 	return handle, sidecarCtx, nil
 }
 
-func loopWorkstation(cfg *interfaces.FactoryConfig, name string) (interfaces.FactoryWorkstationConfig, error) {
+func recurrenceWorkstation(cfg *interfaces.FactoryConfig, name string) (interfaces.FactoryWorkstationConfig, error) {
+	if strings.TrimSpace(name) == "" {
+		return interfaces.FactoryWorkstationConfig{}, fmt.Errorf("invocation recurrence workstation is required")
+	}
 	for _, workstation := range cfg.Workstations {
 		if workstation.Name == name {
+			if workstation.Kind != interfaces.WorkstationKindCron {
+				return interfaces.FactoryWorkstationConfig{}, fmt.Errorf("invocation recurrence workstation %q must be CRON", name)
+			}
 			return workstation, nil
 		}
 	}
-	return interfaces.FactoryWorkstationConfig{}, fmt.Errorf("loop period: %s workstation is missing", name)
+	return interfaces.FactoryWorkstationConfig{}, fmt.Errorf("invocation recurrence: %s workstation is missing", name)
 }
 
-func (fs *FactoryService) triggerLoopStartup(
+func validateInvocationRecurrence(cfg *interfaces.FactoryConfig, recurrence *interfaces.InvocationRecurrenceConfig) error {
+	if recurrence == nil || strings.TrimSpace(recurrence.PeriodArgument) == "" {
+		return fmt.Errorf("invocation recurrence period argument is required")
+	}
+	if _, err := recurrenceWorkstation(cfg, recurrence.StartupWorkstation); err != nil {
+		return err
+	}
+	_, err := recurrenceWorkstation(cfg, recurrence.RepeatWorkstation)
+	return err
+}
+
+func (fs *FactoryService) triggerInvocationRecurrence(
 	ctx context.Context,
 	sessionID string,
 	cfg *interfaces.FactoryConfig,
 	_ *workinvocation.NormalizedArguments,
 ) error {
-	if cfg == nil || cfg.Name != "@you/loop" {
+	recurrence := invocationRecurrence(cfg)
+	if recurrence == nil {
 		return nil
 	}
 	session := fs.sessionByID(sessionID)
 	handle := liveSessionHandle(session)
 	if handle == nil || handle.Bundle == nil {
-		return fmt.Errorf("loop startup: Factory Session runtime is unavailable")
+		return fmt.Errorf("invocation recurrence: Factory Session runtime is unavailable")
 	}
 	workersScheduler, err := fs.requireWorkersScheduler()
 	if err != nil {
 		return err
 	}
-	for _, workstation := range cfg.Workstations {
-		if workstation.Name == "schedule-loop-iteration" {
-			return workersScheduler.SubmitCronTick(ctx, handle.Bundle.RuntimeCfg,
-				workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir()),
-				workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory)), workstation, time.Time{})
-		}
+	workstation, err := recurrenceWorkstation(cfg, recurrence.StartupWorkstation)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("loop startup: schedule-loop-iteration workstation is missing")
+	return workersScheduler.SubmitCronTick(ctx, handle.Bundle.RuntimeCfg,
+		workersScheduler.WorkflowIdentityForFactoryDir(handle.Bundle.RuntimeCfg.FactoryDir()),
+		workersservice.WorkRequestSubmitter(submitWorkRequestWithFactory(handle.Bundle.Factory)), workstation, time.Time{})
 }
 
-func loopInvocationPeriod(arguments *workinvocation.NormalizedArguments) (time.Duration, error) {
-	if arguments == nil {
-		return 0, fmt.Errorf("period is required")
+func invocationRecurrence(cfg *interfaces.FactoryConfig) *interfaces.InvocationRecurrenceConfig {
+	if cfg == nil || cfg.InvocationRecurrence == nil {
+		return nil
 	}
-	argument, ok := arguments.Arguments["period"]
+	return cfg.InvocationRecurrence
+}
+
+func invocationRecurrencePeriod(recurrence *interfaces.InvocationRecurrenceConfig, arguments *workinvocation.NormalizedArguments) (time.Duration, error) {
+	if recurrence == nil || strings.TrimSpace(recurrence.PeriodArgument) == "" {
+		return 0, fmt.Errorf("invocation recurrence period argument is required")
+	}
+	if arguments == nil {
+		return 0, fmt.Errorf("%s is required", recurrence.PeriodArgument)
+	}
+	argument, ok := arguments.Arguments[recurrence.PeriodArgument]
 	if !ok || len(argument.Values) != 1 {
-		return 0, fmt.Errorf("period must have exactly one value")
+		return 0, fmt.Errorf("%s must have exactly one value", recurrence.PeriodArgument)
 	}
 	period, err := time.ParseDuration(argument.Values[0])
 	if err != nil || period <= 0 {
-		return 0, fmt.Errorf("period %q must be a positive duration", argument.Values[0])
+		return 0, fmt.Errorf("%s %q must be a positive duration", recurrence.PeriodArgument, argument.Values[0])
 	}
 	return period, nil
 }

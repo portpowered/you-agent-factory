@@ -93,6 +93,13 @@ adapt outward. For example, a new session read that exposes JavaScript
 orchestrator progress should keep progress derivation in Factory Session or
 orchestrator owners, then map it through API, CLI, MCP, or UI boundaries.
 
+Factory-specific invocation lifecycle policy must be declared by factory
+configuration rather than selected through package-name or workstation-name
+branches in `FactoryService`. For recurrence, use the public
+`invocationRecurrence` capability to name the invocation period argument and
+the authored startup/repeat cron workstations; the generic Factory Session
+coordinator only validates and runs that declaration.
+
 ## Root Package Guardrails
 
 New root `pkg/` package families need an explicit target-owner rationale in the

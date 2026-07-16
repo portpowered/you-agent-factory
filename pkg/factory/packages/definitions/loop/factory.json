@@ -48,6 +48,11 @@
       }
     ]
   },
+  "invocationRecurrence": {
+    "periodArgument": "period",
+    "startupWorkstation": "schedule-loop-iteration",
+    "repeatWorkstation": "repeat-loop-iteration"
+  },
   "workTypes": [
     {
       "name": "loop-control",
