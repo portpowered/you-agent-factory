@@ -50,7 +50,6 @@
   a failed CI result has a direct local rerun. In `pwsh` summary steps, write
   expanded GitHub expressions as plain text rather than surrounding them with
   PowerShell backticks, which can escape the closing quote after expansion.
-  The UI dead-code baseline can require explicit entries for Vite/Vitest setup,
-  mock, and declaration entrypoints that are referenced only by configuration;
-  confirm those references before accepting the normalized current report into
-  `docs/internal/development/frontend-deadcode-baseline.json`.
+  Run the UI dead-code check through the pinned Bun toolchain (`bun install
+  --frozen-lockfile` followed by `bun run deadcode`); its configuration-aware
+  analysis can differ from an npm-installed dependency tree.
