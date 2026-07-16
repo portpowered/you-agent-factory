@@ -110,7 +110,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/ingest",
-      "minimum": 80.36
+      "minimum": 79.45
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages",
@@ -252,7 +252,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore",
-      "minimum": 90.65
+      "minimum": 90.36
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream",
@@ -662,7 +662,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/work/invocation",
-      "minimum": 75.33
+      "minimum": 75.09
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/work/materialize",

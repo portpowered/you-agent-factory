@@ -5,6 +5,9 @@
 ## Commands
 
 - Default non-long lane: `make test-functional`
+- Ordinary unit and package-integration lane: `make test-unit`
+- Stress lane: `make test-stress`
+- Release-package lane: `make test-release`
 - Independent functional coverage report: `make test-functional-coverage`
 - Independent backend unit coverage report: `make test-unit-coverage`
 - Built-CLI S24 acceptance lane (also run by `make verify-pr`): `make test-built-cli-acceptance`
