@@ -77,12 +77,28 @@ func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req workerproce
 	scriptReq := req
 	scriptReq.Command = cfg.Command
 	scriptReq.Args = append([]string(nil), cfg.Args...)
-	scriptReq.Env = workerprocess.MergeCommandEnv(req.Env, workerprocess.CommandEnvEntriesFromMap(cfg.Env))
+	scriptReq.Env = workerprocess.MergeCommandEnv(
+		req.Env,
+		workerprocess.CommandEnvEntriesFromMap(mockWorkerOriginalCommandEnv(req)),
+		workerprocess.CommandEnvEntriesFromMap(cfg.Env),
+	)
 	scriptReq.Stdin = []byte(cfg.Stdin)
 	if cfg.WorkingDirectory != "" {
 		scriptReq.WorkDir = cfg.WorkingDirectory
 	}
 	return r.runNext(scriptCtx, scriptReq)
+}
+
+func mockWorkerOriginalCommandEnv(req workerprocess.CommandRequest) map[string]string {
+	args, err := json.Marshal(req.Args)
+	if err != nil {
+		args = []byte("[]")
+	}
+	return map[string]string{
+		"YOU_MOCK_WORKER_COMMAND":   req.Command,
+		"YOU_MOCK_WORKER_ARGS_JSON": string(args),
+		"YOU_MOCK_WORKER_TYPE":      req.WorkerType,
+	}
 }
 
 func (r *MockWorkerCommandRunner) runNext(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {

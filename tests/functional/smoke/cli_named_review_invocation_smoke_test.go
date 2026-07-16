@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,27 +24,33 @@ func TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection(t *t
 	}
 
 	for _, tc := range []struct {
-		name         string
-		configure    func(t *testing.T, factoryDir string)
-		operatorArgs []string
+		name             string
+		configure        func(t *testing.T, factoryDir string)
+		operatorArgs     []string
+		expectedProvider string
+		expectedModel    string
 	}{
 		{name: "defaults"},
 		{
-			name: "materialized_configuration",
+			name:             "materialized_configuration",
+			expectedProvider: "codex",
+			expectedModel:    "configured-codex-model",
 			configure: func(t *testing.T, factoryDir string) {
 				setReviewWorkerModel(t, factoryDir, "configured-codex-model")
 			},
 		},
 		{
-			name: "model_provider_flags",
+			name:             "model_provider_flags",
+			expectedProvider: "gemini",
+			expectedModel:    "flag-gemini-model",
 			operatorArgs: []string{
-				"--default-worker-model-provider", "CODEX",
-				"--default-worker-model", "flag-codex-model",
+				"--default-worker-model-provider", "GEMINI",
+				"--default-worker-model", "flag-gemini-model",
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			response, reviewCalls, err := runNamedReviewInvocationCLIJSON(t, tc.configure, tc.operatorArgs)
+			response, invocations, err := runNamedReviewInvocationCLIJSON(t, tc.configure, tc.operatorArgs)
 			if err != nil {
 				t.Fatalf("you run --named %s: %v", review.PackagedFactoryName, err)
 			}
@@ -55,9 +60,10 @@ func TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection(t *t
 			if got := invocationPrimaryResultText(t, response); got != "approved revised candidate" {
 				t.Fatalf("primaryResult = %q, want approved revised candidate", got)
 			}
-			if reviewCalls != 2 {
-				t.Fatalf("review invocation count = %d, want rejection followed by approval", reviewCalls)
+			if len(invocations) != 4 {
+				t.Fatalf("provider invocation count = %d, want work/review followed by revised work/review", len(invocations))
 			}
+			assertReviewProviderInvocations(t, invocations, tc.expectedProvider, tc.expectedModel)
 		})
 	}
 }
@@ -66,7 +72,7 @@ func runNamedReviewInvocationCLIJSON(
 	t *testing.T,
 	configure func(*testing.T, string),
 	operatorArgs []string,
-) (factoryapi.InvocationResponse, int, error) {
+) (factoryapi.InvocationResponse, []reviewProviderInvocation, error) {
 	t.Helper()
 
 	homeDir := t.TempDir()
@@ -82,7 +88,7 @@ func runNamedReviewInvocationCLIJSON(
 		configure(t, factoryDir)
 	}
 
-	mockWorkersPath, reviewCallsPath := writePackagedReviewMockWorkers(t)
+	mockWorkersPath, invocationPath := writePackagedReviewMockWorkers(t)
 	port, err := reserveLocalTCPPort()
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
@@ -117,71 +123,127 @@ func runNamedReviewInvocationCLIJSON(
 	if runErr != nil && stderr.Len() > 0 {
 		runErr = fmt.Errorf("%w\nstderr:\n%s", runErr, stderr.String())
 	}
+	if runErr != nil && stdout.Len() > 0 {
+		runErr = fmt.Errorf("%w\nstdout:\n%s", runErr, stdout.String())
+	}
 
-	count := reviewInvocationCount(t, reviewCallsPath)
-	return response, count, runErr
+	if runErr != nil {
+		return response, nil, runErr
+	}
+	return response, reviewProviderInvocations(t, invocationPath), nil
+}
+
+type reviewProviderInvocation struct {
+	Provider string          `json:"provider"`
+	Args     json.RawMessage `json:"args"`
+	Review   bool            `json:"review"`
 }
 
 func writePackagedReviewMockWorkers(t *testing.T) (string, string) {
 	t.Helper()
 
 	scriptDir := t.TempDir()
-	counterPath := filepath.Join(scriptDir, "reviewer.count")
-	reviewerCommand, reviewerArgs := packagedReviewSequenceCommand(t, scriptDir, counterPath)
-	executorCommand, executorArgs := mockWorkerEchoCommand("candidate work")
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
-			{
-				WorkerName: "review-work-executor", WorkstationName: review.PackagedExecuteWorkstationName,
-				RunType:      factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: executorCommand, Args: executorArgs},
-			},
-			{
-				WorkerName: "review-work-reviewer", WorkstationName: review.PackagedReviewWorkstationName,
-				RunType:      factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: reviewerCommand, Args: reviewerArgs},
-			},
-		},
-	}
-	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-review.json"), counterPath
-}
-
-func packagedReviewSequenceCommand(t *testing.T, scriptDir, counterPath string) (string, []string) {
-	t.Helper()
+	invocationPath := filepath.Join(scriptDir, "provider-invocations.jsonl")
 	if runtime.GOOS == "windows" {
-		scriptPath := filepath.Join(scriptDir, "reviewer.ps1")
-		script := "$count = 0\n" +
-			"if (Test-Path -LiteralPath '" + counterPath + "') { $count = [int](Get-Content -Raw -LiteralPath '" + counterPath + "') }\n" +
-			"if ($count -eq 0) { [Console]::Out.Write('{\"decision\":\"REJECTED\",\"feedback\":\"add the release date\"}') } else { [Console]::Out.Write('{\"decision\":\"ACCEPTED\",\"output\":\"approved revised candidate\"}') }\n" +
-			"[IO.File]::WriteAllText('" + counterPath + "', [string]($count + 1))\n"
-		if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
-			t.Fatalf("write review sequence script: %v", err)
-		}
-		return "powershell.exe", []string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", scriptPath}
+		writePackagedReviewMockWorkerWindows(t, scriptDir, invocationPath)
+	} else {
+		writePackagedReviewMockWorkerPOSIX(t, scriptDir, invocationPath)
 	}
-
-	scriptPath := filepath.Join(scriptDir, "reviewer.sh")
-	script := "#!/bin/sh\ncount=0\nif [ -f \"" + counterPath + "\" ]; then count=$(cat \"" + counterPath + "\"); fi\n" +
-		"if [ \"$count\" -eq 0 ]; then printf '%s' '{\"decision\":\"REJECTED\",\"feedback\":\"add the release date\"}'; else printf '%s' '{\"decision\":\"ACCEPTED\",\"output\":\"approved revised candidate\"}'; fi\n" +
-		"printf '%s' $((count + 1)) > \"" + counterPath + "\"\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write review sequence script: %v", err)
-	}
-	return scriptPath, nil
+	command, args := packagedReviewMockWorkerCommand(scriptDir)
+	cfg := factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{
+		{WorkerName: "review-work-executor", WorkstationName: review.PackagedExecuteWorkstationName, RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: command, Args: args}},
+		{WorkerName: "review-work-reviewer", WorkstationName: review.PackagedReviewWorkstationName, RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: command, Args: args}},
+	}}
+	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-review.json"), invocationPath
 }
 
-func reviewInvocationCount(t *testing.T, path string) int {
+func packagedReviewMockWorkerCommand(scriptDir string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		return "powershell.exe", []string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", filepath.Join(scriptDir, "mock-provider.ps1")}
+	}
+	return filepath.Join(scriptDir, "mock-provider.sh"), nil
+}
+
+func writePackagedReviewMockWorkerWindows(t *testing.T, scriptDir, invocationPath string) {
+	t.Helper()
+	scriptPath := filepath.Join(scriptDir, "mock-provider.ps1")
+	script := "$originalArgs = $env:YOU_MOCK_WORKER_ARGS_JSON | ConvertFrom-Json\n" +
+		"$review = $env:YOU_MOCK_WORKER_TYPE -eq 'review-work-reviewer'\n" +
+		"$entry = @{provider=$env:YOU_MOCK_WORKER_COMMAND; args=$originalArgs; review=$review} | ConvertTo-Json -Compress\n" +
+		"Add-Content -LiteralPath '" + invocationPath + "' -Value $entry\n" +
+		"if ($review) { $count = @(Get-Content -LiteralPath '" + invocationPath + "' | ConvertFrom-Json | Where-Object { $_.review }).Count; if ($count -eq 1) { $output='{\"decision\":\"REJECTED\",\"feedback\":\"add the release date\"}' } else { $output='{\"decision\":\"ACCEPTED\",\"output\":\"approved revised candidate\"}' } } else { $output='candidate work' }\n" +
+		"[Console]::Out.Write($output)\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o600); err != nil {
+		t.Fatalf("write mock provider script: %v", err)
+	}
+}
+
+func writePackagedReviewMockWorkerPOSIX(t *testing.T, scriptDir, invocationPath string) {
+	t.Helper()
+	script := "#!/bin/sh\nreview=false\n[ \"$YOU_MOCK_WORKER_TYPE\" = 'review-work-reviewer' ] && review=true\n" +
+		"printf '{\"provider\":\"%s\",\"args\":%s,\"review\":%s}\\n' \"$YOU_MOCK_WORKER_COMMAND\" \"$YOU_MOCK_WORKER_ARGS_JSON\" \"$review\" >> \"" + invocationPath + "\"\n" +
+		"if [ \"$review\" = true ]; then count=$(grep -c '\"review\":true' \"" + invocationPath + "\"); if [ \"$count\" -eq 1 ]; then printf '%s' '{\"decision\":\"REJECTED\",\"feedback\":\"add the release date\"}'; else printf '%s' '{\"decision\":\"ACCEPTED\",\"output\":\"approved revised candidate\"}'; fi; else printf '%s' 'candidate work'; fi\n"
+	path := filepath.Join(scriptDir, "mock-provider.sh")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write mock provider: %v", err)
+	}
+}
+
+func reviewProviderInvocations(t *testing.T, path string) []reviewProviderInvocation {
 	t.Helper()
 	payload, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("read review invocation count: %v", err)
+		t.Fatalf("read provider invocations: %v", err)
 	}
-	count, err := strconv.Atoi(strings.TrimSpace(string(payload)))
-	if err != nil {
-		t.Fatalf("parse review invocation count %q: %v", payload, err)
+	var invocations []reviewProviderInvocation
+	for _, line := range strings.Split(strings.TrimSpace(string(payload)), "\n") {
+		var invocation reviewProviderInvocation
+		if err := json.Unmarshal([]byte(line), &invocation); err != nil {
+			t.Fatalf("decode provider invocation %q: %v", line, err)
+		}
+		invocations = append(invocations, invocation)
 	}
-	return count
+	return invocations
+}
+
+func assertReviewProviderInvocations(t *testing.T, invocations []reviewProviderInvocation, wantProvider, wantModel string) {
+	t.Helper()
+	for index, invocation := range invocations {
+		if wantProvider != "" && invocation.Provider != wantProvider {
+			t.Fatalf("provider invocation %d = %q, want %q", index, invocation.Provider, wantProvider)
+		}
+		if (index%2 == 1) != invocation.Review {
+			t.Fatalf("provider invocation %d review = %t, want alternating work/review", index, invocation.Review)
+		}
+		args := providerInvocationArgs(t, invocation)
+		if wantModel != "" && !containsAdjacentArgs(args, "--model", wantModel) {
+			t.Fatalf("provider invocation %d args = %#v, want --model %q", index, args, wantModel)
+		}
+	}
+}
+
+func providerInvocationArgs(t *testing.T, invocation reviewProviderInvocation) []string {
+	t.Helper()
+	var args []string
+	if err := json.Unmarshal(invocation.Args, &args); err == nil {
+		return args
+	}
+	var wrapped struct {
+		Value []string `json:"value"`
+	}
+	if err := json.Unmarshal(invocation.Args, &wrapped); err != nil || wrapped.Value == nil {
+		t.Fatalf("decode provider args %s: %v", invocation.Args, err)
+	}
+	return wrapped.Value
+}
+
+func containsAdjacentArgs(args []string, flag, value string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == flag && args[index+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func setReviewWorkerModel(t *testing.T, factoryDir, model string) {

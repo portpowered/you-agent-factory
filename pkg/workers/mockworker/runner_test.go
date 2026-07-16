@@ -272,7 +272,11 @@ func TestMockWorkerCommandRunner_ScriptConfigTransformsRequest(t *testing.T) {
 	if !reflect.DeepEqual(next.req.Args, []string{"--flag", "value"}) {
 		t.Fatalf("Args = %#v, want script args", next.req.Args)
 	}
-	if !reflect.DeepEqual(next.req.Env, []string{"BASE=override", "KEEP=value", "EXTRA=overlay"}) {
+	if !reflect.DeepEqual(next.req.Env, []string{
+		"BASE=override", "KEEP=value",
+		"YOU_MOCK_WORKER_ARGS_JSON=[\"ignored\"]", "YOU_MOCK_WORKER_COMMAND=ignored", "YOU_MOCK_WORKER_TYPE=worker",
+		"EXTRA=overlay",
+	}) {
 		t.Fatalf("Env = %#v, want merged env preserving order with overlays", next.req.Env)
 	}
 	if string(next.req.Stdin) != "script-stdin" {
