@@ -316,7 +316,7 @@ review failure ends at `reviewable-work:failed` and has no successful primary
 result.
 
 The materialized factory is editable at
-`~/.you-agent-factory/you-agent-factories/@you/review`. Its two workers accept
+`~/.you-agent-factory/factories/@you/review`. Its two workers accept
 the standard agent-worker fields, including `modelProvider` (`CODEX` or
 `CLAUDE`) and `model`, either in `factory.json` or their split `AGENTS.md`
 front matter. Omit them to use normal operator defaults; `YOU_DEFAULT_WORKER_MODEL_PROVIDER`,
@@ -328,7 +328,7 @@ needs a different model. Unsupported provider values are rejected by normal
 factory validation:
 
 ```bash
-you factory config validate ~/.you-agent-factory/you-agent-factories/@you/review
+you factory config validate ~/.you-agent-factory/factories/@you/review
 ```
 
 You can customize the worker and workstation prompts, but preserve the review
