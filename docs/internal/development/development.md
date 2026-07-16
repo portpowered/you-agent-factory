@@ -188,6 +188,25 @@ Covered UI and browser integration lanes emit stable slow-file summaries through
 
 Backend coverage is intentionally split. `make test-unit-coverage` discovers only `./cmd/factory` and maintained backend `./pkg/...` test packages and preserves the repository's aggregate and per-package coverage gates. `make test-functional-coverage` discovers only maintained short packages under `tests/functional/...`, excludes `tests/functional/internal/...`, and reports total and per-package coverage directly from that functional-only profile over the same backend-owned code. Packages not exercised by a functional test are reported at `0.0%`; their unit-test coverage is never substituted. The functional aggregate floor is `GO_FUNCTIONAL_COVERAGE_MIN=33.1`, while every non-baselined package must meet `GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN=80.0`. Existing packages below that target are listed in `go-functional-coverage-package-baseline.txt`; new packages are intentionally absent and therefore must reach 80% instead of being added to the baseline by default. `make test-backend-coverage` and `make test-backend-functional` remain focused aliases for the unit and functional lanes respectively; `make test-backend-verification` is an aggregate compatibility target that runs both reports in sequence. Stress, built-CLI release acceptance, release-surface smoke, and tagged long tests remain outside both coverage profiles.
 
+The deterministic current package floors are recorded in
+`go-unit-coverage-package-minimums.json` and
+`go-functional-coverage-package-minimums.json`. Each manifest uses schema
+version `1`, names its `unit` or `functional` lane, and contains an import-path-
+sorted `packages` array. A measured entry has exactly `package` and a numeric
+`minimum` written with two decimal places. A package with no measurable
+statements uses `exception` instead of `minimum`; the exception must identify a
+`measurement` or `migration` defect and include `justification`, `owner`, a
+`deadline` in `YYYY-MM-DD` form, and an objective `removalGate`. Ordinary low
+coverage is represented by a numeric floor, not an exception.
+
+Bootstrap a new lane manifest from the lane's integer statement counts with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -generate-manifest <new-file>`. Generation is create-only: it refuses to overwrite reviewed policy.
+The renderer sorts entries and truncates each exact ratio downward to two
+decimal percentage points, so identical profiles produce identical bytes and a
+generated floor never exceeds its measurement. A later package-minimums change
+will add the explicit monotonic workflow for updating an existing reviewed
+manifest.
+
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 
 When a required lane fails, GitHub Actions keeps the lane-owned failure evidence for 14 days and names it explicitly in the lane summary:
