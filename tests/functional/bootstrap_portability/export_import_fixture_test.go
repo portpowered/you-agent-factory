@@ -3,16 +3,16 @@ package bootstrap_portability
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 const (
@@ -284,18 +284,33 @@ type namedFactoryReadback interface {
 	GetCurrentFactory(context.Context) (factoryapi.Factory, error)
 }
 
-func buildExportImportFixtureService(t *testing.T, rootDir string) namedFactoryReadback {
-	t.Helper()
+type namedFactoryReadbackFunc func(context.Context) (factoryapi.Factory, error)
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
+func (fn namedFactoryReadbackFunc) GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error) {
+	return fn(ctx)
+}
+
+func currentFactoryReadbackClient(baseURL string) namedFactoryReadback {
+	return namedFactoryReadbackFunc(func(ctx context.Context) (factoryapi.Factory, error) {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/factory-sessions/~default/factory", nil)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("build current factory request: %w", err)
+		}
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("get current factory: %w", err)
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			return factoryapi.Factory{}, fmt.Errorf("get current factory status = %d, want %d", response.StatusCode, http.StatusOK)
+		}
+
+		var current factoryapi.Factory
+		if err := json.NewDecoder(response.Body).Decode(&current); err != nil {
+			return factoryapi.Factory{}, fmt.Errorf("decode current factory response: %w", err)
+		}
+		return current, nil
 	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService(%s): %v", rootDir, err)
-	}
-	return svc
 }
 
 func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthoredFixture(t *testing.T) {
@@ -370,8 +385,11 @@ func TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignal
 	}
 	assertCurrentFactoryPointer(t, rootDir, "beta")
 
-	svc := buildExportImportFixtureService(t, rootDir)
-	fixture.assertCurrentFactorySignals(t, rootDir, svc, "beta")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:     rootDir,
+		UseMockWorkers: true,
+	})
+	fixture.assertCurrentFactorySignals(t, rootDir, currentFactoryReadbackClient(server.URL()), "beta")
 }
 
 func assertExportImportFixtureCanonicalRouteArraysJSON(
