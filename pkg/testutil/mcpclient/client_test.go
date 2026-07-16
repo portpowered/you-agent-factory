@@ -231,28 +231,42 @@ func newFrameRecorder(operationTarget int) *frameRecorder {
 	return recorder
 }
 
-func (r *frameRecorder) record(data []byte) {
+func (r *frameRecorder) record(data []byte) []rpcFrame {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	frames := make([]rpcFrame, 0)
 	_, _ = r.buffer.Write(data)
 	for {
 		line, err := r.buffer.ReadBytes('\n')
 		if err != nil {
-			_, _ = r.buffer.Write(line)
-			return
-		}
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		r.recorded = append(r.recorded, bytes.Clone(line))
-		var frame rpcFrame
-		if json.Unmarshal(line, &frame) == nil && (frame.Method == "tools/list" || frame.Method == "tools/call") {
-			r.operation++
-			if r.operation == r.target {
-				r.once.Do(func() { close(r.ready) })
+			if json.Valid(bytes.TrimSpace(line)) {
+				r.recordLine(line, &frames)
+				return frames
 			}
+			_, _ = r.buffer.Write(line)
+			return frames
 		}
+		r.recordLine(line, &frames)
+	}
+}
+
+func (r *frameRecorder) recordLine(line []byte, frames *[]rpcFrame) {
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return
+	}
+	r.recorded = append(r.recorded, bytes.Clone(line))
+	var frame rpcFrame
+	if json.Unmarshal(line, &frame) != nil {
+		return
+	}
+	*frames = append(*frames, frame)
+	if frame.Method != "tools/list" && frame.Method != "tools/call" {
+		return
+	}
+	r.operation++
+	if r.operation == r.target {
+		r.once.Do(func() { close(r.ready) })
 	}
 }
 
@@ -268,7 +282,7 @@ type recordingWriter struct {
 }
 
 func (w *recordingWriter) Write(data []byte) (int, error) {
-	w.recorder.record(data)
+	_ = w.recorder.record(data)
 	return w.destination.Write(data)
 }
 
@@ -284,9 +298,10 @@ type recordingReader struct {
 func (r *recordingReader) Read(data []byte) (int, error) {
 	n, err := r.source.Read(data)
 	if n > 0 {
-		r.recorder.record(data[:n])
-		var frame rpcFrame
-		if json.Unmarshal(bytes.TrimSpace(data[:n]), &frame) == nil && frame.ID != nil && frame.Method == "" {
+		for _, frame := range r.recorder.record(data[:n]) {
+			if frame.ID == nil || frame.Method != "" {
+				continue
+			}
 			r.responses++
 			if r.responses > 1 {
 				select {
