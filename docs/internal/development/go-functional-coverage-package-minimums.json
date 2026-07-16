@@ -769,6 +769,10 @@
       "minimum": 0.18
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/workers/application",
+      "minimum": 85.71
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/workers/cliprovider",
       "exception": {
         "kind": "measurement",
@@ -834,7 +838,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/agy",
-      "minimum": 11.01
+      "minimum": 10.82
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/claude",

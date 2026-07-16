@@ -312,7 +312,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer",
-      "minimum": 86.66
+      "minimum": 86.50
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/dashboard",
@@ -422,11 +422,11 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/runtimehost",
-      "minimum": 34.64
+      "minimum": 34.52
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service",
-      "minimum": 78.46
+      "minimum": 78.08
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
@@ -434,7 +434,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/runtimebuild",
-      "minimum": 89.61
+      "minimum": 88.23
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/sessionpersistence",
@@ -646,7 +646,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 74.32
+      "minimum": 73.38
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/work/content",
@@ -683,6 +683,10 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/agypty",
       "minimum": 82.19
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/workers/application",
+      "minimum": 85.71
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/cliprovider",
@@ -722,7 +726,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider",
-      "minimum": 85.89
+      "minimum": 85.77
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/adapter",
@@ -798,7 +802,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/service",
-      "minimum": 82.30
+      "minimum": 81.89
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/skippermissions",

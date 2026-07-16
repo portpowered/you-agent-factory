@@ -29,7 +29,10 @@
   explicit run/intentional-skip summary, per-suite coverage thresholds,
   diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
   Their exact local reruns are `make test-unit-coverage` and
-  `make test-functional-coverage`.
+  `make test-functional-coverage`. Both commands serialize Go package coverage
+  writers before canonicalizing repeated source blocks into one sorted profile;
+  keep that ordering so concurrent packages cannot corrupt the shared profile
+  and the uploaded artifact matches the totals enforced by the lane.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned
