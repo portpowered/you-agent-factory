@@ -17,8 +17,9 @@ func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) 
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelHost:     installedCacheInspectHost{},
 	})
 
 	models, err := svc.ListModels(context.Background())

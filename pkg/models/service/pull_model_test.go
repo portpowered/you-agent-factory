@@ -166,7 +166,7 @@ func TestService_PullModel_ProjectsModelHostResult(t *testing.T) {
 			Path: "model.gguf", Bytes: 42, SHA256: "abc",
 		}},
 	}}
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     host,
 	})

@@ -18,7 +18,7 @@ func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     missingCacheInspectHost{},
 	})

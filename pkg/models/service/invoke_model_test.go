@@ -27,7 +27,7 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     readyInvokeHost{},
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
