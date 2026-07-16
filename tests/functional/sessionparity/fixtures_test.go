@@ -3,9 +3,13 @@ package sessionparity
 import (
 	"bytes"
 	"encoding/json"
-	"reflect"
 	"testing"
 )
+
+type namedFixtureProjection struct {
+	interfaceName string
+	projection    Projection
+}
 
 func TestTerminalFixtureObservations_NormalizeAcrossCustomerInterfaces(t *testing.T) {
 	for _, test := range []struct {
@@ -17,9 +21,13 @@ func TestTerminalFixtureObservations_NormalizeAcrossCustomerInterfaces(t *testin
 		{name: "failure", observations: TerminalFailureObservations(), want: terminalFailureProjection()},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			got := normalizeFixtureObservations(t, test.observations)
-			if differences := Compare(test.want, got); len(differences) != 0 {
-				t.Fatalf("fixture projection differs from declared stable facts: %#v", differences)
+			projections := normalizeFixtureObservations(t, test.observations)
+			for _, got := range projections {
+				t.Run(got.interfaceName, func(t *testing.T) {
+					if differences := Compare(test.want, got.projection); len(differences) != 0 {
+						t.Fatalf("fixture projection differs from declared stable facts: %#v", differences)
+					}
+				})
 			}
 		})
 	}
@@ -34,15 +42,19 @@ func TestTerminalFixtureObservations_AreDeterministic(t *testing.T) {
 		{name: "failure", fixture: TerminalFailureObservations},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			firstProjection := normalizeFixtureObservations(t, test.fixture())
-			secondProjection := normalizeFixtureObservations(t, test.fixture())
-			if differences := Compare(firstProjection, secondProjection); len(differences) != 0 {
-				t.Fatalf("unchanged fixture produced semantic differences: %#v", differences)
-			}
-			firstJSON := projectionJSON(t, firstProjection)
-			secondJSON := projectionJSON(t, secondProjection)
-			if !bytes.Equal(firstJSON, secondJSON) {
-				t.Fatalf("serialized projection changed between identical fixture observations\nfirst:  %s\nsecond: %s", firstJSON, secondJSON)
+			first := normalizeFixtureObservations(t, test.fixture())
+			second := normalizeFixtureObservations(t, test.fixture())
+			for index := range first {
+				t.Run(first[index].interfaceName, func(t *testing.T) {
+					if differences := Compare(first[index].projection, second[index].projection); len(differences) != 0 {
+						t.Fatalf("unchanged fixture produced semantic differences: %#v", differences)
+					}
+					firstJSON := projectionJSON(t, first[index].projection)
+					secondJSON := projectionJSON(t, second[index].projection)
+					if !bytes.Equal(firstJSON, secondJSON) {
+						t.Fatalf("serialized projection changed between identical fixture observations\nfirst:  %s\nsecond: %s", firstJSON, secondJSON)
+					}
+				})
 			}
 		})
 	}
@@ -110,7 +122,7 @@ func fixtureString(value string) *string {
 	return &value
 }
 
-func normalizeFixtureObservations(t *testing.T, observations CapturedObservations) Projection {
+func normalizeFixtureObservations(t *testing.T, observations CapturedObservations) []namedFixtureProjection {
 	t.Helper()
 	rest, err := NormalizeREST(observations.REST)
 	if err != nil {
@@ -124,10 +136,17 @@ func normalizeFixtureObservations(t *testing.T, observations CapturedObservation
 	if err != nil {
 		t.Fatalf("NormalizeMCP: %v", err)
 	}
-	if !reflect.DeepEqual(cli, rest) || !reflect.DeepEqual(mcp, rest) {
-		t.Fatalf("customer-interface projections differ\nREST: %#v\nCLI: %#v\nMCP: %#v", rest, cli, mcp)
+	projections := []namedFixtureProjection{
+		{interfaceName: "REST", projection: rest},
+		{interfaceName: "CLI JSON", projection: cli},
+		{interfaceName: "MCP", projection: mcp},
 	}
-	return rest
+	for _, projection := range projections[1:] {
+		if differences := Compare(rest, projection.projection); len(differences) != 0 {
+			t.Fatalf("%s fixture differs from REST fixture: %#v", projection.interfaceName, differences)
+		}
+	}
+	return projections
 }
 
 func projectionJSON(t *testing.T, projection Projection) []byte {
