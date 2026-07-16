@@ -112,7 +112,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 	case "cli/you.docs":
 		markCovered(scenario, LaneShort, "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN", InterfaceCLI)
 	case "cli/you.run":
-		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText", InterfaceCLI)
+		markCovered(scenario, LaneShort, "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText", InterfaceCLI)
 	case "cli/you.submit.batch":
 		markCovered(scenario, LaneLong, "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory", InterfaceCLI)
 	case "cli/you.work.move":

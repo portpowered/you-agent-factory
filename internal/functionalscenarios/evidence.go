@@ -7,8 +7,10 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -47,7 +49,8 @@ func CheckEvidenceReferences(repositoryRoot string, manifest *Manifest) error {
 	used := make(map[string]map[string]bool)
 	for _, scenario := range manifest.Scenarios {
 		for _, evidence := range scenario.Evidence {
-			if err := checkEvidenceReference(repositoryRoot, evidence.Test); err != nil {
+			runtimeStableIDs, err := checkEvidenceReference(repositoryRoot, evidence.Test)
+			if err != nil {
 				return manifestCheckError(scenario.Interface, scenario.StableID, "evidence %q is not qualifying: %v", evidence.Test, err)
 			}
 			stableIDs, ok := declared[evidence.Test]
@@ -57,6 +60,16 @@ func CheckEvidenceReferences(repositoryRoot string, manifest *Manifest) error {
 					scenario.StableID,
 					"evidence %q is not declared by its customer-boundary test for this component (declared stable IDs: %v)",
 					evidence.Test,
+					stableIDs,
+				)
+			}
+			if !slices.Equal(runtimeStableIDs, stableIDs) {
+				return manifestCheckError(
+					scenario.Interface,
+					scenario.StableID,
+					"evidence %q directly declares stable IDs %v, but the registry requires %v",
+					evidence.Test,
+					runtimeStableIDs,
 					stableIDs,
 				)
 			}
@@ -146,34 +159,88 @@ func indexEvidenceRegistry(registry *EvidenceRegistry) (map[string][]string, err
 	return declared, nil
 }
 
-func checkEvidenceReference(repositoryRoot, reference string) error {
+func checkEvidenceReference(repositoryRoot, reference string) ([]string, error) {
 	testPath, testName, found := strings.Cut(reference, "::")
 	if !found || testPath == "" || testName == "" {
-		return fmt.Errorf("use path::TestName")
+		return nil, fmt.Errorf("use path::TestName")
 	}
 	normalizedPath := filepath.ToSlash(filepath.Clean(testPath))
 	if filepath.IsAbs(testPath) || normalizedPath == ".." || strings.HasPrefix(normalizedPath, "../") {
-		return fmt.Errorf("test path must stay within the repository")
+		return nil, fmt.Errorf("test path must stay within the repository")
 	}
 	if !hasQualifyingEvidenceRoot(normalizedPath) {
-		return fmt.Errorf("test path must be under tests/functional or tests/release, not an internal package test")
+		return nil, fmt.Errorf("test path must be under tests/functional or tests/release, not an internal package test")
 	}
 
 	filename := filepath.Join(repositoryRoot, filepath.FromSlash(normalizedPath))
 	parsed, err := parser.ParseFile(token.NewFileSet(), filename, nil, 0)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("cited test file does not exist")
+			return nil, fmt.Errorf("cited test file does not exist")
 		}
-		return fmt.Errorf("parse cited test file: %w", err)
+		return nil, fmt.Errorf("parse cited test file: %w", err)
 	}
 	for _, declaration := range parsed.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
 		if ok && function.Name.Name == testName && hasGoTestSignature(function) {
-			return nil
+			return directEvidenceDeclaration(parsed, function)
 		}
 	}
-	return fmt.Errorf("cited executable test symbol %q does not exist in %s", testName, normalizedPath)
+	return nil, fmt.Errorf("cited executable test symbol %q does not exist in %s", testName, normalizedPath)
+}
+
+func directEvidenceDeclaration(file *ast.File, function *ast.FuncDecl) ([]string, error) {
+	aliases := make(map[string]bool)
+	for _, imported := range file.Imports {
+		importPath, err := strconv.Unquote(imported.Path.Value)
+		if err != nil || importPath != "github.com/portpowered/infinite-you/tests/internal/functionalevidence" {
+			continue
+		}
+		alias := path.Base(importPath)
+		if imported.Name != nil {
+			alias = imported.Name.Name
+		}
+		if alias != "." && alias != "_" {
+			aliases[alias] = true
+		}
+	}
+
+	var declarations [][]string
+	ast.Inspect(function.Body, func(node ast.Node) bool {
+		call, ok := node.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		selector, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || selector.Sel.Name != "Covers" {
+			return true
+		}
+		packageName, ok := selector.X.(*ast.Ident)
+		if !ok || !aliases[packageName.Name] {
+			return true
+		}
+		stableIDs := make([]string, 0, len(call.Args)-1)
+		for _, argument := range call.Args[1:] {
+			literal, ok := argument.(*ast.BasicLit)
+			if !ok || literal.Kind != token.STRING {
+				declarations = append(declarations, nil)
+				return true
+			}
+			stableID, err := strconv.Unquote(literal.Value)
+			if err != nil {
+				declarations = append(declarations, nil)
+				return true
+			}
+			stableIDs = append(stableIDs, stableID)
+		}
+		slices.Sort(stableIDs)
+		declarations = append(declarations, stableIDs)
+		return true
+	})
+	if len(declarations) != 1 || len(declarations[0]) == 0 {
+		return nil, fmt.Errorf("cited test must contain exactly one direct functionalevidence.Covers call with literal stable IDs")
+	}
+	return declarations[0], nil
 }
 
 func hasGoTestSignature(function *ast.FuncDecl) bool {

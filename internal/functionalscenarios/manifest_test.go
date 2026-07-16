@@ -45,7 +45,18 @@ func TestCheckEvidenceReferencesRejectsStaleAndInternalOnlyCitations(t *testing.
 	if err := os.MkdirAll(filepath.Dir(functionalPath), 0o755); err != nil {
 		t.Fatalf("create functional fixture directory: %v", err)
 	}
-	if err := os.WriteFile(functionalPath, []byte("package functional\n\nimport \"testing\"\n\nfunc TestGetOne(t *testing.T) {}\nfunc TestGetTwo(t *testing.T) {}\nfunc TestHelper() {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(functionalPath, []byte(`package functional
+
+import (
+	"testing"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
+)
+
+func TestGetOne(t *testing.T) { functionalevidence.Covers(t, "rest/getOne") }
+func TestGetTwo(t *testing.T) { functionalevidence.Covers(t, "rest/getTwo") }
+func TestNoDeclaration(t *testing.T) {}
+func TestHelper() {}
+`), 0o644); err != nil {
 		t.Fatalf("write functional fixture: %v", err)
 	}
 	writeEvidenceRegistryFixture(t, root, []EvidenceDeclaration{{
@@ -90,6 +101,16 @@ func TestCheckEvidenceReferencesRejectsStaleAndInternalOnlyCitations(t *testing.
 	err := CheckEvidenceReferences(root, substituted)
 	if err == nil || !strings.Contains(err.Error(), `scenario "rest/getOne"`) || !strings.Contains(err.Error(), "not declared by its customer-boundary test for this component") || !strings.Contains(err.Error(), "rest/getTwo") {
 		t.Fatalf("CheckEvidenceReferences() substitution error = %v, want exact component binding diagnostic", err)
+	}
+
+	writeEvidenceRegistryFixture(t, root, []EvidenceDeclaration{{
+		Test: "tests/functional/api_test.go::TestNoDeclaration", StableIDs: []string{"rest/getOne"},
+	}})
+	missingDeclaration := cloneManifest(t, base)
+	missingDeclaration.Scenarios[0].Evidence[0].Test = "tests/functional/api_test.go::TestNoDeclaration"
+	err = CheckEvidenceReferences(root, missingDeclaration)
+	if err == nil || !strings.Contains(err.Error(), `scenario "rest/getOne"`) || !strings.Contains(err.Error(), "must contain exactly one direct functionalevidence.Covers call") {
+		t.Fatalf("CheckEvidenceReferences() missing declaration error = %v, want cited-test ownership diagnostic", err)
 	}
 }
 

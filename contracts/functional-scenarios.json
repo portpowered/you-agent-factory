@@ -242,7 +242,7 @@
       "interface": "cli",
       "classification": "runnable",
       "status": "covered",
-      "lane": "long",
+      "lane": "short",
       "executionClass": "deterministic",
       "evidence": [
         {
