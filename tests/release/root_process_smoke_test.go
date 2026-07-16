@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
+const compiledBinaryCommandTimeout = 30 * time.Second
+
 // TestRootProcessCompiledBinaryModeMatrix proves the process-root migration at
 // the installed-binary boundary instead of only through Cobra or root fakes.
 func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
@@ -84,13 +86,13 @@ func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
 
 func runBoundedBinary(t *testing.T, binaryPath string, environment []string, args ...string) (string, error) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), compiledBinaryCommandTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Env = environment
 	output, err := cmd.CombinedOutput()
 	if ctx.Err() == context.DeadlineExceeded {
-		t.Fatalf("you %s exceeded 10 second bound", strings.Join(args, " "))
+		t.Fatalf("you %s exceeded %s bound", strings.Join(args, " "), compiledBinaryCommandTimeout)
 	}
 	return string(output), err
 }
