@@ -101,7 +101,7 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 	response := factoryapi.FactoryDispatch{
 		Id:               result.ID,
 		SessionId:        result.SessionID,
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(result.OrchestratorKind),
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
 		DispatchKind:     factoryapi.FactoryDispatchKind(result.DispatchKind),
 		Status:           factoryapi.FactoryDispatchStatus(result.Status),
 	}

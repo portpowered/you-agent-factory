@@ -374,11 +374,17 @@ func generatedWorkers(workers []interfaces.FactoryWorker) []factoryapi.Worker {
 			name = worker.ID
 		}
 		out = append(out, factoryapi.Worker{
-			Name:             name,
-			ExecutorProvider: interfaces.GeneratedPublicFactoryWorkerProviderPtr(worker.Provider),
-			ModelProvider:    interfaces.GeneratedPublicFactoryWorkerModelProviderPtr(worker.ModelProvider),
-			Model:            stringPtrIfNotEmpty(worker.Model),
-			Type:             interfaces.GeneratedPublicFactoryWorkerTypePtr(worker.Config["type"]),
+			Name: name,
+			ExecutorProvider: generatedEnumPtr(worker.Provider, func(value string) factoryapi.WorkerProvider {
+				return factoryapi.WorkerProvider(interfaces.PublicWorkerProviderFromInternalRuntime(value))
+			}),
+			ModelProvider: generatedEnumPtr(worker.ModelProvider, func(value string) factoryapi.WorkerModelProvider {
+				return factoryapi.WorkerModelProvider(interfaces.PublicWorkerModelProviderFromInternalRuntime(value))
+			}),
+			Model: stringPtrIfNotEmpty(worker.Model),
+			Type: generatedEnumPtr(worker.Config["type"], func(value string) factoryapi.WorkerType {
+				return factoryapi.WorkerType(interfaces.PublicWorkerTypeFromInternalRuntime(value))
+			}),
 		})
 	}
 	return out
@@ -396,10 +402,12 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			name = workstation.ID
 		}
 		converted := factoryapi.Workstation{
-			Id:          stringPtrIfNotEmpty(workstation.ID),
-			Name:        name,
-			Worker:      workstation.WorkerID,
-			Type:        interfaces.GeneratedPublicFactoryWorkstationTypePtr(workstation.Config["type"]),
+			Id:     stringPtrIfNotEmpty(workstation.ID),
+			Name:   name,
+			Worker: workstation.WorkerID,
+			Type: generatedEnumPtr(workstation.Config["type"], func(value string) factoryapi.WorkstationType {
+				return factoryapi.WorkstationType(interfaces.PublicWorkstationTypeFromInternalRuntime(value, "", ""))
+			}),
 			Inputs:      generatedWorkstationIOs(workstation.InputPlaceIDs, placesByID),
 			Outputs:     generatedWorkstationIOsPtr(workstation.OutputPlaceIDs, placesByID),
 			OnContinue:  generatedWorkstationIOsPtr(workstation.ContinuePlaceIDs, placesByID),
@@ -407,7 +415,9 @@ func generatedWorkstations(workstations []interfaces.FactoryWorkstation, places 
 			OnFailure:   generatedWorkstationIOsPtr(workstation.FailurePlaceIDs, placesByID),
 		}
 		if workstation.Kind != "" {
-			converted.Behavior = interfaces.GeneratedPublicWorkstationKindPtr(interfaces.WorkstationKind(workstation.Kind))
+			converted.Behavior = generatedEnumPtr(workstation.Kind, func(value string) factoryapi.WorkstationKind {
+				return factoryapi.WorkstationKind(interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKind(value)))
+			})
 		}
 		out = append(out, converted)
 	}
@@ -595,4 +605,12 @@ func requestEventContent(parts []work.WorkContentPart) []work.WorkContentPart {
 func eventWorksPtr(items []work.FactoryWorkItem) *[]work.WorkRequestEventWork {
 	out := eventWorks(items)
 	return &out
+}
+
+func generatedEnumPtr[T ~string](value string, convert func(string) T) *T {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := convert(value)
+	return &converted
 }

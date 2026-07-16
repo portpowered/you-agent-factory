@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
@@ -79,8 +78,7 @@ func operatorDefaultProviderInternal(canonicalPublic string) (string, error) {
 	if trimmed == "" {
 		return "", nil
 	}
-	public := factoryapi.WorkerModelProvider(trimmed)
-	internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(public)
+	internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(trimmed)
 	if !ok {
 		return "", fmt.Errorf(
 			"unsupported worker model provider %q: %s",
@@ -127,12 +125,12 @@ func isSupportedRuntimeModelProvider(value string) bool {
 		}
 	}
 	if canonical := interfaces.StrictPublicFactoryWorkerModelProvider(trimmed); canonical != "" {
-		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(factoryapi.WorkerModelProvider(canonical)); ok {
+		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(canonical); ok {
 			return true
 		}
 	}
 	if canonical, ok := interfaces.CanonicalizeOperatorWorkerModelProviderInput(trimmed); ok && !interfaces.IsSymbolicWorkerModelProviderDefault(canonical) {
-		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(factoryapi.WorkerModelProvider(canonical)); ok {
+		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(canonical); ok {
 			return true
 		}
 	}

@@ -5,10 +5,8 @@ import (
 
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
@@ -18,26 +16,28 @@ func SupportedModelProviders() []modelprovider.ID {
 	return modelprovider.Supported()
 }
 
-var internalModelProviderToPublicWorkerModelProvider = map[modelprovider.ID]factoryapi.WorkerModelProvider{
-	modelprovider.Claude:   factoryapi.WorkerModelProviderClaude,
-	modelprovider.Codex:    factoryapi.WorkerModelProviderCodex,
-	modelprovider.Cursor:   factoryapi.WorkerModelProviderCursor,
-	modelprovider.Gemini:   factoryapi.WorkerModelProviderGemini,
-	modelprovider.Kiro:     factoryapi.WorkerModelProviderKiro,
-	modelprovider.OpenCode: factoryapi.WorkerModelProviderOpenCode,
-	modelprovider.Pi:       factoryapi.WorkerModelProviderPi,
-	modelprovider.Agy:      factoryapi.WorkerModelProviderAgy,
+var internalModelProviderToPublicWorkerModelProvider = map[modelprovider.ID]string{
+	modelprovider.Claude:   publicFactoryWorkerModelProviderClaude,
+	modelprovider.Codex:    publicFactoryWorkerModelProviderCodex,
+	modelprovider.Cursor:   publicFactoryWorkerModelProviderCursor,
+	modelprovider.Gemini:   publicFactoryWorkerModelProviderGemini,
+	modelprovider.Kiro:     publicFactoryWorkerModelProviderKiro,
+	modelprovider.OpenCode: publicFactoryWorkerModelProviderOpenCode,
+	modelprovider.Pi:       publicFactoryWorkerModelProviderPi,
+	modelprovider.Agy:      publicFactoryWorkerModelProviderAgy,
 }
 
-// PublicWorkerModelProviderFromInternal maps a canonical internal provider command to the generated public enum.
-func PublicWorkerModelProviderFromInternal(provider modelprovider.ID) (factoryapi.WorkerModelProvider, bool) {
+// PublicWorkerModelProviderFromInternal maps a canonical provider command to
+// the authored public Factory vocabulary without depending on a transport type.
+func PublicWorkerModelProviderFromInternal(provider modelprovider.ID) (string, bool) {
 	public, ok := internalModelProviderToPublicWorkerModelProvider[provider]
 	return public, ok
 }
 
-// InternalModelProviderFromPublicWorkerModelProvider maps a canonical public WorkerModelProvider to the internal command.
-func InternalModelProviderFromPublicWorkerModelProvider(value factoryapi.WorkerModelProvider) (modelprovider.ID, bool) {
-	switch StrictPublicFactoryWorkerModelProvider(string(value)) {
+// InternalModelProviderFromPublicWorkerModelProvider maps authored public
+// Factory vocabulary to the canonical provider command.
+func InternalModelProviderFromPublicWorkerModelProvider(value string) (modelprovider.ID, bool) {
+	switch StrictPublicFactoryWorkerModelProvider(value) {
 	case publicFactoryWorkerModelProviderClaude:
 		return modelprovider.Claude, true
 	case publicFactoryWorkerModelProviderCodex:
@@ -347,14 +347,6 @@ func normalizePublicFactoryEnumValue(value string, aliases map[string]string, pr
 	return ""
 }
 
-func generatedPublicFactoryEnumPtr[T ~string](value string, convert func(string) T) *T {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := convert(value)
-	return &enumValue
-}
-
 // InternalRuntimeWorkerTypeFromPublic maps canonical public worker types to the
 // internal runtime identifiers used by validation and execution.
 func InternalRuntimeWorkerTypeFromPublic(value string) string {
@@ -404,6 +396,12 @@ func StrictPublicFactoryWorkerType(value string) string {
 // PermissivePublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and preserves unknown values.
 func PermissivePublicFactoryWorkerModelProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases, true)
+}
+
+// PublicWorkerModelProviderFromInternalRuntime maps runtime provider aliases to
+// authored Factory vocabulary while preserving unknown values.
+func PublicWorkerModelProviderFromInternalRuntime(value string) string {
+	return normalizePublicFactoryEnumValue(value, internalFactoryWorkerModelProviderAliases, true)
 }
 
 // StrictPublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and rejects unknown values.
@@ -457,6 +455,12 @@ func AcceptedPublicWorkerModelProviderSummary() string {
 // PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.
 func PermissivePublicFactoryWorkerProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerProviderAliases, true)
+}
+
+// PublicWorkerProviderFromInternalRuntime maps runtime executor aliases to
+// authored Factory vocabulary while preserving unknown values.
+func PublicWorkerProviderFromInternalRuntime(value string) string {
+	return normalizePublicFactoryEnumValue(value, internalFactoryWorkerProviderAliases, true)
 }
 
 // StrictPublicFactoryWorkerProvider canonicalizes supported public worker providers and rejects unknown values.
@@ -586,112 +590,6 @@ func StrictPublicFactoryRunnerSelectionSource(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerSelectionSourceAliases, false)
 }
 
-// GeneratedPublicFactoryWorkerType returns the generated worker type enum.
-func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
-	return factoryapi.WorkerType(PublicWorkerTypeFromInternalRuntime(value))
-}
-
-// GeneratedPublicFactoryWorkerTypePtr returns the generated worker type enum when non-empty.
-func GeneratedPublicFactoryWorkerTypePtr(value string) *factoryapi.WorkerType {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerType)
-}
-
-// GeneratedPublicFactoryWorkerModelProvider returns the generated worker model provider enum.
-func GeneratedPublicFactoryWorkerModelProvider(value string) factoryapi.WorkerModelProvider {
-	return factoryapi.WorkerModelProvider(normalizePublicFactoryEnumValue(value, internalFactoryWorkerModelProviderAliases, true))
-}
-
-// GeneratedPublicFactoryWorkerModelProviderPtr returns the generated worker model provider enum when non-empty.
-func GeneratedPublicFactoryWorkerModelProviderPtr(value string) *factoryapi.WorkerModelProvider {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerModelProvider)
-}
-
-// GeneratedPublicFactoryWorkerProvider returns the generated worker provider enum.
-func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvider {
-	return factoryapi.WorkerProvider(normalizePublicFactoryEnumValue(value, internalFactoryWorkerProviderAliases, true))
-}
-
-// GeneratedPublicFactoryWorkerProviderPtr returns the generated worker provider enum when non-empty.
-func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerProvider {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerProvider)
-}
-
-// GeneratedPublicFactoryHostedWorkerProvider returns the generated hosted worker provider enum.
-func GeneratedPublicFactoryHostedWorkerProvider(value string) factoryapi.HostedWorkerProvider {
-	return factoryapi.HostedWorkerProvider(PermissivePublicFactoryHostedWorkerProvider(value))
-}
-
-// GeneratedPublicFactoryHostedWorkerProviderPtr returns the generated hosted worker provider enum when non-empty.
-func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *factoryapi.HostedWorkerProvider {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryHostedWorkerProvider)
-}
-
-// GeneratedPublicFactoryWorkerModelLocality returns the generated worker model locality enum.
-func GeneratedPublicFactoryWorkerModelLocality(value string) factoryapi.WorkerModelLocality {
-	return factoryapi.WorkerModelLocality(PermissivePublicFactoryWorkerModelLocality(value))
-}
-
-// GeneratedPublicFactoryWorkerModelLocalityPtr returns the generated worker model locality enum when non-empty.
-func GeneratedPublicFactoryWorkerModelLocalityPtr(value string) *factoryapi.WorkerModelLocality {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerModelLocality)
-}
-
-// GeneratedPublicFactoryWorkerModelOperationContentType returns the generated worker capability content type enum.
-func GeneratedPublicFactoryWorkerModelOperationContentType(value string) factoryapi.ModelOperationContentType {
-	return factoryapi.ModelOperationContentType(PermissivePublicFactoryWorkerModelOperationContentType(value))
-}
-
-// GeneratedPublicFactoryWorkerModelOperationContentTypePtr returns the generated worker capability content type enum when non-empty.
-func GeneratedPublicFactoryWorkerModelOperationContentTypePtr(value string) *factoryapi.ModelOperationContentType {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkerModelOperationContentType)
-}
-
-// GeneratedPublicFactoryWorkstationType returns the generated workstation type enum.
-func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationType {
-	return factoryapi.WorkstationType(PublicWorkstationTypeFromInternalRuntime(value, "", ""))
-}
-
-// GeneratedPublicFactoryWorkstationTypeFromWorkstation returns the generated workstation
-// type enum using worker and scheduling context for behavior-aware projection.
-func GeneratedPublicFactoryWorkstationTypeFromWorkstation(workstation FactoryWorkstationConfig, workerType string) factoryapi.WorkstationType {
-	return factoryapi.WorkstationType(PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind))
-}
-
-// GeneratedPublicFactoryWorkstationTypePtr returns the generated workstation type enum when non-empty.
-func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.WorkstationType {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationType)
-}
-
-// GeneratedPublicFactoryRunnerID returns the generated runner ID enum.
-func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
-	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
-}
-
-// GeneratedPublicFactoryRunnerIDPtr returns the generated runner ID enum when non-empty.
-func GeneratedPublicFactoryRunnerIDPtr(value string) *factoryapi.RunnerID {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerID)
-}
-
-// GeneratedPublicFactoryWorkstationOutcomeFormat returns the generated workstation outcome format enum.
-func GeneratedPublicFactoryWorkstationOutcomeFormat(value string) factoryapi.WorkstationOutcomeFormat {
-	return factoryapi.WorkstationOutcomeFormat(PermissivePublicFactoryWorkstationOutcomeFormat(value))
-}
-
-// GeneratedPublicFactoryWorkstationOutcomeFormatPtr returns the generated workstation outcome format enum when non-empty.
-func GeneratedPublicFactoryWorkstationOutcomeFormatPtr(value string) *factoryapi.WorkstationOutcomeFormat {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationOutcomeFormat)
-}
-
-// GeneratedPublicFactoryRunnerSelectionSource returns the generated runner selection source enum.
-func GeneratedPublicFactoryRunnerSelectionSource(value string) factoryapi.RunnerSelectionSource {
-	return factoryapi.RunnerSelectionSource(PermissivePublicFactoryRunnerSelectionSource(value))
-}
-
-// GeneratedPublicFactoryRunnerSelectionSourcePtr returns the generated runner selection source enum when non-empty.
-func GeneratedPublicFactoryRunnerSelectionSourcePtr(value string) *factoryapi.RunnerSelectionSource {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerSelectionSource)
-}
-
 const (
 	publicFactoryWorkstationKindStandard = "STANDARD"
 	publicFactoryWorkstationKindRepeater = "REPEATER"
@@ -751,16 +649,4 @@ func PermissivePublicWorkTypeHandlingBehavior(value string) string {
 // StrictPublicWorkTypeHandlingBehavior canonicalizes supported public work-type handling markers and rejects unknown values.
 func StrictPublicWorkTypeHandlingBehavior(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkTypeHandlingBehaviorAliases, false)
-}
-
-// GeneratedPublicWorkstationKind returns the generated workstation kind enum.
-func GeneratedPublicWorkstationKind(kind WorkstationKind) factoryapi.WorkstationKind {
-	return factoryapi.WorkstationKind(CanonicalPublicWorkstationKind(kind))
-}
-
-// GeneratedPublicWorkstationKindPtr returns the generated workstation kind enum when non-empty.
-func GeneratedPublicWorkstationKindPtr(kind WorkstationKind) *factoryapi.WorkstationKind {
-	return generatedPublicFactoryEnumPtr(string(kind), func(value string) factoryapi.WorkstationKind {
-		return GeneratedPublicWorkstationKind(WorkstationKind(value))
-	})
 }

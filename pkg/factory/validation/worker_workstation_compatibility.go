@@ -85,7 +85,7 @@ func PollerRunWorkstationKindTargets(cfg *interfaces.FactoryConfig) []Target {
 			continue
 		}
 
-		behaviorLabel := interfaces.GeneratedPublicWorkstationKind(workstation.Kind)
+		behaviorLabel := interfaces.CanonicalPublicWorkstationKind(workstation.Kind)
 		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
 		targets = append(targets, Target{
 			Code:     CodePollerRunWorkstationKindMismatch,

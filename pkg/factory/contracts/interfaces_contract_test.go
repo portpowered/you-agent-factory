@@ -5,9 +5,11 @@ package factorycontracts
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 func TestFactoryEventClone_DetachesPayloadAndContextSlices(t *testing.T) {
@@ -122,7 +124,7 @@ func TestCronConfigUnmarshalJSON_IgnoresRetiredAliases(t *testing.T) {
 	}
 }
 
-func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
+func TestCanonicalPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	for _, tt := range generatedPublicFactoryEnumPreservationCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.fn(tt.input); got != tt.want {
@@ -272,34 +274,126 @@ func TestCloneFactoryWorldProviderSessionRecord_ClonesCanonicalSafeContracts(t *
 }
 
 func generatedWorkerTypeString(value string) string {
-	return string(GeneratedPublicFactoryWorkerType(value))
+	return PublicWorkerTypeFromInternalRuntime(value)
 }
 func generatedWorkerModelProviderString(value string) string {
-	return string(GeneratedPublicFactoryWorkerModelProvider(value))
+	return PublicWorkerModelProviderFromInternalRuntime(value)
 }
 func generatedWorkerProviderString(value string) string {
-	return string(GeneratedPublicFactoryWorkerProvider(value))
+	return PublicWorkerProviderFromInternalRuntime(value)
 }
 func generatedHostedWorkerProviderString(value string) string {
-	return string(GeneratedPublicFactoryHostedWorkerProvider(value))
+	return PermissivePublicFactoryHostedWorkerProvider(value)
 }
 func generatedWorkerModelLocalityString(value string) string {
-	return string(GeneratedPublicFactoryWorkerModelLocality(value))
+	return PermissivePublicFactoryWorkerModelLocality(value)
 }
 func generatedWorkerOperationContentTypeString(value string) string {
-	return string(GeneratedPublicFactoryWorkerModelOperationContentType(value))
+	return PermissivePublicFactoryWorkerModelOperationContentType(value)
 }
 func permissiveResourceTypeString(value string) string {
 	return PermissivePublicFactoryResourceType(value)
 }
 func generatedWorkstationTypeString(value string) string {
-	return string(GeneratedPublicFactoryWorkstationType(value))
+	return PublicWorkstationTypeFromInternalRuntime(value, "", "")
 }
 func generatedRunnerIDString(value string) string {
-	return string(GeneratedPublicFactoryRunnerID(value))
+	return PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value))
 }
 func generatedRunnerSelectionSourceString(value string) string {
-	return string(GeneratedPublicFactoryRunnerSelectionSource(value))
+	return PermissivePublicFactoryRunnerSelectionSource(value)
+}
+
+// Generated enum helpers below are test-local compatibility fixtures. The
+// production conversion is owned by config and transport boundary adapters.
+func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
+	return factoryapi.WorkerType(PublicWorkerTypeFromInternalRuntime(value))
+}
+
+func GeneratedPublicFactoryWorkerModelProvider(value string) factoryapi.WorkerModelProvider {
+	return factoryapi.WorkerModelProvider(PublicWorkerModelProviderFromInternalRuntime(value))
+}
+
+func GeneratedPublicFactoryWorkerProvider(value string) factoryapi.WorkerProvider {
+	return factoryapi.WorkerProvider(PublicWorkerProviderFromInternalRuntime(value))
+}
+
+func GeneratedPublicFactoryHostedWorkerProvider(value string) factoryapi.HostedWorkerProvider {
+	return factoryapi.HostedWorkerProvider(PermissivePublicFactoryHostedWorkerProvider(value))
+}
+
+func GeneratedPublicFactoryWorkerModelLocality(value string) factoryapi.WorkerModelLocality {
+	return factoryapi.WorkerModelLocality(PermissivePublicFactoryWorkerModelLocality(value))
+}
+
+func GeneratedPublicFactoryWorkerModelOperationContentType(value string) factoryapi.ModelOperationContentType {
+	return factoryapi.ModelOperationContentType(PermissivePublicFactoryWorkerModelOperationContentType(value))
+}
+
+func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationType {
+	return factoryapi.WorkstationType(PublicWorkstationTypeFromInternalRuntime(value, "", ""))
+}
+
+func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
+	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
+}
+
+func GeneratedPublicFactoryRunnerSelectionSource(value string) factoryapi.RunnerSelectionSource {
+	return factoryapi.RunnerSelectionSource(PermissivePublicFactoryRunnerSelectionSource(value))
+}
+
+func GeneratedPublicFactoryWorkerTypePtr(value string) *factoryapi.WorkerType {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryWorkerType)
+}
+
+func GeneratedPublicFactoryWorkerModelProviderPtr(value string) *factoryapi.WorkerModelProvider {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryWorkerModelProvider)
+}
+
+func GeneratedPublicFactoryWorkerProviderPtr(value string) *factoryapi.WorkerProvider {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryWorkerProvider)
+}
+
+func GeneratedPublicFactoryHostedWorkerProviderPtr(value string) *factoryapi.HostedWorkerProvider {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryHostedWorkerProvider)
+}
+
+func GeneratedPublicFactoryWorkerModelLocalityPtr(value string) *factoryapi.WorkerModelLocality {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryWorkerModelLocality)
+}
+
+func GeneratedPublicFactoryWorkerModelOperationContentTypePtr(value string) *factoryapi.ModelOperationContentType {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryWorkerModelOperationContentType)
+}
+
+func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.WorkstationType {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryWorkstationType)
+}
+
+func GeneratedPublicFactoryRunnerIDPtr(value string) *factoryapi.RunnerID {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryRunnerID)
+}
+
+func GeneratedPublicFactoryRunnerSelectionSourcePtr(value string) *factoryapi.RunnerSelectionSource {
+	return generatedEnumPtrForTest(value, GeneratedPublicFactoryRunnerSelectionSource)
+}
+
+func GeneratedPublicWorkstationKind(kind WorkstationKind) factoryapi.WorkstationKind {
+	return factoryapi.WorkstationKind(CanonicalPublicWorkstationKind(kind))
+}
+
+func GeneratedPublicWorkstationKindPtr(kind WorkstationKind) *factoryapi.WorkstationKind {
+	return generatedEnumPtrForTest(string(kind), func(value string) factoryapi.WorkstationKind {
+		return GeneratedPublicWorkstationKind(WorkstationKind(value))
+	})
+}
+
+func generatedEnumPtrForTest[T ~string](value string, convert func(string) T) *T {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := convert(value)
+	return &converted
 }
 
 func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
@@ -754,17 +848,17 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 
 func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *testing.T) {
 	cases := []struct {
-		public factoryapi.WorkerModelProvider
+		public string
 		want   ModelProvider
 	}{
-		{factoryapi.WorkerModelProviderClaude, ModelProviderClaude},
-		{factoryapi.WorkerModelProviderCodex, ModelProviderCodex},
-		{factoryapi.WorkerModelProviderCursor, ModelProviderCursor},
-		{factoryapi.WorkerModelProviderGemini, ModelProviderGemini},
-		{factoryapi.WorkerModelProviderKiro, ModelProviderKiro},
-		{factoryapi.WorkerModelProviderOpenCode, ModelProviderOpenCode},
-		{factoryapi.WorkerModelProviderPi, ModelProviderPi},
-		{factoryapi.WorkerModelProviderAgy, ModelProviderAgy},
+		{string(factoryapi.WorkerModelProviderClaude), ModelProviderClaude},
+		{string(factoryapi.WorkerModelProviderCodex), ModelProviderCodex},
+		{string(factoryapi.WorkerModelProviderCursor), ModelProviderCursor},
+		{string(factoryapi.WorkerModelProviderGemini), ModelProviderGemini},
+		{string(factoryapi.WorkerModelProviderKiro), ModelProviderKiro},
+		{string(factoryapi.WorkerModelProviderOpenCode), ModelProviderOpenCode},
+		{string(factoryapi.WorkerModelProviderPi), ModelProviderPi},
+		{string(factoryapi.WorkerModelProviderAgy), ModelProviderAgy},
 	}
 
 	for _, tt := range cases {
@@ -781,26 +875,26 @@ func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *t
 	}
 }
 
-func TestGeneratedPublicFactoryWorkerModelProvider_CanonicalizesProviderAliases(t *testing.T) {
+func TestPublicWorkerModelProviderFromInternalRuntime_CanonicalizesProviderAliases(t *testing.T) {
 	cases := []struct {
 		input string
-		want  factoryapi.WorkerModelProvider
+		want  string
 	}{
-		{"gemini", factoryapi.WorkerModelProviderGemini},
-		{"kiro-cli", factoryapi.WorkerModelProviderKiro},
-		{"opencode", factoryapi.WorkerModelProviderOpenCode},
-		{"GEMINI", factoryapi.WorkerModelProviderGemini},
-		{"KIRO", factoryapi.WorkerModelProviderKiro},
-		{"OPENCODE", factoryapi.WorkerModelProviderOpenCode},
-		{"agy", factoryapi.WorkerModelProviderAgy},
-		{"AGY", factoryapi.WorkerModelProviderAgy},
-		{"antigravity", factoryapi.WorkerModelProviderAgy},
+		{"gemini", string(factoryapi.WorkerModelProviderGemini)},
+		{"kiro-cli", string(factoryapi.WorkerModelProviderKiro)},
+		{"opencode", string(factoryapi.WorkerModelProviderOpenCode)},
+		{"GEMINI", string(factoryapi.WorkerModelProviderGemini)},
+		{"KIRO", string(factoryapi.WorkerModelProviderKiro)},
+		{"OPENCODE", string(factoryapi.WorkerModelProviderOpenCode)},
+		{"agy", string(factoryapi.WorkerModelProviderAgy)},
+		{"AGY", string(factoryapi.WorkerModelProviderAgy)},
+		{"antigravity", string(factoryapi.WorkerModelProviderAgy)},
 	}
 
 	for _, tt := range cases {
 		t.Run(tt.input, func(t *testing.T) {
-			if got := GeneratedPublicFactoryWorkerModelProvider(tt.input); got != tt.want {
-				t.Fatalf("GeneratedPublicFactoryWorkerModelProvider(%q) = %q, want %q", tt.input, got, tt.want)
+			if got := PublicWorkerModelProviderFromInternalRuntime(tt.input); got != tt.want {
+				t.Fatalf("PublicWorkerModelProviderFromInternalRuntime(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
 	}

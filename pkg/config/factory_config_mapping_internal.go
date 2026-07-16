@@ -979,18 +979,18 @@ func internalFactoryWorkerTypeFromPublic(value factoryapi.WorkerType) string {
 }
 
 func publicFactoryWorkerModelProviderFromInternal(value string) factoryapi.WorkerModelProvider {
-	return interfaces.GeneratedPublicFactoryWorkerModelProvider(value)
+	return factoryapi.WorkerModelProvider(interfaces.PublicWorkerModelProviderFromInternalRuntime(value))
 }
 
 func publicFactoryWorkerModelLocalityFromInternal(value string) factoryapi.WorkerModelLocality {
-	return interfaces.GeneratedPublicFactoryWorkerModelLocality(value)
+	return factoryapi.WorkerModelLocality(interfaces.PermissivePublicFactoryWorkerModelLocality(value))
 }
 
 func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelProvider) string {
 	if value == nil {
 		return ""
 	}
-	if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(*value); ok {
+	if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(string(*value)); ok {
 		return string(internal)
 	}
 	return strings.TrimSpace(string(*value))
@@ -1007,11 +1007,11 @@ func internalFactoryWorkerModelLocalityFromPublic(value *factoryapi.WorkerModelL
 }
 
 func publicFactoryWorkerProviderFromInternal(value string) factoryapi.WorkerProvider {
-	return interfaces.GeneratedPublicFactoryWorkerProvider(value)
+	return factoryapi.WorkerProvider(interfaces.PublicWorkerProviderFromInternalRuntime(value))
 }
 
 func publicFactoryHostedWorkerProviderFromInternal(value string) string {
-	return string(interfaces.GeneratedPublicFactoryHostedWorkerProvider(value))
+	return interfaces.PermissivePublicFactoryHostedWorkerProvider(value)
 }
 
 func internalFactoryWorkerProviderFromPublic(value *factoryapi.WorkerProvider) string {
@@ -1032,7 +1032,7 @@ func internalFactoryHostedWorkerProviderFromPublic(value string) string {
 }
 
 func publicFactoryModelOperationContentTypeFromInternal(value string) factoryapi.ModelOperationContentType {
-	return interfaces.GeneratedPublicFactoryWorkerModelOperationContentType(value)
+	return factoryapi.ModelOperationContentType(interfaces.PermissivePublicFactoryWorkerModelOperationContentType(value))
 }
 
 func internalFactoryModelOperationContentTypeFromPublic(value factoryapi.ModelOperationContentType) string {
@@ -1057,7 +1057,7 @@ func internalFactoryResourceTypeFromPublic(value string) string {
 }
 
 func publicFactoryWorkstationKindFromInternal(kind interfaces.WorkstationKind) factoryapi.WorkstationKind {
-	return interfaces.GeneratedPublicWorkstationKind(kind)
+	return factoryapi.WorkstationKind(interfaces.CanonicalPublicWorkstationKind(kind))
 }
 
 func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) interfaces.WorkstationKind {
@@ -1079,7 +1079,7 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 }
 
 func publicFactoryWorkstationTypeFromInternal(workstation interfaces.FactoryWorkstationConfig, workerType string) factoryapi.WorkstationType {
-	return interfaces.GeneratedPublicFactoryWorkstationTypeFromWorkstation(workstation, workerType)
+	return factoryapi.WorkstationType(interfaces.PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind))
 }
 
 func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType) string {
@@ -1225,7 +1225,7 @@ func orchestratorAPIFromInternal(cfg *interfaces.FactoryConfig) *factoryapi.Fact
 		return nil
 	}
 	kind := interfaces.EffectiveOrchestratorKind(cfg)
-	apiKind := interfaces.GeneratedPublicFactoryOrchestratorKind(kind)
+	apiKind := factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(kind))
 	result := &factoryapi.FactoryOrchestrator{
 		Kind: apiKind,
 	}

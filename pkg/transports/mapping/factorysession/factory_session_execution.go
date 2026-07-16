@@ -312,7 +312,7 @@ func AsyncStartResponseToAPI(result factorysessionexecution.AsyncStartResult) fa
 	response := factoryapi.FactorySessionExecutionResponse{
 		SessionId:        result.SessionID,
 		Status:           factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(result.OrchestratorKind),
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
 		ResolvedSource:   resolvedSourceToAPI(result.ResolvedSource),
 	}
 	if dialect := strings.TrimSpace(result.Dialect); dialect != "" {

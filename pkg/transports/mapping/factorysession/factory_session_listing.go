@@ -403,7 +403,7 @@ func DurableSessionSummaryToAPI(summary factorysessionexecution.DurableSessionLi
 	response := factoryapi.FactorySessionDurableSummary{
 		SessionId:        summary.SessionID,
 		Status:           factoryapi.FactorySessionDurableLifecycleStatus(summary.Status),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(summary.OrchestratorKind),
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(summary.OrchestratorKind)),
 		ResolvedSource:   resolvedSourceToAPI(summary.ResolvedSource),
 	}
 	if dialect := strings.TrimSpace(summary.Dialect); dialect != "" {

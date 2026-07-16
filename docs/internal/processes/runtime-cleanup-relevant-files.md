@@ -368,6 +368,13 @@ result shaping consume that value directly. The legacy `ProjectRuntime`
 compatibility entrypoint maps it to the generated response and adds the public
 stop summary; do not add new runtime derivation to that compatibility adapter.
 
+Factory configuration enum policy remains string vocabulary in
+`pkg/factory/contracts`, including runtime-alias normalization and preservation
+of unknown values. Generated OpenAPI enum construction and pointer omission
+belong in config serialization, `pkg/transports/mapping`, or the HTTP projection
+that emits the public value; those boundaries must not expose generated-enum
+helpers from the Factory contract owner.
+
 Factory validation results and operational validation failures carry
 `pkg/factory/validation.Target` values through domain, service, and control-plane
 boundaries. `pkg/transports/mapping` maps those owner-defined targets and result

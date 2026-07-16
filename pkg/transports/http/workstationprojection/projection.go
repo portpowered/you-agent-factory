@@ -227,14 +227,30 @@ func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource worke
 		return nil
 	}
 	view := &factoryapi.FactoryWorldSelectedRunnerView{
-		RunnerId:        interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
-		SelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(runnerSource)),
+		RunnerId:        runnerIDPtr(runnerID),
+		SelectionSource: runnerSelectionSourcePtr(string(runnerSource)),
 	}
 	if metadata, ok := workerrunner.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
 		view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
 	}
 	return view
+}
+
+func runnerIDPtr(value string) *factoryapi.RunnerID {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.RunnerID(interfaces.PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
+	return &converted
+}
+
+func runnerSelectionSourcePtr(value string) *factoryapi.RunnerSelectionSource {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.RunnerSelectionSource(interfaces.PermissivePublicFactoryRunnerSelectionSource(value))
+	return &converted
 }
 
 func generatedFactoryWorldRunnerCapabilitiesView(

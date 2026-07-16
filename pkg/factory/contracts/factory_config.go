@@ -11,7 +11,6 @@ import (
 
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
@@ -679,9 +678,4 @@ func StrictPublicFactoryOrchestratorKind(value string) string {
 var publicFactoryOrchestratorKindAliases = map[string]string{
 	OrchestratorKindPetri:      OrchestratorKindPetri,
 	OrchestratorKindJavaScript: OrchestratorKindJavaScript,
-}
-
-// GeneratedPublicFactoryOrchestratorKind returns the generated orchestrator kind enum.
-func GeneratedPublicFactoryOrchestratorKind(kind string) factoryapi.FactoryOrchestratorKind {
-	return factoryapi.FactoryOrchestratorKind(StrictPublicFactoryOrchestratorKind(kind))
 }

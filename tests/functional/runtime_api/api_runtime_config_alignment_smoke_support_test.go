@@ -226,7 +226,7 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if cron.Worker != "cron-worker" {
 		t.Fatalf("%s worker = %q, want cron-worker", runtimeConfigAlignmentCronWorkstation, cron.Worker)
 	}
-	if cron.Behavior == nil || *cron.Behavior != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindCron) {
+	if cron.Behavior == nil || string(*cron.Behavior) != interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindCron) {
 		t.Fatalf("%s kind = %#v, want CRON", runtimeConfigAlignmentCronWorkstation, cron.Behavior)
 	}
 	if cron.Cron == nil || cron.Cron.Schedule != "0 * * * *" {
@@ -248,7 +248,7 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if stringValueFromFunctionalPtr(review.Type) != interfaces.WorkstationTypeModel {
 		t.Fatalf("%s type = %q, want %q", runtimeConfigAlignmentReviewWorkstation, stringValueFromFunctionalPtr(review.Type), interfaces.WorkstationTypeModel)
 	}
-	if review.Behavior == nil || *review.Behavior != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
+	if review.Behavior == nil || string(*review.Behavior) != interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
 		t.Fatalf("%s kind = %#v, want REPEATER", runtimeConfigAlignmentReviewWorkstation, review.Behavior)
 	}
 	if !reflect.DeepEqual(stringSliceValue(review.StopWords), []string{"DONE"}) {

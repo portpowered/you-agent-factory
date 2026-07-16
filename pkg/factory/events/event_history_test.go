@@ -498,21 +498,21 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 	}
 
 	worker := (*payload.Factory.Workers)[0]
-	if got, want := stringValueForEventHistoryTest(worker.ExecutorProvider), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerProviderPtr(runtimeConfig.Workers["builder"].ExecutorProvider)); got != want {
+	if got, want := stringValueForEventHistoryTest(worker.ExecutorProvider), "SCRIPT_WRAP"; got != want {
 		t.Fatalf("worker executor provider = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(worker.ModelProvider), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerModelProviderPtr(runtimeConfig.Workers["builder"].ModelProvider)); got != want {
+	if got, want := stringValueForEventHistoryTest(worker.ModelProvider), "CODEX"; got != want {
 		t.Fatalf("worker model provider = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(worker.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkerTypePtr(runtimeConfig.Workers["builder"].Type)); got != want {
+	if got, want := stringValueForEventHistoryTest(worker.Type), "INFERENCE_WORKER"; got != want {
 		t.Fatalf("worker type = %q, want %q", got, want)
 	}
 
 	workstation := (*payload.Factory.Workstations)[0]
-	if got, want := stringValueForEventHistoryTest(workstation.Type), stringValueForEventHistoryTest(interfaces.GeneratedPublicFactoryWorkstationTypePtr(runtimeConfig.Workstations["Build"].Type)); got != want {
+	if got, want := stringValueForEventHistoryTest(workstation.Type), "LOGICAL_MOVE"; got != want {
 		t.Fatalf("workstation type = %q, want %q", got, want)
 	}
-	if got, want := stringValueForEventHistoryTest(workstation.Behavior), stringValueForEventHistoryTest(interfaces.GeneratedPublicWorkstationKindPtr(runtimeConfig.Workstations["Build"].Kind)); got != want {
+	if got, want := stringValueForEventHistoryTest(workstation.Behavior), "REPEATER"; got != want {
 		t.Fatalf("workstation behavior = %q, want %q", got, want)
 	}
 }

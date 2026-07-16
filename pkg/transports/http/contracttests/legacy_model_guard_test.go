@@ -146,7 +146,7 @@ func TestOpenAPIContract_WorkerModelProviderEnumMatchesSupportedBackendProviders
 		if !ok {
 			t.Fatalf("PublicWorkerModelProviderFromInternal(%q) = false", internal)
 		}
-		mapped, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(public)
+		mapped, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(string(public))
 		if !ok || mapped != internal {
 			t.Fatalf("InternalModelProviderFromPublicWorkerModelProvider(%q) = (%q, %v), want (%q, true)", public, mapped, ok, internal)
 		}
@@ -168,7 +168,7 @@ func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t
 		t.Fatalf("generated WorkerModelProvider constants = %d, supported internal providers = %d", len(want), len(modelprovider.Supported()))
 	}
 	for _, public := range want {
-		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(public); !ok {
+		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(string(public)); !ok {
 			t.Fatalf("InternalModelProviderFromPublicWorkerModelProvider(%q) = false", public)
 		}
 	}

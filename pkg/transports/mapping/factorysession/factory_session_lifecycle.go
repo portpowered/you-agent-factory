@@ -74,7 +74,7 @@ func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) 
 	response := factoryapi.FactorySessionDurableReadModel{
 		SessionId:        result.SessionID,
 		Status:           factoryapi.FactorySessionDurableLifecycleStatus(result.Status),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(result.OrchestratorKind),
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind(interfaces.StrictPublicFactoryOrchestratorKind(result.OrchestratorKind)),
 		ResolvedSource:   resolvedSourceToAPI(result.ResolvedSource),
 	}
 	applyOptionalSessionReadResponseFields(&response, result)

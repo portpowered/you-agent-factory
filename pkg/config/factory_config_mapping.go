@@ -876,7 +876,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
 		WorkPropagation:       workPropagationAPIFromInternal(normalized.WorkPropagation),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
-		OutcomeFormat:         interfaces.GeneratedPublicFactoryWorkstationOutcomeFormatPtr(normalized.OutcomeFormat),
+		OutcomeFormat:         workstationOutcomeFormatPtrIfNotEmpty(normalized.OutcomeFormat),
 		Operation:             stringPtrIfNotEmpty(normalized.Operation),
 		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
@@ -1390,7 +1390,19 @@ func workerProviderPtrIfNotEmpty(value string) *factoryapi.WorkerProvider {
 }
 
 func hostedWorkerProviderPtrIfNotEmpty(value string) *factoryapi.HostedWorkerProvider {
-	return interfaces.GeneratedPublicFactoryHostedWorkerProviderPtr(value)
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.HostedWorkerProvider(interfaces.PermissivePublicFactoryHostedWorkerProvider(value))
+	return &converted
+}
+
+func workstationOutcomeFormatPtrIfNotEmpty(value string) *factoryapi.WorkstationOutcomeFormat {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.WorkstationOutcomeFormat(interfaces.PermissivePublicFactoryWorkstationOutcomeFormat(value))
+	return &converted
 }
 
 func workstationTypePtrIfNotEmpty(workstation interfaces.FactoryWorkstationConfig, workerType string) *factoryapi.WorkstationType {
