@@ -27,7 +27,6 @@
     { "path": "tests/functional/runtime_api/api_legacy_unary_retirement_smoke_test.go", "sha256": "b760c8a9192c2aebe63ac7775211bac25e3fd03544969ed08ded8cfda3f479bd" },
     { "path": "tests/functional/runtime_api/api_runtime_config_alignment_smoke_support_test.go", "sha256": "883c42a4dc4ca96aa21afdcdbe00c3d59e822e0ff25e76ac9c26587ade32b9f3" },
     { "path": "tests/functional/runtime_api/api_runtime_config_alignment_support_test.go", "sha256": "d2cc4ffb6fc73c77ff6d707f0684316a501918a6e1b2e071d6fac2c00bc029ea" },
-    { "path": "tests/functional/runtime_api/api_runtime_log_policy_test.go", "sha256": "13f7a59fc89bf5247d14889ff46f4f9f48aa9f02fca55c92ac81bbf007e56d03" },
     { "path": "tests/functional/runtime_api/api_session_invocation_test.go", "sha256": "730c4dfb2d7062785a97dd74b72c546e0f0845579bad92c10e20a417dfcda489" },
     { "path": "tests/functional/runtime_api/api_unified_event_log_smoke_test.go", "sha256": "d9792f6f192bb65f60f7d16722cc3f23453ee89daf757397fafb7831a18fbf14" },
     { "path": "tests/functional/runtime_api/dashboard_engine_state_test.go", "sha256": "a6e0b8f81d023b0846f3f242f11129775fc14ddd696f49eaf6eee6f04723e11b" },

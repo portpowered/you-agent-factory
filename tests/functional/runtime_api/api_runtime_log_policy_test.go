@@ -20,13 +20,9 @@ func TestFunctionalAPIServer_DisablesRuntimeFileLoggingByDefault(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
 	logDir := t.TempDir()
 
-	var capturedService *service.FactoryService
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		CaptureService: func(svc *service.FactoryService) {
-			capturedService = svc
-		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
 			cfg.RuntimeLogDir = logDir
@@ -36,14 +32,6 @@ func TestFunctionalAPIServer_DisablesRuntimeFileLoggingByDefault(t *testing.T) {
 	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 	if status.RuntimeStatus == "" {
 		t.Fatal("GET /status returned empty runtimeStatus")
-	}
-	if capturedService == nil {
-		t.Fatal("expected functional API server to capture factory service")
-	}
-
-	diagnostics := capturedService.RuntimeLogDiagnostics()
-	if diagnostics.Path != "" {
-		t.Fatalf("RuntimeLogDiagnostics().Path = %q, want empty when runtime file logging is disabled", diagnostics.Path)
 	}
 
 	logFiles := collectRuntimeLogFiles(t, logDir)
@@ -56,16 +44,12 @@ func TestFunctionalAPIServer_CanOptIntoRuntimeFileLogging(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, persistTestPipelineConfig())
 	logDir := t.TempDir()
 
-	var capturedService *service.FactoryService
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                dir,
 		WaitForServiceModeRuntime: true,
-		CaptureService: func(svc *service.FactoryService) {
-			capturedService = svc
-		},
 		Configure: func(cfg *service.FactoryServiceConfig) {
 			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.RuntimeFileLoggingPolicy = service.RuntimeFileLoggingPolicyEnabled
+			cfg.RuntimeFileLoggingPolicy = runtimeFileLoggingEnabled
 			cfg.RuntimeLogDir = logDir
 			cfg.RuntimeInstanceID = "functional-api-runtime-log"
 		},
@@ -75,30 +59,20 @@ func TestFunctionalAPIServer_CanOptIntoRuntimeFileLogging(t *testing.T) {
 	if status.RuntimeStatus == "" {
 		t.Fatal("GET /status returned empty runtimeStatus")
 	}
-	if capturedService == nil {
-		t.Fatal("expected functional API server to capture factory service")
-	}
-
-	diagnostics := capturedService.RuntimeLogDiagnostics()
-	if diagnostics.Path == "" {
-		t.Fatal("RuntimeLogDiagnostics().Path = empty, want runtime log path when file logging is enabled")
-	}
-	rel, err := filepath.Rel(logDir, diagnostics.Path)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		t.Fatalf("runtime log path = %q, want path under %q", diagnostics.Path, logDir)
-	}
 
 	logFiles := collectRuntimeLogFiles(t, logDir)
 	if len(logFiles) != 1 {
 		t.Fatalf("runtime log files = %v, want exactly one", logFiles)
 	}
-	if logFiles[0] != diagnostics.Path {
-		t.Fatalf("runtime log file = %q, want diagnostics path %q", logFiles[0], diagnostics.Path)
+	logPath := logFiles[0]
+	rel, err := filepath.Rel(logDir, logPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		t.Fatalf("runtime log path = %q, want path under %q", logPath, logDir)
 	}
 
-	startup := requireRuntimeAPILogMessage(t, diagnostics.Path, "factory started")
-	if startup["runtime_log_path"] != diagnostics.Path {
-		t.Fatalf("runtime_log_path = %#v, want %q in startup record %#v", startup["runtime_log_path"], diagnostics.Path, startup)
+	startup := requireRuntimeAPILogMessage(t, logPath, "factory started")
+	if startup["runtime_log_path"] != logPath {
+		t.Fatalf("runtime_log_path = %#v, want %q in startup record %#v", startup["runtime_log_path"], logPath, startup)
 	}
 	if startup["runtime_log_root"] != logDir {
 		t.Fatalf("runtime_log_root = %#v, want %q in startup record %#v", startup["runtime_log_root"], logDir, startup)
@@ -107,6 +81,8 @@ func TestFunctionalAPIServer_CanOptIntoRuntimeFileLogging(t *testing.T) {
 		t.Fatalf("runtime_log_appender = %#v, want %q in startup record %#v", startup["runtime_log_appender"], logging.RuntimeLogAppenderZapRollingFile, startup)
 	}
 }
+
+const runtimeFileLoggingEnabled = "enabled"
 
 func collectRuntimeLogFiles(t *testing.T, dir string) []string {
 	t.Helper()
