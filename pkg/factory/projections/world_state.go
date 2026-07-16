@@ -129,7 +129,17 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	if handled, err := r.applyOrchestratorLifecycleEvent(event); handled {
 		return err
 	}
-	if handled, err := r.applySessionLifecycleEvent(event); handled {
+	switch interfaces.FactoryEventType(event.Type) {
+	case interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeSessionPaused,
+		interfaces.FactoryEventTypeSessionResumed,
+		interfaces.FactoryEventTypeSessionResultUpdated,
+		interfaces.FactoryEventTypeSessionCompleted:
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		_, err = r.applySessionLifecycleEvent(canonicalEvent)
 		return err
 	}
 	if handled, err := r.applyDispatchLifecycleEvent(event); handled {
@@ -1001,7 +1011,14 @@ func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryP
 	return interfaces.FactoryPlace{}, false
 }
 func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
-	if handled, err := r.applyOrchestratorProgressEvent(event); handled {
+	switch interfaces.FactoryEventType(event.Type) {
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten:
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return true, err
+		}
+		_, err = r.applyOrchestratorProgressEvent(canonicalEvent)
 		return true, err
 	}
 	switch event.Type {

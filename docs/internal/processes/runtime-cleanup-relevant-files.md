@@ -36,6 +36,12 @@ Keep generated session-event unions at public mapping and compatibility-test
 boundaries; runtime lifecycle recording should pass domain orchestrator strings,
 Work content, and worker-owned failure detail.
 
+Factory world-state reducers for Factory Session lifecycle and orchestrator
+progress consume the same owner-defined envelope and payload contracts directly.
+Convert a generated event only at the temporary outer projection compatibility
+boundary, then use `FactoryEvent.DecodePayload`; do not reintroduce generated
+status, content, checkpoint, artifact, or warning values inside the reducer.
+
 Dispatch queue, interruption, reconciliation, synthetic reconnect, and artifact
 creation producers use Factory-owned status, usage, artifact, provider-session,
 and payload contracts and append the canonical domain envelope directly.

@@ -586,3 +586,137 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 		t.Fatalf("workItemRefsForInputs = %#v, want first-occurrence customer refs", refsForInputs)
 	}
 }
+
+func TestCanonicalSessionLifecycleEventsReconstructBracketAndResult(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, time.July, 15, 20, 0, 0, 0, time.FixedZone("fixture", -7*60*60))
+	completedAt := startedAt.Add(3 * time.Second)
+	durationMillis := int64(3000)
+	resultStatus := interfaces.FactorySessionResultStatusFinal
+	sessionID, orchestratorKind := "session-1", "javascript"
+	reducer := newFactoryWorldReducer(3)
+
+	events := []interfaces.FactoryEvent{
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeSessionStarted, interfaces.FactoryEventContext{
+			SessionID: &sessionID, OrchestratorKind: &orchestratorKind, EventTime: startedAt,
+		}, interfaces.FactorySessionStartedEventPayload{FactoryID: stringPtrForProjectionTest("factory-1"), StartedAt: startedAt}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeSessionResultUpdated, interfaces.FactoryEventContext{
+			SessionID: &sessionID, EventTime: startedAt.Add(time.Second),
+		}, interfaces.FactorySessionResultUpdatedEventPayload{
+			ArtifactIDs:  []string{"artifact-1"},
+			ResultStatus: resultStatus,
+			ResultSummary: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText, Text: "done",
+			}},
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeSessionCompleted, interfaces.FactoryEventContext{
+			SessionID: &sessionID, EventTime: completedAt,
+		}, interfaces.FactorySessionCompletedEventPayload{
+			ArtifactIDs:    []string{"artifact-1"},
+			CompletedAt:    completedAt,
+			DurationMillis: &durationMillis,
+			FinalStatus:    interfaces.FactorySessionLifecycleStatusSucceeded,
+			ResultStatus:   &resultStatus,
+		}),
+	}
+	for _, event := range events {
+		handled, err := reducer.applySessionLifecycleEvent(event)
+		if err != nil || !handled {
+			t.Fatalf("applySessionLifecycleEvent(%s) = handled %t, err %v", event.Type, handled, err)
+		}
+	}
+
+	bracket := reducer.stateValue.SessionBracket
+	if bracket == nil || bracket.SessionID != sessionID || !bracket.Terminal {
+		t.Fatalf("session bracket = %#v, want terminal %q bracket", bracket, sessionID)
+	}
+	if bracket.StartedAt != startedAt.UTC() || bracket.CompletedAt != completedAt.UTC() {
+		t.Fatalf("session bracket times = %s..%s, want UTC %s..%s", bracket.StartedAt, bracket.CompletedAt, startedAt.UTC(), completedAt.UTC())
+	}
+	if bracket.ResultStatus != string(resultStatus) || len(bracket.ResultSummary) != 1 || bracket.ResultSummary[0].Text != "done" {
+		t.Fatalf("session result = status %q summary %#v", bracket.ResultStatus, bracket.ResultSummary)
+	}
+	if reducer.stateValue.JavaScriptRuntime == nil || reducer.stateValue.JavaScriptRuntime.PrimaryResult[0].Text != "done" {
+		t.Fatalf("javascript runtime result = %#v", reducer.stateValue.JavaScriptRuntime)
+	}
+}
+
+func TestCanonicalOrchestratorProgressEventsReconstructPhaseAndCheckpoint(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 1, 0, 0, 0, time.UTC)
+	phaseID, phaseName := "phase-2", "verify"
+	checkpointID, artifactHash := "checkpoint-1", "sha256:fixture"
+	artifactSize := int64(42)
+	reducer := newFactoryWorldReducer(2)
+
+	events := []interfaces.FactoryEvent{
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeOrchestratorPhaseChanged, interfaces.FactoryEventContext{
+			EventTime: eventTime, PhaseID: &phaseID, PhaseName: &phaseName,
+		}, interfaces.OrchestratorPhaseChangedEventPayload{
+			PhaseStatus:       interfaces.OrchestratorPhaseStatusActive,
+			PreviousPhaseName: stringPtrForProjectionTest("build"),
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeOrchestratorCheckpointWritten, interfaces.FactoryEventContext{
+			CheckpointID: &checkpointID, EventTime: eventTime.Add(time.Second),
+		}, interfaces.OrchestratorCheckpointWrittenEventPayload{
+			ArtifactRef: &interfaces.FactoryArtifactRef{
+				ContentHash: &artifactHash, ID: "artifact-1", Kind: "CHECKPOINT", SizeBytes: &artifactSize, Visibility: "INTERNAL_CHECKPOINT",
+			},
+			Label:              "after verify",
+			ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable,
+			Timestamp:          timePtrForProjectionTest(eventTime.Add(time.Second)),
+			Warnings:           []interfaces.FactoryDispatchWarning{{Code: "CHECKPOINT_WARNING", Message: "fixture warning"}},
+		}),
+	}
+	for _, event := range events {
+		handled, err := reducer.applyOrchestratorProgressEvent(event)
+		if err != nil || !handled {
+			t.Fatalf("applyOrchestratorProgressEvent(%s) = handled %t, err %v", event.Type, handled, err)
+		}
+	}
+
+	assertCanonicalOrchestratorProgress(t, reducer.stateValue.JavaScriptRuntime, phaseName, checkpointID, artifactHash, artifactSize)
+}
+
+func assertCanonicalOrchestratorProgress(
+	t *testing.T,
+	runtime *interfaces.FactorySessionJavaScriptRuntimeState,
+	phaseName string,
+	checkpointID string,
+	artifactHash string,
+	artifactSize int64,
+) {
+	t.Helper()
+	if runtime == nil || runtime.Phase != phaseName || runtime.ScriptStatus != "RUNNING" {
+		t.Fatalf("javascript runtime = %#v", runtime)
+	}
+	if len(runtime.Phases) != 2 || runtime.Phases[0] != "build" || runtime.Phases[1] != phaseName {
+		t.Fatalf("phase history = %#v", runtime.Phases)
+	}
+	checkpoint := runtime.Checkpoints[0]
+	if checkpoint.ID != checkpointID || checkpoint.ArtifactRef == nil || checkpoint.ArtifactRef.ContentHash != artifactHash {
+		t.Fatalf("checkpoint = %#v", checkpoint)
+	}
+	if checkpoint.ArtifactRef.SizeBytes != artifactSize || len(checkpoint.Warnings) != 1 || checkpoint.Warnings[0].Code != "CHECKPOINT_WARNING" {
+		t.Fatalf("checkpoint metadata = %#v", checkpoint)
+	}
+}
+
+func canonicalWorldProjectionEvent(
+	t *testing.T,
+	eventType interfaces.FactoryEventType,
+	context interfaces.FactoryEventContext,
+	payload any,
+) interfaces.FactoryEvent {
+	t.Helper()
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal %s payload: %v", eventType, err)
+	}
+	return interfaces.FactoryEvent{
+		Context: context, Id: "test/" + string(eventType), Payload: encoded,
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1, Type: eventType,
+	}
+}
+
+func timePtrForProjectionTest(value time.Time) *time.Time { return &value }
