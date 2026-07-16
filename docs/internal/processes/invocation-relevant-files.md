@@ -134,6 +134,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - `pkg/factory/sessions/invocation/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
+  It must use Factory-contract binding constants directly; generated HTTP enums
+  are transport-boundary types and must not enter this domain package.
   `pkg/factory/sessions/invocation/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
   observations. `pkg/factory/sessions/invocation/session_telemetry.go` owns invocation metric

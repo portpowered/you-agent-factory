@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -262,7 +261,7 @@ func structuredInvocationContent(signature *interfaces.InvocationSignatureConfig
 
 func hasPrimaryPositionalBinding(bindings []interfaces.InvocationParameterBindingConfig) bool {
 	for _, binding := range bindings {
-		if binding.Kind == string(factoryapi.FactoryInvocationParameterBindingKindPositional) && binding.Position == 1 {
+		if binding.Kind == interfaces.InvocationParameterBindingKindPositional && binding.Position == 1 {
 			return true
 		}
 	}
