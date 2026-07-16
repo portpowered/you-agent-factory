@@ -357,3 +357,9 @@ checkpoint, and artifact projection. Domain callers such as cursor identity and
 result shaping consume that value directly. The legacy `ProjectRuntime`
 compatibility entrypoint maps it to the generated response and adds the public
 stop summary; do not add new runtime derivation to that compatibility adapter.
+
+Factory Session validation failures carry `pkg/factory/validation.Target`
+values through service and control-plane boundaries. The HTTP handler maps those
+owner-defined targets to generated `FactoryValidationTarget` values only while
+writing the public error response; do not store generated transport targets in
+Factory Session errors.

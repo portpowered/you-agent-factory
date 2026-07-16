@@ -352,6 +352,10 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
 	if err != nil {
 		s.logger.Debug("open factory session rejected", zap.Error(err))
+		var domainTargetedErr interface {
+			error
+			ErrorTargets() []factoryvalidation.Target
+		}
 		var targetedErr interface {
 			error
 			ErrorTargets() []factoryapi.FactoryValidationTarget
@@ -362,6 +366,16 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.As(err, &codedErr) {
 			code = codedErr.ErrorCode()
+		}
+		if errors.As(err, &domainTargetedErr) {
+			s.writeErrorWithTargets(
+				w,
+				http.StatusBadRequest,
+				err.Error(),
+				code,
+				factoryvalidation.ToValidationTargets(domainTargetedErr.ErrorTargets()),
+			)
+			return
 		}
 		if errors.As(err, &targetedErr) {
 			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), code, targetedErr.ErrorTargets())

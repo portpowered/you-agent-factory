@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 func alwaysRunnableProbe(folderPath, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure) {
@@ -63,7 +63,7 @@ func TestDiscoverTargets_PreservesConfigLoadFailuresWhenNoRunnableTargetsRemain(
 		t.Fatalf("validation = (%q, %q, %v), want config_load_failed folderPath", reason, field, ok)
 	}
 	var targetedErr interface {
-		ErrorTargets() []factoryapi.FactoryValidationTarget
+		ErrorTargets() []factoryvalidation.Target
 	}
 	if !errors.As(err, &targetedErr) {
 		t.Fatalf("config load error %v did not expose structured targets", err)
@@ -75,8 +75,8 @@ func TestDiscoverTargets_PreservesConfigLoadFailuresWhenNoRunnableTargetsRemain(
 	if targets[0].Code != "factory.session.target.config_load_failed" {
 		t.Fatalf("config load target code = %q, want factory.session.target.config_load_failed", targets[0].Code)
 	}
-	if targets[0].Subject.Id != "default" {
-		t.Fatalf("config load target subject id = %q, want default", targets[0].Subject.Id)
+	if targets[0].Subject.ID != "default" {
+		t.Fatalf("config load target subject id = %q, want default", targets[0].Subject.ID)
 	}
 }
 

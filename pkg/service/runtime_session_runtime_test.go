@@ -34,6 +34,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
@@ -1553,7 +1554,7 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	t.Helper()
 
 	var targetedErr interface {
-		ErrorTargets() []factoryapi.FactoryValidationTarget
+		ErrorTargets() []factoryvalidation.Target
 	}
 	if !errors.As(err, &targetedErr) {
 		t.Fatalf("validation error %v did not expose structured targets", err)
@@ -1568,8 +1569,8 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	if target.Code != wantCode {
 		t.Fatalf("validation target code = %q, want %q", target.Code, wantCode)
 	}
-	if target.Subject.Id != wantField {
-		t.Fatalf("validation target subject id = %q, want %q", target.Subject.Id, wantField)
+	if target.Subject.ID != wantField {
+		t.Fatalf("validation target subject id = %q, want %q", target.Subject.ID, wantField)
 	}
 }
 
@@ -1582,7 +1583,7 @@ func assertFactorySessionConfigLoadFailure(t *testing.T, err error, wantTargetID
 	}
 
 	var targetedErr interface {
-		ErrorTargets() []factoryapi.FactoryValidationTarget
+		ErrorTargets() []factoryvalidation.Target
 	}
 	if !errors.As(err, &targetedErr) {
 		t.Fatalf("config load error %v did not expose structured targets", err)
@@ -1595,8 +1596,8 @@ func assertFactorySessionConfigLoadFailure(t *testing.T, err error, wantTargetID
 	if target.Code != "factory.session.target.config_load_failed" {
 		t.Fatalf("config load target code = %q, want factory.session.target.config_load_failed", target.Code)
 	}
-	if target.Subject.Id != wantTargetID {
-		t.Fatalf("config load target subject id = %q, want %q", target.Subject.Id, wantTargetID)
+	if target.Subject.ID != wantTargetID {
+		t.Fatalf("config load target subject id = %q, want %q", target.Subject.ID, wantTargetID)
 	}
 }
 

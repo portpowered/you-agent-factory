@@ -25,6 +25,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -748,12 +749,11 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	mf := &testutil.MockFactory{
-		OpenFactorySessionErr: apiTestSessionValidationError{
-			message: "folder validation failed",
-			targets: []factoryapi.FactoryValidationTarget{
-				factoryvalidation.FactorySessionFieldTarget("missing", "folderPath", "folder validation failed"),
-			},
-		},
+		OpenFactorySessionErr: factorysessions.NewValidationError(
+			factorysessions.ValidationReasonMissing,
+			"folderPath",
+			errors.New("folder validation failed"),
+		),
 	}
 	srv := newTestServer(mf)
 

@@ -17,7 +17,7 @@ func TestValidationReasonFromError_RecognizesStructuredValidationErrors(t *testi
 		t.Fatal("expected validationError type")
 	}
 	targets := ve.ErrorTargets()
-	if len(targets) != 1 || targets[0].Code == "" || targets[0].Subject.Id != "folderPath" {
+	if len(targets) != 1 || targets[0].Code == "" || targets[0].Subject.ID != "folderPath" {
 		t.Fatalf("ErrorTargets() = %#v, want folderPath validation target", targets)
 	}
 }
