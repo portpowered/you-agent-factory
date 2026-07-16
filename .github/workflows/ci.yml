@@ -187,7 +187,7 @@ jobs:
         run: |
           "## Windows Go ${{ matrix.label }}" >> $env:GITHUB_STEP_SUMMARY
           "" >> $env:GITHUB_STEP_SUMMARY
-          "- Local rerun: `${{ matrix.command }}`" >> $env:GITHUB_STEP_SUMMARY
+          "- Local rerun: ${{ matrix.command }}" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Run Windows Go ${{ matrix.label }} suite
         shell: pwsh

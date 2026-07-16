@@ -251,7 +251,7 @@ Backend verification failure summaries are rendered by `go run ./cmd/backendveri
 
 ### PR Inference Approval
 
-Required pull-request CI runs one explicit inference approval lane named `PR Inference Approval`. It is **not** folded into Backend Verification and is **not** gated by `Classify PR Impact`; every pull request and main push runs it after Build, Lint, and API complete.
+Required pull-request CI runs one explicit inference approval lane named `PR Inference Approval`. It is **not** folded into Backend Verification and is **not** gated by `Classify PR Impact`; every pull request and main push schedules it independently of Build, Lint, and API.
 
 **Local rerun commands**
 
