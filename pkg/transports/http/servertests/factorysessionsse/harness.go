@@ -62,6 +62,68 @@ type FactorySessionSSECheckpoint struct {
 	AfterSequence *int
 }
 
+// FactorySessionSSEOpenError preserves a typed HTTP failure returned while
+// opening a session event stream.
+type FactorySessionSSEOpenError struct {
+	SessionID  string
+	Checkpoint FactorySessionSSECheckpoint
+	StatusCode int
+	Response   factoryapi.ErrorResponse
+}
+
+func (e *FactorySessionSSEOpenError) Error() string {
+	return fmt.Sprintf(
+		"open Factory Session SSE stream for session %q checkpoint %s: status %d: %s",
+		e.SessionID,
+		factorySessionSSECheckpointDescription(e.Checkpoint),
+		e.StatusCode,
+		e.Response.Message,
+	)
+}
+
+// FactorySessionSSEReadOutcome classifies bounded waiting separately from
+// caller cancellation.
+type FactorySessionSSEReadOutcome string
+
+const (
+	FactorySessionSSEReadOutcomeWaitingTimeout FactorySessionSSEReadOutcome = "WAITING_TIMEOUT"
+	FactorySessionSSEReadOutcomeCallerCanceled FactorySessionSSEReadOutcome = "CALLER_CANCELED"
+)
+
+// FactorySessionSSEReadError records the selector, checkpoint, elapsed bound,
+// and last trustworthy frame for an interrupted bounded read.
+type FactorySessionSSEReadError struct {
+	Outcome        FactorySessionSSEReadOutcome
+	SessionID      string
+	Checkpoint     FactorySessionSSECheckpoint
+	ElapsedBound   time.Duration
+	LastValidFrame *FactorySessionSSEFrame
+	Err            error
+}
+
+func (e *FactorySessionSSEReadError) Error() string {
+	lastFrame := "no valid frame observed"
+	if e.LastValidFrame != nil {
+		lastFrame = fmt.Sprintf("last valid frame id=%q event=%q data=%q comment=%q",
+			e.LastValidFrame.ID,
+			e.LastValidFrame.Event,
+			e.LastValidFrame.Data,
+			e.LastValidFrame.Comment,
+		)
+	}
+	return fmt.Sprintf(
+		"session SSE read %s for session %q checkpoint %s after %s: %s: %v",
+		e.Outcome,
+		e.SessionID,
+		factorySessionSSECheckpointDescription(e.Checkpoint),
+		e.ElapsedBound,
+		lastFrame,
+		e.Err,
+	)
+}
+
+func (e *FactorySessionSSEReadError) Unwrap() error { return e.Err }
+
 // ApplyRecovery returns the checkpoint to use for the next stream open after a
 // typed JSON recovery probe. The server controls each omission independently.
 func (c FactorySessionSSECheckpoint) ApplyRecovery(
@@ -109,15 +171,18 @@ type factorySessionSSEReadResult struct {
 
 // FactorySessionSSEStream is one open session event SSE connection.
 type FactorySessionSSEStream struct {
-	t         *testing.T
-	timeout   time.Duration
-	Response  *http.Response
-	Identity  FactorySessionSSEStreamIdentity
-	reader    *bufio.Reader
-	cancel    context.CancelFunc
-	pending   <-chan factorySessionSSEReadResult
-	lastFrame FactorySessionSSEFrame
-	hasFrame  bool
+	t          *testing.T
+	timeout    time.Duration
+	Response   *http.Response
+	Identity   FactorySessionSSEStreamIdentity
+	reader     *bufio.Reader
+	ctx        context.Context
+	cancel     context.CancelFunc
+	pending    <-chan factorySessionSSEReadResult
+	lastFrame  FactorySessionSSEFrame
+	hasFrame   bool
+	sessionID  string
+	checkpoint FactorySessionSSECheckpoint
 }
 
 // NewFactorySessionSSEHarness returns a harness that fails closed when a read
@@ -134,41 +199,67 @@ func NewFactorySessionSSEHarness(t *testing.T, timeout time.Duration) *FactorySe
 // string (without leading "?").
 func (h *FactorySessionSSEHarness) Open(serverURL, sessionID, query string) *FactorySessionSSEStream {
 	h.t.Helper()
+	stream, err := h.tryOpen(context.Background(), serverURL, sessionID, query, FactorySessionSSECheckpoint{})
+	if err != nil {
+		h.t.Fatalf("open session SSE stream: %v", err)
+	}
+	return stream
+}
+
+func (h *FactorySessionSSEHarness) tryOpen(
+	callerContext context.Context,
+	serverURL, sessionID, query string,
+	checkpoint FactorySessionSSECheckpoint,
+) (*FactorySessionSSEStream, error) {
+	h.t.Helper()
 
 	path := "/factory-sessions/" + sessionID + "/events"
 	if query != "" {
 		path += "?" + query
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(callerContext)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+path, nil)
 	if err != nil {
-		h.t.Fatalf("new session SSE request: %v", err)
+		cancel()
+		return nil, fmt.Errorf("new session SSE request for session %q: %w", sessionID, err)
 	}
 	req.Header.Set("Accept", "text/event-stream")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		cancel()
-		h.t.Fatalf("GET %s: %v", path, err)
+		return nil, fmt.Errorf("GET %s: %w", path, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		cancel()
-		body, _ := io.ReadAll(resp.Body)
+		var errorResponse factoryapi.ErrorResponse
+		decodeErr := json.NewDecoder(resp.Body).Decode(&errorResponse)
 		_ = resp.Body.Close()
-		h.t.Fatalf("GET %s status = %d, want 200: %s", path, resp.StatusCode, string(body))
+		if decodeErr != nil {
+			return nil, fmt.Errorf("GET %s status = %d: decode error response: %w", path, resp.StatusCode, decodeErr)
+		}
+		return nil, &FactorySessionSSEOpenError{
+			SessionID:  sessionID,
+			Checkpoint: checkpoint,
+			StatusCode: resp.StatusCode,
+			Response:   errorResponse,
+		}
 	}
 	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
 		cancel()
 		_ = resp.Body.Close()
-		h.t.Fatalf("GET %s Content-Type = %q, want text/event-stream", path, got)
+		return nil, fmt.Errorf("GET %s Content-Type = %q, want text/event-stream", path, got)
 	}
 	return &FactorySessionSSEStream{
-		t:        h.t,
-		timeout:  h.timeout,
-		Response: resp,
-		Identity: factorySessionSSEIdentityFromHeader(resp.Header),
-		reader:   bufio.NewReader(resp.Body),
-		cancel:   cancel,
-	}
+		t:          h.t,
+		timeout:    h.timeout,
+		Response:   resp,
+		Identity:   factorySessionSSEIdentityFromHeader(resp.Header),
+		reader:     bufio.NewReader(resp.Body),
+		ctx:        ctx,
+		cancel:     cancel,
+		sessionID:  sessionID,
+		checkpoint: checkpoint,
+	}, nil
 }
 
 // OpenFromCheckpoint resumes a session event stream after the supplied
@@ -179,7 +270,29 @@ func (h *FactorySessionSSEHarness) OpenFromCheckpoint(
 ) *FactorySessionSSEStream {
 	h.t.Helper()
 
-	return h.Open(serverURL, sessionID, factorySessionSSECheckpointQuery(checkpoint))
+	stream, err := h.tryOpen(
+		context.Background(),
+		serverURL,
+		sessionID,
+		factorySessionSSECheckpointQuery(checkpoint),
+		checkpoint,
+	)
+	if err != nil {
+		h.t.Fatalf("open session SSE stream from checkpoint: %v", err)
+	}
+	return stream
+}
+
+// TryOpenFromCheckpoint opens a session stream with caller-owned cancellation
+// and returns typed HTTP failures instead of failing the test.
+func (h *FactorySessionSSEHarness) TryOpenFromCheckpoint(
+	ctx context.Context,
+	serverURL, sessionID string,
+	checkpoint FactorySessionSSECheckpoint,
+) (*FactorySessionSSEStream, error) {
+	h.t.Helper()
+
+	return h.tryOpen(ctx, serverURL, sessionID, factorySessionSSECheckpointQuery(checkpoint), checkpoint)
 }
 
 func factorySessionSSECheckpointQuery(checkpoint FactorySessionSSECheckpoint) string {
@@ -191,6 +304,18 @@ func factorySessionSSECheckpointQuery(checkpoint FactorySessionSSECheckpoint) st
 		query.Set("after_sequence", fmt.Sprint(*checkpoint.AfterSequence))
 	}
 	return query.Encode()
+}
+
+func factorySessionSSECheckpointDescription(checkpoint FactorySessionSSECheckpoint) string {
+	afterSequence := "<omitted>"
+	if checkpoint.AfterSequence != nil {
+		afterSequence = fmt.Sprint(*checkpoint.AfterSequence)
+	}
+	afterEventID := checkpoint.AfterEventID
+	if afterEventID == "" {
+		afterEventID = "<omitted>"
+	}
+	return fmt.Sprintf("after_event_id=%q after_sequence=%s", afterEventID, afterSequence)
 }
 
 func factorySessionSSEIdentityFromHeader(header http.Header) FactorySessionSSEStreamIdentity {
@@ -359,10 +484,18 @@ func (s *FactorySessionSSEStream) TryReadNextEvent(timeout time.Duration) (facto
 	for {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			return factoryapi.FactoryEvent{}, fmt.Errorf("%w after %s", errFactorySessionSSEHarnessTimeout, timeout)
+			return factoryapi.FactoryEvent{}, s.readError(
+				FactorySessionSSEReadOutcomeWaitingTimeout,
+				timeout,
+				errFactorySessionSSEHarnessTimeout,
+			)
 		}
 		frame, err := s.TryReadNextFrame(remaining)
 		if err != nil {
+			var readErr *FactorySessionSSEReadError
+			if errors.As(err, &readErr) {
+				readErr.ElapsedBound = timeout
+			}
 			return factoryapi.FactoryEvent{}, err
 		}
 		if frame.FactoryEvent != nil {
@@ -389,10 +522,21 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
+	var callerCanceled <-chan struct{}
+	if s.ctx != nil {
+		callerCanceled = s.ctx.Done()
+	}
 	select {
 	case result := <-s.pending:
 		s.pending = nil
 		if result.err != nil {
+			if errors.Is(result.err, context.Canceled) {
+				return FactorySessionSSEFrame{}, s.readError(
+					FactorySessionSSEReadOutcomeCallerCanceled,
+					timeout,
+					context.Canceled,
+				)
+			}
 			return result.frame, result.err
 		}
 		if !result.ok {
@@ -402,8 +546,37 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 		s.hasFrame = true
 		return result.frame, nil
 	case <-timer.C:
-		return FactorySessionSSEFrame{}, fmt.Errorf("%w after %s", errFactorySessionSSEHarnessTimeout, timeout)
+		return FactorySessionSSEFrame{}, s.readError(
+			FactorySessionSSEReadOutcomeWaitingTimeout,
+			timeout,
+			errFactorySessionSSEHarnessTimeout,
+		)
+	case <-callerCanceled:
+		return FactorySessionSSEFrame{}, s.readError(
+			FactorySessionSSEReadOutcomeCallerCanceled,
+			timeout,
+			s.ctx.Err(),
+		)
 	}
+}
+
+func (s *FactorySessionSSEStream) readError(
+	outcome FactorySessionSSEReadOutcome,
+	elapsedBound time.Duration,
+	err error,
+) *FactorySessionSSEReadError {
+	readErr := &FactorySessionSSEReadError{
+		Outcome:      outcome,
+		SessionID:    s.sessionID,
+		Checkpoint:   s.checkpoint,
+		ElapsedBound: elapsedBound,
+		Err:          err,
+	}
+	if s.hasFrame {
+		lastFrame := s.lastFrame
+		readErr.LastValidFrame = &lastFrame
+	}
+	return readErr
 }
 
 // ReadEvents reads count SSE data frames in order, failing closed on timeout.
