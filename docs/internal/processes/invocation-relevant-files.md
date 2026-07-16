@@ -778,6 +778,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch. Resolution
   never repairs legacy prompts, so installed files remain customer-owned and
   byte-for-byte unchanged by `you run --named` lookup.
+- Packaged `@you/review` uses that same catalog, assembly, and editable
+  materialization path. Its `reviewable-work` lifecycle routes `init` through
+  `execute-review-work` to `in-review`, then through `review-review-work` to
+  the explicit invocation-return terminal `approved` state. The reviewer uses
+  `decision-envelope`: accepted envelopes carry the approved candidate in
+  `output`, rejection returns to `init` with feedback, and failures route to
+  `failed`. Keep this approval-only topology and explicit return policy aligned
+  when changing packaged-factory plumbing.
 - `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
   and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`

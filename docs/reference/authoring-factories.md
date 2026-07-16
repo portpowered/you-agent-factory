@@ -279,17 +279,19 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal` and `@you/tts` also use the
+First-party built-ins such as `@you/goal`, `@you/review`, and `@you/tts` also use the
 named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
+you run --named @you/review "Draft the release notes"
 you run --named @you/tts --output primary "Read the release summary."
 ```
 
 Start with `@you/goal` when you want a goal-oriented factory you can run
 immediately and customize on disk instead of authoring `factory.json` from
-scratch. Start with `@you/tts` when you need the inference-oriented packaged
+scratch. Start with `@you/review` when every result must pass an independent
+review before it can be returned. Start with `@you/tts` when you need the inference-oriented packaged
 TTS example. See `you docs run` for named-Factory invocation inputs and stdout
 result modes, `you docs sessions` for stopped-run inspection and recovery, and
 `you docs models` for TTS readiness, direct invocation, and audio or JSON
