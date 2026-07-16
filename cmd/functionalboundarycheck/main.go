@@ -25,7 +25,10 @@ var forbiddenRequestBatchImports = []string{
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri",
 }
 
-type config struct{ path string }
+type config struct {
+	root string
+	path string
+}
 
 func main() {
 	if err := run(os.Args[1:], os.Stderr); err != nil {
@@ -39,23 +42,28 @@ func run(args []string, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return checkSource(cfg.path)
+	return checkSource(cfg.root, cfg.path)
 }
 
 func parseConfig(args []string, stderr io.Writer) (config, error) {
 	flags := flag.NewFlagSet("functionalboundarycheck", flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	root := flags.String("root", ".", "repository root")
 	path := flags.String("path", defaultScenarioPath, "request-batch functional scenario source path")
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
 	}
-	return config{path: *path}, nil
+	return config{root: *root, path: *path}, nil
 }
 
-func checkSource(path string) error {
-	file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+func checkSource(root, path string) error {
+	relativePath, sourcePath, err := functionalTestPath(root, path)
 	if err != nil {
-		return fmt.Errorf("%s parse request-batch functional scenario %s: %w", diagnosticPrefix, filepath.ToSlash(path), err)
+		return err
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), sourcePath, nil, parser.ImportsOnly)
+	if err != nil {
+		return fmt.Errorf("%s parse request-batch functional scenario %s: %w", diagnosticPrefix, relativePath, err)
 	}
 	for _, spec := range file.Imports {
 		importPath, err := strconv.Unquote(spec.Path.Value)
@@ -63,10 +71,30 @@ func checkSource(path string) error {
 			return fmt.Errorf("%s read import in %s: %w", diagnosticPrefix, filepath.ToSlash(path), err)
 		}
 		if isForbiddenRequestBatchImport(importPath) {
-			return prohibitedInternalImportError(path, importPath)
+			return prohibitedInternalImportError(relativePath, importPath)
 		}
 	}
 	return nil
+}
+
+func functionalTestPath(root, path string) (string, string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", "", fmt.Errorf("%s resolve repository root: %w", diagnosticPrefix, err)
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "", fmt.Errorf("%s resolve functional scenario path: %w", diagnosticPrefix, err)
+	}
+	relativePath, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", "", fmt.Errorf("%s resolve functional scenario location: %w", diagnosticPrefix, err)
+	}
+	relativePath = filepath.ToSlash(relativePath)
+	if relativePath == ".." || strings.HasPrefix(relativePath, "../") || !strings.HasPrefix(relativePath, "tests/functional/") || !strings.HasSuffix(relativePath, "_test.go") {
+		return "", "", fmt.Errorf("%s request-batch boundary checks apply only to repository tests/functional/*_test.go sources: %s", diagnosticPrefix, relativePath)
+	}
+	return relativePath, absPath, nil
 }
 
 func isForbiddenRequestBatchImport(importPath string) bool {
