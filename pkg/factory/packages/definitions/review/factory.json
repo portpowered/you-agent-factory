@@ -43,6 +43,7 @@
       "name": "execute-review-work",
       "type": "AGENT_RUN",
       "worker": "review-work-executor",
+      "workPropagation": {"mode": "PRESERVE_INPUT"},
       "inputs": [{"workType": "reviewable-work", "state": "init"}],
       "outputs": [{"workType": "reviewable-work", "state": "in-review"}],
       "onFailure": [{"workType": "reviewable-work", "state": "failed"}],

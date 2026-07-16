@@ -27,6 +27,9 @@ func TestBuiltInFactoryJSON_LoadsReviewGatedTopology(t *testing.T) {
 	if !executeOK || !reviewOK {
 		t.Fatal("missing execute or review workstation")
 	}
+	if execute.WorkPropagation == nil || execute.WorkPropagation.Mode != interfaces.WorkPropagationModePreserveInput {
+		t.Fatalf("execute work propagation = %#v, want PRESERVE_INPUT", execute.WorkPropagation)
+	}
 	if execute.Outputs[0].StateName != "in-review" || review.Outputs[0].StateName != "approved" || review.OnRejection[0].StateName != "init" || review.OnFailure[0].StateName != "failed" {
 		t.Fatalf("review routes = %#v", review)
 	}

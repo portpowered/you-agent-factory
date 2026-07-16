@@ -375,6 +375,7 @@ func applyOutputOutcome(
 	place *petri.Place,
 	workTypes map[string]*state.WorkType,
 ) {
+	setLastOutputTag(token, in.Output)
 	switch in.Outcome {
 	case interfaces.OutcomeContinue:
 		setOutputFeedbackTag(token, "continue_feedback", in.Feedback)
@@ -386,6 +387,13 @@ func applyOutputOutcome(
 	case interfaces.OutcomeFailed:
 		appendOutputFailure(token, in.TransitionID, in.Error, in.Now)
 	}
+}
+
+func setLastOutputTag(token *interfaces.Token, output string) {
+	if output == "" {
+		return
+	}
+	setOutputFeedbackTag(token, "_last_output", output)
 }
 
 func setOutputFeedbackTag(token *interfaces.Token, key, value string) {

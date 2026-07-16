@@ -3,6 +3,13 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+- Review-gated factories that must revise rejected work should preserve the
+  original input on the work-stage route, retain non-empty worker output in the
+  `_last_output` token tag, and read `Payload`, `PreviousOutput`, and
+  `RejectionFeedback` from the retry prompt. This keeps the request, candidate,
+  and reviewer feedback available without weakening the approval-only terminal
+  return contract. Focused coverage belongs with the packaged invocation tests.
+
 ## CLI run and submit command contracts
 
 - Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
