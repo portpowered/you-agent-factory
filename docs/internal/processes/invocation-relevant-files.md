@@ -12,6 +12,11 @@ primary-result behavior.
 - Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
   as production code. Keep topology fixtures readable by delegating independent
   identity, routing, and validation assertions to named test helpers.
+- Adding an embedded packaged-factory definition also adds two measured backend
+  packages to the unit and functional coverage manifests: record the definition
+  package's observed numeric floor and the wrapper package's documented
+  measurement exception when it has no executable statements. Verify both with
+  `make test-unit-coverage` and `make test-functional-coverage`.
 
 ## CLI run and submit command contracts
 
