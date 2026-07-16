@@ -33,7 +33,10 @@
   When a change adds a measurable Go package to either profile, add its
   package-specific minimum to the matching
   `docs/internal/development/go-*-coverage-package-minimums.json` manifest in
-  the same change; the coverage gate rejects unowned measured packages.
+  the same change; the coverage gate rejects unowned measured packages. Keep
+  manifest packages in lexical import-path order, including after merge
+  conflict resolution; the coverage validator rejects unsorted entries before
+  running its test profile.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned

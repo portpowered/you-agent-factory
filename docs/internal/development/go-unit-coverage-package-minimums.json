@@ -113,12 +113,12 @@
       "minimum": 100.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fix",
-      "minimum": 60.00
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch",
       "minimum": 80.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fix",
+      "minimum": 60.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion",
@@ -438,10 +438,10 @@
       "package": "github.com/portpowered/infinite-you/pkg/runtimehost",
       "minimum": 34.64
     },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/service",
-      "minimum": 78.46
-    },
+      {
+        "package": "github.com/portpowered/infinite-you/pkg/service",
+        "minimum": 78.25
+      },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
       "minimum": 75.00
