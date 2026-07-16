@@ -29,7 +29,24 @@
   explicit run/intentional-skip summary, per-suite coverage thresholds,
   diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
   Their exact local reruns are `make test-unit-coverage` and
-  `make test-functional-coverage`.
+  `make test-functional-coverage`. Both commands serialize Go package coverage
+  writers before canonicalizing repeated source blocks into one sorted profile;
+  keep that ordering so concurrent packages cannot corrupt the shared profile
+  and the uploaded artifact matches the totals enforced by the lane.
+  When merging `main` into a branch, retain `main`'s reviewed package-minimum
+  manifest entries unless the branch has independently regenerated and proven
+  a stricter floor. Reintroducing a stale branch floor can turn a passing
+  profile into a coverage-policy failure without any source behavior change.
+  Factory-service command-runner overrides are resolved while composing the
+  runtime worker application, including through `wire.InjectFactoryService`.
+  Functional API tests should set the service-level provider and script
+  overrides directly and assert the runner is invoked, rather than supplying
+  a prebuilt worker application that bypasses this composition boundary.
+  Local concurrent lane scripts must redirect each background command directly
+  to its retained log, wait on that command, and replay the log afterward. Do
+  not put background commands behind live `while`/`tee` pipelines: on Windows,
+  detached descendants can inherit the pipe handle after the tested command
+  exits and prevent the repository-owned verification target from terminating.
   When a change adds a measurable Go package to either profile, add its
   package-specific minimum to the matching
   `docs/internal/development/go-*-coverage-package-minimums.json` manifest in

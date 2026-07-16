@@ -301,6 +301,10 @@ type Config struct {
 	// (prompt rendering, AgentExecutor, stop-token evaluation) without
 	// shelling out to a real CLI tool.
 	ProviderOverride workers.Provider
+	// ProviderCommandRunnerOverride, when non-nil, replaces the subprocess
+	// boundary used by MODEL_WORKER providers while preserving provider request
+	// construction and response handling.
+	ProviderCommandRunnerOverride workers.CommandRunner
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
 	// runner prerequisite checks during startup. Tests that replace execution
 	// with mocks or custom executors use this to exercise service wiring
@@ -312,6 +316,10 @@ type Config struct {
 	// workstation is skipped. Tests use this to inject workstation
 	// definitions without requiring files on disk.
 	WorkstationLoader factoryconfig.WorkstationLoader
+	// CommandRunnerOverride, when non-nil, replaces the subprocess boundary
+	// used by SCRIPT_WORKER executors. It is intentionally distinct from the
+	// provider command runner override.
+	CommandRunnerOverride workers.CommandRunner
 	// WorkerApplication is the process-composed worker/provider, script, and
 	// hosted-worker component shared by every runtime session.
 	WorkerApplication workerapplication.Components

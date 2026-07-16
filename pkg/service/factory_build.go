@@ -218,17 +218,28 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	), nil
 }
 
-// ConfigWithWorkerApplication adapts the direct-service entrypoint into the
-// production worker application consumed by FactoryCore. Functional callers
-// must provide a preconstructed WorkerApplication instead.
+// ConfigWithWorkerApplication adapts direct service command-runner overrides
+// into the worker application consumed by FactoryCore.
 func ConfigWithWorkerApplication(cfg *FactoryServiceConfig) (*FactoryServiceConfig, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("factory service config is required")
 	}
-	if cfg.WorkerApplication.Valid() {
+	if cfg.WorkerApplication.Valid() && cfg.ProviderCommandRunnerOverride == nil && cfg.CommandRunnerOverride == nil {
 		return cfg, nil
 	}
-	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+	components := cfg.WorkerApplication
+	var err error
+	if components.Valid() {
+		components, err = components.WithCommandRunners(
+			cfg.ProviderCommandRunnerOverride,
+			cfg.CommandRunnerOverride,
+		)
+	} else {
+		components, err = workerapplication.New(cfg.Logger, workerapplication.Edges{
+			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
+			ScriptCommandRunner:   cfg.CommandRunnerOverride,
+		})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("construct factory service worker application: %w", err)
 	}
