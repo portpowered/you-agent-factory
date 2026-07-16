@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/quorum"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -21,7 +20,7 @@ func TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult(t *testi
 		t.Skip("slow CLI named @you/quorum invocation smoke")
 	}
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"), quorum.PackagedFactoryName, quorum.BuiltInFactoryJSON); err != nil {
+	if _, err := factoryconfig.PersistNamedFactory(defaultpaths.NamedFactoriesRoot(homeDir), quorum.PackagedFactoryName, quorum.BuiltInFactoryJSON); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/quorum): %v", err)
 	}
 	port, err := reserveLocalTCPPort()
@@ -32,7 +31,7 @@ func TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult(t *testi
 	defer cancel()
 	cmd := exec.CommandContext(ctx, buildYouCLIBinary(t), "--json", "run", "--named", quorum.PackagedFactoryName, "--with-mock-workers", "--no-record", "--server", fmt.Sprintf("http://127.0.0.1:%d", port), "--quiet", writeQuorumMockWorkersConfig(t), "--branch-provider", "CLAUDE", "--branch-model", "claude-sonnet-4-20250514", "--merge-provider", "CODEX", "--merge-model", "gpt-5", "compare the two plans")
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
+	cmd.Env = namedFactorySmokeEnvironment(homeDir)
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
