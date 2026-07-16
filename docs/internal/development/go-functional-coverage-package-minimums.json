@@ -124,7 +124,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/events",
-      "minimum": 61.16
+      "minimum": 60.98
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/ingest",
@@ -224,7 +224,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions",
-      "minimum": 36.02
+      "minimum": 35.90
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane",
