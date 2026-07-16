@@ -41,9 +41,9 @@ const (
 // on symbolic defaults.
 func BaselineClassifierWorkerPresets() []WorkerPreset {
 	return []WorkerPreset{
-		{ID: ClassifierSmallPresetID, ModelProvider: "CODEX", Model: "gpt-5-mini", ReasoningEffort: "low"},
-		{ID: ClassifierMediumPresetID, ModelProvider: "CODEX", Model: "gpt-5", ReasoningEffort: "medium"},
-		{ID: ClassifierLargePresetID, ModelProvider: "CODEX", Model: "gpt-5.4", ReasoningEffort: "high"},
+		{ID: ClassifierSmallPresetID, ModelProvider: "CODEX", Model: "gpt-5-mini"},
+		{ID: ClassifierMediumPresetID, ModelProvider: "CODEX", Model: "gpt-5"},
+		{ID: ClassifierLargePresetID, ModelProvider: "CODEX", Model: "gpt-5.4"},
 	}
 }
 

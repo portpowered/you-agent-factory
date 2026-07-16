@@ -134,6 +134,11 @@ func TestBaselineClassifierWorkerPresetsAreValidAndUnique(t *testing.T) {
 			t.Fatalf("baseline presets do not include %q: %#v", id, config.WorkerPresets)
 		}
 	}
+	for _, preset := range config.WorkerPresets {
+		if preset.ReasoningEffort != "" {
+			t.Fatalf("baseline preset %q reasoning effort = %q, want unset", preset.ID, preset.ReasoningEffort)
+		}
+	}
 }
 
 func TestWriteBaselineClassifierWorkerPresets(t *testing.T) {

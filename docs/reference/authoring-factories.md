@@ -300,9 +300,10 @@ result choices.
 
 `@you/classifier` first classifies one text request as `small`, `medium`, or
 `large`, then routes it to the matching target workstation. The classifier and
-small target use the `small` baseline preset (`CODEX` / `gpt-5-mini`); the
-medium target uses `medium` (`CODEX` / `gpt-5`); and the large target uses
-`large` (`CODEX` / `gpt-5.4`). Run `you config init` in a new home before the
+small target use the `small` baseline provider/model preset (`CODEX` /
+`gpt-5-mini`); the medium target uses `medium` (`CODEX` / `gpt-5`); and the
+large target uses `large` (`CODEX` / `gpt-5.4`). These presets do not select a
+reasoning-effort policy. Run `you config init` in a new home before the
 first invocation so those baseline presets and the packaged factory are
 installed:
 

@@ -5941,7 +5941,7 @@ type Worker struct {
 	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
 	Operations *[]ModelOperation `json:"operations,omitempty"`
 
-	// Preset Operator-owned worker preset ID resolved before model dispatch. A preset supplies modelProvider, model, and reasoningEffort unless a worker explicitly overrides a field.
+	// Preset Operator-owned worker preset ID resolved before model dispatch. A preset supplies modelProvider and model unless a worker explicitly overrides either field.
 	Preset *string `json:"preset,omitempty"`
 
 	// Provider Built-in hosted provider identity when this worker uses repository-owned hosted execution.
