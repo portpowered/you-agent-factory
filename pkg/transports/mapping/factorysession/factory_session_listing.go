@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -48,6 +50,55 @@ func LiveSessionSummaryToAPI(session factorysessionexecution.LiveSessionSummary)
 		Project:    session.Project,
 		IsDefault:  session.IsDefault,
 		Target:     factoryapi.FactorySessionTargetRef{},
+	}
+}
+
+// LogicalTargetToAPI maps one normalized Factory Session logical target to the
+// public client-safe API shape.
+func LogicalTargetToAPI(ref logicaltarget.CanonicalReference) factoryapi.FactorySessionLogicalTarget {
+	target := factoryapi.FactorySessionLogicalTarget{
+		Kind:       logicalTargetKindToAPI(ref.Kind),
+		FolderPath: ref.FolderPath,
+	}
+	if ref.Kind == logicaltarget.KindNamed {
+		namedTarget := ref.NamedTarget
+		target.NamedTarget = &namedTarget
+	}
+	if ref.Kind == logicaltarget.KindProvider && ref.Provider != nil {
+		target.ProviderBoundary = &factoryapi.FactorySessionLogicalProviderBoundary{
+			Provider: ref.Provider.Provider,
+			Kind:     ref.Provider.Kind,
+			Boundary: ref.Provider.Boundary,
+		}
+	}
+	return target
+}
+
+// LogicalTargetFromSession derives public normalized target metadata for one
+// live Factory Session within backendScopeID.
+func LogicalTargetFromSession(
+	backendScopeID string,
+	session *factorysessions.LiveSession,
+) (*factoryapi.FactorySessionLogicalTarget, error) {
+	if session == nil {
+		return nil, nil
+	}
+	ref, err := logicaltarget.NormalizeTargetRef(backendScopeID, session.FolderPath, session.Target)
+	if err != nil {
+		return nil, err
+	}
+	target := LogicalTargetToAPI(ref)
+	return &target, nil
+}
+
+func logicalTargetKindToAPI(kind logicaltarget.Kind) factoryapi.FactorySessionLogicalTargetKind {
+	switch kind {
+	case logicaltarget.KindNamed:
+		return factoryapi.FactorySessionLogicalTargetKindNamed
+	case logicaltarget.KindProvider:
+		return factoryapi.FactorySessionLogicalTargetKindProvider
+	default:
+		return factoryapi.FactorySessionLogicalTargetKindDefault
 	}
 }
 

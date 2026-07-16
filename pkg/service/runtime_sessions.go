@@ -1370,7 +1370,7 @@ func factorySessionNormalizedLogicalTarget(
 	if backendScopeID == "" {
 		return nil
 	}
-	target, err := logicaltarget.APILogicalTargetFromSession(backendScopeID, session)
+	target, err := factorysession.LogicalTargetFromSession(backendScopeID, session)
 	if err != nil || target == nil {
 		return nil
 	}

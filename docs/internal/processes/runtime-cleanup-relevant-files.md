@@ -337,6 +337,13 @@ its detached checkpoint-backed partial projection. Convert those values through
 `pkg/transports/mapping` only when the control plane assembles generated public
 responses.
 
+Normalized Factory Session logical-target identity is derived in
+`pkg/factory/sessions/logicaltarget` and represented by its canonical reference
+or the live runtime projection contract. Convert that reference to generated
+logical-target kinds and provider-boundary fields only in
+`pkg/transports/mapping/factorysession`; domain target normalization must not
+return generated HTTP values.
+
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
 Factory-owned `FactoryArtifact` metadata, including capture and redaction

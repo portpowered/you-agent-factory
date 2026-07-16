@@ -4,11 +4,84 @@ import (
 	"errors"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
+
+func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
+	t.Parallel()
+
+	defaultRef, err := logicaltarget.NormalizeDefaultTarget("scope-1", t.TempDir())
+	if err != nil {
+		t.Fatalf("NormalizeDefaultTarget: %v", err)
+	}
+	defaultTarget := factorysession.LogicalTargetToAPI(defaultRef)
+	if defaultTarget.Kind != factoryapi.FactorySessionLogicalTargetKindDefault {
+		t.Fatalf("default kind = %q", defaultTarget.Kind)
+	}
+	if defaultTarget.NamedTarget != nil || defaultTarget.ProviderBoundary != nil {
+		t.Fatalf("default target should not include named or provider fields: %#v", defaultTarget)
+	}
+
+	namedRef, err := logicaltarget.NormalizeNamedTarget("scope-1", t.TempDir(), "goal")
+	if err != nil {
+		t.Fatalf("NormalizeNamedTarget: %v", err)
+	}
+	namedTarget := factorysession.LogicalTargetToAPI(namedRef)
+	if namedTarget.Kind != factoryapi.FactorySessionLogicalTargetKindNamed {
+		t.Fatalf("named kind = %q", namedTarget.Kind)
+	}
+	if namedTarget.NamedTarget == nil || *namedTarget.NamedTarget != namedRef.NamedTarget {
+		t.Fatalf("namedTarget = %#v, want %q", namedTarget.NamedTarget, namedRef.NamedTarget)
+	}
+
+	providerRef, err := logicaltarget.NormalizeProviderTarget("scope-1", t.TempDir(), logicaltarget.ProviderBoundary{
+		Provider: "cursor", Kind: "agent", Boundary: "workspace-1",
+	})
+	if err != nil {
+		t.Fatalf("NormalizeProviderTarget: %v", err)
+	}
+	providerTarget := factorysession.LogicalTargetToAPI(providerRef)
+	if providerTarget.Kind != factoryapi.FactorySessionLogicalTargetKindProvider {
+		t.Fatalf("provider kind = %q", providerTarget.Kind)
+	}
+	if providerTarget.ProviderBoundary == nil || providerTarget.ProviderBoundary.Boundary != "workspace-1" {
+		t.Fatalf("provider boundary = %#v", providerTarget.ProviderBoundary)
+	}
+}
+
+func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
+	t.Parallel()
+
+	target, err := factorysession.LogicalTargetFromSession("scope-1", nil)
+	if err != nil || target != nil {
+		t.Fatalf("LogicalTargetFromSession(nil) = (%#v, %v), want nil,nil", target, err)
+	}
+
+	session := &factorysessions.LiveSession{
+		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
+		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
+	}
+	target, err = factorysession.LogicalTargetFromSession("scope-1", session)
+	if err != nil {
+		t.Fatalf("LogicalTargetFromSession: %v", err)
+	}
+	if target == nil || target.Kind != factoryapi.FactorySessionLogicalTargetKindNamed {
+		t.Fatalf("target = %#v", target)
+	}
+
+	invalidSession := &factorysessions.LiveSession{
+		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
+		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
+	}
+	if _, err := factorysession.LogicalTargetFromSession("scope-1", invalidSession); err == nil {
+		t.Fatal("LogicalTargetFromSession(invalid named target) = nil, want validation error")
+	}
+}
 
 func TestListSessionsRequestFromAPI_DefaultsToLiveScope(t *testing.T) {
 	request, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{})
