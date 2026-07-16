@@ -6,10 +6,11 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
-	wantNames := []string{"@you/classifier", "@you/fusion", "@you/goal", "@you/subagent", "@you/tts"}
+	wantNames := []string{"@you/classifier", "@you/deep-research", "@you/fusion", "@you/goal", "@you/subagent", "@you/tts"}
 	if got := factorypackages.Names(); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("Names() = %v, want %v", got, wantNames)
 	}
@@ -29,6 +30,12 @@ func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
 			}
 			if cfg.Project != definition.Project {
 				t.Fatalf("definition project = %q, loaded project = %q", definition.Project, cfg.Project)
+			}
+			if interfaces.IsJavaScriptOrchestratorFactory(cfg) {
+				if cfg.Orchestrator.JavaScript == nil || cfg.Orchestrator.JavaScript.SourceRef == "" {
+					t.Fatalf("JavaScript packaged definition %q has no workflow source: %#v", name, cfg.Orchestrator)
+				}
+				return
 			}
 			if len(cfg.Workers) == 0 || len(cfg.Workstations) == 0 || len(cfg.WorkTypes) == 0 {
 				t.Fatalf("packaged definition %q is not runnable: %#v", name, cfg)

@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	builtinclassifier "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/classifier"
+	builtindeepresearch "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch"
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
@@ -23,6 +24,11 @@ var catalog = map[string]Definition{
 		Name:    "@you/classifier",
 		Project: "builtin-classifier",
 		JSON:    builtinclassifier.BuiltInFactoryJSON,
+	},
+	"@you/deep-research": {
+		Name:    "@you/deep-research",
+		Project: "builtin-deep-research",
+		JSON:    builtindeepresearch.BuiltInFactoryJSON,
 	},
 	"@you/fusion": {
 		Name:    "@you/fusion",

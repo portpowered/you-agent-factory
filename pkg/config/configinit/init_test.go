@@ -780,7 +780,7 @@ func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) 
 	got := err.Error()
 	for _, want := range []string{
 		"install packaged factory",
-		"@you/classifier",
+		factorypackages.Names()[0],
 		namedFactoriesRoot,
 	} {
 		if !strings.Contains(got, want) {
