@@ -145,9 +145,21 @@ jobs:
         run: make typecheck
 
   windows-go-tests:
-    name: Windows Short Go Suite
+    name: Windows Go ${{ matrix.label }}
     runs-on: windows-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Unit
+            command: make test-unit
+          - label: Functional
+            command: make test-functional
+          - label: Stress
+            command: make test-stress
+          - label: Release
+            command: make test-release
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -170,9 +182,16 @@ jobs:
         shell: pwsh
         run: choco install make --no-progress -y
 
-      - name: Run Windows short Go suite
+      - name: Report local rerun command
         shell: pwsh
-        run: make test
+        run: |
+          "## Windows Go ${{ matrix.label }}" >> $env:GITHUB_STEP_SUMMARY
+          "" >> $env:GITHUB_STEP_SUMMARY
+          "- Local rerun: `${{ matrix.command }}`" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Run Windows Go ${{ matrix.label }} suite
+        shell: pwsh
+        run: ${{ matrix.command }}
 
   verify-build-contracts:
     name: Build, Lint, and API
