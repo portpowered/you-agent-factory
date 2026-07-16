@@ -47,6 +47,17 @@ Protocol envelopes, HTTP status and headers, CLI rendering or diagnostics, and
 MCP JSON-RPC request-correlation metadata do not belong in this contract
 because they are not Factory Session facts.
 
+## Difference reports
+
+`Compare` compares two already-normalized projections and returns every
+semantic difference as a `Difference` with a stable field path plus compact,
+normalized JSON `expected` and `actual` values. It compares object fields in
+lexicographic path order and collection items by their retained order. Missing
+facts are reported with `null` on the missing side, unexpected facts with
+`null` on the expected side, and duplicate or reordered facts through their
+affected indexed paths. The report is deterministic and never incorporates
+transport formatting, observation timestamps, or protocol metadata.
+
 ## Deterministic fixture observations
 
 `TerminalSuccessObservations` and `TerminalFailureObservations` provide static
