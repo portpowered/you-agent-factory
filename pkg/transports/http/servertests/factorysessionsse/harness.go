@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,14 @@ type FactorySessionSSEStreamIdentity struct {
 	LogicalSessionKeyID string
 	FactorySessionID    string
 	StreamGenerationID  string
+}
+
+// FactorySessionSSECheckpoint identifies the last FactoryEvent acknowledged by
+// a session stream consumer. AfterEventID takes precedence when both fields are
+// supplied, matching the public API contract.
+type FactorySessionSSECheckpoint struct {
+	AfterEventID  string
+	AfterSequence *int
 }
 
 // FactorySessionSSEFrame is one complete SSE protocol frame. FactoryEvent is
@@ -146,6 +155,24 @@ func (h *FactorySessionSSEHarness) Open(serverURL, sessionID, query string) *Fac
 		reader:   bufio.NewReader(resp.Body),
 		cancel:   cancel,
 	}
+}
+
+// OpenFromCheckpoint resumes a session event stream after the supplied
+// acknowledged FactoryEvent checkpoint.
+func (h *FactorySessionSSEHarness) OpenFromCheckpoint(
+	serverURL, sessionID string,
+	checkpoint FactorySessionSSECheckpoint,
+) *FactorySessionSSEStream {
+	h.t.Helper()
+
+	query := url.Values{}
+	if checkpoint.AfterEventID != "" {
+		query.Set("after_event_id", checkpoint.AfterEventID)
+	}
+	if checkpoint.AfterSequence != nil {
+		query.Set("after_sequence", fmt.Sprint(*checkpoint.AfterSequence))
+	}
+	return h.Open(serverURL, sessionID, query.Encode())
 }
 
 func factorySessionSSEIdentityFromHeader(header http.Header) FactorySessionSSEStreamIdentity {
