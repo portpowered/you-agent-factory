@@ -20,12 +20,13 @@ import (
 type runtimeSessionExecutionCoreBuilder func(context.Context, *runtimehost.Config) (*runtimehost.Core, error)
 
 // BuildSessionExecutionService constructs the durable execution collaborator
-// selected by CLI inputs. Transport packages receive only the resulting
-// service and retain parsing and rendering ownership.
+// selected by CLI inputs. Transport packages receive the narrow service with
+// its cleanup owner and retain command-lifecycle, parsing, and rendering
+// ownership.
 func BuildSessionExecutionService(
 	ctx context.Context,
 	request sessionexecutioncli.ServiceRequest,
-) (factorysessionexecution.Service, error) {
+) (sessionexecutioncli.ServiceOwner, error) {
 	return buildSessionExecutionService(ctx, request, InjectRuntimeCore)
 }
 
@@ -33,7 +34,7 @@ func buildSessionExecutionService(
 	ctx context.Context,
 	request sessionexecutioncli.ServiceRequest,
 	buildCore runtimeSessionExecutionCoreBuilder,
-) (factorysessionexecution.Service, error) {
+) (sessionexecutioncli.ServiceOwner, error) {
 	provider, err := normalizeSessionExecutionProvider(request.Provider)
 	if err != nil {
 		return nil, err
@@ -53,7 +54,7 @@ func buildSessionExecutionService(
 	if err != nil {
 		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
 	}
-	return service, nil
+	return ownedExecutionService{Service: service}, nil
 }
 
 // buildRuntimeBackedSessionExecutionService retains the complete application
@@ -64,7 +65,7 @@ func buildRuntimeBackedSessionExecutionService(
 	ctx context.Context,
 	projectRoot string,
 	buildCore runtimeSessionExecutionCoreBuilder,
-) (factorysessionexecution.Service, error) {
+) (sessionexecutioncli.ServiceOwner, error) {
 	graph, err := buildRuntimeBackedSessionExecutionGraph(ctx, projectRoot, strings.NewReader(""), io.Discard, buildCore)
 	if err != nil {
 		return nil, err

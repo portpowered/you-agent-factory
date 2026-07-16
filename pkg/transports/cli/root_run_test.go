@@ -153,12 +153,19 @@ func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 			}
 			return application.Run(ctx)
 		},
-		BuildSessionExecution: func(_ context.Context, _ sessionexecutioncli.ServiceRequest) (factorysessionexecution.Service, error) {
+		BuildSessionExecution: func(_ context.Context, _ sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
 			catalogPath := filepath.Join("..", "..", "..", filepath.FromSlash(fixtures.ContractFixtureCatalogRelativePath))
-			return factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+			service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+			return rootRunExecutionOwner{Service: service}, err
 		},
 	})
 }
+
+type rootRunExecutionOwner struct {
+	factorysessionexecution.Service
+}
+
+func (rootRunExecutionOwner) Close() error { return nil }
 
 func TestRunCommand_VerboseFlag(t *testing.T) {
 	root := NewRootCommand()

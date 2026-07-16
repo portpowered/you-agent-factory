@@ -74,8 +74,10 @@ stdio lifecycle from the request's explicit reader and writer, and let
 `pkg/initializer` start, wait for, stop, and close that graph. Runtime-backed
 CLI session execution follows the same rule by retaining its complete graph in
 the returned closable execution owner; it must not discard the graph after
-extracting durable execution. Do not return a separately composed MCP
-application from the process graph builder.
+extracting durable execution. The CLI command boundary must retain that owner
+for the full workflow or durable-list operation and close it exactly once after
+both successful and failed command execution. Do not return a separately
+composed MCP application from the process graph builder.
 
 Factory Session selectors at that graph-owned transport boundary must round-trip
 the canonical ID returned by list responses. Registry aliases such as

@@ -310,8 +310,13 @@ func TestBuildSessionExecutionServiceSelectsRequestedBackingService(t *testing.T
 				if _, ok := runtimeOwnedExecution(service); !ok {
 					t.Fatalf("service type = %T, want runtime service", service)
 				}
-			} else if _, ok := service.(*factorysessionexecution.FakeService); !ok {
-				t.Fatalf("service type = %T, want fixture service", service)
+			} else if owned, ok := service.(ownedExecutionService); !ok {
+				t.Fatalf("service type = %T, want owned fixture service", service)
+			} else if _, ok := owned.Service.(*factorysessionexecution.FakeService); !ok {
+				t.Fatalf("owned service type = %T, want fixture service", owned.Service)
+			}
+			if err := service.Close(); err != nil {
+				t.Fatalf("Close() error = %v", err)
 			}
 		})
 	}
