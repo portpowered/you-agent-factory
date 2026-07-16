@@ -18,7 +18,12 @@ var BuiltInFactoryJSON = []byte(`{
       {"name":"role-specific-models","argv":["Compare the two proposed release plans.","--branch-provider","CODEX","--branch-model","gpt-5","--merge-provider","CLAUDE","--merge-model","claude-sonnet-4-20250514"]}
     ]
   },
-  "workTypes": [{"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"branch-a","type":"PROCESSING"},{"name":"branch-b","type":"PROCESSING"},{"name":"merge","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "workTypes": [
+    {"name":"task","handlingBehavior":["DEFAULT"],"states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},
+    {"name":"quorum-branch-a","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},
+    {"name":"quorum-branch-b","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]},
+    {"name":"quorum-merge","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}
+  ],
   "resources": [],
   "workers": [
     {"name":"quorum-branch-a","type":"AGENT_WORKER","modelProvider":"${branchProvider}","model":"${branchModel}","body":"First independent quorum branch for @you/quorum."},
@@ -26,9 +31,9 @@ var BuiltInFactoryJSON = []byte(`{
     {"name":"quorum-merge","type":"AGENT_WORKER","modelProvider":"${mergeProvider}","model":"${mergeModel}","body":"Final merge worker for @you/quorum."}
   ],
   "workstations": [
-    {"name":"split-quorum","type":"LOGICAL_MOVE","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"branch-a"}],"onFailure":[{"workType":"task","state":"failed"}],"body":"Prepare the quorum request for branch processing."},
-    {"name":"run-quorum-branch-a","type":"AGENT_RUN","worker":"quorum-branch-a","inputs":[{"workType":"task","state":"branch-a"}],"outputs":[{"workType":"task","state":"branch-b"}],"onFailure":[{"workType":"task","state":"failed"}],"body":"Produce branch A's independent assessment of the request.\n\nRequest:\n${input}"},
-    {"name":"run-quorum-branch-b","type":"AGENT_RUN","worker":"quorum-branch-b","inputs":[{"workType":"task","state":"branch-b"}],"outputs":[{"workType":"task","state":"merge"}],"onFailure":[{"workType":"task","state":"failed"}],"body":"Produce branch B's independent assessment of the request.\n\nRequest:\n${input}"},
-    {"name":"merge-quorum","type":"AGENT_RUN","worker":"quorum-merge","inputs":[{"workType":"task","state":"merge"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}],"body":"Synthesize the quorum assessments into one final response.\n\nOriginal request:\n${input}"}
+    {"name":"split-quorum","type":"LOGICAL_MOVE","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"quorum-branch-a","state":"init"},{"workType":"quorum-branch-b","state":"init"}],"onFailure":[{"workType":"task","state":"failed"}],"body":"Create two independent quorum branch Work items from the original request."},
+    {"name":"run-quorum-branch-a","type":"AGENT_RUN","worker":"quorum-branch-a","inputs":[{"workType":"quorum-branch-a","state":"init"}],"outputs":[{"workType":"quorum-branch-a","state":"complete"}],"onFailure":[{"workType":"quorum-branch-a","state":"failed"}],"body":"Produce branch A's independent assessment of the request.\n\nOriginal request:\n${input}"},
+    {"name":"run-quorum-branch-b","type":"AGENT_RUN","worker":"quorum-branch-b","inputs":[{"workType":"quorum-branch-b","state":"init"}],"outputs":[{"workType":"quorum-branch-b","state":"complete"}],"onFailure":[{"workType":"quorum-branch-b","state":"failed"}],"body":"Produce branch B's independent assessment of the request.\n\nOriginal request:\n${input}"},
+    {"name":"merge-quorum","type":"AGENT_RUN","worker":"quorum-merge","inputs":[{"workType":"quorum-branch-a","state":"complete"},{"workType":"quorum-branch-b","state":"complete"}],"outputs":[{"workType":"quorum-merge","state":"complete"}],"onFailure":[{"workType":"quorum-merge","state":"failed"}],"body":"Synthesize the two quorum assessments into one final response. The branch inputs are ordered as branch A then branch B.\n\nOriginal request:\n${input}"}
   ]
 }`)

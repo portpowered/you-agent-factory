@@ -1,11 +1,13 @@
 package quorum
 
 import (
+	"context"
 	"reflect"
 	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
@@ -19,7 +21,7 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedQuorumFactory(t *testing.T) {
 	if cfg.Name != PackagedFactoryName || cfg.Project != PackagedFactoryProject {
 		t.Fatalf("packaged identity = %q/%q, want %q/%q", cfg.Name, cfg.Project, PackagedFactoryName, PackagedFactoryProject)
 	}
-	if cfg.InvocationSignature == nil || len(cfg.Workers) != 3 || len(cfg.Workstations) != 4 {
+	if cfg.InvocationSignature == nil || len(cfg.Workers) != 3 || len(cfg.Workstations) != 4 || len(cfg.WorkTypes) != 4 {
 		t.Fatalf("quorum config is not runnable: %#v", cfg)
 	}
 	for _, target := range factoryvalidation.Validate(cfg).Targets {
@@ -27,6 +29,77 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedQuorumFactory(t *testing.T) {
 			t.Fatalf("validation target = %#v, want valid quorum signature", target)
 		}
 	}
+}
+
+func TestBuiltInQuorumFactory_UsesIndependentBranchesAndGatedMerge(t *testing.T) {
+	cfg := loadQuorumConfig(t)
+	workstations := workstationsByName(cfg.Workstations)
+
+	split := workstations["split-quorum"]
+	if !sameRoutes(split.Inputs, []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}) ||
+		!sameRoutes(split.Outputs, []interfaces.IOConfig{{WorkTypeName: "quorum-branch-a", StateName: "init"}, {WorkTypeName: "quorum-branch-b", StateName: "init"}}) {
+		t.Fatalf("split routes = %#v, want one request input and two independent branch outputs", split)
+	}
+
+	for _, branch := range []string{"a", "b"} {
+		workType := "quorum-branch-" + branch
+		station := workstations["run-quorum-branch-"+branch]
+		if !sameRoutes(station.Inputs, []interfaces.IOConfig{{WorkTypeName: workType, StateName: "init"}}) ||
+			!sameRoutes(station.Outputs, []interfaces.IOConfig{{WorkTypeName: workType, StateName: "complete"}}) {
+			t.Fatalf("branch %s routes = %#v, want isolated %s Work", branch, station, workType)
+		}
+	}
+
+	merge := workstations["merge-quorum"]
+	wantMergeInputs := []interfaces.IOConfig{{WorkTypeName: "quorum-branch-a", StateName: "complete"}, {WorkTypeName: "quorum-branch-b", StateName: "complete"}}
+	if !sameRoutes(merge.Inputs, wantMergeInputs) || !sameRoutes(merge.Outputs, []interfaces.IOConfig{{WorkTypeName: "quorum-merge", StateName: "complete"}}) {
+		t.Fatalf("merge routes = %#v, want ordered branch fan-in and one final Work", merge)
+	}
+
+	net, err := (&factoryconfig.ConfigMapper{}).Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Map quorum topology: %v", err)
+	}
+	splitTransition := net.Transitions["split-quorum"]
+	if len(splitTransition.OutputArcs) != 2 {
+		t.Fatalf("split output arcs = %#v, want two derived Work outputs", splitTransition.OutputArcs)
+	}
+	transformer := token_transformer.New(net.Places, net.WorkTypes)
+	input := []interfaces.TokenColor{{WorkID: "request-work", WorkTypeID: "task", DataType: interfaces.DataTypeWork, RequestID: "request-1"}}
+	for index := range splitTransition.OutputArcs {
+		output, err := transformer.OutputToken(token_transformer.OutputTokenInput{ArcIndex: index, Arcs: splitTransition.OutputArcs, InputColors: input})
+		if err != nil {
+			t.Fatalf("derive branch %d: %v", index, err)
+		}
+		if output.Color.WorkID == "request-work" || output.Color.ParentID != "request-work" {
+			t.Fatalf("branch %d lineage = %#v, want a distinct child of request-work", index, output.Color)
+		}
+	}
+	mergeTransition := net.Transitions["merge-quorum"]
+	if len(mergeTransition.InputArcs) != 2 {
+		t.Fatalf("merge input arcs = %#v, want both completed branch Work items before dispatch", mergeTransition.InputArcs)
+	}
+}
+
+func loadQuorumConfig(t *testing.T) *interfaces.FactoryConfig {
+	t.Helper()
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	return cfg
+}
+
+func workstationsByName(workstations []interfaces.FactoryWorkstationConfig) map[string]interfaces.FactoryWorkstationConfig {
+	byName := make(map[string]interfaces.FactoryWorkstationConfig, len(workstations))
+	for _, workstation := range workstations {
+		byName[workstation.Name] = workstation
+	}
+	return byName
+}
+
+func sameRoutes(got, want []interfaces.IOConfig) bool {
+	return reflect.DeepEqual(got, want)
 }
 
 func TestBuiltInQuorumFactory_DefaultNamedInvocationAcceptsInput(t *testing.T) {
