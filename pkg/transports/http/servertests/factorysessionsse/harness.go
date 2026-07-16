@@ -654,63 +654,86 @@ const (
 )
 
 func tryReadNextSSEFrame(reader *bufio.Reader) (FactorySessionSSEFrame, bool, error) {
-	var frame FactorySessionSSEFrame
-	var dataLines []string
-	var commentLines []string
-	var hasIDField bool
-	var hasEventField bool
+	rawFrame, ok, err := readFactorySessionSSERawFrame(reader)
+	if err != nil || !ok {
+		return rawFrame.frame, ok, err
+	}
+	return rawFrame.decode()
+}
+
+type factorySessionSSERawFrame struct {
+	frame         FactorySessionSSEFrame
+	dataLines     []string
+	commentLines  []string
+	hasIDField    bool
+	hasEventField bool
+}
+
+func readFactorySessionSSERawFrame(reader *bufio.Reader) (factorySessionSSERawFrame, bool, error) {
+	var rawFrame factorySessionSSERawFrame
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if !hasIDField && !hasEventField && len(dataLines) == 0 && len(commentLines) == 0 {
-				return FactorySessionSSEFrame{}, false, nil
+			if !rawFrame.hasFields() {
+				return factorySessionSSERawFrame{}, false, nil
 			}
-			return frame, false, err
+			return rawFrame, false, err
 		}
 		line = strings.TrimRight(line, "\r\n")
 		if line == "" {
-			break
+			return rawFrame, true, nil
 		}
-		if strings.HasPrefix(line, ":") {
-			commentLines = append(commentLines, strings.TrimPrefix(strings.TrimPrefix(line, ":"), " "))
-			continue
-		}
-		field, value, found := strings.Cut(line, ":")
-		if !found {
-			field, value = line, ""
-		} else {
-			value = strings.TrimPrefix(value, " ")
-		}
-		switch field {
-		case "id":
-			hasIDField = true
-			frame.ID = value
-		case "event":
-			hasEventField = true
-			frame.Event = value
-		case "data":
-			dataLines = append(dataLines, value)
-		}
+		rawFrame.addLine(line)
 	}
-	frame.Data = strings.Join(dataLines, "\n")
-	frame.Comment = strings.Join(commentLines, "\n")
-	if len(dataLines) > 0 {
+}
+
+func (f *factorySessionSSERawFrame) addLine(line string) {
+	if strings.HasPrefix(line, ":") {
+		f.commentLines = append(f.commentLines, strings.TrimPrefix(strings.TrimPrefix(line, ":"), " "))
+		return
+	}
+	field, value, found := strings.Cut(line, ":")
+	if !found {
+		field, value = line, ""
+	} else {
+		value = strings.TrimPrefix(value, " ")
+	}
+	switch field {
+	case "id":
+		f.hasIDField = true
+		f.frame.ID = value
+	case "event":
+		f.hasEventField = true
+		f.frame.Event = value
+	case "data":
+		f.dataLines = append(f.dataLines, value)
+	}
+}
+
+func (f factorySessionSSERawFrame) hasFields() bool {
+	return f.hasIDField || f.hasEventField || len(f.dataLines) > 0 || len(f.commentLines) > 0
+}
+
+func (f factorySessionSSERawFrame) decode() (FactorySessionSSEFrame, bool, error) {
+	f.frame.Data = strings.Join(f.dataLines, "\n")
+	f.frame.Comment = strings.Join(f.commentLines, "\n")
+	if len(f.dataLines) > 0 {
 		var event factoryapi.FactoryEvent
-		if err := json.Unmarshal([]byte(frame.Data), &event); err != nil {
-			frame.kind = factorySessionSSEFrameOther
-			return frame, true, &FactorySessionSSEParseError{Frame: frame, Err: err}
+		if err := json.Unmarshal([]byte(f.frame.Data), &event); err != nil {
+			f.frame.kind = factorySessionSSEFrameOther
+			return f.frame, true, &FactorySessionSSEParseError{Frame: f.frame, Err: err}
 		}
-		frame.kind = factorySessionSSEFrameData
-		frame.FactoryEvent = &event
-		return frame, true, nil
+		f.frame.kind = factorySessionSSEFrameData
+		f.frame.FactoryEvent = &event
+		return f.frame, true, nil
 	}
-	if len(commentLines) > 0 {
-		frame.kind = factorySessionSSEFrameComment
-		return frame, true, nil
+	if len(f.commentLines) > 0 {
+		f.frame.kind = factorySessionSSEFrameComment
+		return f.frame, true, nil
 	}
-	if hasIDField || hasEventField {
-		frame.kind = factorySessionSSEFrameOther
-		return frame, true, nil
+	if f.hasIDField || f.hasEventField {
+		f.frame.kind = factorySessionSSEFrameOther
+		return f.frame, true, nil
 	}
 	return FactorySessionSSEFrame{}, false, nil
 }
