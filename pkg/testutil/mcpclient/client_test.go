@@ -84,6 +84,19 @@ func TestClientNegotiatesDiscoversAndCorrelatesToolTrafficOverRealStdio(t *testi
 	}
 }
 
+func TestRecordingReaderRecognizesSplitJSONRPCResponses(t *testing.T) {
+	reader := &recordingReader{}
+	if reader.recordsOperationResponse([]byte("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2")) {
+		t.Fatal("first operation response was reported before its frame completed")
+	}
+	if !reader.recordsOperationResponse([]byte(",\"result\":{}}\n")) {
+		t.Fatal("first complete operation response did not release the gate")
+	}
+	if reader.recordsOperationResponse([]byte("{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}\n")) {
+		t.Fatal("second operation response released the gate more than once")
+	}
+}
+
 func connectRecordingClient(t *testing.T, ctx context.Context) (*Client, *frameRecorder, *frameRecorder, <-chan error) {
 	t.Helper()
 	serverInput, pipeWriter := io.Pipe()
@@ -278,6 +291,8 @@ type recordingReader struct {
 	source    io.ReadCloser
 	recorder  *frameRecorder
 	gate      <-chan struct{}
+	mu        sync.Mutex
+	buffer    bytes.Buffer
 	responses int
 }
 
@@ -285,15 +300,11 @@ func (r *recordingReader) Read(data []byte) (int, error) {
 	n, err := r.source.Read(data)
 	if n > 0 {
 		r.recorder.record(data[:n])
-		var frame rpcFrame
-		if json.Unmarshal(bytes.TrimSpace(data[:n]), &frame) == nil && frame.ID != nil && frame.Method == "" {
-			r.responses++
-			if r.responses > 1 {
-				select {
-				case <-r.gate:
-				case <-time.After(testTimeout):
-					return 0, context.DeadlineExceeded
-				}
+		if r.recordsOperationResponse(data[:n]) {
+			select {
+			case <-r.gate:
+			case <-time.After(testTimeout):
+				return 0, context.DeadlineExceeded
 			}
 		}
 	}
@@ -301,6 +312,26 @@ func (r *recordingReader) Read(data []byte) (int, error) {
 }
 
 func (r *recordingReader) Close() error { return r.source.Close() }
+
+func (r *recordingReader) recordsOperationResponse(data []byte) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, _ = r.buffer.Write(data)
+	for {
+		line, err := r.buffer.ReadBytes('\n')
+		if err != nil {
+			_, _ = r.buffer.Write(line)
+			return false
+		}
+		var frame rpcFrame
+		if json.Unmarshal(bytes.TrimSpace(line), &frame) == nil && frame.ID != nil && frame.Method == "" {
+			r.responses++
+			if r.responses == 2 {
+				return true
+			}
+		}
+	}
+}
 
 type rpcFrame struct {
 	ID     any             `json:"id"`
