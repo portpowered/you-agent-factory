@@ -83,6 +83,9 @@ func TestProductionInitializerUsesInjectedLifecycle(t *testing.T) {
 	if !called {
 		t.Fatal("injected initializer was not called")
 	}
+	if err := (productionInitializer{}).Run(context.Background(), Initialization{}); err == nil {
+		t.Fatal("default initializer accepted a nil application graph")
+	}
 }
 
 func TestExecuteRoutesHelpAndExplicitCommandsToSuppliedStreams(t *testing.T) {
