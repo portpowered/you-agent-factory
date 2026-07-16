@@ -311,7 +311,7 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 		t.Fatalf("construct model service: %v", err)
 	}
-	svc := AttachModelServiceCollaborator(shell, modelAPI)
+	svc := AttachModelServiceCollaborator(shell, AdaptModelService(modelAPI))
 	svc = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: svc},
 		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),

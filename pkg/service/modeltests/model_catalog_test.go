@@ -98,7 +98,7 @@ func attachModelService(t *testing.T, svc *service.FactoryService) *service.Fact
 	if err != nil {
 		t.Fatalf("modelsservice.NewService: %v", err)
 	}
-	return service.AttachModelServiceCollaborator(shell, models)
+	return service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models))
 }
 
 func modelCatalogConfig(includeResource bool) map[string]any {

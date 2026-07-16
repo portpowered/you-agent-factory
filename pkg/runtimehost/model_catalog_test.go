@@ -20,6 +20,7 @@ import (
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	modelcatalogmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/modelcatalog"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -238,7 +239,7 @@ func runtimeHostModelFacade(t *testing.T, runtimeCfg *factoryconfig.LoadedFactor
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	facade.modelService = modelAPI
+	facade.modelService = modelcatalogmapping.NewAdapter(modelAPI)
 	return facade
 }
 

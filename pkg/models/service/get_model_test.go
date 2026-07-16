@@ -10,7 +10,6 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -27,10 +26,10 @@ func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+	if model.ManagedRuntime.ReadinessState != managedruntime.ReadinessStateMissing {
 		t.Fatalf("managed readiness = %s, want MISSING", model.ManagedRuntime.ReadinessState)
 	}
-	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+	if model.ManagedRuntime.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("managed lifecycle = %s, want NOT_INSTALLED", model.ManagedRuntime.LifecycleState)
 	}
 }
@@ -48,10 +47,10 @@ func TestService_GetModel_PreservesInstalledAssetReadinessFromModelHost(t *testi
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if model.ManagedRuntime.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
 	}
-	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if model.ManagedRuntime.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("managed lifecycle = %s, want INSTALLED", model.ManagedRuntime.LifecycleState)
 	}
 }

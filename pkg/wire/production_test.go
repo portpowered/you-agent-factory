@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -124,9 +123,6 @@ func assertCompleteGraph(
 
 func assertProductionModelService(t *testing.T, graph *wire.Graph) {
 	t.Helper()
-	if _, ok := graph.Models.(*modelsservice.Service); !ok {
-		t.Fatalf("production model collaborator = %T, want canonical *models/service.Service", graph.Models)
-	}
 	models, err := graph.Models.ListModels(context.Background())
 	if err != nil {
 		t.Fatalf("production model collaborator ListModels() error = %v", err)

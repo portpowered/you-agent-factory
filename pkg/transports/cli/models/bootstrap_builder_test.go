@@ -65,7 +65,7 @@ func buildRealTestModelInvocationBootstrap(ctx context.Context, cfg *service.Fac
 	if err != nil {
 		return nil, err
 	}
-	bootstrap.Service = service.AttachModelServiceCollaborator(shell, models)
+	bootstrap.Service = service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models))
 	return &testBootstrapModelRunner{bootstrap: bootstrap}, nil
 }
 

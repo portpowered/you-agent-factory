@@ -756,7 +756,7 @@ func buildRunTestFactoryServiceWithModels(
 	if err != nil {
 		return nil, err
 	}
-	return service.AttachModelServiceCollaborator(shell, models), nil
+	return service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models)), nil
 }
 
 func writeRunWireTestWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {

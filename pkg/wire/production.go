@@ -297,7 +297,7 @@ func provideRuntimeModelService(
 	if err != nil {
 		return nil, fmt.Errorf("construct model service: %w", err)
 	}
-	return models, nil
+	return service.AdaptModelService(models), nil
 }
 
 func provideRuntimeHostCoreWithModels(

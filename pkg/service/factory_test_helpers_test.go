@@ -204,7 +204,7 @@ func attachModelServiceForTest(t *testing.T, svc *FactoryService) {
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	svc.modelService = modelAPI
+	svc.modelService = AdaptModelService(modelAPI)
 }
 
 type recordingDiagnosticsProvider struct{}

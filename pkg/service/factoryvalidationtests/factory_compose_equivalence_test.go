@@ -67,7 +67,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("modelsservice.NewService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, models)
+	composed := service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models))
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
@@ -204,7 +204,7 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("modelsservice.NewService: %v", err)
 	}
-	composed := service.AttachModelServiceCollaborator(shell, models)
+	composed := service.AttachModelServiceCollaborator(shell, service.AdaptModelService(models))
 	composed = service.AttachFactorySaveCollaborator(
 		service.FactoryServiceShell{Service: composed},
 		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
