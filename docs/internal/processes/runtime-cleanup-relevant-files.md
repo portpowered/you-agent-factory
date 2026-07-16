@@ -200,6 +200,12 @@ for the full workflow or durable-list operation and close it exactly once after
 both successful and failed command execution. Do not return a separately
 composed MCP application from the process graph builder.
 
+The repository-only MCP client harness under `internal/testutil/mcpclient`
+records real stdio traffic at the newline-delimited frame boundary. Its reader
+must buffer fragmented pipe reads until a complete frame is available before
+passing bytes to the SDK; raw `Read` chunk boundaries are not JSON-RPC message
+boundaries and cannot safely drive correlation or shutdown assertions.
+
 Factory Session selectors at that graph-owned transport boundary must round-trip
 the canonical ID returned by list responses. Registry aliases such as
 `~default` remain valid compatibility selectors, but production startup tests

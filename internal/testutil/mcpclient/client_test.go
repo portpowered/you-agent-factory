@@ -1,6 +1,7 @@
 package mcpclient
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -95,7 +96,7 @@ func connectRecordingClient(t *testing.T, ctx context.Context) (*Client, *frameR
 		serverErr <- newRealServer(t).ServeStdio(ctx, serverInput, serverOutput)
 	}()
 	client, err := Connect(ctx, Pipes{
-		Reader: &recordingReader{source: pipeReader, recorder: responses, gate: requests.ready},
+		Reader: newRecordingReader(pipeReader, responses, requests.ready),
 		Writer: &recordingWriter{destination: pipeWriter, recorder: requests},
 	}, Options{Name: "sdk-conversation-test", Version: "1.0.0"})
 	if err != nil {
@@ -231,6 +232,41 @@ func newFrameRecorder(operationTarget int) *frameRecorder {
 	return recorder
 }
 
+func TestRecordingReaderReturnsAndRecordsCompleteFragmentedFrame(t *testing.T) {
+	t.Parallel()
+	source, writer := io.Pipe()
+	recorder := newFrameRecorder(0)
+	reader := newRecordingReader(source, recorder, make(chan struct{}))
+	t.Cleanup(func() { _ = reader.Close() })
+	encoded := []byte("{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}\n")
+	split := len(encoded) / 2
+	writeErr := make(chan error, 1)
+	go func() {
+		if _, err := writer.Write(encoded[:split]); err != nil {
+			writeErr <- err
+			return
+		}
+		_, err := writer.Write(encoded[split:])
+		writeErr <- err
+	}()
+
+	buffer := make([]byte, len(encoded)+16)
+	n, err := reader.Read(buffer)
+	if err != nil {
+		t.Fatalf("Read() error = %v", err)
+	}
+	if !bytes.Equal(buffer[:n], encoded) {
+		t.Fatalf("Read() = %q, want complete frame %q", buffer[:n], encoded)
+	}
+	wantRecorded := bytes.TrimSpace(encoded)
+	if frames := recorder.frames(); len(frames) != 1 || !bytes.Equal(frames[0], wantRecorded) {
+		t.Fatalf("recorded frames = %q, want %q", frames, wantRecorded)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatalf("Write() error = %v", err)
+	}
+}
+
 func (r *frameRecorder) record(data []byte) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -241,17 +277,20 @@ func (r *frameRecorder) record(data []byte) {
 			_, _ = r.buffer.Write(line)
 			return
 		}
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		r.recorded = append(r.recorded, bytes.Clone(line))
-		var frame rpcFrame
-		if json.Unmarshal(line, &frame) == nil && (frame.Method == "tools/list" || frame.Method == "tools/call") {
-			r.operation++
-			if r.operation == r.target {
-				r.once.Do(func() { close(r.ready) })
-			}
+		r.appendFrameLocked(bytes.TrimSpace(line))
+	}
+}
+
+func (r *frameRecorder) appendFrameLocked(line []byte) {
+	if len(line) == 0 {
+		return
+	}
+	r.recorded = append(r.recorded, bytes.Clone(line))
+	var frame rpcFrame
+	if json.Unmarshal(line, &frame) == nil && (frame.Method == "tools/list" || frame.Method == "tools/call") {
+		r.operation++
+		if r.operation == r.target {
+			r.once.Do(func() { close(r.ready) })
 		}
 	}
 }
@@ -260,6 +299,19 @@ func (r *frameRecorder) frames() [][]byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([][]byte(nil), r.recorded...)
+}
+
+func (r *frameRecorder) responseCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	responses := 0
+	for _, encoded := range r.recorded {
+		var frame rpcFrame
+		if json.Unmarshal(encoded, &frame) == nil && frame.ID != nil && frame.Method == "" {
+			responses++
+		}
+	}
+	return responses
 }
 
 type recordingWriter struct {
@@ -275,29 +327,43 @@ func (w *recordingWriter) Write(data []byte) (int, error) {
 func (w *recordingWriter) Close() error { return w.destination.Close() }
 
 type recordingReader struct {
-	source    io.ReadCloser
-	recorder  *frameRecorder
-	gate      <-chan struct{}
-	responses int
+	source     io.ReadCloser
+	buffered   *bufio.Reader
+	recorder   *frameRecorder
+	gate       <-chan struct{}
+	pending    []byte
+	pendingErr error
+}
+
+func newRecordingReader(source io.ReadCloser, recorder *frameRecorder, gate <-chan struct{}) *recordingReader {
+	return &recordingReader{source: source, buffered: bufio.NewReader(source), recorder: recorder, gate: gate}
 }
 
 func (r *recordingReader) Read(data []byte) (int, error) {
-	n, err := r.source.Read(data)
-	if n > 0 {
-		r.recorder.record(data[:n])
-		var frame rpcFrame
-		if json.Unmarshal(bytes.TrimSpace(data[:n]), &frame) == nil && frame.ID != nil && frame.Method == "" {
-			r.responses++
-			if r.responses > 1 {
-				select {
-				case <-r.gate:
-				case <-time.After(testTimeout):
-					return 0, context.DeadlineExceeded
-				}
+	if len(r.pending) == 0 {
+		if r.pendingErr != nil {
+			err := r.pendingErr
+			r.pendingErr = nil
+			return 0, err
+		}
+		frame, err := r.buffered.ReadBytes('\n')
+		if len(frame) == 0 {
+			return 0, err
+		}
+		r.recorder.record(frame)
+		if r.recorder.responseCount() > 1 {
+			select {
+			case <-r.gate:
+			case <-time.After(testTimeout):
+				return 0, context.DeadlineExceeded
 			}
 		}
+		r.pending = frame
+		r.pendingErr = err
 	}
-	return n, err
+	n := copy(data, r.pending)
+	r.pending = r.pending[n:]
+	return n, nil
 }
 
 func (r *recordingReader) Close() error { return r.source.Close() }

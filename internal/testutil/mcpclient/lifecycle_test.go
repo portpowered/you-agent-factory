@@ -149,7 +149,7 @@ func connectUnblockedRecordingClient(t *testing.T, ctx context.Context) (*Client
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- newRealServer(t).ServeStdio(ctx, serverInput, serverOutput) }()
 	client, err := Connect(ctx, Pipes{
-		Reader: &recordingReader{source: pipeReader, recorder: responses, gate: requests.ready},
+		Reader: newRecordingReader(pipeReader, responses, requests.ready),
 		Writer: &recordingWriter{destination: pipeWriter, recorder: requests},
 	}, Options{Name: "sdk-error-boundary-test", Version: "1.0.0"})
 	if err != nil {
