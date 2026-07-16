@@ -176,6 +176,12 @@ must attach the graph-owned durable execution service's Petri mutation recorder;
 that preserves one canonical Factory Session event and snapshot owner across
 startup, replacement, and resume builds.
 
+The shared Wire provider set constructs persistence, durable execution, and the
+recorder-configured runtime-build service before passing completed collaborators
+to `composebridge.ComposeCore`. Root one-shot invocation and the legacy
+`InjectFactoryService` facade both adapt that same runtime core; neither path may
+re-enter `BuildFactoryService` to create a replacement session foundation.
+
 The guard also rejects `BuildInvocationBootstrap`, `NewExecutionService`,
 `NewFakeServiceFromContractFixtures`, and `ProjectPersistence` calls outside
 approved application-composition owners. Transport packages consume injected

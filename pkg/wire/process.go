@@ -8,10 +8,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
 )
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
@@ -217,7 +221,47 @@ func buildInvocationRunner(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (runcli.InvocationRunner, error) {
-	return service.BuildInvocationBootstrap(ctx, cfg)
+	normalized := service.NormalizeInvocationBootstrapConfig(cfg)
+	if normalized == nil {
+		return nil, fmt.Errorf("build invocation bootstrap: config is required")
+	}
+	runtimeCfg := service.RuntimeHostConfigFromFactoryService(normalized)
+	copied := *runtimeCfg
+	runtimeCfg = &copied
+	if runtimeCfg.Logger == nil {
+		runtimeCfg.Logger = zap.NewNop()
+	}
+	runtimeCfg.Clock = factory.EnsureClock(runtimeCfg.Clock)
+	core, err := InjectRuntimeCore(ctx, runtimeCfg)
+	if err != nil {
+		return nil, err
+	}
+	svc := completeInvocationServiceFacade(core, normalized)
+	bootstrap, err := service.NewInvocationBootstrap(svc)
+	if err != nil {
+		return nil, err
+	}
+	return &wireInvocationRunner{InvocationBootstrap: bootstrap, core: core}, nil
+}
+
+type wireInvocationRunner struct {
+	*service.InvocationBootstrap
+	core *runtimehost.Core
+}
+
+func (runner *wireInvocationRunner) InvokeModel(
+	ctx context.Context,
+	modelName string,
+	request factoryapi.ModelInvocationRequest,
+) (apisurface.ModelInvocationResult, error) {
+	return runner.Service.InvokeModel(ctx, modelName, request)
+}
+
+func completeInvocationServiceFacade(
+	core *runtimehost.Core,
+	cfg *service.FactoryServiceConfig,
+) *service.FactoryService {
+	return provideFactoryServiceFromRuntimeHostCore(core, cfg)
 }
 
 func applicationModeForProcess(mode initializer.ProcessMode) (initializer.Mode, error) {

@@ -1588,16 +1588,11 @@ func NormalizeInvocationBootstrapConfig(cfg *FactoryServiceConfig) *FactoryServi
 	return &normalized
 }
 
-// BuildInvocationBootstrap constructs FactoryService-owned session/runtime
-// dependencies for one-shot invocation without starting a listening HTTP server.
-func BuildInvocationBootstrap(ctx context.Context, cfg *FactoryServiceConfig) (*InvocationBootstrap, error) {
-	normalized := NormalizeInvocationBootstrapConfig(cfg)
-	if normalized == nil {
-		return nil, fmt.Errorf("build invocation bootstrap: config is required")
-	}
-	service, err := BuildFactoryService(ctx, normalized)
-	if err != nil {
-		return nil, err
+// NewInvocationBootstrap adapts an already-composed service facade for one-shot
+// invocation. Composition remains owned by the shared Wire application graph.
+func NewInvocationBootstrap(service *FactoryService) (*InvocationBootstrap, error) {
+	if service == nil {
+		return nil, fmt.Errorf("build invocation bootstrap: service is required")
 	}
 	return &InvocationBootstrap{Service: service}, nil
 }

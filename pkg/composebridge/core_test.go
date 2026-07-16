@@ -5,16 +5,19 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	"go.uber.org/zap"
 )
 
@@ -201,19 +204,43 @@ func buildCoreForTest(ctx context.Context, cfg *runtimehost.Config) (*runtimehos
 	clock := composebridge.ClockForCompose(cfg, load)
 	sessions := factorysessions.NewRegistry()
 	localModels := composebridge.NewLocalModelDomain(cfg)
-	runtimeBuild, err := composebridge.NewRuntimeBuildService(
-		cfg, clock, root.BaseLogger, &localModels, sessions,
+	runtimeBuild, err := composebridge.NewRuntimeBuildService(cfg, clock, root.BaseLogger, &localModels, sessions)
+	if err != nil {
+		return nil, err
+	}
+	projectRoot := strings.TrimSpace(cfg.ExecutionBaseDir)
+	if projectRoot == "" {
+		projectRoot = strings.TrimSpace(cfg.Dir)
+	}
+	if projectRoot == "" {
+		projectRoot = strings.TrimSpace(root.FactoryRootDir)
+	}
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(cfg.DurableSessionPersistencePolicy, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	durableExecution, err := factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot, Provider: cfg.ProviderOverride,
+			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
+			Persistence:      persistence, Clock: clock,
+		},
 	)
 	if err != nil {
 		return nil, err
 	}
+	recorder := durableExecution.(interface {
+		RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error
+	})
+	runtimeBuild, err = runtimeBuild.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
+	if err != nil {
+		return nil, err
+	}
 	hostedWorkers := composebridge.HostedWorkers(cfg, root.BaseLogger, clock)
-	collaborators := composebridge.Collaborators{
+	return composebridge.ComposeCore(ctx, cfg, root, composebridge.Collaborators{
 		Sessions: sessions, LocalModels: localModels, RuntimeBuild: runtimeBuild,
 		WorkersScheduler: composebridge.NewWorkersScheduler(cfg, clock, root.BaseLogger, hostedWorkers),
-	}
-	return composebridge.ComposeCore(
-		ctx, cfg, root, collaborators, load, clock,
-		hostedWorkers,
-	)
+		DurableExecution: durableExecution, Persistence: persistence,
+	}, load, clock, hostedWorkers)
 }

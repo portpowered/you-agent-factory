@@ -1277,6 +1277,14 @@ func TestNormalizeInvocationBootstrapConfig_ForcesNoServerShape(t *testing.T) {
 	}
 }
 
+func BuildInvocationBootstrap(ctx context.Context, cfg *FactoryServiceConfig) (*InvocationBootstrap, error) {
+	svc, err := BuildFactoryService(ctx, NormalizeInvocationBootstrapConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return NewInvocationBootstrap(svc)
+}
+
 func TestBuildInvocationBootstrap_LeavesNoFactoryAPIServerListener(t *testing.T) {
 	t.Parallel()
 

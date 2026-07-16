@@ -29,13 +29,25 @@ func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimeho
 	}
 	clock := provideRuntimeHostClock(cfg, v3)
 	logger := provideRuntimeHostBaseLogger(v)
-	service, err := provideRuntimeHostRuntimeBuild(cfg, clock, logger, v2, registry)
+	wireRuntimeHostBaseBuild, err := provideRuntimeHostRuntimeBuild(cfg, clock, logger, v2, registry)
+	if err != nil {
+		return nil, err
+	}
+	wireRuntimeHostPersistence, err := provideRuntimeHostPersistence(cfg, v)
+	if err != nil {
+		return nil, err
+	}
+	service, err := provideRuntimeHostDurableExecution(cfg, v, clock, wireRuntimeHostPersistence)
+	if err != nil {
+		return nil, err
+	}
+	runtimebuildService, err := provideRuntimeHostRecordingBuild(wireRuntimeHostBaseBuild, service)
 	if err != nil {
 		return nil, err
 	}
 	config := provideRuntimeHostHostedWorkers(cfg, logger, clock)
 	serviceService := provideRuntimeHostWorkers(cfg, clock, logger, config)
-	collaborators := provideRuntimeHostCollaborators(registry, v2, service, serviceService)
+	collaborators := provideRuntimeHostCollaborators(registry, v2, runtimebuildService, serviceService, service, wireRuntimeHostPersistence)
 	core, err := provideRuntimeHostCore(ctx, cfg, v, collaborators, v3, clock, config)
 	if err != nil {
 		return nil, err
@@ -45,29 +57,42 @@ func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimeho
 
 // InjectFactoryService is the wireinject entry for the factory composition root.
 func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {
-	factoryServiceRoot, err := provideFactoryServiceRoot(cfg)
+	config := provideRuntimeHostConfigFromFactoryService(cfg)
+	v, err := provideRuntimeHostRoot(config)
 	if err != nil {
 		return nil, err
 	}
 	registry := provideFactorySessionsRegistry()
-	v := provideLocalModelDomain(cfg)
-	factoryConfigLoadResult, err := provideFactoryConfigLoad(cfg, factoryServiceRoot)
+	v2 := provideRuntimeHostLocalModels(config)
+	v3, err := provideRuntimeHostConfigLoad(config, v)
 	if err != nil {
 		return nil, err
 	}
-	clock := provideServiceClock(cfg, factoryConfigLoadResult)
-	logger := provideBaseLogger(factoryServiceRoot)
-	runtimebuildService, err := provideRuntimeBuildService(cfg, clock, logger, v, registry)
+	clock := provideRuntimeHostClock(config, v3)
+	logger := provideRuntimeHostBaseLogger(v)
+	wireRuntimeHostBaseBuild, err := provideRuntimeHostRuntimeBuild(config, clock, logger, v2, registry)
 	if err != nil {
 		return nil, err
 	}
-	config := provideHostedWorkersConfig(cfg, logger, clock)
-	serviceService := provideWorkersSchedulerService(cfg, clock, logger, config)
-	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService, serviceService)
-	factoryCore, err := provideFactoryCore(ctx, cfg, factoryServiceRoot, factoryServiceCollaborators, factoryConfigLoadResult, clock, config)
+	wireRuntimeHostPersistence, err := provideRuntimeHostPersistence(config, v)
 	if err != nil {
 		return nil, err
 	}
-	factoryService := provideFactoryService(factoryCore, cfg)
+	factorysessionexecutionService, err := provideRuntimeHostDurableExecution(config, v, clock, wireRuntimeHostPersistence)
+	if err != nil {
+		return nil, err
+	}
+	runtimebuildService, err := provideRuntimeHostRecordingBuild(wireRuntimeHostBaseBuild, factorysessionexecutionService)
+	if err != nil {
+		return nil, err
+	}
+	hostedworkersConfig := provideRuntimeHostHostedWorkers(config, logger, clock)
+	serviceService := provideRuntimeHostWorkers(config, clock, logger, hostedworkersConfig)
+	collaborators := provideRuntimeHostCollaborators(registry, v2, runtimebuildService, serviceService, factorysessionexecutionService, wireRuntimeHostPersistence)
+	core, err := provideRuntimeHostCore(ctx, config, v, collaborators, v3, clock, hostedworkersConfig)
+	if err != nil {
+		return nil, err
+	}
+	factoryService := provideFactoryServiceFromRuntimeHostCore(core, cfg)
 	return factoryService, nil
 }

@@ -142,7 +142,11 @@ func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 				buildCtx context.Context,
 				serviceCfg *service.FactoryServiceConfig,
 			) (runcli.InvocationRunner, error) {
-				return service.BuildInvocationBootstrap(buildCtx, serviceCfg)
+				svc, err := service.BuildFactoryService(buildCtx, service.NormalizeInvocationBootstrapConfig(serviceCfg))
+				if err != nil {
+					return nil, err
+				}
+				return service.NewInvocationBootstrap(svc)
 			})
 			if err != nil {
 				return err

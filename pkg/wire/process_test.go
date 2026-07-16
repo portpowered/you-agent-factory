@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -18,6 +19,7 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"go.uber.org/zap"
 )
 
 type processRunnerFunc func(context.Context) error
@@ -104,6 +106,36 @@ func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("invocation builder calls = %d, want 1", calls)
+	}
+}
+
+func TestRootInvocationRunnerConsumesOneWireSessionFoundation(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	runner, err := buildInvocationRunner(context.Background(), &service.FactoryServiceConfig{
+		Dir: factoryDir, ExecutionBaseDir: t.TempDir(), SystemConfigHomeDir: t.TempDir(),
+		RuntimeFileLoggingPolicy:                service.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:                    service.RuntimeMetricsPolicyDisabled,
+		Logger:                                  zap.NewNop(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("buildInvocationRunner() error = %v", err)
+	}
+	shared, ok := runner.(*wireInvocationRunner)
+	if !ok || shared.core == nil || shared.Service == nil {
+		t.Fatalf("invocation runner = %T, want Wire core-backed runner", runner)
+	}
+	if shared.core.Sessions() == nil || shared.core.Sessions().Count() != 1 {
+		t.Fatal("root invocation core did not retain its single initialized Factory Session registry")
+	}
+	if shared.Service.DurableExecutionService() != shared.core.DurableExecution() {
+		t.Fatal("root invocation compatibility facade replaced the Wire-owned durable execution service")
+	}
+	owner, ok := shared.core.DurableExecution().(interface{ PersistenceStore() runtimepersist.Store })
+	if !ok || owner.PersistenceStore() == nil || owner.PersistenceStore() != shared.core.Persistence() {
+		t.Fatal("root invocation durable execution replaced the Wire-owned persistence store")
 	}
 }
 

@@ -3,24 +3,16 @@ package composebridge
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
-	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
@@ -30,6 +22,8 @@ type Collaborators struct {
 	LocalModels      LocalModelDomain
 	RuntimeBuild     *runtimebuild.Service
 	WorkersScheduler *workersservice.Service
+	DurableExecution factorysessionexecution.Service
+	Persistence      factorysessionexecution.PersistenceChoice
 }
 
 // ComposeCore constructs a runtimehost.Core using explicit composition collaborators.
@@ -69,12 +63,6 @@ func ComposeCore(
 		}
 		cfg.Dir = resolvedDir
 	}
-	durableExecution, persistence, runtimeBuild, err := composeSessionRuntimeDependencies(cfg, root, clock, collaborators.RuntimeBuild)
-	if err != nil {
-		return nil, err
-	}
-	collaborators.RuntimeBuild = runtimeBuild
-
 	replaySideEffects, replayFactoryOpts, err := ReplayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
 		return nil, err
@@ -129,8 +117,8 @@ func ComposeCore(
 		runtimeBundle,
 		runtimeBundle.Logger,
 		WireModelAssetPuller(cfg, collaborators.LocalModels),
-		durableExecution,
-		persistence,
+		collaborators.DurableExecution,
+		collaborators.Persistence.Store(),
 	), nil
 }
 
@@ -142,102 +130,12 @@ func validateCoreCollaborators(collaborators Collaborators) error {
 		return fmt.Errorf("compose runtime host core: runtime build service is required")
 	case collaborators.WorkersScheduler == nil:
 		return fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	case collaborators.DurableExecution == nil:
+		return fmt.Errorf("compose runtime host core: durable execution service is required")
 	default:
+		if err := collaborators.Persistence.Validate(); err != nil {
+			return fmt.Errorf("compose runtime host core: %w", err)
+		}
 		return nil
 	}
-}
-
-func composeSessionRuntimeDependencies(
-	cfg *runtimehost.Config,
-	root Root,
-	clock factory.Clock,
-	build *runtimebuild.Service,
-) (factorysessionexecution.Service, runtimepersist.Store, *runtimebuild.Service, error) {
-	execution, persistence, err := composeDurableExecution(cfg, root, clock)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	configured, err := composePetriRecordingRuntimeBuild(build, execution)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	return execution, persistence, configured, nil
-}
-
-func composePetriRecordingRuntimeBuild(
-	build *runtimebuild.Service,
-	execution factorysessionexecution.Service,
-) (*runtimebuild.Service, error) {
-	recorder, ok := execution.(interface {
-		RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error
-	})
-	if !ok {
-		return nil, fmt.Errorf("compose runtime host core: durable execution owner does not record Petri mutations")
-	}
-	configured, err := build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
-	if err != nil {
-		return nil, fmt.Errorf("compose runtime host core: %w", err)
-	}
-	return configured, nil
-}
-
-func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
-	for _, candidate := range []string{executionBaseDir, configuredDir, factoryRootDir} {
-		if root := strings.TrimSpace(candidate); root != "" {
-			return root
-		}
-	}
-	return ""
-}
-
-func composeDurableExecution(
-	cfg *runtimehost.Config,
-	root Root,
-	clock factory.Clock,
-) (factorysessionexecution.Service, runtimepersist.Store, error) {
-	projectRoot := durableProjectRoot(cfg.ExecutionBaseDir, cfg.Dir, root.FactoryRootDir)
-	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(
-		cfg.DurableSessionPersistencePolicy,
-		projectRoot,
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("compose durable session persistence: %w", err)
-	}
-	configPath := strings.TrimSpace(cfg.SystemConfigPath)
-	if configPath == "" {
-		homeDir := strings.TrimSpace(cfg.SystemConfigHomeDir)
-		if homeDir == "" {
-			homeDir, err = os.UserHomeDir()
-			if err != nil {
-				return nil, nil, fmt.Errorf("resolve operator config home: %w", err)
-			}
-		}
-		configPath = defaultpaths.OperatorConfigPath(homeDir)
-	}
-	operatorConfig, err := operatorconfig.LoadFileConfig(configPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("compose durable session worker presets: %w", err)
-	}
-	workerPresetIDs := make(map[string]struct{}, len(operatorConfig.WorkerPresets))
-	workerPresets := make(map[string]workflowruntime.WorkerPreset, len(operatorConfig.WorkerPresets))
-	for _, preset := range operatorConfig.WorkerPresets {
-		workerPresetIDs[preset.ID] = struct{}{}
-		workerPresets[preset.ID] = workflowruntime.WorkerPreset{ModelProvider: preset.ModelProvider, Model: preset.Model, ReasoningEffort: preset.ReasoningEffort}
-	}
-	service, err := factorysessionexecution.NewExecutionService(
-		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-		factorysessionexecution.ServiceConfig{
-			ProjectRoot:      projectRoot,
-			Provider:         cfg.ProviderOverride,
-			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
-			Persistence:      persistence,
-			Clock:            clock,
-			WorkerPresetIDs:  workerPresetIDs,
-			WorkerSettings:   workflowruntime.WorkerSettingsConfig{Presets: workerPresets, DefaultModelProvider: operatorConfig.Defaults.WorkerModelProvider, DefaultModel: operatorConfig.Defaults.WorkerModel},
-		},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	return service, persistence.Store(), nil
 }

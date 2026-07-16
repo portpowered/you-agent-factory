@@ -425,45 +425,6 @@ func NewFactoryServiceCollaborators(
 	}, nil
 }
 
-// NewFactoryServiceCollaboratorsFromParts assembles collaborators from explicit
-// wire-provided parts.
-func NewFactoryServiceCollaboratorsFromParts(
-	sessions *factorysessions.Registry,
-	localModels LocalModelDomain,
-	runtimeBuild *runtimebuild.Service,
-	workersScheduler *workersservice.Service,
-) FactoryServiceCollaborators {
-	return FactoryServiceCollaborators{
-		Sessions:         sessions,
-		LocalModels:      localModels,
-		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: workersScheduler,
-	}
-}
-
-// NewRuntimeBuildService constructs the runtimebuild collaborator for wire.
-// Worker dispatches publish canonical response events into the required live
-// session registry (matching BuildFactoryService / BuildFactoryCore).
-func NewRuntimeBuildService(
-	cfg *FactoryServiceConfig,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	localModels *LocalModelDomain,
-	sessions *factorysessions.Registry,
-) (*runtimebuild.Service, error) {
-	if sessions == nil {
-		return nil, fmt.Errorf("construct runtime build service: Factory Session registry is required")
-	}
-	return newRuntimeBuildService(
-		cfg,
-		clock,
-		baseLogger,
-		localModels,
-		newInferenceProgressPublisherFactory(sessions, baseLogger),
-		newSessionDispatchCompletionObserverFactory(sessions),
-	)
-}
-
 // ServiceClockForCompose selects the factory clock for the loaded replay artifact.
 func ServiceClockForCompose(cfg *FactoryServiceConfig, load FactoryConfigLoadResult) factory.Clock {
 	return serviceClockForMode(cfg.Clock, load.ReplayArtifact)
