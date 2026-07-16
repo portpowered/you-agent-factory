@@ -492,7 +492,7 @@ else
 	cd ui && $(UI_SCRIPT) test:integration
 endif
 	$(MAKE) ui-storybook
-	$(MAKE) ui-test-storybook
+	$(MAKE) ui-test-storybook-browser-checks
 
 ui-durable-session-real-backend-integration-test:
 ifeq ($(BUN_BIN),)
@@ -522,6 +522,9 @@ ui-storybook:
 
 ui-test-storybook:
 	cd ui && $(UI_SCRIPT) test-storybook
+
+ui-test-storybook-browser-checks:
+	cd ui && $(UI_SCRIPT) test-storybook:browser-checks
 
 ui-components-typecheck:
 	cd ui/packages/components && $(UI_SCRIPT) typecheck

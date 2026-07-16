@@ -30,6 +30,7 @@ export function spawnBun(args, options = {}) {
       ...process.env,
       AGENT_FACTORY_STORYBOOK_HOST: HOST,
       AGENT_FACTORY_STORYBOOK_PORT: PORT,
+      AGENT_FACTORY_STORYBOOK_URL: STORYBOOK_URL,
     },
     stdio: "inherit",
     shell: false,
@@ -281,6 +282,7 @@ export async function waitForStorybookReady({
 
 export async function runStorybookCI({
   assertAvailable = () => assertPortAvailable(HOST, PORT),
+  includeInteractionSuite = true,
   runCommand = runBun,
   settle = delay,
   spawnServer = () =>
@@ -321,16 +323,20 @@ export async function runStorybookCI({
 
   try {
     await waitForReady({ serverExit });
-    await Promise.race([
-      runCommand(["run", "storybook:test-runner:ci"]),
-      serverExit,
-    ]);
-    await settle(POST_TEST_RUNNER_SETTLE_MS);
-    await waitForStableIndex();
-    await Promise.race([
-      runCommand(["run", "storybook:responsive-check"]),
-      serverExit,
-    ]);
+    if (includeInteractionSuite) {
+      await Promise.race([
+        runCommand(["run", "storybook:test-runner:ci"]),
+        serverExit,
+      ]);
+      await settle(POST_TEST_RUNNER_SETTLE_MS);
+      await waitForStableIndex();
+    }
+    if (includeInteractionSuite) {
+      await Promise.race([
+        runCommand(["run", "storybook:responsive-check"]),
+        serverExit,
+      ]);
+    }
     await Promise.race([
       runCommand(["run", "storybook:factory-graph-touch-check"]),
       serverExit,
@@ -343,14 +349,16 @@ export async function runStorybookCI({
       runCommand(["run", "storybook:dashboard-viewport-check"]),
       serverExit,
     ]);
-    await Promise.race([
-      runCommand(["run", "storybook:choose-file-check"]),
-      serverExit,
-    ]);
-    await Promise.race([
-      runCommand(["run", "storybook:checkbox-consistency-check"]),
-      serverExit,
-    ]);
+    if (includeInteractionSuite) {
+      await Promise.race([
+        runCommand(["run", "storybook:choose-file-check"]),
+        serverExit,
+      ]);
+      await Promise.race([
+        runCommand(["run", "storybook:checkbox-consistency-check"]),
+        serverExit,
+      ]);
+    }
   } finally {
     shuttingDown = true;
     await stop(server);
@@ -358,7 +366,9 @@ export async function runStorybookCI({
 }
 
 export async function main() {
-  await runStorybookCI();
+  await runStorybookCI({
+    includeInteractionSuite: !process.argv.includes("--browser-checks-only"),
+  });
 }
 
 if (import.meta.main) {

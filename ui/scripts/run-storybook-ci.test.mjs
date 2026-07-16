@@ -185,6 +185,52 @@ describe("runStorybookCI", () => {
     ]);
     expect(stop).toHaveBeenCalledWith(server);
   });
+});
+
+describe("runStorybookCI browser-check mode", () => {
+  test("skips the full interaction suite", async () => {
+    const server = new EventEmitter();
+    server.pid = 1234;
+    server.exitCode = null;
+    const runCommand = vi.fn().mockResolvedValue(undefined);
+    const settle = vi.fn().mockResolvedValue(undefined);
+    const stop = vi.fn(async () => {
+      server.exitCode = 0;
+    });
+    const waitForStableIndex = vi.fn().mockResolvedValue(undefined);
+
+    await runStorybookCI({
+      assertAvailable: vi.fn().mockResolvedValue(undefined),
+      includeInteractionSuite: false,
+      runCommand,
+      settle,
+      spawnServer: vi.fn(() => server),
+      stop,
+      waitForReady: vi.fn().mockResolvedValue(undefined),
+      waitForStableIndex,
+    });
+
+    expect(runCommand).toHaveBeenCalledTimes(3);
+    expect(runCommand).not.toHaveBeenCalledWith([
+      "run",
+      "storybook:test-runner:ci",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(1, [
+      "run",
+      "storybook:factory-graph-touch-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(2, [
+      "run",
+      "storybook:header-responsive-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(3, [
+      "run",
+      "storybook:dashboard-viewport-check",
+    ]);
+    expect(settle).not.toHaveBeenCalled();
+    expect(waitForStableIndex).not.toHaveBeenCalled();
+    expect(stop).toHaveBeenCalledWith(server);
+  });
 
   test("fails when the static server exits before readiness completes", async () => {
     const server = new EventEmitter();
