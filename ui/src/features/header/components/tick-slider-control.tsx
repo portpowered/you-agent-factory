@@ -109,7 +109,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
         "md:flex-nowrap",
       )}
     >
-      <label className="flex min-w-36 flex-1 flex-col gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-on-surface-subtle md:min-w-52">
+      <label className="flex min-h-10 min-w-36 flex-1 flex-col justify-center gap-0.5 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-on-surface-subtle md:min-w-52">
         <span className="sr-only">{messages.sliderLabel}</span>
         <input
           aria-describedby={tickStatusID}
