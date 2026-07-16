@@ -48,11 +48,13 @@ vi.mock("@xyflow/react", async () => {
     }: {
       children: ReactNode;
       onInit?: (instance: {
+        fitView: () => Promise<boolean>;
         getViewport: () => { x: number; y: number; zoom: number };
       }) => void;
     }) => {
       useEffect(() => {
         onInit?.({
+          fitView: vi.fn().mockResolvedValue(true),
           getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
         });
       }, [onInit]);
@@ -169,9 +171,7 @@ describe("CurrentActivityGraphViewport visual groups", () => {
     expect(
       screen.getByTestId("factory-visual-group-controls"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Create group" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create group" })).toBeEnabled();
 
     rerender(
       <CurrentActivityGraphViewport
