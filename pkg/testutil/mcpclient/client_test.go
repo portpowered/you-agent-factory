@@ -76,7 +76,7 @@ func TestClientNegotiatesDiscoversAndCorrelatesToolTrafficOverRealStdio(t *testi
 	}
 	select {
 	case err := <-serverErr:
-		if err != nil {
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
 			t.Fatalf("ServeStdio() error = %v", err)
 		}
 	case <-ctx.Done():
@@ -223,6 +223,23 @@ type frameRecorder struct {
 	once      sync.Once
 }
 
+func TestFrameRecorderClassifiesSplitAndCoalescedFrames(t *testing.T) {
+	t.Parallel()
+
+	recorder := newFrameRecorder(0)
+	if decoded := recorder.record([]byte(`{"jsonrpc":"2.0","id":2`)); len(decoded) != 0 {
+		t.Fatalf("partial frame decoded = %#v, want none", decoded)
+	}
+	decoded := recorder.record([]byte("}\n{\"jsonrpc\":\"2.0\",\"id\":3}\n"))
+	if len(decoded) != 2 || fmt.Sprint(decoded[0].ID) != "2" || fmt.Sprint(decoded[1].ID) != "3" {
+		t.Fatalf("decoded frames = %#v, want complete identities 2 and 3", decoded)
+	}
+	decoded = recorder.record([]byte(`{"jsonrpc":"2.0","id":4}`))
+	if len(decoded) != 1 || fmt.Sprint(decoded[0].ID) != "4" {
+		t.Fatalf("unterminated complete frame = %#v, want identity 4", decoded)
+	}
+}
+
 func newFrameRecorder(operationTarget int) *frameRecorder {
 	recorder := &frameRecorder{target: operationTarget, ready: make(chan struct{})}
 	if operationTarget == 0 {
@@ -231,29 +248,43 @@ func newFrameRecorder(operationTarget int) *frameRecorder {
 	return recorder
 }
 
-func (r *frameRecorder) record(data []byte) {
+func (r *frameRecorder) record(data []byte) []rpcFrame {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	var decoded []rpcFrame
 	_, _ = r.buffer.Write(data)
 	for {
 		line, err := r.buffer.ReadBytes('\n')
 		if err != nil {
-			_, _ = r.buffer.Write(line)
-			return
-		}
-		line = bytes.TrimSpace(line)
-		if len(line) == 0 {
-			continue
-		}
-		r.recorded = append(r.recorded, bytes.Clone(line))
-		var frame rpcFrame
-		if json.Unmarshal(line, &frame) == nil && (frame.Method == "tools/list" || frame.Method == "tools/call") {
-			r.operation++
-			if r.operation == r.target {
-				r.once.Do(func() { close(r.ready) })
+			if !json.Valid(bytes.TrimSpace(line)) {
+				_, _ = r.buffer.Write(line)
+				return decoded
 			}
+			decoded = r.appendDecodedFrame(line, decoded)
+			return decoded
+		}
+		decoded = r.appendDecodedFrame(line, decoded)
+	}
+}
+
+func (r *frameRecorder) appendDecodedFrame(line []byte, decoded []rpcFrame) []rpcFrame {
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return decoded
+	}
+	r.recorded = append(r.recorded, bytes.Clone(line))
+	var frame rpcFrame
+	if json.Unmarshal(line, &frame) != nil {
+		return decoded
+	}
+	decoded = append(decoded, frame)
+	if frame.Method == "tools/list" || frame.Method == "tools/call" {
+		r.operation++
+		if r.operation == r.target {
+			r.once.Do(func() { close(r.ready) })
 		}
 	}
+	return decoded
 }
 
 func (r *frameRecorder) frames() [][]byte {
@@ -268,7 +299,7 @@ type recordingWriter struct {
 }
 
 func (w *recordingWriter) Write(data []byte) (int, error) {
-	w.recorder.record(data)
+	_ = w.recorder.record(data)
 	return w.destination.Write(data)
 }
 
@@ -284,9 +315,10 @@ type recordingReader struct {
 func (r *recordingReader) Read(data []byte) (int, error) {
 	n, err := r.source.Read(data)
 	if n > 0 {
-		r.recorder.record(data[:n])
-		var frame rpcFrame
-		if json.Unmarshal(bytes.TrimSpace(data[:n]), &frame) == nil && frame.ID != nil && frame.Method == "" {
+		for _, frame := range r.recorder.record(data[:n]) {
+			if frame.ID == nil || frame.Method != "" {
+				continue
+			}
 			r.responses++
 			if r.responses > 1 {
 				select {

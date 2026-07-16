@@ -360,6 +360,25 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 	}
 }
 
+func TestAgentRunInferenceRequestClonesMutableInputs(t *testing.T) {
+	t.Parallel()
+
+	request := testAgentRunRequest()
+	request.InputTokens = []any{"input-token"}
+	request.EnvVars = map[string]string{"AGENT_MODE": "review"}
+
+	got := agentRunInferenceRequest(request, nil)
+	request.InputTokens[0] = "mutated"
+	request.EnvVars["AGENT_MODE"] = "mutated"
+
+	if got.InputTokens[0] != "input-token" {
+		t.Fatalf("input tokens = %#v, want caller-independent copy", got.InputTokens)
+	}
+	if got.EnvVars["AGENT_MODE"] != "review" {
+		t.Fatalf("environment = %#v, want caller-independent copy", got.EnvVars)
+	}
+}
+
 type spyLogger struct{}
 
 func (spyLogger) Debug(string, ...any)   {}
