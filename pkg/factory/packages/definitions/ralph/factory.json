@@ -61,7 +61,7 @@
       "inputs": [{"workType": "ralph", "state": "execute"}],
       "outputs": [{"workType": "ralph", "state": "complete"}],
       "onContinue": [{"workType": "ralph", "state": "execute"}],
-      "onRejection": [{"workType": "ralph", "state": "execute"}],
+      "onRejection": [{"workType": "ralph", "state": "failed"}],
       "onFailure": [{"workType": "ralph", "state": "failed"}],
       "workPropagation": {"mode": "OUTPUT_AS_PAYLOAD"},
       "promptFile": "prompts/executor.md"

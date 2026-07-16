@@ -41,6 +41,7 @@ func TestBuiltInFactoryJSON_LoadsRunnablePlanThenExecuteFactory(t *testing.T) {
 	assertRoute(t, executor.Inputs, "execute")
 	assertRoute(t, executor.Outputs, "complete")
 	assertRoute(t, executor.OnContinue, "execute")
+	assertRoute(t, executor.OnRejection, "failed")
 	assertRoute(t, executor.OnFailure, "failed")
 	assertLoopBreaker(t, cfg.Workstations)
 	if executor.Kind != interfaces.WorkstationKindRepeater {

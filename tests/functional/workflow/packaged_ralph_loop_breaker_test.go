@@ -18,6 +18,7 @@ func TestPackagedRalph_ConvergesOrRoutesExhaustedExecutorToFailed(t *testing.T) 
 		wantPlace       string
 		wantCalls       int
 		wantLoopBreaker bool
+		wantRejection   bool
 	}{
 		{
 			name:          "converges",
@@ -51,6 +52,16 @@ func TestPackagedRalph_ConvergesOrRoutesExhaustedExecutorToFailed(t *testing.T) 
 			},
 			wantPlace: "ralph:failed",
 			wantCalls: 1,
+		},
+		{
+			name:          "executor_rejection",
+			plannerResult: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "planned work"},
+			executorResults: []interfaces.WorkResult{
+				{Outcome: interfaces.OutcomeRejected, Feedback: "plan needs revision"},
+			},
+			wantPlace:     "ralph:failed",
+			wantCalls:     1,
+			wantRejection: true,
 		},
 	}
 
@@ -88,6 +99,9 @@ func TestPackagedRalph_ConvergesOrRoutesExhaustedExecutorToFailed(t *testing.T) 
 			}
 			if tc.wantLoopBreaker {
 				assertDispatchHistoryContainsWorkstationRoute(t, snapshot.DispatchHistory, ralph.PackagedLoopBreakerName, "ralph:failed")
+			}
+			if tc.wantRejection {
+				assertDispatchHistoryContainsWorkstationRoute(t, snapshot.DispatchHistory, ralph.PackagedExecuteWorkstationName, "ralph:failed")
 			}
 		})
 	}
