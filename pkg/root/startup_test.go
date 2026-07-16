@@ -131,7 +131,7 @@ func TestExecuteStartup_ProductionInvocationConstructionFailurePreventsInitializ
 
 	err := executeStartup(context.Background(), startupcli.Request{
 		Kind: startupcli.KindRun, Run: startupcli.RunIntent{WorkerSidecarsEnabled: true}, RunConfig: &runConfig,
-	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
+	}, processDependencies{graphBuilder: productionGraphBuilder{}, initializer: initializer})
 	if err == nil {
 		t.Fatal("executeStartup() error = nil, want invocation bootstrap construction failure")
 	}

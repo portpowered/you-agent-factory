@@ -10,9 +10,34 @@ import (
 	"context"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/spf13/cobra"
 )
 
 // Injectors from wire.go:
+
+// InjectWireCore is the wireinject entry for the process composition surface.
+func InjectWireCore() WireCore {
+	cliCommandBuilder := provideCLICommandBuilder()
+	processGraphBuilder := provideProcessGraphBuilder()
+	processInitializer := provideProcessInitializer()
+	mcpExecutionBuilder := provideMCPExecutionBuilder()
+	serviceBuilder := provideSessionExecutionBuilder()
+	invocationBuilder := provideModelInvocationBuilder()
+	return WireCore{
+		BuildCLICommand:       cliCommandBuilder,
+		BuildProcessGraph:     processGraphBuilder,
+		InitializeProcess:     processInitializer,
+		BuildMCPExecution:     mcpExecutionBuilder,
+		BuildSessionExecution: serviceBuilder,
+		BuildModelInvocation:  invocationBuilder,
+	}
+}
+
+// InjectCLICommand is the wireinject entry for the Cobra CLI command tree.
+func InjectCLICommand(options cli.RootCommandOptions) *cobra.Command {
+	return cli.NewRootCommandWithOptions(options)
+}
 
 // InjectRuntimeCore constructs the single Factory Session core consumed by the
 // application graph before initializer lifecycle execution.

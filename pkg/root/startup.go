@@ -60,12 +60,18 @@ type Dependencies struct {
 	BuildMCPExecution     wire.MCPExecutionBuilder
 }
 
-func executeStartup(ctx context.Context, request startupcli.Request, dependencies Dependencies) error {
+type processDependencies struct {
+	core         wire.WireCore
+	graphBuilder GraphBuilder
+	initializer  Initializer
+}
+
+func executeStartup(ctx context.Context, request startupcli.Request, dependencies processDependencies) error {
 	mode, sidecars, err := selectMode(request)
 	if err != nil {
 		return err
 	}
-	graph, err := dependencies.GraphBuilder.Build(ctx, GraphRequest{
+	graph, err := dependencies.graphBuilder.Build(ctx, GraphRequest{
 		Policy: initializer.ProcessPolicy{Mode: mode, Sidecars: sidecars}, Startup: request,
 	})
 	if err != nil {
@@ -74,7 +80,7 @@ func executeStartup(ctx context.Context, request startupcli.Request, dependencie
 	if graph == nil {
 		return fmt.Errorf("construct %s application graph: builder returned nil graph", mode)
 	}
-	return dependencies.Initializer.Run(ctx, Initialization{
+	return dependencies.initializer.Run(ctx, Initialization{
 		Graph: graph,
 	})
 }
@@ -102,21 +108,26 @@ func selectMode(request startupcli.Request) (Mode, SidecarPolicy, error) {
 	}
 }
 
-func normalizeDependencies(dependencies Dependencies) Dependencies {
-	if dependencies.BuildMCPExecution == nil {
-		dependencies.BuildMCPExecution = wire.BuildMCPExecutionService
+func dependenciesFromWireCore(core wire.WireCore, overrides Dependencies) processDependencies {
+	if overrides.BuildMCPExecution != nil {
+		core.BuildMCPExecution = overrides.BuildMCPExecution
 	}
-	if dependencies.GraphBuilder == nil {
-		dependencies.GraphBuilder = productionGraphBuilder{buildMCP: dependencies.BuildMCPExecution}
+	if overrides.BuildSessionExecution != nil {
+		core.BuildSessionExecution = overrides.BuildSessionExecution
 	}
-	if dependencies.Initializer == nil {
-		dependencies.Initializer = productionInitializer{}
+	if overrides.BuildModelInvocation != nil {
+		core.BuildModelInvocation = overrides.BuildModelInvocation
 	}
-	if dependencies.BuildSessionExecution == nil {
-		dependencies.BuildSessionExecution = wire.BuildSessionExecutionService
+	graphBuilder := overrides.GraphBuilder
+	if graphBuilder == nil {
+		graphBuilder = productionGraphBuilder{
+			buildGraph: core.BuildProcessGraph,
+			buildMCP:   core.BuildMCPExecution,
+		}
 	}
-	if dependencies.BuildModelInvocation == nil {
-		dependencies.BuildModelInvocation = wire.BuildModelInvocation
+	processInitializer := overrides.Initializer
+	if processInitializer == nil {
+		processInitializer = productionInitializer{initialize: core.InitializeProcess}
 	}
-	return dependencies
+	return processDependencies{core: core, graphBuilder: graphBuilder, initializer: processInitializer}
 }

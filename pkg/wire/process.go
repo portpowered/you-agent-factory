@@ -12,7 +12,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -20,8 +23,61 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
+
+// CLICommandBuilder constructs a fresh Cobra command tree from process-owned
+// transport options.
+type CLICommandBuilder func(cli.RootCommandOptions) *cobra.Command
+
+// ProcessGraphBuilder constructs an inert process graph with the MCP execution
+// builder selected for the process.
+type ProcessGraphBuilder func(
+	context.Context,
+	startupcli.Request,
+	initializer.ProcessPolicy,
+	MCPExecutionBuilder,
+) (*initializer.ProcessGraph, error)
+
+// ProcessInitializer starts and owns an already-constructed process graph.
+type ProcessInitializer func(context.Context, *initializer.ProcessGraph) error
+
+// WireCore is the process composition surface injected once by pkg/root. Its
+// builders retain request-specific construction boundaries without requiring
+// root to assemble each production dependency independently.
+type WireCore struct {
+	BuildCLICommand       CLICommandBuilder
+	BuildProcessGraph     ProcessGraphBuilder
+	InitializeProcess     ProcessInitializer
+	BuildMCPExecution     MCPExecutionBuilder
+	BuildSessionExecution sessionexecutioncli.ServiceBuilder
+	BuildModelInvocation  modelscli.InvocationBuilder
+}
+
+func provideCLICommandBuilder() CLICommandBuilder {
+	return cli.NewRootCommandWithOptions
+}
+
+func provideProcessGraphBuilder() ProcessGraphBuilder {
+	return BuildProcessGraphWithMCPBuilder
+}
+
+func provideProcessInitializer() ProcessInitializer {
+	return initializer.RunProcess
+}
+
+func provideMCPExecutionBuilder() MCPExecutionBuilder {
+	return BuildMCPExecutionService
+}
+
+func provideSessionExecutionBuilder() sessionexecutioncli.ServiceBuilder {
+	return BuildSessionExecutionService
+}
+
+func provideModelInvocationBuilder() modelscli.InvocationBuilder {
+	return BuildModelInvocation
+}
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
 // production-shaped functional graph may replace. Its zero value preserves

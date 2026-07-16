@@ -1,0 +1,403 @@
+{
+  "Session": {
+    "SessionID": "~default",
+    "Status": "RUNNING",
+    "OrchestratorKind": "PETRI",
+    "Dialect": "",
+    "ResolvedSource": {
+      "Kind": "",
+      "SourceRef": "",
+      "SourceHash": "",
+      "Dialect": "",
+      "ResolutionOrder": null,
+      "Metadata": null,
+      "Agents": null
+    },
+    "SourceHash": "",
+    "Policy": {
+      "Requested": null,
+      "Effective": null,
+      "EffectiveHash": ""
+    },
+    "Phase": "",
+    "PhaseSummaries": null,
+    "LatestCheckpoint": null,
+    "Progress": null,
+    "Budgets": null,
+    "Usage": {
+      "Resources": []
+    },
+    "ResultSummary": {
+      "ResultStatus": "NOT_READY",
+      "Summary": ""
+    },
+    "ArtifactRefs": null,
+    "ArtifactCount": 0,
+    "Failure": null,
+    "Lifecycle": {
+      "QueuedAt": null,
+      "AwaitingApprovalAt": null,
+      "StartedAt": "2026-07-16T11:56:32.4835614Z",
+      "PausedAt": null,
+      "ResumedAt": null,
+      "FinishedAt": null,
+      "InterruptedAt": null,
+      "TerminatedAt": null,
+      "UpdatedAt": null
+    },
+    "StaleLease": false,
+    "Links": {
+      "Session": "/factory-sessions/~default",
+      "Status": "/factory-sessions/~default",
+      "Events": "/factory-sessions/~default/events",
+      "Results": "/factory-sessions/~default/results",
+      "Dispatches": "/factory-sessions/~default/dispatches",
+      "Artifacts": "/factory-sessions/~default/artifacts"
+    }
+  },
+  "Result": {
+    "SessionID": "~default",
+    "ResultStatus": "NOT_READY",
+    "SessionStatus": "RUNNING",
+    "Mode": "final",
+    "IncludeArtifacts": false,
+    "PrimaryResult": null,
+    "ArtifactIDs": null,
+    "ArtifactRefs": null,
+    "Failure": null,
+    "Availability": {
+      "Reason": "RESULT_NOT_READY",
+      "Message": "Session is still running.",
+      "Retryable": true
+    }
+  },
+  "Dispatches": null,
+  "DispatchJavaScript": null,
+  "DispatchStatusTransitions": null,
+  "Artifacts": null,
+  "Events": [
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "session-started/~default",
+      "type": "SESSION_STARTED",
+      "context": {
+        "sequence": 1,
+        "tick": 1,
+        "eventTime": "2026-07-16T11:56:32.4835614Z",
+        "sessionId": "~default",
+        "sessionSequence": 0,
+        "orchestratorKind": "PETRI",
+        "source": "runtime-service"
+      },
+      "payload": {
+        "policyHash": null,
+        "sourceHash": null,
+        "sourceRef": null,
+        "startedAt": "2026-07-16T11:56:32Z"
+      }
+    },
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "session-result-updated/~default",
+      "type": "SESSION_RESULT_UPDATED",
+      "context": {
+        "sequence": 2,
+        "tick": 2,
+        "eventTime": "2026-07-16T11:56:33.4835614Z",
+        "sessionId": "~default",
+        "sessionSequence": 1,
+        "orchestratorKind": "PETRI",
+        "source": "runtime-service"
+      },
+      "payload": {
+        "availability": {
+          "message": "Session is still running.",
+          "reason": "RESULT_NOT_READY",
+          "retryable": true
+        },
+        "resultStatus": "NOT_READY"
+      }
+    }
+  ],
+  "RuntimeRecords": null,
+  "Records": [
+    {
+      "kind": "canonical_factory_event",
+      "canonicalEvent": {
+        "schemaVersion": "agent-factory.event.v1",
+        "id": "session-started/~default",
+        "type": "SESSION_STARTED",
+        "context": {
+          "sequence": 1,
+          "tick": 1,
+          "eventTime": "2026-07-16T11:56:32.4835614Z",
+          "sessionId": "~default",
+          "sessionSequence": 0,
+          "orchestratorKind": "PETRI",
+          "source": "runtime-service"
+        },
+        "payload": {
+          "policyHash": null,
+          "sourceHash": null,
+          "sourceRef": null,
+          "startedAt": "2026-07-16T11:56:32Z"
+        }
+      }
+    },
+    {
+      "kind": "canonical_factory_event",
+      "canonicalEvent": {
+        "schemaVersion": "agent-factory.event.v1",
+        "id": "session-result-updated/~default",
+        "type": "SESSION_RESULT_UPDATED",
+        "context": {
+          "sequence": 2,
+          "tick": 2,
+          "eventTime": "2026-07-16T11:56:33.4835614Z",
+          "sessionId": "~default",
+          "sessionSequence": 1,
+          "orchestratorKind": "PETRI",
+          "source": "runtime-service"
+        },
+        "payload": {
+          "availability": {
+            "message": "Session is still running.",
+            "reason": "RESULT_NOT_READY",
+            "retryable": true
+          },
+          "resultStatus": "NOT_READY"
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "2ec5ece6-8477-4d9a-a4ca-4316a932b498",
+        "transition_id": "step-one",
+        "outcome": "ACCEPTED",
+        "type": "CREATE",
+        "token_id": "batch-request-c22f9fda60ccc4d7eadc61a7adbe7807-release-smoke-seed",
+        "from_place": "",
+        "to_place": "task:processing",
+        "reason": "transitioner: ACCEPTED from transition step-one",
+        "token": {
+          "id": "batch-request-c22f9fda60ccc4d7eadc61a7adbe7807-release-smoke-seed",
+          "place_id": "task:processing",
+          "color": {
+            "name": "release-smoke-seed",
+            "request_id": "request-c22f9fda60ccc4d7eadc61a7adbe7807",
+            "work_id": "batch-request-c22f9fda60ccc4d7eadc61a7adbe7807-release-smoke-seed",
+            "work_type_id": "task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "trace-1f72ef3f0b7ca79252f2b4e89ee810d6",
+            "trace_id": "trace-1f72ef3f0b7ca79252f2b4e89ee810d6",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "release-smoke-seed",
+              "_work_type": "task"
+            },
+            "relations": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "mock worker accepted\nCOMPLETE"
+              }
+            ],
+            "payload": "bW9jayB3b3JrZXIgYWNjZXB0ZWQKQ09NUExFVEU="
+          },
+          "created_at": "2026-07-16T04:56:32.4777898-07:00",
+          "entered_at": "2026-07-16T04:56:32.4835614-07:00",
+          "history": {
+            "total_visits": {
+              "step-one": 1
+            },
+            "consecutive_failures": {
+              "step-one": 0
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "",
+            "failure_log": null
+          }
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "10012d1a-8f6b-4f0e-845b-1e66a1cfd74d",
+        "transition_id": "step-two",
+        "outcome": "ACCEPTED",
+        "type": "CREATE",
+        "token_id": "batch-request-c22f9fda60ccc4d7eadc61a7adbe7807-release-smoke-seed",
+        "from_place": "",
+        "to_place": "task:complete",
+        "reason": "transitioner: ACCEPTED from transition step-two",
+        "token": {
+          "id": "batch-request-c22f9fda60ccc4d7eadc61a7adbe7807-release-smoke-seed",
+          "place_id": "task:complete",
+          "color": {
+            "name": "release-smoke-seed",
+            "request_id": "request-c22f9fda60ccc4d7eadc61a7adbe7807",
+            "work_id": "batch-request-c22f9fda60ccc4d7eadc61a7adbe7807-release-smoke-seed",
+            "work_type_id": "task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "trace-1f72ef3f0b7ca79252f2b4e89ee810d6",
+            "trace_id": "trace-1f72ef3f0b7ca79252f2b4e89ee810d6",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "release-smoke-seed",
+              "_work_type": "task"
+            },
+            "relations": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "mock worker accepted\nCOMPLETE"
+              }
+            ],
+            "payload": "bW9jayB3b3JrZXIgYWNjZXB0ZWQKQ09NUExFVEU="
+          },
+          "created_at": "2026-07-16T04:56:32.4777898-07:00",
+          "entered_at": "2026-07-16T04:56:32.4915032-07:00",
+          "history": {
+            "total_visits": {
+              "step-one": 1,
+              "step-two": 1
+            },
+            "consecutive_failures": {
+              "step-two": 0
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "",
+            "failure_log": null
+          }
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "bec62ebe-dc1b-4a44-8f5a-63c1e352b0c7",
+        "transition_id": "step-one",
+        "outcome": "ACCEPTED",
+        "type": "CREATE",
+        "token_id": "batch-request-c48735b4f56645835761e274ddad0193-release-smoke-seed",
+        "from_place": "",
+        "to_place": "task:processing",
+        "reason": "transitioner: ACCEPTED from transition step-one",
+        "token": {
+          "id": "batch-request-c48735b4f56645835761e274ddad0193-release-smoke-seed",
+          "place_id": "task:processing",
+          "color": {
+            "name": "release-smoke-seed",
+            "request_id": "request-c48735b4f56645835761e274ddad0193",
+            "work_id": "batch-request-c48735b4f56645835761e274ddad0193-release-smoke-seed",
+            "work_type_id": "task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "trace-f74b572fe592775741af5b931a88641c",
+            "trace_id": "trace-f74b572fe592775741af5b931a88641c",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "release-smoke-seed",
+              "_work_type": "task"
+            },
+            "relations": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "mock worker accepted\nCOMPLETE"
+              }
+            ],
+            "payload": "bW9jayB3b3JrZXIgYWNjZXB0ZWQKQ09NUExFVEU="
+          },
+          "created_at": "2026-07-16T04:56:44.4928463-07:00",
+          "entered_at": "2026-07-16T04:56:44.4972247-07:00",
+          "history": {
+            "total_visits": {
+              "step-one": 1
+            },
+            "consecutive_failures": {
+              "step-one": 0
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "",
+            "failure_log": null
+          }
+        }
+      }
+    },
+    {
+      "kind": "petri_token_mutation",
+      "petriMutation": {
+        "dispatch_id": "eb2a9584-5dbd-4d2c-9c26-ef8a4268c0e2",
+        "transition_id": "step-two",
+        "outcome": "ACCEPTED",
+        "type": "CREATE",
+        "token_id": "batch-request-c48735b4f56645835761e274ddad0193-release-smoke-seed",
+        "from_place": "",
+        "to_place": "task:complete",
+        "reason": "transitioner: ACCEPTED from transition step-two",
+        "token": {
+          "id": "batch-request-c48735b4f56645835761e274ddad0193-release-smoke-seed",
+          "place_id": "task:complete",
+          "color": {
+            "name": "release-smoke-seed",
+            "request_id": "request-c48735b4f56645835761e274ddad0193",
+            "work_id": "batch-request-c48735b4f56645835761e274ddad0193-release-smoke-seed",
+            "work_type_id": "task",
+            "data_type": "work",
+            "chaining_trace_depth": 1,
+            "current_chaining_trace_id": "trace-f74b572fe592775741af5b931a88641c",
+            "trace_id": "trace-f74b572fe592775741af5b931a88641c",
+            "parent_id": "",
+            "tags": {
+              "_work_name": "release-smoke-seed",
+              "_work_type": "task"
+            },
+            "relations": null,
+            "content": [
+              {
+                "type": "text",
+                "text": "mock worker accepted\nCOMPLETE"
+              }
+            ],
+            "payload": "bW9jayB3b3JrZXIgYWNjZXB0ZWQKQ09NUExFVEU="
+          },
+          "created_at": "2026-07-16T04:56:44.4928463-07:00",
+          "entered_at": "2026-07-16T04:56:44.5467142-07:00",
+          "history": {
+            "total_visits": {
+              "step-one": 1,
+              "step-two": 1
+            },
+            "consecutive_failures": {
+              "step-two": 0
+            },
+            "place_visits": {},
+            "total_duration": 0,
+            "last_error": "",
+            "failure_log": null
+          }
+        }
+      }
+    }
+  ],
+  "CheckpointSummary": null,
+  "StartRequest": null,
+  "ResolvedSource": {
+    "Kind": "",
+    "SourceRef": "",
+    "SourceHash": "",
+    "Dialect": "",
+    "ResolutionOrder": null,
+    "Metadata": null,
+    "Agents": null
+  },
+  "SourceContent": ""
+}

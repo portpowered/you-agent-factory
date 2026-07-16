@@ -35,18 +35,27 @@ func Main() int {
 }
 
 type productionGraphBuilder struct {
-	buildMCP wire.MCPExecutionBuilder
+	buildGraph wire.ProcessGraphBuilder
+	buildMCP   wire.MCPExecutionBuilder
 }
 
 func (builder productionGraphBuilder) Build(ctx context.Context, request GraphRequest) (*ApplicationGraph, error) {
+	if builder.buildGraph == nil {
+		builder.buildGraph = wire.BuildProcessGraphWithMCPBuilder
+	}
 	if builder.buildMCP == nil {
 		builder.buildMCP = wire.BuildMCPExecutionService
 	}
-	return wire.BuildProcessGraphWithMCPBuilder(ctx, request.Startup, request.Policy, builder.buildMCP)
+	return builder.buildGraph(ctx, request.Startup, request.Policy, builder.buildMCP)
 }
 
-type productionInitializer struct{}
+type productionInitializer struct {
+	initialize wire.ProcessInitializer
+}
 
-func (productionInitializer) Run(ctx context.Context, initialization Initialization) error {
-	return initializer.RunProcess(ctx, initialization.Graph)
+func (production productionInitializer) Run(ctx context.Context, initialization Initialization) error {
+	if production.initialize == nil {
+		production.initialize = initializer.RunProcess
+	}
+	return production.initialize(ctx, initialization.Graph)
 }
