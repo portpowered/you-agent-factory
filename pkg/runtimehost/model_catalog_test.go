@@ -16,6 +16,7 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -109,16 +110,16 @@ func TestCoreModelServiceAttachmentIsVisibleToSnapshotsAndHostFacade(t *testing.
 func TestRuntimeHostModelServicePreservesCatalogPullObservabilityAndErrors(t *testing.T) {
 	runtimeCfg := runtimeHostModelConfig(t)
 	modelHost := &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+		Identity:       modelhost.Identity{Name: "voice-model", Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateLoaded,
 	}, pull: modelhost.PullSnapshot{
 		ReadinessSnapshot: modelhost.ReadinessSnapshot{
-			Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+			Identity:       modelhost.Identity{Name: "voice-model", Locality: managedruntime.LocalityLocal},
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateLoaded,
 		},
-		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeALREADYREADY,
+		PullOutcome:   managedruntime.PullOutcomeAlreadyReady,
 		LegacyOutcome: "ALREADY_PRESENT",
 		CachePath:     "/tmp/model",
 		Revision:      "rev-1",
@@ -187,9 +188,9 @@ func TestRuntimeHostModelServicePreservesFactoryRunnerIdentityForInvocation(t *t
 	}
 	cfg.WorkerApplication = components
 	host := runtimeHostModelFacade(t, runtimeCfg, &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+		Identity:       modelhost.Identity{Name: "voice-model", Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateLoaded,
 	}}, &runtimeHostModelPuller{}, cfg)
 
 	result, err := host.InvokeModel(context.Background(), "voice-model", factoryapi.ModelInvocationRequest{Operation: "TTS"})

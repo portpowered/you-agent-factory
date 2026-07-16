@@ -21,7 +21,7 @@ func TestFailureClassForError_ModelhostLeaseDenied(t *testing.T) {
 	err := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+			ReadinessState: managedruntime.ReadinessStateFailed,
 			FailureClass:   modelhost.FailureClassCapacityExhausted,
 		},
 		Cause: modelhost.ErrCapacityExhausted,
@@ -37,7 +37,7 @@ func TestFailureClassForError_ModelhostMissingReadiness(t *testing.T) {
 	err := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			ReadinessState: managedruntime.ReadinessStateMissing,
 			FailureClass:   modelhost.FailureClassMissingAssets,
 		},
 		Cause: modelhost.ErrRuntimeNotReady,
@@ -53,7 +53,7 @@ func TestFailureClassForError_ModelhostRuntimeFailure(t *testing.T) {
 	err := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+			ReadinessState: managedruntime.ReadinessStateFailed,
 			FailureClass:   modelhost.FailureClassProcessCrash,
 		},
 		Cause: modelhost.ErrProcessCrash,

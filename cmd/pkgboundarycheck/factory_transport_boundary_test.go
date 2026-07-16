@@ -65,11 +65,26 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/models/host/contract.go", "modelhost", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	writeGoImportFile(t, repoRoot, "pkg/models/local/catalog.go", "local", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
 		t.Fatalf("run() error = %v, want exact migration files allowed; stderr=%q", err, stderr.String())
+	}
+
+	for _, path := range []string{
+		"pkg/models/host/catalog_host.go",
+		"pkg/models/host/contract.go",
+		"pkg/models/host/diagnostics.go",
+		"pkg/models/host/lease_policy.go",
+		"pkg/models/host/local_assets.go",
+		"pkg/models/host/supervisor.go",
+	} {
+		writeGoImportFile(t, repoRoot, path, "modelhost", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	}
+	stderr.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
+		t.Fatal("run() error = nil, want migrated model host imports rejected")
 	}
 
 	writeGoImportFile(t, repoRoot, "pkg/workers/inference/inference.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/http/generated")

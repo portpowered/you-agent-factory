@@ -3,9 +3,57 @@ package apisurface
 import (
 	"strings"
 
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
+
+// ManagedRuntimeToAPI maps the model-owned runtime projection to the public contract.
+func ManagedRuntimeToAPI(runtime managedruntime.Runtime) factoryapi.ManagedRuntime {
+	diagnostics := factoryapi.StringMap{}
+	for key, value := range runtime.Diagnostics {
+		diagnostics[key] = value
+	}
+	return factoryapi.ManagedRuntime{
+		Identity:            runtime.Identity,
+		ReadinessState:      factoryapi.ManagedRuntimeReadinessState(runtime.ReadinessState),
+		LifecycleState:      factoryapi.ManagedRuntimeLifecycleState(runtime.LifecycleState),
+		Locality:            factoryapi.WorkerModelLocality(runtime.Locality),
+		SupportedOperations: operationsToAPI(runtime.SupportedOperations),
+		Diagnostics:         &diagnostics,
+	}
+}
+
+func operationsToAPI(operations []managedruntime.Operation) []factoryapi.ModelOperation {
+	converted := make([]factoryapi.ModelOperation, 0, len(operations))
+	for _, operation := range operations {
+		item := factoryapi.ModelOperation{Name: operation.Name}
+		if operation.Inputs != nil {
+			inputs := operationSlotsToAPI(operation.Inputs)
+			item.Inputs = &inputs
+		}
+		if operation.Outputs != nil {
+			outputs := operationSlotsToAPI(operation.Outputs)
+			item.Outputs = &outputs
+		}
+		converted = append(converted, item)
+	}
+	return converted
+}
+
+func operationSlotsToAPI(slots []managedruntime.OperationSlot) []factoryapi.ModelOperationSlot {
+	converted := make([]factoryapi.ModelOperationSlot, 0, len(slots))
+	for _, slot := range slots {
+		contentTypes := make([]factoryapi.ModelOperationContentType, 0, len(slot.ContentTypes))
+		for _, contentType := range slot.ContentTypes {
+			contentTypes = append(contentTypes, factoryapi.ModelOperationContentType(contentType))
+		}
+		converted = append(converted, factoryapi.ModelOperationSlot{
+			Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required,
+		})
+	}
+	return converted
+}
 
 // ManagedRuntimePullResultFromService maps a service-owned pull result into the
 // public managed-runtime pull contract while preserving legacy outcome fields.

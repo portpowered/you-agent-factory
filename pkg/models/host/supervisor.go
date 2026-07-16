@@ -14,7 +14,7 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 const (
@@ -142,29 +142,29 @@ func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSn
 	case supervisedStateReady:
 		return ReadinessSnapshot{
 			Identity:       identity,
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateLoaded,
 			FailureClass:   FailureClassNone,
-			Diagnostics: mergeDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateLOADED, map[string]string{
+			Diagnostics: mergeDiagnostics(identity, managedruntime.ReadinessStateReady, managedruntime.LifecycleStateLoaded, map[string]string{
 				"endpoint": r.endpoint,
 			}),
 		}
 	case supervisedStateLoading:
 		return ReadinessSnapshot{
 			Identity:       identity,
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+			ReadinessState: managedruntime.ReadinessStateLoading,
+			LifecycleState: managedruntime.LifecycleStateLoading,
 			FailureClass:   FailureClassLoadingTimeout,
-			Diagnostics:    managedDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateLOADING),
+			Diagnostics:    managedDiagnostics(identity, managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateLoading),
 		}
 	case supervisedStateFailed:
 		readiness := ReadinessStateForFailureClass(r.failureClass)
-		lifecycle := factoryapi.ManagedRuntimeLifecycleStateLOADED
+		lifecycle := managedruntime.LifecycleStateLoaded
 		if r.failureClass == FailureClassLoadingTimeout {
-			lifecycle = factoryapi.ManagedRuntimeLifecycleStateLOADING
+			lifecycle = managedruntime.LifecycleStateLoading
 		}
 		if r.failureClass == FailureClassMissingAssets {
-			lifecycle = factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+			lifecycle = managedruntime.LifecycleStateNotInstalled
 		}
 		return ReadinessSnapshot{
 			Identity:       identity,
@@ -174,13 +174,13 @@ func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSn
 			Diagnostics:    managedDiagnostics(identity, readiness, lifecycle),
 		}
 	default:
-		if base.ReadinessState == factoryapi.ManagedRuntimeReadinessStateREADY {
+		if base.ReadinessState == managedruntime.ReadinessStateReady {
 			return ReadinessSnapshot{
 				Identity:       identity,
-				ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
-				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+				ReadinessState: managedruntime.ReadinessStateLoading,
+				LifecycleState: managedruntime.LifecycleStateLoading,
 				FailureClass:   FailureClassLoadingTimeout,
-				Diagnostics:    managedDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateLOADING),
+				Diagnostics:    managedDiagnostics(identity, managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateLoading),
 			}
 		}
 		return base

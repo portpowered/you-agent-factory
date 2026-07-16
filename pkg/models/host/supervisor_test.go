@@ -14,7 +14,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 func TestCatalogHost_SupervisedBackend_InspectPreservesInstalledAssetReadinessWithoutLiveSlot(t *testing.T) {
@@ -25,10 +25,10 @@ func TestCatalogHost_SupervisedBackend_InspectPreservesInstalledAssetReadinessWi
 	if err != nil {
 		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if ready.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY for installed assets without a live supervised slot", ready.ReadinessState)
 	}
-	if ready.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if ready.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("lifecycle = %s, want INSTALLED", ready.LifecycleState)
 	}
 }
@@ -112,7 +112,7 @@ func TestCatalogHost_SupervisedBackend_PostStartCrashSurfacesFailedReadiness(t *
 		if inspectErr != nil {
 			t.Fatalf("InspectReadiness: %v", inspectErr)
 		}
-		if ready.ReadinessState == factoryapi.ManagedRuntimeReadinessStateFAILED {
+		if ready.ReadinessState == managedruntime.ReadinessStateFailed {
 			if ready.FailureClass != FailureClassProcessCrash {
 				t.Fatalf("failure class = %s, want %s", ready.FailureClass, FailureClassProcessCrash)
 			}

@@ -3,7 +3,7 @@ package modelhost
 import (
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 const (
@@ -64,15 +64,15 @@ func identityDiagnosticFields(identity Identity) map[string]string {
 
 func (d Diagnostics) logLoadStarted(identity Identity) {
 	fields := identityDiagnosticFields(identity)
-	fields["readiness_state"] = string(factoryapi.ManagedRuntimeReadinessStateLOADING)
-	fields["lifecycle_state"] = string(factoryapi.ManagedRuntimeLifecycleStateLOADING)
+	fields["readiness_state"] = string(managedruntime.ReadinessStateLoading)
+	fields["lifecycle_state"] = string(managedruntime.LifecycleStateLoading)
 	d.info("model host load started", fields)
 }
 
 func (d Diagnostics) logLoadReady(identity Identity) {
 	fields := identityDiagnosticFields(identity)
-	fields["readiness_state"] = string(factoryapi.ManagedRuntimeReadinessStateREADY)
-	fields["lifecycle_state"] = string(factoryapi.ManagedRuntimeLifecycleStateLOADED)
+	fields["readiness_state"] = string(managedruntime.ReadinessStateReady)
+	fields["lifecycle_state"] = string(managedruntime.LifecycleStateLoaded)
 	d.info("model host load ready", fields)
 	d.record(metricLoadSuccess, fields)
 }
@@ -97,7 +97,7 @@ func (d Diagnostics) logLoadFailed(identity Identity, class FailureClass, err er
 func (d Diagnostics) logProcessCrash(identity Identity, err error) {
 	fields := identityDiagnosticFields(identity)
 	fields["failure_class"] = string(FailureClassProcessCrash)
-	fields["readiness_state"] = string(factoryapi.ManagedRuntimeReadinessStateFAILED)
+	fields["readiness_state"] = string(managedruntime.ReadinessStateFailed)
 	if err != nil {
 		fields["error"] = err.Error()
 	}

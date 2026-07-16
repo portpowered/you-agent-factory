@@ -10,12 +10,12 @@ import (
 	"time"
 
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 // CatalogHost is the catalog-backed model host implementation for process-level wiring.
@@ -143,7 +143,7 @@ func (h *CatalogHost) inspectReadiness(
 		return ReadinessSnapshot{}, err
 	}
 	identity := h.identityFromCatalog(runtimeCfg, entry)
-	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
+	if string(entry.Summary.ProviderLocality) != workerconfig.ModelLocalityLocal {
 		return ClassifyReadiness(identity, CacheInspection{}, false), nil
 	}
 	inspection, err := h.cacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
@@ -169,19 +169,19 @@ func (h *CatalogHost) Pull(
 	if err != nil {
 		return PullSnapshot{}, err
 	}
-	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
+	if string(entry.Summary.ProviderLocality) != workerconfig.ModelLocalityLocal {
 		identity := h.identityFromCatalog(runtimeCfg, entry)
 		snapshot := ClassifyReadiness(identity, CacheInspection{}, true)
 		pullSnapshot := PullSnapshot{
 			ReadinessSnapshot: snapshot,
-			PullOutcome:       factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME,
+			PullOutcome:       managedruntime.PullOutcomeUnsupportedRuntime,
 		}
 		return pullSnapshot, &ReadinessError{Snapshot: snapshot, Cause: ErrUnsupportedRuntime}
 	}
 	pullResult, err := h.assetPuller.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
 		readiness := pullResult.Snapshot
-		var pullErr *apisurface.ManagedRuntimePullError
+		var pullErr *modelassets.PullError
 		if errors.As(err, &pullErr) {
 			readiness = managedRuntimePullSnapshot(runtimeCfg, entry, pullErr.Result)
 		}
@@ -206,7 +206,7 @@ func (h *CatalogHost) Pull(
 func pullSnapshotFromAssetResult(result AssetPullResult, readiness ReadinessSnapshot) PullSnapshot {
 	outcome := result.PullOutcome
 	if outcome == "" {
-		outcome = factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME
+		outcome = managedruntime.PullOutcomeUnsupportedRuntime
 	}
 	return PullSnapshot{
 		ReadinessSnapshot: readiness,
@@ -231,7 +231,7 @@ func (h *CatalogHost) AcquireLease(
 	if err := h.ensureSupervisedReadyForLease(ctx, runtimeCfg, modelName, inspection, &snapshot); err != nil {
 		return Lease{}, err
 	}
-	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if snapshot.ReadinessState != managedruntime.ReadinessStateReady {
 		cause := readinessCause(snapshot)
 		return Lease{}, &ReadinessError{Snapshot: snapshot, Cause: cause}
 	}
@@ -412,8 +412,8 @@ func (h *CatalogHost) Unload(
 		return &ReadinessError{
 			Snapshot: ReadinessSnapshot{
 				Identity:       Identity{Name: strings.TrimSpace(modelName)},
-				ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
-				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+				ReadinessState: managedruntime.ReadinessStateFailed,
+				LifecycleState: managedruntime.LifecycleStateLoaded,
 				FailureClass:   FailureClassCapacityExhausted,
 			},
 			Cause: ErrCapacityExhausted,
@@ -426,8 +426,8 @@ func (h *CatalogHost) Unload(
 		return &ReadinessError{
 			Snapshot: ReadinessSnapshot{
 				Identity:       Identity{Name: strings.TrimSpace(modelName)},
-				ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
-				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+				ReadinessState: managedruntime.ReadinessStateLoading,
+				LifecycleState: managedruntime.LifecycleStateLoading,
 				FailureClass:   FailureClassCapacityExhausted,
 			},
 			Cause: ErrCapacityExhausted,
@@ -557,11 +557,11 @@ func (h *CatalogHost) catalogEntry(runtimeCfg *factoryconfig.LoadedFactoryConfig
 	catalog := localmodels.BuildCatalog(runtimeCfg)
 	key := localmodels.CanonicalModelName(modelName)
 	if key == "" {
-		return localmodels.CatalogEntry{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+		return localmodels.CatalogEntry{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
 	}
 	entry, ok := catalog[key]
 	if !ok {
-		return localmodels.CatalogEntry{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
+		return localmodels.CatalogEntry{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
 	}
 	return entry, nil
 }
@@ -572,8 +572,8 @@ func (h *CatalogHost) identityFromCatalog(
 ) Identity {
 	identity := Identity{
 		Name:                entry.Summary.Name,
-		Locality:            entry.Summary.ProviderLocality,
-		SupportedOperations: append([]factoryapi.ModelOperation(nil), entry.Summary.Operations...),
+		Locality:            managedruntime.Locality(entry.Summary.ProviderLocality),
+		SupportedOperations: operationsFromCatalog(entry),
 	}
 	if resource := modelScopedResource(runtimeCfg, entry.Summary.Name); resource != nil {
 		identity.Backend = strings.TrimSpace(resource.Backend)
@@ -591,6 +591,37 @@ func (h *CatalogHost) identityFromCatalog(
 		}
 	}
 	return identity
+}
+
+func operationsFromCatalog(entry localmodels.CatalogEntry) []managedruntime.Operation {
+	operations := make([]managedruntime.Operation, 0, len(entry.Summary.Operations))
+	for _, operation := range entry.Summary.Operations {
+		converted := managedruntime.Operation{Name: operation.Name}
+		if operation.Inputs != nil {
+			for _, slot := range *operation.Inputs {
+				contentTypes := make([]string, 0, len(slot.ContentTypes))
+				for _, contentType := range slot.ContentTypes {
+					contentTypes = append(contentTypes, string(contentType))
+				}
+				converted.Inputs = append(converted.Inputs, managedruntime.OperationSlot{
+					Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required,
+				})
+			}
+		}
+		if operation.Outputs != nil {
+			for _, slot := range *operation.Outputs {
+				contentTypes := make([]string, 0, len(slot.ContentTypes))
+				for _, contentType := range slot.ContentTypes {
+					contentTypes = append(contentTypes, string(contentType))
+				}
+				converted.Outputs = append(converted.Outputs, managedruntime.OperationSlot{
+					Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required,
+				})
+			}
+		}
+		operations = append(operations, converted)
+	}
+	return operations
 }
 
 func modelScopedResource(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) *factoryresource.Config {
@@ -615,11 +646,11 @@ func modelScopedResource(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelNam
 func managedRuntimePullSnapshot(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	entry localmodels.CatalogEntry,
-	result apisurface.ModelPullResult,
+	result modelassets.PullResult,
 ) ReadinessSnapshot {
 	identity := Identity{
 		Name:     strings.TrimSpace(result.ModelName),
-		Locality: entry.Summary.ProviderLocality,
+		Locality: managedruntime.Locality(entry.Summary.ProviderLocality),
 	}
 	if identity.Name == "" {
 		identity.Name = entry.Summary.Name
@@ -628,13 +659,13 @@ func managedRuntimePullSnapshot(
 		identity.Backend = strings.TrimSpace(resource.Backend)
 		identity.LoadPolicy = strings.TrimSpace(resource.LoadPolicy)
 	}
-	readiness := factoryapi.ManagedRuntimeReadinessState(strings.TrimSpace(result.ReadinessState))
+	readiness := managedruntime.ReadinessState(strings.TrimSpace(result.ReadinessState))
 	if readiness == "" {
-		readiness = factoryapi.ManagedRuntimeReadinessStateFAILED
+		readiness = managedruntime.ReadinessStateFailed
 	}
-	lifecycle := factoryapi.ManagedRuntimeLifecycleState(strings.TrimSpace(result.LifecycleState))
+	lifecycle := managedruntime.LifecycleState(strings.TrimSpace(result.LifecycleState))
 	if lifecycle == "" {
-		lifecycle = factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+		lifecycle = managedruntime.LifecycleStateNotInstalled
 	}
 	return ReadinessSnapshot{
 		Identity:       identity,

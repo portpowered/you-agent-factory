@@ -79,7 +79,7 @@ func overlayCatalogManagedRuntime(
 	base factoryapi.ManagedRuntime,
 	snapshot modelhost.ReadinessSnapshot,
 ) factoryapi.ManagedRuntime {
-	projected := modelhost.ManagedRuntimeFromSnapshot(snapshot)
+	projected := apisurface.ManagedRuntimeToAPI(modelhost.ManagedRuntimeFromSnapshot(snapshot))
 	if len(base.SupportedOperations) > 0 {
 		projected.SupportedOperations = append([]factoryapi.ModelOperation(nil), base.SupportedOperations...)
 	}

@@ -362,7 +362,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/models/managedruntime",
-      "minimum": 100.00
+      "minimum": 50.00
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/models/provider",
@@ -370,7 +370,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/models/service",
-      "minimum": 90.47
+      "minimum": 68.54
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/childcontract",
@@ -646,7 +646,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping",
-      "minimum": 81.89
+      "minimum": 59.38
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/composition",

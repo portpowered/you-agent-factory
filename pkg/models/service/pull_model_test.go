@@ -15,8 +15,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -153,14 +153,14 @@ func TestService_PullModel_ProjectsModelHostResult(t *testing.T) {
 		ReadinessSnapshot: modelhost.ReadinessSnapshot{
 			Identity: modelhost.Identity{
 				Name:       "OMNIVOICE_Q4_K_M",
-				Locality:   factoryapi.WorkerModelLocalityLocal,
+				Locality:   managedruntime.LocalityLocal,
 				SourceKind: "MANAGED_RUNTIME",
 				SourceID:   "managed:omnivoice",
 			},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateInstalled,
 		},
-		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		PullOutcome:   managedruntime.PullOutcomeInstalledSuccessfully,
 		LegacyOutcome: "PULLED",
 		CachePath:     "/tmp/cache",
 		Revision:      "rev1",

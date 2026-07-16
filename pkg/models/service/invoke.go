@@ -148,7 +148,7 @@ func (s *Service) ensureInvocationReady(
 	if err != nil {
 		return factoryapi.ManagedRuntime{}, err
 	}
-	managed := modelhost.ManagedRuntimeFromSnapshot(snapshot)
+	managed := apisurface.ManagedRuntimeToAPI(modelhost.ManagedRuntimeFromSnapshot(snapshot))
 	if invocationErr := apisurface.InvocationErrorFromManagedRuntime(managed); invocationErr != nil {
 		return managed, invocationErr
 	}

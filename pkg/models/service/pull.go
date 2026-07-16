@@ -9,6 +9,7 @@ import (
 
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
@@ -114,7 +115,7 @@ func modelPullResultFromSnapshot(snapshot modelhost.PullSnapshot) apisurface.Mod
 	}
 	locality := snapshot.Identity.Locality
 	if locality == "" {
-		locality = factoryapi.WorkerModelLocalityLocal
+		locality = managedruntime.LocalityLocal
 	}
 	return apisurface.ModelPullResult{
 		ModelName:          strings.TrimSpace(snapshot.Identity.Name),

@@ -267,6 +267,11 @@ Managed-runtime readiness states, invocation-blocking sentinels, and the narrow
 readiness-error seam belong in `pkg/models/managedruntime`. Worker policy should
 classify that model-owned seam; `pkg/transports/mapping` may preserve historical
 error identity by aliasing its public compatibility sentinels to the model owner.
+The model host likewise carries model-owned runtime identity, locality,
+operation, readiness, lifecycle, and pull-outcome values. Only the outward
+transport mapping layer projects that host state into generated `ManagedRuntime`
+contracts; local asset integration exchanges `pkg/models/assets.PullResult`
+without routing through transport aliases.
 
 The same check rejects recreation or import of converged roots and reports the
 canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,

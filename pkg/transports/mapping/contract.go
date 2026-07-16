@@ -9,6 +9,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -900,7 +901,7 @@ var ErrFactoryVersionStale = interfaces.ErrFactoryVersionStale
 
 // ErrModelNotFound reports that the requested discovered model identifier is
 // not present in the current runtime configuration.
-var ErrModelNotFound = errors.New("model not found")
+var ErrModelNotFound = managedruntime.ErrNotFound
 
 // ErrModelNotAvailable reports that a discovered local model exists but its
 // required local assets are not present in the managed cache.

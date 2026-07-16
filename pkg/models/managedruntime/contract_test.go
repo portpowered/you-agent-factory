@@ -49,6 +49,14 @@ func TestReadinessStateFromErrorPrefersReadinessSeam(t *testing.T) {
 	}
 }
 
+func TestErrNotFoundHasStableIdentity(t *testing.T) {
+	t.Parallel()
+
+	if managedruntime.ErrNotFound == nil || managedruntime.ErrNotFound.Error() != "model not found" {
+		t.Fatalf("ErrNotFound = %v, want stable model-not-found identity", managedruntime.ErrNotFound)
+	}
+}
+
 type readinessError struct {
 	state managedruntime.ReadinessState
 }

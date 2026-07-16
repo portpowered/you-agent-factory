@@ -148,12 +148,6 @@ func defaultBoundaryPolicy() boundaryPolicy {
 // New reverse dependencies are rejected across every protected domain while
 // these exact files migrate to domain-owned inputs and outward transport mapping.
 var documentedDomainTransportExceptions = []string{
-	"pkg/models/host/catalog_host.go",
-	"pkg/models/host/contract.go",
-	"pkg/models/host/diagnostics.go",
-	"pkg/models/host/lease_policy.go",
-	"pkg/models/host/local_assets.go",
-	"pkg/models/host/supervisor.go",
 	"pkg/models/local/catalog.go",
 	"pkg/models/local/managed_runtime.go",
 	"pkg/models/service/api.go",

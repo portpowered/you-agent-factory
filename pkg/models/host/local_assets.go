@@ -7,9 +7,9 @@ import (
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 type localAssetGateway struct {
@@ -33,13 +33,13 @@ func (g localAssetGateway) PullModel(
 		RuntimeCacheInspector: g.puller,
 		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
 	})
-	outcome := factoryapi.ManagedRuntimePullOutcome(strings.TrimSpace(result.ManagedPullOutcome))
+	outcome := managedruntime.PullOutcome(strings.TrimSpace(result.ManagedPullOutcome))
 	if outcome == "" && err == nil {
-		outcome = factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY
+		outcome = managedruntime.PullOutcomeInstalledSuccessfully
 	}
 	if err != nil {
 		if outcome == "" {
-			outcome = factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME
+			outcome = managedruntime.PullOutcomeUnsupportedRuntime
 		}
 		pullResult := AssetPullResult{
 			PullOutcome: outcome,
@@ -70,14 +70,14 @@ func (g localAssetGateway) InspectRuntimeCache(
 	}, nil
 }
 
-func snapshotFromPullResult(result apisurface.ModelPullResult) ReadinessSnapshot {
-	readiness := factoryapi.ManagedRuntimeReadinessState(strings.TrimSpace(result.ReadinessState))
+func snapshotFromPullResult(result modelassets.PullResult) ReadinessSnapshot {
+	readiness := managedruntime.ReadinessState(strings.TrimSpace(result.ReadinessState))
 	if readiness == "" {
-		readiness = factoryapi.ManagedRuntimeReadinessStateREADY
+		readiness = managedruntime.ReadinessStateReady
 	}
-	lifecycle := factoryapi.ManagedRuntimeLifecycleState(strings.TrimSpace(result.LifecycleState))
+	lifecycle := managedruntime.LifecycleState(strings.TrimSpace(result.LifecycleState))
 	if lifecycle == "" {
-		lifecycle = factoryapi.ManagedRuntimeLifecycleStateINSTALLED
+		lifecycle = managedruntime.LifecycleStateInstalled
 	}
 	diagnostics := map[string]string{
 		"readinessState": string(readiness),
@@ -92,7 +92,7 @@ func snapshotFromPullResult(result apisurface.ModelPullResult) ReadinessSnapshot
 	return ReadinessSnapshot{
 		Identity: Identity{
 			Name:          strings.TrimSpace(result.ModelName),
-			Locality:      factoryapi.WorkerModelLocality(result.ProviderLocality),
+			Locality:      managedruntime.Locality(result.ProviderLocality),
 			SourceKind:    result.SourceKind,
 			SourceID:      result.SourceID,
 			ResolverNotes: result.ResolverNotes,
@@ -104,7 +104,7 @@ func snapshotFromPullResult(result apisurface.ModelPullResult) ReadinessSnapshot
 	}
 }
 
-func assetPullResultFromService(result apisurface.ModelPullResult, outcome factoryapi.ManagedRuntimePullOutcome) AssetPullResult {
+func assetPullResultFromService(result modelassets.PullResult, outcome managedruntime.PullOutcome) AssetPullResult {
 	files := make([]PullDownloadedFile, 0, len(result.DownloadedFiles))
 	for _, file := range result.DownloadedFiles {
 		files = append(files, PullDownloadedFile{

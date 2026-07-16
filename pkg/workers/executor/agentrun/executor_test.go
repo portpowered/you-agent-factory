@@ -16,11 +16,11 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 type staticInferencer struct {
@@ -263,7 +263,7 @@ func TestAgentRunExecutor_ModelhostReadinessFailureSurfacesAgentRunModelNotReady
 	readinessErr := &modelhost.ReadinessError{
 		Snapshot: modelhost.ReadinessSnapshot{
 			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			ReadinessState: managedruntime.ReadinessStateMissing,
 			FailureClass:   modelhost.FailureClassMissingAssets,
 		},
 		Cause: modelhost.ErrRuntimeNotReady,

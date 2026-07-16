@@ -8,6 +8,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -86,21 +87,21 @@ type installedCacheInspectHost struct {
 
 func (installedCacheInspectHost) InspectReadiness(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.ReadinessSnapshot, error) {
 	return modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+		Identity:       modelhost.Identity{Name: modelName, Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateInstalled,
 	}, nil
 }
 
 func (missingCacheInspectHost) ResolveIdentity(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.Identity, error) {
-	return modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal}, nil
+	return modelhost.Identity{Name: modelName, Locality: managedruntime.LocalityLocal}, nil
 }
 
 func (missingCacheInspectHost) InspectReadiness(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (modelhost.ReadinessSnapshot, error) {
 	return modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: modelName, Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+		Identity:       modelhost.Identity{Name: modelName, Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateMissing,
+		LifecycleState: managedruntime.LifecycleStateNotInstalled,
 	}, nil
 }
 

@@ -4,6 +4,8 @@ package managedruntime
 import "errors"
 
 var (
+	// ErrNotFound reports that a requested model is absent from configuration.
+	ErrNotFound = errors.New("model not found")
 	// ErrMissing reports that invocation requires uninstalled runtime assets.
 	ErrMissing = errors.New("managed runtime missing")
 	// ErrLoading reports that invocation must wait for runtime preparation.
@@ -24,6 +26,64 @@ const (
 	ReadinessStateFailed      ReadinessState = "FAILED"
 	ReadinessStateUnsupported ReadinessState = "UNSUPPORTED"
 )
+
+// LifecycleState names the durable install/load position of a managed runtime.
+type LifecycleState string
+
+const (
+	LifecycleStateNotInstalled  LifecycleState = "NOT_INSTALLED"
+	LifecycleStateInstalling    LifecycleState = "INSTALLING"
+	LifecycleStateInstalled     LifecycleState = "INSTALLED"
+	LifecycleStateLoading       LifecycleState = "LOADING"
+	LifecycleStateLoaded        LifecycleState = "LOADED"
+	LifecycleStateNotApplicable LifecycleState = "NOT_APPLICABLE"
+)
+
+// PullOutcome classifies the source-agnostic result of an asset pull.
+type PullOutcome string
+
+const (
+	PullOutcomeAlreadyPresent        PullOutcome = "ALREADY_PRESENT"
+	PullOutcomeAlreadyReady          PullOutcome = "ALREADY_READY"
+	PullOutcomeInstalledSuccessfully PullOutcome = "INSTALLED_SUCCESSFULLY"
+	PullOutcomeSourceFetchFailed     PullOutcome = "SOURCE_FETCH_FAILED"
+	PullOutcomeStillLoading          PullOutcome = "STILL_LOADING"
+	PullOutcomeTimedOut              PullOutcome = "TIMED_OUT"
+	PullOutcomeUnsupportedRuntime    PullOutcome = "UNSUPPORTED_RUNTIME"
+)
+
+// Locality identifies whether a model executes locally or through a remote provider.
+type Locality string
+
+const (
+	LocalityLocal Locality = "LOCAL"
+	LocalityCloud Locality = "CLOUD"
+)
+
+// Operation describes one provider-neutral model capability.
+type Operation struct {
+	Name    string
+	Inputs  []OperationSlot
+	Outputs []OperationSlot
+}
+
+// OperationSlot describes one named input or output of a model operation.
+type OperationSlot struct {
+	Name         string
+	ContentTypes []string
+	Required     *bool
+}
+
+// Runtime is the model-owned readiness projection consumed by service and
+// transport adapters.
+type Runtime struct {
+	Identity            string
+	ReadinessState      ReadinessState
+	LifecycleState      LifecycleState
+	Locality            Locality
+	SupportedOperations []Operation
+	Diagnostics         map[string]string
+}
 
 // InvocationReadinessError exposes model readiness to consumers without
 // coupling them to a transport-specific error representation.
