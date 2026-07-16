@@ -12,11 +12,10 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
 
 // ResolveInferenceOperationBindings resolves supported operation input slots for
@@ -68,32 +67,6 @@ func ResolveInferenceOperationBindings(
 	return resolved, nil
 }
 
-// OperationBindingsFromGenerated maps authored OpenAPI operation bindings onto the
-// internal inference binding contract.
-func OperationBindingsFromGenerated(values *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {
-	if values == nil || len(*values) == 0 {
-		return nil
-	}
-	bindings := make([]interfaces.ModelOperationBinding, 0, len(*values))
-	for _, binding := range *values {
-		current := interfaces.ModelOperationBinding{
-			Slot:           strings.TrimSpace(binding.Slot),
-			Config:         contentcontract.PartsFromGenerated(binding.Config),
-			DefaultContent: contentcontract.PartsFromGenerated(binding.DefaultContent),
-		}
-		if binding.Selector != nil {
-			current.Selector = &interfaces.ModelOperationBindingSelector{
-				Slot:  stringValue(binding.Selector.Slot),
-				Label: stringValue(binding.Selector.Label),
-				Type:  stringValue(binding.Selector.Type),
-				Role:  stringValue(binding.Selector.Role),
-			}
-		}
-		bindings = append(bindings, current)
-	}
-	return bindings
-}
-
 // DirectInferenceWorkstationConfig builds a synthetic inference-run workstation
 // definition for direct model invocation using the same binding contract as
 // authored INFERENCE_RUN workstations.
@@ -136,19 +109,15 @@ func WorkContentFromInferenceOutput(raw string, operation workerconfig.ModelOper
 		return nil, nil
 	}
 
-	var content factoryapi.WorkContent
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &content); err == nil {
-		return orderWorkContentByOperationOutputs(contentcontract.PartsFromGenerated(&content), operation), nil
+		return orderWorkContentByOperationOutputs(contentcontract.SupportedParts(content), operation), nil
 	}
 	var envelope struct {
-		Content factoryapi.WorkContent `json:"content"`
+		Content []work.WorkContentPart `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && envelope.Content != nil {
-		return orderWorkContentByOperationOutputs(contentcontract.PartsFromGenerated(&envelope.Content), operation), nil
-	}
-	var parts []work.WorkContentPart
-	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil {
-		return orderWorkContentByOperationOutputs(parts, operation), nil
+		return orderWorkContentByOperationOutputs(contentcontract.SupportedParts(envelope.Content), operation), nil
 	}
 	if modelOperationHasOnlyTextOutputs(operation) {
 		return []work.WorkContentPart{{
@@ -338,11 +307,4 @@ func slotContentTypes(slot workerconfig.ModelOperationSlot) []string {
 		}
 	}
 	return types
-}
-
-func stringValue[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return strings.TrimSpace(string(*value))
 }

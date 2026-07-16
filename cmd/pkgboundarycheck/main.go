@@ -23,7 +23,9 @@ const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
 
 var protectedTransportIndependentDomainRoots = []string{
 	"pkg/factory",
+	"pkg/models",
 	"pkg/work",
+	"pkg/workers",
 }
 
 var factoryRetiredPackageRoots = []retiredPackageRoot{
@@ -79,7 +81,7 @@ type boundaryPolicy struct {
 	approvedProductPackageFamilies []string
 	migrationPackageExceptions     []migrationPackageException
 	generatedCodeExceptions        []generatedCodeException
-	factoryTransportExceptions     []string
+	domainTransportExceptions      []string
 }
 
 type migrationPackageException struct {
@@ -137,15 +139,34 @@ func defaultBoundaryPolicy() boundaryPolicy {
 		approvedProductPackageFamilies: slices.Clone(approvedProductPackageFamilies),
 		migrationPackageExceptions:     slices.Clone(documentedMigrationPackageExceptions),
 		generatedCodeExceptions:        slices.Clone(documentedGeneratedCodeExceptions),
-		factoryTransportExceptions:     slices.Clone(documentedFactoryTransportExceptions),
+		domainTransportExceptions:      slices.Clone(documentedDomainTransportExceptions),
 	}
 }
 
-// documentedFactoryTransportExceptions is a deletion inventory for the
-// remaining Factory-owned files that still adapt generated transport values.
-// New reverse dependencies are rejected even while these files migrate to
-// domain-owned inputs and transport mapping moves outward.
-var documentedFactoryTransportExceptions = []string{}
+// documentedDomainTransportExceptions is a deletion-only inventory for the
+// remaining model and worker files that still adapt generated transport values.
+// New reverse dependencies are rejected across every protected domain while
+// these exact files migrate to domain-owned inputs and outward transport mapping.
+var documentedDomainTransportExceptions = []string{
+	"pkg/models/assets/puller.go",
+	"pkg/models/host/catalog_host.go",
+	"pkg/models/host/contract.go",
+	"pkg/models/host/diagnostics.go",
+	"pkg/models/host/lease_policy.go",
+	"pkg/models/host/local_assets.go",
+	"pkg/models/host/supervisor.go",
+	"pkg/models/local/catalog.go",
+	"pkg/models/local/managed_runtime.go",
+	"pkg/models/local/puller.go",
+	"pkg/models/service/api.go",
+	"pkg/models/service/catalog.go",
+	"pkg/models/service/invoke.go",
+	"pkg/models/service/pull.go",
+	"pkg/workers/executor/agentrun/failure.go",
+	"pkg/workers/provider/parityfixtures/mode_parity.go",
+	"pkg/workers/provider/parityfixtures/suite.go",
+	"pkg/workers/provider/parityfixtures/transport.go",
+}
 
 type config struct {
 	root        string
@@ -159,7 +180,7 @@ type scanResult struct {
 	migrationShimFindings          []migrationShimFinding
 	applicationGraphImportFindings []applicationGraphImportFinding
 	handwrittenGeneratedFindings   []handwrittenGeneratedFinding
-	factoryTransportFindings       []factoryTransportImportFinding
+	domainTransportFindings        []domainTransportImportFinding
 }
 
 type retiredPackageRoot struct {
@@ -197,7 +218,7 @@ type applicationGraphImportFinding struct {
 	filePath    string
 }
 
-type factoryTransportImportFinding struct {
+type domainTransportImportFinding struct {
 	packagePath string
 	importPath  string
 	filePath    string
@@ -242,7 +263,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.migrationShimFindings) +
 		len(findings.applicationGraphImportFindings) +
 		len(findings.handwrittenGeneratedFindings) +
-		len(findings.factoryTransportFindings)
+		len(findings.domainTransportFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
@@ -259,7 +280,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
 	writeApplicationGraphImportFindings(stderr, findings.applicationGraphImportFindings)
 	writeHandwrittenGeneratedFindings(stderr, findings.handwrittenGeneratedFindings)
-	writeFactoryTransportImportFindings(stderr, findings.factoryTransportFindings)
+	writeDomainTransportImportFindings(stderr, findings.domainTransportFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -344,7 +365,7 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
-	result.factoryTransportFindings, err = scanFactoryTransportImports(repoRoot, policy.factoryTransportExceptions)
+	result.domainTransportFindings, err = scanDomainTransportImports(repoRoot, policy.domainTransportExceptions)
 	if err != nil {
 		return scanResult{}, err
 	}
@@ -364,8 +385,8 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	return result, nil
 }
 
-func scanFactoryTransportImports(repoRoot string, exceptions []string) ([]factoryTransportImportFinding, error) {
-	var findings []factoryTransportImportFinding
+func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainTransportImportFinding, error) {
+	var findings []domainTransportImportFinding
 	for _, domainRoot := range protectedTransportIndependentDomainRoots {
 		absoluteRoot := filepath.Join(repoRoot, filepath.FromSlash(domainRoot))
 		if _, err := os.Stat(absoluteRoot); err != nil {
@@ -402,7 +423,7 @@ func scanFactoryTransportImports(repoRoot string, exceptions []string) ([]factor
 			for _, importSpec := range parsedFile.Imports {
 				importPath, err := strconv.Unquote(importSpec.Path.Value)
 				if err == nil && strings.HasPrefix(importPath, transportImportPrefix) {
-					findings = append(findings, factoryTransportImportFinding{
+					findings = append(findings, domainTransportImportFinding{
 						packagePath: packagePath,
 						importPath:  importPath,
 						filePath:    filePath,
@@ -415,7 +436,7 @@ func scanFactoryTransportImports(repoRoot string, exceptions []string) ([]factor
 			return nil, fmt.Errorf("scan protected domain transport imports under %s: %w", domainRoot, err)
 		}
 	}
-	slices.SortFunc(findings, func(left, right factoryTransportImportFinding) int {
+	slices.SortFunc(findings, func(left, right domainTransportImportFinding) int {
 		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
 			return comparison
 		}
@@ -814,7 +835,7 @@ func writeApplicationGraphImportFindings(writer io.Writer, findings []applicatio
 	}
 }
 
-func writeFactoryTransportImportFindings(writer io.Writer, findings []factoryTransportImportFinding) {
+func writeDomainTransportImportFindings(writer io.Writer, findings []domainTransportImportFinding) {
 	for _, finding := range findings {
 		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited domain transport import: %s (%s)\n", finding.importPath, finding.filePath)
 		fmt.Fprintf(writer, "  domain owner: %s\n", finding.packagePath)

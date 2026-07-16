@@ -237,13 +237,13 @@ finish the named move, not ownership rationale for new product behavior.
 transport packages should own narrow contracts that startup injects instead of
 depending outward on the application graph.
 
-The guard also rejects new production imports from `pkg/factory/**` into
-`pkg/transports/**`. Generated OpenAPI values must be converted under
-`pkg/transports/mapping`, while Factory and Factory Session packages accept and
-return owner-defined contracts. The exact migration-file inventory in
-`cmd/pkgboundarycheck/main.go` is deletion-only: remove entries as the remaining
-definition and compatibility adapters move outward, and never add a new entry
-to make a reverse dependency pass.
+The guard rejects new production imports from `pkg/factory/**`, `pkg/work/**`,
+`pkg/workers/**`, and `pkg/models/**` into `pkg/transports/**`. Generated OpenAPI
+values must be converted under `pkg/transports/mapping`, while domain packages
+accept and return owner-defined contracts. The exact worker/model migration-file
+inventory in `cmd/pkgboundarycheck/main.go` is deletion-only: remove entries as
+the remaining compatibility adapters move outward, and never add a new entry to
+make a reverse dependency pass.
 Factory definition serialization returns a detached
 `pkg/factory/contracts.FactorySnapshot` and domain `FactoryVersion`. Read-model
 identity changes use snapshot operations that preserve unknown JSON fields;

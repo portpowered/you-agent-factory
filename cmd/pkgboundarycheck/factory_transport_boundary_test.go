@@ -11,7 +11,9 @@ func TestRunRejectsProtectedDomainTransportImports(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/models/catalog/transport.go", "catalog", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/work/content/generated.go", "content", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	writeGoImportFile(t, repoRoot, "pkg/workers/inference/generated.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent")
 	writeGoImportFile(t, repoRoot, "pkg/root/cli.go", "root", "github.com/portpowered/infinite-you/pkg/transports/cli")
 
 	stderr := &bytes.Buffer{}
@@ -22,8 +24,12 @@ func TestRunRejectsProtectedDomainTransportImports(t *testing.T) {
 	for _, want := range []string{
 		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/mapping (pkg/factory/runtime/transport.go)",
 		"domain owner: pkg/factory/runtime",
+		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/http/generated (pkg/models/catalog/transport.go)",
+		"domain owner: pkg/models/catalog",
 		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/http/generated (pkg/work/content/generated.go)",
 		"domain owner: pkg/work/content",
+		"prohibited domain transport import: github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent (pkg/workers/inference/generated.go)",
+		"domain owner: pkg/workers/inference",
 		"protected domain packages must not consume transport contracts or adapters",
 		"define the input at its domain owner and map generated values under pkg/transports/mapping",
 	} {
@@ -38,7 +44,9 @@ func TestRunAllowsProtectedDomainTransportImportsOnlyForTests(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/models/host/contract_test.go", "modelhost", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/work/content/content_test.go", "content", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	writeGoImportFile(t, repoRoot, "pkg/workers/inference/inference_test.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
 	writeGoImportFile(t, repoRoot, "pkg/work/content/contract.go", "content", "github.com/portpowered/infinite-you/pkg/work")
 
 	stderr := &bytes.Buffer{}
@@ -50,6 +58,25 @@ func TestRunAllowsProtectedDomainTransportImportsOnlyForTests(t *testing.T) {
 	stderr.Reset()
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
 		t.Fatal("run() error = nil, want retired Factory definition transport import rejected")
+	}
+}
+
+func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/models/host/contract.go", "modelhost", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	writeGoImportFile(t, repoRoot, "pkg/workers/executor/agentrun/failure.go", "agentrun", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want exact migration files allowed; stderr=%q", err, stderr.String())
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/workers/inference/inference.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/http/generated")
+	stderr.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
+		t.Fatal("run() error = nil, want migrated worker inference import rejected")
 	}
 }
 

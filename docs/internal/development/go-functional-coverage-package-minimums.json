@@ -761,6 +761,18 @@
       "minimum": 73.41
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent",
+      "minimum": 51.16
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics",
+      "minimum": 0.00
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference",
+      "minimum": 91.66
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen",
       "exception": {
         "kind": "measurement",
@@ -880,7 +892,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/inference",
-      "minimum": 61.74
+      "minimum": 60.44
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/mockworker",

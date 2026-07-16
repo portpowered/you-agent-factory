@@ -73,6 +73,36 @@ func TestWorkContentFromInferenceOutput_PreservesTextFallbackForTextOnlyOperatio
 	}
 }
 
+func TestWorkContentFromInferenceOutputAcceptsGeneratedUnionJSON(t *testing.T) {
+	t.Parallel()
+
+	var generatedPart factoryapi.WorkContentPart
+	if err := generatedPart.FromWorkJsonContentPart(factoryapi.WorkJsonContentPart{
+		Type: factoryapi.WorkContentPartTypeJSON,
+		Json: map[string]any{"voice": "alloy"},
+	}); err != nil {
+		t.Fatalf("build generated content: %v", err)
+	}
+	raw, err := json.Marshal(factoryapi.WorkContent{generatedPart})
+	if err != nil {
+		t.Fatalf("marshal generated content: %v", err)
+	}
+
+	got, err := WorkContentFromInferenceOutput(string(raw), workerconfig.ModelOperation{
+		Name: "TTS",
+		Outputs: []workerconfig.ModelOperationSlot{{
+			Name:         "metadata",
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("WorkContentFromInferenceOutput: %v", err)
+	}
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeJSON || string(got[0].JSON) != `{"voice":"alloy"}` {
+		t.Fatalf("content = %#v, want generated JSON mapped to canonical content", got)
+	}
+}
+
 func TestDirectAndSessionInferenceOutputShapingStayAligned(t *testing.T) {
 	t.Parallel()
 
@@ -107,22 +137,6 @@ func TestDirectAndSessionInferenceOutputShapingStayAligned(t *testing.T) {
 	}
 	if directContent[0].Type != sessionContent[0].Type || directContent[0].File != sessionContent[0].File {
 		t.Fatalf("direct = %#v session = %#v, want equivalent canonical output", directContent, sessionContent)
-	}
-}
-
-func TestOperationBindingsFromGenerated_MapsSelectorFields(t *testing.T) {
-	t.Parallel()
-
-	textType := factoryapi.ModelOperationContentTypeText
-	bindings := OperationBindingsFromGenerated(&[]factoryapi.WorkstationOperationBinding{{
-		Slot: "text",
-		Selector: &factoryapi.WorkstationOperationBindingSelector{
-			Label: stringPtr("utterance"),
-			Type:  &textType,
-		},
-	}})
-	if len(bindings) != 1 || bindings[0].Slot != "text" || bindings[0].Selector.Label != "utterance" {
-		t.Fatalf("bindings = %#v, want mapped selector", bindings)
 	}
 }
 
@@ -235,8 +249,4 @@ func inferenceBindingWorkstationFixture(workstationType string) *interfaces.Fact
 			},
 		},
 	}
-}
-
-func stringPtr(value string) *string {
-	return &value
 }

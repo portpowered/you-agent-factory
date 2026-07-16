@@ -24,6 +24,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
@@ -83,7 +84,7 @@ func (s *Service) InvokeModel(
 	}}
 	workstationDef := workerinference.DirectInferenceWorkstationConfig(
 		request.Operation,
-		workerinference.OperationBindingsFromGenerated(request.Bindings),
+		workerinferencemapping.OperationBindingsFromGenerated(request.Bindings),
 	)
 	resolvedBindings, err := workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {

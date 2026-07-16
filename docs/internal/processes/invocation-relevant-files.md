@@ -669,11 +669,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
   input even if the process-level `os.Stdin` is still a TTY.
-- `pkg/workers/inference/inference.go` resolves inference-run operation bindings,
-  maps direct invocation request bindings, builds the provider-neutral inference
-  request envelope, and shapes inference responses into ordered canonical
-  `WorkContentPart` output shared by direct model invocation and factory-session
-  execution paths.
+- `pkg/workers/inference/inference.go` resolves worker-owned inference-run
+  operation bindings, builds the provider-neutral request envelope, and shapes
+  canonical `WorkContentPart` output shared by direct model invocation and
+  Factory Session execution. Generated OpenAPI binding conversion belongs in
+  `pkg/transports/mapping/workerinference`; inference output parsing consumes the
+  Work-owned content shape and must not import generated or transport mapping
+  packages.
 - `pkg/transports/mapping/inference_failure.go` classifies inference readiness and
   execution failures into actionable customer-facing outcomes for missing model,
   loading model, unsupported operation, timeout, and runtime failure cases
