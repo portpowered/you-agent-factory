@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: layout command inverses stay colocated for undo/redo coverage.
+// biome-ignore lint/style/noExcessiveLinesPerFile: layout command inverses stay colocated for undo/redo coverage.
 import {
   factoryLayoutEdgeWaypoints,
   factoryLayoutWaypointArraysEqual,

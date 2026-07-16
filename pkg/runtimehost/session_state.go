@@ -198,10 +198,3 @@ func (h *Host) handleDefaultRuntimeStartFailure(
 	}
 	return fmt.Errorf("start runtime: %w", startErr)
 }
-
-func (h *Host) modelPullMetricsRecorder() ModelPullMetricsRecorder {
-	if h == nil || h.cfg == nil {
-		return nil
-	}
-	return h.cfg.ModelPullMetricsRecorder
-}

@@ -31,6 +31,21 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 			history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return recordedAt })
 			history.RecordSessionLifecycleFromFactoryConfig("session-recorded-js", config, 0, recordedAt)
 			if testCase.factoryState == interfaces.FactoryStateCompleted {
+				phaseStartedAt := recordedAt.Add(250 * time.Millisecond)
+				phaseCompletedAt := recordedAt.Add(750 * time.Millisecond)
+				history.RecordOrchestratorPhaseChanged(factoryevents.OrchestratorPhaseChangedInput{
+					SessionID:           "session-recorded-js",
+					OrchestratorKind:    factoryapi.JAVASCRIPT,
+					OrchestratorDialect: "workflow-v1",
+					PhaseID:             "phase-plan",
+					PhaseName:           "plan",
+					Source:              "runtime",
+					Tick:                1,
+					PhaseStatus:         factoryapi.COMPLETED,
+					StartedAt:           &phaseStartedAt,
+					CompletedAt:         &phaseCompletedAt,
+					ProgressSummary:     "plan completed",
+				}, phaseCompletedAt)
 				history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
 					SessionID:             "session-recorded-js",
 					OrchestratorKind:      factoryapi.JAVASCRIPT,
@@ -68,6 +83,31 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 			assertRecordedJavaScriptLifecycle(t, loaded.Events, testCase.wantStatus, testCase.failure)
 			assertRecordingOmitsRawJavaScriptInternals(t, loaded)
 		})
+	}
+}
+
+func TestRecordedRuntimeEventContract_AppendedEventRetainsCanonicalTimestamp(t *testing.T) {
+	t.Parallel()
+
+	recordedAt := time.Date(2026, time.July, 12, 9, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return recordedAt })
+	history.AppendRecordedEvent(factoryapi.FactoryEvent{
+		Id:   "factory-event/runtime-bridge/1",
+		Type: factoryapi.FactoryEventTypeScriptRequest,
+		Context: factoryapi.FactoryEventContext{
+			EventTime: recordedAt,
+		},
+	})
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("appended event count = %d, want 1", len(events))
+	}
+	if events[0].Id != "factory-event/runtime-bridge/1" || events[0].Type != factoryapi.FactoryEventTypeScriptRequest {
+		t.Fatalf("appended event identity = %#v, want recorded runtime event", events[0])
+	}
+	if got, want := events[0].Context.EventTime, recordedAt.UTC(); !got.Equal(want) || got.Location() != time.UTC {
+		t.Fatalf("appended event time = %s (%s), want %s (UTC)", got, got.Location(), want)
 	}
 }
 
@@ -113,6 +153,7 @@ func assertRecordedJavaScriptLifecycle(t *testing.T, recorded []factoryapi.Facto
 	t.Helper()
 	var started *factoryapi.SessionStartedEventPayload
 	var completed *factoryapi.SessionCompletedEventPayload
+	var phaseChanged *factoryapi.OrchestratorPhaseChangedEventPayload
 	for _, event := range recorded {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeSessionStarted:
@@ -127,6 +168,12 @@ func assertRecordedJavaScriptLifecycle(t *testing.T, recorded []factoryapi.Facto
 				t.Fatalf("decode session completed: %v", err)
 			}
 			completed = &payload
+		case factoryapi.FactoryEventTypeOrchestratorPhaseChanged:
+			payload, err := event.Payload.AsOrchestratorPhaseChangedEventPayload()
+			if err != nil {
+				t.Fatalf("decode orchestrator phase changed: %v", err)
+			}
+			phaseChanged = &payload
 		}
 	}
 	if started == nil || started.SourceRef == nil || *started.SourceRef != "workflows/main.js" || started.SourceHash == nil || *started.SourceHash != "sha256:source" {
@@ -140,6 +187,11 @@ func assertRecordedJavaScriptLifecycle(t *testing.T, recorded []factoryapi.Facto
 	}
 	if wantFailure != "" && (completed.FailureDetail == nil || completed.FailureDetail.Message != wantFailure) {
 		t.Fatalf("failure detail = %#v, want %q", completed.FailureDetail, wantFailure)
+	}
+	if wantStatus == factoryapi.FactorySessionDurableLifecycleStatusSucceeded &&
+		(phaseChanged == nil || phaseChanged.PhaseStatus != factoryapi.COMPLETED ||
+			phaseChanged.ProgressSummary == nil || *phaseChanged.ProgressSummary != "plan completed") {
+		t.Fatalf("orchestrator phase change = %#v, want completed plan progress", phaseChanged)
 	}
 }
 

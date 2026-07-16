@@ -9,13 +9,16 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +45,7 @@ func TestCompatibilityFacadesShareFakeDurableExecution(t *testing.T) {
 		t.Fatalf("compose fake execution: %v", err)
 	}
 	core := runtimehost.NewCore(&runtimehost.Config{}, "", zap.NewNop(), nil, nil, nil,
-		runtimehost.LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, execution)
+		runtimehost.LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, execution, nil)
 	host := runtimehost.NewHostFromCore(core)
 	svc := service.NewFactoryServiceFromRuntimeHostCore(core)
 	if host.DurableExecutionService() != execution || svc.DurableExecutionService() != execution {
@@ -80,7 +83,7 @@ func TestBuildCore_RejectsRecordAndReplayTogether(t *testing.T) {
 		Logger:     zap.NewNop(),
 	})
 
-	core, err := composebridge.BuildCore(ctx, cfg)
+	core, err := buildCoreForTest(ctx, cfg)
 	if core != nil {
 		t.Fatal("expected BuildCore to return nil core for conflicting record/replay paths")
 	}
@@ -98,27 +101,12 @@ func TestBuildCore_RejectsMissingFactoryConfig(t *testing.T) {
 		Logger: zap.NewNop(),
 	})
 
-	core, err := composebridge.BuildCore(ctx, cfg)
+	core, err := buildCoreForTest(ctx, cfg)
 	if core != nil {
 		t.Fatal("expected BuildCore to return nil core without factory.json")
 	}
 	if err == nil {
 		t.Fatal("expected BuildCore to fail without factory.json")
-	}
-}
-
-func TestBuildCore_RejectsMissingWorkerApplicationBeforeFactoryLoad(t *testing.T) {
-	t.Parallel()
-
-	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
-		Dir:    t.TempDir(),
-		Logger: zap.NewNop(),
-	})
-	if core != nil {
-		t.Fatal("expected BuildCore to return nil core")
-	}
-	if err == nil || !strings.Contains(err.Error(), "worker application is required") {
-		t.Fatalf("BuildCore error = %v, want missing worker application", err)
 	}
 }
 
@@ -136,7 +124,7 @@ func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	})
 
-	core, err := composebridge.BuildCore(ctx, cfg)
+	core, err := buildCoreForTest(ctx, cfg)
 	if err != nil {
 		t.Fatalf("BuildCore: %v", err)
 	}
@@ -169,13 +157,13 @@ func TestBuildCore_ComposesExplicitlyDisabledPersistence(t *testing.T) {
 
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	core, err := composebridge.BuildCore(context.Background(), composedRuntimeConfig(t, &runtimehost.Config{
+	core, err := buildCoreForTest(context.Background(), &runtimehost.Config{
 		Dir:                                     dir,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	}))
+	})
 	if err != nil {
 		t.Fatalf("BuildCore: %v", err)
 	}
@@ -196,13 +184,13 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
 		t.Fatalf("write blocked root: %v", err)
 	}
-	core, err := composebridge.BuildCore(context.Background(), composedRuntimeConfig(t, &runtimehost.Config{
+	core, err := buildCoreForTest(context.Background(), &runtimehost.Config{
 		Dir:                                     dir,
 		ExecutionBaseDir:                        blockedRoot,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	}))
+	})
 	if core != nil {
 		t.Fatal("BuildCore returned a core for unavailable persistence")
 	}
@@ -210,4 +198,70 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 	if !errors.As(err, &validation) || validation.Field != "persistence" {
 		t.Fatalf("BuildCore error = %#v, want wrapped persistence ValidationError", err)
 	}
+}
+
+func buildCoreForTest(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return nil, err
+		}
+		cfg.WorkerApplication = components
+	}
+	root, err := service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
+	if err != nil {
+		return nil, err
+	}
+	if err := service.EnsureBackendScopeForCompose(cfg, root.BaseLogger); err != nil {
+		return nil, err
+	}
+	load, err := service.LoadFactoryConfigForStartup(cfg, root)
+	if err != nil {
+		return nil, err
+	}
+	clock := composebridge.ClockForCompose(cfg, load)
+	sessions := factorysessions.NewRegistry()
+	localModels, err := composebridge.NewLocalModelDomain(cfg)
+	if err != nil {
+		return nil, err
+	}
+	runtimeBuild, err := composebridge.NewRuntimeBuildService(cfg, clock, root.BaseLogger, &localModels, sessions)
+	if err != nil {
+		return nil, err
+	}
+	projectRoot := strings.TrimSpace(cfg.ExecutionBaseDir)
+	if projectRoot == "" {
+		projectRoot = strings.TrimSpace(cfg.Dir)
+	}
+	if projectRoot == "" {
+		projectRoot = strings.TrimSpace(root.FactoryRootDir)
+	}
+	persistence, err := factorysessionexecution.PersistenceChoiceForPolicy(cfg.DurableSessionPersistencePolicy, projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	durableExecution, err := factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{
+			ProjectRoot: projectRoot, Provider: cfg.ProviderOverride,
+			ProviderExecutor: providerexecution.NewExecutor(cfg.ProviderOverride),
+			Persistence:      persistence, Clock: clock,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	recorder := durableExecution.(interface {
+		RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error
+	})
+	runtimeBuild, err = runtimeBuild.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
+	if err != nil {
+		return nil, err
+	}
+	hostedWorkers := cfg.WorkerApplication.Hosted
+	return composebridge.ComposeCore(ctx, cfg, root, composebridge.Collaborators{
+		Sessions: sessions, LocalModels: localModels, RuntimeBuild: runtimeBuild,
+		WorkersScheduler: composebridge.NewWorkersScheduler(cfg, clock, root.BaseLogger, hostedWorkers),
+		DurableExecution: durableExecution, Persistence: persistence,
+	}, load, clock, hostedWorkers)
 }

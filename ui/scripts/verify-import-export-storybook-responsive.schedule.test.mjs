@@ -191,7 +191,7 @@ describe("provider-session detail responsive schedule", () => {
     );
 
     expect(providerSessionStory?.id).toBe(
-      "you-agent-factory-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+      "you-agent-factory-current-selection-provider-session-detail-panel--mixed-transcript",
     );
     expect(providerSessionStory?.dialogName).toBeUndefined();
     expect(viewportChecks).toEqual([

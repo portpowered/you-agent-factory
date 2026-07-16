@@ -28,6 +28,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
@@ -149,6 +151,55 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	}
 	svc.registerLiveSession(defaultFactorySessionID, handle, target, true)
 	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
+}
+
+func newLocalModelResourceLimiter() *localModelResourceLimiter {
+	return localmodels.NewResourceLimiter(localModelHooks())
+}
+
+func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
+	manager, err := localmodels.NewManagedRuntime(localmodels.ManagedRuntimeDependencies{
+		AssetPuller: assetPuller, Runtime: runtime, Hooks: localModelHooks(),
+	})
+	if err != nil {
+		return nil
+	}
+	return manager
+}
+
+func attachModelServiceForTest(t *testing.T, svc *FactoryService) {
+	t.Helper()
+	if svc == nil {
+		t.Fatal("attach model service: factory service is required")
+	}
+	puller := svc.modelAssets
+	if puller == nil {
+		puller = localmodels.NewAssetPuller(t.TempDir())
+		svc.modelAssets = puller
+	}
+	host := svc.modelHost()
+	if host == nil {
+		gateway := modelhost.NewLocalAssetGateway(puller)
+		var err error
+		host, err = modelhost.NewHost(modelhost.Dependencies{
+			AssetPuller: gateway, CacheInspector: gateway,
+			ProcessLauncher: modelhost.DefaultProcessLauncher(),
+		})
+		if err != nil {
+			t.Fatalf("NewHost: %v", err)
+		}
+	}
+	modelAPI, err := modelsservice.NewService(modelsservice.Dependencies{
+		RuntimeConfig: svc.currentRuntimeConfig, ModelHost: host,
+		ModelAssetPuller: puller, Logger: svc.logger,
+		ModelPullMetrics:        modelPullMetricsRecorderForService(svc.modelPullMetricsRecorder()),
+		ModelInvocationExecutor: svc.modelInvocationExecutor,
+		FactoryRunnerID:         svc.factoryRunnerID(),
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	svc.modelService = modelAPI
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -1181,17 +1232,19 @@ func cleanResolvedPath(path string) string {
 
 func newServiceTestSupervisedModelHost(t *testing.T, puller modelAssetPuller, launcher modelhost.ProcessLauncher) modelhost.Host {
 	t.Helper()
-	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-		Supervisor: modelhost.SupervisorConfig{
-			ReadinessTimeout:    500 * time.Millisecond,
-			HealthCheckInterval: 10 * time.Millisecond,
-			ProcessLauncher:     launcher,
-			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
-		},
-	})
-	if host == nil {
-		t.Fatal("model host = nil")
+	gateway := modelhost.NewLocalAssetGateway(puller)
+	host, err := modelhost.NewHost(modelhost.Dependencies{
+		AssetPuller: gateway, CacheInspector: gateway, ProcessLauncher: launcher,
+		Options: modelhost.Options{
+			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+			Supervisor: modelhost.SupervisorConfig{
+				ReadinessTimeout:    500 * time.Millisecond,
+				HealthCheckInterval: 10 * time.Millisecond,
+				HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+			},
+		}})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
 	}
 	return host
 }
@@ -1359,6 +1412,14 @@ func TestNormalizeInvocationBootstrapConfig_ForcesNoServerShape(t *testing.T) {
 	if got.WorkFile != "" {
 		t.Fatalf("WorkFile = %q, want empty", got.WorkFile)
 	}
+}
+
+func BuildInvocationBootstrap(ctx context.Context, cfg *FactoryServiceConfig) (*InvocationBootstrap, error) {
+	svc, err := BuildFactoryService(ctx, NormalizeInvocationBootstrapConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return NewInvocationBootstrap(svc)
 }
 
 func TestBuildInvocationBootstrap_LeavesNoFactoryAPIServerListener(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -73,6 +74,24 @@ func TestCommandRunnerOverrideForMode_UnmatchedPassthroughDelegatesToNextRunner(
 	}
 	if result.ExitCode != 0 || string(result.Stdout) != "service-harness-passthrough" {
 		t.Fatalf("result = %#v, want service harness passthrough output", result)
+	}
+}
+
+func TestRuntimeBuildDefensiveConstructionBoundaries(t *testing.T) {
+	t.Parallel()
+
+	if err := applyOperatorDefaultsToLoadedConfig(operatorconfig.ResolvedDefaults{}, nil); err != nil {
+		t.Fatalf("applyOperatorDefaultsToLoadedConfig(nil) error = %v", err)
+	}
+	var svc *Service
+	if configured, err := svc.WithPetriMutationRecorder(nil); configured != nil || err == nil {
+		t.Fatalf("nil service WithPetriMutationRecorder() = (%v, %v), want construction error", configured, err)
+	}
+	if _, err := svc.Build(context.Background(), SessionBuildSpec{}); err == nil {
+		t.Fatal("nil service Build() succeeded")
+	}
+	if _, err := svc.BuildSpec(context.Background(), SessionSpecInput{}); err == nil {
+		t.Fatal("nil service BuildSpec() succeeded")
 	}
 }
 

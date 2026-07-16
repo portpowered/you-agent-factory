@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: this projection keeps canonical factory graph mapping rules together.
+// biome-ignore lint/style/noExcessiveLinesPerFile: this projection keeps canonical factory graph mapping rules together.
 import type {
   DashboardEdgeOutcomeKind,
   DashboardPlaceKind,

@@ -136,7 +136,7 @@ export const storyChecks = [
         page,
         viewport,
       }),
-    id: "you-agent-factory-current-selection-provider-session-detail-panel--timestamp-prefixed-session-success",
+    id: "you-agent-factory-current-selection-provider-session-detail-panel--mixed-transcript",
     label: "current selection provider-session success",
   },
   {

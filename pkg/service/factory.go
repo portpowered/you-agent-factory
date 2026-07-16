@@ -164,7 +164,6 @@ type FactoryService struct {
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
-	modelInitOnce            sync.Once
 	durableExecution         factorysessionexecution.Service
 }
 
@@ -228,7 +227,7 @@ func composePetriRecordingRuntimeBuild(
 	if !ok {
 		return nil, fmt.Errorf("compose factory core: durable execution owner does not record Petri mutations")
 	}
-	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations), nil
+	return build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)
@@ -419,9 +418,9 @@ type FactoryServiceConfig struct {
 	// factory/sessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
 	SessionGateway sessionGateway
-	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.
-	// Tests use this to assert model transport methods delegate without running
-	// the full managed-runtime pipeline.
+	// ModelAPI supplies the model collaborator for direct compatibility builds.
+	// The canonical Wire graph constructs the production model service; direct
+	// service callers may inject an already-built boundary for focused tests.
 	ModelAPI apisurface.ModelAPI
 	// ModelAssets, when non-nil, replaces the default localmodels.AssetPuller
 	// collaborator wired at service construction. Tests use this to assert

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: typed factory-session transport helpers stay grouped around one API surface.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: typed factory-session transport helpers stay grouped around one API surface.
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
 import {

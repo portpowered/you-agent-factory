@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -110,7 +111,10 @@ func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
 	}
 	localModels := input.PrefetchedLocalModels
 	if localModels.Manager == nil {
-		localModels = NewLocalModelDomain(input.Config)
+		localModels, err = modelhost.NewLocalDomain(LocalModelDomainDependencies(input.Config))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var workerOpts []factory.FactoryOption

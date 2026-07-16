@@ -27,7 +27,7 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     readyInvokeHost{},
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
@@ -65,7 +65,7 @@ func TestService_InvokeModel_ReturnsNotFoundWhenModelDoesNotExist(t *testing.T) 
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, &interfaces.FactoryConfig{Name: "factory"})
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 	})
 
@@ -79,7 +79,7 @@ func TestService_InvokeModel_ReturnsManagedRuntimeMissingWhenCacheNotReady(t *te
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     missingCacheInspectHost{},
 	})
@@ -98,11 +98,9 @@ func TestService_InvokeModel_ReturnsManagedRuntimeMissingWhenCacheNotReady(t *te
 func TestService_InvokeModel_ReturnsUnavailableWhenRuntimeMissing(t *testing.T) {
 	t.Parallel()
 
-	svc := modelsservice.New(modelsservice.Dependencies{})
-
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
-	if err == nil || !strings.Contains(err.Error(), "runtime is not available") {
-		t.Fatalf("InvokeModel error = %v, want runtime unavailable", err)
+	svc, err := modelsservice.NewService(modelsservice.Dependencies{})
+	if svc != nil || !errors.Is(err, modelsservice.ErrInvalidDependencies) {
+		t.Fatalf("NewService = (%v, %v), want missing runtime construction error", svc, err)
 	}
 }
 
@@ -110,19 +108,12 @@ func TestService_InvokeModel_ReturnsErrorWhenExecutorMissing(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc, err := modelsservice.NewService(modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     readyInvokeHost{},
 	})
-
-	_, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
-		Operation: "TTS",
-		Content: &factoryapi.WorkContent{
-			mustGeneratedInvokeTextPart(t, "hello world"),
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "model invocation executor is not configured") {
-		t.Fatalf("InvokeModel error = %v, want executor missing", err)
+	if svc != nil || !errors.Is(err, modelsservice.ErrInvalidDependencies) || !strings.Contains(err.Error(), "model asset puller") {
+		t.Fatalf("NewService = (%v, %v), want missing required collaborator", svc, err)
 	}
 }
 
@@ -132,7 +123,7 @@ func TestService_InvokeModel_LogsInvocationReadiness(t *testing.T) {
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	core, logs := observer.New(zapcore.DebugLevel)
 	logger := zap.New(core)
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     missingCacheInspectHost{},
 		Logger:        logger,
@@ -186,7 +177,7 @@ func TestService_InvokeModel_PropagatesCancellationAndDeadlines(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := tt.context(t)
 			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-			svc := modelsservice.New(modelsservice.Dependencies{
+			svc := mustConstructModelService(t, modelsservice.Dependencies{
 				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 				ModelHost:     readyInvokeHost{},
 				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
@@ -246,7 +237,7 @@ func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testin
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-			svc := modelsservice.New(modelsservice.Dependencies{
+			svc := mustConstructModelService(t, modelsservice.Dependencies{
 				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 				ModelHost:     readyInvokeHost{},
 				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
@@ -268,7 +259,7 @@ func TestService_InvokeModel_ReturnsUnsupportedModeWhenAudioStreamMissingOutput(
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	mode := factoryapi.AUDIOSTREAM
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:     readyInvokeHost{},
 		ModelInvocationExecutor: func(_ *factoryconfig.LoadedFactoryConfig, _ *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
@@ -296,7 +287,7 @@ func TestService_InvokeModel_UsesFactoryRunnerID(t *testing.T) {
 
 	runtimeCfg := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	var capturedRunnerID string
-	svc := modelsservice.New(modelsservice.Dependencies{
+	svc := mustConstructModelService(t, modelsservice.Dependencies{
 		RuntimeConfig:   func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 		ModelHost:       readyInvokeHost{},
 		FactoryRunnerID: "runner-42",

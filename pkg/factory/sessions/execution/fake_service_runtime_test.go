@@ -1096,7 +1096,7 @@ func testExecutionServiceProviders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProjectPersistence: %v", err)
 	}
-	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence})
+	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence, Clock: durableFixedClock{now: time.Now()}})
 	if err != nil {
 		t.Fatalf("NewExecutionService(runtime): %v", err)
 	}
@@ -1120,12 +1120,32 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 	t.Helper()
 	projectRoot := t.TempDir()
 	testApplicationPersistencePolicies(t, projectRoot)
+	testExecutionServiceRequiredPersistenceDependencies(t, projectRoot)
+	testExecutionServiceDisabledPersistence(t, projectRoot)
+	testExecutionServiceInvalidPersistenceChoices(t, projectRoot)
+}
+
+func testExecutionServiceRequiredPersistenceDependencies(t *testing.T, projectRoot string) {
+	t.Helper()
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
+		ProjectRoot: projectRoot,
+		Persistence: DisabledPersistence(),
+	}); err == nil {
+		t.Fatal("NewExecutionService(runtime without clock) error = nil, want validation error")
+	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "clock" {
+		t.Fatalf("runtime without clock error = %#v, want clock ValidationError", err)
+	}
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot}); err == nil {
 		t.Fatal("NewExecutionService(runtime without persistence choice) error = nil, want validation error")
 	}
+}
+
+func testExecutionServiceDisabledPersistence(t *testing.T, projectRoot string) {
+	t.Helper()
 	disabled, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: DisabledPersistence(),
+		Clock:       durableFixedClock{now: time.Now()},
 	})
 	if err != nil {
 		t.Fatalf("NewExecutionService(runtime with disabled persistence): %v", err)
@@ -1137,15 +1157,21 @@ func testExecutionServicePersistenceChoices(t *testing.T) {
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: ChildExecutorModeLive,
 		Persistence:       DisabledPersistence(),
+		Clock:             durableFixedClock{now: time.Now()},
 	}); err == nil {
 		t.Fatal("NewExecutionService(live runtime without provider) error = nil, want validation error")
 	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "runtime.childExecutorMode" {
 		t.Fatalf("live runtime without provider error = %#v, want runtime.childExecutorMode ValidationError", err)
 	}
+}
+
+func testExecutionServiceInvalidPersistenceChoices(t *testing.T, projectRoot string) {
+	t.Helper()
 	contradictory := PersistenceChoice{store: runtimepersist.DirectoryStore{Dir: t.TempDir()}, disabled: true}
 	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{
 		ProjectRoot: projectRoot,
 		Persistence: contradictory,
+		Clock:       durableFixedClock{now: time.Now()},
 	}); err == nil {
 		t.Fatal("NewExecutionService(runtime with contradictory persistence) error = nil, want validation error")
 	} else if validation, ok := err.(*ValidationError); !ok || validation.Field != "persistence" {
@@ -1421,7 +1447,7 @@ func newJavaScriptRuntimeService(t *testing.T) *JavaScriptRuntimeService {
 
 	service, err := NewExecutionService(
 		ExecutionProviderJavaScriptRuntime,
-		ServiceConfig{ProjectRoot: t.TempDir(), Persistence: DisabledPersistence()},
+		ServiceConfig{ProjectRoot: t.TempDir(), Persistence: DisabledPersistence(), Clock: durableFixedClock{now: time.Now()}},
 	)
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)

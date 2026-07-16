@@ -103,12 +103,18 @@ func validFixture(t *testing.T) *buildFixture {
 	if err != nil {
 		t.Fatalf("NewExecutionService() error = %v", err)
 	}
+	workerProvider, err := runtimebuild.New(runtimebuild.Config{}, fixedClock{}, zap.NewNop(), func(context.Context, runtimebuild.SessionBuildSpec) (any, error) {
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatalf("runtimebuild.New() error = %v", err)
+	}
 	fixture := &buildFixture{
 		persistence: &memoryStore{},
 		modelWorkers: phasedModelWorkerServices{
 			Models:         &modelservice.Service{},
 			Workers:        workersservice.New(workersservice.Config{}),
-			WorkerProvider: runtimebuild.New(runtimebuild.Config{}, fixedClock{}, zap.NewNop(), nil),
+			WorkerProvider: workerProvider,
 		},
 		sessions: phasedFactorySessionServices{
 			FactoryDefinition: &factorydefinition.Service{},

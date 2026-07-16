@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -74,6 +75,90 @@ func TestRootRunInjectedProviderCommandRunner(t *testing.T) {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}
 	assertRootRunProviderRequest(t, providerWorkDir, runner.LastRequest())
+	assertRootRunSessionReloadsThroughRuntimeMCP(t, factoryDir, runner)
+}
+
+func TestRootRunPersistenceConstructionFailurePreventsProviderDispatch(t *testing.T) {
+	factoryDir, _ := scaffoldRootRunProviderFactory(t)
+	blockedPersistenceRoot := filepath.Join(factoryDir, ".you-agent-factory")
+	if err := os.WriteFile(blockedPersistenceRoot, []byte("not a directory"), 0o600); err != nil {
+		t.Fatalf("write blocked persistence root: %v", err)
+	}
+	runner := support.NewRecordingCommandRunner(string(support.CursorProviderSuccessStdout(rootRunProviderResult)))
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := root.ExitSuccess
+	support.WithWorkingDirectory(t, factoryDir, func() {
+		code = root.Run(root.Input{
+			Args: []string{
+				"you", "run", "--factory", filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+				"--no-record", rootRunPrompt,
+			},
+			Env:     isolatedRootRunEnvironment(t.TempDir()),
+			Stdin:   strings.NewReader(""),
+			Stdout:  &stdout,
+			Stderr:  &stderr,
+			Context: context.Background(),
+		}, root.Dependencies{GraphBuilder: functionalEdgeGraphBuilder{edges: wire.FunctionalEdges{
+			ProviderCommandRunner: runner,
+		}}})
+	})
+
+	if code != root.ExitFailure {
+		t.Fatalf("root.Run() exit code = %d, want %d", code, root.ExitFailure)
+	}
+	for _, want := range []string{"construct local-run application graph", "compose durable session persistence", "initialize durable session persistence directory"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr = %q, want actionable context %q", stderr.String(), want)
+		}
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want no terminal result before construction succeeds", stdout.String())
+	}
+	if runner.CallCount() != 0 {
+		t.Fatalf("provider runner call count = %d, want zero before initializer lifecycle", runner.CallCount())
+	}
+}
+
+func assertRootRunSessionReloadsThroughRuntimeMCP(
+	t *testing.T,
+	projectRoot string,
+	runner *support.RecordingCommandRunner,
+) {
+	t.Helper()
+	input := strings.NewReader(
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"root-run-restart-test","version":"test"}}}` + "\n" +
+			`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"you.factory_session.get","arguments":{"sessionId":"~default"}}}` + "\n" +
+			`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"you.factory_session.get_result","arguments":{"sessionId":"~default","mode":"partial"}}}` + "\n" +
+			`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"you.factory_session.read_events","arguments":{"sessionId":"~default"}}}` + "\n",
+	)
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	code := root.Run(root.Input{
+		Args: []string{
+			"you", "mcp", "serve", "--runtime", "--project-root", projectRoot,
+		},
+		Env:     isolatedRootRunEnvironment(t.TempDir()),
+		Stdin:   input,
+		Stdout:  &output,
+		Stderr:  &diagnostics,
+		Context: context.Background(),
+	}, root.Dependencies{})
+	if code != root.ExitSuccess {
+		t.Fatalf("restart MCP exit code = %d, want %d; stdout=%q stderr=%q", code, root.ExitSuccess, output.String(), diagnostics.String())
+	}
+	for _, want := range []string{
+		`"id":2`, `"id":3`, `"id":4`, `~default`, `SUCCEEDED`, `FINAL`,
+		`SESSION_COMPLETED`, rootRunProviderResult,
+	} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("restart MCP output = %q, want %q", output.String(), want)
+		}
+	}
+	if runner.CallCount() != 1 {
+		t.Fatalf("restart provider runner call count = %d, want persisted read without redispatch", runner.CallCount())
+	}
 }
 
 func scaffoldRootRunProviderFactory(t *testing.T) (string, string) {

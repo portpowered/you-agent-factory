@@ -13,7 +13,7 @@ import (
 
 func TestInspectReadiness_ReportsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
-	host := NewCatalogHost(stubAssetGateway{
+	host := mustNewCatalogHost(t, stubAssetGateway{
 		byModel: map[string]CacheInspection{
 			"OMNIVOICE_Q4_K_M": {
 				Supported:          true,

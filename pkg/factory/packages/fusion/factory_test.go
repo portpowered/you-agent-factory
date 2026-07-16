@@ -11,6 +11,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -160,7 +161,7 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 		t.Fatalf("construct worker application: %v", err)
 	}
 
-	builder := runtimebuild.New(
+	builder, err := runtimebuild.New(
 		runtimebuild.Config{
 			ApplyOperatorDefaults: true,
 			WorkerApplication:     workerApplication,
@@ -169,12 +170,15 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 				WorkerModel:         "gpt-5",
 			},
 		},
-		nil,
+		factory.EnsureClock(nil),
 		zap.NewNop(),
 		func(context.Context, runtimebuild.SessionBuildSpec) (any, error) {
 			return struct{}{}, nil
 		},
 	)
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
 	spec, err := builder.BuildSpec(context.Background(), runtimebuild.SessionSpecInput{
 		Dir:              resolution.FactoryDir,
 		FolderPath:       resolution.FactoryDir,

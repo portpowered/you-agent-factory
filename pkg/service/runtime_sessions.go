@@ -2152,7 +2152,31 @@ func (fs *FactoryService) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
-	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
+	result, err := fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
+	if err != nil {
+		return result, err
+	}
+	recorder, ok := fs.durableExecution.(interface {
+		RecordPetriSessionCompletion(string, factorysessionexecution.PetriSessionCompletion) error
+	})
+	if !ok {
+		return result, nil
+	}
+	completion := factorysessionexecution.PetriSessionCompletion{
+		Status:        factorysessionexecution.LifecycleStatusSucceeded,
+		PrimaryResult: result.PrimaryResult,
+	}
+	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+		completion.Status = factorysessionexecution.LifecycleStatusFailed
+		completion.Failure = &factorysessionexecution.FailureSummary{
+			Reason:  result.ErrorCode,
+			Message: result.Message,
+		}
+	}
+	if err := recorder.RecordPetriSessionCompletion(sessionID, completion); err != nil {
+		return result, fmt.Errorf("record factory session invocation completion: %w", err)
+	}
+	return result, nil
 }
 
 func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvoker {

@@ -2,6 +2,7 @@ package wire
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -33,27 +34,31 @@ func BuildModelInvocation(ctx context.Context, request modelscli.InvocationReque
 		cfg.RuntimeLogDir = defaultpaths.RuntimeLogsRoot(request.HomeDir)
 		cfg.RuntimeMetricsDir = defaultpaths.RuntimeMetricsRoot(request.HomeDir)
 	}
-	bootstrap, err := service.BuildInvocationBootstrap(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+	runner, err := buildInvocationRunner(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
-	return &modelInvocationRunner{bootstrap: bootstrap}, nil
+	modelRunner, ok := runner.(modelscli.InvocationRunner)
+	if !ok {
+		return nil, fmt.Errorf("build model invocation: shared invocation runner does not implement model invocation")
+	}
+	return &modelInvocationRunner{runner: modelRunner}, nil
 }
 
 type modelInvocationRunner struct {
-	bootstrap *service.InvocationBootstrap
+	runner modelscli.InvocationRunner
 }
 
-func (r *modelInvocationRunner) Run(ctx context.Context) error { return r.bootstrap.Run(ctx) }
+func (r *modelInvocationRunner) Run(ctx context.Context) error { return r.runner.Run(ctx) }
 
 func (r *modelInvocationRunner) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	return r.bootstrap.Service.InvokeModel(ctx, modelName, request)
+	return r.runner.InvokeModel(ctx, modelName, request)
 }
 
 func (r *modelInvocationRunner) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	return r.bootstrap.GetCurrentFactoryForSession(ctx, sessionID)
+	return r.runner.GetCurrentFactoryForSession(ctx, sessionID)
 }
 
 func (r *modelInvocationRunner) CloseFactorySession(ctx context.Context, sessionID string) error {
-	return r.bootstrap.CloseFactorySession(ctx, sessionID)
+	return r.runner.CloseFactorySession(ctx, sessionID)
 }

@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard selection resolution keeps graph, worker, and work-item routing in one module.
+// biome-ignore lint/style/noExcessiveLinesPerFile: dashboard selection resolution keeps graph, worker, and work-item routing in one module.
 import type {
   DashboardActiveExecution,
   DashboardRuntimeWorkstationRequest,

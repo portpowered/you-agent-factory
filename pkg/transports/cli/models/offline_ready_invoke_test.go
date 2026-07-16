@@ -125,7 +125,9 @@ func installOfflineReadyLocalModelBootstrapFixture(t *testing.T) (factoryDir str
 	factoryfixtures.WriteFactoryJSON(t, factoryDir, offlineReadyLocalModelFactoryConfig(healthServer.URL))
 
 	augmentModelsInvokeBootstrapServiceConfig = func(cfg *service.FactoryServiceConfig) {
-		service.ApplyInvocationBootstrapLocalModelTestFixture(cfg, healthServer.URL, runtime, puller)
+		if err := service.ApplyInvocationBootstrapLocalModelTestFixture(cfg, healthServer.URL, runtime, puller); err != nil {
+			t.Fatalf("ApplyInvocationBootstrapLocalModelTestFixture: %v", err)
+		}
 		cfg.MockWorkersConfig = factoryconfig.NewEmptyMockWorkersConfig()
 	}
 

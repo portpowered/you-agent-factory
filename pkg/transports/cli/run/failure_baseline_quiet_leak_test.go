@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -405,7 +405,7 @@ func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string
 	go readPipeIntoChannel(stdoutRead, stdoutCh)
 	go readPipeIntoChannel(stderrRead, stderrCh)
 
-	runErr := Run(context.Background(), cfg)
+	runErr := runWithFactoryServiceBuilder(context.Background(), cfg, FactoryServiceBuilderFromService(service.BuildFactoryService))
 
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr

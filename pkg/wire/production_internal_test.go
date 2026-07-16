@@ -11,16 +11,241 @@ import (
 	"testing"
 	"time"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+type recordingRuntimeOwner struct {
+	factorysessionexecution.Service
+	sessionID string
+	records   []interfaces.TokenMutationRecord
+}
+
+func TestRuntimeHostConfigFromFactoryServiceIsCopied(t *testing.T) {
+	t.Parallel()
+
+	if got := provideRuntimeHostConfigFromFactoryService(nil); got != nil {
+		t.Fatalf("nil FactoryService config produced %#v, want nil", got)
+	}
+
+	source := &service.FactoryServiceConfig{Dir: "factory-a"}
+	got := provideRuntimeHostConfigFromFactoryService(source)
+	if got == nil || got.Dir != "factory-a" {
+		t.Fatalf("runtime host config = %#v, want an isolated copy of %#v", got, source)
+	}
+	got.Dir = "factory-b"
+	if source.Dir != "factory-a" {
+		t.Fatalf("source runtime host config was mutated to %q", source.Dir)
+	}
+}
+
+func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {
+	t.Parallel()
+
+	dir, assets := modelCatalogFixture(t)
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
+			Clock: productionInternalClock{}, ModelAssets: assets,
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	t.Cleanup(func() { _ = graph.Close() })
+
+	if graph.core == nil || graph.core.ModelService() == nil ||
+		graph.core.ModelService() != graph.Models || graph.Models != graph.Transport.Models {
+		t.Fatal("production core, graph, and transport did not retain the default model service instance")
+	}
+	models, err := graph.Transport.Models.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("transport model catalog call error = %v", err)
+	}
+	if len(models.Results) != 1 || assets.inspectCalls != 1 {
+		t.Fatalf("catalog results/asset inspections = (%d, %d), want (1, 1)", len(models.Results), assets.inspectCalls)
+	}
+}
+
+func TestFactoryServiceCompatibilityFacadeUsesWireModelProviderAndInjectedAssetEdge(t *testing.T) {
+	t.Parallel()
+
+	dir, assets := modelCatalogFixture(t)
+	svc, err := InjectFactoryService(context.Background(), &service.FactoryServiceConfig{
+		Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
+		Clock: productionInternalClock{}, ModelAssets: assets,
+		DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+		RuntimeFileLoggingPolicy:                service.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:                    service.RuntimeMetricsPolicyDisabled,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("InjectFactoryService() error = %v", err)
+	}
+
+	models, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("compatibility model catalog call error = %v", err)
+	}
+	if !svc.ComposeCollaboratorSnapshot().ModelServiceInitialized || len(models.Results) != 1 || assets.inspectCalls != 1 {
+		t.Fatalf("model service/catalog results/asset inspections = (%t, %d, %d), want (true, 1, 1)",
+			svc.ComposeCollaboratorSnapshot().ModelServiceInitialized, len(models.Results), assets.inspectCalls)
+	}
+}
+
+func modelCatalogFixture(t *testing.T) (string, *recordingModelAssets) {
+	t.Helper()
+	dir := t.TempDir()
+	factoryCfg := factoryfixtures.MinimalFactoryConfig()
+	factoryCfg["workers"] = []map[string]any{
+		{"name": "worker-a", "type": "SCRIPT_WORKER", "command": "test", "body": "Process work."},
+		{
+			"name": "model-worker", "type": "INFERENCE_WORKER", "modelProvider": "CODEX",
+			"model": "OMNIVOICE_Q4_K_M", "modelLocality": interfaces.ModelLocalityLocal,
+			"resources": []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
+		},
+	}
+	factoryCfg["workstations"].([]map[string]any)[0]["type"] = "SCRIPT_RUN"
+	factoryCfg["workstations"].([]map[string]any)[0]["body"] = "Run the worker."
+	factoryCfg["resources"] = []map[string]any{{
+		"name": "omnivoice-cache", "type": "MODEL", "capacity": 1,
+		"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND",
+	}}
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryCfg)
+	return dir, &recordingModelAssets{AssetPuller: localmodels.NewAssetPuller(t.TempDir())}
+}
+
+type recordingModelAssets struct {
+	localmodels.AssetPuller
+	inspectCalls int
+}
+
+func (assets *recordingModelAssets) InspectRuntimeCache(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (localmodels.RuntimeCacheInspection, error) {
+	assets.inspectCalls++
+	return assets.AssetPuller.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+}
+
+func TestProductionGraphRetainsCoreModelServiceAndInjectedCatalogEdge(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	injected := &injectedModelAPI{}
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
+			Clock: productionInternalClock{}, ModelAPI: injected,
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	t.Cleanup(func() { _ = graph.Close() })
+
+	if graph.core == nil || graph.core.ModelService() != injected || graph.Models != injected || graph.Transport.Models != injected {
+		t.Fatal("production core, graph, and transport did not retain the exact injected model service instance")
+	}
+	if _, err := graph.Transport.Models.ListModels(context.Background()); err != nil {
+		t.Fatalf("transport model catalog call error = %v", err)
+	}
+	if injected.listCalls != 1 {
+		t.Fatalf("injected model catalog calls = %d, want 1", injected.listCalls)
+	}
+}
+
+type injectedModelAPI struct{ listCalls int }
+
+func (api *injectedModelAPI) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	api.listCalls++
+	return factoryapi.ListModelsResponse{}, nil
+}
+
+func (*injectedModelAPI) GetModel(context.Context, string) (factoryapi.ModelDetail, error) {
+	return factoryapi.ModelDetail{}, nil
+}
+
+func (*injectedModelAPI) PullModel(context.Context, string) (apisurface.ModelPullResult, error) {
+	return apisurface.ModelPullResult{}, nil
+}
+
+func (*injectedModelAPI) InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	return apisurface.ModelInvocationResult{}, nil
+}
+
+func (owner *recordingRuntimeOwner) RecordPetriTokenMutations(
+	sessionID string,
+	records []interfaces.TokenMutationRecord,
+) error {
+	owner.sessionID = sessionID
+	owner.records = append([]interfaces.TokenMutationRecord(nil), records...)
+	return nil
+}
+
+func TestRuntimeHostRecordingBuildUsesGraphOwnedDurableExecution(t *testing.T) {
+	t.Parallel()
+
+	var built runtimebuild.SessionBuildSpec
+	base, err := runtimebuild.New(runtimebuild.Config{}, factory.EnsureClock(nil), zap.NewNop(), func(
+		_ context.Context,
+		spec runtimebuild.SessionBuildSpec,
+	) (any, error) {
+		built = spec
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
+	owner := &recordingRuntimeOwner{Service: factorysessionexecution.NewFakeService()}
+	configured, err := provideRuntimeHostRecordingBuild(runtimeHostBaseBuild{Service: base}, owner)
+	if err != nil {
+		t.Fatalf("provideRuntimeHostRecordingBuild: %v", err)
+	}
+	if _, err := configured.Build(context.Background(), runtimebuild.SessionBuildSpec{SessionID: "root-session"}); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	cfg := &factory.FactoryConfig{}
+	for _, option := range built.AdditionalFactoryOpts {
+		option(cfg)
+	}
+	want := []interfaces.TokenMutationRecord{{TransitionID: "completed"}}
+	if cfg.PetriMutationRecorder == nil {
+		t.Fatal("configured runtime build omitted the durable execution recorder")
+	}
+	if err := cfg.PetriMutationRecorder("root-session", want); err != nil {
+		t.Fatalf("PetriMutationRecorder: %v", err)
+	}
+	if owner.sessionID != "root-session" || len(owner.records) != 1 || owner.records[0].TransitionID != "completed" {
+		t.Fatalf("recorded mutations = (%q, %#v), want graph-owned root-session completion", owner.sessionID, owner.records)
+	}
+}
 
 func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	dir := t.TempDir()

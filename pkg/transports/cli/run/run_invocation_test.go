@@ -1328,7 +1328,11 @@ func installCapturingRealInvocationBootstrap(t *testing.T) *capturingBootstrapRu
 
 	capture := &capturingBootstrapRunner{}
 	buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
-		inner, err := service.BuildInvocationBootstrap(ctx, cfg)
+		svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+		if err != nil {
+			return nil, err
+		}
+		inner, err := service.NewInvocationBootstrap(svc)
 		if err != nil {
 			return nil, err
 		}

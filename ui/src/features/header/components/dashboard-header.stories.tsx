@@ -77,3 +77,36 @@ export const ResponsiveVerification = {
     </div>
   ),
 };
+
+export const EmptySessions = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: { body: { sessions: [] } },
+        },
+      ],
+    },
+  },
+  render: () => <DashboardHeader />,
+};
+
+export const SessionsError = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions",
+          response: {
+            body: { code: "NETWORK_ERROR", message: "Sessions are offline." },
+            status: 503,
+          },
+        },
+      ],
+    },
+  },
+  render: () => <DashboardHeader />,
+};

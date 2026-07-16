@@ -258,7 +258,7 @@ func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	})
+	}, buildFactoryService)
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on failure", output)
 	}
@@ -296,7 +296,7 @@ func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	})
+	}, buildFactoryService)
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on timeout", output)
 	}
@@ -334,7 +334,7 @@ func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing
 		CleanInvocation:         true,
 		DisableDefaultRecording: true,
 		Logger:                  zap.NewNop(),
-	})
+	}, buildFactoryService)
 	if output != "" {
 		t.Fatalf("stdout = %q, want empty on cancellation", output)
 	}
@@ -844,7 +844,11 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-func runWithCapturedStdout(t *testing.T, cfg RunConfig) (string, error) {
+func runWithCapturedStdout(
+	t *testing.T,
+	cfg RunConfig,
+	builders ...FactoryServiceBuilder,
+) (string, error) {
 	t.Helper()
 	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
 		cfg.ExecutionBaseDir = cfg.Dir
@@ -865,7 +869,11 @@ func runWithCapturedStdout(t *testing.T, cfg RunConfig) (string, error) {
 	}()
 
 	os.Stdout = writePipe
-	runErr := Run(context.Background(), cfg)
+	builder := FactoryServiceBuilderFromService(service.BuildFactoryService)
+	if len(builders) > 0 {
+		builder = builders[0]
+	}
+	runErr := runWithFactoryServiceBuilder(context.Background(), cfg, builder)
 	os.Stdout = oldStdout
 
 	if err := writePipe.Close(); err != nil {

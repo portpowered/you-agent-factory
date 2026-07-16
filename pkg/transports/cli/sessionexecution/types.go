@@ -30,9 +30,17 @@ type ServiceRequest struct {
 	ChildExecutorMode  string
 }
 
-// ServiceBuilder constructs a durable execution collaborator outside the CLI
-// transport boundary.
-type ServiceBuilder func(context.Context, ServiceRequest) (factorysessionexecution.Service, error)
+// ServiceOwner couples a durable execution collaborator to the resources that
+// keep it alive. The command that receives an owner must close it when that
+// command finishes.
+type ServiceOwner interface {
+	factorysessionexecution.Service
+	Close() error
+}
+
+// ServiceBuilder constructs an owned durable execution collaborator outside
+// the CLI transport boundary.
+type ServiceBuilder func(context.Context, ServiceRequest) (ServiceOwner, error)
 
 // StartConfig holds CLI inputs for one durable Factory Session execution start.
 type StartConfig struct {

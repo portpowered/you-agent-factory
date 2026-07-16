@@ -7,15 +7,20 @@ import (
 	"net/http"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	"go.uber.org/zap"
 )
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
@@ -47,26 +52,23 @@ type MCPExecutionBuilder func(context.Context, MCPExecutionRequest) (factorysess
 // selected by MCP command inputs. Protocol parsing remains in the transport;
 // persistence and runtime construction remain in wire.
 func BuildMCPExecutionService(
-	_ context.Context,
+	ctx context.Context,
 	request MCPExecutionRequest,
+) (factorysessionexecution.Service, error) {
+	return buildMCPExecutionService(ctx, request, InjectRuntimeCore)
+}
+
+func buildMCPExecutionService(
+	ctx context.Context,
+	request MCPExecutionRequest,
+	buildCore runtimeSessionExecutionCoreBuilder,
 ) (factorysessionexecution.Service, error) {
 	if request.RuntimeBacked {
 		projectRoot, err := resolveSessionExecutionProjectRoot(request.ProjectRoot)
 		if err != nil {
 			return nil, err
 		}
-		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("initialize runtime-backed persistence: %w", err)
-		}
-		service, err := factorysessionexecution.NewExecutionService(
-			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)
-		}
-		return service, nil
+		return buildRuntimeBackedSessionExecutionService(ctx, projectRoot, buildCore)
 	}
 	catalogPath, err := resolveSessionExecutionFixtureCatalog(request.FixtureCatalogPath)
 	if err != nil {
@@ -84,7 +86,7 @@ func BuildMCPExecutionService(
 func BuildProcessGraph(ctx context.Context, request startupcli.Request, policy initializer.ProcessPolicy) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(
 		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
-		BuildMCPExecutionService,
+		BuildMCPExecutionService, true,
 	)
 }
 
@@ -99,7 +101,7 @@ func BuildProcessGraphWithFunctionalEdges(
 ) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(
 		ctx, request, policy, edges, buildProcessApplicationRunner,
-		BuildMCPExecutionService,
+		BuildMCPExecutionService, true,
 	)
 }
 
@@ -114,7 +116,7 @@ func BuildProcessGraphWithMCPBuilder(
 ) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(
 		ctx, request, policy, FunctionalEdges{}, buildProcessApplicationRunner,
-		buildMCP,
+		buildMCP, false,
 	)
 }
 
@@ -139,6 +141,7 @@ func buildProcessGraph(
 	edges FunctionalEdges,
 	buildRunner processRunnerBuilder,
 	buildMCP MCPExecutionBuilder,
+	runtimeMCPGraph bool,
 	invocationBuilders ...runcli.InvocationBootstrapBuilder,
 ) (*initializer.ProcessGraph, error) {
 	switch request.Kind {
@@ -180,7 +183,7 @@ func buildProcessGraph(
 		}
 		return &initializer.ProcessGraph{Policy: policy, Run: application}, nil
 	case startupcli.KindMCPServe:
-		return buildMCPProcessGraph(ctx, request.MCP, policy, buildMCP)
+		return buildMCPProcessGraph(ctx, request.MCP, policy, buildMCP, runtimeMCPGraph)
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
 	}
@@ -227,6 +230,7 @@ func buildMCPProcessGraph(
 	intent startupcli.MCPIntent,
 	policy initializer.ProcessPolicy,
 	buildMCP MCPExecutionBuilder,
+	runtimeMCPGraph bool,
 ) (*initializer.ProcessGraph, error) {
 	if policy.Mode != initializer.ProcessModeMCPServe || policy.Sidecars != (initializer.SidecarPolicy{}) {
 		return nil, fmt.Errorf("construct MCP graph: incompatible process policy %+v", policy)
@@ -234,15 +238,25 @@ func buildMCPProcessGraph(
 	if buildMCP == nil {
 		return nil, fmt.Errorf("construct MCP graph: execution service builder is required")
 	}
-	execution, err := buildMCP(ctx, MCPExecutionRequest{
-		FixtureCatalogPath: intent.FixtureCatalogPath,
-		RuntimeBacked:      intent.RuntimeBacked,
-		ProjectRoot:        intent.ProjectRoot,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("construct MCP graph: %w", err)
+	var graph *Graph
+	var err error
+	if intent.RuntimeBacked && runtimeMCPGraph {
+		projectRoot, rootErr := resolveSessionExecutionProjectRoot(intent.ProjectRoot)
+		if rootErr != nil {
+			return nil, fmt.Errorf("construct MCP graph: %w", rootErr)
+		}
+		graph, err = buildRuntimeBackedSessionExecutionGraph(ctx, projectRoot, intent.Stdin, intent.Stdout, InjectRuntimeCore)
+	} else {
+		execution, buildErr := buildMCP(ctx, MCPExecutionRequest{
+			FixtureCatalogPath: intent.FixtureCatalogPath,
+			RuntimeBacked:      intent.RuntimeBacked,
+			ProjectRoot:        intent.ProjectRoot,
+		})
+		if buildErr != nil {
+			return nil, fmt.Errorf("construct MCP graph: %w", buildErr)
+		}
+		graph, err = Build(ctx, Inputs{MCPExecution: execution, MCPInput: intent.Stdin, MCPOutput: intent.Stdout})
 	}
-	graph, err := Build(ctx, Inputs{MCPExecution: execution, MCPInput: intent.Stdin, MCPOutput: intent.Stdout})
 	if err != nil {
 		return nil, fmt.Errorf("construct MCP graph: %w", err)
 	}
@@ -260,7 +274,47 @@ func buildInvocationRunner(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (runcli.InvocationRunner, error) {
-	return service.BuildInvocationBootstrap(ctx, cfg)
+	normalized := service.NormalizeInvocationBootstrapConfig(cfg)
+	if normalized == nil {
+		return nil, fmt.Errorf("build invocation bootstrap: config is required")
+	}
+	runtimeCfg := service.RuntimeHostConfigFromFactoryService(normalized)
+	copied := *runtimeCfg
+	runtimeCfg = &copied
+	if runtimeCfg.Logger == nil {
+		runtimeCfg.Logger = zap.NewNop()
+	}
+	runtimeCfg.Clock = factory.EnsureClock(runtimeCfg.Clock)
+	core, err := InjectRuntimeCore(ctx, runtimeCfg)
+	if err != nil {
+		return nil, err
+	}
+	svc := completeInvocationServiceFacade(core, normalized)
+	bootstrap, err := service.NewInvocationBootstrap(svc)
+	if err != nil {
+		return nil, err
+	}
+	return &wireInvocationRunner{InvocationBootstrap: bootstrap, core: core}, nil
+}
+
+type wireInvocationRunner struct {
+	*service.InvocationBootstrap
+	core *runtimehost.Core
+}
+
+func (runner *wireInvocationRunner) InvokeModel(
+	ctx context.Context,
+	modelName string,
+	request factoryapi.ModelInvocationRequest,
+) (apisurface.ModelInvocationResult, error) {
+	return runner.Service.InvokeModel(ctx, modelName, request)
+}
+
+func completeInvocationServiceFacade(
+	core *runtimehost.Core,
+	cfg *service.FactoryServiceConfig,
+) *service.FactoryService {
+	return provideFactoryServiceFromRuntimeHostCore(core, cfg)
 }
 
 func applicationModeForProcess(mode initializer.ProcessMode) (initializer.Mode, error) {

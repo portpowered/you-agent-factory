@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: save-input scenarios share one rich factory fixture.
+// biome-ignore lint/style/noExcessiveLinesPerFile: save-input scenarios share one rich factory fixture.
 import { describe, expect, it } from "vitest";
 import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
 import type {

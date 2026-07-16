@@ -253,6 +253,15 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 	return service
 }
 
+// PersistenceStore returns the graph-owned durable snapshot collaborator.
+// It is nil when persistence was explicitly disabled.
+func (s *JavaScriptRuntimeService) PersistenceStore() runtimepersist.Store {
+	if s == nil {
+		return nil
+	}
+	return s.persistence
+}
+
 func (s *JavaScriptRuntimeService) now() time.Time { return s.clock.Now().UTC() }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {

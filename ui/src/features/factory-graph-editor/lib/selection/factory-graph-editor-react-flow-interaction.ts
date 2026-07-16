@@ -4,7 +4,9 @@ export const FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS = {
   deleteKeyCode: null,
   elementsSelectable: true,
   panActivationKeyCode: "Space",
-  panOnDrag: false,
+  // An empty mouse-button allowlist keeps primary-button marquee selection
+  // while React Flow still accepts touchstart gestures for pane panning.
+  panOnDrag: [],
   panOnScroll: true,
   selectionOnDrag: true,
   zoomOnPinch: true,
@@ -20,3 +22,14 @@ export const FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS = {
   | "zoomOnPinch"
   | "zoomOnScroll"
 >;
+
+export function isTouchPanePointerDown(input: {
+  pointerType: string;
+  target: EventTarget | null;
+}): boolean {
+  return (
+    input.pointerType === "touch" &&
+    input.target instanceof Element &&
+    input.target.classList.contains("react-flow__pane")
+  );
+}

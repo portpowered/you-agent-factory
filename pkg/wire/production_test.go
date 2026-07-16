@@ -11,8 +11,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -62,6 +64,43 @@ func TestBuildConstructsRealGraphOnceWithoutStartingLifecycle(t *testing.T) {
 	}
 	if err := graph.Close(); err != nil {
 		t.Fatalf("second Graph.Close() error = %v", err)
+	}
+}
+
+func TestInjectRuntimeCoreSharesSessionFoundationWithCompatibilityConsumers(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, factoryfixtures.MinimalFactoryConfig())
+	starts := 0
+	core, err := wire.InjectRuntimeCore(context.Background(), &runtimehost.Config{
+		Dir: factoryDir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(), Clock: productionClock{},
+		RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		APIServerStarter: func(context.Context, apisurface.APISurface, int, *zap.Logger) error {
+			starts++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("InjectRuntimeCore() error = %v", err)
+	}
+	if starts != 0 {
+		t.Fatalf("runtime core construction started API lifecycle %d times, want zero", starts)
+	}
+	if core.Sessions() == nil || core.Sessions().Count() != 1 || core.RuntimeBuild() == nil {
+		t.Fatal("runtime core omitted its single initialized registry or runtime-build service")
+	}
+	owner, ok := core.DurableExecution().(interface{ PersistenceStore() runtimepersist.Store })
+	if !ok || core.Persistence() == nil || owner.PersistenceStore() != core.Persistence() {
+		t.Fatal("runtime core durable execution did not retain the Wire-owned persistence store")
+	}
+	host := runtimehost.NewHostFromCore(core)
+	serviceFacade := service.NewFactoryServiceFromRuntimeHostCore(core)
+	if host.DurableExecutionService() != core.DurableExecution() ||
+		serviceFacade.DurableExecutionService() != core.DurableExecution() {
+		t.Fatal("compatibility consumers replaced the Wire-owned durable execution service")
 	}
 }
 
@@ -155,6 +194,78 @@ func TestBuildReportsConcreteCoreFailureBeforeLifecycleStart(t *testing.T) {
 	}
 	if output.Len() != 0 {
 		t.Fatal("MCP transport started after graph construction failed")
+	}
+}
+
+func TestBuildRejectsInvalidPersistenceBeforeLifecycleStart(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, factoryfixtures.MinimalFactoryConfig())
+	var apiStarts int
+	var output bytes.Buffer
+	graph, err := wire.Build(context.Background(), wire.Inputs{
+		Config: &runtimehost.Config{
+			Dir: factoryDir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(), Clock: productionClock{},
+			DurableSessionPersistencePolicy:         "unsupported",
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+			APIServerStarter: func(context.Context, apisurface.APISurface, int, *zap.Logger) error {
+				apiStarts++
+				return nil
+			},
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &output,
+	})
+	if graph != nil {
+		t.Fatal("Build() returned a graph for invalid persistence policy")
+	}
+	var validation *factorysessionexecution.ValidationError
+	if err == nil || !strings.Contains(err.Error(), "compose durable session persistence") || !errors.As(err, &validation) || validation.Field != "persistence.policy" {
+		t.Fatalf("Build() error = %v, want actionable persistence policy context", err)
+	}
+	if apiStarts != 0 || output.Len() != 0 {
+		t.Fatalf("construction failure started lifecycle work: API=%d MCP-bytes=%d", apiStarts, output.Len())
+	}
+}
+
+func TestBuildSharesConstructedPersistenceAndRoundTripsSnapshot(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, factoryfixtures.MinimalFactoryConfig())
+	graph, err := wire.Build(context.Background(), wire.Inputs{
+		Config: &runtimehost.Config{
+			Dir: factoryDir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(), Clock: productionClock{},
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	defer func() { _ = graph.Close() }()
+	owner, ok := graph.DurableExecution.(interface{ PersistenceStore() runtimepersist.Store })
+	if !ok || graph.Persistence == nil || owner.PersistenceStore() != graph.Persistence {
+		t.Fatal("durable execution did not retain the graph-owned persistence store")
+	}
+	if graph.SessionRegistry == nil || graph.SessionRegistry.Count() != 1 {
+		t.Fatal("graph did not retain its single initialized live session registry")
+	}
+	sessionID := "dur-sess-cccccccccccccccccccccccccccccccc"
+	payload := []byte(`{"status":"COMPLETED"}`)
+	if err := graph.Persistence.Save(sessionID, payload); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	loaded, err := graph.Persistence.Load(sessionID)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if string(loaded) != string(payload) {
+		t.Fatalf("loaded payload = %s, want %s", loaded, payload)
 	}
 }
 

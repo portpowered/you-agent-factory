@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: surface coverage keeps related shared graph scenarios in one fixture file.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: surface coverage keeps related shared graph scenarios in one fixture file.
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";

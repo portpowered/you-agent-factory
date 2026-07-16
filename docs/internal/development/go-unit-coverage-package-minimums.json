@@ -8,7 +8,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/composebridge",
-      "minimum": 82.65
+      "minimum": 82.45
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/config",
@@ -426,7 +426,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service",
-      "minimum": 78.08
+      "minimum": 78.09
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/service/factorysave",
@@ -550,7 +550,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/session",
-      "minimum": 77.58
+      "minimum": 77.57
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution",

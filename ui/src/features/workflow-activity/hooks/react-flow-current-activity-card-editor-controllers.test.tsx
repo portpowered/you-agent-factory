@@ -1,5 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing current-activity editor-controller coverage stayed intact during feature-root migration.
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: controller coverage grew with topology delete regressions; split is deferred to keep one harness seam.
+// biome-ignore lint/style/noExcessiveLinesPerFile: controller coverage grew with topology delete regressions; split is deferred to keep one harness seam.
 import { act, renderHook } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";

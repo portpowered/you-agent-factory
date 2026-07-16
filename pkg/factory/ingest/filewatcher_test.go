@@ -27,6 +27,17 @@ type mockFactory struct {
 	workRequests []interfaces.WorkRequest
 }
 
+func TestFileWatcherWatchReturnsCanceledContextDeterministically(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	fw := NewFileWatcher(t.TempDir(), &mockFactory{}, zap.NewNop())
+	if err := fw.Watch(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Watch(canceled context) error = %v, want context.Canceled", err)
+	}
+}
+
 func (m *mockFactory) SubmitWorkRequest(_ context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
 	if err != nil {

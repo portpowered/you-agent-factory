@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: stream lifecycle wiring stays colocated with its single owning hook.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: stream lifecycle wiring stays colocated with its single owning hook.
 import { useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 

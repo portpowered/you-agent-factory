@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: shared draft-edge coverage stays grouped around one projection seam and compact custom layouts.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/style/noExcessiveLinesPerFile: shared draft-edge coverage stays grouped around one projection seam and compact custom layouts.
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { buildGraphLayout } from "../../flowchart/lib/layout";

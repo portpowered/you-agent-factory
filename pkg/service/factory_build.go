@@ -199,7 +199,15 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 	service := NewFactoryServiceFromCore(core)
 	shell := FactoryServiceShell{Service: service}
-	service = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	if cfg != nil && cfg.ModelAPI != nil {
+		service = AttachModelServiceCollaborator(shell, cfg.ModelAPI)
+	} else {
+		// Portable durable-session recordings intentionally contain no Factory
+		// runtime configuration, and direct compatibility construction no longer
+		// owns model-service assembly. Attach an explicit unavailable boundary so
+		// every service facade remains a consumer of an already-built ModelAPI.
+		service = AttachModelServiceCollaborator(shell, unavailableModelService{})
+	}
 	service = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: service},
 		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: service}, cfg),
@@ -490,7 +498,11 @@ func buildRuntimeBundle(
 	}
 	localModels := input.prefetchedLocalModels
 	if localModels.Manager == nil {
-		localModels = NewLocalModelDomain(input.cfg)
+		var err error
+		localModels, err = modelhost.NewLocalDomain(LocalModelDomainDependencies(input.cfg))
+		if err != nil {
+			return nil, err
+		}
 	}
 	hostInput := factoryservice.BuildInput{
 		Dir:                   input.dir,
@@ -611,18 +623,6 @@ func loadRuntimeBundleWorkerOptions(
 
 // localModelDomain is the compatibility alias for extracted local-model wiring.
 type localModelDomain = LocalModelDomain
-
-func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) LocalModelDomain {
-	return NewLocalModelDomain(cfg)
-}
-
-func newLocalModelResourceLimiter() *localModelResourceLimiter {
-	return localmodels.NewResourceLimiter(localModelHooks())
-}
-
-func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localModelRuntime) *managedLocalModelManager {
-	return localmodels.NewManager(assetPuller, runtime, localModelHooks())
-}
 
 func localModelHooks() localmodels.Hooks {
 	return localmodels.Hooks{
@@ -1204,7 +1204,7 @@ func newRuntimeBuildService(
 	startupLocalModels *localModelDomain,
 	progressPublisherFactory inferenceProgressPublisherFactory,
 	dispatchCompletionFactory dispatchCompletionObserverFactory,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
 		buildCfg,
@@ -1509,7 +1509,7 @@ func NewRuntimeBuildServiceForCompose(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	return newRuntimeBuildService(
 		FactoryServiceConfigFromRuntimeHost(cfg),
 		clock,
@@ -1574,7 +1574,7 @@ type ModelService = apisurface.ModelAPI
 // NewModelServiceFromCore constructs a model service from a composed runtime core.
 func NewModelServiceFromCore(core *runtimehost.Core) ModelService {
 	if core == nil {
-		return wireModelServiceCollaborator(nil, nil)
+		return nil
 	}
 	return runtimehost.NewHostFromCore(core).ModelService()
 }
@@ -1585,18 +1585,6 @@ func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefiniti
 		return factoryDefinitionHost{}
 	}
 	return factoryDefinitionHost{FactoryService: NewFactoryServiceFromCore(adaptRuntimeHostCore(core))}
-}
-
-// StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*interfaces.WorkerConfig, bool) {
-	if core == nil {
-		return nil, false
-	}
-	runtimeCfg := coreStartupRuntimeConfigFromRuntimeHost(core)
-	if runtimeCfg == nil {
-		return nil, false
-	}
-	return runtimeCfg.Worker(name)
 }
 
 func adaptRuntimeHostCore(core *runtimehost.Core) *FactoryCore {
@@ -1634,16 +1622,6 @@ func factoryServiceCollaboratorsFromRuntimeHost(core *runtimehost.Core) FactoryS
 	}
 }
 
-func coreStartupRuntimeConfigFromRuntimeHost(core *runtimehost.Core) *factoryconfig.LoadedFactoryConfig {
-	if core == nil {
-		return nil
-	}
-	if bundle := core.StartupBundle(); bundle != nil {
-		return bundle.RuntimeCfg
-	}
-	return nil
-}
-
 // InvocationBootstrap constructs and runs one-shot factory invocation
 // session/runtime dependencies without binding a listening HTTP server.
 type InvocationBootstrap struct {
@@ -1667,16 +1645,11 @@ func NormalizeInvocationBootstrapConfig(cfg *FactoryServiceConfig) *FactoryServi
 	return &normalized
 }
 
-// BuildInvocationBootstrap constructs FactoryService-owned session/runtime
-// dependencies for one-shot invocation without starting a listening HTTP server.
-func BuildInvocationBootstrap(ctx context.Context, cfg *FactoryServiceConfig) (*InvocationBootstrap, error) {
-	normalized := NormalizeInvocationBootstrapConfig(cfg)
-	if normalized == nil {
-		return nil, fmt.Errorf("build invocation bootstrap: config is required")
-	}
-	service, err := BuildFactoryService(ctx, normalized)
-	if err != nil {
-		return nil, err
+// NewInvocationBootstrap adapts an already-composed service facade for one-shot
+// invocation. Composition remains owned by the shared Wire application graph.
+func NewInvocationBootstrap(service *FactoryService) (*InvocationBootstrap, error) {
+	if service == nil {
+		return nil, fmt.Errorf("build invocation bootstrap: service is required")
 	}
 	return &InvocationBootstrap{Service: service}, nil
 }
@@ -1739,27 +1712,38 @@ func ApplyInvocationBootstrapLocalModelTestFixture(
 	healthEndpoint string,
 	runtime localmodels.Runtime,
 	assets localmodels.AssetPuller,
-) {
+) error {
 	if cfg == nil {
-		return
+		return fmt.Errorf("apply invocation bootstrap local model fixture: config is required")
 	}
 	cfg.LocalModelRuntimeOverride = runtime
 	cfg.ModelAssets = assets
-	cfg.ModelHostOverride = newInvocationBootstrapSupervisedModelHost(assets, healthEndpoint)
+	host, err := newInvocationBootstrapSupervisedModelHost(assets, healthEndpoint)
+	if err != nil {
+		return err
+	}
+	cfg.ModelHostOverride = host
 	cfg.SkipBuiltInRunnerPrerequisiteValidation = true
+	return nil
 }
 
-func newInvocationBootstrapSupervisedModelHost(assets localmodels.AssetPuller, healthEndpoint string) modelhost.Host {
+func newInvocationBootstrapSupervisedModelHost(assets localmodels.AssetPuller, healthEndpoint string) (modelhost.Host, error) {
 	launcher := &invocationBootstrapFakeProcessLauncher{healthEndpoint: strings.TrimSpace(healthEndpoint)}
-	return modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(assets), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-		Supervisor: modelhost.SupervisorConfig{
-			ReadinessTimeout:    500 * time.Millisecond,
-			HealthCheckInterval: 10 * time.Millisecond,
-			ProcessLauncher:     launcher,
-			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
-		},
-	})
+	gateway := modelhost.NewLocalAssetGateway(assets)
+	host, err := modelhost.NewHost(modelhost.Dependencies{
+		AssetPuller: gateway, CacheInspector: gateway, ProcessLauncher: launcher,
+		Options: modelhost.Options{
+			SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+			Supervisor: modelhost.SupervisorConfig{
+				ReadinessTimeout:    500 * time.Millisecond,
+				HealthCheckInterval: 10 * time.Millisecond,
+				HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+			},
+		}})
+	if err != nil {
+		return nil, fmt.Errorf("construct invocation bootstrap model host: %w", err)
+	}
+	return host, nil
 }
 
 type invocationBootstrapFakeProcessLauncher struct {

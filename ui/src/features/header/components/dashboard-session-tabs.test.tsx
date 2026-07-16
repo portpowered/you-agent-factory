@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing dashboard-session-tabs coverage stayed intact during feature-root migration.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -244,7 +244,7 @@ describe("DashboardSessionTabs", () => {
     );
   });
 
-  it("lets the tab strip compress each tab instead of clipping overflowed sessions", async () => {
+  it("keeps overflowed session tabs reachable through a horizontal tab strip", async () => {
     listFactorySessions.mockResolvedValue([
       {
         factoryDir: "/workspace/root",
@@ -301,13 +301,14 @@ describe("DashboardSessionTabs", () => {
 
     expect(tabStripShell?.className).not.toContain("flex-1");
     expect(tabStripRow?.className).not.toContain("flex-1");
-    expect(navigation.className).toContain("overflow-hidden");
+    expect(navigation.className).toContain("overflow-x-auto");
+    expect(navigation.className).toContain("overscroll-x-contain");
     expect(navigation.className).not.toContain("flex-1");
-    expect(tablist.className).toContain("overflow-hidden");
+    expect(tablist.className).toContain("min-w-max");
     expect(tablist.className).toContain("inline-flex");
     for (const shell of shells) {
-      expect(shell.className).toContain("flex-1");
-      expect(shell.className).toContain("basis-0");
+      expect(shell.className).toContain("flex-none");
+      expect(shell.className).toContain("min-w-40");
       expect(shell.className).toContain("max-w-72");
     }
   });
