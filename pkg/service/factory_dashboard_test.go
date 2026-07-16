@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
@@ -28,6 +29,72 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestPortableRecordingArtifacts_CanonicalizesAndDeduplicatesArtifacts(t *testing.T) {
+	capturedAt := time.Date(2026, time.July, 16, 17, 0, 0, 0, time.UTC)
+	checkpointAt := capturedAt.Add(time.Minute)
+	label, hash := "first", "hash-first"
+	size, secrets := int64(24), int32(2)
+	artifacts := []factoryapi.FactoryArtifact{
+		{
+			Id: "artifact-first", Kind: "dispatch", Visibility: "operator", Label: &label, ContentHash: &hash, SizeBytes: &size,
+			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt},
+			RedactionCounts: &factoryapi.FactoryArtifactRedactionCounts{Secrets: &secrets},
+		},
+		{Id: "artifact-checkpoint", Kind: "checkpoint", Visibility: "operator"},
+		{Id: "artifact-first", Kind: "replacement", Visibility: "internal"},
+	}
+
+	actual := portableRecordingArtifacts(artifacts, &recording.CanonicalCheckpoint{ArtifactID: "artifact-checkpoint", Timestamp: checkpointAt})
+	if len(actual) != 2 {
+		t.Fatalf("artifact count = %d, want 2", len(actual))
+	}
+	if actual[0].Kind != "replacement" || actual[0].Visibility != "internal" {
+		t.Fatalf("duplicate artifact = %#v, want replacement values", actual[0])
+	}
+	if actual[1].CreatedAt != checkpointAt {
+		t.Fatalf("checkpoint artifact timestamp = %s, want %s", actual[1].CreatedAt, checkpointAt)
+	}
+	if actual[0].Label != "" || actual[0].ContentHash != "" || actual[0].SizeBytes != 0 || actual[0].SecretsRedacted != 0 {
+		t.Fatalf("duplicate artifact retained stale fields: %#v", actual[0])
+	}
+}
+
+func TestPortableRecordingStatusAndResultReflectSessionFinality(t *testing.T) {
+	durableSucceeded := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+	if status := portableRecordingStatus(factoryapi.FactorySessionRuntime{LifecycleControlStatus: &durableSucceeded}); status != "SUCCEEDED" {
+		t.Fatalf("durable status = %q, want SUCCEEDED", status)
+	}
+	if status := portableRecordingStatus(factoryapi.FactorySessionRuntime{Status: factoryapi.FactorySessionStatusFINISHED}); status != "SUCCEEDED" {
+		t.Fatalf("finished status = %q, want SUCCEEDED", status)
+	}
+	if status := portableRecordingStatus(factoryapi.FactorySessionRuntime{Status: "RUNNING"}); status != "RUNNING" {
+		t.Fatalf("running status = %q, want RUNNING", status)
+	}
+
+	for _, test := range []struct {
+		status, wantStatus, wantReason string
+		wantRetryable                  bool
+	}{
+		{status: "SUCCEEDED", wantStatus: "FINAL"},
+		{status: "FAILED", wantStatus: "UNAVAILABLE", wantReason: "RESULT_UNAVAILABLE"},
+		{status: "RUNNING", wantStatus: "NOT_READY", wantReason: "RESULT_NOT_READY", wantRetryable: true},
+	} {
+		result := portableRecordingResult(test.status)
+		if result.Mode != "final" || result.Status != test.wantStatus {
+			t.Fatalf("result for %s = %#v", test.status, result)
+		}
+		if test.wantReason == "" {
+			if result.Availability != nil {
+				t.Fatalf("availability for %s = %#v, want nil", test.status, result.Availability)
+			}
+			continue
+		}
+		if result.Availability == nil || result.Availability.Reason != test.wantReason || result.Availability.Retryable != test.wantRetryable {
+			t.Fatalf("availability for %s = %#v", test.status, result.Availability)
+		}
+	}
+}
 
 func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	dir := t.TempDir()

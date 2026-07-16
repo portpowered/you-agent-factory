@@ -133,8 +133,8 @@ func TestCoverageTestJobs(t *testing.T) {
 		cfg  config
 		want int
 	}{
-		{name: "unit uses go default", cfg: config{suite: "unit"}, want: 0},
-		{name: "functional is bounded", cfg: config{suite: "functional"}, want: defaultFunctionalCoverageJobs},
+		{name: "unit serializes coverage writers", cfg: config{suite: "unit"}, want: defaultCoverageJobs},
+		{name: "functional serializes coverage writers", cfg: config{suite: "functional"}, want: defaultCoverageJobs},
 		{name: "explicit override", cfg: config{suite: "functional", jobs: 1}, want: 1},
 	}
 	for _, tc := range cases {
@@ -633,6 +633,91 @@ func TestEvaluateCoverageIgnoresExternalTotalReportAndUsesMergedProfileCoverage(
 	}
 	if totalLine != "total: (statements) 60.0%" {
 		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 60.0%")
+	}
+}
+
+func TestCanonicalizeCoverageProfileMergesRepeatedBlocksInStableOrder(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 7",
+		modulePath + "/tests/functional/runtime_api/server.go:1.1,2.1 5 1",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 4",
+		"",
+	}, "\n"))
+
+	coverPackages := []string{
+		modulePath + "/pkg/service",
+		modulePath + "/pkg/config",
+	}
+	if err := canonicalizeCoverageProfile(profilePath, repoRoot, coverPackages); err != nil {
+		t.Fatalf("canonicalizeCoverageProfile() error = %v", err)
+	}
+
+	got, err := os.ReadFile(profilePath)
+	if err != nil {
+		t.Fatalf("read canonical profile: %v", err)
+	}
+	want := strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("canonical profile = %q, want %q", got, want)
+	}
+
+	totals, err := readCoverageProfileTotals(profilePath, repoRoot)
+	if err != nil {
+		t.Fatalf("readCoverageProfileTotals() error = %v", err)
+	}
+	if totals[modulePath+"/pkg/config"] != (packageCoverageTotals{coveredStatements: 3, totalStatements: 3}) {
+		t.Fatalf("config totals = %+v, want 3/3", totals[modulePath+"/pkg/config"])
+	}
+	if totals[modulePath+"/pkg/service"] != (packageCoverageTotals{coveredStatements: 2, totalStatements: 2}) {
+		t.Fatalf("service totals = %+v, want 2/2", totals[modulePath+"/pkg/service"])
+	}
+}
+
+func TestMergeCoverageProfilesCombinesIsolatedTestBinaries(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(t.TempDir())
+	firstProfile := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
+		"",
+	}, "\n"))
+	secondProfile := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		"",
+	}, "\n"))
+	outputPath := filepath.Join(t.TempDir(), "merged.out")
+	coverPackages := []string{modulePath + "/pkg/config", modulePath + "/pkg/service"}
+
+	if err := mergeCoverageProfiles([]string{firstProfile, secondProfile}, outputPath, repoRoot, coverPackages); err != nil {
+		t.Fatalf("mergeCoverageProfiles() error = %v", err)
+	}
+	got, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatalf("read merged profile: %v", err)
+	}
+	want := strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		modulePath + "/pkg/service/factory.go:3.1,4.1 2 1",
+		"",
+	}, "\n")
+	if string(got) != want {
+		t.Fatalf("merged profile = %q, want %q", got, want)
 	}
 }
 

@@ -46,14 +46,11 @@ func buildRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehos
 	if cfg == nil {
 		return nil, fmt.Errorf("compose runtime config is required")
 	}
-	if !cfg.WorkerApplication.Valid() {
-		components, err := InjectWorkerApplication(cfg.Logger, FunctionalEdges{})
-		if err != nil {
-			return nil, fmt.Errorf("compose runtime worker application: %w", err)
-		}
-		cfg.WorkerApplication = components
+	serviceCfg, err := service.ConfigWithWorkerApplication(runtimeConfigAsServiceConfig(cfg))
+	if err != nil {
+		return nil, fmt.Errorf("compose runtime worker application: %w", err)
 	}
-	serviceCfg := runtimeConfigAsServiceConfig(cfg)
+	cfg = serviceConfigAsRuntimeConfig(serviceCfg)
 	root, err := service.ResolveFactoryServiceRoot(serviceCfg)
 	if err != nil {
 		return nil, err

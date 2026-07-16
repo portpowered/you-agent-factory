@@ -39,6 +39,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -112,6 +113,91 @@ func TestExplicitServiceCollaboratorConstructorsAssembleInertGraph(t *testing.T)
 	hosted := NewHostedWorkersConfig(cfg, logger, clock)
 	if runtimeBuildWithoutSessions == nil || collaborators.Sessions != sessions || hosted.Logger == nil {
 		t.Fatalf("explicit collaborators were not retained: collaborators=%+v hosted=%+v", collaborators, hosted)
+	}
+}
+
+func TestConfigWithWorkerApplicationRejectsNilConfig(t *testing.T) {
+	t.Parallel()
+
+	if _, err := ConfigWithWorkerApplication(nil); err == nil {
+		t.Fatal("ConfigWithWorkerApplication(nil) succeeded")
+	}
+}
+
+func TestConfigWithWorkerApplicationKeepsValidApplicationWithoutOverrides(t *testing.T) {
+	t.Parallel()
+
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	configured, err := ConfigWithWorkerApplication(&FactoryServiceConfig{WorkerApplication: components})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if configured.WorkerApplication.Provider != components.Provider || configured.WorkerApplication.Script != components.Script {
+		t.Fatal("ConfigWithWorkerApplication unexpectedly replaced the supplied worker factories")
+	}
+	if configured.WorkerApplication.ProviderCommandInjected || configured.WorkerApplication.ScriptCommandInjected {
+		t.Fatal("ConfigWithWorkerApplication marked command runners as injected without overrides")
+	}
+}
+
+func TestConfigWithWorkerApplicationAppliesOverridesToValidApplication(t *testing.T) {
+	t.Parallel()
+
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	providerRunner := stubCommandRunner{}
+	scriptRunner := stubCommandRunner{}
+	configured, err := ConfigWithWorkerApplication(&FactoryServiceConfig{
+		WorkerApplication:             components,
+		ProviderCommandRunnerOverride: providerRunner,
+		CommandRunnerOverride:         scriptRunner,
+	})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication: %v", err)
+	}
+	if configured.WorkerApplication.ProviderCommandRunner != providerRunner {
+		t.Fatal("ConfigWithWorkerApplication did not apply the provider command runner override")
+	}
+	if configured.WorkerApplication.ScriptCommandRunner != scriptRunner {
+		t.Fatal("ConfigWithWorkerApplication did not apply the script command runner override")
+	}
+}
+
+func TestRuntimeLogStartTimeString(t *testing.T) {
+	t.Parallel()
+
+	if got := runtimeLogStartTimeString(time.Time{}); got != "" {
+		t.Fatalf("runtimeLogStartTimeString(zero) = %q, want empty", got)
+	}
+	value := time.Date(2026, time.July, 16, 18, 0, 0, 0, time.FixedZone("test", -7*60*60))
+	if got, want := runtimeLogStartTimeString(value), "2026-07-17T01:00:00Z"; got != want {
+		t.Fatalf("runtimeLogStartTimeString() = %q, want %q", got, want)
+	}
+}
+
+func TestNilFactoryServiceRuntimeDiagnosticsAreEmpty(t *testing.T) {
+	t.Parallel()
+
+	var service *FactoryService
+	if bundle := service.CurrentRuntimeBundle(); bundle != nil {
+		t.Fatal("nil service returned a runtime bundle")
+	}
+	if diagnostics := service.RuntimeLogDiagnostics(); diagnostics != (RuntimeLogDiagnostics{}) {
+		t.Fatalf("nil service diagnostics = %+v, want empty", diagnostics)
+	}
+}
+
+func TestHandleDefaultRuntimeStartFailureIgnoresClosedServiceSession(t *testing.T) {
+	t.Parallel()
+
+	service := &FactoryService{cfg: &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}}
+	if err := service.handleDefaultRuntimeStartFailure(context.Background(), nil, errors.New("start failed")); err != nil {
+		t.Fatalf("handleDefaultRuntimeStartFailure() = %v, want nil for a closed service session", err)
 	}
 }
 

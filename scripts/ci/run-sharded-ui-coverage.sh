@@ -27,16 +27,20 @@ printf '%s\n' \
 run_shard() {
   local index="$1"
   local shard_label="${index}/${shard_total}"
+  local log_file="${artifact_root}/shard-${index}.log"
+
+  env UI_COVERAGE_SHARD="${shard_label}" "$make_bin" ui-test-coverage >"$log_file" 2>&1
+}
+
+print_shard_log() {
+  local index="$1"
+  local shard_label="${index}/${shard_total}"
   local lane_label="UI Coverage Shard ${shard_label}"
   local log_file="${artifact_root}/shard-${index}.log"
 
-  (
-    set +e
-    env UI_COVERAGE_SHARD="${shard_label}" "$make_bin" ui-test-coverage 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
-      printf '[%s] %s\n' "$lane_label" "$line"
-    done
-    exit "${PIPESTATUS[0]}"
-  ) | tee "$log_file"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '[%s] %s\n' "$lane_label" "$line"
+  done <"$log_file"
 }
 
 failed_shards=()
@@ -55,6 +59,10 @@ for i in "${!pids[@]}"; do
   if ! wait "$pid"; then
     failed_shards+=("$index")
   fi
+done
+
+for index in "${indices[@]}"; do
+  print_shard_log "$index"
 done
 
 if ((${#failed_shards[@]} > 0)); then

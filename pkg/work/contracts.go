@@ -114,20 +114,21 @@ type WorkRequestSubmitResult struct {
 
 // Work is one public item inside a WorkRequest batch.
 type Work struct {
-	Name                     string            `json:"name"`
-	WorkID                   string            `json:"workId,omitempty"`
-	RequestID                string            `json:"requestId,omitempty"`
-	WorkTypeID               string            `json:"workTypeName,omitempty"`
-	State                    string            `json:"state,omitempty"`
-	ChainingTraceDepth       int               `json:"chainingTraceDepth,omitempty"`
-	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
-	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
-	TraceID                  string            `json:"traceId,omitempty"`
-	Content                  []WorkContentPart `json:"content,omitempty"`
-	Payload                  any               `json:"payload,omitempty"`
-	Tags                     map[string]string `json:"tags,omitempty"`
-	ExecutionID              string            `json:"-"`
-	RuntimeRelations         []Relation        `json:"-"`
+	Name                     string               `json:"name"`
+	WorkID                   string               `json:"workId,omitempty"`
+	RequestID                string               `json:"requestId,omitempty"`
+	WorkTypeID               string               `json:"workTypeName,omitempty"`
+	State                    string               `json:"state,omitempty"`
+	ChainingTraceDepth       int                  `json:"chainingTraceDepth,omitempty"`
+	CurrentChainingTraceID   string               `json:"currentChainingTraceId,omitempty"`
+	PreviousChainingTraceIDs []string             `json:"previousChainingTraceIds,omitempty"`
+	TraceID                  string               `json:"traceId,omitempty"`
+	Content                  []WorkContentPart    `json:"content,omitempty"`
+	Payload                  any                  `json:"payload,omitempty"`
+	Tags                     map[string]string    `json:"tags,omitempty"`
+	ExecutionID              string               `json:"-"`
+	RuntimeRelations         []Relation           `json:"-"`
+	InvocationArguments      *InvocationArguments `json:"-"`
 }
 
 // WorkContentPart is the backend-owned canonical work content shape mirrored from the public API contract.

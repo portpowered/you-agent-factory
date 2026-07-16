@@ -215,8 +215,8 @@ func invocationDiagnosticsForDispatch(
 
 func invocationArgumentsFromDispatch(dispatch work.WorkDispatch) *work.InvocationArguments {
 	for _, raw := range dispatch.InputTokens {
-		token, ok := raw.(factorytoken.Token)
-		if !ok {
+		token := factoryTokenFromDispatchInput(raw)
+		if token == nil {
 			continue
 		}
 		if token.Color.DataType == factorytoken.DataTypeResource {
@@ -227,6 +227,17 @@ func invocationArgumentsFromDispatch(dispatch work.WorkDispatch) *work.Invocatio
 		}
 	}
 	return nil
+}
+
+func factoryTokenFromDispatchInput(raw any) *factorytoken.Token {
+	switch token := raw.(type) {
+	case factorytoken.Token:
+		return &token
+	case *factorytoken.Token:
+		return token
+	default:
+		return nil
+	}
 }
 
 func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *workerexecution.WorkResult) {
@@ -449,6 +460,8 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		InputTokens:              InputTokens(requestContext.InputTokens...),
 		ModelOperation:           workstationDef.Operation,
 		ModelBindings:            modelBindings,
+		Model:                    workerDef.Model,
+		ModelProvider:            workerDef.ModelProvider,
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,

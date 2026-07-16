@@ -21,23 +21,25 @@ printf '%s\n' \
   "==> ${browser_lane_label} lane [make ${browser_target}] (concurrent)"
 
 run_lane() {
-  local lane_label="$1"
-  local make_target="$2"
-  local log_file="$3"
+  local make_target="$1"
+  local log_file="$2"
 
-  (
-    set +e
-    "$make_bin" "$make_target" 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
-      printf '[%s] %s\n' "$lane_label" "$line"
-    done
-    exit "${PIPESTATUS[0]}"
-  ) | tee "$log_file"
+  "$make_bin" "$make_target" >"$log_file" 2>&1
 }
 
-run_lane "$coverage_lane_label" "$coverage_target" "$coverage_log" &
+print_lane_log() {
+  local lane_label="$1"
+  local log_file="$2"
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '[%s] %s\n' "$lane_label" "$line"
+  done <"$log_file"
+}
+
+run_lane "$coverage_target" "$coverage_log" &
 coverage_pid=$!
 
-run_lane "$browser_lane_label" "$browser_target" "$browser_log" &
+run_lane "$browser_target" "$browser_log" &
 browser_pid=$!
 
 coverage_status=0
@@ -45,6 +47,9 @@ browser_status=0
 
 wait "$coverage_pid" || coverage_status=$?
 wait "$browser_pid" || browser_status=$?
+
+print_lane_log "$coverage_lane_label" "$coverage_log"
+print_lane_log "$browser_lane_label" "$browser_log"
 
 if (( coverage_status != 0 )); then
   printf '%s\n' \

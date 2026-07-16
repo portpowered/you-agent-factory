@@ -91,6 +91,43 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	if len(argument.Sources) != 1 || argument.Sources[0].Kind != string(workinvocation.ArgumentSourceKindStructured) {
 		t.Fatalf("argument sources = %#v, want STRUCTURED", argument.Sources)
 	}
+	if len(submitted.Content) != 1 || submitted.Content[0].Text != "hello" {
+		t.Fatalf("submitted content = %#v, want primary structured input", submitted.Content)
+	}
+}
+
+func TestStructuredInvocationContentRequiresOnePrimaryPositionalValue(t *testing.T) {
+	primarySignature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{{
+		Name:     "input",
+		Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 1}},
+	}}}
+	noPrimarySignature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{{
+		Name:     "input",
+		Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed)}},
+	}}}
+	tests := []struct {
+		name        string
+		signature   *interfaces.InvocationSignatureConfig
+		arguments   workinvocation.NormalizedArguments
+		wantContent string
+	}{
+		{name: "nil signature", arguments: workinvocation.NormalizedArguments{}},
+		{name: "no positional binding", signature: noPrimarySignature, arguments: workinvocation.NormalizedArguments{}},
+		{name: "missing primary argument", signature: primarySignature, arguments: workinvocation.NormalizedArguments{}},
+		{name: "multiple primary values", signature: primarySignature, arguments: workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{"input": {Values: []string{"first", "second"}}}}},
+		{name: "one primary value", signature: primarySignature, arguments: workinvocation.NormalizedArguments{Arguments: map[string]workinvocation.NormalizedArgument{"input": {Values: []string{"hello"}}}}, wantContent: "hello"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content := structuredInvocationContent(tt.signature, tt.arguments)
+			if tt.wantContent == "" && content != nil {
+				t.Fatalf("content = %#v, want nil", content)
+			}
+			if tt.wantContent != "" && (len(content) != 1 || content[0].Text != tt.wantContent) {
+				t.Fatalf("content = %#v, want %q", content, tt.wantContent)
+			}
+		})
+	}
 }
 
 func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {

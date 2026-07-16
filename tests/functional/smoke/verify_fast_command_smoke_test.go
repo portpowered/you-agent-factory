@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 )
@@ -416,6 +417,29 @@ esac
 	}
 	if !strings.Contains(output, "FAIL: UI Browser Integration lane [make ui-integration-test] failed. Rerun with: make ui-integration-test") {
 		t.Fatalf("concurrent UI verification script missing exact browser lane rerun hint:\n%s", output)
+	}
+}
+
+func TestConcurrentUIVerificationLanesScriptSmoke_DoesNotWaitForDetachedLogHandle(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-concurrent-ui-detached", `#!/bin/sh
+printf '%s\n' "fake-make:$1"
+(sleep 2) &
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "concurrent-ui-verification-artifacts")
+
+	startedAt := time.Now()
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-concurrent-ui-verification-lanes.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err != nil {
+		t.Fatalf("run concurrent UI verification script: %v\n%s", err, output)
+	}
+	if elapsed := time.Since(startedAt); elapsed >= 1500*time.Millisecond {
+		t.Fatalf("concurrent UI verification waited for a detached process holding output open: %s\n%s", elapsed, output)
 	}
 }
 

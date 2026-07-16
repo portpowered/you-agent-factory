@@ -86,6 +86,52 @@ func (f calculateMutationsFixture) calculate(arcs []petri.Arc, result resolvedWo
 	})
 }
 
+func TestCalculateMutations_CustomerQuorumNamesDoNotGainPackagedRelations(t *testing.T) {
+	now := time.Date(2026, time.July, 16, 18, 0, 0, 0, time.UTC)
+	places := map[string]*petri.Place{
+		"quorum-merge:complete": {ID: "quorum-merge:complete", TypeID: "quorum-merge", State: "complete"},
+	}
+	workTypes := map[string]*state.WorkType{"quorum-merge": {ID: "quorum-merge"}}
+	inputs := []factorytoken.Token{
+		{Color: factorytoken.Color{WorkID: "branch-a", WorkTypeID: "quorum-branch-a"}},
+		{Color: factorytoken.Color{WorkID: "branch-b", WorkTypeID: "quorum-branch-b"}},
+	}
+
+	for _, testCase := range []struct {
+		name          string
+		factoryName   string
+		wantRelations int
+	}{
+		{name: "customer factory", factoryName: "customer-factory", wantRelations: 0},
+		{name: "packaged quorum", factoryName: "@you/quorum", wantRelations: 2},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			mutations, err := calculateMutations(mutationCalculationInput{
+				transition:  &petri.Transition{ID: "merge-quorum"},
+				workstation: &interfaces.FactoryWorkstationConfig{Name: "merge-quorum"},
+				arcs:        []petri.Arc{{ID: "merge-output", PlaceID: "quorum-merge:complete"}},
+				consumed:    inputs,
+				result:      resolvedWorkResult{outcome: workerexecution.OutcomeAccepted},
+				now:         now,
+				inputColors: tokenColorsFromTokens(inputs),
+				transformer: token_transformer.New(places, workTypes),
+				runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+					Factory: &interfaces.FactoryConfig{Name: testCase.factoryName},
+				},
+			})
+			if err != nil {
+				t.Fatalf("calculateMutations() error = %v", err)
+			}
+			if len(mutations) != 1 || mutations[0].NewToken == nil {
+				t.Fatalf("mutations = %#v, want one output token", mutations)
+			}
+			if got := len(mutations[0].NewToken.Color.Relations); got != testCase.wantRelations {
+				t.Fatalf("relations = %#v, want %d relations", mutations[0].NewToken.Color.Relations, testCase.wantRelations)
+			}
+		})
+	}
+}
+
 func assertCalculatedMutation(t *testing.T, mutations []interfaces.MarkingMutation, want struct {
 	name            string
 	arcs            []petri.Arc
