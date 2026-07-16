@@ -44,34 +44,39 @@ func factoryWorkItemsFromRequest(works []work.WorkRequestEventWork) []work.Facto
 	}
 	out := make([]work.FactoryWorkItem, 0, len(works))
 	for _, requestWork := range works {
-		state := ""
-		if requestWork.State != nil {
-			state = requestWork.State.Name
-		}
-		content := work.CloneWorkContentParts(requestWork.Content)
-		for i := range content {
-			content[i].Type = content[i].Type.Normalized()
-		}
-		item := work.FactoryWorkItem{
-			ID:                       requestWork.WorkID,
-			WorkTypeID:               requestWork.WorkTypeID,
-			State:                    state,
-			DisplayName:              requestWork.Name,
-			ChainingTraceDepth:       requestWork.ChainingTraceDepth,
-			CurrentChainingTraceID:   requestWork.CurrentChainingTraceID,
-			PreviousChainingTraceIDs: cloneStringSlice(requestWork.PreviousChainingTraceIDs),
-			TraceID:                  requestWork.TraceID,
-			Content:                  content,
-			Tags:                     cloneStringMap(requestWork.Tags),
-		}
-		if item.CurrentChainingTraceID == "" {
-			item.CurrentChainingTraceID = item.TraceID
-		}
+		item := factoryWorkItemFromEventWork(requestWork)
 		if item.ID != "" {
 			out = append(out, item)
 		}
 	}
 	return out
+}
+
+func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) work.FactoryWorkItem {
+	state := ""
+	if eventWork.State != nil {
+		state = eventWork.State.Name
+	}
+	content := work.CloneWorkContentParts(eventWork.Content)
+	for i := range content {
+		content[i].Type = content[i].Type.Normalized()
+	}
+	item := work.FactoryWorkItem{
+		ID:                       eventWork.WorkID,
+		WorkTypeID:               eventWork.WorkTypeID,
+		State:                    state,
+		DisplayName:              eventWork.Name,
+		ChainingTraceDepth:       eventWork.ChainingTraceDepth,
+		CurrentChainingTraceID:   eventWork.CurrentChainingTraceID,
+		PreviousChainingTraceIDs: cloneStringSlice(eventWork.PreviousChainingTraceIDs),
+		TraceID:                  eventWork.TraceID,
+		Content:                  content,
+		Tags:                     cloneStringMap(eventWork.Tags),
+	}
+	if item.CurrentChainingTraceID == "" {
+		item.CurrentChainingTraceID = item.TraceID
+	}
+	return item
 }
 
 func firstWorkRequestID(works []work.WorkRequestEventWork) string {

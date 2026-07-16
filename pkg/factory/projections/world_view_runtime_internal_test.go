@@ -22,6 +22,57 @@ type projectionRuntimeLookupFixture struct {
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
+func TestCanonicalDispatchResponseReconstructsCompletionAndReleasesResources(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 5, 0, 0, 0, time.UTC)
+	dispatchID, traceID := "dispatch-1", "trace-1"
+	resourceToken := resourceTokenID("gpu", 0)
+	reducer := newFactoryWorldReducer(2)
+	reducer.applyInitialStructure(interfaces.InitialStructurePayload{
+		Places:       []interfaces.FactoryPlace{{ID: "task:failed", TypeID: "task", State: "failed", Category: "FAILED"}},
+		Workstations: []interfaces.FactoryWorkstation{{ID: "review", Name: "Review", FailurePlaceIDs: []string{"task:failed"}}},
+	})
+	reducer.stateValue.ActiveDispatches[dispatchID] = interfaces.FactoryWorldDispatch{
+		DispatchID: dispatchID, StartedTick: 1, StartedAt: eventTime.Add(-time.Second),
+		Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
+		WorkItemIDs: []string{"work-1"}, TraceIDs: []string{traceID},
+		Resources: []interfaces.FactoryResourceUnit{{ResourceID: "gpu", TokenID: resourceToken, PlaceID: "gpu:available"}},
+	}
+	reducer.stateValue.WorkItemsByID["work-1"] = work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: traceID}
+	failure := &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyRetryable, Type: workerexecution.WorkFailureTypeTimeout}
+	event := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchResponse, interfaces.FactoryEventContext{
+		DispatchID: &dispatchID, EventTime: eventTime, Tick: 2, TraceIDs: &[]string{traceID}, WorkIDs: &[]string{"work-1"},
+	}, workerexecution.DispatchResponseEventPayload{
+		TransitionID: "review", Outcome: workerexecution.OutcomeFailed,
+		DurationMillis: int64PtrForProjectionTest(1000), ProviderFailure: failure,
+		OutputResources: &[]workerexecution.DispatchResourceEventRef{{Name: "gpu", Capacity: 1}},
+		OutputWork: &[]work.WorkRequestEventWork{{
+			WorkID: "work-1", WorkTypeID: "task", TraceID: traceID,
+			Content: []work.WorkContentPart{{Type: work.WorkContentPartType("TEXT"), Text: "failed output"}},
+		}},
+	})
+
+	if err := reducer.applyDispatchResponseEvent(event); err != nil {
+		t.Fatalf("applyDispatchResponseEvent: %v", err)
+	}
+	if len(reducer.stateValue.CompletedDispatches) != 1 || len(reducer.stateValue.FailedDispatches) != 1 {
+		t.Fatalf("completion counts = completed %d failed %d", len(reducer.stateValue.CompletedDispatches), len(reducer.stateValue.FailedDispatches))
+	}
+	completion := reducer.stateValue.CompletedDispatches[0]
+	if completion.DispatchID != dispatchID || completion.Result.FailureMetadata == nil || completion.Result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("completion = %#v", completion)
+	}
+	if len(completion.OutputWorkItems) != 1 || completion.OutputWorkItems[0].PlaceID != "task:failed" || completion.OutputWorkItems[0].Content[0].Type != work.WorkContentPartTypeText {
+		t.Fatalf("output work = %#v", completion.OutputWorkItems)
+	}
+	if got := reducer.tokenPlaces[resourceToken]; got != "gpu:available" {
+		t.Fatalf("released resource place = %q, want gpu:available", got)
+	}
+	if _, active := reducer.stateValue.ActiveDispatches[dispatchID]; active {
+		t.Fatal("completed dispatch remains active")
+	}
+}
+
 func (f projectionRuntimeLookupFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.workers[name]
 	return worker, ok

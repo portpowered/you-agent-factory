@@ -74,6 +74,13 @@ input snapshots, and topology-derived workstation, worker, provider, and model
 metadata; generated event conversion remains at the temporary outer projection
 compatibility entrypoint.
 
+Dispatch-response world-state reduction decodes the canonical Factory envelope
+into the worker-execution-owned completion payload. Route Work output with the
+worker outcome, rebuild detached Work content and lineage, release named
+resources, and retain failure metadata without converting through generated
+HTTP types; generated conversion remains only at the temporary outer projection
+compatibility entrypoint.
+
 Inference, script, and agent-run world-state reduction decodes the canonical
 Factory envelope into `pkg/workers/execution` payloads. Keep provider-session
 metadata detached, decode safe diagnostic JSON through the worker diagnostics

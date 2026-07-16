@@ -3,45 +3,8 @@ package projections
 import (
 	"fmt"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
-
-func resourceUnitsFromGenerated(resources *[]factoryapi.Resource) []interfaces.FactoryResourceUnit {
-	if resources == nil {
-		return nil
-	}
-	out := make([]interfaces.FactoryResourceUnit, 0, len(*resources))
-	for _, resource := range *resources {
-		if resource.Name == "" {
-			continue
-		}
-		out = append(out, interfaces.FactoryResourceUnit{ResourceID: resource.Name})
-	}
-	return out
-}
-
-func workstationResultFromGenerated(payload factoryapi.DispatchResponseEventPayload) interfaces.WorkstationResult {
-	failureMetadata := workerdiagnostics.WorkFailureMetadataFromGenerated(payload.ProviderFailure)
-	var failureDetail *workerexecution.FailureDetail
-	if payload.FailureDetail != nil {
-		failureDetail = &workerexecution.FailureDetail{
-			Reason:  workerexecution.WorkFailureType(payload.FailureDetail.Reason),
-			Message: payload.FailureDetail.Message,
-		}
-	}
-	return interfaces.WorkstationResult{
-		Outcome:                     string(payload.Outcome),
-		Output:                      stringValue(payload.Output),
-		Error:                       stringValue(payload.Error),
-		Feedback:                    stringValue(payload.Feedback),
-		SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
-		FailureDetail:               failureDetail,
-		FailureMetadata:             workerexecution.CloneWorkFailureMetadata(failureMetadata),
-	}
-}
 
 func placeIDsFromGeneratedIOs(values []factoryapi.WorkstationIO) []string {
 	if len(values) == 0 {

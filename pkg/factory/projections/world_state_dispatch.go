@@ -275,8 +275,8 @@ func (r *factoryWorldReducer) scriptResponsesForDispatch(dispatchID string) map[
 	return responses
 }
 
-func (r *factoryWorldReducer) applyDispatchCompleted(event factoryapi.FactoryEvent, payload factoryapi.DispatchResponseEventPayload) {
-	dispatchID := stringValue(event.Context.DispatchId)
+func (r *factoryWorldReducer) applyDispatchCompleted(event interfaces.FactoryEvent, payload workerexecution.DispatchResponseEventPayload) {
+	dispatchID := stringValue(event.Context.DispatchID)
 	if dispatchID == "" {
 		return
 	}
@@ -284,7 +284,7 @@ func (r *factoryWorldReducer) applyDispatchCompleted(event factoryapi.FactoryEve
 	delete(r.stateValue.ActiveDispatches, dispatchID)
 
 	workIDs := append([]string(nil), dispatch.WorkItemIDs...)
-	traceIDs := dispatchCompletionTraceIDs(dispatch, event.Context.TraceIds)
+	traceIDs := dispatchCompletionTraceIDs(dispatch, event.Context.TraceIDs)
 	outputWorkItems, workIDs, traceIDs := r.applyDispatchOutputWork(event.Context.Tick, dispatch, payload, workIDs, traceIDs)
 	r.releaseResourceUnits(dispatch.Resources, payload.OutputResources)
 	completion := r.dispatchCompletionFromResponse(event, payload, dispatchID, dispatch, workIDs, traceIDs, outputWorkItems)
@@ -302,14 +302,14 @@ func dispatchCompletionTraceIDs(dispatch interfaces.FactoryWorldDispatch, eventT
 func (r *factoryWorldReducer) applyDispatchOutputWork(
 	observedTick int,
 	dispatch interfaces.FactoryWorldDispatch,
-	payload factoryapi.DispatchResponseEventPayload,
+	payload workerexecution.DispatchResponseEventPayload,
 	workIDs []string,
 	traceIDs []string,
 ) ([]workdomain.FactoryWorkItem, []string, []string) {
 	outputWorkItems := make([]workdomain.FactoryWorkItem, 0, len(sliceValue(payload.OutputWork)))
 	inputWorkItems := dispatchInputWorkItems(dispatch)
-	for index, work := range sliceValue(payload.OutputWork) {
-		item := r.dispatchOutputWorkItem(dispatch, payload, work)
+	for index, eventWork := range sliceValue(payload.OutputWork) {
+		item := r.dispatchOutputWorkItem(dispatch, payload, factoryWorkItemFromEventWork(eventWork))
 		if item.ID == "" {
 			continue
 		}
@@ -332,10 +332,9 @@ func (r *factoryWorldReducer) applyDispatchOutputWork(
 
 func (r *factoryWorldReducer) dispatchOutputWorkItem(
 	dispatch interfaces.FactoryWorldDispatch,
-	payload factoryapi.DispatchResponseEventPayload,
-	work factoryapi.Work,
+	payload workerexecution.DispatchResponseEventPayload,
+	item workdomain.FactoryWorkItem,
 ) workdomain.FactoryWorkItem {
-	item := factoryWorkItemFromGenerated(work)
 	if item.ID == "" {
 		return workdomain.FactoryWorkItem{}
 	}
@@ -348,7 +347,7 @@ func (r *factoryWorldReducer) dispatchOutputWorkItem(
 	if explicitPlaceID == "" {
 		if derivedPlaceID := r.outputPlaceForWork(dispatch.Workstation.ID, payload.Outcome, item.WorkTypeID); derivedPlaceID != "" {
 			item.PlaceID = derivedPlaceID
-		} else if payload.Outcome == factoryapi.WorkOutcomeContinue || payload.Outcome == factoryapi.WorkOutcomeRejected {
+		} else if payload.Outcome == workerexecution.OutcomeContinue || payload.Outcome == workerexecution.OutcomeRejected {
 			item.PlaceID = previousPlaceID
 		} else if item.State != "" {
 			item.PlaceID = r.placeForWorkTypeState(item.WorkTypeID, item.State)
@@ -358,8 +357,8 @@ func (r *factoryWorldReducer) dispatchOutputWorkItem(
 }
 
 func (r *factoryWorldReducer) dispatchCompletionFromResponse(
-	event factoryapi.FactoryEvent,
-	payload factoryapi.DispatchResponseEventPayload,
+	event interfaces.FactoryEvent,
+	payload workerexecution.DispatchResponseEventPayload,
 	dispatchID string,
 	dispatch interfaces.FactoryWorldDispatch,
 	workIDs []string,
@@ -369,28 +368,36 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 	inputWorkItems := dispatchInputWorkItems(dispatch)
 	latestAttempt := r.latestInferenceAttemptForDispatch(dispatchID)
 	return interfaces.FactoryWorldDispatchCompletion{
-		DispatchID:      dispatchID,
-		TransitionID:    payload.TransitionId,
-		Workstation:     dispatch.Workstation,
-		StartedTick:     dispatch.StartedTick,
-		CompletedTick:   event.Context.Tick,
-		StartedAt:       dispatch.StartedAt,
-		CompletedAt:     event.Context.EventTime,
-		DurationMillis:  int64Value(payload.DurationMillis),
-		Result:          workstationResultFromGenerated(payload),
+		DispatchID:     dispatchID,
+		TransitionID:   payload.TransitionID,
+		Workstation:    dispatch.Workstation,
+		StartedTick:    dispatch.StartedTick,
+		CompletedTick:  event.Context.Tick,
+		StartedAt:      dispatch.StartedAt,
+		CompletedAt:    event.Context.EventTime,
+		DurationMillis: int64Value(payload.DurationMillis),
+		Result: interfaces.WorkstationResult{
+			Outcome:                     string(payload.Outcome),
+			Output:                      stringValue(payload.Output),
+			Error:                       stringValue(payload.Error),
+			Feedback:                    stringValue(payload.Feedback),
+			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
+			FailureDetail:               workerexecution.CloneFailureDetail(payload.FailureDetail),
+			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(payload.ProviderFailure),
+		},
 		WorkItemIDs:     sortedStrings(workIDs),
 		ConsumedInputs:  interfaces.CloneWorkstationInputs(dispatch.Inputs),
 		InputWorkItems:  sortedWorkItems(inputWorkItems),
 		OutputWorkItems: sortedWorkItems(outputWorkItems),
 		CurrentChainingTraceID: completedDispatchCurrentChainingTraceID(
-			event.Context.CurrentChainingTraceId,
-			payload.CurrentChainingTraceId,
+			event.Context.CurrentChainingTraceID,
+			payload.CurrentChainingTraceID,
 			dispatch,
 			inputWorkItems,
 		),
 		PreviousChainingTraceIDs: completedDispatchPreviousChainingTraceIDs(
-			event.Context.PreviousChainingTraceIds,
-			payload.PreviousChainingTraceIds,
+			event.Context.PreviousChainingTraceIDs,
+			payload.PreviousChainingTraceIDs,
 			dispatch,
 			inputWorkItems,
 		),
@@ -404,11 +411,11 @@ func (r *factoryWorldReducer) dispatchCompletionFromResponse(
 func (r *factoryWorldReducer) recordDispatchCompletionState(
 	dispatchID string,
 	dispatch interfaces.FactoryWorldDispatch,
-	payload factoryapi.DispatchResponseEventPayload,
+	payload workerexecution.DispatchResponseEventPayload,
 	completion interfaces.FactoryWorldDispatchCompletion,
 ) {
 	r.stateValue.CompletedDispatches = append(r.stateValue.CompletedDispatches, completion)
-	if payload.Outcome == factoryapi.WorkOutcomeFailed {
+	if payload.Outcome == workerexecution.OutcomeFailed {
 		r.stateValue.FailedDispatches = append(r.stateValue.FailedDispatches, completion)
 		r.recordFailedCompletion(completion)
 	}
@@ -420,7 +427,7 @@ func (r *factoryWorldReducer) recordDispatchCompletionState(
 
 func (r *factoryWorldReducer) appendProviderSessionRecord(
 	dispatch interfaces.FactoryWorldDispatch,
-	payload factoryapi.DispatchResponseEventPayload,
+	payload workerexecution.DispatchResponseEventPayload,
 	completion interfaces.FactoryWorldDispatchCompletion,
 ) {
 	if completion.ProviderSession == nil || completion.ProviderSession.ID == "" {
@@ -428,7 +435,7 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 	}
 	r.stateValue.ProviderSessions = append(r.stateValue.ProviderSessions, interfaces.FactoryWorldProviderSessionRecord{
 		DispatchID:               completion.DispatchID,
-		TransitionID:             payload.TransitionId,
+		TransitionID:             payload.TransitionID,
 		WorkstationName:          dispatch.Workstation.Name,
 		Outcome:                  string(payload.Outcome),
 		ProviderSession:          *workerexecution.CloneProviderSessionMetadata(completion.ProviderSession),

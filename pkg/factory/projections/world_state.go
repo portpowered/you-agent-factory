@@ -11,6 +11,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -120,7 +121,11 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		}
 		return r.applyDispatchRequestEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeDispatchResponse:
-		return r.applyDispatchResponseEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyDispatchResponseEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeFactoryStateResponse:
 		return r.applyFactoryStateResponseEvent(event)
 	case factoryapi.FactoryEventTypeWorkStateChange:
@@ -250,9 +255,9 @@ func (r *factoryWorldReducer) applyDispatchRequestEvent(event interfaces.Factory
 	return nil
 }
 
-func (r *factoryWorldReducer) applyDispatchResponseEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchResponseEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchResponseEvent(event interfaces.FactoryEvent) error {
+	var payload workerexecution.DispatchResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.applyDispatchCompleted(event, payload)
@@ -479,10 +484,10 @@ func (r *factoryWorldReducer) consumeResourceUnits(resources *[]interfaces.Dispa
 	return consumed
 }
 
-func (r *factoryWorldReducer) releaseResourceUnits(consumed []interfaces.FactoryResourceUnit, resources *[]factoryapi.Resource) {
+func (r *factoryWorldReducer) releaseResourceUnits(consumed []interfaces.FactoryResourceUnit, resources *[]workerexecution.DispatchResourceEventRef) {
 	released := make([]bool, len(consumed))
-	for _, resource := range resourceUnitsFromGenerated(resources) {
-		index := firstConsumedResourceIndex(consumed, released, resource.ResourceID)
+	for _, resource := range sliceValue(resources) {
+		index := firstConsumedResourceIndex(consumed, released, resource.Name)
 		if index < 0 {
 			continue
 		}
@@ -564,7 +569,7 @@ func (r *factoryWorldReducer) initialPlaceForWorkType(workTypeID string) string 
 	return fallback
 }
 
-func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome factoryapi.WorkOutcome, workTypeID string) string {
+func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome workerexecution.WorkOutcome, workTypeID string) string {
 	workstation, ok := r.topologyWorkstation(workstationID)
 	if !ok {
 		return ""
@@ -574,7 +579,7 @@ func (r *factoryWorldReducer) outputPlaceForWork(workstationID string, outcome f
 
 func (r *factoryWorldReducer) outputPlaceForOutcome(
 	workstation interfaces.FactoryWorkstation,
-	outcome factoryapi.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	workTypeID string,
 ) string {
 	routes, ok := routedOutputPlaces(workstation, outcome)
@@ -584,25 +589,25 @@ func (r *factoryWorldReducer) outputPlaceForOutcome(
 	if route := r.matchOutputRoute(routes, workTypeID); route != "" {
 		return route
 	}
-	if outcome == factoryapi.WorkOutcomeFailed {
+	if outcome == workerexecution.OutcomeFailed {
 		return r.failedPlaceForWorkType(workTypeID)
 	}
 	return ""
 }
 
-func routedOutputPlaces(workstation interfaces.FactoryWorkstation, outcome factoryapi.WorkOutcome) ([]string, bool) {
+func routedOutputPlaces(workstation interfaces.FactoryWorkstation, outcome workerexecution.WorkOutcome) ([]string, bool) {
 	switch outcome {
-	case factoryapi.WorkOutcomeContinue:
+	case workerexecution.OutcomeContinue:
 		if len(workstation.ContinuePlaceIDs) == 0 {
 			return nil, false
 		}
 		return workstation.ContinuePlaceIDs, true
-	case factoryapi.WorkOutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		if len(workstation.RejectionPlaceIDs) == 0 {
 			return nil, false
 		}
 		return workstation.RejectionPlaceIDs, true
-	case factoryapi.WorkOutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		if len(workstation.FailurePlaceIDs) > 0 {
 			return workstation.FailurePlaceIDs, true
 		}
@@ -664,14 +669,14 @@ func placeIDMatchesWorkType(placeID string, workTypeID string) bool {
 	return prefix == workTypeID
 }
 
-func (r *factoryWorldReducer) terminalWorkForCompletion(outcome factoryapi.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
+func (r *factoryWorldReducer) terminalWorkForCompletion(outcome workerexecution.WorkOutcome, workIDs []string) *interfaces.FactoryTerminalWork {
 	for _, workID := range sortedStrings(workIDs) {
 		item, ok := r.stateValue.WorkItemsByID[workID]
 		if !ok || item.PlaceID == "" {
 			continue
 		}
 		category := r.placeCats[item.PlaceID]
-		if category == "TERMINAL" || category == "FAILED" || outcome == factoryapi.WorkOutcomeFailed {
+		if category == "TERMINAL" || category == "FAILED" || outcome == workerexecution.OutcomeFailed {
 			return &interfaces.FactoryTerminalWork{WorkItem: item, Status: category}
 		}
 	}
