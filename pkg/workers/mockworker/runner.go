@@ -90,10 +90,8 @@ func (r *MockWorkerCommandRunner) runScript(ctx context.Context, req workerproce
 }
 
 func mockWorkerOriginalCommandEnv(req workerprocess.CommandRequest) map[string]string {
-	args, err := json.Marshal(req.Args)
-	if err != nil {
-		args = []byte("[]")
-	}
+	// CommandRequest.Args is []string, so JSON encoding cannot fail.
+	args, _ := json.Marshal(req.Args)
 	return map[string]string{
 		"YOU_MOCK_WORKER_COMMAND":   req.Command,
 		"YOU_MOCK_WORKER_ARGS_JSON": string(args),
