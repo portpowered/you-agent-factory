@@ -1,6 +1,8 @@
 package requests
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -43,7 +45,10 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 			Tags:                     map[string]string{"scope": "alpha"},
 			TargetState:              "queued",
 			ExecutionID:              "exec-1",
-			Relations:                []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
+			InvocationArguments: &interfaces.InvocationArguments{Arguments: map[string]interfaces.InvocationArgument{
+				"worktree": {Values: []string{"customer-fix"}},
+			}},
+			Relations: []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
 		},
 		{
 			RequestID:   "request-shared",
@@ -61,11 +66,30 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	assertCanonicalBatchEnvelope(t, workRequest)
 	assertCanonicalFirstWork(t, workRequest.Works[0])
 	assertCanonicalSecondWork(t, workRequest.Works[1])
+	assertInvocationArgumentsStayRuntimeOnly(t, workRequest.Works[0])
 
 	requests[0].Payload[0] = 'X'
 	requests[0].Tags["scope"] = "mutated"
 	requests[0].Relations[0].TargetWorkID = "mutated"
 	assertCanonicalFirstWorkClones(t, workRequest.Works[0])
+}
+
+func assertInvocationArgumentsStayRuntimeOnly(t *testing.T, work interfaces.Work) {
+	t.Helper()
+	argument := work.InvocationArguments.Arguments["worktree"]
+	if len(argument.Values) != 1 || argument.Values[0] != "customer-fix" {
+		t.Fatalf("runtime invocation arguments = %#v, want customer worktree", work.InvocationArguments)
+	}
+	encoded, err := json.Marshal(work)
+	if err != nil {
+		t.Fatalf("marshal work: %v", err)
+	}
+	if string(encoded) == "" || string(encoded) == "null" || string(encoded) == "{}" {
+		t.Fatalf("marshaled work = %s, want public work fields", encoded)
+	}
+	if bytes.Contains(encoded, []byte("customer-fix")) {
+		t.Fatalf("marshaled work leaked runtime invocation arguments: %s", encoded)
+	}
 }
 
 func assertCanonicalBatchEnvelope(t *testing.T, workRequest interfaces.WorkRequest) {

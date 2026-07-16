@@ -6,11 +6,12 @@ import (
 
 // ShouldPrepareFactoryWorktreeForCodex reports whether a model workstation dispatch
 // should materialize a factory-local git worktree before execution. The historical
-// name remains for compatibility. A resolved worktree is factory-managed for every
-// supported agent provider, so model/provider selection cannot bypass isolation.
+// name remains for compatibility. A resolved worktree is factory-managed even
+// when the runtime uses its default provider, so model/provider selection cannot
+// bypass isolation.
 // A workstation with an authored workingDirectory retains CLI worktree passthrough.
 func ShouldPrepareFactoryWorktreeForCodex(
-	executionModelProvider string,
+	_ string,
 	authoredWorkingDirectory string,
 	resolvedWorktree string,
 ) bool {
@@ -20,5 +21,5 @@ func ShouldPrepareFactoryWorktreeForCodex(
 	if strings.TrimSpace(authoredWorkingDirectory) != "" {
 		return false
 	}
-	return strings.TrimSpace(executionModelProvider) != ""
+	return true
 }

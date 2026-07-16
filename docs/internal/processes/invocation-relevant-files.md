@@ -793,12 +793,18 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - Packaged `@you/fix` is authored under `pkg/factory/packages/definitions/fix/`
   and exposes its public identity and topology constants under
   `pkg/factory/packages/fix/`. Its plan, implementation, and review
-  workstations share a `fix-{{ (index .Inputs 0).TraceID }}` worktree template;
-  with `CODEX` model-provider workers and no authored working directory, the
-  existing workstation executor prepares that one factory-local worktree before
-  the planner dispatches and reuses it for later stages. Review rejection routes
-  `fix:review` back to `fix:implement`; only the review output reaches the
-  explicit `fix:complete` invocation return.
+  workstations share an invocation-interpolated, trace-suffixed worktree
+  template. With no authored working directory, the workstation executor
+  prepares that one factory-local worktree before the planner dispatches and
+  reuses it for later stages, including when the runtime uses its default model
+  provider. Runtime-only invocation arguments must survive the
+  `SubmitRequest` → `WorkRequest` normalization boundary without entering
+  public event payloads. Review rejection routes `fix:review` back to
+  `fix:implement`; only the review output reaches the explicit `fix:complete`
+  invocation return. Functional named-CLI coverage lives in
+  `tests/functional/smoke/cli_named_fix_run_smoke_test.go`, which materializes
+  the package in a temporary Git repository and proves default, configured,
+  and model/provider-flag invocations create one contained checkout.
 - `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
   and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`

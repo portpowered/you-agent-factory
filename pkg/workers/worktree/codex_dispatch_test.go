@@ -41,6 +41,11 @@ func TestShouldPrepareFactoryWorktreeForCodex(t *testing.T) {
 			resolvedWorktree:       "feature-a",
 			want:                   true,
 		},
+		{
+			name:             "PreservesIsolationForDefaultExecutionProvider",
+			resolvedWorktree: "feature-a",
+			want:             true,
+		},
 	}
 
 	for _, tc := range tests {

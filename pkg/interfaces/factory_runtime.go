@@ -123,6 +123,10 @@ type Work struct {
 	Tags                     map[string]string `json:"tags,omitempty"`
 	ExecutionID              string            `json:"-"`
 	RuntimeRelations         []Relation        `json:"-"`
+	// InvocationArguments are runtime-only normalized values used to resolve
+	// invocation-interpolated worker and workstation fields. They are excluded
+	// from the public request and event contracts because values can be sensitive.
+	InvocationArguments *InvocationArguments `json:"-"`
 }
 
 // WorkContentPart is the backend-owned canonical work content shape mirrored
