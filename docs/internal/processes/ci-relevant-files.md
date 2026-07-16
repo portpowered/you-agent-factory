@@ -46,4 +46,6 @@
   content-hash-locked migration quarantine for legacy files that already crossed
   direct implementation boundaries when repository-wide enforcement was enabled.
   New files and changed quarantined files fail the required functional check;
-  remove entries as scenarios move to customer interfaces.
+  remove entries as scenarios move to customer interfaces. GitHub issue #1176
+  owns the migration while quarantined files remain; keep the baseline's
+  `migrationTask` reference aligned with that approved tracker.

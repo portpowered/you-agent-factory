@@ -1,6 +1,6 @@
 {
   "formatVersion": "functional-boundary-baseline/v1",
-  "migrationTask": "tasks/ideas-to-review/agent-factory/migrate-legacy-functional-tests-to-customer-boundaries.md",
+  "migrationTask": "https://github.com/portpowered/you-agent-factory/issues/1176",
   "files": [
     { "path": "tests/functional/bootstrap_portability/cli_init_agent_slot_regression_test.go", "sha256": "11895a46c805c7845015aa21638bfdf55ce526da1b7379c98a2d378441f22040" },
     { "path": "tests/functional/bootstrap_portability/export_import_fixture_test.go", "sha256": "86ee4f0a18d3d0a12fa14335842f426dee4a5aa7dad9edf2da0e28c78600288e" },

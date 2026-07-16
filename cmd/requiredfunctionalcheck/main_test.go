@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -58,6 +60,38 @@ func TestDirect(t *testing.T) { service.BuildFactoryService() }
 	want := `functional test boundary [direct-product-boundary]: tests/functional/direct_test.go:4 directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.BuildFactoryService"`
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("run() error = %v, want %q", err, want)
+	}
+}
+
+func TestCommandProcessExitsNonZeroWithStableBoundaryDiagnostic(t *testing.T) {
+	root := t.TempDir()
+	writeCommandCanonicalManifest(t, root)
+	writeCommandFixture(t, root, defaultManifestPath, `{"formatVersion":"required-functional-scenarios/v1","scenarios":[{"stableId":"cli/direct","test":"tests/functional/direct_test.go::TestDirect","interface":"cli","lane":"short","executionClass":"deterministic","customerBoundary":true}]}`)
+	writeCommandFixture(t, root, "tests/functional/direct_test.go", `package functional
+import "testing"
+import service "github.com/portpowered/infinite-you/pkg/service"
+func TestDirect(t *testing.T) { service.BuildFactoryService() }
+`)
+
+	binaryName := "requiredfunctionalcheck"
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+	binaryPath := filepath.Join(t.TempDir(), binaryName)
+	build := exec.Command("go", "build", "-o", binaryPath, ".")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build required-functional-check: %v\n%s", err, output)
+	}
+
+	command := exec.Command(binaryPath, "-root", root)
+	output, err := command.CombinedOutput()
+	exitError, ok := err.(*exec.ExitError)
+	if !ok || exitError.ExitCode() != 1 {
+		t.Fatalf("required-functional-check error = %v, output = %q; want exit code 1", err, output)
+	}
+	want := `functional test boundary [direct-product-boundary]: tests/functional/direct_test.go:4 directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.BuildFactoryService"`
+	if !strings.Contains(string(output), want) {
+		t.Fatalf("required-functional-check output = %q, want %q", output, want)
 	}
 }
 
