@@ -116,6 +116,11 @@ type functionalBoundaryType struct {
 	name string
 }
 
+type functionalBoundaryIdentifiers struct {
+	implementations map[string]functionalBoundaryType
+	localTypes      map[string]string
+}
+
 func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBoundaryViolation, error) {
 	fileSet := token.NewFileSet()
 	parsed, err := parser.ParseFile(fileSet, path, nil, parser.SkipObjectResolution)
@@ -131,7 +136,9 @@ func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBound
 		return nil, fmt.Errorf("resolve functional test path %s: %w", filepath.ToSlash(path), err)
 	}
 
+	parents := functionalBoundaryParents(parsed)
 	typedIdentifiers := functionalBoundaryTypedIdentifiers(parsed, imports)
+	structFields := functionalBoundaryStructFields(parsed, imports)
 	var violations []FunctionalBoundaryViolation
 	ast.Inspect(parsed, func(node ast.Node) bool {
 		if literal, ok := node.(*ast.CompositeLit); ok {
@@ -144,17 +151,27 @@ func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBound
 		}
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
+			selector, isSelector := node.(*ast.SelectorExpr)
+			if !isSelector || !functionalBoundaryValueReference(selector, parents) {
+				return true
+			}
+			qualifier, isQualifier := selector.X.(*ast.Ident)
+			boundaryImport, imported := imports[qualifierName(qualifier, isQualifier)]
+			if !imported || allowedBoundarySymbol(boundaryImport.path, selector.Sel.Name) {
+				return true
+			}
+			violations = append(violations, newFunctionalBoundaryViolation(
+				relativePath, fileSet.Position(selector.Pos()).Line, boundaryImport,
+				boundaryImport.path+"."+selector.Sel.Name,
+			))
 			return true
 		}
 		selector, ok := call.Fun.(*ast.SelectorExpr)
 		if !ok {
 			return true
 		}
-		qualifier, ok := selector.X.(*ast.Ident)
-		if !ok {
-			return true
-		}
-		boundaryImport, importedCall := imports[qualifier.Name]
+		qualifier, isQualifier := selector.X.(*ast.Ident)
+		boundaryImport, importedCall := imports[qualifierName(qualifier, isQualifier)]
 		if importedCall {
 			if allowedBoundarySymbol(boundaryImport.path, selector.Sel.Name) {
 				return true
@@ -165,7 +182,9 @@ func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBound
 			))
 			return true
 		}
-		boundaryType, typedCall := functionalBoundaryTypedIdentifier(parsed, typedIdentifiers, call.Pos(), qualifier.Name)
+		boundaryType, typedCall := functionalBoundaryReceiverType(
+			parsed, typedIdentifiers, structFields, call.Pos(), selector.X,
+		)
 		if !typedCall {
 			return true
 		}
@@ -178,6 +197,55 @@ func checkFunctionalBoundaryFile(repositoryRoot, path string) ([]FunctionalBound
 	return violations, nil
 }
 
+func qualifierName(qualifier *ast.Ident, ok bool) string {
+	if !ok {
+		return ""
+	}
+	return qualifier.Name
+}
+
+func functionalBoundaryParents(root ast.Node) map[ast.Node]ast.Node {
+	parents := make(map[ast.Node]ast.Node)
+	var stack []ast.Node
+	ast.Inspect(root, func(node ast.Node) bool {
+		if node == nil {
+			stack = stack[:len(stack)-1]
+			return false
+		}
+		if len(stack) > 0 {
+			parents[node] = stack[len(stack)-1]
+		}
+		stack = append(stack, node)
+		return true
+	})
+	return parents
+}
+
+func functionalBoundaryValueReference(selector *ast.SelectorExpr, parents map[ast.Node]ast.Node) bool {
+	for node := ast.Node(selector); parents[node] != nil; node = parents[node] {
+		parent := parents[node]
+		switch typed := parent.(type) {
+		case *ast.CallExpr:
+			return typed.Fun != node
+		case *ast.AssignStmt:
+			return slices.Contains(typed.Rhs, node.(ast.Expr))
+		case *ast.ValueSpec:
+			return slices.Contains(typed.Values, node.(ast.Expr))
+		case *ast.ReturnStmt:
+			return slices.Contains(typed.Results, node.(ast.Expr))
+		case *ast.KeyValueExpr:
+			return typed.Value == node
+		case *ast.CompositeLit:
+			return typed.Type != node
+		case *ast.ParenExpr, *ast.IndexExpr, *ast.IndexListExpr:
+			continue
+		default:
+			return false
+		}
+	}
+	return false
+}
+
 func newFunctionalBoundaryViolation(relativePath string, line int, boundaryImport functionalBoundaryImport, symbol string) FunctionalBoundaryViolation {
 	return FunctionalBoundaryViolation{
 		File: filepath.ToSlash(relativePath), Line: line,
@@ -185,16 +253,20 @@ func newFunctionalBoundaryViolation(relativePath string, line int, boundaryImpor
 	}
 }
 
-func functionalBoundaryTypedIdentifiers(file *ast.File, imports map[string]functionalBoundaryImport) map[*ast.FuncDecl]map[string]functionalBoundaryType {
-	functions := make(map[*ast.FuncDecl]map[string]functionalBoundaryType)
+func functionalBoundaryTypedIdentifiers(file *ast.File, imports map[string]functionalBoundaryImport) map[*ast.FuncDecl]functionalBoundaryIdentifiers {
+	functions := make(map[*ast.FuncDecl]functionalBoundaryIdentifiers)
 	for _, declaration := range file.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
 		if !ok {
 			continue
 		}
-		identifiers := make(map[string]functionalBoundaryType)
+		identifiers := functionalBoundaryIdentifiers{
+			implementations: make(map[string]functionalBoundaryType),
+			localTypes:      make(map[string]string),
+		}
 		for _, fields := range []*ast.FieldList{function.Recv, function.Type.Params, function.Type.Results} {
-			addFunctionalBoundaryFields(identifiers, fields, imports)
+			addFunctionalBoundaryFields(identifiers.implementations, fields, imports)
+			addFunctionalLocalTypeFields(identifiers.localTypes, fields)
 		}
 		ast.Inspect(function.Body, func(node ast.Node) bool {
 			declaration, ok := node.(*ast.DeclStmt)
@@ -210,13 +282,65 @@ func functionalBoundaryTypedIdentifiers(file *ast.File, imports map[string]funct
 				if !ok || value.Type == nil {
 					continue
 				}
-				addFunctionalBoundaryNames(identifiers, value.Names, value.Type, imports)
+				addFunctionalBoundaryNames(identifiers.implementations, value.Names, value.Type, imports)
+				addFunctionalLocalTypeNames(identifiers.localTypes, value.Names, value.Type)
 			}
 			return true
 		})
 		functions[function] = identifiers
 	}
 	return functions
+}
+
+func addFunctionalLocalTypeFields(identifiers map[string]string, fields *ast.FieldList) {
+	if fields == nil {
+		return
+	}
+	for _, field := range fields.List {
+		addFunctionalLocalTypeNames(identifiers, field.Names, field.Type)
+	}
+}
+
+func addFunctionalLocalTypeNames(identifiers map[string]string, names []*ast.Ident, expression ast.Expr) {
+	for star, ok := expression.(*ast.StarExpr); ok; star, ok = expression.(*ast.StarExpr) {
+		expression = star.X
+	}
+	typeName, ok := expression.(*ast.Ident)
+	if !ok {
+		return
+	}
+	for _, name := range names {
+		identifiers[name.Name] = typeName.Name
+	}
+}
+
+func functionalBoundaryStructFields(file *ast.File, imports map[string]functionalBoundaryImport) map[string]map[string]functionalBoundaryType {
+	structs := make(map[string]map[string]functionalBoundaryType)
+	for _, declaration := range file.Decls {
+		general, ok := declaration.(*ast.GenDecl)
+		if !ok || general.Tok != token.TYPE {
+			continue
+		}
+		for _, specification := range general.Specs {
+			typeSpec, ok := specification.(*ast.TypeSpec)
+			structure, isStruct := typeSpec.Type.(*ast.StructType)
+			if !ok || !isStruct {
+				continue
+			}
+			fields := make(map[string]functionalBoundaryType)
+			for _, field := range structure.Fields.List {
+				boundaryType, found := functionalBoundaryTypeOf(field.Type, imports)
+				if !found || allowedBoundaryType(boundaryType.name) {
+					continue
+				}
+				for _, name := range field.Names {
+					fields[name.Name] = boundaryType
+				}
+			}
+			structs[typeSpec.Name.Name] = fields
+		}
+	}
+	return structs
 }
 
 func addFunctionalBoundaryFields(identifiers map[string]functionalBoundaryType, fields *ast.FieldList, imports map[string]functionalBoundaryImport) {
@@ -238,13 +362,30 @@ func addFunctionalBoundaryNames(identifiers map[string]functionalBoundaryType, n
 	}
 }
 
-func functionalBoundaryTypedIdentifier(file *ast.File, identifiers map[*ast.FuncDecl]map[string]functionalBoundaryType, position token.Pos, name string) (functionalBoundaryType, bool) {
+func functionalBoundaryReceiverType(file *ast.File, identifiers map[*ast.FuncDecl]functionalBoundaryIdentifiers, structFields map[string]map[string]functionalBoundaryType, position token.Pos, expression ast.Expr) (functionalBoundaryType, bool) {
 	for _, declaration := range file.Decls {
 		function, ok := declaration.(*ast.FuncDecl)
 		if !ok || position < function.Pos() || position > function.End() {
 			continue
 		}
-		boundaryType, found := identifiers[function][name]
+		scope := identifiers[function]
+		if identifier, direct := expression.(*ast.Ident); direct {
+			boundaryType, found := scope.implementations[identifier.Name]
+			return boundaryType, found
+		}
+		selector, nested := expression.(*ast.SelectorExpr)
+		if !nested {
+			return functionalBoundaryType{}, false
+		}
+		root, rooted := selector.X.(*ast.Ident)
+		if !rooted {
+			return functionalBoundaryType{}, false
+		}
+		localType, found := scope.localTypes[root.Name]
+		if !found {
+			return functionalBoundaryType{}, false
+		}
+		boundaryType, found := structFields[localType][selector.Sel.Name]
 		return boundaryType, found
 	}
 	return functionalBoundaryType{}, false

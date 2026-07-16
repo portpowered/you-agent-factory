@@ -90,6 +90,37 @@ func direct(svc *service.FactoryService) { svc.Run(nil) }
 	}
 }
 
+func TestCheckFunctionalTestBoundariesRejectsImplementationFunctionValue(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBoundaryFixture(t, root, `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+func direct() { build := service.BuildFactoryService; build() }
+`)
+	err := CheckFunctionalTestBoundaries(root)
+	want := `directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.BuildFactoryService"`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckFunctionalTestBoundaries() error = %v, want %q", err, want)
+	}
+}
+
+func TestCheckFunctionalTestBoundariesRejectsNestedImplementationReceiver(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeBoundaryFixture(t, root, `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+type holder struct { service *service.FactoryService }
+func direct(value holder) { value.service.Run(nil) }
+`)
+	err := CheckFunctionalTestBoundaries(root)
+	want := `directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.FactoryService.Run"`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckFunctionalTestBoundaries() error = %v, want %q", err, want)
+	}
+}
+
 func TestCheckFunctionalTestBoundariesIgnoresFilesOutsideFunctionalTree(t *testing.T) {
 	t.Parallel()
 
