@@ -149,6 +149,10 @@
       "minimum": 60.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/ralph",
+      "minimum": 0.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent",
       "minimum": 60.00
     },
