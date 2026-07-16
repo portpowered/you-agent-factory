@@ -400,61 +400,29 @@ func NewFactoryServiceCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
-	hostedWorkers hostedworkers.Config,
-) FactoryServiceCollaborators {
-	startupLocalModels := NewLocalModelDomain(cfg)
-	return FactoryServiceCollaborators{
-		Sessions:    sessions,
-		LocalModels: startupLocalModels,
-		RuntimeBuild: newRuntimeBuildService(
-			cfg,
-			clock,
-			baseLogger,
-			&startupLocalModels,
-			newInferenceProgressPublisherFactory(sessions, baseLogger),
-			newSessionDispatchCompletionObserverFactory(sessions),
-		),
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
-	}
-}
-
-// NewFactoryServiceCollaboratorsFromParts assembles collaborators from explicit
-// wire-provided parts.
-func NewFactoryServiceCollaboratorsFromParts(
-	sessions *factorysessions.Registry,
-	localModels LocalModelDomain,
-	runtimeBuild *runtimebuild.Service,
-	workersScheduler *workersservice.Service,
-) FactoryServiceCollaborators {
-	return FactoryServiceCollaborators{
-		Sessions:         sessions,
-		LocalModels:      localModels,
-		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: workersScheduler,
-	}
-}
-
-// NewRuntimeBuildService constructs the runtimebuild collaborator for wire.
-// When sessions is non-nil, worker dispatches publish canonical response events
-// into the live session store (matching BuildFactoryService / BuildFactoryCore).
-func NewRuntimeBuildService(
-	cfg *FactoryServiceConfig,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	localModels *LocalModelDomain,
-	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (FactoryServiceCollaborators, error) {
 	if sessions == nil {
-		return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil, nil)
+		return FactoryServiceCollaborators{}, fmt.Errorf("construct Factory Service collaborators: Factory Session registry is required")
 	}
-	return newRuntimeBuildService(
+	startupLocalModels := NewLocalModelDomain(cfg)
+	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
+	runtimeBuild, err := newRuntimeBuildService(
 		cfg,
 		clock,
 		baseLogger,
-		localModels,
+		&startupLocalModels,
 		newInferenceProgressPublisherFactory(sessions, baseLogger),
 		newSessionDispatchCompletionObserverFactory(sessions),
 	)
+	if err != nil {
+		return FactoryServiceCollaborators{}, err
+	}
+	return FactoryServiceCollaborators{
+		Sessions:         sessions,
+		LocalModels:      startupLocalModels,
+		RuntimeBuild:     runtimeBuild,
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
+	}, nil
 }
 
 // ServiceClockForCompose selects the factory clock for the loaded replay artifact.
@@ -671,9 +639,6 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
-	if !cfg.WorkerApplication.Valid() {
-		return nil, fmt.Errorf("factory service worker application is required")
-	}
 	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
 		return nil, err
@@ -686,10 +651,10 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		return nil, err
 	}
 	clock := ServiceClockForCompose(cfg, load)
-	hostedWorkers := NewHostedWorkersConfig(cfg, root.BaseLogger, clock)
-	collaborators := NewFactoryServiceCollaborators(
-		cfg, clock, root.BaseLogger, NewFactorySessionsRegistry(), hostedWorkers,
-	)
+	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	if err != nil {
+		return nil, err
+	}
 	return ComposeFactoryCore(
 		ctx,
 		cfg,
@@ -697,7 +662,7 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		collaborators,
 		load,
 		clock,
-		hostedWorkers,
+		NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
 	)
 }
 
@@ -839,9 +804,6 @@ func ComposeFactoryCore(
 }
 
 func validateFactoryCoreComposition(cfg *FactoryServiceConfig, collaborators FactoryServiceCollaborators) error {
-	if cfg == nil || !cfg.WorkerApplication.Valid() {
-		return fmt.Errorf("compose factory core: worker application is required")
-	}
 	if collaborators.WorkersScheduler == nil {
 		return fmt.Errorf("compose factory core: worker sidecar owner is required")
 	}

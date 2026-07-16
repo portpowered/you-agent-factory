@@ -215,9 +215,9 @@ func TestExecuteWorkflowStartsUseInjectedDurableExecutionService(t *testing.T) {
 		err = ExecuteWithDependencies(Input{
 			Args: append([]string{"you", "--json"}, command.args...),
 			Env:  homeEnvironment(t.TempDir()), Stdout: &output, Context: context.Background(),
-		}, Dependencies{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (factorysessionexecution.Service, error) {
+		}, Dependencies{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
 			requests = append(requests, request)
-			return service, nil
+			return rootTestExecutionOwner{Service: service}, nil
 		}})
 		if err != nil {
 			t.Fatalf("ExecuteWithDependencies(%s) error = %v", command.name, err)
@@ -235,6 +235,12 @@ func TestExecuteWorkflowStartsUseInjectedDurableExecutionService(t *testing.T) {
 		}
 	}
 }
+
+type rootTestExecutionOwner struct {
+	factorysessionexecution.Service
+}
+
+func (rootTestExecutionOwner) Close() error { return nil }
 
 func TestExecuteModelsInvokeUsesInjectedModelCollaborator(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, "")

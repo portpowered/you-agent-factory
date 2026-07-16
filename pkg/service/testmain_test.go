@@ -237,17 +237,23 @@ func startLocalModelInferenceTestServer(
 	clock := ServiceClockForCompose(cfg, load)
 	sessions := NewFactorySessionsRegistry()
 	startupLocalModels := domain
+	runtimeBuild, err := newRuntimeBuildService(
+		cfg,
+		clock,
+		root.BaseLogger,
+		&startupLocalModels,
+		newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
+		newSessionDispatchCompletionObserverFactory(sessions),
+	)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("newRuntimeBuildService: %v", err)
+	}
 	collaborators := FactoryServiceCollaborators{
-		Sessions:    sessions,
-		LocalModels: domain,
-		RuntimeBuild: newRuntimeBuildService(
-			cfg,
-			clock,
-			root.BaseLogger,
-			&startupLocalModels,
-			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
-			newSessionDispatchCompletionObserverFactory(sessions),
-		),
+		Sessions:         sessions,
+		LocalModels:      domain,
+		RuntimeBuild:     runtimeBuild,
 		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(
@@ -1061,11 +1067,8 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 
 	recordPath := filepath.Join(t.TempDir(), "recording.json")
 	svc, err := BuildFactoryService(context.Background(), serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
-		Dir:         dir,
-		RuntimeMode: interfaces.RuntimeModeService,
-		Logger:      zap.NewNop(),
-		RecordPath:  recordPath,
-		WorkFile:    workFile,
+		Dir: dir, RuntimeMode: interfaces.RuntimeModeService, Logger: zap.NewNop(),
+		RecordPath: recordPath, WorkFile: workFile,
 	}, workerapplication.Edges{ScriptCommandRunner: recordingDiagnosticsCommandRunner{}}))
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
