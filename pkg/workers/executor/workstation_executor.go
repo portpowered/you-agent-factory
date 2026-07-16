@@ -449,6 +449,8 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.Wo
 		InputTokens:              InputTokens(requestContext.InputTokens...),
 		ModelOperation:           workstationDef.Operation,
 		ModelBindings:            modelBindings,
+		Model:                    workerDef.Model,
+		ModelProvider:            workerDef.ModelProvider,
 		SystemPrompt:             workerDef.Body,
 		UserMessage:              rendered,
 		OutputSchema:             workstationDef.OutputSchema,

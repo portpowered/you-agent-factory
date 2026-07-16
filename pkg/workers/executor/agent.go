@@ -81,6 +81,7 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 	if !ok {
 		return missingWorkerWorkResult(request.Dispatch, workerType, time.Since(start)), nil
 	}
+	workerDef = effectiveWorkerDefinition(request, workerDef)
 
 	workstationDef, _ := ae.runtimeConfig.Workstation(inferenceWorkstationType(request))
 	req := inferenceRequestForExecutionRequest(request, workerDef, workstationDef)
@@ -117,6 +118,20 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request workerexecution.Wo
 		resp.Content = shapedContent
 	}
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
+}
+
+func effectiveWorkerDefinition(request workerexecution.WorkstationExecutionRequest, workerDef *workerconfig.Config) *workerconfig.Config {
+	if workerDef == nil || (request.Model == "" && request.ModelProvider == "") {
+		return workerDef
+	}
+	effective := *workerDef
+	if request.Model != "" {
+		effective.Model = request.Model
+	}
+	if request.ModelProvider != "" {
+		effective.ModelProvider = request.ModelProvider
+	}
+	return &effective
 }
 
 func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *workerconfig.Config, operationName string) (string, error) {

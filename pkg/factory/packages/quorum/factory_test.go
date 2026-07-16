@@ -34,11 +34,18 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedQuorumFactory(t *testing.T) {
 func TestBuiltInQuorumFactory_UsesIndependentBranchesAndGatedMerge(t *testing.T) {
 	cfg := loadQuorumConfig(t)
 	workstations := workstationsByName(cfg.Workstations)
+	assertQuorumRoutes(t, workstations)
+	assertQuorumLineageAndDependencies(t, cfg, workstations)
+}
+
+func assertQuorumRoutes(t *testing.T, workstations map[string]interfaces.FactoryWorkstationConfig) {
+	t.Helper()
 
 	split := workstations["split-quorum"]
 	if !sameRoutes(split.Inputs, []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}) ||
-		!sameRoutes(split.Outputs, []interfaces.IOConfig{{WorkTypeName: "quorum-branch-a", StateName: "init"}, {WorkTypeName: "quorum-branch-b", StateName: "init"}}) {
-		t.Fatalf("split routes = %#v, want one request input and two independent branch outputs", split)
+		!sameRoutes(split.Outputs, []interfaces.IOConfig{{WorkTypeName: "task", StateName: "quorum-context"}, {WorkTypeName: "quorum-branch-a", StateName: "init"}, {WorkTypeName: "quorum-branch-b", StateName: "init"}}) ||
+		split.WorkPropagation == nil || split.WorkPropagation.Mode != interfaces.WorkPropagationModePreserveInput {
+		t.Fatalf("split = %#v, want preserved request context and two independent branch outputs", split)
 	}
 
 	for _, branch := range []string{"a", "b"} {
@@ -51,22 +58,27 @@ func TestBuiltInQuorumFactory_UsesIndependentBranchesAndGatedMerge(t *testing.T)
 	}
 
 	merge := workstations["merge-quorum"]
-	wantMergeInputs := []interfaces.IOConfig{{WorkTypeName: "quorum-branch-a", StateName: "complete"}, {WorkTypeName: "quorum-branch-b", StateName: "complete"}}
+	wantMergeInputs := []interfaces.IOConfig{{WorkTypeName: "task", StateName: "quorum-context"}, {WorkTypeName: "quorum-branch-a", StateName: "complete"}, {WorkTypeName: "quorum-branch-b", StateName: "complete"}}
 	if !sameRoutes(merge.Inputs, wantMergeInputs) || !sameRoutes(merge.Outputs, []interfaces.IOConfig{{WorkTypeName: "quorum-merge", StateName: "complete"}}) {
 		t.Fatalf("merge routes = %#v, want ordered branch fan-in and one final Work", merge)
 	}
+}
 
+func assertQuorumLineageAndDependencies(t *testing.T, cfg *interfaces.FactoryConfig, workstations map[string]interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+	split := workstations["split-quorum"]
+	merge := workstations["merge-quorum"]
 	net, err := (&factoryconfig.ConfigMapper{}).Map(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("Map quorum topology: %v", err)
 	}
 	splitTransition := net.Transitions["split-quorum"]
-	if len(splitTransition.OutputArcs) != 2 {
-		t.Fatalf("split output arcs = %#v, want two derived Work outputs", splitTransition.OutputArcs)
+	if len(splitTransition.OutputArcs) != 3 {
+		t.Fatalf("split output arcs = %#v, want preserved request and two derived Work outputs", splitTransition.OutputArcs)
 	}
 	transformer := token_transformer.New(net.Places, net.WorkTypes)
 	input := []interfaces.TokenColor{{WorkID: "request-work", WorkTypeID: "task", DataType: interfaces.DataTypeWork, RequestID: "request-1"}}
-	for index := range splitTransition.OutputArcs {
+	for index := 1; index < len(splitTransition.OutputArcs); index++ {
 		output, err := transformer.OutputToken(token_transformer.OutputTokenInput{ArcIndex: index, Arcs: splitTransition.OutputArcs, InputColors: input})
 		if err != nil {
 			t.Fatalf("derive branch %d: %v", index, err)
@@ -80,11 +92,11 @@ func TestBuiltInQuorumFactory_UsesIndependentBranchesAndGatedMerge(t *testing.T)
 		}
 	}
 	mergeTransition := net.Transitions["merge-quorum"]
-	if len(mergeTransition.InputArcs) != 2 {
-		t.Fatalf("merge input arcs = %#v, want both completed branch Work items before dispatch", mergeTransition.InputArcs)
+	if len(mergeTransition.InputArcs) != 3 {
+		t.Fatalf("merge input arcs = %#v, want original request and both completed branch Work items before dispatch", mergeTransition.InputArcs)
 	}
 	mergeOutput := &interfaces.Token{Color: interfaces.TokenColor{WorkTypeID: "quorum-merge"}}
-	ApplyWorkRelations(mergeOutput, &merge, []interfaces.TokenColor{{WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"}, {WorkID: "branch-b-work", WorkTypeID: "quorum-branch-b"}})
+	ApplyWorkRelations(mergeOutput, &merge, []interfaces.TokenColor{{WorkID: "request-work", WorkTypeID: "task"}, {WorkID: "branch-a-work", WorkTypeID: "quorum-branch-a"}, {WorkID: "branch-b-work", WorkTypeID: "quorum-branch-b"}})
 	wantDependencies := []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "branch-a-work", RequiredState: "complete"}, {Type: interfaces.RelationDependsOn, TargetWorkID: "branch-b-work", RequiredState: "complete"}}
 	if !sameRelations(mergeOutput.Color.Relations, wantDependencies) {
 		t.Fatalf("merge relations = %#v, want dependencies on both branch results", mergeOutput.Color.Relations)

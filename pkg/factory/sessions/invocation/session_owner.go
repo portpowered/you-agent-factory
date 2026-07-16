@@ -233,7 +233,39 @@ func resolveStructuredSessionInvocationInput(
 	if normalized.CompatibilityInput != nil {
 		source = normalized.CompatibilityInput.Source
 	}
-	return ResolvedSessionInvocationInput{Source: source, NormalizedArguments: &normalized}, nil
+	return ResolvedSessionInvocationInput{
+		Source:              source,
+		Content:             structuredInvocationContent(signature, normalized),
+		NormalizedArguments: &normalized,
+	}, nil
+}
+
+// structuredInvocationContent preserves the primary positional argument as the
+// submitted Work content so routed Work can expose the original request.
+func structuredInvocationContent(signature *interfaces.InvocationSignatureConfig, normalized workinvocation.NormalizedArguments) []interfaces.WorkContentPart {
+	if signature == nil {
+		return nil
+	}
+	for _, parameter := range signature.Parameters {
+		if !hasPrimaryPositionalBinding(parameter.Bindings) {
+			continue
+		}
+		argument, ok := normalized.Arguments[parameter.Name]
+		if !ok || len(argument.Values) != 1 {
+			return nil
+		}
+		return []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: argument.Values[0]}}
+	}
+	return nil
+}
+
+func hasPrimaryPositionalBinding(bindings []interfaces.InvocationParameterBindingConfig) bool {
+	for _, binding := range bindings {
+		if binding.Kind == string(factoryapi.FactoryInvocationParameterBindingKindPositional) && binding.Position == 1 {
+			return true
+		}
+	}
+	return false
 }
 
 func sessionInvocationCompatibilityContent(request InvocationRequest) ([]work.WorkContentPart, error) {

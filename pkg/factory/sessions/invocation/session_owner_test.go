@@ -91,6 +91,9 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 	if len(argument.Sources) != 1 || argument.Sources[0].Kind != string(workinvocation.ArgumentSourceKindStructured) {
 		t.Fatalf("argument sources = %#v, want STRUCTURED", argument.Sources)
 	}
+	if len(submitted.Content) != 1 || submitted.Content[0].Text != "hello" {
+		t.Fatalf("submitted content = %#v, want primary structured input", submitted.Content)
+	}
 }
 
 func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {

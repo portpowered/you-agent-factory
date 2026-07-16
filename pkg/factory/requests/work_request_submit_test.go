@@ -1,6 +1,7 @@
 package requests
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -44,6 +45,7 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 			TargetState:              "queued",
 			ExecutionID:              "exec-1",
 			Relations:                []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "work-2", RequiredState: "complete"}},
+			InvocationArguments:      &work.InvocationArguments{Arguments: map[string]work.InvocationArgument{"input": {Values: []string{"first"}}}},
 		},
 		{
 			RequestID:   "request-shared",
@@ -65,7 +67,11 @@ func TestWorkRequestFromSubmitRequests_PreservesCanonicalBatchContract(t *testin
 	requests[0].Payload[0] = 'X'
 	requests[0].Tags["scope"] = "mutated"
 	requests[0].Relations[0].TargetWorkID = "mutated"
+	requests[0].InvocationArguments.Arguments["input"] = work.InvocationArgument{Values: []string{"mutated"}}
 	assertCanonicalFirstWorkClones(t, workRequest.Works[0])
+	if got := workRequest.Works[0].InvocationArguments.Arguments["input"].Values; !reflect.DeepEqual(got, []string{"first"}) {
+		t.Fatalf("invocation arguments = %#v, want detached input argument", got)
+	}
 }
 
 func assertCanonicalBatchEnvelope(t *testing.T, workRequest work.WorkRequest) {
