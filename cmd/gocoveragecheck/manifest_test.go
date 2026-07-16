@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCoverageFloorFromTotalsTruncatesDownward(t *testing.T) {
@@ -189,5 +190,69 @@ func TestCreateCoverageManifestIsCreateOnly(t *testing.T) {
 	}
 	if string(first) != string(second) {
 		t.Fatalf("existing manifest changed after rejected create:\n%s\n---\n%s", first, second)
+	}
+}
+
+func TestReadCoverageManifestRejectsExpiredException(t *testing.T) {
+	t.Parallel()
+
+	importPath := modulePath + "/pkg/config"
+	data := []byte(`{"version":1,"lane":"unit","packages":[{"package":"` + importPath + `","exception":{"kind":"measurement","justification":"profile defect","owner":"backend-quality","deadline":"2026-07-14","removalGate":"profile contains statements"}}]}`)
+	_, err := readCoverageManifestAt(data, "unit", []string{importPath}, time.Date(2026, 7, 15, 18, 0, 0, 0, time.FixedZone("test", -7*60*60)))
+	if err == nil || !strings.Contains(err.Error(), "expired exception for package \""+importPath+"\"") {
+		t.Fatalf("readCoverageManifestAt() error = %v, want expired-exception diagnostic", err)
+	}
+}
+
+func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
+	t.Parallel()
+
+	alpha := modulePath + "/pkg/config"
+	beta := modulePath + "/pkg/service"
+	for _, lane := range []string{"unit", "functional"} {
+		lane := lane
+		t.Run(lane, func(t *testing.T) {
+			t.Parallel()
+
+			manifest := coverageManifest{
+				Version: coverageManifestVersion,
+				Lane:    lane,
+				Packages: []coverageManifestEntry{
+					{Package: alpha, Minimum: json.RawMessage("80.00")},
+					{Package: beta, Minimum: json.RawMessage("75.00")},
+				},
+			}
+			missing := manifest
+			missing.Packages = missing.Packages[:1]
+			err := validateCoverageManifestAt(missing, lane, []string{alpha, beta}, time.Date(2026, 7, 15, 0, 0, 0, 0, time.UTC))
+			if err == nil || !strings.Contains(err.Error(), "measured "+lane+" package \""+beta+"\" has no manifest entry") {
+				t.Fatalf("missing-entry error = %v, want lane-specific closed failure", err)
+			}
+
+			if failures := checkCoverageManifest(manifest, map[string]packageCoverageTotals{
+				alpha: {coveredStatements: 4, totalStatements: 5},
+				beta:  {coveredStatements: 3, totalStatements: 4},
+			}, "minimums.json"); len(failures) != 0 {
+				t.Fatalf("equality failures = %v, want none", failures)
+			}
+
+			failures := checkCoverageManifest(manifest, map[string]packageCoverageTotals{
+				alpha: {coveredStatements: 79, totalStatements: 100},
+				beta:  {coveredStatements: 74, totalStatements: 100},
+			}, "minimums.json")
+			if len(failures) != 2 {
+				t.Fatalf("regression failures = %v, want two", failures)
+			}
+			if !strings.Contains(failures[0], "package="+alpha+" lane="+lane+" expected-minimum=80.00% actual=79.0000% delta=-1.0000") ||
+				!strings.Contains(failures[0], "-generate-manifest <new-manifest>") {
+				t.Fatalf("first regression = %q, want complete actionable diagnostic", failures[0])
+			}
+			if !strings.Contains(failures[1], "package="+beta+" lane="+lane+" expected-minimum=75.00% actual=74.0000% delta=-1.0000") {
+				t.Fatalf("second regression = %q, want complete diagnostic", failures[1])
+			}
+			if !slices.IsSorted(failures) {
+				t.Fatalf("regression failures are not in stable package order: %v", failures)
+			}
+		})
 	}
 }

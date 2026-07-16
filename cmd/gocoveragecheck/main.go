@@ -43,6 +43,7 @@ type config struct {
 	coverpkg         string
 	jobs             int
 	generateManifest string
+	packageManifest  string
 	min              float64
 	packageBaseline  string
 	packageMin       float64
@@ -60,6 +61,7 @@ type coverageResult struct {
 	packageTotals                map[string]packageCoverageTotals
 	packageSummaries             []packageCoverageSummary
 	zeroCoveragePackages         []string
+	packageMinimumFailures       []string
 }
 
 type packageCoverageTotals struct {
@@ -98,6 +100,7 @@ func execute(cfg config) error {
 	if len(result.insufficientCoveragePackages) > 0 {
 		failures = append(failures, formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin()))
 	}
+	failures = append(failures, result.packageMinimumFailures...)
 
 	for _, summary := range result.packageSummaries {
 		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
@@ -122,6 +125,7 @@ func parseConfig() config {
 	flag.StringVar(&cfg.coverpkg, "coverpkg", "", "comma-separated import paths to measure; defaults to backend-owned packages")
 	flag.IntVar(&cfg.jobs, "jobs", 0, "go test -p value; functional coverage defaults to 2 and unit coverage uses the Go default")
 	flag.StringVar(&cfg.generateManifest, "generate-manifest", "", "create a deterministic package-minimum manifest from this lane's coverage profile")
+	flag.StringVar(&cfg.packageManifest, "package-manifest", "", "enforce the active lane's checked-in package-minimum manifest")
 	flag.Float64Var(&cfg.min, "min", 0, "minimum total statement coverage percentage")
 	flag.StringVar(&cfg.packageBaseline, "package-baseline", "", "newline-delimited list of backend packages temporarily exempt from the per-package minimum coverage gate; defaults by suite")
 	flag.Float64Var(&cfg.packageMin, "package-min", defaultPackageCoverageMin, "minimum statement coverage required for each non-baselined backend package")
@@ -231,6 +235,17 @@ func run(cfg config) (coverageResult, error) {
 	result, totalLine, err := evaluateCoverage(stdout.String(), "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, packageGateEnabled)
 	if err != nil {
 		return coverageResult{}, err
+	}
+	if packageGateEnabled && strings.TrimSpace(cfg.packageManifest) != "" {
+		manifestPath := cfg.packageManifest
+		if !filepath.IsAbs(manifestPath) {
+			manifestPath = filepath.Join(repoRoot, manifestPath)
+		}
+		manifest, err := readCoverageManifestFile(manifestPath, cfg.suite, packageImportPaths(result.packageSummaries))
+		if err != nil {
+			return coverageResult{}, err
+		}
+		result.packageMinimumFailures = checkCoverageManifest(manifest, result.packageTotals, cfg.packageManifest)
 	}
 	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil

@@ -201,6 +201,15 @@ coverage is represented by a numeric floor, not an exception.
 
 Bootstrap a new lane manifest from the lane's integer statement counts with
 `go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -generate-manifest <new-file>`. Generation is create-only: it refuses to overwrite reviewed policy.
+
+Enforce a reviewed lane manifest with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -package-manifest <manifest-file>`.
+The check fails closed when a measured package is missing, an exception is
+expired, or the exact integer statement ratio is below its package floor.
+Regression diagnostics include the lane, package, expected minimum, actual
+coverage, signed delta, and the create-only command for producing a candidate
+manifest for review. Aggregate `-min` enforcement remains independent and
+blocking.
 The renderer sorts entries and truncates each exact ratio downward to two
 decimal percentage points, so identical profiles produce identical bytes and a
 generated floor never exceeds its measurement. A later package-minimums change

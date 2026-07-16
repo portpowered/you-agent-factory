@@ -125,6 +125,10 @@ func renderCoverageManifest(manifest coverageManifest) ([]byte, error) {
 }
 
 func readCoverageManifest(data []byte, expectedLane string, measuredPackages []string) (coverageManifest, error) {
+	return readCoverageManifestAt(data, expectedLane, measuredPackages, time.Now().UTC())
+}
+
+func readCoverageManifestAt(data []byte, expectedLane string, measuredPackages []string, now time.Time) (coverageManifest, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var manifest coverageManifest
@@ -134,7 +138,7 @@ func readCoverageManifest(data []byte, expectedLane string, measuredPackages []s
 	if err := ensureJSONEOF(decoder); err != nil {
 		return coverageManifest{}, err
 	}
-	if err := validateCoverageManifest(manifest, expectedLane, measuredPackages); err != nil {
+	if err := validateCoverageManifestAt(manifest, expectedLane, measuredPackages, now); err != nil {
 		return coverageManifest{}, err
 	}
 	return manifest, nil
@@ -151,6 +155,10 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 }
 
 func validateCoverageManifest(manifest coverageManifest, expectedLane string, measuredPackages []string) error {
+	return validateCoverageManifestAt(manifest, expectedLane, measuredPackages, time.Now().UTC())
+}
+
+func validateCoverageManifestAt(manifest coverageManifest, expectedLane string, measuredPackages []string, now time.Time) error {
 	if manifest.Version != coverageManifestVersion {
 		return fmt.Errorf("validate go coverage manifest: version %d is unsupported; expected %d", manifest.Version, coverageManifestVersion)
 	}
@@ -182,6 +190,12 @@ func validateCoverageManifest(manifest coverageManifest, expectedLane string, me
 		if err := validateCoverageManifestEntry(entry); err != nil {
 			return fmt.Errorf("validate go coverage manifest package %q: %w", entry.Package, err)
 		}
+		if entry.Exception != nil {
+			deadline, _ := time.Parse("2006-01-02", entry.Exception.Deadline)
+			if deadline.Before(dateOnlyUTC(now)) {
+				return fmt.Errorf("validate go coverage manifest: expired exception for package %q: deadline %s passed; satisfy removal gate: %s", entry.Package, entry.Exception.Deadline, entry.Exception.RemovalGate)
+			}
+		}
 		seen[entry.Package] = struct{}{}
 		previous = entry.Package
 	}
@@ -191,6 +205,47 @@ func validateCoverageManifest(manifest coverageManifest, expectedLane string, me
 		}
 	}
 	return nil
+}
+
+func dateOnlyUTC(value time.Time) time.Time {
+	year, month, day := value.UTC().Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+}
+
+func readCoverageManifestFile(filename string, lane string, measuredPackages []string) (coverageManifest, error) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return coverageManifest{}, fmt.Errorf("read %s go coverage manifest: %w", lane, err)
+	}
+	manifest, err := readCoverageManifest(data, lane, measuredPackages)
+	if err != nil {
+		return coverageManifest{}, err
+	}
+	return manifest, nil
+}
+
+func checkCoverageManifest(manifest coverageManifest, totals map[string]packageCoverageTotals, manifestPath string) []string {
+	failures := make([]string, 0)
+	for _, entry := range manifest.Packages {
+		if entry.Exception != nil {
+			continue
+		}
+		minimum, _ := parseCoverageFloor(entry.Minimum)
+		actual := totals[entry.Package]
+		if actual.totalStatements > 0 && int64(actual.coveredStatements)*10000 >= int64(minimum)*int64(actual.totalStatements) {
+			continue
+		}
+		actualPercent := 0.0
+		if actual.totalStatements > 0 {
+			actualPercent = float64(actual.coveredStatements) * 100 / float64(actual.totalStatements)
+		}
+		expectedPercent := float64(minimum) / 100
+		failures = append(failures, fmt.Sprintf(
+			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points; restore coverage or generate a reviewed candidate with `go run ./cmd/gocoveragecheck -suite %s -profile <coverage-profile> -generate-manifest <new-manifest>` (current manifest: %s)",
+			entry.Package, manifest.Lane, minimum.String(), actualPercent, actualPercent-expectedPercent, manifest.Lane, manifestPath,
+		))
+	}
+	return failures
 }
 
 func validateCoverageLane(lane string) error {
