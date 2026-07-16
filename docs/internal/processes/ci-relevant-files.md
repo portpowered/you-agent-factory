@@ -29,11 +29,11 @@
   explicit run/intentional-skip summary, per-suite coverage thresholds,
   diagnostics, and artifacts; neither lane may depend on Build, Lint, or API.
   Their exact local reruns are `make test-unit-coverage` and
-  `make test-functional-coverage`.
-  When a change adds a measurable Go package to either profile, add its
-  package-specific minimum to the matching
-  `docs/internal/development/go-*-coverage-package-minimums.json` manifest in
-  the same change; the coverage gate rejects unowned measured packages.
+  `make test-functional-coverage`. When a newly measured package enters either
+  profile, add its import-path-sorted entry to the matching
+  `docs/internal/development/go-*-coverage-package-minimums.json` manifest.
+  Use a measurement exception only when the active profile has no measurable
+  statements; otherwise record the package's verified baseline.
   Windows Go suite coverage is a `windows-go-tests` matrix with independent
   `Unit`, `Functional`, `Stress`, and `Release` jobs. Keep `fail-fast: false`,
   preserve each job's Windows setup, and invoke the matching repository-owned
