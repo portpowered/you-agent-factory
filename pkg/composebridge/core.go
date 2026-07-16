@@ -15,6 +15,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -38,15 +39,22 @@ func NewCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
-) Collaborators {
+) (Collaborators, error) {
+	if sessions == nil {
+		return Collaborators{}, fmt.Errorf("compose session collaborators: registry is required")
+	}
 	startupLocalModels := NewLocalModelDomain(cfg)
 	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
+	runtimeBuild, err := NewRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, sessions)
+	if err != nil {
+		return Collaborators{}, err
+	}
 	return Collaborators{
 		Sessions:         sessions,
 		LocalModels:      startupLocalModels,
-		RuntimeBuild:     NewRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, sessions),
+		RuntimeBuild:     runtimeBuild,
 		WorkersScheduler: NewWorkersScheduler(cfg, clock, baseLogger, hostedWorkers),
-	}
+	}, nil
 }
 
 // ComposeCore constructs a runtimehost.Core using explicit composition collaborators.
@@ -59,8 +67,8 @@ func ComposeCore(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (*runtimehost.Core, error) {
-	if collaborators.WorkersScheduler == nil {
-		return nil, fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	if err := validateCoreCollaborators(collaborators); err != nil {
+		return nil, err
 	}
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
@@ -86,10 +94,11 @@ func ComposeCore(
 		}
 		cfg.Dir = resolvedDir
 	}
-	durableExecution, persistence, err := composeDurableExecution(cfg, root, clock)
+	durableExecution, persistence, runtimeBuild, err := composeSessionRuntimeDependencies(cfg, root, clock, collaborators.RuntimeBuild)
 	if err != nil {
 		return nil, err
 	}
+	collaborators.RuntimeBuild = runtimeBuild
 
 	replaySideEffects, replayFactoryOpts, err := ReplayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
@@ -148,6 +157,53 @@ func ComposeCore(
 		durableExecution,
 		persistence,
 	), nil
+}
+
+func validateCoreCollaborators(collaborators Collaborators) error {
+	switch {
+	case collaborators.Sessions == nil:
+		return fmt.Errorf("compose runtime host core: Factory Session registry is required")
+	case collaborators.RuntimeBuild == nil:
+		return fmt.Errorf("compose runtime host core: runtime build service is required")
+	case collaborators.WorkersScheduler == nil:
+		return fmt.Errorf("compose runtime host core: worker sidecar owner is required")
+	default:
+		return nil
+	}
+}
+
+func composeSessionRuntimeDependencies(
+	cfg *runtimehost.Config,
+	root Root,
+	clock factory.Clock,
+	build *runtimebuild.Service,
+) (factorysessionexecution.Service, runtimepersist.Store, *runtimebuild.Service, error) {
+	execution, persistence, err := composeDurableExecution(cfg, root, clock)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	configured, err := composePetriRecordingRuntimeBuild(build, execution)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return execution, persistence, configured, nil
+}
+
+func composePetriRecordingRuntimeBuild(
+	build *runtimebuild.Service,
+	execution factorysessionexecution.Service,
+) (*runtimebuild.Service, error) {
+	recorder, ok := execution.(interface {
+		RecordPetriTokenMutations(string, []interfaces.TokenMutationRecord) error
+	})
+	if !ok {
+		return nil, fmt.Errorf("compose runtime host core: durable execution owner does not record Petri mutations")
+	}
+	configured, err := build.WithPetriMutationRecorder(recorder.RecordPetriTokenMutations)
+	if err != nil {
+		return nil, fmt.Errorf("compose runtime host core: %w", err)
+	}
+	return configured, nil
 }
 
 func durableProjectRoot(executionBaseDir, configuredDir, factoryRootDir string) string {
@@ -228,7 +284,10 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		return nil, err
 	}
 	clock := ClockForCompose(cfg, load)
-	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, factorysessions.NewRegistry())
+	collaborators, err := NewCollaborators(cfg, clock, root.BaseLogger, factorysessions.NewRegistry())
+	if err != nil {
+		return nil, err
+	}
 	return ComposeCore(
 		ctx,
 		cfg,

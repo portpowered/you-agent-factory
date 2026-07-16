@@ -27,7 +27,10 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 	}
 	clock := provideServiceClock(cfg, factoryConfigLoadResult)
 	logger := provideBaseLogger(factoryServiceRoot)
-	runtimebuildService := provideRuntimeBuildService(cfg, clock, logger, v, registry)
+	runtimebuildService, err := provideRuntimeBuildService(cfg, clock, logger, v, registry)
+	if err != nil {
+		return nil, err
+	}
 	config := provideHostedWorkersConfig(cfg, logger, clock)
 	serviceService := provideWorkersSchedulerService(cfg, clock, logger, config)
 	factoryServiceCollaborators := provideFactoryServiceCollaborators(registry, v, runtimebuildService, serviceService)

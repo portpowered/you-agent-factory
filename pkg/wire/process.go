@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -50,7 +51,7 @@ func BuildMCPExecutionService(
 		}
 		service, err := factorysessionexecution.NewExecutionService(
 			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
+			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence, Clock: factory.EnsureClock(nil)},
 		)
 		if err != nil {
 			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)

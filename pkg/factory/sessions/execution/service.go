@@ -339,6 +339,9 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		if projectRoot == "" {
 			return nil, NewValidationError("projectRoot", "projectRoot is required")
 		}
+		if config.Clock == nil {
+			return nil, NewValidationError("clock", "clock is required")
+		}
 		childExecutorMode := normalizeChildExecutorMode(config.ChildExecutorMode)
 		executor := config.ProviderExecutor
 		if executor == nil && config.Provider != nil {

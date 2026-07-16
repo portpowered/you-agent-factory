@@ -236,17 +236,23 @@ func startLocalModelInferenceTestServer(
 	clock := ServiceClockForCompose(cfg, load)
 	sessions := NewFactorySessionsRegistry()
 	startupLocalModels := domain
+	runtimeBuild, err := newRuntimeBuildService(
+		cfg,
+		clock,
+		root.BaseLogger,
+		&startupLocalModels,
+		newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
+		newSessionDispatchCompletionObserverFactory(sessions),
+	)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("newRuntimeBuildService: %v", err)
+	}
 	collaborators := FactoryServiceCollaborators{
-		Sessions:    sessions,
-		LocalModels: domain,
-		RuntimeBuild: newRuntimeBuildService(
-			cfg,
-			clock,
-			root.BaseLogger,
-			&startupLocalModels,
-			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
-			newSessionDispatchCompletionObserverFactory(sessions),
-		),
+		Sessions:         sessions,
+		LocalModels:      domain,
+		RuntimeBuild:     runtimeBuild,
 		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfig(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(

@@ -64,7 +64,7 @@ func NewRuntimeBuildService(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	return service.NewRuntimeBuildServiceForCompose(cfg, clock, baseLogger, localModels, sessions)
 }
 

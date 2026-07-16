@@ -1155,7 +1155,7 @@ func newRuntimeBuildService(
 	startupLocalModels *localModelDomain,
 	progressPublisherFactory inferenceProgressPublisherFactory,
 	dispatchCompletionFactory dispatchCompletionObserverFactory,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
 		buildCfg,
@@ -1443,7 +1443,7 @@ func NewRuntimeBuildServiceForCompose(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	return newRuntimeBuildService(
 		FactoryServiceConfigFromRuntimeHost(cfg),
 		clock,

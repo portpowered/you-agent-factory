@@ -73,7 +73,7 @@ func provideRuntimeBuildService(
 	baseLogger *zap.Logger,
 	localModels service.LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	domain := localModels
 	return service.NewRuntimeBuildService(cfg, clock, baseLogger, &domain, sessions)
 }

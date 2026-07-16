@@ -400,22 +400,29 @@ func NewFactoryServiceCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
-) FactoryServiceCollaborators {
+) (FactoryServiceCollaborators, error) {
+	if sessions == nil {
+		return FactoryServiceCollaborators{}, fmt.Errorf("construct Factory Service collaborators: Factory Session registry is required")
+	}
 	startupLocalModels := NewLocalModelDomain(cfg)
 	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
-	return FactoryServiceCollaborators{
-		Sessions:    sessions,
-		LocalModels: startupLocalModels,
-		RuntimeBuild: newRuntimeBuildService(
-			cfg,
-			clock,
-			baseLogger,
-			&startupLocalModels,
-			newInferenceProgressPublisherFactory(sessions, baseLogger),
-			newSessionDispatchCompletionObserverFactory(sessions),
-		),
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
+	runtimeBuild, err := newRuntimeBuildService(
+		cfg,
+		clock,
+		baseLogger,
+		&startupLocalModels,
+		newInferenceProgressPublisherFactory(sessions, baseLogger),
+		newSessionDispatchCompletionObserverFactory(sessions),
+	)
+	if err != nil {
+		return FactoryServiceCollaborators{}, err
 	}
+	return FactoryServiceCollaborators{
+		Sessions:         sessions,
+		LocalModels:      startupLocalModels,
+		RuntimeBuild:     runtimeBuild,
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, baseLogger, hostedWorkers),
+	}, nil
 }
 
 // NewFactoryServiceCollaboratorsFromParts assembles collaborators from explicit
@@ -435,17 +442,17 @@ func NewFactoryServiceCollaboratorsFromParts(
 }
 
 // NewRuntimeBuildService constructs the runtimebuild collaborator for wire.
-// When sessions is non-nil, worker dispatches publish canonical response events
-// into the live session store (matching BuildFactoryService / BuildFactoryCore).
+// Worker dispatches publish canonical response events into the required live
+// session registry (matching BuildFactoryService / BuildFactoryCore).
 func NewRuntimeBuildService(
 	cfg *FactoryServiceConfig,
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 	sessions *factorysessions.Registry,
-) *runtimebuild.Service {
+) (*runtimebuild.Service, error) {
 	if sessions == nil {
-		return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil, nil)
+		return nil, fmt.Errorf("construct runtime build service: Factory Session registry is required")
 	}
 	return newRuntimeBuildService(
 		cfg,
@@ -683,7 +690,10 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		return nil, err
 	}
 	clock := ServiceClockForCompose(cfg, load)
-	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	if err != nil {
+		return nil, err
+	}
 	return ComposeFactoryCore(
 		ctx,
 		cfg,

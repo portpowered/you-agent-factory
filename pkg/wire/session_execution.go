@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -36,6 +37,7 @@ func BuildSessionExecutionService(
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: request.ChildExecutorMode,
 			Persistence:       persistence,
+			Clock:             factory.EnsureClock(nil),
 		})
 	}
 	catalogPath, err := resolveSessionExecutionFixtureCatalog(request.FixtureCatalogPath)

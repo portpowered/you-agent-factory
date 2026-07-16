@@ -169,6 +169,13 @@ composition boundary in `pkg/factory/sessions/execution/service.go`; production
 runtime code must receive either that injected store or an explicit disabled
 policy and must not use a persistence boolean.
 
+Construct `pkg/service/runtimebuild.Service` with an explicit clock, logger, and
+runtime bundle builder, and propagate its constructor error before initializer
+lifecycle begins. Before building any session runtime, application composition
+must attach the graph-owned durable execution service's Petri mutation recorder;
+that preserves one canonical Factory Session event and snapshot owner across
+startup, replacement, and resume builds.
+
 The guard also rejects `BuildInvocationBootstrap`, `NewExecutionService`,
 `NewFakeServiceFromContractFixtures`, and `ProjectPersistence` calls outside
 approved application-composition owners. Transport packages consume injected
