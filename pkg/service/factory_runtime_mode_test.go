@@ -2002,6 +2002,18 @@ func assertModelCatalogCallsForwardedOnce(t *testing.T, stub *stubModelService, 
 func TestInvocationBootstrap_InvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing.T) {
 	t.Parallel()
 
+	for name, bootstrap := range map[string]*InvocationBootstrap{
+		"nil bootstrap": nil,
+		"nil service":   &InvocationBootstrap{},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := bootstrap.InvokeModel(context.Background(), "invoke-model", factoryapi.ModelInvocationRequest{})
+			if err == nil || !reflect.DeepEqual(result, apisurface.ModelInvocationResult{}) {
+				t.Fatalf("InvokeModel = (%#v, %v), want zero result and bootstrap error", result, err)
+			}
+		})
+	}
+
 	type contextKey string
 	ctx := context.WithValue(context.Background(), contextKey("request"), "invoke-request")
 	invokeErr := &apisurface.ManagedRuntimeInvocationError{
