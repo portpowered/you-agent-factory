@@ -244,7 +244,7 @@ func TestCheckCoverageManifestControlledProfilesForBothLanes(t *testing.T) {
 				t.Fatalf("regression failures = %v, want two", failures)
 			}
 			if !strings.Contains(failures[0], "package="+alpha+" lane="+lane+" expected-minimum=80.00% actual=79.0000% delta=-1.0000") ||
-				!strings.Contains(failures[0], "-generate-manifest <new-manifest>") {
+				!strings.Contains(failures[0], "-update-manifest minimums.json") {
 				t.Fatalf("first regression = %q, want complete actionable diagnostic", failures[0])
 			}
 			if !strings.Contains(failures[1], "package="+beta+" lane="+lane+" expected-minimum=75.00% actual=74.0000% delta=-1.0000") {

@@ -207,14 +207,18 @@ Enforce a reviewed lane manifest with
 The check fails closed when a measured package is missing, an exception is
 expired, or the exact integer statement ratio is below its package floor.
 Regression diagnostics include the lane, package, expected minimum, actual
-coverage, signed delta, and the create-only command for producing a candidate
-manifest for review. Aggregate `-min` enforcement remains independent and
-blocking.
+coverage, signed delta, and the monotonic update command for ratcheting the
+reviewed manifest after coverage is restored. Aggregate `-min` enforcement
+remains independent and blocking.
 The renderer sorts entries and truncates each exact ratio downward to two
 decimal percentage points, so identical profiles produce identical bytes and a
-generated floor never exceeds its measurement. A later package-minimums change
-will add the explicit monotonic workflow for updating an existing reviewed
-manifest.
+generated floor never exceeds its measurement. Ratchet an existing reviewed
+manifest explicitly with
+`go run ./cmd/gocoveragecheck -suite <unit|functional> -min 0 -update-manifest <manifest-file>`.
+The command reports every package as `added`, `raised`, `unchanged`, or
+`rejected` in import-path order. Any rejected decrease prevents the entire
+write; repeating the command without an added package or qualifying increase
+leaves the manifest byte-for-byte unchanged.
 
 The browser-backed lane remains self-building for the same reason: `make ui-integration-test` delegates into the shared browser harness that runs `bun run build` with a test-owned API origin and serves that exact build with `vite preview`. Treat that build plus preview startup as part of the lane's owned runtime contract instead of uploading `ui/dist` from another job.
 

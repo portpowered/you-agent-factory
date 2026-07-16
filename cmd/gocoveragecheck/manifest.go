@@ -77,29 +77,33 @@ func newCoverageManifest(lane string, totals map[string]packageCoverageTotals, p
 	slices.Sort(packages)
 	entries := make([]coverageManifestEntry, 0, len(packages))
 	for _, importPath := range packages {
-		floor, err := coverageFloorFromTotals(totals[importPath])
+		entry, err := newCoverageManifestEntry(lane, importPath, totals[importPath])
 		if err != nil {
-			if totals[importPath].totalStatements == 0 {
-				entries = append(entries, coverageManifestEntry{
-					Package: importPath,
-					Exception: &coverageManifestException{
-						Kind:          "measurement",
-						Justification: "The Go coverage profile contains no measurable statements for this declaration-only package.",
-						Owner:         "backend-quality",
-						Deadline:      unmeasurablePackageDeadline,
-						RemovalGate:   fmt.Sprintf("The %s coverage profile reports at least one measurable statement for this package.", lane),
-					},
-				})
-				continue
-			}
 			return coverageManifest{}, fmt.Errorf("generate %s coverage manifest for %s: %w", lane, importPath, err)
 		}
-		entries = append(entries, coverageManifestEntry{
-			Package: importPath,
-			Minimum: json.RawMessage(floor.String()),
-		})
+		entries = append(entries, entry)
 	}
 	return coverageManifest{Version: coverageManifestVersion, Lane: lane, Packages: entries}, nil
+}
+
+func newCoverageManifestEntry(lane string, importPath string, totals packageCoverageTotals) (coverageManifestEntry, error) {
+	floor, err := coverageFloorFromTotals(totals)
+	if err == nil {
+		return coverageManifestEntry{Package: importPath, Minimum: json.RawMessage(floor.String())}, nil
+	}
+	if totals.totalStatements != 0 || totals.coveredStatements != 0 {
+		return coverageManifestEntry{}, err
+	}
+	return coverageManifestEntry{
+		Package: importPath,
+		Exception: &coverageManifestException{
+			Kind:          "measurement",
+			Justification: "The Go coverage profile contains no measurable statements for this declaration-only package.",
+			Owner:         "backend-quality",
+			Deadline:      unmeasurablePackageDeadline,
+			RemovalGate:   fmt.Sprintf("The %s coverage profile reports at least one measurable statement for this package.", lane),
+		},
+	}, nil
 }
 
 func coverageFloorFromTotals(totals packageCoverageTotals) (coverageFloor, error) {
@@ -129,6 +133,14 @@ func readCoverageManifest(data []byte, expectedLane string, measuredPackages []s
 }
 
 func readCoverageManifestAt(data []byte, expectedLane string, measuredPackages []string, now time.Time) (coverageManifest, error) {
+	return readCoverageManifestAtMode(data, expectedLane, measuredPackages, now, true)
+}
+
+func readCoverageManifestForUpdate(data []byte, expectedLane string, measuredPackages []string) (coverageManifest, error) {
+	return readCoverageManifestAtMode(data, expectedLane, measuredPackages, time.Now().UTC(), false)
+}
+
+func readCoverageManifestAtMode(data []byte, expectedLane string, measuredPackages []string, now time.Time, requireComplete bool) (coverageManifest, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var manifest coverageManifest
@@ -138,7 +150,7 @@ func readCoverageManifestAt(data []byte, expectedLane string, measuredPackages [
 	if err := ensureJSONEOF(decoder); err != nil {
 		return coverageManifest{}, err
 	}
-	if err := validateCoverageManifestAt(manifest, expectedLane, measuredPackages, now); err != nil {
+	if err := validateCoverageManifestAtMode(manifest, expectedLane, measuredPackages, now, requireComplete); err != nil {
 		return coverageManifest{}, err
 	}
 	return manifest, nil
@@ -159,6 +171,10 @@ func validateCoverageManifest(manifest coverageManifest, expectedLane string, me
 }
 
 func validateCoverageManifestAt(manifest coverageManifest, expectedLane string, measuredPackages []string, now time.Time) error {
+	return validateCoverageManifestAtMode(manifest, expectedLane, measuredPackages, now, true)
+}
+
+func validateCoverageManifestAtMode(manifest coverageManifest, expectedLane string, measuredPackages []string, now time.Time, requireComplete bool) error {
 	if manifest.Version != coverageManifestVersion {
 		return fmt.Errorf("validate go coverage manifest: version %d is unsupported; expected %d", manifest.Version, coverageManifestVersion)
 	}
@@ -199,9 +215,11 @@ func validateCoverageManifestAt(manifest coverageManifest, expectedLane string, 
 		seen[entry.Package] = struct{}{}
 		previous = entry.Package
 	}
-	for _, importPath := range measuredPackages {
-		if _, ok := seen[importPath]; !ok {
-			return fmt.Errorf("validate go coverage manifest: measured %s package %q has no manifest entry", expectedLane, importPath)
+	if requireComplete {
+		for _, importPath := range measuredPackages {
+			if _, ok := seen[importPath]; !ok {
+				return fmt.Errorf("validate go coverage manifest: measured %s package %q has no manifest entry", expectedLane, importPath)
+			}
 		}
 	}
 	return nil
@@ -241,7 +259,7 @@ func checkCoverageManifest(manifest coverageManifest, totals map[string]packageC
 		}
 		expectedPercent := float64(minimum) / 100
 		failures = append(failures, fmt.Sprintf(
-			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points; restore coverage or generate a reviewed candidate with `go run ./cmd/gocoveragecheck -suite %s -profile <coverage-profile> -generate-manifest <new-manifest>` (current manifest: %s)",
+			"package coverage regression: package=%s lane=%s expected-minimum=%s%% actual=%.4f%% delta=%+.4f percentage-points; restore coverage before running `go run ./cmd/gocoveragecheck -suite %s -profile <coverage-profile> -update-manifest %s`",
 			entry.Package, manifest.Lane, minimum.String(), actualPercent, actualPercent-expectedPercent, manifest.Lane, manifestPath,
 		))
 	}
