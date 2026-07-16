@@ -62,6 +62,20 @@ type FactorySessionSSECheckpoint struct {
 	AfterSequence *int
 }
 
+// ApplyRecovery returns the checkpoint to use for the next stream open after a
+// typed JSON recovery probe. The server controls each omission independently.
+func (c FactorySessionSSECheckpoint) ApplyRecovery(
+	recovery factoryapi.FactorySessionEventStreamRecovery,
+) FactorySessionSSECheckpoint {
+	if recovery.Retry.OmitAfterEventId {
+		c.AfterEventID = ""
+	}
+	if recovery.Retry.OmitAfterSequence {
+		c.AfterSequence = nil
+	}
+	return c
+}
+
 // FactorySessionSSEFrame is one complete SSE protocol frame. FactoryEvent is
 // populated only when Data contains a valid generated FactoryEvent contract.
 type FactorySessionSSEFrame struct {
@@ -165,6 +179,10 @@ func (h *FactorySessionSSEHarness) OpenFromCheckpoint(
 ) *FactorySessionSSEStream {
 	h.t.Helper()
 
+	return h.Open(serverURL, sessionID, factorySessionSSECheckpointQuery(checkpoint))
+}
+
+func factorySessionSSECheckpointQuery(checkpoint FactorySessionSSECheckpoint) string {
 	query := url.Values{}
 	if checkpoint.AfterEventID != "" {
 		query.Set("after_event_id", checkpoint.AfterEventID)
@@ -172,7 +190,7 @@ func (h *FactorySessionSSEHarness) OpenFromCheckpoint(
 	if checkpoint.AfterSequence != nil {
 		query.Set("after_sequence", fmt.Sprint(*checkpoint.AfterSequence))
 	}
-	return h.Open(serverURL, sessionID, query.Encode())
+	return query.Encode()
 }
 
 func factorySessionSSEIdentityFromHeader(header http.Header) FactorySessionSSEStreamIdentity {
@@ -441,6 +459,17 @@ func (h *FactorySessionSSEHarness) ProbeRecovery(
 		h.t.Fatalf("decode recovery probe response: %v: %s", err, string(body))
 	}
 	return recovery, resp
+}
+
+// ProbeRecoveryFromCheckpoint requests the generated JSON recovery contract
+// for the same checkpoint representation used by OpenFromCheckpoint.
+func (h *FactorySessionSSEHarness) ProbeRecoveryFromCheckpoint(
+	serverURL, sessionID string,
+	checkpoint FactorySessionSSECheckpoint,
+) (factoryapi.FactorySessionEventStreamRecovery, *http.Response) {
+	h.t.Helper()
+
+	return h.ProbeRecovery(serverURL, sessionID, factorySessionSSECheckpointQuery(checkpoint))
 }
 
 type factorySessionSSEFrameKind int
