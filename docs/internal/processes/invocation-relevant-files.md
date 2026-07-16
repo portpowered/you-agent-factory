@@ -998,6 +998,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/factory/packages/catalog.go`. When a stage's output is the next stage's
   input, set `workPropagation.mode` to `OUTPUT_AS_PAYLOAD` and prove that
   propagated payload at the transitioner layer.
+- `pkg/service/runtimebuild.BuildSpec` is the pre-dispatch boundary for proving
+  `--default-worker-model-provider` and `--default-worker-model` apply to
+  every omitted agent/model worker in a materialized packaged factory. Assert
+  the effective worker configuration there; provider values are converted from
+  public CLI spelling to the internal provider identifier before worker
+  dispatch.
 - `pkg/transports/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared
   `InvocationRequest` payload shape, fail with stable
