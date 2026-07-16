@@ -32,6 +32,34 @@ func (r *timeoutThenDataReader) Read(destination []byte) (int, error) {
 
 func (*timeoutThenDataReader) Close() error { return nil }
 
+type delayedDataReader struct {
+	closed    chan struct{}
+	closeOnce sync.Once
+	read      bool
+}
+
+func newDelayedDataReader() *delayedDataReader {
+	return &delayedDataReader{closed: make(chan struct{})}
+}
+
+func (r *delayedDataReader) Read(destination []byte) (int, error) {
+	if r.read {
+		return 0, io.EOF
+	}
+	select {
+	case <-time.After(10 * time.Millisecond):
+		r.read = true
+		return copy(destination, "post-exit-output"), nil
+	case <-r.closed:
+		return 0, io.EOF
+	}
+}
+
+func (r *delayedDataReader) Close() error {
+	r.closeOnce.Do(func() { close(r.closed) })
+	return nil
+}
+
 func TestAllocator_RejectsInvalidLaunch(t *testing.T) {
 	t.Parallel()
 
@@ -474,5 +502,26 @@ func TestStartPTYCapture_ContinuesAfterReadDeadline(t *testing.T) {
 	}
 	if capacityHit {
 		t.Fatal("capacityHit = true, want false")
+	}
+}
+
+func TestFinishSessionRun_DrainsBufferedOutputBeforeClosingReader(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu          sync.Mutex
+		captured    []byte
+		capacityHit bool
+		lastByteAt  = time.Now()
+	)
+	reader := newDelayedDataReader()
+	readDone := startPTYCapture(reader, SessionConfig{MaxCaptureBytes: 1024}, &mu, &captured, &capacityHit, &lastByteAt)
+
+	result, err := finishSessionRun(reader, readDone, &mu, &captured, &capacityHit, false, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("finishSessionRun() error = %v", err)
+	}
+	if got := result.CleanedText; got != "post-exit-output" {
+		t.Fatalf("CleanedText = %q, want post-exit-output drained after process exit", got)
 	}
 }

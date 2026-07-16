@@ -129,6 +129,9 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		}
 		workflowContext = runtime.WorkflowContext(bundle.Factory)
 	}
+	if fs == nil || fs.cfg == nil || !fs.cfg.WorkerApplication.Valid() {
+		return nil, fmt.Errorf("runtime host worker application is required")
+	}
 	executor := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
@@ -139,8 +142,8 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
-		fs.providerCommandRunnerOverride(),
-		fs.commandRunnerOverride(),
+		fs.cfg.WorkerApplication.ProviderCommandRunner,
+		fs.cfg.WorkerApplication.ScriptCommandRunner,
 		nil,
 		nil,
 		nil,
@@ -167,20 +170,6 @@ func (fs *Host) providerOverride() workers.Provider {
 		return nil
 	}
 	return fs.coordinatorPolicy().providerOverride
-}
-
-func (fs *Host) providerCommandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().providerCommandRunnerOverride
-}
-
-func (fs *Host) commandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
 func (fs *Host) invocationSkipPermissionsOverride() *bool {

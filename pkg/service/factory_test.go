@@ -4030,6 +4030,7 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 	svc := &FactoryService{
 		policy:      serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{}),
 		modelAssets: puller,
+		cfg:         serviceTestConfigWithWorkerApplication(t, &FactoryServiceConfig{}),
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		RuntimeCfg:  runtimeCfg,

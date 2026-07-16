@@ -23,7 +23,7 @@ func TestFactorySessionSSEInvalidCursor_UnknownAfterEventIDReturnsTypedErrorNotF
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
 	query := "after_event_id=" + url.QueryEscape(factorySessionSSEUnknownCursorEventID)
 	resp := harness.GetSessionEvents(server.URL, fixture.SessionID, query, "")
-	defer resp.Body.Close()
+	defer closeFactorySessionSSEResponse(t, resp)
 
 	body := readFactorySessionSSEErrorResponseBody(t, resp)
 	assertFactorySessionSSEInvalidCursorErrorPayload(t, body)
@@ -37,7 +37,7 @@ func TestFactorySessionSSEInvalidCursor_UnknownAfterSequenceReturnsTypedErrorNot
 
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
 	resp := harness.GetSessionEvents(server.URL, fixture.SessionID, "after_sequence=999", "")
-	defer resp.Body.Close()
+	defer closeFactorySessionSSEResponse(t, resp)
 
 	body := readFactorySessionSSEErrorResponseBody(t, resp)
 	assertFactorySessionSSEInvalidCursorErrorPayload(t, body)
@@ -52,7 +52,7 @@ func TestFactorySessionSSEInvalidCursor_JSONProbeClassifiesStaleCursorWithOmitGu
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
 	query := "after_event_id=" + url.QueryEscape(factorySessionSSEUnknownCursorEventID)
 	recovery, resp := harness.ProbeRecovery(server.URL, fixture.SessionID, query)
-	defer resp.Body.Close()
+	defer closeFactorySessionSSEResponse(t, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("recovery probe status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
@@ -76,7 +76,7 @@ func TestFactorySessionSSEInvalidCursor_JSONProbeValidCursorReturnsStreamReady(t
 	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
 	query := "after_event_id=" + url.QueryEscape(fixture.Retained[1].Id)
 	recovery, resp := harness.ProbeRecovery(server.URL, fixture.SessionID, query)
-	defer resp.Body.Close()
+	defer closeFactorySessionSSEResponse(t, resp)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("recovery probe status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
@@ -89,6 +89,77 @@ func TestFactorySessionSSEInvalidCursor_JSONProbeValidCursorReturnsStreamReady(t
 	}
 	if recovery.Retry.OmitAfterEventId || recovery.Retry.OmitAfterSequence {
 		t.Fatalf("retry = %#v, want both omit flags false for reusable cursor", recovery.Retry)
+	}
+}
+
+func TestFactorySessionSSEInvalidCursor_StreamGenerationChangeInvalidatesAndOmitsPriorCheckpoint(t *testing.T) {
+	fixture := NewFactorySessionSSEFixture(t)
+	root := fixture.RootMockFactory()
+	server := httptest.NewServer(newAPITestServer(root).Handler())
+	defer server.Close()
+
+	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	priorStream := harness.Open(server.URL, fixture.SessionID, "")
+	priorStream.ReadEvents(2)
+	priorIdentity := priorStream.Identity
+	priorStream.Close()
+	if priorIdentity != (FactorySessionSSEStreamIdentity{
+		BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
+		LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
+		FactorySessionID:    fixture.SessionID,
+		StreamGenerationID:  factorySessionSSEFixtureStreamGenerationID,
+	}) {
+		t.Fatalf("prior identity = %#v, want complete original generation identity", priorIdentity)
+	}
+
+	checkpointSequence := 1
+	priorCheckpoint := FactorySessionSSECheckpoint{
+		AfterEventID:  fixture.Retained[1].Id,
+		AfterSequence: &checkpointSequence,
+	}
+	currentRetained := fixture.ReplaceStreamGeneration(t, root)
+
+	recovery, resp := harness.ProbeRecoveryFromCheckpoint(server.URL, fixture.SessionID, priorCheckpoint)
+	defer closeFactorySessionSSEResponse(t, resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("recovery probe status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE {
+		t.Fatalf("outcome = %q, want CURSOR_STALE", recovery.Outcome)
+	}
+	if !recovery.Retry.OmitAfterEventId || !recovery.Retry.OmitAfterSequence {
+		t.Fatalf("retry = %#v, want both prior cursor forms omitted", recovery.Retry)
+	}
+
+	retryCheckpoint := priorCheckpoint.ApplyRecovery(recovery)
+	if retryCheckpoint.AfterEventID != "" || retryCheckpoint.AfterSequence != nil {
+		t.Fatalf("retry checkpoint = %#v, want both stale cursors omitted", retryCheckpoint)
+	}
+	currentStream := harness.OpenFromCheckpoint(server.URL, fixture.SessionID, retryCheckpoint)
+	defer currentStream.Close()
+	currentEvents := currentStream.ReadEvents(len(currentRetained))
+	if currentEvents[0].Id != currentRetained[0].Id {
+		t.Fatalf("first recovered event id = %q, want current retained boundary %q", currentEvents[0].Id, currentRetained[0].Id)
+	}
+
+	currentIdentity := currentStream.Identity
+	if currentIdentity.BackendScopeID != priorIdentity.BackendScopeID ||
+		currentIdentity.LogicalSessionKeyID != priorIdentity.LogicalSessionKeyID ||
+		currentIdentity.FactorySessionID != priorIdentity.FactorySessionID {
+		t.Fatalf("current identity = %#v, want backend/logical/Factory Session identity retained from %#v", currentIdentity, priorIdentity)
+	}
+	if currentIdentity.StreamGenerationID == priorIdentity.StreamGenerationID {
+		t.Fatalf("current stream generation = %q, want change from prior identity %#v", currentIdentity.StreamGenerationID, priorIdentity)
+	}
+	if currentIdentity.StreamGenerationID != factorySessionSSEFixtureNextGenerationID {
+		t.Fatalf("current stream generation = %q, want %q", currentIdentity.StreamGenerationID, factorySessionSSEFixtureNextGenerationID)
+	}
+}
+
+func closeFactorySessionSSEResponse(t *testing.T, resp *http.Response) {
+	t.Helper()
+	if err := resp.Body.Close(); err != nil {
+		t.Errorf("close session events response body: %v", err)
 	}
 }
 

@@ -4,14 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -19,6 +24,9 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type processRunnerFunc func(context.Context) error
@@ -29,6 +37,43 @@ type processCommandRunner struct{}
 
 func (*processCommandRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
 	return workers.CommandResult{}, nil
+}
+
+type processRecordingCommandRunner struct {
+	requests []workers.CommandRequest
+	result   workers.CommandResult
+}
+
+func (r *processRecordingCommandRunner) Run(_ context.Context, request workers.CommandRequest) (workers.CommandResult, error) {
+	r.requests = append(r.requests, request)
+	return r.result, nil
+}
+
+type processAgyAllocator struct {
+	launches []agypty.ProcessLaunch
+}
+
+func (a *processAgyAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, _ agypty.SessionConfig) (agypty.PTYSession, error) {
+	a.launches = append(a.launches, launch)
+	return &processAgySession{}, nil
+}
+
+type processAgySession struct{}
+
+func (*processAgySession) Run(context.Context) (agypty.SessionResult, error) {
+	return agypty.SessionResult{ExitCode: 0, CleanedText: "agy functional output"}, nil
+}
+func (*processAgySession) Close() error { return nil }
+
+type processRoundTripper struct{ calls int }
+
+func (r *processRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	r.calls++
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(`{"data":{"ok":true}}`)),
+		Header:     make(http.Header),
+	}, nil
 }
 
 func TestBuildProcessGraphConstructsRunBeforeLifecycle(t *testing.T) {
@@ -144,8 +189,8 @@ func TestBuildProcessGraphSelectsOnlySuppliedFunctionalEdge(t *testing.T) {
 			if err != nil {
 				t.Fatalf("buildProcessGraph() error = %v", err)
 			}
-			if built == nil || built.ProviderCommandRunnerOverride != test.wantEdge {
-				t.Fatalf("provider command runner = %T, want %T", built.ProviderCommandRunnerOverride, test.wantEdge)
+			if built == nil || !built.WorkerApplication.Valid() || built.WorkerApplication.ProviderCommandInjected != (test.wantEdge != nil) {
+				t.Fatalf("provider application injection = %v, want %v", built != nil && built.WorkerApplication.ProviderCommandInjected, test.wantEdge != nil)
 			}
 			if graph == nil || graph.Run == nil {
 				t.Fatalf("run graph = %+v, want constructed application", graph)
@@ -156,29 +201,194 @@ func TestBuildProcessGraphSelectsOnlySuppliedFunctionalEdge(t *testing.T) {
 
 func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
 	t.Parallel()
-	configured := &processCommandRunner{}
 	injected := &processCommandRunner{}
 	modelAssets := localmodels.NewAssetPuller(t.TempDir())
 	modelRuntime := localmodels.NewOmniVoiceRuntime(nil)
-	cfg := &service.FactoryServiceConfig{ProviderCommandRunnerOverride: configured}
+	cfg := &service.FactoryServiceConfig{}
 
-	production := configWithFunctionalEdges(cfg, FunctionalEdges{})
-	if production != cfg || production.ProviderCommandRunnerOverride != configured {
-		t.Fatalf("production config = %+v, want original config and provider runner", production)
+	production, err := configWithFunctionalEdges(cfg, FunctionalEdges{})
+	if err != nil {
+		t.Fatalf("configWithFunctionalEdges(production): %v", err)
+	}
+	if production == cfg || !production.WorkerApplication.Valid() {
+		t.Fatalf("production config = %+v, want copied config with constructed worker application", production)
 	}
 
-	functional := configWithFunctionalEdges(cfg, FunctionalEdges{
+	functional, err := configWithFunctionalEdges(cfg, FunctionalEdges{
 		ProviderCommandRunner: injected,
 		ModelAssets:           modelAssets,
 		LocalModelRuntime:     modelRuntime,
 	})
-	if functional == cfg || functional.ProviderCommandRunnerOverride != injected ||
-		functional.ModelAssets != modelAssets || functional.LocalModelRuntimeOverride != modelRuntime {
-		t.Fatalf("functional config = %+v, want copied config with injected provider runner", functional)
+	if err != nil {
+		t.Fatalf("configWithFunctionalEdges(functional): %v", err)
 	}
-	if cfg.ProviderCommandRunnerOverride != configured {
+	if functional == cfg || !functional.WorkerApplication.Valid() ||
+		!functional.WorkerApplication.ProviderCommandInjected ||
+		functional.ModelAssets != modelAssets || functional.LocalModelRuntimeOverride != modelRuntime {
+		t.Fatalf("functional config = %+v, want copied config with injected provider component", functional)
+	}
+	if cfg.WorkerApplication.Valid() {
 		t.Fatal("functional edge selection mutated the caller-owned config")
 	}
+}
+
+func TestConfigWithFunctionalEdgesSelectsIndependentWorkerEdges(t *testing.T) {
+	t.Parallel()
+	providerRunner := &processCommandRunner{}
+	scriptRunner := &processCommandRunner{}
+	allocator := &agypty.MockAllocator{}
+
+	built, err := configWithFunctionalEdges(&service.FactoryServiceConfig{}, FunctionalEdges{
+		ProviderCommandRunner: providerRunner,
+		ScriptCommandRunner:   scriptRunner,
+		AgyPTYAllocator:       allocator,
+	})
+	if err != nil {
+		t.Fatalf("configWithFunctionalEdges(): %v", err)
+	}
+	if !built.WorkerApplication.Valid() || !built.WorkerApplication.ProviderCommandInjected {
+		t.Fatal("independent worker edges did not produce a functional worker application")
+	}
+}
+
+func TestConfigWithFunctionalEdgesSelectsIndependentHostedEdges(t *testing.T) {
+	t.Parallel()
+	httpClient := &http.Client{Timeout: 17 * time.Second}
+	clock := clockwork.NewFakeClock()
+	resolver := hostedworkers.SecretResolver(func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
+		return "functional-secret", nil
+	})
+	original := &service.FactoryServiceConfig{}
+
+	built, err := configWithFunctionalEdges(original, FunctionalEdges{
+		HostedHTTPClient: httpClient, HostedLinearEndpoint: "https://linear.test/graphql",
+		HostedSecretResolver: resolver, HostedClock: clock,
+	})
+	if err != nil {
+		t.Fatalf("configWithFunctionalEdges(): %v", err)
+	}
+	hosted := built.WorkerApplication.Hosted
+	if built == original || hosted.HTTPClient != httpClient || hosted.LinearEndpoint != "https://linear.test/graphql" {
+		t.Fatalf("hosted HTTP edges were not selected: %+v", built)
+	}
+	if hosted.SecretResolver == nil || hosted.Clock != clock {
+		t.Fatal("hosted secret and clock edges were not selected")
+	}
+	if original.WorkerApplication.Valid() {
+		t.Fatal("hosted functional edge selection mutated caller-owned config")
+	}
+}
+
+func TestBuildProcessGraphFunctionalWorkerEdgesReachObservableExecution(t *testing.T) {
+	t.Parallel()
+	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	providerRunner := &processRecordingCommandRunner{}
+	scriptRunner := &processRecordingCommandRunner{result: workers.CommandResult{Stdout: []byte("script functional output")}}
+	agyAllocator := &processAgyAllocator{}
+	httpTransport := &processRoundTripper{}
+	httpClient := &http.Client{Transport: httpTransport, Timeout: time.Second}
+	hostedClock := clockwork.NewFakeClock()
+	probe := &functionalWorkerEdgeProbe{
+		t: t, providerRunner: providerRunner, scriptRunner: scriptRunner, agyAllocator: agyAllocator,
+		httpTransport: httpTransport, hostedClock: hostedClock,
+	}
+	resolver := hostedworkers.SecretResolver(func(context.Context, interfaces.RuntimeConfigLookup, string) (string, error) {
+		probe.secretCalls++
+		return "resolved-functional-secret", nil
+	})
+
+	graph, err := buildProcessGraph(context.Background(), startupcli.Request{
+		Kind: startupcli.KindRun,
+		RunConfig: &runcli.RunConfig{
+			Dir: factoryDir, DisableDefaultRecording: true, SuppressDashboardRendering: true,
+		},
+	}, initializer.ProcessPolicy{
+		Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true},
+	}, FunctionalEdges{
+		ProviderCommandRunner: providerRunner, ScriptCommandRunner: scriptRunner, AgyPTYAllocator: agyAllocator,
+		HostedHTTPClient: httpClient, HostedLinearEndpoint: "https://linear.functional/graphql",
+		HostedSecretResolver: resolver, HostedClock: hostedClock,
+	}, probe.buildRunner, BuildMCPExecutionService)
+	if err != nil {
+		t.Fatalf("buildProcessGraph() error = %v", err)
+	}
+	if graph == nil || graph.Run == nil || len(scriptRunner.requests) != 1 {
+		t.Fatalf("functional graph = %+v, script calls = %d", graph, len(scriptRunner.requests))
+	}
+}
+
+type functionalWorkerEdgeProbe struct {
+	t              *testing.T
+	providerRunner *processRecordingCommandRunner
+	scriptRunner   *processRecordingCommandRunner
+	agyAllocator   *processAgyAllocator
+	httpTransport  *processRoundTripper
+	hostedClock    clockwork.Clock
+	secretCalls    int
+}
+
+func (p *functionalWorkerEdgeProbe) buildRunner(
+	_ context.Context,
+	cfg *service.FactoryServiceConfig,
+	_ initializer.Mode,
+) (runcli.RuntimeRunner, error) {
+	if err := p.executeScript(cfg); err != nil {
+		return nil, err
+	}
+	if err := p.executeAgy(cfg); err != nil {
+		return nil, err
+	}
+	if err := p.executeHosted(cfg); err != nil {
+		return nil, err
+	}
+	return processRunnerFunc(func(context.Context) error { return nil }), nil
+}
+
+func (p *functionalWorkerEdgeProbe) executeScript(cfg *service.FactoryServiceConfig) error {
+	script, err := cfg.WorkerApplication.Script.New(
+		&interfaces.WorkerConfig{Command: "functional-script"}, logging.NoopLogger{},
+	)
+	if err != nil {
+		return err
+	}
+	result, err := script.Execute(context.Background(), interfaces.WorkstationExecutionRequest{})
+	if err != nil || result.Output != "script functional output" {
+		return errors.New("functional script edge did not reach execution")
+	}
+	return nil
+}
+
+func (p *functionalWorkerEdgeProbe) executeAgy(cfg *service.FactoryServiceConfig) error {
+	provider, err := cfg.WorkerApplication.Provider.New(workerprovider.WithAgyFactoryRoot(p.t.TempDir()))
+	if err != nil {
+		return err
+	}
+	response, err := provider.Execute(context.Background(), interfaces.RunnerExecutionRequest{
+		Dispatch: interfaces.WorkDispatch{DispatchID: "functional-agy"}, ModelProvider: string(interfaces.ModelProviderAgy),
+		WorkingDirectory: ".", UserMessage: "run through the PTY edge",
+	})
+	if err != nil || response.Content != "agy functional output" || len(p.agyAllocator.launches) != 1 || len(p.providerRunner.requests) != 0 {
+		return errors.New("functional Agy edge did not remain distinct from provider command execution")
+	}
+	return nil
+}
+
+func (p *functionalWorkerEdgeProbe) executeHosted(cfg *service.FactoryServiceConfig) error {
+	hosted := cfg.WorkerApplication.Hosted
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, hosted.LinearEndpoint, strings.NewReader(`{}`))
+	if err != nil {
+		return err
+	}
+	response, err := hosted.HTTPClient.Do(request)
+	if err != nil {
+		return err
+	}
+	_ = response.Body.Close()
+	secret, secretErr := hosted.SecretResolver(context.Background(), nil, "linear-token")
+	if secretErr != nil || secret != "resolved-functional-secret" || p.httpTransport.calls != 1 || p.secretCalls != 1 || hosted.Clock != p.hostedClock {
+		return errors.New("functional hosted edges did not reach execution")
+	}
+	return nil
 }
 
 func TestBuildProcessGraphConstructsMCPBeforeLifecycle(t *testing.T) {

@@ -401,12 +401,12 @@ func NewFactoryServiceCollaborators(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
+	hostedWorkers hostedworkers.Config,
 ) (FactoryServiceCollaborators, error) {
 	startupLocalModels, err := modelhost.NewLocalDomain(LocalModelDomainDependencies(cfg))
 	if err != nil {
 		return FactoryServiceCollaborators{}, err
 	}
-	hostedWorkers := NewHostedWorkersConfig(cfg, baseLogger, clock)
 	return FactoryServiceCollaborators{
 		Sessions:    sessions,
 		LocalModels: startupLocalModels,
@@ -675,6 +675,9 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 	if err := validateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	if !cfg.WorkerApplication.Valid() {
+		return nil, fmt.Errorf("factory service worker application is required")
+	}
 	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
 		return nil, err
@@ -687,7 +690,10 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		return nil, err
 	}
 	clock := ServiceClockForCompose(cfg, load)
-	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	hostedWorkers := cfg.WorkerApplication.Hosted
+	collaborators, err := NewFactoryServiceCollaborators(
+		cfg, clock, root.BaseLogger, NewFactorySessionsRegistry(), hostedWorkers,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -698,7 +704,7 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		collaborators,
 		load,
 		clock,
-		NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 }
 
@@ -840,6 +846,9 @@ func ComposeFactoryCore(
 }
 
 func validateFactoryCoreComposition(cfg *FactoryServiceConfig, collaborators FactoryServiceCollaborators) error {
+	if cfg == nil || !cfg.WorkerApplication.Valid() {
+		return fmt.Errorf("compose factory core: worker application is required")
+	}
 	if collaborators.WorkersScheduler == nil {
 		return fmt.Errorf("compose factory core: worker sidecar owner is required")
 	}

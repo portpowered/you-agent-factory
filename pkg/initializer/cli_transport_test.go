@@ -14,7 +14,7 @@ func TestInitializeCLITransport_RejectsMissingFactoryConfig(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	cfg := &initializer.Config{Dir: t.TempDir()}
+	cfg := composedInitializerConfig(t, &initializer.Config{Dir: t.TempDir()})
 
 	_, errInit := initializer.InitializeCLITransport(ctx, cfg)
 	_, errService := service.BuildFactoryService(ctx, service.FactoryServiceConfigFromRuntimeHost(cfg))
@@ -35,10 +35,10 @@ func TestInitializeCLITransportComposesConfiguredDashboard(t *testing.T) {
 
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	transport, err := initializer.InitializeCLITransport(context.Background(), &initializer.Config{
+	transport, err := initializer.InitializeCLITransport(context.Background(), composedInitializerConfig(t, &initializer.Config{
 		Dir:                     dir,
 		SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) {},
-	})
+	}))
 	if err != nil {
 		t.Fatalf("InitializeCLITransport() error = %v", err)
 	}
@@ -54,7 +54,7 @@ func TestInitializeCLITransport_ComposesRuntimeRunnerWithoutBuildFactoryService(
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	transport, err := initializer.InitializeCLITransport(ctx, &initializer.Config{Dir: dir})
+	transport, err := initializer.InitializeCLITransport(ctx, composedInitializerConfig(t, &initializer.Config{Dir: dir}))
 	if err != nil {
 		t.Fatalf("InitializeCLITransport: %v", err)
 	}

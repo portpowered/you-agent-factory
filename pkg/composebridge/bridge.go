@@ -54,11 +54,6 @@ func ClockForCompose(cfg *runtimehost.Config, load ConfigLoad) factory.Clock {
 	return service.ClockForCompose(cfg, load)
 }
 
-// HostedWorkers builds the hosted-workers collaborator from config.
-func HostedWorkers(cfg *runtimehost.Config, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
-	return service.HostedWorkersForCompose(cfg, logger, clock)
-}
-
 // NewRuntimeBuildService constructs the runtimebuild collaborator for core composition.
 func NewRuntimeBuildService(
 	cfg *runtimehost.Config,

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 
+	"github.com/jonboulle/clockwork"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
@@ -12,6 +14,9 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
@@ -21,6 +26,12 @@ type FunctionalEdges struct {
 	ProviderCommandRunner workers.CommandRunner
 	ModelAssets           localmodels.AssetPuller
 	LocalModelRuntime     localmodels.Runtime
+	ScriptCommandRunner   workers.CommandRunner
+	AgyPTYAllocator       agypty.PTYAllocator
+	HostedHTTPClient      *http.Client
+	HostedLinearEndpoint  string
+	HostedSecretResolver  hostedworkers.SecretResolver
+	HostedClock           clockwork.Clock
 }
 
 // MCPExecutionRequest contains the transport inputs that select the durable
@@ -150,13 +161,22 @@ func buildProcessGraph(
 		if len(invocationBuilders) > 0 {
 			invocationBuilder = invocationBuilders[0]
 		}
+		var sharedWorkerApplication workerapplication.Components
 		application, err := runcli.BuildApplication(ctx, runConfig, func(
 			buildCtx context.Context,
 			cfg *service.FactoryServiceConfig,
 		) (runcli.RuntimeRunner, error) {
-			return buildRunner(buildCtx, configWithFunctionalEdges(cfg, edges), applicationMode)
+			configured, err := configWithFunctionalEdges(cfg, edges, &sharedWorkerApplication)
+			if err != nil {
+				return nil, err
+			}
+			return buildRunner(buildCtx, configured, applicationMode)
 		}, func(buildCtx context.Context, cfg *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
-			return invocationBuilder(buildCtx, configWithFunctionalEdges(cfg, edges))
+			configured, err := configWithFunctionalEdges(cfg, edges, &sharedWorkerApplication)
+			if err != nil {
+				return nil, err
+			}
+			return invocationBuilder(buildCtx, configured)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
@@ -172,22 +192,43 @@ func buildProcessGraph(
 func configWithFunctionalEdges(
 	cfg *service.FactoryServiceConfig,
 	edges FunctionalEdges,
-) *service.FactoryServiceConfig {
-	if cfg == nil || (isNil(edges.ProviderCommandRunner) && isNil(edges.ModelAssets) &&
-		isNil(edges.LocalModelRuntime)) {
-		return cfg
+	shared ...*workerapplication.Components,
+) (*service.FactoryServiceConfig, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("construct worker application: service config is required")
 	}
 	copied := *cfg
-	if !isNil(edges.ProviderCommandRunner) {
-		copied.ProviderCommandRunnerOverride = edges.ProviderCommandRunner
-	}
 	if !isNil(edges.ModelAssets) {
 		copied.ModelAssets = edges.ModelAssets
 	}
 	if !isNil(edges.LocalModelRuntime) {
 		copied.LocalModelRuntimeOverride = edges.LocalModelRuntime
 	}
-	return &copied
+	if len(shared) > 0 && shared[0] != nil && shared[0].Valid() {
+		copied.WorkerApplication = *shared[0]
+		return &copied, nil
+	}
+	hostedClock := edges.HostedClock
+	if hostedClock == nil {
+		hostedClock, _ = cfg.Clock.(clockwork.Clock)
+	}
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
+		ProviderCommandRunner: edges.ProviderCommandRunner,
+		ScriptCommandRunner:   edges.ScriptCommandRunner,
+		AgyPTYAllocator:       edges.AgyPTYAllocator,
+		HostedHTTPClient:      edges.HostedHTTPClient,
+		HostedLinearEndpoint:  edges.HostedLinearEndpoint,
+		HostedSecretResolver:  edges.HostedSecretResolver,
+		HostedClock:           hostedClock,
+	})
+	if err != nil {
+		return nil, err
+	}
+	copied.WorkerApplication = components
+	if len(shared) > 0 && shared[0] != nil {
+		*shared[0] = components
+	}
+	return &copied, nil
 }
 
 func buildMCPProcessGraph(

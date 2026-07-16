@@ -42,8 +42,8 @@ func NewCollaboratorsWithLocalModels(
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
 	localModels LocalModelDomain,
+	hostedWorkers hostedworkers.Config,
 ) Collaborators {
-	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
 	return Collaborators{
 		Sessions:         sessions,
 		LocalModels:      localModels,
@@ -232,6 +232,9 @@ func buildCore(
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
+	if !cfg.WorkerApplication.Valid() {
+		return nil, fmt.Errorf("compose runtime worker application is required")
+	}
 	root, err := resolveRoot(cfg)
 	if err != nil {
 		return nil, err
@@ -245,15 +248,20 @@ func buildCore(
 	}
 	clock := ClockForCompose(cfg, load)
 	sessions := NewSessionsRegistry()
+	hostedWorkers := cfg.WorkerApplication.Hosted
 	var collaborators Collaborators
 	if localModels == nil {
 		startupLocalModels, modelErr := modelhost.NewLocalDomain(LocalModelDomainDependencies(cfg))
 		if modelErr != nil {
 			return nil, modelErr
 		}
-		collaborators = NewCollaboratorsWithLocalModels(cfg, clock, root.BaseLogger, sessions, startupLocalModels)
+		collaborators = NewCollaboratorsWithLocalModels(
+			cfg, clock, root.BaseLogger, sessions, startupLocalModels, hostedWorkers,
+		)
 	} else {
-		collaborators = NewCollaboratorsWithLocalModels(cfg, clock, root.BaseLogger, sessions, *localModels)
+		collaborators = NewCollaboratorsWithLocalModels(
+			cfg, clock, root.BaseLogger, sessions, *localModels, hostedWorkers,
+		)
 	}
 	core, err := ComposeCore(
 		ctx,
@@ -262,7 +270,7 @@ func buildCore(
 		collaborators,
 		load,
 		clock,
-		HostedWorkers(cfg, root.BaseLogger, clock),
+		hostedWorkers,
 	)
 	if err != nil {
 		return nil, err

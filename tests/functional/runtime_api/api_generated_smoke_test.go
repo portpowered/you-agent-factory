@@ -19,6 +19,7 @@ import (
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
@@ -63,6 +64,13 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	}
 
 	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
+	functionalevidence.Covers(
+		t,
+		"rest/getEventsBySessionId",
+		"rest/getStatusBySessionId",
+		"rest/listWorkBySessionId",
+		"rest/submitWorkBySessionId",
+	)
 }
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission(t *testing.T) {
@@ -298,6 +306,7 @@ func TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent(t *testing.
 	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
 		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
 	}
+	functionalevidence.Covers(t, "rest/upsertWorkRequestBySessionId")
 }
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
@@ -309,7 +318,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("Done. COMPLETE")
+			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("Done. COMPLETE"), nil)
 		},
 		factory.WithServiceMode(),
 	)
@@ -352,7 +361,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 		dir,
 		false,
 		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderCommandRunnerOverride = runner
+			support.ConfigureWorkerCommands(t, cfg, runner, nil)
 		},
 		factory.WithServiceMode(),
 	)

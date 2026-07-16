@@ -22,6 +22,7 @@ import (
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -129,6 +130,16 @@ func modelHostDiagnostics(logger *zap.Logger, metrics service.InvocationMetricsR
 }
 
 func provideFactoryServiceRoot(cfg *service.FactoryServiceConfig) (service.FactoryServiceRoot, error) {
+	if cfg == nil {
+		return service.FactoryServiceRoot{}, fmt.Errorf("factory service config is required")
+	}
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return service.FactoryServiceRoot{}, fmt.Errorf("construct production worker application: %w", err)
+		}
+		cfg.WorkerApplication = components
+	}
 	return service.ResolveFactoryServiceRoot(cfg)
 }
 
@@ -235,6 +246,13 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	}
 
 	cfg := *inputs.Config
+	if !cfg.WorkerApplication.Valid() {
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{})
+		if err != nil {
+			return nil, fmt.Errorf("build production application graph: %w", err)
+		}
+		cfg.WorkerApplication = components
+	}
 	localModels, err := provideLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(&cfg))
 	if err != nil {
 		return nil, fmt.Errorf("build production application graph: %w", err)

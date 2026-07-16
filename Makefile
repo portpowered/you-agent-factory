@@ -61,8 +61,8 @@ GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
 GO_UNIT_COVERAGE_MIN ?= $(GO_COVERAGE_MIN)
 GO_FUNCTIONAL_COVERAGE_MIN ?= 33.1
-GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN ?= 80.0
-GO_FUNCTIONAL_COVERAGE_BASELINE ?= docs/internal/development/go-functional-coverage-package-baseline.txt
+GO_UNIT_COVERAGE_MANIFEST ?= docs/internal/development/go-unit-coverage-package-minimums.json
+GO_FUNCTIONAL_COVERAGE_MANIFEST ?= docs/internal/development/go-functional-coverage-package-minimums.json
 GO_UNIT_COVERAGE_PROFILE ?=
 GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 BACKEND_SIZE_ROOT ?= .
@@ -155,6 +155,7 @@ contracts-generate:
 
 contracts-check:
 	$(GO) run ./cmd/contractscheck -root .
+	$(GO) run ./cmd/functionalscenarioproject -check contracts/functional-scenarios.json
 
 contracts-smoke:
 	$(GO) test ./internal/contract... ./cmd/contracts... -count=1 -timeout $(GO_TEST_TIMEOUT)
@@ -288,10 +289,10 @@ test-coverage-go:
 	$(MAKE) test-unit-coverage
 
 test-unit-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
+	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -package-manifest $(GO_UNIT_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
 
 test-functional-coverage:
-	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-min $(GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN) -package-baseline $(GO_FUNCTIONAL_COVERAGE_BASELINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),)
+	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-manifest $(GO_FUNCTIONAL_COVERAGE_MANIFEST) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)

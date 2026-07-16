@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 )
 
@@ -154,10 +155,15 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
 	}
+	workerApplication, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
 
 	builder := runtimebuild.New(
 		runtimebuild.Config{
 			ApplyOperatorDefaults: true,
+			WorkerApplication:     workerApplication,
 			OperatorDefaults: operatorconfig.ResolvedDefaults{
 				WorkerModelProvider: "CODEX",
 				WorkerModel:         "gpt-5",
