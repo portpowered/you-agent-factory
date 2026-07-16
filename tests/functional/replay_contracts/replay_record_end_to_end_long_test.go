@@ -3,11 +3,10 @@
 package replay_contracts
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,13 +15,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 const recordReplayLiveScriptEnv = "AGENT_FACTORY_RECORD_REPLAY_LIVE_SCRIPT"
@@ -51,14 +48,10 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 
 	t.Setenv(recordReplayLiveScriptEnv, "1")
 	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
-	recordOutput, err := runRecordReplayCLIWithCapturedStdout(t, runcli.RunConfig{
-		Dir:                        dir,
-		Port:                       0,
-		WorkFile:                   workFile,
-		RecordPath:                 artifactPath,
-		SuppressDashboardRendering: true,
-		Logger:                     zap.NewNop(),
-	})
+	binaryPath := buildReplayCLIBinary(t)
+	recordOutput, err := runRecordReplayCLI(t, binaryPath,
+		"--server", "http://127.0.0.1:0", "run", "--dir", dir, "--work", workFile, "--record", artifactPath, "--quiet",
+	)
 	if err != nil {
 		t.Fatalf("record run failed: %v", err)
 	}
@@ -86,13 +79,9 @@ func TestRecordReplayEndToEnd_CLIRecordReplayAndRegressionHarnessSucceed(t *test
 		t.Fatalf("remove original fixture dir: %v", err)
 	}
 
-	replayOutput, err := runRecordReplayCLIWithCapturedStdout(t, runcli.RunConfig{
-		Dir:                        t.TempDir(),
-		Port:                       0,
-		ReplayPath:                 artifactPath,
-		SuppressDashboardRendering: true,
-		Logger:                     zap.NewNop(),
-	})
+	replayOutput, err := runRecordReplayCLI(t, binaryPath,
+		"--server", "http://127.0.0.1:0", "run", "--replay", artifactPath, "--quiet",
+	)
 	if err != nil {
 		t.Fatalf("replay run failed: %v", err)
 	}
@@ -117,19 +106,15 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 	t.Setenv(recordReplayLiveScriptEnv, "1")
 	t.Setenv(recordReplayScriptSecretEnv, recordReplayScriptSecretValue)
 
-	var startup bytes.Buffer
-	if err := runcli.Run(context.Background(), runcli.RunConfig{
-		Dir:                        dir,
-		Port:                       0,
-		WorkFile:                   workFile,
-		SuppressDashboardRendering: true,
-		StartupOutput:              &startup,
-		Logger:                     zap.NewNop(),
-	}); err != nil {
+	binaryPath := buildReplayCLIBinary(t)
+	startup, err := runRecordReplayCLI(t, binaryPath,
+		"--server", "http://127.0.0.1:0", "run", "--dir", dir, "--work", workFile,
+	)
+	if err != nil {
 		t.Fatalf("default record run failed: %v", err)
 	}
 
-	artifactPath := recordedPathFromCLIOutput(t, startup.String())
+	artifactPath := recordedPathFromCLIOutput(t, startup)
 	wantRoot := filepath.Join(homeDir, ".you-agent-factory", "recordings")
 	if !strings.HasPrefix(artifactPath, wantRoot+string(os.PathSeparator)) {
 		t.Fatalf("artifact path = %q, want root under %q", artifactPath, wantRoot)
@@ -153,13 +138,9 @@ func TestRecordReplayEndToEnd_DefaultLiveRecordingPathReplaysThroughExistingFlow
 		t.Fatalf("remove original fixture dir: %v", err)
 	}
 
-	replayOutput, err := runRecordReplayCLIWithCapturedStdout(t, runcli.RunConfig{
-		Dir:                        t.TempDir(),
-		Port:                       0,
-		ReplayPath:                 artifactPath,
-		SuppressDashboardRendering: true,
-		Logger:                     zap.NewNop(),
-	})
+	replayOutput, err := runRecordReplayCLI(t, binaryPath,
+		"--server", "http://127.0.0.1:0", "run", "--replay", artifactPath, "--quiet",
+	)
 	if err != nil {
 		t.Fatalf("replay run failed: %v", err)
 	}
@@ -235,7 +216,7 @@ Finish the input task.
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayWorkRequestRecorded(t, artifact, requestID, "external-submit", 2, 1)
 	assertGeneratedReplayRequestMetadata(t, events, "")
-	generatedRequest := findReplayWorkRequestBySourcePrefix(artifact, "worker-output:")
+	generatedRequest := findReplayWorkRequestBySourcePrefix(t, artifact, "worker-output:")
 	if generatedRequest == nil {
 		t.Fatalf("replay artifact did not record worker-generated work request: %#v", replayWorkRequestEvents(t, artifact))
 	}
@@ -272,8 +253,10 @@ func assertReplayWorkRequestRecorded(t *testing.T, artifact *interfaces.ReplayAr
 	t.Fatalf("replay artifact missing work request %s: %#v", requestID, replayWorkRequestEvents(t, artifact))
 }
 
-func findReplayWorkRequestBySourcePrefix(artifact *interfaces.ReplayArtifact, sourcePrefix string) *recordedFactoryWorkRequestEvent {
-	for _, event := range replayWorkRequestEvents(nil, artifact) {
+func findReplayWorkRequestBySourcePrefix(t *testing.T, artifact *interfaces.ReplayArtifact, sourcePrefix string) *recordedFactoryWorkRequestEvent {
+	t.Helper()
+
+	for _, event := range replayWorkRequestEvents(t, artifact) {
 		if strings.HasPrefix(event.Source, sourcePrefix) {
 			return &event
 		}
@@ -416,39 +399,19 @@ func writeRecordReplayWorkFile(t *testing.T, path string) {
 	support.WriteWorkRequestFile(t, path, req)
 }
 
-func runRecordReplayCLIWithCapturedStdout(t *testing.T, cfg runcli.RunConfig) (string, error) {
+func runRecordReplayCLI(t *testing.T, binaryPath string, args ...string) (string, error) {
 	t.Helper()
 
-	oldStdout := os.Stdout
-	readPipe, writePipe, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe stdout: %v", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
-	readCh := make(chan []byte, 1)
-	readErrCh := make(chan error, 1)
-	go func() {
-		data, readErr := io.ReadAll(readPipe)
-		readCh <- data
-		readErrCh <- readErr
-	}()
-
-	os.Stdout = writePipe
-	runErr := runcli.Run(context.Background(), cfg)
-	os.Stdout = oldStdout
-
-	if err := writePipe.Close(); err != nil {
-		t.Fatalf("close captured stdout writer: %v", err)
+	command := exec.CommandContext(ctx, binaryPath, args...)
+	command.Dir = t.TempDir()
+	output, err := command.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("record/replay CLI timed out: %v\n%s", ctx.Err(), output)
 	}
-	output := <-readCh
-	if err := <-readErrCh; err != nil {
-		t.Fatalf("read captured stdout: %v", err)
-	}
-	if err := readPipe.Close(); err != nil {
-		t.Fatalf("close captured stdout reader: %v", err)
-	}
-
-	return string(output), runErr
+	return string(output), err
 }
 
 func recordedPathFromCLIOutput(t *testing.T, output string) string {
