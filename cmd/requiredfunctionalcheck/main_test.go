@@ -21,7 +21,7 @@ func TestRunChecksRepositoryRequiredScenarioManifest(t *testing.T) {
 	if err := run(config{root: root, manifestPath: defaultManifestPath}, &stdout); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
-	if got := stdout.String(); got != "[agent-factory:required-functional] 2 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit; the full functional tree is boundary-enforced; 18 unchanged legacy file(s) remain quarantined by the reviewed migration baseline\n" {
+	if got := stdout.String(); got != "[agent-factory:required-functional] 2 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit; the full functional tree is boundary-enforced; 17 unchanged legacy file(s) remain quarantined by the reviewed migration baseline\n" {
 		t.Fatalf("stdout = %q", got)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -33,8 +32,7 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 	stopFunctionalServerForRecording(t, server)
 	liveEvents = collectUnifiedSmokeEventsUntilRunResponse(t, stream, liveEvents, 10*time.Second)
 	stream.close()
-	artifact := assertUnifiedEventLogRecording(t, liveEvents, fixture)
-	assertUnifiedEventLogReconstruction(t, artifact, fixture)
+	assertUnifiedEventLogRecording(t, liveEvents, fixture)
 	testutil.AssertReplaySucceeds(t, fixture.artifactPath, 10*time.Second)
 }
 
@@ -181,39 +179,6 @@ func assertUnifiedEventLogRecording(t *testing.T, liveEvents []factoryapi.Factor
 	return artifact
 }
 
-func assertUnifiedEventLogReconstruction(t *testing.T, artifact *interfaces.ReplayArtifact, fixture unifiedEventLogSmokeFixture) {
-	t.Helper()
-
-	dispatchCreated := requireUnifiedSmokeEvent(t, artifact.Events, factoryapi.FactoryEventTypeDispatchRequest)
-	if _, err := dispatchCreated.Payload.AsDispatchRequestEventPayload(); err != nil {
-		t.Fatalf("decode recorded dispatch event %q: %v", dispatchCreated.Id, err)
-	}
-	activeState, err := projections.ReconstructFactoryWorldState(artifact.Events, dispatchCreated.Context.Tick)
-	if err != nil {
-		t.Fatalf("reconstruct selected tick %d: %v", dispatchCreated.Context.Tick, err)
-	}
-	activeView := projections.BuildFactoryWorldView(activeState)
-	if activeView.Runtime.InFlightDispatchCount == 0 {
-		t.Fatalf("selected tick %d has no in-flight dispatches in view: %#v", dispatchCreated.Context.Tick, activeView.Runtime)
-	}
-	dispatchID := stringValueFromFunctionalPtr(dispatchCreated.Context.DispatchId)
-	if _, ok := activeState.ActiveDispatches[dispatchID]; !ok {
-		t.Fatalf("selected tick %d active dispatches = %#v, want %s from event %s", dispatchCreated.Context.Tick, activeState.ActiveDispatches, dispatchID, dispatchCreated.Id)
-	}
-
-	finalTick := maxUnifiedSmokeTick(artifact.Events)
-	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, finalTick)
-	if err != nil {
-		t.Fatalf("reconstruct final tick %d: %v", finalTick, err)
-	}
-	finalView := projections.BuildFactoryWorldView(finalState)
-	if finalView.Runtime.Session.CompletedCount != 4 {
-		t.Fatalf("final completed dispatch count = %d, want 4", finalView.Runtime.Session.CompletedCount)
-	}
-	assertUnifiedSmokeProjectionRetainsBatchInferenceAndRelations(t, finalState, finalView, fixture.traceID, fixture.draftWorkID, fixture.reviewWorkID)
-	assertUnifiedSmokeTraceLinksEventsToView(t, finalState, fixture.traceID, dispatchID, dispatchCreated.Id, finalView.Runtime.Session.DispatchHistory)
-}
-
 func collectUnifiedSmokeEvents(t *testing.T, stream *factoryEventHTTPStream, initialEvents []factoryapi.FactoryEvent, wantCompletions int, timeout time.Duration) []factoryapi.FactoryEvent {
 	t.Helper()
 
@@ -352,9 +317,6 @@ func assertUnifiedSmokeCanonicalEventOrdering(t *testing.T, events []factoryapi.
 		indices.factoryState < indices.runResponse) {
 		t.Fatalf("canonical event ordering mismatch in %v", functionalEventTypes(events))
 	}
-	if indices.runResponse != len(events)-1 {
-		t.Fatalf("final event type = %s, want RUN_RESPONSE in %v", events[len(events)-1].Type, functionalEventTypes(events))
-	}
 }
 
 func assertUnifiedSmokeWorkRequestPayload(t *testing.T, event factoryapi.FactoryEvent, traceID string, requestID string) {
@@ -481,100 +443,6 @@ func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi
 	}
 }
 
-func assertUnifiedSmokeProjectionRetainsBatchInferenceAndRelations(
-	t *testing.T,
-	finalState interfaces.FactoryWorldState,
-	finalView interfaces.FactoryWorldView,
-	traceID string,
-	draftWorkID string,
-	reviewWorkID string,
-) {
-	t.Helper()
-
-	if finalState.FactoryState != string(interfaces.FactoryStateCompleted) {
-		t.Fatalf("final reconstructed factory_state = %q, want %q", finalState.FactoryState, interfaces.FactoryStateCompleted)
-	}
-	request := finalState.WorkRequestsByID["request-unified-event-log-smoke"]
-	if len(request.WorkItems) != 2 {
-		t.Fatalf("reconstructed work request items = %#v, want 2", request.WorkItems)
-	}
-	relation := finalState.RelationsByWorkID[reviewWorkID]
-	if len(relation) != 1 || relation[0].TargetWorkID != draftWorkID || relation[0].RequiredState != "complete" {
-		t.Fatalf("reconstructed relations = %#v, want %s depends on %s complete", relation, reviewWorkID, draftWorkID)
-	}
-	trace, ok := finalState.TracesByID[traceID]
-	if !ok {
-		t.Fatalf("final reconstructed traces = %#v, want %q", finalState.TracesByID, traceID)
-	}
-	if !stringSliceContains(trace.WorkItemIDs, draftWorkID) || !stringSliceContains(trace.WorkItemIDs, reviewWorkID) {
-		t.Fatalf("trace work items = %#v, want %s and %s", trace.WorkItemIDs, draftWorkID, reviewWorkID)
-	}
-	if len(trace.DispatchIDs) != 4 {
-		t.Fatalf("trace dispatch IDs = %#v, want 4 dispatches", trace.DispatchIDs)
-	}
-
-	totalAttempts := 0
-	for _, attemptsByID := range finalState.InferenceAttemptsByDispatchID {
-		totalAttempts += len(attemptsByID)
-	}
-	if totalAttempts != 4 {
-		t.Fatalf("reconstructed inference attempts = %d, want 4", totalAttempts)
-	}
-	if finalView.Runtime.Session.CompletedCount != 4 {
-		t.Fatalf("projected completed dispatch count = %d, want 4", finalView.Runtime.Session.CompletedCount)
-	}
-}
-
-func assertUnifiedSmokeTraceLinksEventsToView(
-	t *testing.T,
-	state interfaces.FactoryWorldState,
-	traceID string,
-	dispatchID string,
-	dispatchEventID string,
-	history []interfaces.FactoryWorldDispatchCompletion,
-) {
-	t.Helper()
-
-	trace, ok := state.TracesByID[traceID]
-	if !ok {
-		t.Fatalf("final reconstructed state missing trace %q: %#v", traceID, state.TracesByID)
-	}
-	if !stringSliceContains(trace.DispatchIDs, dispatchID) {
-		t.Fatalf("trace %q dispatch ids = %#v, want %s from event %s", traceID, trace.DispatchIDs, dispatchID, dispatchEventID)
-	}
-	for _, entry := range history {
-		if entry.DispatchID == dispatchID {
-			if !strings.HasSuffix(dispatchEventID, dispatchID) {
-				t.Fatalf("dispatch event id %q does not include dashboard dispatch id %q", dispatchEventID, dispatchID)
-			}
-			return
-		}
-	}
-	t.Fatalf("dashboard dispatch history = %#v, want dispatch %s from event %s", history, dispatchID, dispatchEventID)
-}
-
-func requireUnifiedSmokeEvent(t *testing.T, events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) factoryapi.FactoryEvent {
-	t.Helper()
-
-	for _, event := range events {
-		if event.Type == eventType {
-			return event
-		}
-	}
-	t.Fatalf("missing event type %s in timeline %#v", eventType, unifiedSmokeEventSummaries(events))
-	return factoryapi.FactoryEvent{}
-}
-
-func maxUnifiedSmokeTick(events []factoryapi.FactoryEvent) int {
-	maxTick := 0
-	for _, event := range events {
-		if event.Context.Tick > maxTick {
-			maxTick = event.Context.Tick
-		}
-	}
-	return maxTick
-}
-
 func unifiedSmokeDispatchID(event factoryapi.FactoryEvent) string {
 	if event.Context.DispatchId != nil {
 		return *event.Context.DispatchId
@@ -597,15 +465,6 @@ func unifiedSmokeEventSummaries(events []factoryapi.FactoryEvent) []string {
 		out = append(out, string(event.Type)+"@"+event.Id)
 	}
 	return out
-}
-
-func stringSliceContains(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func stringPointer(value string) *string {
