@@ -58,6 +58,13 @@ func TestRecordedEventBridgePreservesCanonicalEvent(t *testing.T) {
 	t.Parallel()
 
 	history := factoryevents.NewFactoryEventHistory(nil, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("Subscribe() error = %v", err)
+	}
+
 	eventTime := time.Date(2026, time.July, 16, 1, 2, 3, 0, time.FixedZone("test", -7*60*60))
 	history.AppendRecordedEvent(interfaces.FactoryEvent{
 		Id:      "recorded-event-1",
@@ -74,6 +81,15 @@ func TestRecordedEventBridgePreservesCanonicalEvent(t *testing.T) {
 	}
 	if got, want := recorded[0].Context.EventTime, eventTime.UTC(); !got.Equal(want) || got.Location() != time.UTC {
 		t.Fatalf("recorded event time = %v (%v), want %v (UTC)", got, got.Location(), want)
+	}
+
+	select {
+	case live := <-stream.Events:
+		if live.Id != recorded[0].Id || live.SchemaVersion != recorded[0].SchemaVersion || !live.Context.EventTime.Equal(recorded[0].Context.EventTime) {
+			t.Fatalf("live recorded event = %#v, want canonical history event %#v", live, recorded[0])
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for recorded event bridge live delivery")
 	}
 }
 
