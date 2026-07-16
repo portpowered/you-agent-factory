@@ -6,16 +6,14 @@ import (
 	"strings"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // PauseLiveFactorySession applies live pause control through the dataplane.
 func (s *Service) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	return s.applyLiveLifecycleControl(ctx, sessionID, factorysessionexecution.LifecycleControlPause, request)
 }
 
@@ -23,8 +21,8 @@ func (s *Service) PauseLiveFactorySession(
 func (s *Service) ResumeLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	return s.applyLiveLifecycleControl(ctx, sessionID, factorysessionexecution.LifecycleControlResume, request)
 }
 
@@ -46,18 +44,10 @@ func (s *Service) applyLiveLifecycleControl(
 	ctx context.Context,
 	sessionID string,
 	operation factorysessionexecution.LifecycleControlKind,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory session gateway is required")
+		return factorysessionexecution.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := s.liveLifecycle.ApplyControl(ctx, sessionID, operation, control)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return s.liveLifecycle.ApplyControl(ctx, sessionID, operation, request)
 }

@@ -1699,7 +1699,15 @@ func (fs *FactoryService) PauseLiveFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().PauseLiveFactorySession(ctx, sessionID, request)
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.requireSessionGateway().PauseLiveFactorySession(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (fs *FactoryService) ResumeLiveFactorySession(
@@ -1707,7 +1715,15 @@ func (fs *FactoryService) ResumeLiveFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return fs.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, request)
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 const (
@@ -1816,16 +1832,16 @@ type sessionGateway interface {
 	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
-	PauseLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	ResumeLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	PauseLiveFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ResumeLiveFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
 	CloseFactorySession(context.Context, string) error
-	PauseDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	ResumeDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	CancelDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	TerminateDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	ApproveDurableFactorySession(context.Context, string, factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	RetryDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	InterruptDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	PauseDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ResumeDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	CancelDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	TerminateDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ApproveDurableFactorySession(context.Context, string, factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error)
+	RetryDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
+	InterruptDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
 	SubscribeSessionResponseStream(sessionID string, dispatchID string, afterSequence int64) (*factorysessions.SessionResponseStreamSubscription, error)
 	SessionResponseStreamDispatchIDs(sessionID string) ([]string, error)
 	CloseSessionResponseStreams(session *factorysessions.LiveSession)

@@ -34,6 +34,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -1591,7 +1592,15 @@ func (c *runtimeCoordinator) PauseLiveFactorySession(ctx context.Context, sessio
 	if c == nil || c.host == nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory service is required")
 	}
-	return c.host.requireSessionGateway().PauseLiveFactorySession(ctx, sessionID, request)
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := c.host.requireSessionGateway().PauseLiveFactorySession(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (fs *Host) ResumeLiveFactorySession(
@@ -1606,7 +1615,15 @@ func (c *runtimeCoordinator) ResumeLiveFactorySession(ctx context.Context, sessi
 	if c == nil || c.host == nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory service is required")
 	}
-	return c.host.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, request)
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := c.host.requireSessionGateway().ResumeLiveFactorySession(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (fs *Host) observeLiveLifecycleControl(
@@ -1774,16 +1791,16 @@ type SessionGateway interface {
 	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor, *interfaces.FactorySessionLogicalResolveHint) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
-	PauseLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	ResumeLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	PauseLiveFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ResumeLiveFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
 	CloseFactorySession(context.Context, string) error
-	PauseDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	ResumeDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	CancelDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	TerminateDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	ApproveDurableFactorySession(context.Context, string, factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	RetryDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
-	InterruptDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	PauseDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ResumeDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	CancelDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	TerminateDurableFactorySession(context.Context, string, factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error)
+	ApproveDurableFactorySession(context.Context, string, factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error)
+	RetryDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
+	InterruptDurableFactorySessionDispatch(context.Context, string, factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error)
 	SubscribeSessionResponseStream(sessionID string, dispatchID string, afterSequence int64) (*factorysessions.SessionResponseStreamSubscription, error)
 	SessionResponseStreamDispatchIDs(sessionID string) ([]string, error)
 	CloseSessionResponseStreams(session *factorysessions.LiveSession)

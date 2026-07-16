@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
@@ -1577,10 +1578,10 @@ type stubSessionGateway struct {
 	openFromFolder      *FactorySessionOpenResult
 	listSessionsResult  factoryapi.ListFactorySessionsResponse
 	getSessionResult    factoryapi.FactorySession
-	pauseResult         factoryapi.FactorySessionLifecycleControlResponse
-	resumeResult        factoryapi.FactorySessionLifecycleControlResponse
-	durablePauseResult  factoryapi.FactorySessionLifecycleControlResponse
-	durableCancelResult factoryapi.FactorySessionLifecycleControlResponse
+	pauseResult         factorysessionexecution.LifecycleControlResult
+	resumeResult        factorysessionexecution.LifecycleControlResult
+	durablePauseResult  factorysessionexecution.LifecycleControlResult
+	durableCancelResult factorysessionexecution.LifecycleControlResult
 	calls               []string
 	folderPaths         []string
 	sessionIDs          []string
@@ -1637,13 +1638,13 @@ func (s *stubSessionGateway) GetFactorySessionPartialResult(_ context.Context, s
 	return factoryapi.FactorySessionPartialResult{}, nil
 }
 
-func (s *stubSessionGateway) PauseLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) PauseLiveFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "pause-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.pauseResult, nil
 }
 
-func (s *stubSessionGateway) ResumeLiveFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) ResumeLiveFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "resume-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.resumeResult, nil
@@ -1655,43 +1656,43 @@ func (s *stubSessionGateway) CloseFactorySession(_ context.Context, sessionID st
 	return nil
 }
 
-func (s *stubSessionGateway) PauseDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) PauseDurableFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "pause-durable-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durablePauseResult, nil
 }
 
-func (s *stubSessionGateway) ResumeDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) ResumeDurableFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "resume-durable-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durablePauseResult, nil
 }
 
-func (s *stubSessionGateway) CancelDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) CancelDurableFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "cancel-durable-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durableCancelResult, nil
 }
 
-func (s *stubSessionGateway) TerminateDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) TerminateDurableFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ControlRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "terminate-durable-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durableCancelResult, nil
 }
 
-func (s *stubSessionGateway) ApproveDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) ApproveDurableFactorySession(_ context.Context, sessionID string, _ factorysessionexecution.ApproveRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "approve-durable-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durablePauseResult, nil
 }
 
-func (s *stubSessionGateway) RetryDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) RetryDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factorysessionexecution.RetryDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "retry-durable-dispatch")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durablePauseResult, nil
 }
 
-func (s *stubSessionGateway) InterruptDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+func (s *stubSessionGateway) InterruptDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factorysessionexecution.InterruptDispatchRequest) (factorysessionexecution.LifecycleControlResult, error) {
 	s.calls = append(s.calls, "interrupt-durable-dispatch")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.durablePauseResult, nil

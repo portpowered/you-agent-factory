@@ -404,3 +404,11 @@ Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the
 transport mapper may serialize the result but must not supply domain result
 fields back to the dataplane.
+
+Factory Session lifecycle service entrypoints accept the execution owner's
+`ControlRequest`, `ApproveRequest`, `RetryDispatchRequest`, and
+`InterruptDispatchRequest` values and return `LifecycleControlResult`. Public
+request normalization and generated response assembly belong in
+`pkg/transports/mapping/factorysession` or the service/runtime compatibility
+adapter that invokes it; `pkg/factory/sessions/service` must not import either
+generated HTTP contracts or transport mapping for lifecycle control.
