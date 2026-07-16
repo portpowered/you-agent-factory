@@ -6,16 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 // mockExecutor implements WorkerExecutor for testing.
 type mockExecutor struct {
-	fn func(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error)
+	fn func(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error)
 }
 
-func (m *mockExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (m *mockExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	return m.fn(ctx, dispatch)
 }
 
@@ -23,10 +25,10 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-			return interfaces.WorkResult{
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+			return workerexecution.WorkResult{
 				TransitionID: d.TransitionID,
-				Outcome:      interfaces.OutcomeAccepted,
+				Outcome:      workerexecution.OutcomeAccepted,
 			}, nil
 		},
 	}
@@ -35,7 +37,7 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 	pool.Start()
 	defer pool.Stop()
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID: "tr-1",
 	}
 	ok := pool.Dispatch("test-worker", dispatch)
@@ -48,7 +50,7 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 		if result.TransitionID != "tr-1" {
 			t.Errorf("expected transition ID tr-1, got %s", result.TransitionID)
 		}
-		if result.Outcome != interfaces.OutcomeAccepted {
+		if result.Outcome != workerexecution.OutcomeAccepted {
 			t.Errorf("expected ACCEPTED, got %s", result.Outcome)
 		}
 	case <-time.After(2 * time.Second):
@@ -58,15 +60,15 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 
 func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
-	seen := make(chan interfaces.ExecutionMetadata, 1)
+	seen := make(chan work.ExecutionMetadata, 1)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 			seen <- d.Execution
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:   d.DispatchID,
 				TransitionID: d.TransitionID,
-				Outcome:      interfaces.OutcomeAccepted,
+				Outcome:      workerexecution.OutcomeAccepted,
 			}, nil
 		},
 	}
@@ -75,7 +77,7 @@ func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) 
 	pool.Start()
 	defer pool.Stop()
 
-	want := interfaces.ExecutionMetadata{
+	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 10,
 		CurrentTick:         11,
 		RequestID:           "request-1",
@@ -83,7 +85,7 @@ func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) 
 		WorkIDs:             []string{"work-1", "work-2"},
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
-	if !pool.Dispatch("test-worker", interfaces.WorkDispatch{
+	if !pool.Dispatch("test-worker", work.WorkDispatch{
 		DispatchID:   "d-1",
 		TransitionID: "transition-1",
 		Execution:    want,
@@ -107,7 +109,7 @@ func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) 
 func TestWorkerPool_DispatchUnknownType(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
-	ok := pool.Dispatch("nonexistent", interfaces.WorkDispatch{TransitionID: "tr-1"})
+	ok := pool.Dispatch("nonexistent", work.WorkDispatch{TransitionID: "tr-1"})
 	if ok {
 		t.Fatal("expected dispatch to unknown worker type to return false")
 	}
@@ -117,8 +119,8 @@ func TestWorkerRunner_ExecutorError(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-			return interfaces.WorkResult{}, fmt.Errorf("connection refused")
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+			return workerexecution.WorkResult{}, fmt.Errorf("connection refused")
 		},
 	}
 
@@ -126,13 +128,13 @@ func TestWorkerRunner_ExecutorError(t *testing.T) {
 	pool.Start()
 	defer pool.Stop()
 
-	pool.Dispatch("error-worker", interfaces.WorkDispatch{
+	pool.Dispatch("error-worker", work.WorkDispatch{
 		TransitionID: "tr-err",
 	})
 
 	select {
 	case result := <-pool.ResultCh():
-		if result.Outcome != interfaces.OutcomeFailed {
+		if result.Outcome != workerexecution.OutcomeFailed {
 			t.Errorf("expected FAILED, got %s", result.Outcome)
 		}
 		if result.Error != "connection refused" {
@@ -147,7 +149,7 @@ func TestWorkerRunner_ExecutorPanic(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 			panic("simulated panic")
 		},
 	}
@@ -156,14 +158,14 @@ func TestWorkerRunner_ExecutorPanic(t *testing.T) {
 	pool.Start()
 	defer pool.Stop()
 
-	pool.Dispatch("panic-worker", interfaces.WorkDispatch{
+	pool.Dispatch("panic-worker", work.WorkDispatch{
 		DispatchID:   "d-panic",
 		TransitionID: "tr-panic",
 	})
 
 	select {
 	case result := <-pool.ResultCh():
-		if result.Outcome != interfaces.OutcomeFailed {
+		if result.Outcome != workerexecution.OutcomeFailed {
 			t.Errorf("expected FAILED, got %s", result.Outcome)
 		}
 		if result.DispatchID != "d-panic" {
@@ -177,7 +179,7 @@ func TestWorkerRunner_ExecutorPanic(t *testing.T) {
 	}
 }
 
-func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+func assertExecutionMetadataEqual(t *testing.T, want, got work.ExecutionMetadata) {
 	t.Helper()
 	if want.RequestID != got.RequestID {
 		t.Fatalf("RequestID = %q, want %q", got.RequestID, want.RequestID)
@@ -200,10 +202,10 @@ func TestWorkerPool_MultipleWorkerTypes(t *testing.T) {
 
 	makeExecutor := func(suffix string) *mockExecutor {
 		return &mockExecutor{
-			fn: func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{
+			fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{
 					TransitionID: d.TransitionID,
-					Outcome:      interfaces.OutcomeAccepted,
+					Outcome:      workerexecution.OutcomeAccepted,
 					Feedback:     suffix,
 				}, nil
 			},
@@ -215,8 +217,8 @@ func TestWorkerPool_MultipleWorkerTypes(t *testing.T) {
 	pool.Start()
 	defer pool.Stop()
 
-	pool.Dispatch("worker-a", interfaces.WorkDispatch{TransitionID: "tr-a"})
-	pool.Dispatch("worker-b", interfaces.WorkDispatch{TransitionID: "tr-b"})
+	pool.Dispatch("worker-a", work.WorkDispatch{TransitionID: "tr-a"})
+	pool.Dispatch("worker-b", work.WorkDispatch{TransitionID: "tr-b"})
 
 	results := map[string]string{}
 	for range 2 {

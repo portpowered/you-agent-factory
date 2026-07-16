@@ -14,8 +14,9 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -158,9 +159,9 @@ func (fw *FileWatcher) PreseedInputs(ctx context.Context) error {
 	return nil
 }
 
-func (fw *FileWatcher) collectPreseedRequests() ([]interfaces.WorkRequest, error) {
-	var batchRequests []interfaces.WorkRequest
-	var fileWorks []interfaces.Work
+func (fw *FileWatcher) collectPreseedRequests() ([]work.WorkRequest, error) {
+	var batchRequests []work.WorkRequest
+	var fileWorks []work.Work
 	usedFileWorkNames := map[string]int{}
 
 	err := filepath.WalkDir(fw.dir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -185,10 +186,10 @@ func (fw *FileWatcher) collectPreseedRequests() ([]interfaces.WorkRequest, error
 		return nil, fmt.Errorf("preseed walk: %w", err)
 	}
 
-	requests := make([]interfaces.WorkRequest, 0, len(batchRequests)+1)
+	requests := make([]work.WorkRequest, 0, len(batchRequests)+1)
 	if len(fileWorks) > 0 {
-		requests = append(requests, interfaces.WorkRequest{
-			Type:  interfaces.WorkRequestTypeFactoryRequestBatch,
+		requests = append(requests, work.WorkRequest{
+			Type:  work.WorkRequestTypeFactoryRequestBatch,
 			Works: fileWorks,
 		})
 	}
@@ -196,61 +197,61 @@ func (fw *FileWatcher) collectPreseedRequests() ([]interfaces.WorkRequest, error
 	return requests, nil
 }
 
-func (fw *FileWatcher) preseedFileRequest(path string, d fs.DirEntry, walkErr error) (interfaces.WorkRequest, bool, bool, error) {
+func (fw *FileWatcher) preseedFileRequest(path string, d fs.DirEntry, walkErr error) (work.WorkRequest, bool, bool, error) {
 	if walkErr != nil {
 		fw.logger.Warn("preseed: skipping unreadable path",
 			zap.String("path", path), zap.Error(walkErr))
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 	if d.IsDir() {
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 
 	name := filepath.Base(path)
 	if isTempFile(name) {
 		fw.logger.Debug("preseed: skipping temp file",
 			zap.String("path", path))
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 
 	ext := strings.ToLower(filepath.Ext(name))
 	if ext != JSON_EXTENSION && ext != MD_EXTENSION {
 		fw.logger.Debug("preseed: skipping unsupported file type",
 			zap.String("path", path), zap.String("extension", ext))
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 
 	workType, executionID, deriveErr := fw.deriveWorkTypeAndChannel(path)
 	if deriveErr != nil {
 		fw.logger.Warn("preseed: failed to derive work type",
 			zap.String("path", path), zap.Error(deriveErr))
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 	if fw.knownWorkTypes != nil && workType != batchInputDirectoryName && !fw.knownWorkTypes[workType] {
 		fw.logger.Warn("preseed: skipping unknown work type",
 			zap.String("path", path), zap.String("work_type", workType))
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 
 	content, err := os.ReadFile(path)
 	if err != nil {
 		fw.logger.Warn("preseed: skipping unreadable file",
 			zap.String("path", path), zap.Error(err))
-		return interfaces.WorkRequest{}, false, false, nil
+		return work.WorkRequest{}, false, false, nil
 	}
 
 	request, explicitBatch, err := fileToWorkRequest(name, ext, workType, executionID, content)
 	if err != nil {
-		return interfaces.WorkRequest{}, false, false, fmt.Errorf("preseed parse %s: %w", path, err)
+		return work.WorkRequest{}, false, false, fmt.Errorf("preseed parse %s: %w", path, err)
 	}
 	fw.logger.Info("preseed: found existing input",
 		zap.String("path", path), zap.String("work_type", workType))
 	return request, explicitBatch, true, nil
 }
 
-func (fw *FileWatcher) validatePreseedRequests(workRequests []interfaces.WorkRequest) error {
+func (fw *FileWatcher) validatePreseedRequests(workRequests []work.WorkRequest) error {
 	for i, request := range workRequests {
-		if _, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+		if _, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{
 			ValidWorkTypes:    fw.knownWorkTypes,
 			ValidStatesByType: fw.knownWorkStates,
 		}); err != nil {
@@ -387,15 +388,15 @@ const (
 	MD_EXTENSION   = ".md"
 )
 
-func fileToWorkRequest(filename, ext, workType, executionID string, content []byte) (interfaces.WorkRequest, bool, error) {
+func fileToWorkRequest(filename, ext, workType, executionID string, content []byte) (work.WorkRequest, bool, error) {
 	if ext == JSON_EXTENSION {
 		var probe struct {
-			Type interfaces.WorkRequestType `json:"type"`
+			Type work.WorkRequestType `json:"type"`
 		}
-		if err := json.Unmarshal(content, &probe); err == nil && probe.Type == interfaces.WorkRequestTypeFactoryRequestBatch {
+		if err := json.Unmarshal(content, &probe); err == nil && probe.Type == work.WorkRequestTypeFactoryRequestBatch {
 			workRequest, err := parseFactoryRequestBatch(content, workType, executionID)
 			if err != nil {
-				return interfaces.WorkRequest{}, false, err
+				return work.WorkRequest{}, false, err
 			}
 			return workRequest, true, nil
 		}
@@ -404,16 +405,16 @@ func fileToWorkRequest(filename, ext, workType, executionID string, content []by
 	return singleFileWorkRequest(filename, workType, executionID, content), false, nil
 }
 
-func parseFactoryRequestBatch(content []byte, workType string, executionID string) (interfaces.WorkRequest, error) {
+func parseFactoryRequestBatch(content []byte, workType string, executionID string) (work.WorkRequest, error) {
 	request, err := requests.ParseCanonicalWorkRequestJSON(content)
 	if err != nil {
-		return interfaces.WorkRequest{}, fmt.Errorf("parse work request batch: %w", err)
+		return work.WorkRequest{}, fmt.Errorf("parse work request batch: %w", err)
 	}
-	if request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		return interfaces.WorkRequest{}, fmt.Errorf("work request batch has unsupported type %q", request.Type)
+	if request.Type != work.WorkRequestTypeFactoryRequestBatch {
+		return work.WorkRequest{}, fmt.Errorf("work request batch has unsupported type %q", request.Type)
 	}
 	if err := applyInternalBatchWorkFields(&request, content); err != nil {
-		return interfaces.WorkRequest{}, err
+		return work.WorkRequest{}, err
 	}
 	defaultWorkType := workType
 	if workType == batchInputDirectoryName {
@@ -424,23 +425,23 @@ func parseFactoryRequestBatch(content []byte, workType string, executionID strin
 			request.Works[i].WorkTypeID = workType
 		}
 		if defaultWorkType != "" && request.Works[i].WorkTypeID != defaultWorkType {
-			return interfaces.WorkRequest{}, fmt.Errorf("work request batch work %q has work_type_name %q that conflicts with watched work type %q", request.Works[i].Name, request.Works[i].WorkTypeID, workType)
+			return work.WorkRequest{}, fmt.Errorf("work request batch work %q has work_type_name %q that conflicts with watched work type %q", request.Works[i].Name, request.Works[i].WorkTypeID, workType)
 		}
 		if executionID != "" && request.Works[i].ExecutionID == "" {
 			request.Works[i].ExecutionID = executionID
 		}
 	}
-	if _, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{}); err != nil {
-		return interfaces.WorkRequest{}, err
+	if _, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{}); err != nil {
+		return work.WorkRequest{}, err
 	}
 	return request, nil
 }
 
-func applyInternalBatchWorkFields(request *interfaces.WorkRequest, content []byte) error {
+func applyInternalBatchWorkFields(request *work.WorkRequest, content []byte) error {
 	var raw struct {
 		Works []struct {
-			ExecutionID      string                `json:"execution_id"`
-			RuntimeRelations []interfaces.Relation `json:"runtime_relations"`
+			ExecutionID      string          `json:"execution_id"`
+			RuntimeRelations []work.Relation `json:"runtime_relations"`
 		} `json:"works"`
 	}
 	if err := json.Unmarshal(content, &raw); err != nil {
@@ -454,16 +455,16 @@ func applyInternalBatchWorkFields(request *interfaces.WorkRequest, content []byt
 			request.Works[i].ExecutionID = raw.Works[i].ExecutionID
 		}
 		if len(raw.Works[i].RuntimeRelations) > 0 {
-			request.Works[i].RuntimeRelations = append([]interfaces.Relation(nil), raw.Works[i].RuntimeRelations...)
+			request.Works[i].RuntimeRelations = append([]work.Relation(nil), raw.Works[i].RuntimeRelations...)
 		}
 	}
 	return nil
 }
 
-func singleFileWorkRequest(filename string, workType string, executionID string, content []byte) interfaces.WorkRequest {
-	return interfaces.WorkRequest{
-		Type: interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+func singleFileWorkRequest(filename string, workType string, executionID string, content []byte) work.WorkRequest {
+	return work.WorkRequest{
+		Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:        strings.TrimSuffix(filename, filepath.Ext(filename)),
 			WorkTypeID:  workType,
 			Payload:     append([]byte(nil), content...),

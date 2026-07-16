@@ -10,14 +10,15 @@ import (
 	"testing"
 	"time"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type gatedResponseStreamWriter struct {
@@ -115,9 +116,9 @@ func floodCanonicalHumanProgress(sink responseEventSink, count int) {
 }
 
 var responseStreamBacklogSuccessResult = apisurface.FactoryInvocationResult{
-	Status: factoryapi.InvocationTerminalStatusCompleted,
-	PrimaryResult: []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+	Status: interfaces.InvocationTerminalStatusCompleted,
+	PrimaryResult: []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 	},
 }
 
@@ -166,9 +167,9 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{planning, reviewing, message})
 
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		Status: interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -259,10 +260,10 @@ func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: interfaces.InvocationTerminalStatusCompleted,
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
@@ -279,7 +280,7 @@ func TestHumanResponseStreamRenderer_WritesInvocationOutcomeForBlockedFailure(t 
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-blocked",
 		TraceID:   "trace-blocked",
-		Status:    factoryapi.InvocationTerminalStatusFailed,
+		Status:    interfaces.InvocationTerminalStatusFailed,
 		ErrorCode: "INVOCATION_BLOCKED",
 		Message:   `goal invocation blocked while work "Review plan" is in state goal:blocked`,
 		SessionID: "session-1",
@@ -319,7 +320,7 @@ func TestHumanResponseStreamRenderer_WritesInvocationOutcomeAfterProgress(t *tes
 	progress.Sequence = 1
 	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{progress})
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status:    factoryapi.InvocationTerminalStatusTimedOut,
+		Status:    interfaces.InvocationTerminalStatusTimedOut,
 		ErrorCode: "INVOCATION_TIMED_OUT",
 		Message:   "invocation timed out while waiting for primary result",
 		SessionID: "session-1",
@@ -345,7 +346,7 @@ func TestHumanResponseStreamRenderer_WritesUnresolvedPrimaryResultOutcome(t *tes
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status:    factoryapi.InvocationTerminalStatusFailed,
+		Status:    interfaces.InvocationTerminalStatusFailed,
 		ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
 		Message:   "primary result could not be resolved",
 	}); err != nil {
@@ -366,7 +367,7 @@ func TestJSONResponseStreamRenderer_EmitsInvocationResultRecordForFailedOutcome(
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-interrupted",
 		TraceID:   "trace-interrupted",
-		Status:    factoryapi.InvocationTerminalStatusFailed,
+		Status:    interfaces.InvocationTerminalStatusFailed,
 		ErrorCode: "INVOCATION_INTERRUPTED",
 		Message:   "dispatch was interrupted before primary result resolved",
 		SessionID: "session-1",
@@ -412,9 +413,9 @@ func TestJSONResponseStreamRenderer_EmitsCanonicalResponseEventsAndInvocationRes
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		RequestID: "req-1",
 		TraceID:   "trace-1",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		Status:    interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -476,9 +477,9 @@ func TestRun_FactoryInvocationResponseStreamJSONPreservesSlowWriterOrder(t *test
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-slow-writer",
 						TraceID:   "trace-slow-writer",
-						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						Status:    interfaces.InvocationTerminalStatusCompleted,
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -540,9 +541,9 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-terminal-boundary",
 						TraceID:   "trace-terminal-boundary",
-						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						Status:    interfaces.InvocationTerminalStatusCompleted,
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -694,9 +695,9 @@ func TestJSONResponseStreamRenderer_EmitsOnlyInvocationResultWithoutEvents(t *te
 	var output strings.Builder
 	renderer := newJSONResponseStreamRenderer(&output)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		Status: interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -810,9 +811,9 @@ func TestResponseStreamNDJSON_PublicVocabularyDecodesAfterPrivateRemoval(t *test
 	invocation := interfaces.FactoryInvocationResult{
 		RequestID: "req-migration-1",
 		TraceID:   "trace-migration-1",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "done"},
+		Status:    interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "done"},
 		},
 	}
 
@@ -844,9 +845,9 @@ func TestResponseStreamNDJSON_RendererOutputDecodesThroughPublicContract(t *test
 	event := canonicalResponseEventFixture(2, responseevents.KindMessage)
 	result := apisurface.FactoryInvocationResult{
 		RequestID: "req-migration-2",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "final"},
+		Status:    interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "final"},
 		},
 	}
 

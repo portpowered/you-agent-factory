@@ -6,16 +6,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // PauseDurableFactorySession applies durable pause control through the control plane.
 func (s *Service) PauseDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	return s.applyDurableLifecycleControl(
 		ctx,
 		sessionID,
@@ -28,8 +26,8 @@ func (s *Service) PauseDurableFactorySession(
 func (s *Service) ResumeDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	return s.applyDurableLifecycleControl(
 		ctx,
 		sessionID,
@@ -42,8 +40,8 @@ func (s *Service) ResumeDurableFactorySession(
 func (s *Service) CancelDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	return s.applyDurableLifecycleControl(
 		ctx,
 		sessionID,
@@ -56,8 +54,8 @@ func (s *Service) CancelDurableFactorySession(
 func (s *Service) TerminateDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ControlRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	return s.applyDurableLifecycleControl(
 		ctx,
 		sessionID,
@@ -70,60 +68,36 @@ func (s *Service) TerminateDurableFactorySession(
 func (s *Service) ApproveDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionApproveRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.ApproveRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory session gateway is required")
+		return factorysessionexecution.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	approve, err := factorysession.ApproveRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := controlplane.ApproveDurableFactorySession(ctx, s.host, sessionID, approve)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return controlplane.ApproveDurableFactorySession(ctx, s.host, sessionID, request)
 }
 
 // RetryDurableFactorySessionDispatch applies durable retry-dispatch control through the control plane.
 func (s *Service) RetryDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionRetryDispatchRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.RetryDispatchRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory session gateway is required")
+		return factorysessionexecution.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	retry, err := factorysession.RetryDispatchRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := controlplane.RetryDurableFactorySessionDispatch(ctx, s.host, sessionID, retry)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return controlplane.RetryDurableFactorySessionDispatch(ctx, s.host, sessionID, request)
 }
 
 // InterruptDurableFactorySessionDispatch applies durable interrupt-dispatch control through the control plane.
 func (s *Service) InterruptDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionInterruptDispatchRequest,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	request factorysessionexecution.InterruptDispatchRequest,
+) (factorysessionexecution.LifecycleControlResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory session gateway is required")
+		return factorysessionexecution.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := controlplane.InterruptDurableFactorySessionDispatch(ctx, s.host, sessionID, interrupt)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return controlplane.InterruptDurableFactorySessionDispatch(ctx, s.host, sessionID, request)
 }
 
 type durableLifecycleControlFunc func(
@@ -136,19 +110,11 @@ type durableLifecycleControlFunc func(
 func (s *Service) applyDurableLifecycleControl(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	request factorysessionexecution.ControlRequest,
 	apply durableLifecycleControlFunc,
-) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+) (factorysessionexecution.LifecycleControlResult, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("factory session gateway is required")
+		return factorysessionexecution.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := apply(ctx, s.host, sessionID, control)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return apply(ctx, s.host, sessionID, request)
 }

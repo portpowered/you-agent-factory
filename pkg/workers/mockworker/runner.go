@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -143,12 +145,12 @@ func mockWorkerMatches(candidate factoryconfig.MockWorkerConfig, req workerproce
 	return true
 }
 
-func commandRequestInputTokens(request workerprocess.CommandRequest) []interfaces.Token {
+func commandRequestInputTokens(request workerprocess.CommandRequest) []factorytoken.Token {
 	if len(request.InputTokens) == 0 {
 		return nil
 	}
 
-	out := make([]interfaces.Token, 0, len(request.InputTokens))
+	out := make([]factorytoken.Token, 0, len(request.InputTokens))
 	for _, raw := range request.InputTokens {
 		token, ok := decodeToken(raw)
 		if !ok {
@@ -159,25 +161,25 @@ func commandRequestInputTokens(request workerprocess.CommandRequest) []interface
 	return out
 }
 
-func decodeToken(raw any) (interfaces.Token, bool) {
-	if token, ok := raw.(interfaces.Token); ok {
+func decodeToken(raw any) (factorytoken.Token, bool) {
+	if token, ok := raw.(factorytoken.Token); ok {
 		return token, true
 	}
 
 	encoded, err := json.Marshal(raw)
 	if err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
-	var token interfaces.Token
+	var token factorytoken.Token
 	if err := json.Unmarshal(encoded, &token); err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
 	return token, true
 }
 
-func mockWorkInputSelectorMatches(selector factoryconfig.MockWorkInputSelector, tokens []interfaces.Token, bindings map[string][]string) bool {
+func mockWorkInputSelectorMatches(selector factoryconfig.MockWorkInputSelector, tokens []factorytoken.Token, bindings map[string][]string) bool {
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if selectorMatchesToken(selector, token, bindings) {
@@ -187,7 +189,7 @@ func mockWorkInputSelectorMatches(selector factoryconfig.MockWorkInputSelector, 
 	return false
 }
 
-func selectorMatchesToken(selector factoryconfig.MockWorkInputSelector, token interfaces.Token, bindings map[string][]string) bool {
+func selectorMatchesToken(selector factoryconfig.MockWorkInputSelector, token factorytoken.Token, bindings map[string][]string) bool {
 	if selector.WorkID != "" && selector.WorkID != token.Color.WorkID {
 		return false
 	}
@@ -224,7 +226,7 @@ func bindingContainsToken(bindings map[string][]string, name string, tokenID str
 	return false
 }
 
-func tokenState(token interfaces.Token) string {
+func tokenState(token factorytoken.Token) string {
 	prefix := token.Color.WorkTypeID + ":"
 	if strings.HasPrefix(token.PlaceID, prefix) {
 		return strings.TrimPrefix(token.PlaceID, prefix)

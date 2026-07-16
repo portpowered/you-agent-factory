@@ -6,11 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
-type workRequestSubmitter func(context.Context, interfaces.WorkRequest) error
+type workRequestSubmitter func(context.Context, work.WorkRequest) error
 
 func (fs *FactoryService) startSchedulerSidecarsForRuntime(
 	ctx context.Context,

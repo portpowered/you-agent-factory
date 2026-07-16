@@ -454,7 +454,7 @@ func isBackendCoveragePackage(importPath string) bool {
 		return false
 	case importPath == modulePath+"/pkg/transports/mcp/generated":
 		return false
-	case strings.HasPrefix(importPath, modulePath+"/pkg/testutil"):
+	case strings.HasPrefix(importPath, modulePath+"/internal/testutil"):
 		return false
 	default:
 		return true

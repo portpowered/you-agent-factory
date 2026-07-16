@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,18 +20,18 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "retired-unary-smoke.replay.json")
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "step one COMPLETE"},
-		interfaces.InferenceResponse{Content: "step two COMPLETE"},
+		workerexecution.InferenceResponse{Content: "step one COMPLETE"},
+		workerexecution.InferenceResponse{Content: "step two COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithRecordPath(artifactPath),
 	)
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-retired-unary-replay",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "replayed",
 			WorkID:     "work-retired-unary-replay",
 			WorkTypeID: "task",

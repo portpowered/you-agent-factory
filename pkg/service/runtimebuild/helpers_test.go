@@ -6,10 +6,10 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -147,8 +147,8 @@ func TestCommandRunnerOverrideForMode_ReplayReplacesOnlyProductionEdge(t *testin
 
 type stubProvider struct{}
 
-func (stubProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{}, nil
+func (stubProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{}, nil
 }
 
 func TestNewSessionLogger_AnnotatesSessionFields(t *testing.T) {

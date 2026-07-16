@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/dataplane"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ScaffoldHost materializes a new factory scaffold for init-new-factory opens.

@@ -4,7 +4,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -65,7 +66,7 @@ func (l *capturingLogger) countEntries(substr string) int {
 	return count
 }
 
-func makeTestSnapshot(tokens map[string]*interfaces.Token) petri.MarkingSnapshot {
+func makeTestSnapshot(tokens map[string]*factorytoken.Token) petri.MarkingSnapshot {
 	placeTokens := make(map[string][]string)
 	for id, tok := range tokens {
 		if tok.CreatedAt.IsZero() {
@@ -79,14 +80,14 @@ func makeTestSnapshot(tokens map[string]*interfaces.Token) petri.MarkingSnapshot
 	return petri.MarkingSnapshot{Tokens: tokens, PlaceTokens: placeTokens}
 }
 
-func schedulerCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *interfaces.Token {
-	return &interfaces.Token{
+func schedulerCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:      id,
 		PlaceID: interfaces.SystemTimePendingPlaceID,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     id,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
 				interfaces.TimeWorkTagKeyCronWorkstation: workstation,
@@ -105,7 +106,7 @@ func transitionIDs(enabled []interfaces.EnabledTransition) []string {
 	return ids
 }
 
-func tokenIDs(tokens []interfaces.Token) []string {
+func tokenIDs(tokens []factorytoken.Token) []string {
 	ids := make([]string, len(tokens))
 	for i := range tokens {
 		ids[i] = tokens[i].ID

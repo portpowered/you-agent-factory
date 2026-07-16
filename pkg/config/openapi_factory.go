@@ -10,8 +10,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 var defaultFactoryConfigMapper = NewFactoryConfigMapper()
@@ -490,10 +492,10 @@ func normalizeFactoryWorkerTypesForFactoryUsage(root map[string]any) error {
 		if interfaces.InternalRuntimeWorkerTypeFromPublic(workerType) != interfaces.WorkerTypeModel {
 			continue
 		}
-		publicType := interfaces.PublicWorkerTypeForFactoryUsage(interfaces.WorkerConfig{
+		publicType := workercompatibility.PublicWorkerTypeForFactoryUsage(workerconfig.Config{
 			Name: workerName,
 			Type: interfaces.WorkerTypeModel,
-		}, workstations)
+		}, compatibilityWorkstations(workstations))
 		worker["type"] = publicType
 	}
 	return nil

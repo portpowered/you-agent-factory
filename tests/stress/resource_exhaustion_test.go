@@ -7,11 +7,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // queueManyItems queues numItems work items via QueueBatch, sending all
@@ -20,9 +25,9 @@ func queueManyItems(t *testing.T, h *testutil.ServiceTestHarness, workTypeID str
 	t.Helper()
 	ctx := context.Background()
 
-	reqs := make([]interfaces.SubmitRequest, numItems)
+	reqs := make([]work.SubmitRequest, numItems)
 	for i := range numItems {
-		reqs[i] = interfaces.SubmitRequest{
+		reqs[i] = work.SubmitRequest{
 			WorkTypeID: workTypeID,
 			Payload:    fmt.Appendf(nil, `{"item": %d}`, i),
 			TraceID:    fmt.Sprintf("trace-%s-%d", workTypeID, i),
@@ -47,8 +52,8 @@ func TestResourceExhaustionGPU(t *testing.T) {
 			{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "processing", Type: interfaces.StateTypeProcessing},
 			{Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
-		Workers:   []interfaces.WorkerConfig{{Name: "gpu-worker"}, {Name: "release-worker"}},
+		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
+		Workers:   []workerconfig.Config{{Name: "gpu-worker"}, {Name: "release-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "acquire", WorkerTypeName: "gpu-worker",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "gpu", StateName: "available"}},
@@ -69,9 +74,9 @@ func TestResourceExhaustionGPU(t *testing.T) {
 		mu: &mu, maxConcurrent: &maxConcurrent, currentConcurrent: &currentConcurrent,
 	})
 
-	releaseResults := make([]interfaces.WorkResult, numItems)
+	releaseResults := make([]workerexecution.WorkResult, numItems)
 	for i := range releaseResults {
-		releaseResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		releaseResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	h.MockWorker("release-worker", releaseResults...)
 
@@ -136,8 +141,8 @@ func TestResourceExhaustionMoney(t *testing.T) {
 			{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "processing", Type: interfaces.StateTypeProcessing},
 			{Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Resources: []interfaces.ResourceConfig{{Name: "money", Capacity: moneyCapacity}},
-		Workers:   []interfaces.WorkerConfig{{Name: "spender"}, {Name: "earner"}},
+		Resources: []factoryresource.Config{{Name: "money", Capacity: moneyCapacity}},
+		Workers:   []workerconfig.Config{{Name: "spender"}, {Name: "earner"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spend", WorkerTypeName: "spender",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "money", StateName: "available"}},
@@ -158,9 +163,9 @@ func TestResourceExhaustionMoney(t *testing.T) {
 		mu: &mu, maxConcurrent: &maxConcurrent, currentConcurrent: &currentConcurrent,
 	})
 
-	earnResults := make([]interfaces.WorkResult, numItems)
+	earnResults := make([]workerexecution.WorkResult, numItems)
 	for i := range earnResults {
-		earnResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		earnResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	h.MockWorker("earner", earnResults...)
 
@@ -220,8 +225,8 @@ func TestResourceExhaustionMoneyConsumed(t *testing.T) {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Resources: []interfaces.ResourceConfig{{Name: "money", Capacity: moneyCapacity}},
-		Workers:   []interfaces.WorkerConfig{{Name: "spender"}},
+		Resources: []factoryresource.Config{{Name: "money", Capacity: moneyCapacity}},
+		Workers:   []workerconfig.Config{{Name: "spender"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "spend", WorkerTypeName: "spender",
 			Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "money", StateName: "available"}},
@@ -231,9 +236,9 @@ func TestResourceExhaustionMoneyConsumed(t *testing.T) {
 	})
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	spendResults := make([]interfaces.WorkResult, numItems)
+	spendResults := make([]workerexecution.WorkResult, numItems)
 	for i := range spendResults {
-		spendResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		spendResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	h.MockWorker("spender", spendResults...)
 
@@ -315,8 +320,8 @@ func TestResourceExhaustionNoTokenLoss(t *testing.T) {
 			{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "processing", Type: interfaces.StateTypeProcessing},
 			{Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: gpuCapacity}, {Name: "money", Capacity: moneyCapacity}},
-		Workers:   []interfaces.WorkerConfig{{Name: "worker"}, {Name: "releaser"}},
+		Resources: []factoryresource.Config{{Name: "gpu", Capacity: gpuCapacity}, {Name: "money", Capacity: moneyCapacity}},
+		Workers:   []workerconfig.Config{{Name: "worker"}, {Name: "releaser"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "acquire", WorkerTypeName: "worker",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "gpu", StateName: "available"}, {WorkTypeName: "money", StateName: "available"}},
@@ -328,11 +333,11 @@ func TestResourceExhaustionNoTokenLoss(t *testing.T) {
 	})
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	acquireResults := make([]interfaces.WorkResult, numItems)
-	releaseResults := make([]interfaces.WorkResult, numItems)
+	acquireResults := make([]workerexecution.WorkResult, numItems)
+	releaseResults := make([]workerexecution.WorkResult, numItems)
 	for i := range numItems {
-		acquireResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
-		releaseResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		acquireResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
+		releaseResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	h.MockWorker("worker", acquireResults...)
 	h.MockWorker("releaser", releaseResults...)
@@ -397,22 +402,22 @@ func TestResourceExhaustionWithFailure(t *testing.T) {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
-		Workers:   []interfaces.WorkerConfig{{Name: "processor"}},
+		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
+		Workers:   []workerconfig.Config{{Name: "processor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "processor",
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+			Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
 			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 		}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	processResults := make([]interfaces.WorkResult, numItems)
-	processResults[0] = interfaces.WorkResult{Outcome: interfaces.OutcomeFailed, Error: "simulated processing failure"}
+	processResults := make([]workerexecution.WorkResult, numItems)
+	processResults[0] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeFailed, Error: "simulated processing failure"}
 	for i := 1; i < numItems; i++ {
-		processResults[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+		processResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 	}
 	h.MockWorker("processor", processResults...)
 
@@ -480,8 +485,8 @@ func TestResourceExhaustionTimeout(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			}}},
-			Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
-			Workers:   []interfaces.WorkerConfig{{Name: "w"}},
+			Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
+			Workers:   []workerconfig.Config{{Name: "w"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{{
 				Name: "process", WorkerTypeName: "w",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "gpu", StateName: "available"}},
@@ -490,9 +495,9 @@ func TestResourceExhaustionTimeout(t *testing.T) {
 		})
 		h := testutil.NewServiceTestHarness(t, dir)
 
-		results := make([]interfaces.WorkResult, 15)
+		results := make([]workerexecution.WorkResult, 15)
 		for i := range results {
-			results[i] = interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}
+			results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
 		}
 		h.MockWorker("w", results...)
 
@@ -515,7 +520,7 @@ func TestResourceExhaustionTimeout(t *testing.T) {
 func workTokenIDsInPlace(snap *petri.MarkingSnapshot, placeID string) map[string]bool {
 	ids := make(map[string]bool)
 	for _, tok := range snap.TokensInPlace(placeID) {
-		if tok.Color.DataType == interfaces.DataTypeResource || tok.Color.WorkID == "" {
+		if tok.Color.DataType == factorytoken.DataTypeResource || tok.Color.WorkID == "" {
 			continue
 		}
 		ids[tok.Color.WorkID] = true
@@ -532,7 +537,7 @@ type concurrencyTracker struct {
 	currentConcurrent *int
 }
 
-func (ct *concurrencyTracker) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (ct *concurrencyTracker) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	ct.mu.Lock()
 	*ct.currentConcurrent++
 	if *ct.currentConcurrent > *ct.maxConcurrent {
@@ -544,7 +549,7 @@ func (ct *concurrencyTracker) Execute(_ context.Context, dispatch interfaces.Wor
 	*ct.currentConcurrent--
 	ct.mu.Unlock()
 
-	return interfaces.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 var (

@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -16,8 +17,8 @@ func TestTerminationCheck_TerminatesWhenNoWorkIsInTheSystem(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -35,9 +36,9 @@ func TestTerminationCheck_DoesNotTerminateWithNonTerminalWork(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"tok1":     {ID: "tok1", PlaceID: "wt:init", Color: interfaces.TokenColor{WorkID: "w1"}},
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":     {ID: "tok1", PlaceID: "wt:init", Color: factorytoken.Color{WorkID: "w1"}},
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -55,9 +56,9 @@ func TestTerminationCheck_TerminatesWhenAllWorkIsTerminal(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"tok1":     {ID: "tok1", PlaceID: "wt:done", Color: interfaces.TokenColor{WorkID: "w1"}},
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":     {ID: "tok1", PlaceID: "wt:done", Color: factorytoken.Color{WorkID: "w1"}},
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -75,9 +76,9 @@ func TestTerminationCheck_TerminatesWhenAllWorkHasFailed(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"tok1":     {ID: "tok1", PlaceID: "wt:failed", Color: interfaces.TokenColor{WorkID: "w1"}},
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":     {ID: "tok1", PlaceID: "wt:failed", Color: factorytoken.Color{WorkID: "w1"}},
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -96,9 +97,9 @@ func TestTerminationCheck_DoesNotTerminateWhileDispatchesAreInFlight(t *testing.
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		InFlightCount: 1,
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"tok1":     {ID: "tok1", PlaceID: "wt:done", Color: interfaces.TokenColor{WorkID: "w1"}},
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1":     {ID: "tok1", PlaceID: "wt:done", Color: factorytoken.Color{WorkID: "w1"}},
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -116,8 +117,8 @@ func TestTerminationCheck_DoesNotTerminateUntilResourcesReturn(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"tok1": {ID: "tok1", PlaceID: "wt:done", Color: interfaces.TokenColor{WorkID: "w1"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"tok1": {ID: "tok1", PlaceID: "wt:done", Color: factorytoken.Color{WorkID: "w1"}},
 		}),
 	}
 
@@ -135,8 +136,8 @@ func TestTerminationCheck_ResourcesOnlyTerminates(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeBatch)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -154,8 +155,8 @@ func TestTerminationCheck_ServiceModeDoesNotTerminateIdleRuntime(t *testing.T) {
 	tc := subsystems.NewTerminationCheck(n, nil, interfaces.RuntimeModeService)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeTerminationSnapshot(map[string]*interfaces.Token{
-			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: interfaces.TokenColor{WorkID: "gpu:0", WorkTypeID: "gpu"}},
+		Marking: makeTerminationSnapshot(map[string]*factorytoken.Token{
+			"res-tok0": {ID: "res-tok0", PlaceID: "gpu:available", Color: factorytoken.Color{WorkID: "gpu:0", WorkTypeID: "gpu"}},
 		}),
 	}
 
@@ -211,7 +212,7 @@ func buildTerminationNetNoTransitions() *state.Net {
 	return net
 }
 
-func makeTerminationSnapshot(tokens map[string]*interfaces.Token) petri.MarkingSnapshot {
+func makeTerminationSnapshot(tokens map[string]*factorytoken.Token) petri.MarkingSnapshot {
 	placeTokens := make(map[string][]string)
 	for id, tok := range tokens {
 		if tok.CreatedAt.IsZero() {

@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -45,8 +46,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 
 	t.Run("ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
-		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 
 		runner := testutil.NewProviderCommandRunner(
 			workers.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
@@ -77,8 +78,8 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 			t.Fatalf("provider command runner calls = %d, want 2", got)
 		}
 		for i, req := range runner.Requests() {
-			if req.Command != string(interfaces.ModelProviderCodex) {
-				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, interfaces.ModelProviderCodex)
+			if req.Command != string(modelprovider.Codex) {
+				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, modelprovider.Codex)
 			}
 			if req.Execution.TraceID != traceID {
 				t.Fatalf("provider request %d trace ID = %q, want %q", i, req.Execution.TraceID, traceID)

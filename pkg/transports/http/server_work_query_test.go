@@ -10,23 +10,27 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 	now := time.Date(2026, 4, 12, 16, 30, 0, 0, time.UTC)
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	submitted := assertSubmitThenListWorkRequest(t, srv, mf)
 	assertSubmitThenListWorkListing(t, srv, mf, submitted, now)
 }
 
-func assertSubmitThenListWorkRequest(t *testing.T, srv *Server, mf *testutil.MockFactory) interfaces.SubmitRequest {
+func assertSubmitThenListWorkRequest(t *testing.T, srv *Server, mf *testutil.MockFactory) workdomain.SubmitRequest {
 	t.Helper()
 
 	rec := submitWorkRequest(t, srv, `{"name":"Inventory story","workTypeName":"task","traceId":"trace-inventory-1","payload":{"title":"Document current API"},"tags":{"branch":"api-standardization"}}`)
@@ -45,7 +49,7 @@ func assertSubmitThenListWorkRequest(t *testing.T, srv *Server, mf *testutil.Moc
 }
 
 func TestSubmitWork_OmitsUnsetOptionalBoundaryFields(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"Inventory story","workTypeName":"task","payload":{"title":"Document current API"}}`)
@@ -68,20 +72,20 @@ func TestSubmitWork_OmitsUnsetOptionalBoundaryFields(t *testing.T) {
 	}
 }
 
-func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.MockFactory, submitted interfaces.SubmitRequest, now time.Time) {
+func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.MockFactory, submitted workdomain.SubmitRequest, now time.Time) {
 	t.Helper()
 
-	mf.Marking.Tokens["tok-inventory-1"] = &interfaces.Token{
+	mf.Marking.Tokens["tok-inventory-1"] = &factorytoken.Token{
 		ID:      "tok-inventory-1",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Name:       submitted.Name,
 			WorkID:     "work-inventory-1",
 			WorkTypeID: submitted.WorkTypeID,
 			TraceID:    submitted.TraceID,
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
-				{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
+			Content: []workdomain.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "Inspect this"},
+				{Type: work.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
 			},
 			Tags: submitted.Tags,
 		},
@@ -111,9 +115,9 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 	if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
 		t.Fatalf("state = %#v, want init/INITIAL", work.State)
 	}
-	assertGeneratedWorkContentParts(t, work.Content, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
+	assertGeneratedWorkContentParts(t, work.Content, []workdomain.WorkContentPart{
+		{Type: workdomain.WorkContentPartTypeText, Text: "Inspect this"},
+		{Type: workdomain.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
 	})
 	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
 		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
@@ -123,22 +127,22 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 func TestGetWork(t *testing.T) {
 	now := time.Now()
 	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 			"tok-prd-1": {
 				ID:      "tok-prd-1",
 				PlaceID: "prd:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:                   "work-prd-1",
 					WorkTypeID:               "prd",
 					ChainingTraceDepth:       4,
 					CurrentChainingTraceID:   "chain-1",
 					PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 					TraceID:                  "trace-1",
-					Content:                  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"}, {Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"}},
+					Content:                  []workdomain.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "Review screenshot"}, {Type: work.WorkContentPartTypeImage, URL: "file://fixtures/review.png"}},
 				},
 				CreatedAt: now,
 				EnteredAt: now,
-				History: interfaces.TokenHistory{
+				History: factorytoken.History{
 					TotalVisits:         map[string]int{"execute": 1},
 					ConsecutiveFailures: make(map[string]int),
 					PlaceVisits:         map[string]int{"prd:init": 1},
@@ -161,20 +165,20 @@ func TestGetWork(t *testing.T) {
 	if resp.ChainingTraceDepth == nil || *resp.ChainingTraceDepth != 4 || resp.CurrentChainingTraceId == nil || *resp.CurrentChainingTraceId != "chain-1" || resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 2 {
 		t.Fatalf("chaining trace fields = %#v, want preserved trace lineage", resp)
 	}
-	assertGeneratedWorkContentParts(t, resp.Content, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
+	assertGeneratedWorkContentParts(t, resp.Content, []workdomain.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "Review screenshot"},
+		{Type: work.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 	})
 }
 
 func TestGetWork_ByWorkID(t *testing.T) {
 	now := time.Now()
 	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 			"tok-prd-1": {
 				ID:      "tok-prd-1",
 				PlaceID: "prd:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-prd-1",
 					WorkTypeID: "prd",
 					TraceID:    "trace-1",
@@ -201,11 +205,11 @@ func TestGetWork_ByWorkID(t *testing.T) {
 func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
 	now := time.Now()
 	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+		Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 			"tok-prd-2": {
 				ID:      "tok-prd-2",
 				PlaceID: "prd:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-prd-2",
 					WorkTypeID: "prd",
 					TraceID:    "trace-2",
@@ -240,11 +244,11 @@ func TestGetWork_IncludesStopSummaryForBlockedWork(t *testing.T) {
 				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 					RuntimeStatus: interfaces.RuntimeStatusIdle,
 					FactoryState:  "RUNNING",
-					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 						"tok-goal-blocked": {
 							ID:      "tok-goal-blocked",
 							PlaceID: "goal:blocked",
-							Color: interfaces.TokenColor{
+							Color: factorytoken.Color{
 								Name:       "Blocked goal",
 								WorkID:     "work-goal-blocked",
 								WorkTypeID: "goal",
@@ -271,10 +275,10 @@ func TestGetWork_IncludesStopSummaryForBlockedWork(t *testing.T) {
 						DispatchID:      "dispatch-goal-blocked-1",
 						TransitionID:    "execute-goal",
 						WorkstationName: "execute-goal",
-						Outcome:         interfaces.OutcomeFailed,
+						Outcome:         workerexecution.OutcomeFailed,
 						Reason:          "provider timeout",
 						EndTime:         now,
-						ConsumedTokens:  []interfaces.Token{{Color: interfaces.TokenColor{WorkID: "work-goal-blocked"}}},
+						ConsumedTokens:  []factorytoken.Token{{Color: factorytoken.Color{WorkID: "work-goal-blocked"}}},
 					}},
 				},
 			},
@@ -320,11 +324,11 @@ func TestGetWork_IncludesStopSummaryForNeedsHumanWork(t *testing.T) {
 				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 					RuntimeStatus: interfaces.RuntimeStatusIdle,
 					FactoryState:  "RUNNING",
-					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 						"tok-goal-human": {
 							ID:      "tok-goal-human",
 							PlaceID: "goal:needs-human",
-							Color: interfaces.TokenColor{
+							Color: factorytoken.Color{
 								Name:       "Needs approval",
 								WorkID:     "work-goal-human",
 								WorkTypeID: "goal",
@@ -440,11 +444,11 @@ func newInterruptedStopSummaryServer(
 				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 					RuntimeStatus: interfaces.RuntimeStatusIdle,
 					FactoryState:  "RUNNING",
-					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 						"tok-goal-interrupted": {
 							ID:      "tok-goal-interrupted",
 							PlaceID: placeID,
-							Color: interfaces.TokenColor{
+							Color: factorytoken.Color{
 								Name:       "Interrupted goal",
 								WorkID:     workID,
 								WorkTypeID: "goal",
@@ -515,10 +519,10 @@ func assertInterruptedStopSummary(
 }
 
 func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-prd-copy",
 		PlaceID: "prd:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-prd-copy",
 			WorkTypeID: "prd",
 			TraceID:    "trace-copy",
@@ -541,10 +545,10 @@ func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
 }
 
 func TestTokenToResponse_CopiesOptionalPreviousChainingTraceIDs(t *testing.T) {
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-prd-copy-slice",
 		PlaceID: "prd:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:                   "work-prd-copy-slice",
 			WorkTypeID:               "prd",
 			TraceID:                  "trace-copy-slice",
@@ -563,7 +567,7 @@ func TestTokenToResponse_CopiesOptionalPreviousChainingTraceIDs(t *testing.T) {
 }
 
 func TestGetWorkNotFound(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 	req := httptest.NewRequest("GET", "/factory-sessions/~default/work/nonexistent", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -586,13 +590,13 @@ func TestGetStatus_ReturnsAggregateSnapshotStatus(t *testing.T) {
 			WorkTypes: map[string]*state.WorkType{"task": {ID: "task", States: []state.StateDefinition{{Value: "init", Category: state.StateCategoryInitial}, {Value: "review", Category: state.StateCategoryProcessing}, {Value: "complete", Category: state.StateCategoryTerminal}, {Value: "failed", Category: state.StateCategoryFailed}}}},
 			Resources: map[string]*state.ResourceDef{"agent-slot": {ID: "agent-slot", Name: "agent-slot", Capacity: 2}},
 		},
-		Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
-			"tok-init":              {ID: "tok-init", PlaceID: "task:init", Color: interfaces.TokenColor{WorkID: "work-init", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
-			"tok-review":            {ID: "tok-review", PlaceID: "task:review", Color: interfaces.TokenColor{WorkID: "work-review", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
-			"tok-complete":          {ID: "tok-complete", PlaceID: "task:complete", Color: interfaces.TokenColor{WorkID: "work-complete", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
-			"tok-failed":            {ID: "tok-failed", PlaceID: "task:failed", Color: interfaces.TokenColor{WorkID: "work-failed", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
-			"agent-slot:resource:0": {ID: "agent-slot:resource:0", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}, CreatedAt: now, EnteredAt: now},
-			"tok-time":              {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: interfaces.TokenColor{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time"}, CreatedAt: now, EnteredAt: now},
+		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+			"tok-init":              {ID: "tok-init", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-init", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
+			"tok-review":            {ID: "tok-review", PlaceID: "task:review", Color: factorytoken.Color{WorkID: "work-review", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
+			"tok-complete":          {ID: "tok-complete", PlaceID: "task:complete", Color: factorytoken.Color{WorkID: "work-complete", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
+			"tok-failed":            {ID: "tok-failed", PlaceID: "task:failed", Color: factorytoken.Color{WorkID: "work-failed", WorkTypeID: "task"}, CreatedAt: now, EnteredAt: now},
+			"agent-slot:resource:0": {ID: "agent-slot:resource:0", PlaceID: "agent-slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}, CreatedAt: now, EnteredAt: now},
+			"tok-time":              {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: factorytoken.Color{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time"}, CreatedAt: now, EnteredAt: now},
 		}},
 	}
 	srv := newTestServer(&testutil.MockFactory{EngineState: snapshot})
@@ -621,9 +625,9 @@ func TestGetStatus_ReturnsAggregateSnapshotStatus(t *testing.T) {
 
 func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
-		"tok-story": {ID: "tok-story", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-story", WorkTypeID: "story", TraceID: "trace-story"}, CreatedAt: now, EnteredAt: now},
-		"tok-time":  {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: interfaces.TokenColor{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time", Tags: map[string]string{interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh"}}, CreatedAt: now, EnteredAt: now},
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"tok-story": {ID: "tok-story", PlaceID: "story:init", Color: factorytoken.Color{WorkID: "work-story", WorkTypeID: "story", TraceID: "trace-story"}, CreatedAt: now, EnteredAt: now},
+		"tok-time":  {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: factorytoken.Color{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time", Tags: map[string]string{interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh"}}, CreatedAt: now, EnteredAt: now},
 	}}})
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work", nil)
@@ -643,11 +647,11 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 
 func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
-		"tok-filter-1": {ID: "tok-filter-1", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-filter-1", WorkTypeID: "story", TraceID: "trace-filter-1"}, CreatedAt: now, EnteredAt: now},
-		"tok-filter-2": {ID: "tok-filter-2", PlaceID: interfaces.SystemTimePendingPlaceID, Color: interfaces.TokenColor{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-filter-2"}, CreatedAt: now, EnteredAt: now},
-		"tok-filter-3": {ID: "tok-filter-3", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-filter-3", WorkTypeID: "story", TraceID: "trace-filter-3"}, CreatedAt: now, EnteredAt: now},
-		"tok-filter-4": {ID: "tok-filter-4", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-filter-4", WorkTypeID: "story", TraceID: "trace-filter-4"}, CreatedAt: now, EnteredAt: now},
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"tok-filter-1": {ID: "tok-filter-1", PlaceID: "story:init", Color: factorytoken.Color{WorkID: "work-filter-1", WorkTypeID: "story", TraceID: "trace-filter-1"}, CreatedAt: now, EnteredAt: now},
+		"tok-filter-2": {ID: "tok-filter-2", PlaceID: interfaces.SystemTimePendingPlaceID, Color: factorytoken.Color{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-filter-2"}, CreatedAt: now, EnteredAt: now},
+		"tok-filter-3": {ID: "tok-filter-3", PlaceID: "story:init", Color: factorytoken.Color{WorkID: "work-filter-3", WorkTypeID: "story", TraceID: "trace-filter-3"}, CreatedAt: now, EnteredAt: now},
+		"tok-filter-4": {ID: "tok-filter-4", PlaceID: "story:init", Color: factorytoken.Color{WorkID: "work-filter-4", WorkTypeID: "story", TraceID: "trace-filter-4"}, CreatedAt: now, EnteredAt: now},
 	}}})
 
 	firstResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2")
@@ -670,8 +674,8 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 
 func TestGetWork_HidesInternalTimeWorkToken(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
-		"tok-time": {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: interfaces.TokenColor{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time"}, CreatedAt: now, EnteredAt: now},
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"tok-time": {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: factorytoken.Color{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time"}, CreatedAt: now, EnteredAt: now},
 	}}})
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work/tok-time", nil)
 	rec := httptest.NewRecorder()
@@ -681,9 +685,9 @@ func TestGetWork_HidesInternalTimeWorkToken(t *testing.T) {
 
 func TestListWork_HidesResourceTokens(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
-		"tok-story":           {ID: "tok-story", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-story", WorkTypeID: "story", TraceID: "trace-story"}, CreatedAt: now, EnteredAt: now},
-		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"tok-story":           {ID: "tok-story", PlaceID: "story:init", Color: factorytoken.Color{WorkID: "work-story", WorkTypeID: "story", TraceID: "trace-story"}, CreatedAt: now, EnteredAt: now},
+		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
 	}}})
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work", nil)
@@ -701,8 +705,8 @@ func TestListWork_HidesResourceTokens(t *testing.T) {
 
 func TestGetWork_HidesResourceToken(t *testing.T) {
 	now := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
-		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
 	}}})
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work/agent-slot:resource", nil)
 	rec := httptest.NewRecorder()
@@ -722,7 +726,7 @@ func TestListWork(t *testing.T) {
 // pkgmaintcheck:ignore-cyclomatic-complexity this list-work contract test keeps the relation, pagination, and status assertions together to preserve route-level intent.
 func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.T) {
 	now := time.Now()
-	tokens := map[string]*interfaces.Token{
+	tokens := map[string]*factorytoken.Token{
 		"tok-1": listWorkToken("tok-1", "work-review", "task:init", "task", now),
 		"tok-2": listWorkToken("tok-2", "work-draft", "task:init", "task", now),
 		"tok-3": listWorkToken("tok-3", "work-parent", "task:init", "task", now),
@@ -730,7 +734,7 @@ func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.
 		"tok-5": listWorkToken("tok-5", "work-origin", "task:init", "task", now),
 	}
 	tokens["tok-1"].Color.Name = "review"
-	tokens["tok-1"].Color.Relations = []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"}, {Type: interfaces.RelationParentChild, TargetWorkID: "work-parent"}, {Type: interfaces.RelationSpawnedBy, TargetWorkID: "work-origin"}}
+	tokens["tok-1"].Color.Relations = []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"}, {Type: work.RelationParentChild, TargetWorkID: "work-parent"}, {Type: work.RelationSpawnedBy, TargetWorkID: "work-origin"}}
 	tokens["tok-2"].Color.Name = "draft"
 	tokens["tok-3"].Color.Name = "parent"
 	tokens["tok-4"].Color.Name = "standalone"
@@ -759,7 +763,7 @@ func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.
 
 func TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId(t *testing.T) {
 	now := time.Now()
-	tokens := map[string]*interfaces.Token{
+	tokens := map[string]*factorytoken.Token{
 		"tok-1": listWorkTokenWithTraces("tok-1", "work-story", "Review PRD", "task:review", "story", "trace-root", "", now),
 		"tok-2": listWorkTokenWithTraces("tok-2", "work-bug", "Fix bug", "task:init", "bug", "", "trace-chain-1", now),
 		"tok-3": listWorkTokenWithTraces("tok-3", "work-plan", "Plan feature", "task:init", "story", "trace-plan", "", now),
@@ -795,7 +799,7 @@ func TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId(t *testing.T) {
 
 func TestListWork_FiltersByNameBeforePagination(t *testing.T) {
 	now := time.Now()
-	tokens := map[string]*interfaces.Token{
+	tokens := map[string]*factorytoken.Token{
 		"tok-1": listWorkTokenWithTraces("tok-1", "work-alpha", "Alpha one", "task:init", "task", "", "", now),
 		"tok-2": listWorkTokenWithTraces("tok-2", "work-beta", "Other item", "task:init", "task", "", "", now),
 		"tok-3": listWorkTokenWithTraces("tok-3", "work-gamma", "Alpha two", "task:init", "task", "", "", now),
@@ -810,7 +814,7 @@ func TestListWork_FiltersByNameBeforePagination(t *testing.T) {
 
 func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 	now := time.Now()
-	tokens := map[string]*interfaces.Token{
+	tokens := map[string]*factorytoken.Token{
 		"tok-1": listWorkToken("tok-1", "work-init", "task:init", "task", now),
 		"tok-2": listWorkToken("tok-2", "work-review", "task:review", "task", now),
 		"tok-3": listWorkToken("tok-3", "work-failed", "task:failed", "task", now),
@@ -841,7 +845,7 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 }
 
 func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 		"tok-1": listWorkToken("tok-1", "work-complete", "task:complete", "task", time.Now()),
 		"tok-2": listWorkToken("tok-2", "work-failed", "task:failed", "task", time.Now()),
 		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", time.Now()),
@@ -852,7 +856,7 @@ func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing
 }
 
 func TestListWork_SortsByStateType(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 		"tok-1": listWorkToken("tok-1", "work-complete", "task:complete", "task", time.Now()),
 		"tok-2": listWorkToken("tok-2", "work-failed", "task:failed", "task", time.Now()),
 		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", time.Now()),
@@ -930,7 +934,7 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","payload":"legacy text"}]}`)
@@ -943,7 +947,7 @@ func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *
 }
 
 func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","file":"wrong"}]}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
@@ -953,7 +957,7 @@ func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-canonical", `{
@@ -970,16 +974,16 @@ func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
 	if len(mf.Submitted[0].Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
+	if mf.Submitted[0].Content[0].Type != work.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
+	if mf.Submitted[0].Content[1].Type != work.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 }
 
 func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-model-content", `{
@@ -1001,13 +1005,13 @@ func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
 	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 3 {
 		t.Fatalf("submitted content = %#v, want 3 canonical parts", mf.Submitted)
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[0].Label != "reference" {
+	if mf.Submitted[0].Content[0].Type != work.WorkContentPartTypeImage || mf.Submitted[0].Content[0].Label != "reference" {
 		t.Fatalf("submitted content[0] = %#v, want normalized image part", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeBinary || mf.Submitted[0].Content[1].ContentType != "application/octet-stream" {
+	if mf.Submitted[0].Content[1].Type != work.WorkContentPartTypeBinary || mf.Submitted[0].Content[1].ContentType != "application/octet-stream" {
 		t.Fatalf("submitted content[1] = %#v, want canonical binary part", mf.Submitted[0].Content[1])
 	}
-	if mf.Submitted[0].Content[2].Type != interfaces.WorkContentPartTypeJSON {
+	if mf.Submitted[0].Content[2].Type != work.WorkContentPartTypeJSON {
 		t.Fatalf("submitted content[2] = %#v, want canonical json part", mf.Submitted[0].Content[2])
 	}
 	jsonValue := map[string]any{}
@@ -1020,7 +1024,7 @@ func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_FirstSubmitAndRepeatedRequestID(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	var firstTraceID string
@@ -1053,7 +1057,7 @@ func TestUpsertWorkRequest_FirstSubmitAndRepeatedRequestID(t *testing.T) {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this upsert boundary test keeps the full relation and runtime mapping contract inline for reviewer-readable coverage.
 func TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-batch", `{
@@ -1093,7 +1097,7 @@ func TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_ReturnsPerWorkIdentifiers(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-batch", `{
@@ -1127,7 +1131,7 @@ func TestUpsertWorkRequest_ReturnsPerWorkIdentifiers(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-parent-child", `{
@@ -1146,7 +1150,7 @@ func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("PUT /work-requests status = %d, want 201: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Relations) != 2 || mf.WorkRequests[0].Relations[0].Type != interfaces.WorkRelationParentChild {
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Relations) != 2 || mf.WorkRequests[0].Relations[0].Type != work.WorkRelationParentChild {
 		t.Fatalf("work request relations = %#v, want parent-child plus dependency", mf.WorkRequests)
 	}
 	child := submittedRequestNamed(t, mf.Submitted, "child")
@@ -1190,7 +1194,7 @@ func TestUpsertWorkRequest_CopiesWorkTagMapBeforeRuntimeSubmission(t *testing.T)
 }
 
 func TestUpsertWorkRequest_WorkTypeIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-legacy", `{"requestId":"request-api-legacy","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","work_type_id":"legacy-task","payload":{"title":"Draft"}}]}`)
@@ -1198,7 +1202,7 @@ func TestUpsertWorkRequest_WorkTypeIDReturnsBadRequest(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_TargetStateReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-state-alias", `{"requestId":"request-api-state-alias","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","target_state":"queued","payload":{"title":"Draft"}}]}`)
@@ -1206,7 +1210,7 @@ func TestUpsertWorkRequest_TargetStateReturnsBadRequest(t *testing.T) {
 }
 
 func TestUpsertWorkRequest_ConflictingCurrentChainingTraceIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-chaining-conflict", `{"requestId":"request-api-chaining-conflict","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","currentChainingTraceId":"chain-a","traceId":"trace-b","payload":{"title":"Draft"}}]}`)
@@ -1215,7 +1219,7 @@ func TestUpsertWorkRequest_ConflictingCurrentChainingTraceIDReturnsBadRequest(t 
 
 func TestUpsertWorkRequest_InvalidExplicitStateReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net: &state.Net{WorkTypes: map[string]*state.WorkType{
 			"task": {ID: "task", States: []state.StateDefinition{{Value: "init", Category: state.StateCategoryInitial}, {Value: "complete", Category: state.StateCategoryTerminal}}},
 		}},
@@ -1265,11 +1269,11 @@ func TestUpsertWorkRequestValidationFailures(t *testing.T) {
 
 func TestGetWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
 	now := time.Now()
-	dispatchToken := interfaces.Token{
+	dispatchToken := factorytoken.Token{
 		ID:      "tok-in-flight",
 		PlaceID: "task:review",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-in-flight",
 			WorkTypeID: "task",
 			Name:       "In flight story",
@@ -1279,11 +1283,11 @@ func TestGetWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
 	}
 	srv := newTestServer(&testutil.MockFactory{
 		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			Dispatches: map[string]*interfaces.DispatchEntry{
 				"dispatch-1": {
 					DispatchID:     "dispatch-1",
-					ConsumedTokens: []interfaces.Token{dispatchToken},
+					ConsumedTokens: []factorytoken.Token{dispatchToken},
 				},
 			},
 			Topology: listWorkFilterTopology(),
@@ -1313,7 +1317,7 @@ func TestGetWork_NotFoundWhenAbsentFromMarkingAndDispatches(t *testing.T) {
 	now := time.Now()
 	srv := newTestServer(&testutil.MockFactory{
 		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 				"tok-mark": listWorkToken("tok-mark", "work-mark", "task:init", "task", now),
 			}},
 			Dispatches: map[string]*interfaces.DispatchEntry{},
@@ -1329,11 +1333,11 @@ func TestGetWork_NotFoundWhenAbsentFromMarkingAndDispatches(t *testing.T) {
 
 func TestListWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
 	now := time.Now()
-	dispatchToken := interfaces.Token{
+	dispatchToken := factorytoken.Token{
 		ID:      "tok-in-flight",
 		PlaceID: "task:review",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-in-flight",
 			WorkTypeID: "task",
 			Name:       "In flight story",
@@ -1343,11 +1347,11 @@ func TestListWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
 	}
 	srv := newTestServer(&testutil.MockFactory{
 		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			Dispatches: map[string]*interfaces.DispatchEntry{
 				"dispatch-1": {
 					DispatchID:     "dispatch-1",
-					ConsumedTokens: []interfaces.Token{dispatchToken},
+					ConsumedTokens: []factorytoken.Token{dispatchToken},
 				},
 			},
 			Topology: listWorkFilterTopology(),
@@ -1372,20 +1376,20 @@ func TestListWork_FiltersApplyToDispatchOnlyWork(t *testing.T) {
 	dispatches := map[string]*interfaces.DispatchEntry{
 		"dispatch-story": {
 			DispatchID: "dispatch-story",
-			ConsumedTokens: []interfaces.Token{
+			ConsumedTokens: []factorytoken.Token{
 				*listWorkTokenWithTraces("tok-story", "work-story", "Review PRD", "task:review", "story", "trace-root", "", now),
 			},
 		},
 		"dispatch-bug": {
 			DispatchID: "dispatch-bug",
-			ConsumedTokens: []interfaces.Token{
+			ConsumedTokens: []factorytoken.Token{
 				*listWorkTokenWithTraces("tok-bug", "work-bug", "Fix bug", "task:init", "bug", "", "trace-chain-1", now),
 			},
 		},
 	}
 	srv := newTestServer(&testutil.MockFactory{
 		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:    petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking:    petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			Dispatches: dispatches,
 			Topology:   listWorkFilterTopology(),
 		},
@@ -1415,7 +1419,7 @@ func TestListWork_FiltersApplyToDispatchOnlyWork(t *testing.T) {
 
 func TestListWork_PaginationCursorUsesDispatchTokenID(t *testing.T) {
 	now := time.Now()
-	markingTokens := map[string]*interfaces.Token{
+	markingTokens := map[string]*factorytoken.Token{
 		"tok-mark-1": listWorkToken("tok-mark-1", "work-mark-1", "task:init", "task", now),
 		"tok-mark-2": listWorkToken("tok-mark-2", "work-mark-2", "task:init", "task", now),
 	}
@@ -1424,7 +1428,7 @@ func TestListWork_PaginationCursorUsesDispatchTokenID(t *testing.T) {
 		EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 			Marking: petri.MarkingSnapshot{Tokens: markingTokens},
 			Dispatches: map[string]*interfaces.DispatchEntry{
-				"dispatch-1": {DispatchID: "dispatch-1", ConsumedTokens: []interfaces.Token{dispatchToken}},
+				"dispatch-1": {DispatchID: "dispatch-1", ConsumedTokens: []factorytoken.Token{dispatchToken}},
 			},
 			Topology: listWorkFilterTopology(),
 		},

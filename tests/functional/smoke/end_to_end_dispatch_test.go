@@ -5,8 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -15,7 +16,7 @@ func TestEndToEndDispatch_CompletesThroughServiceHarness(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "E2E test"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "E2E done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "E2E done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -42,7 +43,7 @@ func TestEndToEndDispatch_CompletesThroughServiceHarness(t *testing.T) {
 func TestEndToEndDispatch_MultipleWorkItemsCompleteIndependently(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simpleEndToEndPipelineConfig())
 	for i := 0; i < 3; i++ {
-		testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 			WorkTypeID: "task",
 			TraceID:    fmt.Sprintf("trace-e2e-batch-%d", i),
 			Payload:    []byte(`{"title":"batch item"}`),

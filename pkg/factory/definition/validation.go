@@ -1,55 +1,32 @@
 package factorydefinition
 
 import (
-	"context"
 	"fmt"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // ValidateUpsertNamedFactoryRequest rejects named-factory upsert payloads whose
 // name or topology fail pre-persist validation.
-func (s *Service) ValidateUpsertNamedFactoryRequest(request factoryapi.Factory) error {
-	if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
-		return err
+func (s *Service) ValidateUpsertNamedFactoryRequest(name string, snapshot *interfaces.FactorySnapshot) error {
+	if err := factoryconfig.ValidateNamedFactoryName(name); err != nil {
+		return fmt.Errorf("%w: %w", factoryconfig.ErrInvalidNamedFactoryName, err)
 	}
-	return s.ValidateEditableFactoryTopology(request)
+	if name == interfaces.DefaultCurrentFactoryName {
+		return fmt.Errorf("%w: %q is reserved for current-factory readback", factoryconfig.ErrInvalidNamedFactoryName, name)
+	}
+	return s.ValidateEditableFactoryTopology(snapshot)
 }
 
 // ValidateEditableFactoryTopology rejects editable factory definitions whose
 // topology fails pre-persist validation.
-func (s *Service) ValidateEditableFactoryTopology(submitted factoryapi.Factory) error {
+func (s *Service) ValidateEditableFactoryTopology(snapshot *interfaces.FactorySnapshot) error {
 	if s == nil {
 		return fmt.Errorf("factory definition service is required")
 	}
-	var workstationLoader factoryconfig.WorkstationLoader
-	if s.host != nil {
-		workstationLoader = s.host.WorkstationLoader()
+	if s.host == nil {
+		return fmt.Errorf("factory definition host is required")
 	}
-	return validateEditableFactoryTopology(submitted, workstationLoader)
-}
-
-func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), submitted, factoryvalidation.Options{
-		Profile:           factoryvalidation.ProfilePrePersist,
-		WorkstationLoader: workstationLoader,
-	})
-	if err != nil {
-		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
-	}
-	if !result.HasBlockingTargets() {
-		return nil
-	}
-	return topologyValidationErrorFromTargets(result.BlockingTargets())
-}
-
-func topologyValidationErrorFromTargets(targets []factoryvalidation.Target) *apisurface.TopologyValidationError {
-	return apisurface.NewTopologyValidationError(
-		"Factory topology contains invalid graph references.",
-		factoryvalidation.ToValidationTargets(targets),
-	)
+	return s.host.ValidateEditableFactorySnapshot(snapshot)
 }

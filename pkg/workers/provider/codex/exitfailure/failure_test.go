@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 	providertestdata "github.com/portpowered/infinite-you/pkg/workers/provider/testdata"
 )
@@ -15,8 +16,8 @@ const (
 	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
 	codexServerFailureMessage     = "Codex encountered a temporary server error."
 	codexFailureMessageBytes      = 1024
-	codexErrorLineScanBytes         = 64 * 1024
-	codexGPT56SolUpgradeMessage     = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
+	codexErrorLineScanBytes       = 64 * 1024
+	codexGPT56SolUpgradeMessage   = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
 )
 
 func parseFailure(input providertestdata.FailureInput) exitfailure.ExitFailureResult {
@@ -28,8 +29,8 @@ func parseFailure(input providertestdata.FailureInput) exitfailure.ExitFailureRe
 func TestParseExitFailure_GPT56SolReturnsActionableNestedMessage(t *testing.T) {
 	entry := providertestdata.MustEntry(t, "codex_gpt_5_6_sol_requires_newer_cli")
 	got := parseFailure(entry.FailureInput())
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("Reason = %q, want %q", got.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	if got.Reason != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("Reason = %q, want %q", got.Reason, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	if got.Message != codexGPT56SolUpgradeMessage {
 		t.Fatalf("Message = %q, want %q", got.Message, codexGPT56SolUpgradeMessage)
@@ -56,7 +57,7 @@ func TestParseExitFailure_StructuredRecordsUseLastValidCrossStreamRecord(t *test
 	}
 
 	got := parseFailure(input)
-	if got.Reason != interfaces.WorkFailureTypeInternalServerError || got.Message != codexServerFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeInternalServerError || got.Message != codexServerFailureMessage {
 		t.Fatalf("ParseExitFailure() = %#v, want final valid stdout server failure", got)
 	}
 }
@@ -72,7 +73,7 @@ func TestParseExitFailure_StructuredFieldsPrecedeSubstringFallback(t *testing.T)
 	}
 
 	got := parseFailure(input)
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != codexBadRequestFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypePermanentBadRequest || got.Message != codexBadRequestFailureMessage {
 		t.Fatalf("ParseExitFailure() = %#v, want structured bad request", got)
 	}
 }
@@ -82,7 +83,7 @@ func TestParseExitFailure_UsesOuterStructuredTypeAndMessage(t *testing.T) {
 		ExitCode: 1,
 		Stderr:   []byte(`ERROR: {"type":"rate_limit_error","message":"request capacity reached"}`),
 	})
-	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != codexThrottleFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeThrottled || got.Message != codexThrottleFailureMessage {
 		t.Fatalf("ParseExitFailure() = %#v, want outer structured throttle failure", got)
 	}
 }
@@ -110,7 +111,7 @@ func TestParseExitFailure_BoundsAndSanitizesFallbackMessages(t *testing.T) {
 	testCases := []struct {
 		name        string
 		input       providertestdata.FailureInput
-		wantReason  interfaces.WorkFailureType
+		wantReason  workerexecution.WorkFailureType
 		wantMessage string
 		reject      []string
 	}{
@@ -122,21 +123,21 @@ func TestParseExitFailure_BoundsAndSanitizesFallbackMessages(t *testing.T) {
 				"customer prompt must stay private",
 				"cleanup complete",
 			}, "\n"))},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 7",
 			reject:      []string{"customer prompt", "cleanup", "gpt-5.6-sol"},
 		},
 		{
 			name:        "MalformedJSONUsesExitFallback",
 			input:       providertestdata.FailureInput{ExitCode: 1, Stderr: []byte(`ERROR: {"type":"error","error":{"message":"private transcript"}`)},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 1",
 			reject:      []string{"private transcript", "{"},
 		},
 		{
 			name:        "CredentialsUseExitFallback",
 			input:       providertestdata.FailureInput{ExitCode: 1, Stderr: []byte("ERROR: request failed with Authorization: Bearer secret-token")},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 1",
 			reject:      []string{"secret-token", "Bearer"},
 		},
@@ -145,14 +146,14 @@ func TestParseExitFailure_BoundsAndSanitizesFallbackMessages(t *testing.T) {
 			input: providertestdata.FailureInput{ExitCode: 2, Stderr: []byte(
 				"ERROR: should not survive the bounded scan\n" + strings.Repeat("cleanup-padding\n", codexErrorLineScanBytes),
 			)},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 2",
 			reject:      []string{"should not survive"},
 		},
 		{
 			name:        "UnknownErrorExcerptUsesExitFallback",
 			input:       providertestdata.FailureInput{ExitCode: 3, Stderr: []byte("ERROR: operation failed " + strings.Repeat("x", codexFailureMessageBytes+200))},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 3",
 			reject:      []string{"operation failed", "xxx"},
 		},
@@ -180,7 +181,7 @@ func TestParseExitFailure_UnstructuredFallbackIsSafeByConstruction(t *testing.T)
 	testCases := []struct {
 		name        string
 		stderr      string
-		wantReason  interfaces.WorkFailureType
+		wantReason  workerexecution.WorkFailureType
 		wantMessage string
 		reject      []string
 	}{
@@ -190,14 +191,14 @@ func TestParseExitFailure_UnstructuredFallbackIsSafeByConstruction(t *testing.T)
 				"ERROR: Selected model is at capacity. Please try a different model.",
 				"ERROR: cleanup failed for /private/customer/path",
 			}, "\n"),
-			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantReason:  workerexecution.WorkFailureTypeThrottled,
 			wantMessage: codexThrottleFailureMessage,
 			reject:      []string{"cleanup", "/private/customer/path"},
 		},
 		{
 			name:        "PromptBearingErrorUsesExitFallback",
 			stderr:      "ERROR: customer prompt: explain unexpected status 429 with private details",
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "codex exited with code 1",
 			reject:      []string{"customer prompt", "private details"},
 		},
@@ -222,7 +223,7 @@ func TestParseExitFailure_StructuredFallbackIsSafeByConstruction(t *testing.T) {
 	testCases := []struct {
 		name        string
 		stderr      string
-		wantReason  interfaces.WorkFailureType
+		wantReason  workerexecution.WorkFailureType
 		wantMessage string
 		reject      []string
 	}{
@@ -232,21 +233,21 @@ func TestParseExitFailure_StructuredFallbackIsSafeByConstruction(t *testing.T) {
 				`ERROR: {"type":"error","status":429,"error":{"type":"rate_limit_error","message":"provider capacity reached"}}`,
 				`ERROR: {"type":"cleanup_error","status":500,"message":"cleanup failed for /private/customer/path"}`,
 			}, "\n"),
-			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantReason:  workerexecution.WorkFailureTypeThrottled,
 			wantMessage: codexThrottleFailureMessage,
 			reject:      []string{"cleanup", "/private/customer/path", "provider capacity reached"},
 		},
 		{
 			name:        "StructuredPromptUsesFixedMessage",
 			stderr:      `ERROR: {"status":400,"error":{"type":"invalid_request_error","message":"customer prompt: explain private account details"}}`,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantReason:  workerexecution.WorkFailureTypePermanentBadRequest,
 			wantMessage: codexBadRequestFailureMessage,
 			reject:      []string{"customer prompt", "private account"},
 		},
 		{
 			name:        "StructuredCredentialUsesFixedMessage",
 			stderr:      `ERROR: {"status":401,"error":{"type":"authentication_error","message":"secret_token=customer-private-value"}}`,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: codexAuthFailureMessage,
 			reject:      []string{"secret_token", "customer-private-value"},
 		},

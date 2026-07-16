@@ -1,12 +1,14 @@
 package openapitests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesHostedLinearWorker(t *testing.T) {
@@ -61,7 +63,7 @@ func assertGeneratedHostedLinearWorker(t *testing.T, worker factoryapi.Worker) {
 	}
 }
 
-func assertRuntimeHostedLinearWorker(t *testing.T, runtimeWorker interfaces.WorkerConfig) {
+func assertRuntimeHostedLinearWorker(t *testing.T, runtimeWorker workerconfig.Config) {
 	t.Helper()
 	if runtimeWorker.Type != interfaces.WorkerTypeHosted || runtimeWorker.Provider != interfaces.HostedWorkerProviderLinear {
 		t.Fatalf("runtime hosted worker = %#v", runtimeWorker)

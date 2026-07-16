@@ -10,22 +10,24 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const runtimeEventSource = "runtime-service"
 
 type acceptedPetriExecutor struct{}
 
-func (*acceptedPetriExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: interfaces.OutcomeAccepted, Output: "done"}, nil
+func (*acceptedPetriExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: workerexecution.OutcomeAccepted, Output: "done"}, nil
 }
 
 func petriRecordingNet() *state.Net {
@@ -749,7 +751,7 @@ func newSequentialBlockingProviderForWorkflow(workflowName string) *sequentialBl
 	}
 }
 
-func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -757,9 +759,9 @@ func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.Pro
 	p.mu.Unlock()
 
 	if call == 1 {
-		return interfaces.InferenceResponse{
+		return workerexecution.InferenceResponse{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -777,12 +779,12 @@ func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.Pro
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-2",

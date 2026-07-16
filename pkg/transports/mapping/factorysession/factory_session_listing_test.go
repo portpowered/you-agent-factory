@@ -4,11 +4,247 @@ import (
 	"errors"
 	"testing"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
+
+func TestLogicalTargetToAPI_DefaultNamedAndProvider(t *testing.T) {
+	t.Parallel()
+
+	defaultRef, err := logicaltarget.NormalizeDefaultTarget("scope-1", t.TempDir())
+	if err != nil {
+		t.Fatalf("NormalizeDefaultTarget: %v", err)
+	}
+	defaultTarget := factorysession.LogicalTargetToAPI(defaultRef)
+	if defaultTarget.Kind != factoryapi.FactorySessionLogicalTargetKindDefault {
+		t.Fatalf("default kind = %q", defaultTarget.Kind)
+	}
+	if defaultTarget.NamedTarget != nil || defaultTarget.ProviderBoundary != nil {
+		t.Fatalf("default target should not include named or provider fields: %#v", defaultTarget)
+	}
+
+	namedRef, err := logicaltarget.NormalizeNamedTarget("scope-1", t.TempDir(), "goal")
+	if err != nil {
+		t.Fatalf("NormalizeNamedTarget: %v", err)
+	}
+	namedTarget := factorysession.LogicalTargetToAPI(namedRef)
+	if namedTarget.Kind != factoryapi.FactorySessionLogicalTargetKindNamed {
+		t.Fatalf("named kind = %q", namedTarget.Kind)
+	}
+	if namedTarget.NamedTarget == nil || *namedTarget.NamedTarget != namedRef.NamedTarget {
+		t.Fatalf("namedTarget = %#v, want %q", namedTarget.NamedTarget, namedRef.NamedTarget)
+	}
+
+	providerRef, err := logicaltarget.NormalizeProviderTarget("scope-1", t.TempDir(), logicaltarget.ProviderBoundary{
+		Provider: "cursor", Kind: "agent", Boundary: "workspace-1",
+	})
+	if err != nil {
+		t.Fatalf("NormalizeProviderTarget: %v", err)
+	}
+	providerTarget := factorysession.LogicalTargetToAPI(providerRef)
+	if providerTarget.Kind != factoryapi.FactorySessionLogicalTargetKindProvider {
+		t.Fatalf("provider kind = %q", providerTarget.Kind)
+	}
+	if providerTarget.ProviderBoundary == nil || providerTarget.ProviderBoundary.Boundary != "workspace-1" {
+		t.Fatalf("provider boundary = %#v", providerTarget.ProviderBoundary)
+	}
+}
+
+func TestOpenRequestFromAPI_DetachesAndNormalizesPublicInput(t *testing.T) {
+	t.Parallel()
+
+	name := " beta "
+	validateOnly := true
+	request := factoryapi.OpenFactorySessionRequest{
+		FolderPath:   "/workspace",
+		Target:       &factoryapi.FactorySessionTargetRef{Kind: factoryapi.FactorySessionTargetRefKindNamed, Name: &name},
+		ValidateOnly: &validateOnly,
+	}
+
+	mapped := factorysession.OpenRequestFromAPI(request)
+	name = "changed"
+	validateOnly = false
+
+	if mapped.FolderPath != "/workspace" || !mapped.ValidateOnly || mapped.InitNewFactory {
+		t.Fatalf("open request = %#v, want detached validate-only request", mapped)
+	}
+	if mapped.Target == nil || mapped.Target.Kind != factorysessions.TargetKindNamed || mapped.Target.Name != "beta" {
+		t.Fatalf("open target = %#v, want trimmed named target", mapped.Target)
+	}
+}
+
+func TestOpenResultToAPI_PreservesHintsTargetsAndSession(t *testing.T) {
+	t.Parallel()
+
+	result := &factorysessions.OpenResult{
+		FolderPath:      " /workspace ",
+		InitsNewFactory: true,
+		SessionID:       "session-beta",
+		Targets: []factorysessions.Target{{
+			Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"},
+		}},
+	}
+	session := factorysessions.NewLiveSession(
+		"session-beta", "/workspace/factory/beta", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}, nil, false, "demo",
+	)
+
+	response := factorysession.OpenResultToAPI(result, session)
+	if response.InitsNewFactory == nil || !*response.InitsNewFactory ||
+		response.FolderPath == nil || *response.FolderPath != "/workspace" {
+		t.Fatalf("open hints = %#v, want init hint and trimmed folder", response)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 || (*response.Targets)[0].Ref.Name == nil || *(*response.Targets)[0].Ref.Name != "beta" {
+		t.Fatalf("targets = %#v, want named beta", response.Targets)
+	}
+	if response.Session == nil || response.Session.Id != "session-beta" || response.Session.Project != "demo" {
+		t.Fatalf("session = %#v, want mapped session-beta", response.Session)
+	}
+}
+
+func TestSyncPreflightResultToAPI_PreservesReconnectDecisionAndIdentity(t *testing.T) {
+	t.Parallel()
+
+	afterEventID := "event-7"
+	afterSequence := int64(7)
+	backendScopeID := "backend-1"
+	factorySessionID := "session-1"
+	logicalSessionKeyID := "/tmp/demo::default::"
+	streamGenerationID := "backend-1::session-1"
+
+	response := factorysession.SyncPreflightResultToAPI(factorysessions.SyncPreflightResult{
+		BackendScopeID:      &backendScopeID,
+		CheckpointReusable:  true,
+		FactorySessionID:    &factorySessionID,
+		LogicalSessionKeyID: &logicalSessionKeyID,
+		Reason:              factorysessions.SyncPreflightReasonOK,
+		ReconnectCursor: factorysessions.SyncPreflightReconnectCursor{
+			AfterEventID:             &afterEventID,
+			AfterSequence:            &afterSequence,
+			Provided:                 true,
+			ValidForStreamGeneration: true,
+		},
+		RequestedSessionID: "~default",
+		StreamGenerationID: &streamGenerationID,
+	})
+
+	if response.ReasonCode != factoryapi.Ok || !response.CheckpointReusable {
+		t.Fatalf("preflight decision = %#v, want reusable ok", response)
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != factorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, factorySessionID)
+	}
+	if response.ReconnectCursor.AfterEventId == nil || *response.ReconnectCursor.AfterEventId != afterEventID ||
+		response.ReconnectCursor.AfterSequence == nil || *response.ReconnectCursor.AfterSequence != afterSequence ||
+		!response.ReconnectCursor.Provided || !response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("reconnectCursor = %#v, want acknowledged valid cursor", response.ReconnectCursor)
+	}
+}
+
+func TestSessionSummaryAndTargetsToAPI_PreservePublicFieldsAndOrdering(t *testing.T) {
+	t.Parallel()
+
+	defaultSession := factorysessions.NewLiveSession(
+		factorysessions.DefaultSessionID,
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		nil,
+		true,
+		"default-project",
+	)
+	namedSession := factorysessions.NewLiveSession(
+		"session-beta",
+		"/factories/beta",
+		"/workspace",
+		"/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
+		nil,
+		false,
+		"beta-project",
+	)
+	summaries := []factoryapi.FactorySessionSummary{
+		factorysession.SessionSummaryToAPI(defaultSession),
+		factorysession.SessionSummaryToAPI(namedSession),
+	}
+	if !summaries[0].IsDefault || summaries[0].Id != factorysessions.CanonicalFactorySessionID(defaultSession) {
+		t.Fatalf("first summary = %#v, want canonical default session first", summaries[0])
+	}
+	if summaries[1].Project != "beta-project" || summaries[1].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
+		summaries[1].Target.Name == nil || *summaries[1].Target.Name != "beta" {
+		t.Fatalf("named summary = %#v, want detached public target fields", summaries[1])
+	}
+
+	targets := factorysession.TargetsToAPI([]factorysessions.Target{{
+		FactoryDir: "/factories/beta",
+		FolderPath: "/workspace",
+		Label:      "Beta",
+		Project:    "beta-project",
+		Ref:        factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: " beta "},
+	}})
+	if len(targets) != 1 || targets[0].Ref.Name == nil || *targets[0].Ref.Name != "beta" || targets[0].Label != "Beta" {
+		t.Fatalf("targets = %#v, want mapped named target", targets)
+	}
+}
+
+func TestReadProjectionsToAPI_PreservesRuntimeAvailability(t *testing.T) {
+	t.Parallel()
+
+	withRuntime := &factorysessions.LiveSession{ID: "session-runtime", Project: "runtime-project"}
+	fallback := &factorysessions.LiveSession{ID: "session-fallback", Project: "fallback-project"}
+	response := factorysession.ReadProjectionsToAPI([]factorysessions.ReadProjection{
+		{
+			Context:          factorysessions.ProjectionContext{Session: withRuntime},
+			RuntimeAvailable: true,
+		},
+		{Context: factorysessions.ProjectionContext{Session: fallback}},
+	})
+
+	if len(response.Sessions) != 2 {
+		t.Fatalf("sessions = %d, want 2", len(response.Sessions))
+	}
+	if response.Sessions[0].Id != "session-runtime" || response.Sessions[0].Runtime == nil ||
+		response.Sessions[0].Runtime.Status != factoryapi.FactorySessionStatusIDLE {
+		t.Fatalf("runtime summary = %#v, want mapped IDLE runtime", response.Sessions[0])
+	}
+	if response.Sessions[1].Id != "session-fallback" || response.Sessions[1].Runtime != nil {
+		t.Fatalf("fallback summary = %#v, want identity without runtime", response.Sessions[1])
+	}
+}
+
+func TestLogicalTargetFromSession_NilNamedAndInvalid(t *testing.T) {
+	t.Parallel()
+
+	target, err := factorysession.LogicalTargetFromSession("scope-1", nil)
+	if err != nil || target != nil {
+		t.Fatalf("LogicalTargetFromSession(nil) = (%#v, %v), want nil,nil", target, err)
+	}
+
+	session := &factorysessions.LiveSession{
+		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
+		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "goal"},
+	}
+	target, err = factorysession.LogicalTargetFromSession("scope-1", session)
+	if err != nil {
+		t.Fatalf("LogicalTargetFromSession: %v", err)
+	}
+	if target == nil || target.Kind != factoryapi.FactorySessionLogicalTargetKindNamed {
+		t.Fatalf("target = %#v", target)
+	}
+
+	invalidSession := &factorysessions.LiveSession{
+		SessionState: factorysessions.SessionState{FolderPath: t.TempDir()},
+		Target:       factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed},
+	}
+	if _, err := factorysession.LogicalTargetFromSession("scope-1", invalidSession); err == nil {
+		t.Fatal("LogicalTargetFromSession(invalid named target) = nil, want validation error")
+	}
+}
 
 func TestListSessionsRequestFromAPI_DefaultsToLiveScope(t *testing.T) {
 	request, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{})

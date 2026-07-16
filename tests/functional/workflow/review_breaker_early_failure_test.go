@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -32,21 +34,21 @@ func TestGuardedLoopBreaker_DoesNotRouteBelowThresholdAfterReviewContinue(t *tes
 		reviewDualInput:     true,
 	})
 
-	responses := make([]interfaces.InferenceResponse, 0, (reviewContinueReworkCycles+1)*2)
+	responses := make([]workerexecution.InferenceResponse, 0, (reviewContinueReworkCycles+1)*2)
 	for round := 1; round <= reviewContinueReworkCycles; round++ {
 		responses = append(responses,
-			interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
-			interfaces.InferenceResponse{Content: reviewContinueEnvelope(round)},
+			workerexecution.InferenceResponse{Content: "<COMPLETE>\n"},
+			workerexecution.InferenceResponse{Content: reviewContinueEnvelope(round)},
 		)
 	}
 	// Let the harness settle after below-threshold rework instead of looping on the
 	// mock provider default response until visit thresholds are hit.
 	responses = append(responses,
-		interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
-		interfaces.InferenceResponse{Content: `{"decision":"ACCEPTED","feedback":"settle below breaker threshold"}`},
+		workerexecution.InferenceResponse{Content: "<COMPLETE>\n"},
+		workerexecution.InferenceResponse{Content: `{"decision":"ACCEPTED","feedback":"settle below breaker threshold"}`},
 	)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": responses,
 	})
 
@@ -55,7 +57,7 @@ func TestGuardedLoopBreaker_DoesNotRouteBelowThresholdAfterReviewContinue(t *tes
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     "work-task-below-threshold",
 		TraceID:    "trace-review-breaker-below-threshold",
@@ -129,14 +131,14 @@ func TestGuardedLoopBreaker_RoutesToFailedWhenReviewVisitsReachThreshold(t *test
 		reviewLoopBreakerMaxVisits: threshold,
 	})
 
-	responses := make([]interfaces.InferenceResponse, 0, threshold*2+1)
+	responses := make([]workerexecution.InferenceResponse, 0, threshold*2+1)
 	for round := 1; round <= threshold; round++ {
 		responses = append(responses,
-			interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
-			interfaces.InferenceResponse{Content: fmt.Sprintf("review rejection %d", round)},
+			workerexecution.InferenceResponse{Content: "<COMPLETE>\n"},
+			workerexecution.InferenceResponse{Content: fmt.Sprintf("review rejection %d", round)},
 		)
 	}
-	responses = append(responses, interfaces.InferenceResponse{Content: "<COMPLETE>\n"})
+	responses = append(responses, workerexecution.InferenceResponse{Content: "<COMPLETE>\n"})
 
 	harness := runGuardedLoopBreakerHarness(t, dir, responses, "work-task-review-at-threshold")
 	harness.RunUntilComplete(t, 10*time.Second)
@@ -157,8 +159,8 @@ func TestGuardedLoopBreaker_RoutesToFailedWhenReviewVisitsReachThreshold(t *test
 		t.Fatalf("review dispatch count = %d, want %d at threshold", len(reviewDispatches), threshold)
 	}
 	for i, dispatch := range reviewDispatches {
-		if dispatch.Outcome != interfaces.OutcomeRejected {
-			t.Fatalf("review dispatch %d outcome = %s, want %s", i, dispatch.Outcome, interfaces.OutcomeRejected)
+		if dispatch.Outcome != workerexecution.OutcomeRejected {
+			t.Fatalf("review dispatch %d outcome = %s, want %s", i, dispatch.Outcome, workerexecution.OutcomeRejected)
 		}
 	}
 
@@ -175,16 +177,16 @@ func TestGuardedLoopBreaker_SurvivesReviewOneVisitBelowThreshold(t *testing.T) {
 		reviewLoopBreakerMaxVisits: threshold,
 	})
 
-	responses := make([]interfaces.InferenceResponse, 0, (threshold-1)*2+2)
+	responses := make([]workerexecution.InferenceResponse, 0, (threshold-1)*2+2)
 	for round := 1; round < threshold; round++ {
 		responses = append(responses,
-			interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
-			interfaces.InferenceResponse{Content: fmt.Sprintf("review rejection %d", round)},
+			workerexecution.InferenceResponse{Content: "<COMPLETE>\n"},
+			workerexecution.InferenceResponse{Content: fmt.Sprintf("review rejection %d", round)},
 		)
 	}
 	responses = append(responses,
-		interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
-		interfaces.InferenceResponse{Content: "<COMPLETE>\n"},
+		workerexecution.InferenceResponse{Content: "<COMPLETE>\n"},
+		workerexecution.InferenceResponse{Content: "<COMPLETE>\n"},
 	)
 
 	harness := runGuardedLoopBreakerHarness(t, dir, responses, "work-task-review-below-threshold")
@@ -200,7 +202,7 @@ func TestGuardedLoopBreaker_SurvivesReviewOneVisitBelowThreshold(t *testing.T) {
 	reviewDispatches := dispatchesForWorkstation(snapshot.DispatchHistory, "review")
 	rejectedReviewDispatches := 0
 	for _, dispatch := range reviewDispatches {
-		if dispatch.Outcome == interfaces.OutcomeRejected {
+		if dispatch.Outcome == workerexecution.OutcomeRejected {
 			rejectedReviewDispatches++
 		}
 	}
@@ -222,9 +224,9 @@ func TestGuardedLoopBreaker_RoutesToFailedWhenExecutorVisitsReachThreshold(t *te
 		executorLoopBreakerMaxVisits: threshold,
 	})
 
-	responses := make([]interfaces.InferenceResponse, 0, threshold)
+	responses := make([]workerexecution.InferenceResponse, 0, threshold)
 	for round := 1; round <= threshold; round++ {
-		responses = append(responses, interfaces.InferenceResponse{
+		responses = append(responses, workerexecution.InferenceResponse{
 			Content: fmt.Sprintf("<CONTINUE>\nround %d still looping at process", round),
 		})
 	}
@@ -248,8 +250,8 @@ func TestGuardedLoopBreaker_RoutesToFailedWhenExecutorVisitsReachThreshold(t *te
 		t.Fatalf("process dispatch count = %d, want %d at threshold", len(processDispatches), threshold)
 	}
 	for i, dispatch := range processDispatches {
-		if dispatch.Outcome != interfaces.OutcomeContinue {
-			t.Fatalf("process dispatch %d outcome = %s, want %s", i, dispatch.Outcome, interfaces.OutcomeContinue)
+		if dispatch.Outcome != workerexecution.OutcomeContinue {
+			t.Fatalf("process dispatch %d outcome = %s, want %s", i, dispatch.Outcome, workerexecution.OutcomeContinue)
 		}
 	}
 
@@ -266,9 +268,9 @@ func TestGuardedLoopBreaker_SurvivesExecutorOneVisitBelowThreshold(t *testing.T)
 		executorLoopBreakerMaxVisits: threshold,
 	})
 
-	responses := make([]interfaces.InferenceResponse, 0, threshold-1)
+	responses := make([]workerexecution.InferenceResponse, 0, threshold-1)
 	for round := 1; round < threshold; round++ {
-		responses = append(responses, interfaces.InferenceResponse{
+		responses = append(responses, workerexecution.InferenceResponse{
 			Content: fmt.Sprintf("<CONTINUE>\nround %d still looping at process", round),
 		})
 	}
@@ -278,7 +280,7 @@ func TestGuardedLoopBreaker_SurvivesExecutorOneVisitBelowThreshold(t *testing.T)
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     "work-task-executor-below-threshold",
 		TraceID:    "trace-work-task-executor-below-threshold",
@@ -307,12 +309,12 @@ func TestGuardedLoopBreaker_SurvivesExecutorOneVisitBelowThreshold(t *testing.T)
 func runGuardedLoopBreakerHarness(
 	t *testing.T,
 	dir string,
-	responses []interfaces.InferenceResponse,
+	responses []workerexecution.InferenceResponse,
 	workID string,
 ) *testutil.ServiceTestHarness {
 	t.Helper()
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": responses,
 	})
 
@@ -321,7 +323,7 @@ func runGuardedLoopBreakerHarness(
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     workID,
 		TraceID:    "trace-" + workID,
@@ -334,19 +336,19 @@ func runGuardedLoopBreakerHarness(
 
 type stallAfterResponsesProvider struct {
 	mu        sync.Mutex
-	responses []interfaces.InferenceResponse
+	responses []workerexecution.InferenceResponse
 	index     int
 	stall     chan struct{}
 }
 
-func newStallAfterResponsesProvider(responses []interfaces.InferenceResponse) *stallAfterResponsesProvider {
+func newStallAfterResponsesProvider(responses []workerexecution.InferenceResponse) *stallAfterResponsesProvider {
 	return &stallAfterResponsesProvider{
 		responses: responses,
 		stall:     make(chan struct{}),
 	}
 }
 
-func (p *stallAfterResponsesProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *stallAfterResponsesProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -357,7 +359,7 @@ func (p *stallAfterResponsesProvider) Infer(_ context.Context, _ interfaces.Prov
 	}
 
 	<-p.stall
-	return interfaces.InferenceResponse{}, errors.New("stallAfterResponsesProvider: unreachable")
+	return workerexecution.InferenceResponse{}, errors.New("stallAfterResponsesProvider: unreachable")
 }
 
 var _ workers.Provider = (*stallAfterResponsesProvider)(nil)

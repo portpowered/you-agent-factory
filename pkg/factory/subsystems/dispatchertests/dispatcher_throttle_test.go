@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T) {
@@ -55,13 +57,13 @@ func TestDispatcher_ThrottledResultPausesMatchingProviderModelLane(t *testing.T)
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return now }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
 		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init-a"},
 			"tok-b": {ID: "tok-b", PlaceID: "p-init-b"},
 		}),
@@ -133,7 +135,7 @@ func TestDispatcher_ThrottleHistoryWithoutAuthoredGuardDoesNotFilterEnabledTrans
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil, subsystems.WithDispatcherClock(func() time.Time { return now }))
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init-a"},
 			"tok-b": {ID: "tok-b", PlaceID: "p-init-b"},
 		}),
@@ -207,12 +209,12 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	pausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -234,7 +236,7 @@ func TestDispatcher_ThrottlePauseExpiresAndAllowsDispatchAgain(t *testing.T) {
 
 	currentTime = currentTime.Add(11 * time.Minute)
 	resumedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -282,12 +284,12 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	firstSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -302,7 +304,7 @@ func TestDispatcher_ThrottlePauseRemainsObservedWhileWindowStaysActive(t *testin
 
 	currentTime = currentTime.Add(4 * time.Minute)
 	stillPausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -354,12 +356,12 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	firstFailure := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -376,7 +378,7 @@ func TestDispatcher_OverlappingThrottleFailuresExtendPauseWithoutResettingPaused
 
 	currentTime = currentTime.Add(4 * time.Minute)
 	secondFailure := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -417,12 +419,12 @@ func TestDispatcher_ThrottlePauseObservedWhenCronTransitionPausedBeforeSchedulin
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return now }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -468,12 +470,12 @@ func TestDispatcher_ThrottlePauseSkipsSchedulerWhenAllEnabledLanesPaused(t *test
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return now }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -524,12 +526,12 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	pausedSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -544,7 +546,7 @@ func TestDispatcher_ExpiredThrottlePauseObservedWhenSchedulerReturnsNoDecisions(
 
 	currentTime = currentTime.Add(11 * time.Minute)
 	expiredSnapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -612,16 +614,16 @@ func TestDispatcher_ThrottlePauseExcludesPausedLaneBeforeSchedulingSharedResourc
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return now }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
 		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a":  {ID: "tok-a", PlaceID: "p-init-a"},
 			"tok-b":  {ID: "tok-b", PlaceID: "p-init-b"},
-			"slot-1": {ID: "slot-1", PlaceID: "slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
+			"slot-1": {ID: "slot-1", PlaceID: "slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
 			throttledCompletedDispatch("d-throttle", "t-a", now),
@@ -684,13 +686,13 @@ func TestDispatcher_AuthoredThrottleGuard_BlocksSiblingTransitionFromRuntimeSnap
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return now }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-b", ModelProvider: "claude", Model: "claude-sonnet"},
 		)),
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init-a"},
 			"tok-b": {ID: "tok-b", PlaceID: "p-init-b"},
 		}),

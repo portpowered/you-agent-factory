@@ -2,14 +2,15 @@ package runtimetests
 
 import (
 	"errors"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	. "github.com/portpowered/infinite-you/pkg/config"
+
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {

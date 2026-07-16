@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -21,7 +22,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 		result          provider.CommandResult
 		input           provider.CodexFailureResolutionInput
 		wantMessage     string
-		wantType        interfaces.WorkFailureType
+		wantType        workerexecution.WorkFailureType
 		wantCausePrefix string
 		forbidden       []string
 	}{
@@ -36,7 +37,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 				),
 				Stderr: []byte("ERROR: unexpected status 429\n"),
 			},
-			wantType:        interfaces.WorkFailureTypeAuthFailure,
+			wantType:        workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage:     codexAuthFailureMessage,
 			wantCausePrefix: "unexpected status 401",
 			forbidden:       []string{alignmentPrivatePrompt, alignmentPrivateResponse},
@@ -48,7 +49,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 				Stdout:   []byte(alignmentPrivateResponse + "\n"),
 				Stderr:   []byte("ERROR: unexpected status 429\nprompt echo: " + alignmentPrivatePrompt + "\n"),
 			},
-			wantType:        interfaces.WorkFailureTypeThrottled,
+			wantType:        workerexecution.WorkFailureTypeThrottled,
 			wantMessage:     codexThrottleFailureMessage,
 			wantCausePrefix: "unexpected status 429",
 			forbidden:       []string{alignmentPrivatePrompt, alignmentPrivateResponse},
@@ -60,7 +61,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 				Stdout:   []byte(alignmentPrivateResponse + "\n"),
 				Stderr:   []byte("prompt echo: " + alignmentPrivatePrompt + "\n"),
 			},
-			wantType:        interfaces.WorkFailureTypeUnknown,
+			wantType:        workerexecution.WorkFailureTypeUnknown,
 			wantMessage:     codexUnknownFailureMessage,
 			wantCausePrefix: "exit code 17",
 			forbidden:       []string{alignmentPrivatePrompt, alignmentPrivateResponse},
@@ -73,7 +74,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 				Stderr:   []byte("ERROR: unexpected status 401\n"),
 			},
 			input:           provider.CodexFailureResolutionInput{CommandError: context.DeadlineExceeded},
-			wantType:        interfaces.WorkFailureTypeTimeout,
+			wantType:        workerexecution.WorkFailureTypeTimeout,
 			wantMessage:     "Codex execution timed out.",
 			wantCausePrefix: "context deadline exceeded",
 			forbidden:       []string{alignmentPrivatePrompt, alignmentPrivateResponse},
@@ -172,11 +173,11 @@ func TestNormalizeProviderExitFailure_CodexPreservesInternalCauseWithoutPublicLe
 		Stdout:   []byte(alignmentPrivateResponse + "\n"),
 		Stderr:   []byte("ERROR: unexpected status 503\nprompt echo: " + alignmentPrivatePrompt + "\n"),
 	}
-	providerErr := provider.NormalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
+	providerErr := provider.NormalizeProviderExitFailure(string(modelprovider.Codex), result, nil, nil)
 	if providerErr == nil {
 		t.Fatal("expected provider error")
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeInternalServerError || providerErr.Message != codexServerFailureMessage {
+	if providerErr.Type != workerexecution.WorkFailureTypeInternalServerError || providerErr.Message != codexServerFailureMessage {
 		t.Fatalf("provider error = %#v, want safe server failure", providerErr)
 	}
 	if providerErr.Cause == nil || !strings.Contains(providerErr.Cause.Error(), "unexpected status 503") {

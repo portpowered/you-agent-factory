@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 func TestInspectReadiness_ReportsInstalledAssetsWithoutLiveSupervisedSlot(t *testing.T) {
@@ -27,7 +27,7 @@ func TestInspectReadiness_ReportsInstalledAssetsWithoutLiveSupervisedSlot(t *tes
 	if err != nil {
 		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if snapshot.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", snapshot.ReadinessState)
 	}
 }
@@ -55,7 +55,7 @@ func TestInspectReadiness_ReportsSupervisedRuntimeCrash(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		snapshot, readinessErr := host.InspectReadiness(context.Background(), loaded, "OMNIVOICE_Q4_K_M")
-		if readinessErr == nil && snapshot.ReadinessState == factoryapi.ManagedRuntimeReadinessStateFAILED {
+		if readinessErr == nil && snapshot.ReadinessState == managedruntime.ReadinessStateFailed {
 			if snapshot.FailureClass != FailureClassProcessCrash {
 				t.Fatalf("failure class = %s, want %s", snapshot.FailureClass, FailureClassProcessCrash)
 			}

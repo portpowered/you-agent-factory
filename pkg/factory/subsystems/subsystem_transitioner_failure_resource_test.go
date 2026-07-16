@@ -4,39 +4,41 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardlessOfInputOrder(t *testing.T) {
 	now := time.Date(2026, time.July, 3, 10, 30, 0, 0, time.UTC)
 	createdAt := now.Add(-2 * time.Hour)
-	resourceConsumed := interfaces.Token{
+	resourceConsumed := factorytoken.Token{
 		ID:        "executor:resource:0",
 		PlaceID:   "executor:available",
 		CreatedAt: createdAt,
 		EnteredAt: createdAt,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "executor:0",
 			WorkTypeID: "executor",
-			DataType:   interfaces.DataTypeResource,
+			DataType:   factorytoken.DataTypeResource,
 			Tags:       map[string]string{"pool": "shared"},
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			PlaceVisits: map[string]int{"executor:available": 4},
 		},
 	}
-	workConsumed := interfaces.Token{
+	workConsumed := factorytoken.Token{
 		ID:        "tok-1",
 		PlaceID:   "wt-code:init",
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "w-resource-failure",
 			WorkTypeID: "wt-code",
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 		},
 	}
 	failureArcs := []petri.Arc{{ID: "a3", Name: "fail", PlaceID: "wt-code:failed", Direction: petri.ArcOutput}}
@@ -48,16 +50,16 @@ func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardless
 
 	orderings := []struct {
 		name     string
-		consumed []interfaces.Token
+		consumed []factorytoken.Token
 	}{
-		{name: "resource-first", consumed: []interfaces.Token{resourceConsumed, workConsumed}},
-		{name: "work-first", consumed: []interfaces.Token{workConsumed, resourceConsumed}},
+		{name: "resource-first", consumed: []factorytoken.Token{resourceConsumed, workConsumed}},
+		{name: "work-first", consumed: []factorytoken.Token{workConsumed, resourceConsumed}},
 	}
 
 	for _, ordering := range orderings {
 		t.Run(ordering.name, func(t *testing.T) {
 			mutations := transitioner.releaseResourceTokensOnFailureMutations(
-				interfaces.OutcomeFailed,
+				workerexecution.OutcomeFailed,
 				"t1",
 				ordering.consumed,
 				failureArcs,
@@ -88,8 +90,8 @@ func TestReleaseResourceTokensOnFailure_PreservesConsumedTokenIdentityRegardless
 
 type acceptedMixedWorkResourceMutationFixture struct {
 	transformer *token_transformer.Transformer
-	resource    interfaces.Token
-	work        interfaces.Token
+	resource    factorytoken.Token
+	work        factorytoken.Token
 	arcs        []petri.Arc
 	result      resolvedWorkResult
 	now         time.Time
@@ -108,29 +110,29 @@ func newAcceptedMixedWorkResourceMutationFixture() acceptedMixedWorkResourceMuta
 	}
 	return acceptedMixedWorkResourceMutationFixture{
 		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
-		resource: interfaces.Token{
+		resource: factorytoken.Token{
 			ID:        "agent-slot:resource:0",
 			PlaceID:   "agent-slot:available",
 			CreatedAt: createdAt,
 			EnteredAt: createdAt,
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "agent-slot:0",
 				WorkTypeID: "agent-slot",
-				DataType:   interfaces.DataTypeResource,
+				DataType:   factorytoken.DataTypeResource,
 			},
 		},
-		work: interfaces.Token{
+		work: factorytoken.Token{
 			ID:        "work-story-1",
 			PlaceID:   "story:in-review",
 			CreatedAt: createdAt,
 			EnteredAt: createdAt,
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-story-1",
 				WorkTypeID: "story",
-				DataType:   interfaces.DataTypeWork,
+				DataType:   factorytoken.DataTypeWork,
 				TraceID:    "trace-batch-idea-001",
 			},
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits:         map[string]int{},
 				ConsecutiveFailures: map[string]int{},
 				PlaceVisits:         map[string]int{},
@@ -142,7 +144,7 @@ func newAcceptedMixedWorkResourceMutationFixture() acceptedMixedWorkResourceMuta
 		},
 		result: resolvedWorkResult{
 			transitionID: "review-story",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "Done. COMPLETE ACCEPTED",
 		},
 		now: now,
@@ -157,9 +159,9 @@ func findWorkAndResourceMutations(mutations []interfaces.MarkingMutation) (*inte
 			continue
 		}
 		switch mutations[i].NewToken.Color.DataType {
-		case interfaces.DataTypeWork:
+		case factorytoken.DataTypeWork:
 			workMutation = &mutations[i]
-		case interfaces.DataTypeResource:
+		case factorytoken.DataTypeResource:
 			resourceMutation = &mutations[i]
 		}
 	}
@@ -179,7 +181,7 @@ func assertAcceptedMixedWorkOutputMutation(t *testing.T, workMutation *interface
 	}
 }
 
-func assertReleasedResourceMutationBasics(t *testing.T, resourceMutation *interfaces.MarkingMutation, resource interfaces.Token) {
+func assertReleasedResourceMutationBasics(t *testing.T, resourceMutation *interfaces.MarkingMutation, resource factorytoken.Token) {
 	t.Helper()
 	if resourceMutation == nil {
 		t.Fatal("expected resource release mutation")
@@ -198,7 +200,7 @@ func assertReleasedResourceMutationBasics(t *testing.T, resourceMutation *interf
 	}
 }
 
-func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfaces.MarkingMutation, resource interfaces.Token) {
+func assertAcceptedMixedWorkResourceMutations(t *testing.T, mutations []interfaces.MarkingMutation, resource factorytoken.Token) {
 	t.Helper()
 	if len(mutations) != 2 {
 		t.Fatalf("mutation count = %d, want 2 (work output + resource release)", len(mutations))
@@ -212,10 +214,10 @@ func TestCalculateMutations_AcceptedMixedWorkResource_ReleasesConsumedResourceRe
 	fixture := newAcceptedMixedWorkResourceMutationFixture()
 	orderings := []struct {
 		name     string
-		consumed []interfaces.Token
+		consumed []factorytoken.Token
 	}{
-		{name: "resource-first", consumed: []interfaces.Token{fixture.resource, fixture.work}},
-		{name: "work-first", consumed: []interfaces.Token{fixture.work, fixture.resource}},
+		{name: "resource-first", consumed: []factorytoken.Token{fixture.resource, fixture.work}},
+		{name: "work-first", consumed: []factorytoken.Token{fixture.work, fixture.resource}},
 	}
 
 	for _, ordering := range orderings {

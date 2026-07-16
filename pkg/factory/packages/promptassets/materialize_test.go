@@ -10,8 +10,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/persist"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/promptassets"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 const (
@@ -71,7 +72,7 @@ func assembleMaterializationFixture(t *testing.T) []byte {
 
 type loadedPromptFixture interface {
 	FactoryConfig() *interfaces.FactoryConfig
-	Worker(string) (*interfaces.WorkerConfig, bool)
+	Worker(string) (*workerconfig.Config, bool)
 	Workstation(string) (*interfaces.FactoryWorkstationConfig, bool)
 }
 

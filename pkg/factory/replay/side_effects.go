@@ -1,0 +1,314 @@
+package replay
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"reflect"
+	"sync"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+)
+
+const (
+	DivergenceCategoryMissingDispatch    = "missing_dispatch"
+	DivergenceCategoryDispatchMismatch   = "dispatch_mismatch"
+	DivergenceCategoryUnknownCompletion  = "unknown_completion"
+	DivergenceCategorySideEffectMismatch = "side_effect_mismatch"
+	DivergenceCategoryConfigMismatch     = "config_mismatch"
+)
+
+// DivergenceReport describes a material difference between a replay artifact
+// and the behavior observed while replaying it.
+type DivergenceReport struct {
+	Category        string `json:"category"`
+	Tick            int    `json:"tick,omitempty"`
+	DispatchID      string `json:"dispatch_id,omitempty"`
+	ExpectedEventID string `json:"expected_event_id,omitempty"`
+	ObservedEventID string `json:"observed_event_id,omitempty"`
+	Expected        string `json:"expected,omitempty"`
+	Observed        string `json:"observed,omitempty"`
+}
+
+// DivergenceError stops replay instead of allowing execution to continue after
+// it no longer represents the recorded run.
+type DivergenceError struct {
+	Report DivergenceReport
+}
+
+func (e *DivergenceError) Error() string {
+	if e == nil {
+		return "replay divergence"
+	}
+	report := e.Report
+	message := fmt.Sprintf("replay divergence: category=%s", report.Category)
+	if report.Tick != 0 {
+		message += fmt.Sprintf(" tick=%d", report.Tick)
+	}
+	if report.DispatchID != "" {
+		message += fmt.Sprintf(" dispatch_id=%s", report.DispatchID)
+	}
+	if report.ExpectedEventID != "" {
+		message += fmt.Sprintf(" expected_event_id=%s", report.ExpectedEventID)
+	}
+	if report.ObservedEventID != "" {
+		message += fmt.Sprintf(" observed_event_id=%s", report.ObservedEventID)
+	}
+	if report.Expected != "" {
+		message += fmt.Sprintf(" expected=%q", report.Expected)
+	}
+	if report.Observed != "" {
+		message += fmt.Sprintf(" observed=%q", report.Observed)
+	}
+	return message
+}
+
+type divergenceOption func(*DivergenceReport)
+
+func withExpectedEventID(eventID string) divergenceOption {
+	return func(report *DivergenceReport) {
+		report.ExpectedEventID = eventID
+	}
+}
+
+func newDivergenceError(category string, tick int, dispatchID, expected, observed string, opts ...divergenceOption) error {
+	report := DivergenceReport{
+		Category:   category,
+		Tick:       tick,
+		DispatchID: dispatchID,
+		Expected:   expected,
+		Observed:   observed,
+	}
+	for _, opt := range opts {
+		opt(&report)
+	}
+	return &DivergenceError{Report: report}
+}
+
+// SideEffects replays recorded provider and script-command behavior through
+// the normal worker side-effect interfaces.
+type SideEffects struct {
+	mu      sync.Mutex
+	records []sideEffectRecord
+}
+
+type sideEffectRecord struct {
+	dispatch      replayDispatch
+	completion    *replayCompletion
+	hasCompletion bool
+	usedBy        string
+}
+
+// NewSideEffects builds replay-aware side-effect substitutes from an artifact.
+func NewSideEffects(artifact *interfaces.ReplayArtifact) (*SideEffects, error) {
+	eventLog, err := reduceReplayEvents(artifact)
+	if err != nil {
+		return nil, err
+	}
+
+	dispatches := make(map[string]replayDispatch, len(eventLog.Dispatches))
+	for _, dispatch := range eventLog.Dispatches {
+		dispatches[dispatch.dispatchID] = dispatch
+	}
+
+	completions := make(map[string]replayCompletion, len(eventLog.Completions))
+	for _, completion := range eventLog.Completions {
+		if _, ok := dispatches[completion.dispatchID]; !ok {
+			return nil, newDivergenceError(
+				DivergenceCategoryUnknownCompletion,
+				completion.observedTick,
+				completion.dispatchID,
+				"recorded dispatch for completion "+completion.completionID,
+				"completion references unknown dispatch "+completion.dispatchID,
+				withExpectedEventID(completion.eventID),
+			)
+		}
+		completions[completion.dispatchID] = completion
+	}
+
+	records := make([]sideEffectRecord, 0, len(eventLog.Dispatches))
+	for _, dispatch := range eventLog.Dispatches {
+		record := sideEffectRecord{dispatch: dispatch}
+		if completion, ok := completions[dispatch.dispatchID]; ok {
+			completionCopy := completion
+			record.completion = &completionCopy
+			record.hasCompletion = true
+		}
+		records = append(records, sideEffectRecord{
+			dispatch:      record.dispatch,
+			completion:    record.completion,
+			hasCompletion: record.hasCompletion,
+		})
+	}
+
+	return &SideEffects{records: records}, nil
+}
+
+// Infer implements workers.Provider by returning the recorded provider response
+// for the matching dispatch.
+func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	record, err := s.claim(ctx, "provider", func(candidate sideEffectRecord) bool {
+		return providerRequestMatches(candidate, req)
+	})
+	if err != nil {
+		return workerexecution.InferenceResponse{}, err
+	}
+	if !record.hasCompletion {
+		return workerexecution.InferenceResponse{}, missingCompletionError(record.dispatch)
+	}
+
+	result := record.completion.result
+	failureMetadata := result.FailureMetadata
+	if result.Outcome == workerexecution.OutcomeFailed && failureMetadata != nil {
+		return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+			failureMetadata.Type,
+			result.Error,
+			errors.New(result.Error),
+		)
+	}
+
+	return workerexecution.InferenceResponse{
+		Content:         result.Output,
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
+		Diagnostics:     workerexecution.CloneWorkDiagnostics(record.completion.diagnostics),
+	}, nil
+}
+
+// Run implements workers.CommandRunner by returning the recorded script command
+// outcome for the matching dispatch.
+func (s *SideEffects) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+	record, err := s.claim(ctx, "command", func(candidate sideEffectRecord) bool {
+		return commandRequestMatches(candidate, req)
+	})
+	if err != nil {
+		return workers.CommandResult{}, err
+	}
+	if !record.hasCompletion {
+		return workers.CommandResult{}, missingCompletionError(record.dispatch)
+	}
+	if record.completion.diagnostics == nil || record.completion.diagnostics.Command == nil {
+		result := workers.CommandResult{
+			Stdout: []byte(record.completion.result.Output),
+			Stderr: []byte(record.completion.result.Error),
+		}
+		if record.completion.result.Outcome == workerexecution.OutcomeFailed {
+			result.ExitCode = 1
+		}
+		return result, nil
+	}
+
+	command := record.completion.diagnostics.Command
+	result := workers.CommandResult{
+		Stdout:   []byte(command.Stdout),
+		Stderr:   []byte(command.Stderr),
+		ExitCode: command.ExitCode,
+	}
+	if command.TimedOut {
+		return result, context.DeadlineExceeded
+	}
+	return result, nil
+}
+
+func missingCompletionError(dispatch replayDispatch) error {
+	return fmt.Errorf("recorded dispatch %q for transition %q has no completion", dispatch.dispatchID, dispatch.dispatch.TransitionID)
+}
+
+func (s *SideEffects) claim(ctx context.Context, kind string, matches func(sideEffectRecord) bool) (sideEffectRecord, error) {
+	if s == nil {
+		return sideEffectRecord{}, fmt.Errorf("replay side effects are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return sideEffectRecord{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return sideEffectRecord{}, err
+	}
+
+	for i := range s.records {
+		if s.records[i].usedBy != "" {
+			continue
+		}
+		if !matches(s.records[i]) {
+			continue
+		}
+		s.records[i].usedBy = kind
+		return s.records[i], nil
+	}
+	return sideEffectRecord{}, newDivergenceError(
+		DivergenceCategorySideEffectMismatch,
+		0,
+		"",
+		"recorded "+kind+" request",
+		"replay "+kind+" request did not match a recorded completion",
+	)
+}
+
+func providerRequestMatches(record sideEffectRecord, req workerexecution.ProviderInferenceRequest) bool {
+	dispatch := record.dispatch.dispatch
+	if !executionMetadataMatches(dispatch.Execution, req.Dispatch.Execution) {
+		return false
+	}
+	if req.WorkerType != "" && req.WorkerType != dispatch.WorkerType {
+		return false
+	}
+	if req.WorkstationType != "" && req.WorkstationType != dispatch.WorkstationName {
+		return false
+	}
+	if record.completion != nil && record.completion.diagnostics != nil && record.completion.diagnostics.Provider != nil {
+		provider := record.completion.diagnostics.Provider
+		if provider.Provider != "" && req.ModelProvider != "" && provider.Provider != req.ModelProvider {
+			return false
+		}
+		if provider.Model != "" && req.Model != "" && provider.Model != req.Model {
+			return false
+		}
+	}
+	return true
+}
+
+func commandRequestMatches(record sideEffectRecord, req workers.CommandRequest) bool {
+	dispatch := record.dispatch.dispatch
+	if !executionMetadataMatches(dispatch.Execution, req.Execution) {
+		return false
+	}
+	if !record.hasCompletion {
+		return true
+	}
+	if record.completion.diagnostics == nil || record.completion.diagnostics.Command == nil {
+		return true
+	}
+	command := record.completion.diagnostics.Command
+	if command.Command != "" && command.Command != req.Command {
+		return false
+	}
+	if len(command.Args) > 0 && !reflect.DeepEqual(command.Args, req.Args) {
+		return false
+	}
+	if command.WorkingDir != "" && command.WorkingDir != req.WorkDir {
+		return false
+	}
+	return true
+}
+
+func executionMetadataMatches(recorded, observed work.ExecutionMetadata) bool {
+	if recorded.ReplayKey != "" && observed.ReplayKey != recorded.ReplayKey {
+		return false
+	}
+	if recorded.TraceID != "" && observed.TraceID != recorded.TraceID {
+		return false
+	}
+	if len(recorded.WorkIDs) > 0 && !reflect.DeepEqual(recorded.WorkIDs, observed.WorkIDs) {
+		return false
+	}
+	return true
+}
+
+var _ workers.Provider = (*SideEffects)(nil)
+var _ workers.CommandRunner = (*SideEffects)(nil)

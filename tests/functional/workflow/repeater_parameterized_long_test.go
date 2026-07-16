@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,12 +21,12 @@ func TestRepeater_RefiresOnRejectedStopsOnAccepted(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	execMock := h.MockWorker("exec-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("finish-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -51,16 +51,16 @@ func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	h.MockWorker("exec-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
 	)
 	h.MockWorker("finish-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -85,10 +85,10 @@ func TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness(t *testing.T) 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "service resource repeater test"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Still working"},
-		interfaces.InferenceResponse{Content: "Almost there"},
-		interfaces.InferenceResponse{Content: "Done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Finalized. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Still working"},
+		workerexecution.InferenceResponse{Content: "Almost there"},
+		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finalized. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,

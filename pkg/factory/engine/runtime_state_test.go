@@ -6,25 +6,27 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestTokenMutationRecordJSON_RoundTripPreservesPetriTransitionSemantics(t *testing.T) {
 	original := interfaces.TokenMutationRecord{
 		DispatchID:   "dispatch-petri-1",
 		TransitionID: "transition-review",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Type:         interfaces.MutationMove,
 		TokenID:      "token-work-1",
 		FromPlace:    "in-progress",
 		ToPlace:      "review",
 		Reason:       "transition fired",
-		Token: &interfaces.Token{
+		Token: &factorytoken.Token{
 			ID:      "token-work-1",
 			PlaceID: "review",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-1",
 				WorkTypeID: "story",
 				Tags:       map[string]string{"trace": "trace-1"},
@@ -114,10 +116,10 @@ func TestRuntimeState_Snapshot_EmptyState(t *testing.T) {
 
 func buildRuntimeStateSnapshotFixture() *RuntimeState {
 	marking := petri.NewMarking("wf-1")
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID:      "tok-1",
 		PlaceID: "place-a",
-		Color:   interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "type-1"},
+		Color:   factorytoken.Color{WorkID: "work-1", WorkTypeID: "type-1"},
 	})
 
 	return &RuntimeState{
@@ -127,22 +129,22 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 				DispatchID:   "dispatch-1",
 				TransitionID: "trans-1",
 				StartTime:    time.Now().Add(-time.Second),
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:        "tok-1",
 					PlaceID:   "place-a",
 					CreatedAt: time.Unix(123, 0),
 					EnteredAt: time.Unix(456, 0),
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID:     "work-1",
 						WorkTypeID: "type-1",
 						Tags:       map[string]string{"source": "dispatcher"},
 						Payload:    []byte("payload"),
 					},
-					History: interfaces.TokenHistory{
+					History: factorytoken.History{
 						TotalVisits:         map[string]int{"trans-1": 1},
 						ConsecutiveFailures: map[string]int{"trans-1": 0},
 						PlaceVisits:         map[string]int{"place-a": 1},
-						FailureLog: []interfaces.FailureRecord{{
+						FailureLog: []factorytoken.Failure{{
 							TransitionID: "trans-0",
 							Error:        "first failure",
 							Attempt:      1,
@@ -157,11 +159,11 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 				}},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "dispatch-0",
 			TransitionID: "trans-0",
-			Outcome:      interfaces.OutcomeAccepted,
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			Outcome:      workerexecution.OutcomeAccepted,
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-result-1",
@@ -170,7 +172,7 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 		DispatchHistory: []interfaces.CompletedDispatch{{
 			DispatchID:   "dispatch-0",
 			TransitionID: "trans-0",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-history-1",
@@ -178,10 +180,10 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 			StartTime: time.Now().Add(-2 * time.Second),
 			EndTime:   time.Now().Add(-time.Second),
 			Duration:  time.Second,
-			ConsumedTokens: []interfaces.Token{{
+			ConsumedTokens: []factorytoken.Token{{
 				ID:      "tok-0",
 				PlaceID: "place-z",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-0",
 					WorkTypeID: "type-0",
 					Tags:       map[string]string{"history": "original"},
@@ -190,14 +192,14 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 			OutputMutations: []interfaces.TokenMutationRecord{{
 				DispatchID:   "dispatch-0",
 				TransitionID: "trans-0",
-				Outcome:      interfaces.OutcomeAccepted,
+				Outcome:      workerexecution.OutcomeAccepted,
 				Type:         interfaces.MutationCreate,
 				TokenID:      "work-0",
 				ToPlace:      "place-complete",
-				Token: &interfaces.Token{
+				Token: &factorytoken.Token{
 					ID:      "work-0",
 					PlaceID: "place-complete",
-					Color:   interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "type-0"},
+					Color:   factorytoken.Color{WorkID: "work-0", WorkTypeID: "type-0"},
 				},
 			}},
 		}},
@@ -207,7 +209,7 @@ func buildRuntimeStateSnapshotFixture() *RuntimeState {
 
 func assertRuntimeSnapshotIgnoresMarkingAndDispatchMutations(t *testing.T, rs *RuntimeState, snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
 	t.Helper()
-	rs.Marking.AddToken(&interfaces.Token{ID: "tok-2", PlaceID: "place-b"})
+	rs.Marking.AddToken(&factorytoken.Token{ID: "tok-2", PlaceID: "place-b"})
 	if _, exists := snap.Marking.Tokens["tok-2"]; exists {
 		t.Error("snapshot marking should not contain token added after snapshot")
 	}
@@ -246,7 +248,7 @@ func assertRuntimeSnapshotIgnoresMarkingAndDispatchMutations(t *testing.T, rs *R
 
 func assertRuntimeSnapshotIgnoresResultAndHistoryMutations(t *testing.T, rs *RuntimeState, snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
 	t.Helper()
-	rs.Results = append(rs.Results, interfaces.WorkResult{TransitionID: "trans-extra"})
+	rs.Results = append(rs.Results, workerexecution.WorkResult{TransitionID: "trans-extra"})
 	if len(snap.Results) != 1 {
 		t.Errorf("snapshot results should have 1 entry, got %d", len(snap.Results))
 	}

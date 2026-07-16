@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -44,7 +46,7 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 	assertWorkerPublicContractPublicRuntime(t, flattenedFactory, "worker-a")
 
 	artifactPath := filepath.Join(t.TempDir(), "worker-public-contract-smoke.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "worker-public-contract-smoke",
 		WorkID:     "work-worker-public-contract-smoke",
 		WorkTypeID: "task",
@@ -101,8 +103,8 @@ func assertWorkerPublicContractInternalRuntime(
 	if worker.ExecutorProvider != "script_wrap" {
 		t.Fatalf("executor provider = %q, want script_wrap", worker.ExecutorProvider)
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("model provider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderClaude)
+	if worker.ModelProvider != string(modelprovider.Claude) {
+		t.Fatalf("model provider = %q, want %q", worker.ModelProvider, modelprovider.Claude)
 	}
 	if worker.SessionID != "" {
 		t.Fatalf("session id = %q, want empty runtime-owned field", worker.SessionID)
@@ -115,7 +117,11 @@ func assertWorkerPublicContractInternalRuntime(
 func assertWorkerPublicContractPublicRuntime(t *testing.T, generated factoryapi.Factory, workerName string) {
 	t.Helper()
 
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		t.Fatalf("capture recorded Factory: %v", err)
+	}
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(snapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -126,8 +132,8 @@ func assertWorkerPublicContractPublicRuntime(t *testing.T, generated factoryapi.
 	if worker.ExecutorProvider != "script_wrap" {
 		t.Fatalf("generated runtime executor provider = %q, want script_wrap", worker.ExecutorProvider)
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("generated runtime model provider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderClaude)
+	if worker.ModelProvider != string(modelprovider.Claude) {
+		t.Fatalf("generated runtime model provider = %q, want %q", worker.ModelProvider, modelprovider.Claude)
 	}
 	if worker.SessionID != "" {
 		t.Fatalf("generated runtime session id = %q, want empty", worker.SessionID)
@@ -144,8 +150,8 @@ func assertWorkerPublicContractProviderRequest(t *testing.T, runner *testutil.Pr
 		t.Fatalf("provider command runner call count = %d, want 2", runner.CallCount())
 	}
 	req := runner.Requests()[0]
-	if req.Command != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("provider command = %q, want %q", req.Command, interfaces.ModelProviderClaude)
+	if req.Command != string(modelprovider.Claude) {
+		t.Fatalf("provider command = %q, want %q", req.Command, modelprovider.Claude)
 	}
 	for _, arg := range req.Args {
 		if arg == "--resume" {

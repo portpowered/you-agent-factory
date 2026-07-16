@@ -3,7 +3,8 @@ package projections
 import (
 	"sort"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func buildFactoryWorldRuntimeView(
@@ -106,7 +107,7 @@ func buildFactoryWorldActiveExecutions(state interfaces.FactoryWorldState, activ
 			WorkItems:                workItems,
 			CurrentChainingTraceID:   dispatch.CurrentChainingTraceID,
 			PreviousChainingTraceIDs: cloneStringSlice(dispatch.PreviousChainingTraceIDs),
-			TraceIDs:                 interfaces.CanonicalChainingTraceIDs(dispatch.TraceIDs),
+			TraceIDs:                 work.CanonicalChainingTraceIDs(dispatch.TraceIDs),
 			ConsumedInputs:           interfaces.CloneWorkstationInputs(dispatch.Inputs),
 		}
 	}
@@ -128,7 +129,7 @@ func buildFactoryWorldActivity(state interfaces.FactoryWorldState, activeIDs []s
 			current.ActiveWorkItems,
 			workItemRefsForIDs(state.PayloadLineage, dispatch.WorkItemIDs, state.WorkItemsByID),
 		)
-		current.TraceIDs = interfaces.CanonicalChainingTraceIDs(append(current.TraceIDs, dispatch.TraceIDs...))
+		current.TraceIDs = work.CanonicalChainingTraceIDs(append(current.TraceIDs, dispatch.TraceIDs...))
 		activity[transitionID] = current
 	}
 	return activity
@@ -288,7 +289,7 @@ func countCompletedDispatches(state interfaces.FactoryWorldState) int {
 	return count
 }
 
-func countFailedWorkItems(failed map[string]interfaces.FactoryWorkItem) int {
+func countFailedWorkItems(failed map[string]work.FactoryWorkItem) int {
 	count := 0
 	for _, work := range failed {
 		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {

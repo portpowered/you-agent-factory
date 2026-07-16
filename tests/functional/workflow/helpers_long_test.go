@@ -6,18 +6,20 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func newAdhocProcessReviewHarness(
 	t *testing.T,
-	responses []interfaces.InferenceResponse,
+	responses []workerexecution.InferenceResponse,
 ) (string, *testutil.MockWorkerMapProvider, *testutil.ServiceTestHarness) {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/adhoc/factory"))
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": responses,
 	})
 	harness := testutil.NewServiceTestHarness(t, dir,
@@ -26,7 +28,7 @@ func newAdhocProcessReviewHarness(
 		testutil.WithExecutionBaseDir(dir),
 	)
 
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     "task-process-review-contract",
 		TraceID:    "trace-process-review-contract",
@@ -39,7 +41,7 @@ func newAdhocProcessReviewHarness(
 
 func assertProviderCallWorkstations(
 	t *testing.T,
-	calls []interfaces.ProviderInferenceRequest,
+	calls []workerexecution.ProviderInferenceRequest,
 	want []string,
 ) {
 	t.Helper()

@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -242,9 +242,9 @@ func workMoveParsingCases(move climanifest.Command) []parsingParityCase {
 			},
 		},
 		{
-			name:       "work move local request-id flag is parseable",
-			commandID:  move.ID,
-			argv:       []string{"work", "move", "work-move-1", "complete", "--request-id", "req-move-1"},
+			name:      "work move local request-id flag is parseable",
+			commandID: move.ID,
+			argv:      []string{"work", "move", "work-move-1", "complete", "--request-id", "req-move-1"},
 			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
 				t.Helper()
 				contract, err := record.RequireFlagByLong("request-id")

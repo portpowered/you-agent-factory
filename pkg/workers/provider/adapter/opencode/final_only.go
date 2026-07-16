@@ -5,8 +5,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -32,14 +33,14 @@ func parseFinalOnly(_ context.Context, input adapter.FinalParseContext) (adapter
 		return adapter.FinalParseResult{}, unusableFinalOnlyOutput()
 	}
 	return adapter.FinalParseResult{
-		Response: interfaces.InferenceResponse{Content: content},
+		Response: workerexecution.InferenceResponse{Content: content},
 		Drafts:   finalOnlyDrafts(input, content),
 	}, nil
 }
 
 func unusableFinalOnlyOutput() *structuredTerminalError {
 	return &structuredTerminalError{
-		failureType: interfaces.WorkFailureTypeUnknown,
+		failureType: workerexecution.WorkFailureTypeUnknown,
 		message:     "OpenCode final-only output did not contain an authoritative response.",
 	}
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestFactoryRequestBatch_InvalidStructureRejected(t *testing.T) {
@@ -102,10 +102,10 @@ func TestFactoryRequestBatch_InvalidJSONRejected(t *testing.T) {
 func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 	validWorkTypes := map[string]bool{"task": true}
 
-	invalidInput := interfaces.WorkRequest{
+	invalidInput := work.WorkRequest{
 		RequestID: "request-atomic-invalid",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{WorkTypeID: "task", Name: "valid-item"},
 			{WorkTypeID: "task", Name: ""},
 		},
@@ -116,21 +116,21 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 		t.Fatalf("failed to marshal input: %v", err)
 	}
 
-	var invalidRequest interfaces.WorkRequest
+	var invalidRequest work.WorkRequest
 	if err := json.Unmarshal(payload, &invalidRequest); err != nil {
 		t.Fatalf("failed to unmarshal input: %v", err)
 	}
-	_, err = requests.NormalizeWorkRequest(invalidRequest, interfaces.WorkRequestNormalizeOptions{
+	_, err = requests.NormalizeWorkRequest(invalidRequest, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: validWorkTypes,
 	})
 	if err == nil {
 		t.Fatal("expected validation error for batch with invalid item, got nil")
 	}
 
-	validInput := interfaces.WorkRequest{
+	validInput := work.WorkRequest{
 		RequestID: "request-atomic-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{WorkTypeID: "task", Name: "item-1"},
 			{WorkTypeID: "task", Name: "item-2"},
 			{WorkTypeID: "task", Name: "item-3"},
@@ -142,11 +142,11 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 		t.Fatalf("failed to marshal input: %v", err)
 	}
 
-	var validRequest interfaces.WorkRequest
+	var validRequest work.WorkRequest
 	if err := json.Unmarshal(payload, &validRequest); err != nil {
 		t.Fatalf("failed to unmarshal input: %v", err)
 	}
-	expanded, err := requests.NormalizeWorkRequest(validRequest, interfaces.WorkRequestNormalizeOptions{
+	expanded, err := requests.NormalizeWorkRequest(validRequest, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: validWorkTypes,
 	})
 	if err != nil {
@@ -169,10 +169,10 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 func assertInvalidBatchPayload(t *testing.T, payload string, wantErr string) {
 	t.Helper()
 
-	var request interfaces.WorkRequest
+	var request work.WorkRequest
 	err := json.Unmarshal([]byte(payload), &request)
 	if err == nil {
-		_, err = requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+		_, err = requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{
 			ValidWorkTypes: map[string]bool{"task": true},
 			ValidStatesByType: map[string]map[string]bool{
 				"task": {"init": true, "complete": true},

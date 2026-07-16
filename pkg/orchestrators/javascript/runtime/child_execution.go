@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/childcontract"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // ChildExecutionRequest is the typed child-agent request shared by host primitives
@@ -202,8 +203,8 @@ func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutio
 	failed := base
 	failed.Status = ChildDispatchStatusFailed
 	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
-	failed.FailureDetail = &interfaces.FailureDetail{
-		Reason:  interfaces.WorkFailureTypeUnknown,
+	failed.FailureDetail = &workerexecution.FailureDetail{
+		Reason:  workerexecution.WorkFailureTypeUnknown,
 		Message: diagnostic,
 	}
 	e.records.Append(RuntimeRecord{

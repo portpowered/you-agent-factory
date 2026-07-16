@@ -7,9 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
 
@@ -120,40 +123,40 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVoca
 		readiness     factoryapi.ManagedRuntimeReadinessState
 		lifecycle     factoryapi.ManagedRuntimeLifecycleState
 		wantIs        error
-		wantReadiness factoryapi.ManagedRuntimeReadinessState
-		wantLifecycle factoryapi.ManagedRuntimeLifecycleState
+		wantReadiness managedruntime.ReadinessState
+		wantLifecycle managedruntime.LifecycleState
 	}{
 		{
 			name:          "missing",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateMISSING,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
 			wantIs:        apisurface.ErrManagedRuntimeMissing,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateMISSING,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantReadiness: managedruntime.ReadinessStateMissing,
+			wantLifecycle: managedruntime.LifecycleStateNotInstalled,
 		},
 		{
 			name:          "loading",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateLOADING,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateLOADING,
 			wantIs:        apisurface.ErrManagedRuntimeLoading,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateLOADING,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+			wantReadiness: managedruntime.ReadinessStateLoading,
+			wantLifecycle: managedruntime.LifecycleStateLoading,
 		},
 		{
 			name:          "failed",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateFAILED,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
 			wantIs:        apisurface.ErrManagedRuntimeFailed,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateFAILED,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantReadiness: managedruntime.ReadinessStateFailed,
+			wantLifecycle: managedruntime.LifecycleStateNotInstalled,
 		},
 		{
 			name:          "unsupported",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
 			wantIs:        apisurface.ErrManagedRuntimeUnsupported,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantReadiness: managedruntime.ReadinessStateUnsupported,
+			wantLifecycle: managedruntime.LifecycleStateNotInstalled,
 		},
 	}
 
@@ -234,7 +237,7 @@ func nonReadyLocalModelFactoryConfig() map[string]any {
 		"name": "factory",
 		"resources": []map[string]any{{
 			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
+			"type":       factoryresource.TypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
 			"backend":    "LLAMACPP",
@@ -245,18 +248,18 @@ func nonReadyLocalModelFactoryConfig() map[string]any {
 			"type":          interfaces.WorkerTypeModel,
 			"modelProvider": "CODEX",
 			"model":         "OMNIVOICE_Q4_K_M",
-			"modelLocality": interfaces.ModelLocalityLocal,
+			"modelLocality": workerconfig.ModelLocalityLocal,
 			"resources":     []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
 			"operations": []map[string]any{{
 				"name": "TTS",
 				"inputs": []map[string]any{{
 					"name":         "text",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+					"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 					"required":     true,
 				}},
 				"outputs": []map[string]any{{
 					"name":         "audio",
-					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+					"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},

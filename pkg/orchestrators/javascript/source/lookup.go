@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 const (

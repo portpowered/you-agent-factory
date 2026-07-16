@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // CircuitBreakerSubsystem enforces system limits and evaluates exhaustion
@@ -131,7 +132,7 @@ func (cb *CircuitBreakerSubsystem) Execute(_ context.Context, snapshot *interfac
 }
 
 // checkLimits returns a non-empty reason string if the token breaches any limit.
-func (cb *CircuitBreakerSubsystem) checkLimits(token *interfaces.Token) string {
+func (cb *CircuitBreakerSubsystem) checkLimits(token *factorytoken.Token) string {
 	now := cb.now()
 
 	// MaxTokenAge: how long the token has existed.
@@ -186,8 +187,8 @@ func (cb *CircuitBreakerSubsystem) evaluateExhaustion(
 		}
 	}
 
-	guardBindings := make(map[string]*interfaces.Token)
-	matchedTokens := make(map[string][]interfaces.Token) // arc name → matched tokens
+	guardBindings := make(map[string]*factorytoken.Token)
+	matchedTokens := make(map[string][]factorytoken.Token) // arc name → matched tokens
 
 	// Phase 1: unguarded arcs.
 	for _, idx := range unguarded {
@@ -235,7 +236,7 @@ func (cb *CircuitBreakerSubsystem) evaluateExhaustion(
 	return mutations
 }
 
-func (cb *CircuitBreakerSubsystem) evaluateGuard(guard petri.Guard, candidates []interfaces.Token, bindings map[string]*interfaces.Token, snapshot *petri.MarkingSnapshot) ([]interfaces.Token, bool) {
+func (cb *CircuitBreakerSubsystem) evaluateGuard(guard petri.Guard, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, snapshot *petri.MarkingSnapshot) ([]factorytoken.Token, bool) {
 	if guard == nil {
 		return nil, false
 	}
@@ -245,7 +246,7 @@ func (cb *CircuitBreakerSubsystem) evaluateGuard(guard petri.Guard, candidates [
 	return guard.Evaluate(candidates, bindings, snapshot)
 }
 
-func (cb *CircuitBreakerSubsystem) exhaustionMutation(tr *petri.Transition, tok *interfaces.Token, outputPlace string) interfaces.MarkingMutation {
+func (cb *CircuitBreakerSubsystem) exhaustionMutation(tr *petri.Transition, tok *factorytoken.Token, outputPlace string) interfaces.MarkingMutation {
 	mutationType := interfaces.MutationMove
 	reason := fmt.Sprintf("exhaustion transition %s", tr.ID)
 	if outputPlace == "" && isSystemConsumeTransition(tr) {
@@ -266,7 +267,7 @@ func isSystemConsumeTransition(tr *petri.Transition) bool {
 }
 
 // isTerminalOrFailed returns true if the token is already in a TERMINAL or FAILED place.
-func (cb *CircuitBreakerSubsystem) isTerminalOrFailed(token *interfaces.Token) bool {
+func (cb *CircuitBreakerSubsystem) isTerminalOrFailed(token *factorytoken.Token) bool {
 	place, ok := cb.state.Places[token.PlaceID]
 	if !ok {
 		return false
@@ -285,7 +286,7 @@ func (cb *CircuitBreakerSubsystem) isTerminalOrFailed(token *interfaces.Token) b
 }
 
 // failedPlaceForToken returns the FAILED place ID for the token's work type.
-func (cb *CircuitBreakerSubsystem) failedPlaceForToken(token *interfaces.Token) string {
+func (cb *CircuitBreakerSubsystem) failedPlaceForToken(token *factorytoken.Token) string {
 	place, ok := cb.state.Places[token.PlaceID]
 	if !ok {
 		return ""
@@ -303,11 +304,11 @@ func (cb *CircuitBreakerSubsystem) failedPlaceForToken(token *interfaces.Token) 
 }
 
 // filterHandled removes tokens that have already been handled by Phase 1.
-func (cb *CircuitBreakerSubsystem) filterHandled(tokens []interfaces.Token, handled map[string]bool) []interfaces.Token {
+func (cb *CircuitBreakerSubsystem) filterHandled(tokens []factorytoken.Token, handled map[string]bool) []factorytoken.Token {
 	if len(handled) == 0 {
 		return tokens
 	}
-	var filtered []interfaces.Token
+	var filtered []factorytoken.Token
 	for _, t := range tokens {
 		if !handled[t.ID] {
 			filtered = append(filtered, t)

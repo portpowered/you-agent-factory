@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 var quietLeakForbiddenMarkers = []string{

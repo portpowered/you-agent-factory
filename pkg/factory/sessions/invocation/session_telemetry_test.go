@@ -9,8 +9,9 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -52,9 +53,9 @@ func TestSessionOwnerTelemetry_NormalizationFailurePreservesStableLabels(t *test
 	cfg.Project = "telemetry-project"
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 			t.Fatal("SubmitWork called after normalization failure")
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return work.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			t.Fatal("Observe called after normalization failure")
@@ -63,9 +64,9 @@ func TestSessionOwnerTelemetry_NormalizationFailurePreservesStableLabels(t *test
 		Telemetry: recording.telemetry(),
 	})
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		Args: &map[string]any{},
-	})
+	}))
 	var argumentErr *workinvocation.ArgumentError
 	if !errors.As(err, &argumentErr) || argumentErr.Code != workinvocation.ArgumentErrorCodeMissingRequiredInput {
 		t.Fatalf("error = %v, want %s", err, workinvocation.ArgumentErrorCodeMissingRequiredInput)
@@ -96,9 +97,9 @@ func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
 	}
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 			t.Fatal("SubmitWork called after interpolation failure")
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return work.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			return SessionInvocationObservation{}, nil
@@ -106,9 +107,9 @@ func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
 		Telemetry: recording.telemetry(),
 	})
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		Args: &map[string]any{"apiKey": []any{"super-secret", "second-secret"}},
-	})
+	}))
 	if err == nil {
 		t.Fatal("InvokeFactorySession error = nil, want interpolation failure")
 	}
@@ -133,9 +134,9 @@ func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T
 	cfg.WorkTypes = nil
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 			t.Fatal("SubmitWork called without a default handling Work type")
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return work.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			t.Fatal("Observe called without submitted Work")
@@ -146,10 +147,10 @@ func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T
 
 	source := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "do not log this payload")
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		SourceKind: &source,
 		Content:    &content,
-	})
+	}))
 	if err == nil || !strings.Contains(err.Error(), "resolve invocation work type:") {
 		t.Fatalf("InvokeFactorySession error = %v, want wrapped Work-type resolution error", err)
 	}
@@ -184,7 +185,7 @@ func TestSessionOwnerTelemetry_PackagedSuccessEmitsEachOutcomeOnce(t *testing.T)
 	owner := packagedSessionOwner(recording, cfg, observations, nil)
 
 	result := invokePackagedSessionOwner(t, owner)
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
 	for _, metric := range []string{
 		InvocationMetricAttempts, InvocationMetricFallbackPolicyUsed, testPackagedAttempts,
 		InvocationMetricSuccess, InvocationMetricResultType, testPackagedSuccess,
@@ -240,7 +241,7 @@ func TestSessionOwnerTelemetry_PackagedFailuresPreserveClassificationAndCounts(t
 			owner := packagedSessionOwner(recording, packagedSessionOwnerConfig(), []SessionInvocationObservation{stoppedSessionInvocationObservation()}, failure)
 
 			result := invokePackagedSessionOwner(t, owner)
-			assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusFailed)
+			assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, tt.errorCode)
 			assertSessionOwnerEqual(t, "message", result.Message, failure.Message)
 			for _, metric := range []string{InvocationMetricAttempts, testPackagedAttempts, InvocationMetricFailure, testPackagedFailure} {
@@ -272,21 +273,21 @@ func TestSessionOwnerTelemetry_WaitFailuresPreserveCorrelationAndClassification(
 		name         string
 		observation  SessionInvocationObservation
 		waitErr      error
-		wantStatus   factoryapi.InvocationTerminalStatus
+		wantStatus   interfaces.InvocationTerminalStatus
 		wantCode     string
 		failureClass string
 	}{
 		{
 			name: "timeout", observation: activeSessionInvocationObservation(), waitErr: context.DeadlineExceeded,
-			wantStatus: factoryapi.InvocationTerminalStatusTimedOut, wantCode: string(factoryapi.INVOCATIONTIMEDOUT), failureClass: "timeout",
+			wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut), failureClass: "timeout",
 		},
 		{
 			name: "cancellation", observation: activeSessionInvocationObservation(), waitErr: context.Canceled,
-			wantStatus: factoryapi.InvocationTerminalStatusCanceled, wantCode: string(factoryapi.INVOCATIONCANCELED), failureClass: "cancellation",
+			wantStatus: interfaces.InvocationTerminalStatusCanceled, wantCode: string(interfaces.InvocationErrorCodeCanceled), failureClass: "cancellation",
 		},
 		{
 			name: "primary result failure", observation: classifiedObservation(workinvocation.PrimaryResultErrorCodeBlocked, "blocked"),
-			wantStatus: factoryapi.InvocationTerminalStatusFailed, wantCode: string(workinvocation.PrimaryResultErrorCodeBlocked), failureClass: "blocked",
+			wantStatus: interfaces.InvocationTerminalStatusFailed, wantCode: string(workinvocation.PrimaryResultErrorCodeBlocked), failureClass: "blocked",
 		},
 	}
 	for _, tt := range tests {
@@ -343,8 +344,8 @@ func packagedSessionOwner(
 	observationIndex := 0
 	return NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-			return interfaces.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+			return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			observation := observations[observationIndex]
@@ -369,9 +370,9 @@ func invokePackagedSessionOwner(t *testing.T, owner *SessionOwner) FactoryInvoca
 	t.Helper()
 	source := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "hello")
-	result, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{
+	result, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		SourceKind: &source, Content: &content,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}

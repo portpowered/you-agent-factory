@@ -4,82 +4,22 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
-// ListSummaries builds API session summaries from registered live sessions.
-func ListSummaries(registry *Registry) []factoryapi.FactorySessionSummary {
-	if registry == nil {
-		return nil
-	}
-	sessionIDs := registry.IDs()
-	summaries := make([]factoryapi.FactorySessionSummary, 0, len(sessionIDs))
-	for _, sessionID := range sessionIDs {
-		session := registry.Get(sessionID)
-		if session == nil {
-			continue
-		}
-		summaries = append(summaries, SummaryResponse(session))
-	}
-	SortSessionSummaries(summaries)
-	return summaries
-}
+// CurrentFactoryName is the domain identifier for the current Factory selector.
+const CurrentFactoryName = "UNDEFINED"
 
-// SortSessionSummaries orders session summaries with default sessions first, then by id.
-func SortSessionSummaries(summaries []factoryapi.FactorySessionSummary) {
-	sort.SliceStable(summaries, func(i, j int) bool {
-		if summaries[i].IsDefault != summaries[j].IsDefault {
-			return summaries[i].IsDefault
-		}
-		return summaries[i].Id < summaries[j].Id
-	})
-}
-
-// SummaryResponse maps a live session to the API summary shape.
-func SummaryResponse(session *LiveSession) factoryapi.FactorySessionSummary {
-	return factoryapi.FactorySessionSummary{
-		FactoryDir: session.FactoryDir,
-		FolderPath: session.FolderPath,
-		Id:         CanonicalFactorySessionID(session),
-		IsDefault:  session.IsDefault,
-		Project:    session.Project,
-		Target: factoryapi.FactorySessionTargetRef{
-			Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
-			Name: stringPointerOrNil(session.Target.Name),
-		},
-	}
-}
-
-// TargetResponse maps a discovered target to the API target shape.
-func TargetResponse(target Target) factoryapi.FactorySessionTarget {
-	return factoryapi.FactorySessionTarget{
-		FactoryDir: target.FactoryDir,
-		FolderPath: target.FolderPath,
-		Label:      target.Label,
-		Project:    target.Project,
-		Ref: factoryapi.FactorySessionTargetRef{
-			Kind: factoryapi.FactorySessionTargetRefKind(target.Ref.Kind),
-			Name: stringPointerOrNil(target.Ref.Name),
-		},
-	}
-}
-
-// TargetsResponse maps discovered targets to API targets.
-func TargetsResponse(targets []Target) []factoryapi.FactorySessionTarget {
-	if len(targets) == 0 {
-		return nil
-	}
-	response := make([]factoryapi.FactorySessionTarget, 0, len(targets))
-	for _, target := range targets {
-		response = append(response, TargetResponse(target))
-	}
-	return response
+// OpenRequest is the transport-independent request to discover, validate, or
+// open a Factory Session from a folder.
+type OpenRequest struct {
+	FolderPath     string
+	Target         *TargetRef
+	ValidateOnly   bool
+	InitNewFactory bool
 }
 
 // NewLiveSession constructs a registry entry for a started session.
@@ -129,32 +69,32 @@ func SessionFactoryRootDir(serviceRootDir string, session *LiveSession) string {
 	return rootDir
 }
 
-// FactoryName derives the API factory name for a session runtime config.
-func FactoryName(rootDir string, runtimeCfg *factoryconfig.LoadedFactoryConfig) factoryapi.FactoryName {
+// FactoryName derives the domain factory name for a session runtime config.
+func FactoryName(rootDir string, runtimeCfg *factoryconfig.LoadedFactoryConfig) string {
 	if runtimeCfg == nil {
-		return apisurface.DefaultCurrentFactoryName
+		return CurrentFactoryName
 	}
 	factoryDir := runtimeCfg.FactoryDir()
 	cleanRoot := filepath.Clean(rootDir)
 	if SameFactoryDir(factoryDir, cleanRoot) {
-		return apisurface.DefaultCurrentFactoryName
+		return CurrentFactoryName
 	}
 	if rootDir != "" && filepath.Dir(factoryDir) == cleanRoot {
 		name := filepath.Base(factoryDir)
 		if err := factoryconfig.ValidateNamedFactoryName(name); err == nil {
-			return factoryapi.FactoryName(name)
+			return name
 		}
 	}
 	cfg := runtimeCfg.FactoryConfig()
 	if cfg != nil {
 		if name := strings.TrimSpace(cfg.Name); name != "" {
-			return factoryapi.FactoryName(name)
+			return name
 		}
 		if project := strings.TrimSpace(cfg.Project); project != "" {
-			return factoryapi.FactoryName(project)
+			return project
 		}
 	}
-	return factoryapi.FactoryName("factory")
+	return "factory"
 }
 
 func stringPointerOrNil(value string) *string {

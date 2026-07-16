@@ -5,21 +5,21 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestDeriveFromWorkRequest_ThreeWorksTwoDependencies(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "graph-test",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "alpha", WorkTypeID: "task"},
 			{Name: "beta", WorkTypeID: "task"},
 			{Name: "gamma", WorkTypeID: "task"},
 		},
-		Relations: []interfaces.WorkRelation{
-			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "beta", TargetWorkName: "alpha"},
-			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "gamma", TargetWorkName: "beta"},
+		Relations: []work.WorkRelation{
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "beta", TargetWorkName: "alpha"},
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "gamma", TargetWorkName: "beta"},
 		},
 	}
 
@@ -44,10 +44,10 @@ func TestDeriveFromWorkRequest_ThreeWorksTwoDependencies(t *testing.T) {
 }
 
 func TestDeriveFromWorkRequest_StandaloneWorkPreserved(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "standalone-test",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "solo-a", WorkTypeID: "task"},
 			{Name: "solo-b", WorkTypeID: "task"},
 		},
@@ -73,17 +73,17 @@ func TestDeriveFromWorkRequest_StandaloneWorkPreserved(t *testing.T) {
 }
 
 func TestDeriveFromWorkRequest_DeterministicAcrossRuns(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "deterministic-test",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "z-last", WorkTypeID: "task"},
 			{Name: "a-first", WorkTypeID: "task"},
 			{Name: "m-middle", WorkTypeID: "task"},
 		},
-		Relations: []interfaces.WorkRelation{
-			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "m-middle", TargetWorkName: "a-first"},
-			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "z-last", TargetWorkName: "m-middle"},
+		Relations: []work.WorkRelation{
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "m-middle", TargetWorkName: "a-first"},
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "z-last", TargetWorkName: "m-middle"},
 		},
 	}
 
@@ -101,10 +101,10 @@ func TestDeriveFromWorkRequest_DeterministicAcrossRuns(t *testing.T) {
 }
 
 func TestDeriveFromWorkRequest_NodeLabelsPreferWorkNames(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "label-test",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "Customer Task", WorkTypeID: "task"},
 		},
 	}
@@ -122,11 +122,11 @@ func TestDeriveFromWorkRequest_NodeLabelsPreferWorkNames(t *testing.T) {
 }
 
 func TestNodeLabelFallbackUsesStableIndex(t *testing.T) {
-	work := interfaces.Work{WorkID: "batch-request-work-1"}
-	if got := nodeLabel(work, 0); got != "batch-request-work-1" {
+	item := work.Work{WorkID: "batch-request-work-1"}
+	if got := nodeLabel(item, 0); got != "batch-request-work-1" {
 		t.Fatalf("nodeLabel with workId = %q, want batch-request-work-1", got)
 	}
-	if got := nodeLabel(interfaces.Work{}, 2); got != "work-3" {
+	if got := nodeLabel(work.Work{}, 2); got != "work-3" {
 		t.Fatalf("nodeLabel without name/workId = %q, want work-3", got)
 	}
 }
@@ -134,24 +134,24 @@ func TestNodeLabelFallbackUsesStableIndex(t *testing.T) {
 func TestDeriveFromWorkRequest_MissingRequiredFields(t *testing.T) {
 	cases := []struct {
 		name string
-		req  interfaces.WorkRequest
+		req  work.WorkRequest
 		want string
 	}{
 		{
 			name: "missing requestId",
-			req: interfaces.WorkRequest{Type: interfaces.WorkRequestTypeFactoryRequestBatch,
-				Works: []interfaces.Work{{Name: "a", WorkTypeID: "task"}}},
+			req: work.WorkRequest{Type: work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.Work{{Name: "a", WorkTypeID: "task"}}},
 			want: "batch requestId is required",
 		},
 		{
 			name: "missing works",
-			req:  interfaces.WorkRequest{RequestID: "x", Type: interfaces.WorkRequestTypeFactoryRequestBatch},
+			req:  work.WorkRequest{RequestID: "x", Type: work.WorkRequestTypeFactoryRequestBatch},
 			want: "batch works must contain at least one item",
 		},
 		{
 			name: "missing work name",
-			req: interfaces.WorkRequest{RequestID: "x", Type: interfaces.WorkRequestTypeFactoryRequestBatch,
-				Works: []interfaces.Work{{WorkTypeID: "task"}}},
+			req: work.WorkRequest{RequestID: "x", Type: work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.Work{{WorkTypeID: "task"}}},
 			want: "works[0] is missing required name",
 		},
 	}
@@ -169,12 +169,12 @@ func TestDeriveFromWorkRequest_MissingRequiredFields(t *testing.T) {
 }
 
 func TestDeriveFromWorkRequest_UnknownDependencyReference(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "unknown-ref",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works:     []interfaces.Work{{Name: "alpha", WorkTypeID: "task"}},
-		Relations: []interfaces.WorkRelation{{
-			Type: interfaces.WorkRelationDependsOn, SourceWorkName: "alpha", TargetWorkName: "missing",
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works:     []work.Work{{Name: "alpha", WorkTypeID: "task"}},
+		Relations: []work.WorkRelation{{
+			Type: work.WorkRelationDependsOn, SourceWorkName: "alpha", TargetWorkName: "missing",
 		}},
 	}
 
@@ -188,15 +188,15 @@ func TestDeriveFromWorkRequest_UnknownDependencyReference(t *testing.T) {
 }
 
 func TestDeriveFromWorkRequest_ParentChildRelationIncluded(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "parent-child",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "child", WorkTypeID: "task"},
 			{Name: "parent", WorkTypeID: "task"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type: interfaces.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent",
+		Relations: []work.WorkRelation{{
+			Type: work.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent",
 		}},
 	}
 	graph, err := DeriveFromWorkRequest(req)
@@ -212,17 +212,17 @@ func TestDeriveFromWorkRequest_ParentChildRelationIncluded(t *testing.T) {
 }
 
 func TestDeriveFromWorkRequest_EdgesSortedDeterministically(t *testing.T) {
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "edge-order",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "a", WorkTypeID: "task"},
 			{Name: "b", WorkTypeID: "task"},
 			{Name: "c", WorkTypeID: "task"},
 		},
-		Relations: []interfaces.WorkRelation{
-			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "c", TargetWorkName: "b"},
-			{Type: interfaces.WorkRelationDependsOn, SourceWorkName: "b", TargetWorkName: "a"},
+		Relations: []work.WorkRelation{
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "c", TargetWorkName: "b"},
+			{Type: work.WorkRelationDependsOn, SourceWorkName: "b", TargetWorkName: "a"},
 		},
 	}
 

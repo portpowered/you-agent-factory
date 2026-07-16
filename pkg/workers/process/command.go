@@ -7,8 +7,10 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // CommandRunner executes a low-level subprocess request for worker code.
@@ -17,7 +19,7 @@ type CommandRunner interface {
 }
 
 // CommandRequest describes one worker-owned subprocess invocation.
-type CommandRequest = interfaces.SubprocessExecutionRequest
+type CommandRequest = workerexecution.SubprocessExecutionRequest
 
 // CommandResult captures the observable output and exit status from a command.
 type CommandResult struct {
@@ -131,8 +133,8 @@ func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (Command
 	return result, nil
 }
 
-func SubprocessRequestBase(dispatch interfaces.WorkDispatch) CommandRequest {
-	clonedDispatch := interfaces.CloneWorkDispatch(dispatch)
+func SubprocessRequestBase(dispatch work.WorkDispatch) CommandRequest {
+	clonedDispatch := work.CloneWorkDispatch(dispatch)
 	return CommandRequest{
 		DispatchID:               clonedDispatch.DispatchID,
 		TransitionID:             clonedDispatch.TransitionID,

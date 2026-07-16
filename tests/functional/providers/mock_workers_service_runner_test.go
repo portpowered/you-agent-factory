@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -72,8 +72,8 @@ func TestMockWorkers_ServiceCommandRunnerCompletesModelAndScriptWorkers(t *testi
 			if len(snapshot.DispatchHistory) != 1 {
 				t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
 			}
-			if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeAccepted {
-				t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeAccepted)
+			if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeAccepted {
+				t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeAccepted)
 			}
 
 			record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, runtimeID), workers.WorkLogEventCommandRunnerCompleted)

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,9 +21,9 @@ func TestConcurrencyLimit_BlocksExcessDispatches(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "item-3"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "item 1 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "item 2 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "item 3 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "item 1 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "item 2 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "item 3 done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -57,9 +57,9 @@ func TestConcurrencyLimit_ResourceTokensConsumedDuringProcessing(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "C"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "A done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "B done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "C done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "A done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "B done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "C done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -85,7 +85,7 @@ func TestConcurrencyLimit_ResourceReleasedOnFailure(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "X"}`))
 
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{{Content: ""}},
+		[]workerexecution.InferenceResponse{{Content: ""}},
 		[]error{errors.New("processor failed")},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -169,9 +169,9 @@ func TestConcurrencyLimit_ReducedCapacityStillCompletes(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Z"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "X done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Y done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Z done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "X done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Y done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Z done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),

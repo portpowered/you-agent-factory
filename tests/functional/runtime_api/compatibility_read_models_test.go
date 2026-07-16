@@ -3,7 +3,7 @@ package runtime_api_test
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type DashboardResponse struct {
@@ -30,20 +30,20 @@ type DashboardRuntime struct {
 }
 
 type InferenceAttempt struct {
-	Attempt            int                       `json:"attempt"`
-	DispatchId         string                    `json:"dispatch_id"`
-	DurationMillis     int64                     `json:"duration_millis,omitempty"`
-	FailureDetail      *interfaces.FailureDetail `json:"failureDetail,omitempty"`
-	ExitCode           *int                      `json:"exit_code,omitempty"`
-	InferenceRequestId string                    `json:"inference_request_id"`
-	Outcome            string                    `json:"outcome,omitempty"`
-	Prompt             string                    `json:"prompt"`
-	RequestTime        string                    `json:"request_time"`
-	Response           string                    `json:"response,omitempty"`
-	ResponseTime       string                    `json:"response_time,omitempty"`
-	TransitionId       string                    `json:"transition_id"`
-	WorkingDirectory   string                    `json:"working_directory,omitempty"`
-	Worktree           string                    `json:"worktree,omitempty"`
+	Attempt            int                            `json:"attempt"`
+	DispatchId         string                         `json:"dispatch_id"`
+	DurationMillis     int64                          `json:"duration_millis,omitempty"`
+	FailureDetail      *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
+	ExitCode           *int                           `json:"exit_code,omitempty"`
+	InferenceRequestId string                         `json:"inference_request_id"`
+	Outcome            string                         `json:"outcome,omitempty"`
+	Prompt             string                         `json:"prompt"`
+	RequestTime        string                         `json:"request_time"`
+	Response           string                         `json:"response,omitempty"`
+	ResponseTime       string                         `json:"response_time,omitempty"`
+	TransitionId       string                         `json:"transition_id"`
+	WorkingDirectory   string                         `json:"working_directory,omitempty"`
+	Worktree           string                         `json:"worktree,omitempty"`
 }
 
 type DashboardTopology struct {

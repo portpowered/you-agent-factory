@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"sort"
 
+	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 // ListModels returns configured model summaries with managed-runtime readiness projection.
-func (s *Service) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
+func (s *Service) ListModels(ctx context.Context) (modelcatalog.List, error) {
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
-		return factoryapi.ListModelsResponse{}, fmt.Errorf("factory service runtime is not available")
+		return modelcatalog.List{}, fmt.Errorf("factory service runtime is not available")
 	}
 	host := s.modelHost()
 	if host == nil {
@@ -23,12 +23,12 @@ func (s *Service) ListModels(ctx context.Context) (factoryapi.ListModelsResponse
 	}
 
 	catalog := localmodels.BuildCatalogWithOptions(runtimeCfg, catalogDiscoveryOptions())
-	results := make([]factoryapi.ModelSummary, 0, len(catalog))
+	results := make([]modelcatalog.Summary, 0, len(catalog))
 	for _, entry := range catalog {
 		summary := entry.Summary
-		snapshot, err := host.InspectReadiness(ctx, runtimeCfg, summary.Name)
+		snapshot, err := host.InspectReadiness(ctx, runtimeCfg, entry.Summary.Name)
 		if err != nil {
-			return factoryapi.ListModelsResponse{}, err
+			return modelcatalog.List{}, err
 		}
 		summary.ManagedRuntime = overlayCatalogManagedRuntime(summary.ManagedRuntime, snapshot)
 		results = append(results, summary)
@@ -36,14 +36,14 @@ func (s *Service) ListModels(ctx context.Context) (factoryapi.ListModelsResponse
 	sort.Slice(results, func(i, j int) bool {
 		return results[i].Name < results[j].Name
 	})
-	return factoryapi.ListModelsResponse{Results: results}, nil
+	return modelcatalog.List{Results: results}, nil
 }
 
 // GetModel returns inspect detail for one configured model with managed-runtime readiness projection.
-func (s *Service) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+func (s *Service) GetModel(ctx context.Context, modelName string) (modelcatalog.Detail, error) {
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
-		return factoryapi.ModelDetail{}, fmt.Errorf("factory service runtime is not available")
+		return modelcatalog.Detail{}, fmt.Errorf("factory service runtime is not available")
 	}
 	host := s.modelHost()
 	if host == nil {
@@ -53,19 +53,19 @@ func (s *Service) GetModel(ctx context.Context, modelName string) (factoryapi.Mo
 	catalog := localmodels.BuildCatalogWithOptions(runtimeCfg, catalogDiscoveryOptions())
 	key := localmodels.CanonicalModelName(modelName)
 	if key == "" {
-		return factoryapi.ModelDetail{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+		return modelcatalog.Detail{}, fmt.Errorf("%w: empty model name", managedruntime.ErrNotFound)
 	}
 	entry, ok := catalog[key]
 	if !ok {
-		return factoryapi.ModelDetail{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
+		return modelcatalog.Detail{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
 	}
 	snapshot, err := host.InspectReadiness(ctx, runtimeCfg, entry.Summary.Name)
 	if err != nil {
-		return factoryapi.ModelDetail{}, err
+		return modelcatalog.Detail{}, err
 	}
 	detail := entry.Detail
 	detail.ManagedRuntime = overlayCatalogManagedRuntime(detail.ManagedRuntime, snapshot)
-	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime)
+	detail.Diagnostics = mergeCatalogDiagnostics(detail.Diagnostics, detail.ManagedRuntime.Diagnostics)
 	return detail, nil
 }
 
@@ -76,12 +76,12 @@ func catalogDiscoveryOptions() localmodels.CatalogOptions {
 }
 
 func overlayCatalogManagedRuntime(
-	base factoryapi.ManagedRuntime,
+	base managedruntime.Runtime,
 	snapshot modelhost.ReadinessSnapshot,
-) factoryapi.ManagedRuntime {
+) managedruntime.Runtime {
 	projected := modelhost.ManagedRuntimeFromSnapshot(snapshot)
 	if len(base.SupportedOperations) > 0 {
-		projected.SupportedOperations = append([]factoryapi.ModelOperation(nil), base.SupportedOperations...)
+		projected.SupportedOperations = append([]managedruntime.Operation(nil), base.SupportedOperations...)
 	}
 	if projected.Locality == "" {
 		projected.Locality = base.Locality
@@ -89,15 +89,12 @@ func overlayCatalogManagedRuntime(
 	return projected
 }
 
-func mergeCatalogDiagnostics(base factoryapi.StringMap, managed factoryapi.ManagedRuntime) factoryapi.StringMap {
-	merged := factoryapi.StringMap{}
+func mergeCatalogDiagnostics(base, managed map[string]string) map[string]string {
+	merged := map[string]string{}
 	for key, value := range base {
 		merged[key] = value
 	}
-	if managed.Diagnostics == nil {
-		return merged
-	}
-	for key, value := range *managed.Diagnostics {
+	for key, value := range managed {
 		merged[key] = value
 	}
 	return merged

@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestNormalizeInvocationOutputMode(t *testing.T) {
@@ -228,9 +229,9 @@ func TestRun_FactoryInvocationResponseStreamFallsBackWhenStreamAttachmentUnavail
 				return apisurface.FactoryInvocationResult{
 					RequestID: "req-1",
 					TraceID:   "trace-1",
-					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+					Status:    interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 					},
 				}, nil
 			},
@@ -286,9 +287,9 @@ func TestRun_FactoryInvocationHumanResponseStreamRejectsLegacyStreamFallback(t *
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
 						TraceID:   "trace-1",
-						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						Status:    interfaces.InvocationTerminalStatusCompleted,
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -341,9 +342,9 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
 						TraceID:   "trace-1",
-						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						Status:    interfaces.InvocationTerminalStatusCompleted,
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -421,7 +422,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		result: apisurface.FactoryInvocationResult{
 			RequestID: "req-blocked",
 			TraceID:   "trace-blocked",
-			Status:    factoryapi.InvocationTerminalStatusFailed,
+			Status:    interfaces.InvocationTerminalStatusFailed,
 			ErrorCode: "INVOCATION_BLOCKED",
 			Message:   `goal invocation blocked while work "Review plan" is in state goal:blocked`,
 			SessionID: factorysessions.DefaultSessionID,
@@ -443,7 +444,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		result: apisurface.FactoryInvocationResult{
 			RequestID: "req-needs-human",
 			TraceID:   "trace-needs-human",
-			Status:    factoryapi.InvocationTerminalStatusFailed,
+			Status:    interfaces.InvocationTerminalStatusFailed,
 			ErrorCode: "INVOCATION_NEEDS_HUMAN",
 			Message:   `goal invocation needs human input while work "Review plan" is in state goal:needs-human`,
 			SessionID: factorysessions.DefaultSessionID,
@@ -465,7 +466,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		result: apisurface.FactoryInvocationResult{
 			RequestID: "req-failed",
 			TraceID:   "trace-failed",
-			Status:    factoryapi.InvocationTerminalStatusFailed,
+			Status:    interfaces.InvocationTerminalStatusFailed,
 			ErrorCode: "INVOCATION_RUNTIME_FAILURE",
 			Message:   "goal execution failed before primary result resolved",
 			SessionID: factorysessions.DefaultSessionID,
@@ -484,7 +485,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		result: apisurface.FactoryInvocationResult{
 			RequestID: "req-timed-out",
 			TraceID:   "trace-timed-out",
-			Status:    factoryapi.InvocationTerminalStatusTimedOut,
+			Status:    interfaces.InvocationTerminalStatusTimedOut,
 			ErrorCode: "INVOCATION_TIMED_OUT",
 			Message:   "invocation timed out while waiting for primary result",
 			SessionID: factorysessions.DefaultSessionID,
@@ -502,7 +503,7 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		result: apisurface.FactoryInvocationResult{
 			RequestID: "req-unresolved",
 			TraceID:   "trace-unresolved",
-			Status:    factoryapi.InvocationTerminalStatusFailed,
+			Status:    interfaces.InvocationTerminalStatusFailed,
 			ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
 			Message:   "primary result could not be resolved",
 			SessionID: factorysessions.DefaultSessionID,
@@ -602,9 +603,9 @@ func slowStdoutResponseEventInvoke(
 		return apisurface.FactoryInvocationResult{
 			RequestID: "req-1",
 			TraceID:   "trace-1",
-			Status:    factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: primaryText},
+			Status:    interfaces.InvocationTerminalStatusCompleted,
+			PrimaryResult: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: primaryText},
 			},
 		}, nil
 	}
@@ -746,9 +747,9 @@ func assertSlowStdoutJSONResponseStreamOutput(t *testing.T, output *gatedRespons
 	assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, apisurface.FactoryInvocationResult{
 		RequestID: "req-1",
 		TraceID:   "trace-1",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: text},
+		Status:    interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: text},
 		},
 	})
 }

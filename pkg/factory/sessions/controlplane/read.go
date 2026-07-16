@@ -3,11 +3,10 @@ package controlplane
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // LiveReadHost exposes live session registry and projection seams owned by the composition root.
@@ -24,12 +23,12 @@ func IsDurableExecutionSessionID(sessionID string) bool {
 }
 
 // ListLiveFactorySessions returns live workspace session summaries with runtime projection when available.
-func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) (factoryapi.ListFactorySessionsResponse, error) {
+func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) ([]factorysessions.ReadProjection, error) {
 	if host == nil {
-		return factoryapi.ListFactorySessionsResponse{}, nil
+		return nil, nil
 	}
 	sessionIDs := host.ListLiveSessionIDs()
-	summaries := make([]factoryapi.FactorySessionSummary, 0, len(sessionIDs))
+	reads := make([]factorysessions.ReadProjection, 0, len(sessionIDs))
 	for _, sessionID := range sessionIDs {
 		session := host.GetLiveSession(sessionID)
 		if session == nil {
@@ -37,13 +36,25 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) (factoryapi
 		}
 		projectionCtx, err := host.BuildSessionProjectionContext(ctx, session)
 		if err != nil {
-			summaries = append(summaries, factorysessions.SummaryResponse(session))
+			reads = append(reads, factorysessions.ReadProjection{
+				Context: factorysessions.ProjectionContext{Session: session},
+			})
 			continue
 		}
-		summaries = append(summaries, factorysessions.SummaryWithRuntime(projectionCtx))
+		reads = append(reads, factorysessions.ReadProjection{
+			Context:          projectionCtx,
+			RuntimeAvailable: true,
+		})
 	}
-	factorysessions.SortSessionSummaries(summaries)
-	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}, nil
+	sort.SliceStable(reads, func(i, j int) bool {
+		left := reads[i].Context.Session
+		right := reads[j].Context.Session
+		if left.IsDefault != right.IsDefault {
+			return left.IsDefault
+		}
+		return factorysessions.CanonicalFactorySessionID(left) < factorysessions.CanonicalFactorySessionID(right)
+	})
+	return reads, nil
 }
 
 // GetLiveFactorySession returns one live session detail after control-plane read routing.
@@ -51,20 +62,20 @@ func GetLiveFactorySession(
 	ctx context.Context,
 	host LiveReadHost,
 	sessionID string,
-) (factoryapi.FactorySession, error) {
+) (factorysessions.ProjectionContext, error) {
 	if IsDurableExecutionSessionID(sessionID) {
-		return factoryapi.FactorySession{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+		return factorysessions.ProjectionContext{}, fmt.Errorf("%w: %s", factorysessions.ErrNotFound, sessionID)
 	}
 	if host == nil {
-		return factoryapi.FactorySession{}, fmt.Errorf("factory session gateway is required")
+		return factorysessions.ProjectionContext{}, fmt.Errorf("factory session gateway is required")
 	}
 	session, err := host.RequireSession(sessionID)
 	if err != nil {
-		return factoryapi.FactorySession{}, err
+		return factorysessions.ProjectionContext{}, err
 	}
 	projectionCtx, err := host.BuildSessionProjectionContext(ctx, session)
 	if err != nil {
-		return factoryapi.FactorySession{}, err
+		return factorysessions.ProjectionContext{}, err
 	}
-	return factorysessions.SessionResponse(projectionCtx), nil
+	return projectionCtx, nil
 }

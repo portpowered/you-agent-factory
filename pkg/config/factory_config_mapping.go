@@ -15,8 +15,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // FactoryConfigMapper maps between on-disk factory configuration payloads and
@@ -766,7 +770,7 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 	return &result
 }
 
-func resourcesAPIFromInternal(resources []interfaces.ResourceConfig) *[]factoryapi.Resource {
+func resourcesAPIFromInternal(resources []factoryresource.Config) *[]factoryapi.Resource {
 	if len(resources) == 0 {
 		return nil
 	}
@@ -786,7 +790,7 @@ func resourcesAPIFromInternal(resources []interfaces.ResourceConfig) *[]factorya
 	return &result
 }
 
-func workersAPIFromInternal(workers []interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *[]factoryapi.Worker {
+func workersAPIFromInternal(workers []workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) *[]factoryapi.Worker {
 	if len(workers) == 0 {
 		return nil
 	}
@@ -797,7 +801,7 @@ func workersAPIFromInternal(workers []interfaces.WorkerConfig, workstations []in
 	return &result
 }
 
-func workerTypesByName(workers []interfaces.WorkerConfig) map[string]string {
+func workerTypesByName(workers []workerconfig.Config) map[string]string {
 	if len(workers) == 0 {
 		return nil
 	}
@@ -872,7 +876,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
 		WorkPropagation:       workPropagationAPIFromInternal(normalized.WorkPropagation),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
-		OutcomeFormat:         interfaces.GeneratedPublicFactoryWorkstationOutcomeFormatPtr(normalized.OutcomeFormat),
+		OutcomeFormat:         workstationOutcomeFormatPtrIfNotEmpty(normalized.OutcomeFormat),
 		Operation:             stringPtrIfNotEmpty(normalized.Operation),
 		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
@@ -1027,7 +1031,7 @@ func WorkstationConfigToOpenAPIWithWorkerType(workstation interfaces.FactoryWork
 	return workstationAPIFromInternal(workstation, workerType)
 }
 
-func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.Worker {
+func workerDefinitionAPIFromInternalWithUsage(def *workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.Worker {
 	if def == nil {
 		return nil
 	}
@@ -1055,7 +1059,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, work
 	}
 }
 
-func hostedWorkerAuthAPIFromInternal(auth *interfaces.HostedWorkerAuthConfig) *factoryapi.HostedWorkerAuth {
+func hostedWorkerAuthAPIFromInternal(auth *workerconfig.HostedWorkerAuthConfig) *factoryapi.HostedWorkerAuth {
 	if auth == nil {
 		return nil
 	}
@@ -1064,7 +1068,7 @@ func hostedWorkerAuthAPIFromInternal(auth *interfaces.HostedWorkerAuthConfig) *f
 	}
 }
 
-func hostedLinearWorkerAPIFromInternal(cfg *interfaces.HostedLinearWorkerConfig) *factoryapi.HostedLinearWorkerConfig {
+func hostedLinearWorkerAPIFromInternal(cfg *workerconfig.HostedLinearWorkerConfig) *factoryapi.HostedLinearWorkerConfig {
 	if cfg == nil {
 		return nil
 	}
@@ -1077,14 +1081,14 @@ func hostedLinearWorkerAPIFromInternal(cfg *interfaces.HostedLinearWorkerConfig)
 	}
 }
 
-func hostedLinearWorkerMappingAPIFromInternal(mapping interfaces.HostedLinearWorkerMappingConfig) *factoryapi.HostedLinearWorkerMapping {
+func hostedLinearWorkerMappingAPIFromInternal(mapping workerconfig.HostedLinearWorkerMappingConfig) *factoryapi.HostedLinearWorkerMapping {
 	return &factoryapi.HostedLinearWorkerMapping{
 		WorkType: stringPtrIfNotEmpty(mapping.WorkType),
 		State:    stringPtrIfNotEmpty(mapping.State),
 	}
 }
 
-func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorkerClaimConfig) *factoryapi.HostedLinearWorkerClaim {
+func hostedLinearWorkerClaimAPIFromInternal(claim *workerconfig.HostedLinearWorkerClaimConfig) *factoryapi.HostedLinearWorkerClaim {
 	if claim == nil {
 		return nil
 	}
@@ -1093,22 +1097,22 @@ func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorker
 	}
 }
 
-func agentWorkerToolsAPIFromInternal(cfg *interfaces.AgentWorkerToolsConfig) *factoryapi.AgentWorkerToolsConfig {
+func agentWorkerToolsAPIFromInternal(cfg *workerconfig.AgentToolsConfig) *factoryapi.AgentWorkerToolsConfig {
 	if cfg == nil {
 		return nil
 	}
-	policy := interfaces.NormalizeAgentWorkerToolPolicy(cfg.Policy)
-	if policy == interfaces.AgentWorkerToolPolicyDisabled {
+	policy := workerconfig.NormalizeAgentToolPolicy(cfg.Policy)
+	if policy == workerconfig.AgentToolPolicyDisabled {
 		return &factoryapi.AgentWorkerToolsConfig{
 			Policy: factoryapi.AgentWorkerToolPolicyDISABLED,
 		}
 	}
 	switch policy {
-	case interfaces.AgentWorkerToolPolicyReadOnly:
+	case workerconfig.AgentToolPolicyReadOnly:
 		return &factoryapi.AgentWorkerToolsConfig{
 			Policy: factoryapi.AgentWorkerToolPolicyREADONLY,
 		}
-	case interfaces.AgentWorkerToolPolicyEnabled:
+	case workerconfig.AgentToolPolicyEnabled:
 		return &factoryapi.AgentWorkerToolsConfig{
 			Policy: factoryapi.AgentWorkerToolPolicyENABLED,
 		}
@@ -1121,18 +1125,18 @@ func agentWorkerToolsAPIFromInternal(cfg *interfaces.AgentWorkerToolsConfig) *fa
 
 // WorkerConfigToOpenAPI converts an internal worker config into the generated
 // OpenAPI worker model.
-func WorkerConfigToOpenAPI(worker interfaces.WorkerConfig) factoryapi.Worker {
+func WorkerConfigToOpenAPI(worker workerconfig.Config) factoryapi.Worker {
 	return WorkerConfigToOpenAPIWithFactoryUsage(worker, nil)
 }
 
 // WorkerConfigToOpenAPIWithFactoryUsage converts an internal worker config into
 // the generated OpenAPI worker model using workstation references for
 // behavior-aware worker taxonomy projection.
-func WorkerConfigToOpenAPIWithFactoryUsage(worker interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) factoryapi.Worker {
+func WorkerConfigToOpenAPIWithFactoryUsage(worker workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) factoryapi.Worker {
 	return *workerDefinitionAPIFromInternalWithUsage(&worker, workstations)
 }
 
-func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]factoryapi.ModelOperation {
+func modelOperationsAPIFromInternal(operations []workerconfig.ModelOperation) *[]factoryapi.ModelOperation {
 	if len(operations) == 0 {
 		return nil
 	}
@@ -1147,7 +1151,7 @@ func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]f
 	return &values
 }
 
-func modelOperationSlotsAPIFromInternal(slots []interfaces.ModelOperationSlot) *[]factoryapi.ModelOperationSlot {
+func modelOperationSlotsAPIFromInternal(slots []workerconfig.ModelOperationSlot) *[]factoryapi.ModelOperationSlot {
 	if len(slots) == 0 {
 		return nil
 	}
@@ -1276,7 +1280,7 @@ func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.Inp
 	return apiGuard
 }
 
-func resourceRequirementsAPIFromInternal(resources []interfaces.ResourceConfig) *[]factoryapi.ResourceRequirement {
+func resourceRequirementsAPIFromInternal(resources []factoryresource.Config) *[]factoryapi.ResourceRequirement {
 	if len(resources) == 0 {
 		return nil
 	}
@@ -1339,13 +1343,26 @@ func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *
 	}
 }
 
-func workerTypePtrForFactoryUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.WorkerType {
+func workerTypePtrForFactoryUsage(def *workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.WorkerType {
 	if def == nil || strings.TrimSpace(def.Type) == "" {
 		return nil
 	}
-	publicType := interfaces.PublicWorkerTypeForFactoryUsage(*def, workstations)
+	publicType := workercompatibility.PublicWorkerTypeForFactoryUsage(*def, compatibilityWorkstations(workstations))
 	enumValue := factoryapi.WorkerType(publicType)
 	return &enumValue
+}
+
+func compatibilityWorkstations(values []interfaces.FactoryWorkstationConfig) []workercompatibility.Workstation {
+	if len(values) == 0 {
+		return nil
+	}
+	workstations := make([]workercompatibility.Workstation, len(values))
+	for i, value := range values {
+		workstations[i] = workercompatibility.Workstation{
+			Name: value.Name, Type: value.Type, Kind: workertaxonomy.WorkstationKind(value.Kind), WorkerTypeName: value.WorkerTypeName,
+		}
+	}
+	return workstations
 }
 
 func workerModelProviderPtrIfNotEmpty(value string) *factoryapi.WorkerModelProvider {
@@ -1373,7 +1390,19 @@ func workerProviderPtrIfNotEmpty(value string) *factoryapi.WorkerProvider {
 }
 
 func hostedWorkerProviderPtrIfNotEmpty(value string) *factoryapi.HostedWorkerProvider {
-	return interfaces.GeneratedPublicFactoryHostedWorkerProviderPtr(value)
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.HostedWorkerProvider(interfaces.PermissivePublicFactoryHostedWorkerProvider(value))
+	return &converted
+}
+
+func workstationOutcomeFormatPtrIfNotEmpty(value string) *factoryapi.WorkstationOutcomeFormat {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	converted := factoryapi.WorkstationOutcomeFormat(interfaces.PermissivePublicFactoryWorkstationOutcomeFormat(value))
+	return &converted
 }
 
 func workstationTypePtrIfNotEmpty(workstation interfaces.FactoryWorkstationConfig, workerType string) *factoryapi.WorkstationType {

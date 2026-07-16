@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 const javascriptRuntimeCallBehaviorBaselineFixture = "pkg/orchestrators/javascript/runtime/javascript-runtime-call-behavior.json"

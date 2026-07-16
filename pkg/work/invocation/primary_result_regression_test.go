@@ -6,7 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -51,7 +52,7 @@ func resolvePrimaryResultRegressionFixture(name string) (invocations.PrimaryResu
 		rootInitial := primaryResultWorkItem("work-root", "task", "draft", "root", "task:init")
 		rootTerminal := primaryResultWorkItem("work-root", "task", "complete", "root", "task:complete")
 		recordPrimaryResultSubmittedWork(&state, 1, "request-1", rootInitial)
-		recordPrimaryResultDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal)
+		recordPrimaryResultDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal)
 		state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 		return invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
 			RequestID:  "request-1",
@@ -64,7 +65,7 @@ func resolvePrimaryResultRegressionFixture(name string) (invocations.PrimaryResu
 		rootTerminal := primaryResultWorkItem("work-root", "task", "complete", "root", "task:complete")
 		summaryTerminal := primaryResultWorkItem("work-summary", "summary", "complete", "summary", "summary:complete")
 		recordPrimaryResultSubmittedWork(&state, 1, "request-1", rootInitial)
-		recordPrimaryResultDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal, summaryTerminal)
+		recordPrimaryResultDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal, summaryTerminal)
 		state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 		state.TerminalWorkByID[summaryTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: summaryTerminal, Status: "TERMINAL"}
 		return invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
@@ -80,12 +81,12 @@ func resolvePrimaryResultRegressionFixture(name string) (invocations.PrimaryResu
 
 	case "accepted_response_not_submitted_input":
 		state := primaryResultWorldStateFixture()
-		requestContent := []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		requestContent := []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "submitted request text",
 		}}
-		responseContent := []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		responseContent := []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "accepted workstation response",
 		}}
 		rootInitial := primaryResultWorkItem("work-root", "task", "draft", "root", "task:init")
@@ -93,7 +94,7 @@ func resolvePrimaryResultRegressionFixture(name string) (invocations.PrimaryResu
 		rootTerminal := primaryResultWorkItem("work-root", "task", "complete", "root", "task:complete")
 		rootTerminal.Content = responseContent
 		recordPrimaryResultSubmittedWork(&state, 1, "request-1", rootInitial)
-		recordPrimaryResultDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal)
+		recordPrimaryResultDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal)
 		state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 		return invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
 			RequestID:  "request-1",
@@ -118,23 +119,23 @@ func readPrimaryResultRegressionFixtureBytes(t *testing.T, name string) []byte {
 
 func primaryResultWorldStateFixture() interfaces.FactoryWorldState {
 	return interfaces.FactoryWorldState{
-		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},
+		PayloadLineage:   work.WorkPayloadLineageProjection{},
 		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
 		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
-		WorkItemsByID:    make(map[string]interfaces.FactoryWorkItem),
+		WorkItemsByID:    make(map[string]work.FactoryWorkItem),
 	}
 }
 
-func primaryResultWorkItem(workID, workTypeName, stateName, name, placeID string) interfaces.FactoryWorkItem {
-	return interfaces.FactoryWorkItem{
+func primaryResultWorkItem(workID, workTypeName, stateName, name, placeID string) work.FactoryWorkItem {
+	return work.FactoryWorkItem{
 		ID:          workID,
 		WorkTypeID:  workTypeName,
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
 		PlaceID:     placeID,
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: workID + "-content",
 		}},
 	}
@@ -144,15 +145,15 @@ func recordPrimaryResultSubmittedWork(
 	state *interfaces.FactoryWorldState,
 	tick int,
 	requestID string,
-	items ...interfaces.FactoryWorkItem,
+	items ...work.FactoryWorkItem,
 ) {
 	if state == nil {
 		return
 	}
 	request := interfaces.WorkRequestPayload{
 		RequestID: requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		WorkItems: append([]interfaces.FactoryWorkItem(nil), items...),
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: append([]work.FactoryWorkItem(nil), items...),
 	}
 	state.WorkRequestsByID[requestID] = request
 	for _, item := range items {
@@ -164,8 +165,8 @@ func recordPrimaryResultDispatchOutput(
 	state *interfaces.FactoryWorldState,
 	tick int,
 	dispatchID string,
-	consumed []interfaces.FactoryWorkItem,
-	outputs ...interfaces.FactoryWorkItem,
+	consumed []work.FactoryWorkItem,
+	outputs ...work.FactoryWorkItem,
 ) {
 	if state == nil {
 		return

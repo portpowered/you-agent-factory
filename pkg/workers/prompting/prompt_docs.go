@@ -8,8 +8,10 @@ import (
 	"sort"
 	"strings"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const factoryDocsTargetPrefix = "factory/docs/"
@@ -140,13 +142,13 @@ func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
 				"branch": "main",
 			},
 			Payload: "payload",
-			Relations: []interfaces.Relation{{
-				Type:          interfaces.RelationDependsOn,
+			Relations: []work.Relation{{
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  "target-work",
 				RequiredState: "SUCCEEDED",
 			}},
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "content",
 			}},
 			PreviousOutput:    "previous-output",
@@ -154,7 +156,7 @@ func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
 			History: PromptHistory{
 				LastError:    "last-error",
 				FailureCount: 1,
-				FailureLog: []interfaces.FailureRecord{{
+				FailureLog: []factorytoken.Failure{{
 					TransitionID: "transition",
 					Error:        "failure",
 					Attempt:      1,

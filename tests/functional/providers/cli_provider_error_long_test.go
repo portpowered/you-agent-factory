@@ -7,18 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type providerLongCase struct {
 	name              string
 	corpusEntry       string
-	provider          interfaces.ModelProvider
+	provider          modelprovider.ID
 	model             string
 	wantCalls         int
 	wantPlace         string
@@ -40,18 +42,18 @@ func TestProviderErrorLong_ScriptWrapScenariosStayNormalizedAcrossProviders(t *t
 
 func providerErrorLongCases() []providerLongCase {
 	return []providerLongCase{
-		{name: "Claude_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "claude_rate_limit_error", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
-		{name: "Claude_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "claude_internal_server_api_error", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Claude_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "claude_timeout_waiting_for_provider", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Claude_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "claude_invalid_request_error", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Claude_Unknown_FailsWithoutRetry", provider: interfaces.ModelProviderClaude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Codex_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "codex_status_429_too_many_requests", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
-		{name: "Codex_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "codex_internal_server_status_500", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Codex_HighDemandTemporaryServerError_RequeuesWithoutThrottlePause", corpusEntry: "codex_high_demand_temporary_errors", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Codex_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "codex_timeout_waiting_for_provider", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
-		{name: "Codex_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "codex_invalid_request_error", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Codex_AuthFailure_FailsWithoutRetry", corpusEntry: "codex_authentication_unauthorized", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
-		{name: "Codex_Unknown_FailsWithoutRetry", provider: interfaces.ModelProviderCodex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Claude_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "claude_rate_limit_error", provider: modelprovider.Claude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
+		{name: "Claude_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "claude_internal_server_api_error", provider: modelprovider.Claude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Claude_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "claude_timeout_waiting_for_provider", provider: modelprovider.Claude, model: "claude-sonnet-4-5-20250514", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Claude_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "claude_invalid_request_error", provider: modelprovider.Claude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Claude_Unknown_FailsWithoutRetry", provider: modelprovider.Claude, model: "claude-sonnet-4-5-20250514", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Codex_Throttled_RequeuesAfterBoundedRetries", corpusEntry: "codex_status_429_too_many_requests", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init", wantThrottlePause: true},
+		{name: "Codex_TransientServerError_RequeuesAfterBoundedRetries", corpusEntry: "codex_internal_server_status_500", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Codex_HighDemandTemporaryServerError_RequeuesWithoutThrottlePause", corpusEntry: "codex_high_demand_temporary_errors", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Codex_Timeout_RequeuesAfterBoundedRetries", corpusEntry: "codex_timeout_waiting_for_provider", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 3, wantPlace: "task:init"},
+		{name: "Codex_PermanentBadRequest_FailsWithoutRetry", corpusEntry: "codex_invalid_request_error", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Codex_AuthFailure_FailsWithoutRetry", corpusEntry: "codex_authentication_unauthorized", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
+		{name: "Codex_Unknown_FailsWithoutRetry", provider: modelprovider.Codex, model: "gpt-5-codex", wantCalls: 1, wantPlace: "task:failed"},
 	}
 }
 
@@ -59,8 +61,8 @@ func providerErrorLongCases() []providerLongCase {
 func runProviderErrorLongCase(t *testing.T, tc providerLongCase) {
 	t.Helper()
 
-	expectedType := interfaces.WorkFailureTypeUnknown
-	expectedFamily := interfaces.WorkFailureFamilyTerminal
+	expectedType := workerexecution.WorkFailureTypeUnknown
+	expectedFamily := workerexecution.WorkFailureFamilyTerminal
 	if tc.corpusEntry != "" {
 		entry := providerErrorCorpusEntryForTest(t, tc.corpusEntry)
 		expectedType = entry.ExpectedType
@@ -146,8 +148,8 @@ func assertProviderOutcome(
 	outcome testutil.ProviderErrorSmokeOutcome,
 	work testutil.ProviderErrorSmokeWork,
 	tc providerLongCase,
-	wantType interfaces.WorkFailureType,
-	wantFamily interfaces.WorkFailureFamily,
+	wantType workerexecution.WorkFailureType,
+	wantFamily workerexecution.WorkFailureFamily,
 ) {
 	t.Helper()
 
@@ -173,8 +175,8 @@ func assertProviderRequeueOutcome(
 	outcome testutil.ProviderErrorSmokeOutcome,
 	work testutil.ProviderErrorSmokeWork,
 	tc providerLongCase,
-	wantType interfaces.WorkFailureType,
-	wantFamily interfaces.WorkFailureFamily,
+	wantType workerexecution.WorkFailureType,
+	wantFamily workerexecution.WorkFailureFamily,
 ) {
 	t.Helper()
 
@@ -197,8 +199,8 @@ func assertProviderRequeueOutcome(
 		t.Fatalf("DispatchHistory length = %d, want 1", len(outcome.Dispatches))
 	}
 	dispatch := outcome.Dispatches[0]
-	if dispatch.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("DispatchHistory outcome = %s, want %s", dispatch.Outcome, interfaces.OutcomeFailed)
+	if dispatch.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("DispatchHistory outcome = %s, want %s", dispatch.Outcome, workerexecution.OutcomeFailed)
 	}
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
 	assertDispatchFailureMetadataMatchesExpected(t, dispatch, wantType, wantFamily)
@@ -214,8 +216,8 @@ func assertProviderRequeueOutcome(
 func assertDispatchFailureMetadataMatchesExpected(
 	t *testing.T,
 	dispatch interfaces.CompletedDispatch,
-	wantType interfaces.WorkFailureType,
-	wantFamily interfaces.WorkFailureFamily,
+	wantType workerexecution.WorkFailureType,
+	wantFamily workerexecution.WorkFailureFamily,
 ) {
 	t.Helper()
 
@@ -233,7 +235,7 @@ func assertDispatchFailureMetadataMatchesExpected(
 func assertActiveThrottlePause(
 	t *testing.T,
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	provider interfaces.ModelProvider,
+	provider modelprovider.ID,
 	model string,
 ) {
 	t.Helper()

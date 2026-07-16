@@ -5,9 +5,7 @@ import (
 	"errors"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -115,7 +113,7 @@ func (o *SessionOwner) resolveStoppedInvocation(
 		if failure := o.deps.SpecialCase.TerminalFailure(selectionInput.WorldState, input.RequestID); failure != nil {
 			result := FactoryInvocationResult{
 				RequestID: input.RequestID, TraceID: input.TraceID,
-				Status:    factoryapi.InvocationTerminalStatusFailed,
+				Status:    interfaces.InvocationTerminalStatusFailed,
 				ErrorCode: failure.ErrorCode, Message: failure.Message,
 			}
 			// Packaged terminal failures retain the general failure metric, but
@@ -148,7 +146,7 @@ func (o *SessionOwner) completedResult(
 ) FactoryInvocationResult {
 	result := FactoryInvocationResult{
 		RequestID: input.RequestID, TraceID: input.TraceID,
-		Status: factoryapi.InvocationTerminalStatusCompleted, PrimaryResult: selection.PrimaryResult,
+		Status: interfaces.InvocationTerminalStatusCompleted, PrimaryResult: selection.PrimaryResult,
 	}
 	if o.deps.Telemetry != nil {
 		o.deps.Telemetry.InvocationCompleted(input.FactoryConfig, input.InputSource, selection.PrimaryResult)
@@ -164,7 +162,7 @@ func (o *SessionOwner) failedResult(
 ) FactoryInvocationResult {
 	result := FactoryInvocationResult{
 		RequestID: input.RequestID, TraceID: input.TraceID,
-		Status:    factoryapi.InvocationTerminalStatusFailed,
+		Status:    interfaces.InvocationTerminalStatusFailed,
 		ErrorCode: string(primaryErr.Code), Message: primaryErr.Message,
 		SessionID: primaryErr.Context.SessionID, WorkID: primaryErr.Context.WorkID,
 		WorkName: primaryErr.Context.WorkName, WorkState: primaryErr.Context.WorkState,
@@ -184,16 +182,16 @@ func (o *SessionOwner) waitErrorResult(
 	result := FactoryInvocationResult{RequestID: input.RequestID, TraceID: input.TraceID}
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		result.Status = factoryapi.InvocationTerminalStatusTimedOut
-		result.ErrorCode = string(factoryapi.INVOCATIONTIMEDOUT)
+		result.Status = interfaces.InvocationTerminalStatusTimedOut
+		result.ErrorCode = string(interfaces.InvocationErrorCodeTimedOut)
 		result.Message = "invocation timed out while waiting for primary result"
 	case errors.Is(err, context.Canceled):
-		result.Status = factoryapi.InvocationTerminalStatusCanceled
-		result.ErrorCode = string(factoryapi.INVOCATIONCANCELED)
+		result.Status = interfaces.InvocationTerminalStatusCanceled
+		result.ErrorCode = string(interfaces.InvocationErrorCodeCanceled)
 		result.Message = "invocation was canceled while waiting for primary result"
 	}
 	failureClass := "timeout"
-	if result.Status == factoryapi.InvocationTerminalStatusCanceled {
+	if result.Status == interfaces.InvocationTerminalStatusCanceled {
 		failureClass = "cancellation"
 	}
 	o.recordFailure(sessionID, input, result, failureClass)

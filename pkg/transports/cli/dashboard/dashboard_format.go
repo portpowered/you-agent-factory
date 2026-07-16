@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func formatDurationShort(d time.Duration) string {
@@ -53,14 +55,14 @@ func formatDashboardWorkTypeCounts(counts map[string]int) string {
 }
 
 func displayCompletedDispatchStatus(outcome string) string {
-	switch interfaces.WorkOutcome(outcome) {
-	case interfaces.OutcomeAccepted:
+	switch workerexecution.WorkOutcome(outcome) {
+	case workerexecution.OutcomeAccepted:
 		return "Success"
-	case interfaces.OutcomeContinue:
+	case workerexecution.OutcomeContinue:
 		return "Continue"
-	case interfaces.OutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		return "Rejected"
-	case interfaces.OutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		return "Failed"
 	default:
 		return "Unknown"
@@ -160,7 +162,7 @@ func worldWorkItemLabels(workItems []interfaces.FactoryWorldWorkItemRef) []strin
 	return labels
 }
 
-func worldWorkItemLabelsFromItems(workItems []interfaces.FactoryWorkItem) []string {
+func worldWorkItemLabelsFromItems(workItems []work.FactoryWorkItem) []string {
 	labels := make([]string, 0, len(workItems))
 	for _, workItem := range workItems {
 		labels = appendUniqueLabel(labels, worldWorkItemLabel(workRefForDashboardItem(workItem)))
@@ -271,7 +273,7 @@ func worldDispatchReason(dispatch interfaces.FactoryWorldDispatchCompletion) str
 	return strings.TrimSpace(dispatch.Result.Feedback)
 }
 
-func dashboardFailureDetail(detail *interfaces.FailureDetail) string {
+func dashboardFailureDetail(detail *workerexecution.FailureDetail) string {
 	if detail == nil {
 		return ""
 	}
@@ -293,7 +295,7 @@ func dashboardFailureReason(reason, message string) string {
 	}
 }
 
-func formatProviderSession(session *interfaces.ProviderSessionMetadata) string {
+func formatProviderSession(session *workerexecution.ProviderSessionMetadata) string {
 	if session == nil || session.ID == "" {
 		return "n/a"
 	}
@@ -311,7 +313,7 @@ func formatProviderSession(session *interfaces.ProviderSessionMetadata) string {
 	return strings.Join(parts, " / ") + " / " + session.ID
 }
 
-func workRefForDashboardItem(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
+func workRefForDashboardItem(item work.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
 	return interfaces.FactoryWorldWorkItemRef{
 		WorkID:      item.ID,
 		WorkTypeID:  item.WorkTypeID,

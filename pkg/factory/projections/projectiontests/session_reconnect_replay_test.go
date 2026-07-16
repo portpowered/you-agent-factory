@@ -4,16 +4,17 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestReconnectReplay_ReconstructsSessionLifecyclePhaseDispatchAndResultWithoutTerminalCompletion(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 15, 30, 0, 0, time.UTC)
 	events := reconnectSessionLifecycleEvents(t0)
-	replay, err := factoryevents.BuildReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
+	canonical := canonicalReconnectProjectionEvents(t, events)
+	replay, err := factoryevents.BuildCanonicalReconnectReplay(canonical, interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "orchestrator-phase-changed/execute",
 	}, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
 	if err != nil {
@@ -24,8 +25,8 @@ func TestReconnectReplay_ReconstructsSessionLifecyclePhaseDispatchAndResultWitho
 	}
 
 	ackIndex := 1
-	merged := append(append([]factoryapi.FactoryEvent{}, events[:ackIndex+1]...), replay...)
-	worldState, err := ReconstructFactoryWorldState(merged, 4)
+	merged := append(append([]interfaces.FactoryEvent{}, canonical[:ackIndex+1]...), replay...)
+	worldState, err := ReconstructCanonicalFactoryWorldState(merged, 4)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -46,6 +47,19 @@ func TestReconnectReplay_ReconstructsSessionLifecyclePhaseDispatchAndResultWitho
 	if view.Runtime.JavaScript == nil || view.Runtime.JavaScript.Phase != "execute" {
 		t.Fatalf("javascript projection = %#v, want execute phase after merging ack state with reconnect replay", view.Runtime.JavaScript)
 	}
+}
+
+func canonicalReconnectProjectionEvents(t *testing.T, events []factoryapi.FactoryEvent) []interfaces.FactoryEvent {
+	t.Helper()
+	canonical := make([]interfaces.FactoryEvent, len(events))
+	for index, event := range events {
+		converted, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("canonical reconnect event %d: %v", index, err)
+		}
+		canonical[index] = converted
+	}
+	return canonical
 }
 
 func reconnectSessionLifecycleEvents(t0 time.Time) []factoryapi.FactoryEvent {

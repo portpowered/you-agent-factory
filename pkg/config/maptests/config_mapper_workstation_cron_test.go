@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestConfigMapping_CronWithoutRequiredInputsUsesOutputWorkTypeForImplicitFailureRouting(t *testing.T) {
@@ -21,7 +23,7 @@ func TestConfigMapping_CronWithoutRequiredInputsUsesOutputWorkTypeForImplicitFai
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "cron-worker",
 			Type: interfaces.WorkerTypeModel,
 		}},
@@ -128,7 +130,7 @@ func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workers: []workerconfig.Config{{Name: "cron-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name:           "daily-refresh",
@@ -269,13 +271,13 @@ func TestConfigMapping_CronTimeEnablementUsesSharedTimePlace(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		tokens   []*interfaces.Token
+		tokens   []*factorytoken.Token
 		want     bool
 		wantBind []string
 	}{
 		{
 			name: "ready input and due time token enables cron",
-			tokens: []*interfaces.Token{
+			tokens: []*factorytoken.Token{
 				configMapperWorkToken("task-ready", "task", "ready"),
 				configMapperCronTimeToken("time-due", "daily-refresh", now.Add(-time.Second), now.Add(time.Minute)),
 			},
@@ -284,14 +286,14 @@ func TestConfigMapping_CronTimeEnablementUsesSharedTimePlace(t *testing.T) {
 		},
 		{
 			name: "missing configured input disables cron",
-			tokens: []*interfaces.Token{
+			tokens: []*factorytoken.Token{
 				configMapperCronTimeToken("time-due", "daily-refresh", now.Add(-time.Second), now.Add(time.Minute)),
 			},
 			want: false,
 		},
 		{
 			name: "not-yet-due time token disables cron",
-			tokens: []*interfaces.Token{
+			tokens: []*factorytoken.Token{
 				configMapperWorkToken("task-ready", "task", "ready"),
 				configMapperCronTimeToken("time-early", "daily-refresh", now.Add(time.Second), now.Add(time.Minute)),
 			},
@@ -299,7 +301,7 @@ func TestConfigMapping_CronTimeEnablementUsesSharedTimePlace(t *testing.T) {
 		},
 		{
 			name: "expired time token disables cron",
-			tokens: []*interfaces.Token{
+			tokens: []*factorytoken.Token{
 				configMapperWorkToken("task-ready", "task", "ready"),
 				configMapperCronTimeToken("time-expired", "daily-refresh", now.Add(-time.Minute), now),
 			},
@@ -307,7 +309,7 @@ func TestConfigMapping_CronTimeEnablementUsesSharedTimePlace(t *testing.T) {
 		},
 		{
 			name: "wrong workstation time token disables cron",
-			tokens: []*interfaces.Token{
+			tokens: []*factorytoken.Token{
 				configMapperWorkToken("task-ready", "task", "ready"),
 				configMapperCronTimeToken("time-wrong", "other-refresh", now.Add(-time.Second), now.Add(time.Minute)),
 			},

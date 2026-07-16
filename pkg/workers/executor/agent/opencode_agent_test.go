@@ -4,41 +4,47 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	executorpkg "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "ok"}}
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "ok"}}
 	executor := executorpkg.NewAgentExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"implement": {
 				Name:          "implement",
-				Runner:        interfaces.RunnerIDOpenCode,
+				Runner:        workerexecution.RunnerIDOpenCode,
 				OpenCodeAgent: "implementer",
 			},
 		},
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {
 				Model:         "opencode-model",
-				ModelProvider: string(interfaces.ModelProviderClaude),
+				ModelProvider: string(modelprovider.Claude),
 				OpenCodeAgent: "reviewer",
 			},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
 			WorkstationName: "implement",
 		},
 		withAgentPrompts("system", "user"),
-		func(req *interfaces.WorkstationExecutionRequest) {
-			req.RunnerID = interfaces.RunnerIDOpenCode
-			req.RunnerSelectionSource = interfaces.RunnerSelectionSourceWorkstation
+		func(req *workerexecution.WorkstationExecutionRequest) {
+			req.RunnerID = workerexecution.RunnerIDOpenCode
+			req.RunnerSelectionSource = workerexecution.RunnerSelectionSourceWorkstation
 		},
 	))
 	if err != nil {
@@ -56,7 +62,7 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 }
 
 func TestAgentExecutor_LeavesOpenCodeAgentEmptyForNonOpenCodeDispatch(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "ok"}}
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "ok"}}
 	executor := executorpkg.NewAgentExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"review": {
@@ -64,17 +70,17 @@ func TestAgentExecutor_LeavesOpenCodeAgentEmptyForNonOpenCodeDispatch(t *testing
 				OpenCodeAgent: "implementer",
 			},
 		},
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {
 				Model:         "gpt-5",
-				ModelProvider: string(interfaces.ModelProviderCodex),
+				ModelProvider: string(modelprovider.Codex),
 				OpenCodeAgent: "reviewer",
 			},
 		},
 	}, provider)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-codex",
 			TransitionID:    "t-codex",
 			WorkerType:      "worker-a",

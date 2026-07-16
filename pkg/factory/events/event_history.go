@@ -9,11 +9,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	eventsnapshot "github.com/portpowered/infinite-you/pkg/factory/events/snapshot"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 // TODO: we should move these constants to the interfaces package, actually we should move the events generally to the openapi.yaml to allow generation of the various types of events payloads.
@@ -38,8 +42,8 @@ const (
 )
 
 type eventHistorySubscription struct {
-	events chan factoryapi.FactoryEvent
-	inbox  chan factoryapi.FactoryEvent
+	events chan interfaces.FactoryEvent
+	inbox  chan interfaces.FactoryEvent
 	done   <-chan struct{}
 }
 
@@ -50,11 +54,12 @@ type FactoryEventHistory struct {
 	net                 *state.Net
 	runtimeConfig       interfaces.RuntimeDefinitionLookup
 	factoryRunner       string
-	initialFactory      *factoryapi.Factory
+	initialFactory      *interfaces.FactorySnapshot
 	now                 func() time.Time
 	streamGenerationID  string
-	events              []factoryapi.FactoryEvent
-	recorders           []func(factoryapi.FactoryEvent)
+	events              []interfaces.FactoryEvent
+	recorders           []func(interfaces.FactoryEvent)
+	eventTypeRecorders  []func(interfaces.FactoryEventType)
 	nextID              int
 	streams             map[int]*eventHistorySubscription
 	runRecordedAt       time.Time
@@ -100,32 +105,30 @@ func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.factoryRunner = interfaces.NormalizeRunnerID(runnerID)
+	h.factoryRunner = workerrunner.NormalizeRunnerID(runnerID)
 }
 
-// SetInitialStructureFactory overrides the public factory snapshot emitted by
-// INITIAL_STRUCTURE. Runtime callers can keep execution configs thin while
+// SetInitialStructureFactory overrides the canonical Factory snapshot emitted
+// by INITIAL_STRUCTURE. Runtime callers can keep execution configs thin while
 // service callers expose an editable event-sourced document.
-func (h *FactoryEventHistory) SetInitialStructureFactory(factory factoryapi.Factory) {
+func (h *FactoryEventHistory) SetInitialStructureFactory(factory *interfaces.FactorySnapshot) {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.initialFactory = &factory
+	h.initialFactory = factory.Clone()
 }
 
-// Events returns the recorded events in append order.
-func (h *FactoryEventHistory) Events() []factoryapi.FactoryEvent {
+// CanonicalEvents returns detached Factory-owned events in append order.
+func (h *FactoryEventHistory) CanonicalEvents() []interfaces.FactoryEvent {
 	if h == nil {
 		return nil
 	}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	events := make([]factoryapi.FactoryEvent, len(h.events))
-	copy(events, h.events)
-	return events
+	return cloneFactoryEvents(h.events)
 }
 
 // Subscribe returns a replay snapshot followed by live canonical events.
@@ -135,17 +138,16 @@ func (h *FactoryEventHistory) Subscribe(
 	scope interfaces.FactoryEventReconnectScope,
 ) (interfaces.FactoryEventStream, error) {
 	if h == nil {
-		ch := make(chan factoryapi.FactoryEvent)
+		ch := make(chan interfaces.FactoryEvent)
 		close(ch)
 		return interfaces.FactoryEventStream{Events: ch}, nil
 	}
 
 	h.mu.Lock()
-	events := make([]factoryapi.FactoryEvent, len(h.events))
-	copy(events, h.events)
+	events := cloneFactoryEvents(h.events)
 	streamGenerationID := h.streamGenerationID
 	if reconnect != nil {
-		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
+		replayed, err := buildDomainReconnectReplay(events, *reconnect, scope)
 		if err != nil {
 			h.mu.Unlock()
 			return interfaces.FactoryEventStream{}, err
@@ -155,8 +157,8 @@ func (h *FactoryEventHistory) Subscribe(
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{
-		events: make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
-		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		events: make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
+		inbox:  make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
 		done:   ctx.Done(),
 	}
 	h.streams[id] = subscription
@@ -178,7 +180,7 @@ func (h *FactoryEventHistory) Subscribe(
 					delete(h.streams, id)
 					h.mu.Unlock()
 					return
-				case subscription.events <- event:
+				case subscription.events <- event.Clone():
 				}
 			}
 		}
@@ -191,23 +193,54 @@ func (h *FactoryEventHistory) Subscribe(
 	}, nil
 }
 
-// AddGeneratedRecorder registers a callback invoked for every future generated
-// FactoryEvent append. Existing events are replayed to the callback first so
+// AddEventRecorder registers a callback invoked for every future canonical
+// Factory event append. Existing events are replayed to the callback first so
 // late recorder setup still sees a complete current-process history.
-func (h *FactoryEventHistory) AddGeneratedRecorder(recorder func(factoryapi.FactoryEvent)) {
+func (h *FactoryEventHistory) AddEventRecorder(recorder func(interfaces.FactoryEvent)) {
 	if h == nil || recorder == nil {
 		return
 	}
 
 	h.mu.Lock()
-	events := make([]factoryapi.FactoryEvent, len(h.events))
-	copy(events, h.events)
+	events := cloneFactoryEvents(h.events)
 	h.recorders = append(h.recorders, recorder)
 	h.mu.Unlock()
 
 	for _, event := range events {
 		recorder(event)
 	}
+}
+
+// AddEventTypeRecorder registers a transport-independent callback for the type
+// of every future canonical Factory event. Existing event types are replayed
+// first so late Factory Session lifecycle bindings observe terminal history.
+func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.FactoryEventType)) {
+	if h == nil || recorder == nil {
+		return
+	}
+
+	h.mu.Lock()
+	eventTypes := make([]interfaces.FactoryEventType, len(h.events))
+	for index, event := range h.events {
+		eventTypes[index] = event.Type
+	}
+	h.eventTypeRecorders = append(h.eventTypeRecorders, recorder)
+	h.mu.Unlock()
+
+	for _, eventType := range eventTypes {
+		recorder(eventType)
+	}
+}
+
+// AppendRecordedEvent appends one already-shaped canonical domain event so
+// runtime owners can bridge their events into this history without depending
+// on a transport representation.
+func (h *FactoryEventHistory) AppendRecordedEvent(event interfaces.FactoryEvent) {
+	if h == nil {
+		return
+	}
+	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
+	h.appendEvent(event)
 }
 
 // RecordInitialStructure records the static topology before work events.
@@ -217,31 +250,31 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	}
 	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
-	factory := generatedFactory(payload)
+	factory := eventsnapshot.FromInitialStructure(payload)
 	h.mu.RLock()
 	if h.initialFactory != nil {
-		factory = *h.initialFactory
+		factory = h.initialFactory.Clone()
 	}
 	h.mu.RUnlock()
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeInitialStructureRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,
-		factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime},
-		factoryapi.InitialStructureRequestEventPayload{Factory: factory},
+		interfaces.FactoryEventContext{Tick: 0, EventTime: eventTime},
+		interfaces.InitialStructureRequestEventPayload{Factory: factory},
 	))
 }
 
 // RecordFactoryChange records a canonical topology replacement event after a
 // live running factory definition change becomes active.
-func (h *FactoryEventHistory) RecordFactoryChange(tick int, payload factoryapi.FactoryChangeEventPayload, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordFactoryChange(tick int, payload interfaces.FactoryChangeEventPayload, eventTime time.Time) {
 	if h == nil {
 		return
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeFactoryChange,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeFactoryChange,
 		fmt.Sprintf("%s/%d", eventIDFactoryChangePrefix, tick),
-		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
 		payload,
 	))
 }
@@ -263,20 +296,20 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 	h.mu.Unlock()
 
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeRunRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeRunRequest,
 		eventIDRunRequest,
-		factoryapi.FactoryEventContext{Tick: 0, EventTime: recordedAt},
-		factoryapi.RunRequestEventPayload{
+		interfaces.FactoryEventContext{Tick: 0, EventTime: recordedAt},
+		interfaces.RunRequestEventPayload{
 			RecordedAt: recordedAt,
-			Factory:    generatedFactory(payload),
+			Factory:    eventsnapshot.FromInitialStructure(payload),
 		},
 	))
 }
 
 // RecordWorkInput records a submitted work token after submit-time identity
 // generation has completed.
-func (h *FactoryEventHistory) RecordWorkInput(tick int, req interfaces.SubmitRequest, token interfaces.Token, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkInput(tick int, req work.SubmitRequest, token factorytoken.Token, eventTime time.Time) {
 	if h == nil || token.ID == "" {
 		return
 	}
@@ -284,29 +317,29 @@ func (h *FactoryEventHistory) RecordWorkInput(tick int, req interfaces.SubmitReq
 
 // RecordWorkRequest records the batch-level request before its work items are
 // exposed as individual work input events.
-func (h *FactoryEventHistory) RecordWorkRequest(tick int, record interfaces.WorkRequestRecord, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkRequest(tick int, record work.WorkRequestRecord, eventTime time.Time) {
 	if h == nil || record.RequestID == "" {
 		return
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
-	context := factoryapi.FactoryEventContext{
+	context := interfaces.FactoryEventContext{
 		Tick:      tick,
 		EventTime: eventTime,
-		RequestId: stringPtr(record.RequestID),
-		TraceIds:  stringSlicePtr(interfaces.CanonicalChainingTraceIDs([]string{record.TraceID})),
-		WorkIds:   stringSlicePtr(workItemIDs(record.WorkItems)),
+		RequestID: stringPtr(record.RequestID),
+		TraceIDs:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{record.TraceID})),
+		WorkIDs:   stringSlicePtr(workItemIDs(record.WorkItems)),
 		Source:    stringPtrIfNotEmpty(record.Source),
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeWorkRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeWorkRequest,
 		fmt.Sprintf("%s/%s", eventIDWorkRequestPrefix, record.RequestID),
 		context,
-		factoryapi.WorkRequestEventPayload{
-			Type:          factoryapi.WorkRequestType(record.Type),
-			Works:         generatedWorksPtr(record.WorkItems),
-			Relations:     generatedFactoryRelationsPtr(record.Relations),
-			Source:        stringPtrIfNotEmpty(record.Source),
-			ParentLineage: stringSlicePtr(record.ParentLineage),
+		work.WorkRequestEventPayload{
+			Type:          record.Type,
+			Works:         requestEventWorks(record.WorkItems),
+			Relations:     eventRelations(record.Relations),
+			Source:        record.Source,
+			ParentLineage: append([]string(nil), record.ParentLineage...),
 		},
 	))
 	for i, relation := range record.Relations {
@@ -315,7 +348,7 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record interfaces.Work
 }
 
 // RecordRelationshipChange records one relation created by a request batch.
-func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID string, traceID string, index int, relation interfaces.FactoryRelation, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID string, traceID string, index int, relation work.FactoryRelation, eventTime time.Time) {
 	if h == nil || relation.Type == "" || relation.TargetWorkID == "" {
 		return
 	}
@@ -326,17 +359,17 @@ func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID strin
 	if relation.TraceID == "" {
 		relation.TraceID = traceID
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeRelationshipChangeRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeRelationshipChangeRequest,
 		fmt.Sprintf("%s/%s/%d", eventIDRelationshipPrefix, requestID, index),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:      tick,
 			EventTime: eventTime,
-			RequestId: stringPtrIfNotEmpty(requestID),
-			TraceIds:  stringSlicePtr(interfaces.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
-			WorkIds:   stringSlicePtr(uniqueStrings([]string{relation.SourceWorkID, relation.TargetWorkID})),
+			RequestID: stringPtrIfNotEmpty(requestID),
+			TraceIDs:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
+			WorkIDs:   stringSlicePtr(uniqueStrings([]string{relation.SourceWorkID, relation.TargetWorkID})),
 		},
-		factoryapi.RelationshipChangeRequestEventPayload{Relation: generatedFactoryRelation(relation)},
+		work.RelationshipChangeRequestEventPayload{Relation: eventRelation(relation)},
 	))
 }
 
@@ -349,32 +382,32 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
 	runnerSelection := h.resolvedRunnerSelectionForDispatch(record.Dispatch)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:                     tick,
 			EventTime:                eventTime,
-			DispatchId:               stringPtr(dispatchID),
-			RequestId:                stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
-			TraceIds:                 stringSlicePtr(traceIDsFromTokens(inputTokens)),
-			WorkIds:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
-			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
+			DispatchID:               stringPtr(dispatchID),
+			RequestID:                stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
+			TraceIDs:                 stringSlicePtr(traceIDsFromTokens(inputTokens)),
+			WorkIDs:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
+			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 		},
-		factoryapi.DispatchRequestEventPayload{
-			TransitionId:             record.Dispatch.TransitionID,
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
-			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
-			Inputs:                   generatedDispatchConsumedWorkRefsFromTokens(inputTokens),
-			Resources:                h.generatedResourcesPtr(inputTokens),
-			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
+		interfaces.DispatchRequestEventPayload{
+			TransitionID:             record.Dispatch.TransitionID,
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
+			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
+			Inputs:                   dispatchConsumedWorkRefsFromTokens(inputTokens),
+			Resources:                h.dispatchResourcesPtr(inputTokens),
+			Metadata:                 dispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
 		},
 	))
 }
 
 // RecordWorkstationResponse records a completed dispatch and its outputs.
-func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfaces.WorkResult, completed interfaces.CompletedDispatch) {
+func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
 	if h == nil || result.DispatchID == "" {
 		return
 	}
@@ -384,84 +417,129 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	failureReason, failureMessage := failureDetailsForResult(result)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchResponse,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchResponse,
 		fmt.Sprintf("%s/%s", eventIDDispatchCompletedPrefix, result.DispatchID),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:                     tick,
 			EventTime:                eventTime,
-			DispatchId:               stringPtr(result.DispatchID),
-			TraceIds:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
-			WorkIds:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(interfaces.CurrentChainingTraceIDFromTokens(completed.ConsumedTokens)),
-			PreviousChainingTraceIds: stringSlicePtr(interfaces.PreviousChainingTraceIDsFromTokens(completed.ConsumedTokens)),
+			DispatchID:               stringPtr(result.DispatchID),
+			TraceIDs:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
+			WorkIDs:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIDs: stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 		},
-		factoryapi.DispatchResponseEventPayload{
-			TransitionId:                result.TransitionID,
-			CurrentChainingTraceId:      stringPtrIfNotEmpty(interfaces.CurrentChainingTraceIDFromTokens(completed.ConsumedTokens)),
-			PreviousChainingTraceIds:    stringSlicePtr(interfaces.PreviousChainingTraceIDsFromTokens(completed.ConsumedTokens)),
-			Outcome:                     factoryapi.WorkOutcome(result.Outcome),
+		workerexecution.DispatchResponseEventPayload{
+			TransitionID:                result.TransitionID,
+			CurrentChainingTraceID:      stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIDs:    stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
+			Outcome:                     result.Outcome,
 			Output:                      stringPtrIfNotEmpty(result.Output),
 			Error:                       stringPtrIfNotEmpty(result.Error),
 			Feedback:                    stringPtrIfNotEmpty(result.Feedback),
 			SelectedClassificationLabel: stringPtrIfNotEmpty(result.SelectedClassificationLabel),
 			FailureDetail:               failureDetail(failureReason, failureMessage),
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
-			OutputWork:                  generatedWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
-			OutputResources:             h.generatedOutputResourcesPtr(completed.OutputMutations),
-			ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
+			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
+			OutputResources:             h.dispatchOutputResourcesPtr(completed.OutputMutations),
+			ProviderFailure:             workerexecution.CloneWorkFailureMetadata(result.FailureMetadata),
 		},
 	))
 }
 
-// RecordInferenceEvent appends a provider-boundary inference event to the same
-// canonical history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordInferenceEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isInferenceEventType(event.Type) {
+// RecordModelEvent appends worker-owned model execution facts to canonical
+// history while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordModelEvent(event workerexecution.ModelEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
+	eventType, payload := modelFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		},
+		payload,
+	))
 }
 
-// RecordModelEvent appends a model-execution boundary event to the same
-// canonical history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordModelEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isModelEventType(event.Type) {
-		return
+func modelFactoryEventPayload(event workerexecution.ModelEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ModelEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeModelRequest, *event.Request
+		}
+	case workerexecution.ModelEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeModelResponse, *event.Response
+		}
 	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
+	return "", nil
 }
 
-// RecordScriptEvent appends a script-boundary event to the same canonical
-// history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isScriptEventType(event.Type) {
+// RecordScriptEvent appends worker-owned script facts to the canonical history
+// while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordScriptEvent(event workerexecution.ScriptEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
+	eventType, payload := scriptFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		},
+		payload,
+	))
+}
+
+func scriptFactoryEventPayload(event workerexecution.ScriptEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ScriptEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeScriptRequest, *event.Request
+		}
+	case workerexecution.ScriptEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeScriptResponse, *event.Response
+		}
+	}
+	return "", nil
 }
 
 // RecordAgentRunEvent appends an agent-run boundary event to the same
 // canonical history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordAgentRunEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isAgentRunEventType(event.Type) {
+func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRunResponseEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
-}
-
-// AppendRecordedEvent appends one already-shaped canonical event into the
-// history so callers can bridge runtime-owned events into a wider stream.
-func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent) {
-	if h == nil {
-		return
-	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeAgentRunResponse,
+		event.ID,
+		interfaces.FactoryEventContext{
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtr(event.DispatchID),
+		},
+		event.Payload,
+	))
 }
 
 // RecordRunResponse records the canonical run completion event after the
@@ -485,15 +563,15 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 	h.hasRunResponse = true
 	h.mu.Unlock()
 
-	stateValue := factoryapi.FactoryState(state)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeRunResponse,
+	stateValue := state
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeRunResponse,
 		eventIDRunResponse,
-		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
-		factoryapi.RunResponseEventPayload{
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.RunResponseEventPayload{
 			State:  &stateValue,
 			Reason: stringPtrIfNotEmpty(reason),
-			WallClock: &factoryapi.WallClock{
+			WallClock: &interfaces.RunEventWallClock{
 				StartedAt:  timePtrIfNotZero(recordedAt),
 				FinishedAt: timePtrIfNotZero(eventTime),
 			},
@@ -503,7 +581,7 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 
 // RecordWorkStateChange records a canonical marking relocation for operator or
 // cascade recovery paths.
-func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record interfaces.WorkStateChangeRecord, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkStateChangeRecord, eventTime time.Time) {
 	if h == nil || record.WorkID == "" || record.Source == "" {
 		return
 	}
@@ -512,24 +590,24 @@ func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record interfaces.
 	if workTypeName == "" {
 		workTypeName = record.WorkTypeID
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeWorkStateChange,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeWorkStateChange,
 		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:      tick,
 			EventTime: eventTime,
-			RequestId: stringPtrIfNotEmpty(record.RequestID),
-			WorkIds:   stringSlicePtr([]string{record.WorkID}),
+			RequestID: stringPtrIfNotEmpty(record.RequestID),
+			WorkIDs:   stringSlicePtr([]string{record.WorkID}),
 		},
-		factoryapi.WorkStateChangeEventPayload{
-			WorkId:        record.WorkID,
+		interfaces.WorkStateChangeEventPayload{
+			WorkID:        record.WorkID,
 			WorkTypeName:  workTypeName,
 			FromState:     record.FromState,
 			ToState:       record.ToState,
-			FromPlaceId:   record.FromPlaceID,
-			ToPlaceId:     record.ToPlaceID,
-			Source:        factoryapi.WorkStateChangeSource(record.Source),
-			TriggerWorkId: stringPtrIfNotEmpty(record.TriggerWorkID),
+			FromPlaceID:   record.FromPlaceID,
+			ToPlaceID:     record.ToPlaceID,
+			Source:        record.Source,
+			TriggerWorkID: stringPtrIfNotEmpty(record.TriggerWorkID),
 			Reason:        stringPtrIfNotEmpty(record.Reason),
 		},
 	))
@@ -541,32 +619,37 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 		return
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeFactoryStateResponse,
+	nextState := next
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeFactoryStateResponse,
 		fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next),
-		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
-		factoryapi.FactoryStateResponseEventPayload{
-			PreviousState: generatedFactoryStatePtr(previous),
-			State:         factoryapi.FactoryState(next),
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.FactoryStateResponseEventPayload{
+			PreviousState: &previous,
+			State:         nextState,
 			Reason:        stringPtrIfNotEmpty(reason),
 		},
 	))
 }
 
-func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
+func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 	h.mu.Lock()
-	event.SchemaVersion = factoryapi.AgentFactoryEventV1
+	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
 	event.Context.Sequence = len(h.events)
 	h.events = append(h.events, event)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)
 	}
-	recorders := append([]func(factoryapi.FactoryEvent){}, h.recorders...)
+	recorders := append([]func(interfaces.FactoryEvent){}, h.recorders...)
+	eventTypeRecorders := append([]func(interfaces.FactoryEventType){}, h.eventTypeRecorders...)
 	h.mu.Unlock()
 
 	for _, recorder := range recorders {
-		recorder(event)
+		recorder(event.Clone())
+	}
+	for _, recorder := range eventTypeRecorders {
+		recorder(event.Type)
 	}
 	for _, stream := range streams {
 		select {
@@ -575,82 +658,35 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 		default:
 		}
 		select {
-		case stream.inbox <- event:
+		case stream.inbox <- event.Clone():
 		default:
 		}
 	}
 }
 
-func factoryEvent(eventType factoryapi.FactoryEventType, id string, context factoryapi.FactoryEventContext, payload any) factoryapi.FactoryEvent {
-	return factoryapi.FactoryEvent{
+func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, context interfaces.FactoryEventContext, payload any) interfaces.FactoryEvent {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(fmt.Sprintf("encode factory event payload %T: %v", payload, err))
+	}
+	return interfaces.FactoryEvent{
 		Type:    eventType,
 		Id:      id,
 		Context: context,
-		Payload: factoryEventPayload(payload),
+		Payload: encoded,
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity canonical event payload union stays on one generated-type switch for replay-safe emission.
-func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	var err error
-	switch typed := payload.(type) {
-	case factoryapi.RunRequestEventPayload:
-		err = out.FromRunRequestEventPayload(typed)
-	case factoryapi.InitialStructureRequestEventPayload:
-		err = out.FromInitialStructureRequestEventPayload(typed)
-	case factoryapi.FactoryChangeEventPayload:
-		err = out.FromFactoryChangeEventPayload(typed)
-	case factoryapi.WorkRequestEventPayload:
-		err = out.FromWorkRequestEventPayload(typed)
-	case factoryapi.RelationshipChangeRequestEventPayload:
-		err = out.FromRelationshipChangeRequestEventPayload(typed)
-	case factoryapi.DispatchRequestEventPayload:
-		err = out.FromDispatchRequestEventPayload(typed)
-	case factoryapi.DispatchResponseEventPayload:
-		err = out.FromDispatchResponseEventPayload(typed)
-	case factoryapi.FactoryStateResponseEventPayload:
-		err = out.FromFactoryStateResponseEventPayload(typed)
-	case factoryapi.RunResponseEventPayload:
-		err = out.FromRunResponseEventPayload(typed)
-	case factoryapi.WorkStateChangeEventPayload:
-		err = out.FromWorkStateChangeEventPayload(typed)
-	case factoryapi.SessionStartedEventPayload:
-		err = out.FromSessionStartedEventPayload(typed)
-	case factoryapi.SessionResultUpdatedEventPayload:
-		err = out.FromSessionResultUpdatedEventPayload(typed)
-	case factoryapi.SessionCompletedEventPayload:
-		err = out.FromSessionCompletedEventPayload(typed)
-	case factoryapi.SessionLifecycleControlEventPayload:
-		err = out.FromSessionLifecycleControlEventPayload(typed)
-	case factoryapi.SessionPausedEventPayload:
-		err = out.FromSessionPausedEventPayload(typed)
-	case factoryapi.SessionResumedEventPayload:
-		err = out.FromSessionResumedEventPayload(typed)
-	default:
-		encoded, marshalErr := json.Marshal(typed)
-		if marshalErr != nil {
-			err = marshalErr
-		} else {
-			err = out.UnmarshalJSON(encoded)
-		}
-	}
-	if err != nil {
-		panic(fmt.Sprintf("factory event payload %T: %v", payload, err))
-	}
-	return out
-}
-
-func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interfaces.WorkDispatch) interfaces.ResolvedRunnerSelection {
+func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) workerexecution.ResolvedRunnerSelection {
 	if h == nil {
-		return interfaces.ResolvedRunnerSelection{}
+		return workerexecution.ResolvedRunnerSelection{}
 	}
 	workstationRunner, workerModelProvider := h.runnerSelectionInputsForDispatch(dispatch)
 	factoryRunner := h.factoryRunnerID()
-	return interfaces.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
+	return workerrunner.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
 }
 
-func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {
+func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch work.WorkDispatch) (string, string) {
 	if h == nil || h.runtimeConfig == nil {
 		return "", ""
 	}
@@ -699,14 +735,14 @@ func (h *FactoryEventHistory) factoryRunnerID() string {
 	return cfg.Runner
 }
 
-func traceIDsFromTokens(tokens []interfaces.Token) []string {
-	return interfaces.PreviousChainingTraceIDsFromTokens(tokens)
+func traceIDsFromTokens(tokens []factorytoken.Token) []string {
+	return factorytoken.PreviousChainingTraceIDs(tokens)
 }
 
-func workIDsFromTokens(tokens []interfaces.Token) []string {
+func workIDsFromTokens(tokens []factorytoken.Token) []string {
 	values := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		values = append(values, token.Color.WorkID)
@@ -714,20 +750,12 @@ func workIDsFromTokens(tokens []interfaces.Token) []string {
 	return uniqueStrings(values)
 }
 
-func workItemIDs(items []interfaces.FactoryWorkItem) []string {
+func workItemIDs(items []work.FactoryWorkItem) []string {
 	values := make([]string, 0, len(items))
 	for _, item := range items {
 		values = append(values, item.ID)
 	}
 	return uniqueStrings(values)
-}
-
-func generatedStringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.StringMap(cloneStringMap(values))
-	return &converted
 }
 
 func stringPtr(value string) *string {
@@ -742,13 +770,6 @@ func stringPtrIfNotEmpty(value string) *string {
 }
 
 func int64Ptr(value int64) *int64 {
-	return &value
-}
-
-func intPtrIfPositive(value int) *int {
-	if value <= 0 {
-		return nil
-	}
 	return &value
 }
 
@@ -773,44 +794,13 @@ func slicePtr[T any](values []T) *[]T {
 	return &out
 }
 
-func isInferenceEventType(eventType factoryapi.FactoryEventType) bool {
-	switch eventType {
-	case factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse:
-		return true
-	default:
-		return false
-	}
-}
-
-func isModelEventType(eventType factoryapi.FactoryEventType) bool {
-	switch eventType {
-	case factoryapi.FactoryEventTypeModelRequest, factoryapi.FactoryEventTypeModelResponse:
-		return true
-	default:
-		return false
-	}
-}
-
-func isScriptEventType(eventType factoryapi.FactoryEventType) bool {
-	switch eventType {
-	case factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse:
-		return true
-	default:
-		return false
-	}
-}
-
-func isAgentRunEventType(eventType factoryapi.FactoryEventType) bool {
-	return eventType == factoryapi.FactoryEventTypeAgentRunResponse
-}
-
-func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
+func workItemFromToken(token factorytoken.Token) work.FactoryWorkItem {
 	currentChainingTraceID := token.Color.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
 	_, stateValue := splitPlaceID(token.PlaceID)
-	return interfaces.FactoryWorkItem{
+	return work.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
 		DisplayName:              token.Color.Name,
@@ -818,7 +808,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...),
 		TraceID:                  token.Color.TraceID,
-		Content:                  append([]interfaces.WorkContentPart(nil), token.Color.Content...),
+		Content:                  append([]work.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
 		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
@@ -826,8 +816,8 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 	}
 }
 
-func failureDetailsForResult(result interfaces.WorkResult) (string, string) {
-	if result.Outcome != interfaces.OutcomeFailed {
+func failureDetailsForResult(result workerexecution.WorkResult) (string, string) {
+	if result.Outcome != workerexecution.OutcomeFailed {
 		return "", ""
 	}
 
@@ -839,7 +829,7 @@ func failureDetailsForResult(result interfaces.WorkResult) (string, string) {
 	return reason, message
 }
 
-func failureReasonForResult(result interfaces.WorkResult) string {
+func failureReasonForResult(result workerexecution.WorkResult) string {
 	failureMetadata := result.FailureMetadata
 	if failureMetadata != nil {
 		if failureMetadata.Type != "" {
@@ -855,11 +845,11 @@ func failureReasonForResult(result interfaces.WorkResult) string {
 	return failureReasonUnknown
 }
 
-func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []interfaces.Token) []interfaces.FactoryWorkItem {
-	items := make([]interfaces.FactoryWorkItem, 0, len(mutations))
-	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokens(consumedTokens)
+func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []factorytoken.Token) []work.FactoryWorkItem {
+	items := make([]work.FactoryWorkItem, 0, len(mutations))
+	previousChainingTraceIDs := factorytoken.PreviousChainingTraceIDs(consumedTokens)
 	for _, mutation := range mutations {
-		if mutation.Token == nil || mutation.Token.Color.DataType == interfaces.DataTypeResource {
+		if mutation.Token == nil || mutation.Token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		item := workItemFromToken(*mutation.Token)
@@ -880,36 +870,36 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func failureDetail(reason, message string) *factoryapi.FailureDetail {
+func failureDetail(reason, message string) *workerexecution.FailureDetail {
 	return failureDetailValue(reason, message)
 }
 
-func failureDetailValue(reason, message string) *factoryapi.FailureDetail {
+func failureDetailValue(reason, message string) *workerexecution.FailureDetail {
 	reason = strings.TrimSpace(reason)
 	message = strings.TrimSpace(message)
 	if reason == "" || message == "" {
 		return nil
 	}
-	return &factoryapi.FailureDetail{
+	return &workerexecution.FailureDetail{
 		Reason:  normalizedFailureReason(reason),
 		Message: message,
 	}
 }
 
-func normalizedFailureReason(reason string) factoryapi.WorkFailureType {
-	candidate := factoryapi.WorkFailureType(strings.TrimSpace(reason))
+func normalizedFailureReason(reason string) workerexecution.WorkFailureType {
+	candidate := workerexecution.WorkFailureType(strings.TrimSpace(reason))
 	switch candidate {
-	case factoryapi.WorkFailureTypeAuthFailure,
-		factoryapi.WorkFailureTypePermanentBadRequest,
-		factoryapi.WorkFailureTypeThrottled,
-		factoryapi.WorkFailureTypeInternalServerError,
-		factoryapi.WorkFailureTypeTimeout,
-		factoryapi.WorkFailureTypeMisconfigured,
-		factoryapi.WorkFailureTypeMissingExecutable,
-		factoryapi.WorkFailureTypeCommandLineTooLong:
+	case workerexecution.WorkFailureTypeAuthFailure,
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypeThrottled,
+		workerexecution.WorkFailureTypeInternalServerError,
+		workerexecution.WorkFailureTypeTimeout,
+		workerexecution.WorkFailureTypeMisconfigured,
+		workerexecution.WorkFailureTypeMissingExecutable,
+		workerexecution.WorkFailureTypeCommandLineTooLong:
 		return candidate
 	default:
-		return factoryapi.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -36,10 +36,10 @@ func seedSubmittedParentChildBatch(t *testing.T) string {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "submitted_parent_child_filewatcher"))
-	testutil.WriteSeedBatchFile(t, dir, interfaces.WorkRequest{
+	testutil.WriteSeedBatchFile(t, dir, work.WorkRequest{
 		RequestID: "release-story-set",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{
 				Name:       "story-set",
 				WorkTypeID: "story-set",
@@ -75,14 +75,14 @@ func seedSubmittedParentChildBatch(t *testing.T) string {
 				},
 			},
 		},
-		Relations: []interfaces.WorkRelation{
+		Relations: []work.WorkRelation{
 			{
-				Type:           interfaces.WorkRelationParentChild,
+				Type:           work.WorkRelationParentChild,
 				SourceWorkName: "story-auth",
 				TargetWorkName: "story-set",
 			},
 			{
-				Type:           interfaces.WorkRelationParentChild,
+				Type:           work.WorkRelationParentChild,
 				SourceWorkName: "story-billing",
 				TargetWorkName: "story-set",
 			},

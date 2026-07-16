@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func containsAll(value string, substrings ...string) bool {
@@ -135,13 +136,13 @@ func TestRuleGuards_MatchesFieldsEmptyInputKey(t *testing.T) {
 
 func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:     "linear-poller",
 		Type:     interfaces.WorkerTypeHosted,
 		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{
+			Mapping: workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
 		},
 	}}
 
@@ -153,12 +154,12 @@ func TestRuleHostedWorkers_AcceptsHostedLinearWorker(t *testing.T) {
 
 func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:     "linear-poller",
 		Type:     interfaces.WorkerTypeHosted,
 		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{},
-		Linear:   &interfaces.HostedLinearWorkerConfig{},
+		Auth:     &workerconfig.HostedWorkerAuthConfig{},
+		Linear:   &workerconfig.HostedLinearWorkerConfig{},
 	}}
 
 	findings := ruleHostedWorkers(cfg)
@@ -169,13 +170,13 @@ func TestRuleHostedWorkers_RejectsMissingSecretRefAndMapping(t *testing.T) {
 
 func TestRuleHostedWorkers_RejectsHostedFieldsOnNonHostedWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:     "executor",
 		Type:     interfaces.WorkerTypeModel,
 		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{
+			Mapping: workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
 		},
 	}}
 
@@ -611,7 +612,7 @@ func TestRuleWorkstationKind_AcceptsPoller(t *testing.T) {
 
 func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "planner",
 		Type: interfaces.WorkerTypeModel,
 	}}
@@ -633,7 +634,7 @@ func TestRulePollerWorkstations_RejectsUnsupportedWorkerType(t *testing.T) {
 
 func TestRulePollerWorkstations_AcceptsScriptAndHostedWorkers(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{
+	cfg.Workers = []workerconfig.Config{
 		{Name: "script-poller", Type: interfaces.WorkerTypeScript},
 		{Name: "hosted-poller", Type: interfaces.WorkerTypeHosted},
 	}
@@ -940,10 +941,10 @@ func testStoryStates() []interfaces.StateConfig {
 
 func TestRuleAgentWorkerTools_RejectsMissingPolicy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:       "executor",
 		Type:       interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{},
+		AgentTools: &workerconfig.AgentToolsConfig{},
 	}}
 
 	findings := ruleAgentWorkerTools(cfg)
@@ -953,10 +954,10 @@ func TestRuleAgentWorkerTools_RejectsMissingPolicy(t *testing.T) {
 
 func TestRuleAgentWorkerTools_RejectsUnsupportedPolicy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "executor",
 		Type: interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{
+		AgentTools: &workerconfig.AgentToolsConfig{
 			Policy: "FULL_SHELL",
 		},
 	}}
@@ -968,11 +969,11 @@ func TestRuleAgentWorkerTools_RejectsUnsupportedPolicy(t *testing.T) {
 
 func TestRuleAgentWorkerTools_RejectsAgentToolsOnInferenceWorker(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "infer",
 		Type: interfaces.WorkerTypeInference,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{
-			Policy: interfaces.AgentWorkerToolPolicyReadOnly,
+		AgentTools: &workerconfig.AgentToolsConfig{
+			Policy: workerconfig.AgentToolPolicyReadOnly,
 		},
 	}}
 
@@ -983,11 +984,11 @@ func TestRuleAgentWorkerTools_RejectsAgentToolsOnInferenceWorker(t *testing.T) {
 
 func TestRuleAgentWorkerTools_AllowsAgentWorkerPolicy(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "executor",
 		Type: interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{
-			Policy: interfaces.AgentWorkerToolPolicyEnabled,
+		AgentTools: &workerconfig.AgentToolsConfig{
+			Policy: workerconfig.AgentToolPolicyEnabled,
 		},
 	}}
 

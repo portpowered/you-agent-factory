@@ -7,14 +7,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-type executorFunc func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error)
+type executorFunc func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error)
 
-func (f executorFunc) Execute(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (f executorFunc) Execute(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	return f(ctx, d)
 }
 
@@ -25,8 +26,8 @@ func TestServiceHarness_MockWorker(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	mockA := h.MockWorker("worker-a", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
-	mockB := h.MockWorker("worker-b", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	mockA := h.MockWorker("worker-a", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
+	mockB := h.MockWorker("worker-b", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.RunUntilComplete(t, 10*time.Second)
 
@@ -69,15 +70,15 @@ func TestServiceHarness_SetCustomExecutor(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	mockB := h.MockWorker("worker-b", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	mockB := h.MockWorker("worker-b", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	var customCalled bool
-	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 		customCalled = true
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   d.DispatchID,
 			TransitionID: d.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}, nil
 	}))
 
@@ -102,16 +103,16 @@ func TestServiceHarness_CustomExecutor_Precedence(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	mockA := h.MockWorker("worker-a", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
-	h.MockWorker("worker-b", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	mockA := h.MockWorker("worker-a", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
+	h.MockWorker("worker-b", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	var customCalled bool
-	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 		customCalled = true
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   d.DispatchID,
 			TransitionID: d.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}, nil
 	}))
 

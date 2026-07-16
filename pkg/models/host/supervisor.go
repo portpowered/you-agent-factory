@@ -11,9 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 const (
@@ -57,7 +58,7 @@ type HealthChecker interface {
 }
 
 // ServerStartBuilder resolves one supervised process launch spec from installed assets.
-type ServerStartBuilder func(identity Identity, inspection CacheInspection, worker *interfaces.WorkerConfig) (ProcessStartSpec, error)
+type ServerStartBuilder func(identity Identity, inspection CacheInspection, worker *workerconfig.Config) (ProcessStartSpec, error)
 
 // SupervisorConfig configures supervised llama.cpp-backed runtime loading.
 type SupervisorConfig struct {
@@ -141,29 +142,29 @@ func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSn
 	case supervisedStateReady:
 		return ReadinessSnapshot{
 			Identity:       identity,
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateLoaded,
 			FailureClass:   FailureClassNone,
-			Diagnostics: mergeDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateLOADED, map[string]string{
+			Diagnostics: mergeDiagnostics(identity, managedruntime.ReadinessStateReady, managedruntime.LifecycleStateLoaded, map[string]string{
 				"endpoint": r.endpoint,
 			}),
 		}
 	case supervisedStateLoading:
 		return ReadinessSnapshot{
 			Identity:       identity,
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+			ReadinessState: managedruntime.ReadinessStateLoading,
+			LifecycleState: managedruntime.LifecycleStateLoading,
 			FailureClass:   FailureClassLoadingTimeout,
-			Diagnostics:    managedDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateLOADING),
+			Diagnostics:    managedDiagnostics(identity, managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateLoading),
 		}
 	case supervisedStateFailed:
 		readiness := ReadinessStateForFailureClass(r.failureClass)
-		lifecycle := factoryapi.ManagedRuntimeLifecycleStateLOADED
+		lifecycle := managedruntime.LifecycleStateLoaded
 		if r.failureClass == FailureClassLoadingTimeout {
-			lifecycle = factoryapi.ManagedRuntimeLifecycleStateLOADING
+			lifecycle = managedruntime.LifecycleStateLoading
 		}
 		if r.failureClass == FailureClassMissingAssets {
-			lifecycle = factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+			lifecycle = managedruntime.LifecycleStateNotInstalled
 		}
 		return ReadinessSnapshot{
 			Identity:       identity,
@@ -173,13 +174,13 @@ func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSn
 			Diagnostics:    managedDiagnostics(identity, readiness, lifecycle),
 		}
 	default:
-		if base.ReadinessState == factoryapi.ManagedRuntimeReadinessStateREADY {
+		if base.ReadinessState == managedruntime.ReadinessStateReady {
 			return ReadinessSnapshot{
 				Identity:       identity,
-				ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
-				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+				ReadinessState: managedruntime.ReadinessStateLoading,
+				LifecycleState: managedruntime.LifecycleStateLoading,
 				FailureClass:   FailureClassLoadingTimeout,
-				Diagnostics:    managedDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateLOADING),
+				Diagnostics:    managedDiagnostics(identity, managedruntime.ReadinessStateLoading, managedruntime.LifecycleStateLoading),
 			}
 		}
 		return base
@@ -521,7 +522,7 @@ func (p *execManagedProcess) Stop(ctx context.Context) error {
 func defaultLlamaCppServerStartBuilder(
 	identity Identity,
 	inspection CacheInspection,
-	worker *interfaces.WorkerConfig,
+	worker *workerconfig.Config,
 ) (ProcessStartSpec, error) {
 	if worker == nil {
 		return ProcessStartSpec{}, fmt.Errorf("local model worker is required for supervised backend %q", identity.Backend)
@@ -565,7 +566,7 @@ func supervisedHealthEndpointAndArgs(workerArgs []string) (string, []string, err
 	return "", args, fmt.Errorf("supervised llama.cpp runtime requires worker arg %q", supervisedHealthEndpointFlag)
 }
 
-func workerDeclaresSupervisedHealthEndpoint(worker *interfaces.WorkerConfig) bool {
+func workerDeclaresSupervisedHealthEndpoint(worker *workerconfig.Config) bool {
 	if worker == nil {
 		return false
 	}

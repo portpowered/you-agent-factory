@@ -9,10 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -106,7 +107,7 @@ func midExecutionConsistencyConfig() *interfaces.FactoryConfig {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
+		Workers: []workerconfig.Config{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "step-worker",
 			Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -183,7 +184,7 @@ func threeStageConfig() *interfaces.FactoryConfig {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
+		Workers: []workerconfig.Config{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "step1", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
 			{Name: "step2", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage2"}}},

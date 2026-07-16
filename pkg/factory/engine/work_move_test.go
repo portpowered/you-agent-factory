@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestMoveWork_AcceptsValidRelocation(t *testing.T) {
@@ -62,8 +64,8 @@ func TestMoveWork_RejectsInFlightDispatch(t *testing.T) {
 	eng := NewFactoryEngine(net, marking, nil)
 	eng.runtimeState.Dispatches["dispatch-1"] = &interfaces.DispatchEntry{
 		DispatchID: "dispatch-1",
-		ConsumedTokens: []interfaces.Token{{
-			Color: interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task"},
+		ConsumedTokens: []factorytoken.Token{{
+			Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task"},
 		}},
 	}
 
@@ -91,12 +93,12 @@ func TestMoveWork_LeavingFailedRetainsFailureHistoryAndClearsGuardFields(t *test
 	net := buildTestNet()
 	marking := petri.NewMarking("test-wf")
 	token := newMoveTestToken("tok-1", "work-1", "task:failed")
-	token.History = interfaces.TokenHistory{
+	token.History = factorytoken.History{
 		TotalVisits:         map[string]int{"transition-build": 3},
 		ConsecutiveFailures: map[string]int{"transition-build": 2},
 		PlaceVisits:         map[string]int{"task:failed": 1},
 		LastError:           "provider timeout",
-		FailureLog: []interfaces.FailureRecord{{
+		FailureLog: []factorytoken.Failure{{
 			TransitionID: "transition-build",
 			Timestamp:    time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC),
 			Error:        "provider timeout",
@@ -129,7 +131,7 @@ func TestMoveWork_DoesNotRecordDispatchEvents(t *testing.T) {
 	marking.AddToken(newMoveTestToken("tok-1", "work-1", "task:init"))
 
 	dispatchCount := 0
-	eng := NewFactoryEngine(net, marking, nil, WithDispatchHandler(func(interfaces.WorkDispatch) {
+	eng := NewFactoryEngine(net, marking, nil, WithDispatchHandler(func(work.WorkDispatch) {
 		dispatchCount++
 	}))
 
@@ -159,7 +161,7 @@ func TestMoveWork_WakesRunLoopWithoutBufferedInputs(t *testing.T) {
 				}
 				return &interfaces.TickResult{
 					Dispatches: []interfaces.DispatchRecord{{
-						Dispatch: interfaces.WorkDispatch{
+						Dispatch: work.WorkDispatch{
 							DispatchID:   "dispatch-after-move",
 							TransitionID: "transition-after-move",
 							WorkerType:   "worker-a",
@@ -175,7 +177,7 @@ func TestMoveWork_WakesRunLoopWithoutBufferedInputs(t *testing.T) {
 			return nil, nil
 		},
 	}
-	eng := NewFactoryEngine(net, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(dispatch interfaces.WorkDispatch) {
+	eng := NewFactoryEngine(net, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(dispatch work.WorkDispatch) {
 		if dispatch.DispatchID == "dispatch-after-move" {
 			select {
 			case dispatched <- struct{}{}:
@@ -205,17 +207,17 @@ func TestMoveWork_WakesRunLoopWithoutBufferedInputs(t *testing.T) {
 	}
 }
 
-func newMoveTestToken(tokenID, workID, placeID string) *interfaces.Token {
-	return &interfaces.Token{
+func newMoveTestToken(tokenID, workID, placeID string) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:        tokenID,
 		PlaceID:   placeID,
 		CreatedAt: time.Now(),
 		EnteredAt: time.Now(),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     workID,
 			WorkTypeID: "task",
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -224,16 +226,16 @@ func newMoveTestToken(tokenID, workID, placeID string) *interfaces.Token {
 }
 
 func TestClearGuardBlockingFields_PreservesFailureHistory(t *testing.T) {
-	history := interfaces.TokenHistory{
+	history := factorytoken.History{
 		TotalVisits:         map[string]int{"t1": 1},
 		ConsecutiveFailures: map[string]int{"t1": 2},
 		PlaceVisits:         map[string]int{"task:failed": 1},
 		LastError:           "boom",
-		FailureLog: []interfaces.FailureRecord{{
+		FailureLog: []factorytoken.Failure{{
 			Error: "boom",
 		}},
 	}
-	interfaces.ClearGuardBlockingFields(&history)
+	factorytoken.ClearGuardBlockingFields(&history)
 	if history.LastError != "boom" || len(history.FailureLog) != 1 {
 		t.Fatalf("failure history = %#v, want preserved", history)
 	}

@@ -4,17 +4,17 @@ import (
 	"context"
 	"runtime"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/models/assets"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // AssetPuller resolves managed local model assets and pull outcomes.
 type AssetPuller interface {
-	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error)
-	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error
-	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error)
+	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (assets.PullResult, error)
+	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) error
+	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error)
 	InspectRuntimeCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error)
 }
 
@@ -27,15 +27,15 @@ func NewAssetPuller(cacheDir string) AssetPuller {
 	return assetPuller{inner: assets.NewPuller(cacheDir, runtime.GOOS, runtime.GOARCH)}
 }
 
-func (p assetPuller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error) {
+func (p assetPuller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (assets.PullResult, error) {
 	return p.inner.PullModel(ctx, runtimeCfg, modelName)
 }
 
-func (p assetPuller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
+func (p assetPuller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) error {
 	return p.inner.EnsureModelAvailable(ctx, runtimeCfg, worker)
 }
 
-func (p assetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
+func (p assetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error) {
 	layout, err := p.inner.ResolveModelCache(ctx, runtimeCfg, worker)
 	if err != nil {
 		return CacheLayout{}, err

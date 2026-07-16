@@ -3,23 +3,24 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 )
 
 func TestFIFOScheduler_TwoTransitionsCompetingForSameToken(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	token := interfaces.Token{ID: "tok-1", PlaceID: "p1"}
+	token := factorytoken.Token{ID: "tok-1", PlaceID: "p1"}
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings:     map[string][]interfaces.Token{"input": {token}},
+			Bindings:     map[string][]factorytoken.Token{"input": {token}},
 		},
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings:     map[string][]interfaces.Token{"input": {token}},
+			Bindings:     map[string][]factorytoken.Token{"input": {token}},
 		},
 	}
 
@@ -42,18 +43,18 @@ func TestFIFOScheduler_TwoTransitionsCompetingForSameToken(t *testing.T) {
 func TestFIFOScheduler_TwoTransitionsIndependentTokens(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	tok1 := interfaces.Token{ID: "tok-1", PlaceID: "p1"}
-	tok2 := interfaces.Token{ID: "tok-2", PlaceID: "p2"}
+	tok1 := factorytoken.Token{ID: "tok-1", PlaceID: "p1"}
+	tok2 := factorytoken.Token{ID: "tok-2", PlaceID: "p2"}
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings:     map[string][]interfaces.Token{"input": {tok1}},
+			Bindings:     map[string][]factorytoken.Token{"input": {tok1}},
 		},
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings:     map[string][]interfaces.Token{"input": {tok2}},
+			Bindings:     map[string][]factorytoken.Token{"input": {tok2}},
 		},
 	}
 
@@ -81,15 +82,15 @@ func TestFIFOScheduler_EmptyEnabled(t *testing.T) {
 func TestFIFOScheduler_MultipleBindingsPartialConflict(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	sharedTok := interfaces.Token{ID: "shared", PlaceID: "p1"}
-	uniqueTok := interfaces.Token{ID: "unique", PlaceID: "p2"}
-	otherTok := interfaces.Token{ID: "other", PlaceID: "p3"}
+	sharedTok := factorytoken.Token{ID: "shared", PlaceID: "p1"}
+	uniqueTok := factorytoken.Token{ID: "unique", PlaceID: "p2"}
+	otherTok := factorytoken.Token{ID: "other", PlaceID: "p3"}
 
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings: map[string][]interfaces.Token{
+			Bindings: map[string][]factorytoken.Token{
 				"code":   {sharedTok},
 				"review": {uniqueTok},
 			},
@@ -97,14 +98,14 @@ func TestFIFOScheduler_MultipleBindingsPartialConflict(t *testing.T) {
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings: map[string][]interfaces.Token{
+			Bindings: map[string][]factorytoken.Token{
 				"input": {sharedTok}, // conflicts with tr-1's "code" binding
 			},
 		},
 		{
 			TransitionID: "tr-3",
 			WorkerType:   "worker-c",
-			Bindings: map[string][]interfaces.Token{
+			Bindings: map[string][]factorytoken.Token{
 				"input": {otherTok}, // no conflict
 			},
 		},
@@ -126,25 +127,25 @@ func TestFIFOScheduler_MultipleBindingsPartialConflict(t *testing.T) {
 func TestFIFOScheduler_CardinalityAllMultipleTokens(t *testing.T) {
 	sched := NewFIFOScheduler()
 
-	tok1 := interfaces.Token{ID: "tok-1", PlaceID: "p1"}
-	tok2 := interfaces.Token{ID: "tok-2", PlaceID: "p1"}
-	tok3 := interfaces.Token{ID: "tok-3", PlaceID: "p2"}
+	tok1 := factorytoken.Token{ID: "tok-1", PlaceID: "p1"}
+	tok2 := factorytoken.Token{ID: "tok-2", PlaceID: "p1"}
+	tok3 := factorytoken.Token{ID: "tok-3", PlaceID: "p2"}
 
 	enabled := []interfaces.EnabledTransition{
 		{
 			TransitionID: "tr-1",
 			WorkerType:   "worker-a",
-			Bindings:     map[string][]interfaces.Token{"all-items": {tok1, tok2}},
+			Bindings:     map[string][]factorytoken.Token{"all-items": {tok1, tok2}},
 		},
 		{
 			TransitionID: "tr-2",
 			WorkerType:   "worker-b",
-			Bindings:     map[string][]interfaces.Token{"single": {tok1}}, // tok-1 already claimed
+			Bindings:     map[string][]factorytoken.Token{"single": {tok1}}, // tok-1 already claimed
 		},
 		{
 			TransitionID: "tr-3",
 			WorkerType:   "worker-c",
-			Bindings:     map[string][]interfaces.Token{"other": {tok3}}, // no conflict
+			Bindings:     map[string][]factorytoken.Token{"other": {tok3}}, // no conflict
 		},
 	}
 

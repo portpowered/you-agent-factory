@@ -8,14 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestLoadedFactoryConfig_AccessorsAndMutations(t *testing.T) {
 	t.Parallel()
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:    "executor",
 			Command: "before",
 		}},
@@ -86,7 +87,7 @@ func testLoadedFactoryConfigLookupsAndMutation(t *testing.T, loaded *LoadedFacto
 		t.Fatal("Workstation(implement) should succeed")
 	}
 
-	if err := loaded.MutateWorkers(func(worker *interfaces.WorkerConfig) error {
+	if err := loaded.MutateWorkers(func(worker *workerconfig.Config) error {
 		worker.Command = "after"
 		return nil
 	}); err != nil {
@@ -109,13 +110,13 @@ func TestLoadedFactoryConfig_MutateWorkersWrapsLookupErrors(t *testing.T) {
 	loaded := &LoadedFactoryConfig{
 		factory: &interfaces.FactoryConfig{},
 		lookup: &runtimeDefinitionLookupMaps{
-			workers: map[string]*interfaces.WorkerConfig{
+			workers: map[string]*workerconfig.Config{
 				"executor": {Name: "executor"},
 			},
 		},
 	}
 
-	err := loaded.MutateWorkers(func(worker *interfaces.WorkerConfig) error {
+	err := loaded.MutateWorkers(func(worker *workerconfig.Config) error {
 		return wantErr
 	})
 	if err == nil {
@@ -143,10 +144,10 @@ func testRuntimeHelperInlineDetection(t *testing.T) {
 	if hasInlineRuntimeDefinitions(nil) {
 		t.Fatal("hasInlineRuntimeDefinitions(nil) should be false")
 	}
-	if workerHasInlineRuntimeDefinitionFields(interfaces.WorkerConfig{Name: "executor"}) {
+	if workerHasInlineRuntimeDefinitionFields(workerconfig.Config{Name: "executor"}) {
 		t.Fatal("workerHasInlineRuntimeDefinitionFields should ignore empty workers")
 	}
-	if !workerHasInlineRuntimeDefinitionFields(interfaces.WorkerConfig{Name: "executor", Args: []string{"run"}}) {
+	if !workerHasInlineRuntimeDefinitionFields(workerconfig.Config{Name: "executor", Args: []string{"run"}}) {
 		t.Fatal("workerHasInlineRuntimeDefinitionFields should detect runtime args")
 	}
 	if workstationHasInlineRuntimeDefinitionFields(interfaces.FactoryWorkstationConfig{

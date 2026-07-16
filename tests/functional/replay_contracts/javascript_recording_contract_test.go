@@ -7,10 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t *testing.T) {
@@ -35,20 +37,20 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 				phaseCompletedAt := recordedAt.Add(750 * time.Millisecond)
 				history.RecordOrchestratorPhaseChanged(factoryevents.OrchestratorPhaseChangedInput{
 					SessionID:           "session-recorded-js",
-					OrchestratorKind:    factoryapi.JAVASCRIPT,
+					OrchestratorKind:    string(factoryapi.JAVASCRIPT),
 					OrchestratorDialect: "workflow-v1",
 					PhaseID:             "phase-plan",
 					PhaseName:           "plan",
 					Source:              "runtime",
 					Tick:                1,
-					PhaseStatus:         factoryapi.COMPLETED,
+					PhaseStatus:         interfaces.OrchestratorPhaseStatusCompleted,
 					StartedAt:           &phaseStartedAt,
 					CompletedAt:         &phaseCompletedAt,
 					ProgressSummary:     "plan completed",
 				}, phaseCompletedAt)
 				history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
 					SessionID:             "session-recorded-js",
-					OrchestratorKind:      factoryapi.JAVASCRIPT,
+					OrchestratorKind:      interfaces.OrchestratorKindJavaScript,
 					OrchestratorDialect:   "workflow-v1",
 					CheckpointID:          "checkpoint-1",
 					Source:                "runtime",
@@ -56,21 +58,25 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 					Label:                 "after-plan",
 					SourceHash:            "sha256:source",
 					RuntimeSnapshotDigest: "sha256:checkpoint-state",
-					ArtifactRef: &factoryapi.FactoryArtifactRef{
-						Id:         "artifact-checkpoint-1",
-						Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
-						Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+					ArtifactRef: &interfaces.FactoryArtifactRef{
+						ID:         "artifact-checkpoint-1",
+						Kind:       interfaces.JavaScriptCheckpointArtifactKind,
+						Visibility: interfaces.JavaScriptCheckpointArtifactVisibility,
 					},
-					ResumabilityStatus: factoryapi.RESUMABLE,
+					ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable,
 				}, recordedAt.Add(time.Second))
 			}
 			history.RecordSessionLifecycleCompletion("session-recorded-js", config, 2, testCase.factoryState, testCase.failure, recordedAt.Add(2*time.Second))
 
-			artifact, err := replay.NewEventLogArtifactFromFactory(recordedAt, javascriptRecordingFactory(), nil, interfaces.ReplayDiagnostics{})
+			factorySnapshot, err := interfaces.NewFactorySnapshot(javascriptRecordingFactory())
 			if err != nil {
-				t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+				t.Fatalf("NewFactorySnapshot: %v", err)
 			}
-			artifact.Events = append(artifact.Events, history.Events()...)
+			artifact, err := replay.NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
+			if err != nil {
+				t.Fatalf("NewEventLogArtifact: %v", err)
+			}
+			artifact.Events = append(artifact.Events, history.CanonicalEvents()...)
 			path := filepath.Join(t.TempDir(), testCase.name+".replay.json")
 			if err := replay.Save(path, artifact); err != nil {
 				t.Fatalf("Save: %v", err)
@@ -80,34 +86,24 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 				t.Fatalf("Load: %v", err)
 			}
 
-			assertRecordedJavaScriptLifecycle(t, loaded.Events, testCase.wantStatus, testCase.failure)
+			assertRecordedJavaScriptLifecycle(t, testutil.GeneratedFactoryEvents(t, loaded.Events), testCase.wantStatus, testCase.failure)
 			assertRecordingOmitsRawJavaScriptInternals(t, loaded)
+			publicFactory, err := factorysnapshot.ToAPI(loaded.Factory)
+			if err != nil {
+				t.Fatalf("map replay Factory snapshot: %v", err)
+			}
+			if publicFactory == nil || publicFactory.Name != "recorded-javascript-factory" {
+				t.Fatalf("mapped replay Factory = %#v, want recorded-javascript-factory", publicFactory)
+			}
 		})
 	}
 }
 
-func TestRecordedRuntimeEventContract_AppendedEventRetainsCanonicalTimestamp(t *testing.T) {
+func TestReplayFactorySnapshotMappingPreservesAbsentOptionalFactory(t *testing.T) {
 	t.Parallel()
-
-	recordedAt := time.Date(2026, time.July, 12, 9, 30, 0, 0, time.FixedZone("PDT", -7*60*60))
-	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return recordedAt })
-	history.AppendRecordedEvent(factoryapi.FactoryEvent{
-		Id:   "factory-event/runtime-bridge/1",
-		Type: factoryapi.FactoryEventTypeScriptRequest,
-		Context: factoryapi.FactoryEventContext{
-			EventTime: recordedAt,
-		},
-	})
-
-	events := history.Events()
-	if len(events) != 1 {
-		t.Fatalf("appended event count = %d, want 1", len(events))
-	}
-	if events[0].Id != "factory-event/runtime-bridge/1" || events[0].Type != factoryapi.FactoryEventTypeScriptRequest {
-		t.Fatalf("appended event identity = %#v, want recorded runtime event", events[0])
-	}
-	if got, want := events[0].Context.EventTime, recordedAt.UTC(); !got.Equal(want) || got.Location() != time.UTC {
-		t.Fatalf("appended event time = %s (%s), want %s (UTC)", got, got.Location(), want)
+	publicFactory, err := factorysnapshot.ToAPI(nil)
+	if err != nil || publicFactory != nil {
+		t.Fatalf("ToAPI(nil) = (%#v, %v), want (nil, nil)", publicFactory, err)
 	}
 }
 

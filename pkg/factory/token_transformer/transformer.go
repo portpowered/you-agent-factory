@@ -7,10 +7,13 @@ import (
 
 	"github.com/google/uuid"
 	factorypkg "github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // Transformer centralizes token conversions for factory submit, routing, and spawn flows.
@@ -49,24 +52,24 @@ func New(places map[string]*petri.Place, workTypes map[string]*state.WorkType, o
 type OutputTokenInput struct {
 	ArcIndex            int
 	Arcs                []petri.Arc
-	ConsumedTokens      []interfaces.Token
-	InputColors         []interfaces.TokenColor
+	ConsumedTokens      []factorytoken.Token
+	InputColors         []factorytoken.Color
 	Output              string
 	WorkPropagationMode interfaces.WorkPropagationMode
 	WorkstationName     string
 	WorkstationType     string
-	Outcome             interfaces.WorkOutcome
+	Outcome             workerexecution.WorkOutcome
 	TransitionID        string
 	Error               string
 	Feedback            string
 	Now                 time.Time
-	History             interfaces.TokenHistory
+	History             factorytoken.History
 	ResourceTokenIndex  int
 }
 
 // InitialTokenFromSubmit converts a submit request into a token placed in the
 // work type's initial place unless the request targets a specific state.
-func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now time.Time) (*interfaces.Token, error) {
+func (t *Transformer) InitialTokenFromSubmit(req work.SubmitRequest, now time.Time) (*factorytoken.Token, error) {
 	placeID, err := t.submitPlaceID(req)
 	if err != nil {
 		return nil, err
@@ -77,25 +80,25 @@ func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now t
 		workID = t.nextWorkID(req.WorkTypeID)
 	}
 
-	return &interfaces.Token{
+	return &factorytoken.Token{
 		ID:      t.nextSubmitTokenID(req.WorkTypeID),
 		PlaceID: placeID,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Name:                     req.Name,
 			RequestID:                req.RequestID,
 			WorkID:                   workID,
 			WorkTypeID:               req.WorkTypeID,
-			DataType:                 interfaces.DataTypeWork,
+			DataType:                 factorytoken.DataTypeWork,
 			ChainingTraceDepth:       chainingTraceDepthForSubmit(req),
 			CurrentChainingTraceID:   firstNonEmpty(req.CurrentChainingTraceID, req.TraceID),
-			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
+			PreviousChainingTraceIDs: work.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
 			ParentID:                 submitParentID(req.Relations),
 			Tags:                     factorypkg.CloneRuntimeTags(req.Tags),
 			Relations:                factorypkg.CloneRuntimeRelations(req.Relations),
 			Content:                  cloneWorkContent(req.Content),
 			Payload:                  factorypkg.CloneRuntimePayload(req.Payload),
-			InvocationArguments:      interfaces.CloneInvocationArguments(req.InvocationArguments),
+			InvocationArguments:      work.CloneInvocationArguments(req.InvocationArguments),
 		},
 		CreatedAt: now,
 		EnteredAt: now,
@@ -117,16 +120,16 @@ func (t *Transformer) nextTokenID(prefix string) string {
 
 // InitialTokenFromColor converts a token color into a token placed in that
 // work type's initial place.
-func (t *Transformer) InitialTokenFromColor(color interfaces.TokenColor, tokenID string, now time.Time) (*interfaces.Token, error) {
+func (t *Transformer) InitialTokenFromColor(color factorytoken.Color, tokenID string, now time.Time) (*factorytoken.Token, error) {
 	initialPlaceID, err := t.initialPlaceID(color.WorkTypeID)
 	if err != nil {
 		return nil, err
 	}
 
-	return &interfaces.Token{
+	return &factorytoken.Token{
 		ID:        tokenID,
 		PlaceID:   initialPlaceID,
-		Color:     interfaces.CloneTokenColor(color),
+		Color:     factorytoken.CloneColor(color),
 		CreatedAt: now,
 		EnteredAt: now,
 		History:   newTokenHistory(),
@@ -135,16 +138,16 @@ func (t *Transformer) InitialTokenFromColor(color interfaces.TokenColor, tokenID
 
 // SpawnedToken converts a spawned work color into a token placed in that work
 // type's initial place, with a transformer-assigned token ID.
-func (t *Transformer) SpawnedToken(color interfaces.TokenColor, parentTransitionID string, now time.Time) (*interfaces.Token, error) {
+func (t *Transformer) SpawnedToken(color factorytoken.Color, parentTransitionID string, now time.Time) (*factorytoken.Token, error) {
 	return t.InitialTokenFromColor(color, t.nextTokenID("spawn-"+parentTransitionID), now)
 }
 
 // FanoutCountToken creates the synthetic count token used by fanout guards.
-func (t *Transformer) FanoutCountToken(countPlaceID, transitionID, parentWorkID string, expectedCount int, now time.Time) *interfaces.Token {
-	return &interfaces.Token{
+func (t *Transformer) FanoutCountToken(countPlaceID, transitionID, parentWorkID string, expectedCount int, now time.Time) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:      t.nextTokenID("fanout-count-" + transitionID),
 		PlaceID: countPlaceID,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			ParentID: parentWorkID,
 			Tags: map[string]string{
 				"expected_count": fmt.Sprintf("%d", expectedCount),
@@ -158,8 +161,8 @@ func (t *Transformer) FanoutCountToken(countPlaceID, transitionID, parentWorkID 
 
 // ReleasedResourceToken recreates a consumed resource token in its release place
 // while preserving the token's identity and metadata.
-func (t *Transformer) ReleasedResourceToken(consumed interfaces.Token, placeID string, now time.Time) *interfaces.Token {
-	released := interfaces.CloneToken(consumed)
+func (t *Transformer) ReleasedResourceToken(consumed factorytoken.Token, placeID string, now time.Time) *factorytoken.Token {
+	released := factorytoken.Clone(consumed)
 	released.PlaceID = placeID
 	released.EnteredAt = now
 	return &released
@@ -167,7 +170,7 @@ func (t *Transformer) ReleasedResourceToken(consumed interfaces.Token, placeID s
 
 // OutputToken converts consumed input tokens plus an output arc into the token
 // that should be created on that arc.
-func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error) {
+func (t *Transformer) OutputToken(in OutputTokenInput) (*factorytoken.Token, error) {
 	if in.ArcIndex < 0 || in.ArcIndex >= len(in.Arcs) {
 		return nil, fmt.Errorf("arc index %d out of range", in.ArcIndex)
 	}
@@ -178,7 +181,7 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		return nil, err
 	}
 
-	if color.DataType != interfaces.DataTypeResource {
+	if color.DataType != factorytoken.DataTypeResource {
 		place := t.places[arc.PlaceID]
 		targetTypeID := ""
 		if place != nil {
@@ -193,13 +196,13 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		return token, nil
 	}
 
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:        color.WorkID,
 		PlaceID:   arc.PlaceID,
 		Color:     color,
 		CreatedAt: createdAtForOutputToken(in.ConsumedTokens, color, in.Now),
 		EnteredAt: in.Now,
-		History:   interfaces.CloneTokenHistory(in.History),
+		History:   factorytoken.CloneHistory(in.History),
 	}
 
 	applyOutputOutcome(token, in, t.places[arc.PlaceID], t.workTypes)
@@ -207,7 +210,7 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 }
 
 func applyOutputPayloadPropagation(
-	color *interfaces.TokenColor,
+	color *factorytoken.Color,
 	in OutputTokenInput,
 	targetTypeID string,
 	place *petri.Place,
@@ -247,9 +250,9 @@ func shouldPreserveRequestWorkPayloadOnOutcome(
 	workTypeID string,
 ) bool {
 	switch in.Outcome {
-	case interfaces.OutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		return true
-	case interfaces.OutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		return isRejectedFailurePlace(place, workTypes, workTypeID)
 	default:
 		return false
@@ -266,16 +269,16 @@ func shouldShapeWorkContentFromWorkerOutput(
 		return false
 	}
 	switch in.Outcome {
-	case interfaces.OutcomeAccepted, interfaces.OutcomeContinue:
+	case workerexecution.OutcomeAccepted, workerexecution.OutcomeContinue:
 		return true
-	case interfaces.OutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		return !isRejectedFailurePlace(place, workTypes, workTypeID)
 	default:
 		return false
 	}
 }
 
-func applyWorkerOutputContent(color *interfaces.TokenColor, output string) error {
+func applyWorkerOutputContent(color *factorytoken.Color, output string) error {
 	if color == nil {
 		return nil
 	}
@@ -284,12 +287,12 @@ func applyWorkerOutputContent(color *interfaces.TokenColor, output string) error
 		return fmt.Errorf("shape workstation response content: %w", err)
 	}
 	if len(content) > 0 {
-		color.Content = interfaces.CloneWorkContentParts(content)
+		color.Content = work.CloneWorkContentParts(content)
 	}
 	return nil
 }
 
-func applyOutputInvocationArguments(color *interfaces.TokenColor, inputColors []interfaces.TokenColor) {
+func applyOutputInvocationArguments(color *factorytoken.Color, inputColors []factorytoken.Color) {
 	if color == nil || color.InvocationArguments != nil {
 		return
 	}
@@ -297,7 +300,7 @@ func applyOutputInvocationArguments(color *interfaces.TokenColor, inputColors []
 	if source == nil || source.InvocationArguments == nil {
 		return
 	}
-	color.InvocationArguments = interfaces.CloneInvocationArguments(source.InvocationArguments)
+	color.InvocationArguments = work.CloneInvocationArguments(source.InvocationArguments)
 }
 
 // PreserveInputApplicationError reports invalid PRESERVE_INPUT routing.
@@ -319,8 +322,8 @@ func (e *PreserveInputApplicationError) Error() string {
 // ApplyPreservedInputToColor copies payload, content, and tags from the selected
 // consumed input work onto a routed output color when they are not already set.
 func ApplyPreservedInputToColor(
-	color *interfaces.TokenColor,
-	inputColors []interfaces.TokenColor,
+	color *factorytoken.Color,
+	inputColors []factorytoken.Color,
 	targetTypeID string,
 	workstationName string,
 ) error {
@@ -336,68 +339,68 @@ func ApplyPreservedInputToColor(
 	}
 	color.Payload = factorypkg.CloneRuntimePayload(source.Payload)
 	if len(color.Content) == 0 && len(source.Content) > 0 {
-		color.Content = interfaces.CloneWorkContentParts(source.Content)
+		color.Content = work.CloneWorkContentParts(source.Content)
 	}
 	if len(color.Tags) == 0 && len(source.Tags) > 0 {
 		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
 	}
 	if color.InvocationArguments == nil {
-		color.InvocationArguments = interfaces.CloneInvocationArguments(source.InvocationArguments)
+		color.InvocationArguments = work.CloneInvocationArguments(source.InvocationArguments)
 	}
 	return nil
 }
 
 // SelectedPreserveInputSource resolves the consumed input work used for preserve-input routing.
-func SelectedPreserveInputSource(inputColors []interfaces.TokenColor, targetTypeID string) *interfaces.TokenColor {
+func SelectedPreserveInputSource(inputColors []factorytoken.Color, targetTypeID string) *factorytoken.Color {
 	if source := findMatchingInput(inputColors, targetTypeID); source != nil {
 		return source
 	}
 	return firstNonResourceInput(inputColors)
 }
 
-func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color interfaces.TokenColor) *interfaces.Token {
-	if color.DataType != interfaces.DataTypeResource {
+func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color factorytoken.Color) *factorytoken.Token {
+	if color.DataType != factorytoken.DataTypeResource {
 		return nil
 	}
 	consumed := matchingConsumedResourceToken(in.ConsumedTokens, color.WorkTypeID, in.ResourceTokenIndex)
 	if consumed == nil {
 		return nil
 	}
-	token := interfaces.CloneToken(*consumed)
+	token := factorytoken.Clone(*consumed)
 	token.PlaceID = arc.PlaceID
 	token.EnteredAt = in.Now
 	return &token
 }
 
 func applyOutputOutcome(
-	token *interfaces.Token,
+	token *factorytoken.Token,
 	in OutputTokenInput,
 	place *petri.Place,
 	workTypes map[string]*state.WorkType,
 ) {
 	switch in.Outcome {
-	case interfaces.OutcomeContinue:
+	case workerexecution.OutcomeContinue:
 		setOutputFeedbackTag(token, "continue_feedback", in.Feedback)
-	case interfaces.OutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		setOutputFeedbackTag(token, interfaces.RejectionFeedback, in.Feedback)
 		if isRejectedFailurePlace(place, workTypes, token.Color.WorkTypeID) {
 			appendOutputFailure(token, in.TransitionID, in.Feedback, in.Now)
 		}
-	case interfaces.OutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		appendOutputFailure(token, in.TransitionID, in.Error, in.Now)
 	}
 }
 
-func setOutputFeedbackTag(token *interfaces.Token, key, value string) {
+func setOutputFeedbackTag(token *factorytoken.Token, key, value string) {
 	if token.Color.Tags == nil {
 		token.Color.Tags = make(map[string]string)
 	}
 	token.Color.Tags[key] = value
 }
 
-func appendOutputFailure(token *interfaces.Token, transitionID, message string, now time.Time) {
+func appendOutputFailure(token *factorytoken.Token, transitionID, message string, now time.Time) {
 	token.History.LastError = message
-	token.History.FailureLog = append(token.History.FailureLog, interfaces.FailureRecord{
+	token.History.FailureLog = append(token.History.FailureLog, factorytoken.Failure{
 		TransitionID: transitionID,
 		Error:        message,
 		Timestamp:    now,
@@ -426,7 +429,7 @@ func (t *Transformer) initialPlaceID(workTypeID string) (string, error) {
 	return "", fmt.Errorf("initial place not found for work type %q", workTypeID)
 }
 
-func (t *Transformer) submitPlaceID(req interfaces.SubmitRequest) (string, error) {
+func (t *Transformer) submitPlaceID(req work.SubmitRequest) (string, error) {
 	if req.TargetState == "" {
 		return t.initialPlaceID(req.WorkTypeID)
 	}
@@ -442,7 +445,7 @@ func (t *Transformer) submitPlaceID(req interfaces.SubmitRequest) (string, error
 	return placeID, nil
 }
 
-func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColors []interfaces.TokenColor) (interfaces.TokenColor, error) {
+func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColors []factorytoken.Color) (factorytoken.Color, error) {
 	arc := arcs[arcIdx]
 
 	targetTypeID := ""
@@ -454,10 +457,10 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		if _, isWorkType := t.workTypes[targetTypeID]; !isWorkType {
 			for _, color := range inputColors {
 				if color.WorkTypeID == targetTypeID {
-					return interfaces.TokenColor{
+					return factorytoken.Color{
 						WorkTypeID: targetTypeID,
 						WorkID:     color.WorkID,
-						DataType:   interfaces.DataTypeResource,
+						DataType:   factorytoken.DataTypeResource,
 					}, nil
 				}
 			}
@@ -465,7 +468,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 	}
 
 	if matched := findMatchingInput(inputColors, targetTypeID); matched != nil {
-		color := interfaces.CloneTokenColor(*matched)
+		color := factorytoken.CloneColor(*matched)
 		ensureWorkOutputDataType(&color, targetTypeID, t.workTypes)
 		return color, nil
 	}
@@ -483,14 +486,14 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		parentID = first.WorkID
 	}
 
-	color := interfaces.TokenColor{
+	color := factorytoken.Color{
 		WorkTypeID:               targetTypeID,
 		WorkID:                   t.nextWorkID(targetTypeID),
 		Name:                     name,
 		RequestID:                requestID,
-		ChainingTraceDepth:       interfaces.ChainingTraceDepthFromTokenColors(inputColors),
+		ChainingTraceDepth:       factorytoken.ChainingTraceDepthFromColors(inputColors),
 		CurrentChainingTraceID:   traceID,
-		PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors),
+		PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDsFromColors(inputColors),
 		TraceID:                  traceID,
 		ParentID:                 parentID,
 	}
@@ -501,12 +504,12 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 // ensureWorkOutputDataType marks routed outputs into registered work-type places as
 // Work tokens. Cross-type transitions that clone a consumed Work token can inherit
 // an empty DataType; mixed Work/resource dispatches must still emit Work lineage.
-func ensureWorkOutputDataType(color *interfaces.TokenColor, targetTypeID string, workTypes map[string]*state.WorkType) {
-	if color == nil || targetTypeID == "" || color.DataType == interfaces.DataTypeResource {
+func ensureWorkOutputDataType(color *factorytoken.Color, targetTypeID string, workTypes map[string]*state.WorkType) {
+	if color == nil || targetTypeID == "" || color.DataType == factorytoken.DataTypeResource {
 		return
 	}
 	if _, isWorkType := workTypes[targetTypeID]; isWorkType {
-		color.DataType = interfaces.DataTypeWork
+		color.DataType = factorytoken.DataTypeWork
 	}
 }
 
@@ -517,7 +520,7 @@ func (t *Transformer) nextWorkID(workTypeID string) string {
 	return uuid.NewString()
 }
 
-func findMatchingInput(inputs []interfaces.TokenColor, targetTypeID string) *interfaces.TokenColor {
+func findMatchingInput(inputs []factorytoken.Color, targetTypeID string) *factorytoken.Color {
 	for i := range inputs {
 		if inputs[i].WorkTypeID == targetTypeID {
 			return &inputs[i]
@@ -526,27 +529,27 @@ func findMatchingInput(inputs []interfaces.TokenColor, targetTypeID string) *int
 	return nil
 }
 
-func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColor {
+func firstNonResourceInput(inputs []factorytoken.Color) *factorytoken.Color {
 	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
+		if inputs[i].DataType != factorytoken.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
 			return &inputs[i]
 		}
 	}
 	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource {
+		if inputs[i].DataType != factorytoken.DataTypeResource {
 			return &inputs[i]
 		}
 	}
 	return nil
 }
 
-func matchingConsumedResourceToken(consumedTokens []interfaces.Token, resourceTypeID string, resourceTokenIndex int) *interfaces.Token {
+func matchingConsumedResourceToken(consumedTokens []factorytoken.Token, resourceTypeID string, resourceTokenIndex int) *factorytoken.Token {
 	if resourceTokenIndex < 0 {
 		resourceTokenIndex = 0
 	}
 	matchIndex := 0
 	for i := range consumedTokens {
-		if consumedTokens[i].Color.DataType != interfaces.DataTypeResource {
+		if consumedTokens[i].Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		if consumedTokens[i].Color.WorkTypeID == resourceTypeID {
@@ -559,9 +562,9 @@ func matchingConsumedResourceToken(consumedTokens []interfaces.Token, resourceTy
 	return nil
 }
 
-func createdAtForOutputToken(consumedTokens []interfaces.Token, outputColor interfaces.TokenColor, now time.Time) time.Time {
+func createdAtForOutputToken(consumedTokens []factorytoken.Token, outputColor factorytoken.Color, now time.Time) time.Time {
 	for _, consumed := range consumedTokens {
-		if consumed.Color.DataType == interfaces.DataTypeResource {
+		if consumed.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if consumed.Color.WorkTypeID == outputColor.WorkTypeID && consumed.Color.WorkID == outputColor.WorkID {
@@ -571,17 +574,17 @@ func createdAtForOutputToken(consumedTokens []interfaces.Token, outputColor inte
 	return now
 }
 
-func cloneWorkContent(content []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+func cloneWorkContent(content []work.WorkContentPart) []work.WorkContentPart {
 	if len(content) == 0 {
 		return nil
 	}
-	clone := make([]interfaces.WorkContentPart, len(content))
+	clone := make([]work.WorkContentPart, len(content))
 	copy(clone, content)
 	return clone
 }
 
-func newTokenHistory() interfaces.TokenHistory {
-	return interfaces.TokenHistory{
+func newTokenHistory() factorytoken.History {
+	return factorytoken.History{
 		TotalVisits:         make(map[string]int),
 		ConsecutiveFailures: make(map[string]int),
 		PlaceVisits:         make(map[string]int),
@@ -597,7 +600,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func chainingTraceDepthForSubmit(req interfaces.SubmitRequest) int {
+func chainingTraceDepthForSubmit(req work.SubmitRequest) int {
 	if req.ChainingTraceDepth > 0 {
 		return req.ChainingTraceDepth
 	}
@@ -607,9 +610,9 @@ func chainingTraceDepthForSubmit(req interfaces.SubmitRequest) int {
 	return 0
 }
 
-func submitParentID(relations []interfaces.Relation) string {
+func submitParentID(relations []work.Relation) string {
 	for _, relation := range relations {
-		if relation.Type == interfaces.RelationParentChild && relation.TargetWorkID != "" {
+		if relation.Type == work.RelationParentChild && relation.TargetWorkID != "" {
 			return relation.TargetWorkID
 		}
 	}

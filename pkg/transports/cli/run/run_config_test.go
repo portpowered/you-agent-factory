@@ -12,16 +12,18 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type canonicalResponseEventRunStub struct {
@@ -96,8 +98,8 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 		}
 		store.Complete()
 		return apisurface.FactoryInvocationResult{
-			Status:        factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: answer}},
+			Status:        interfaces.InvocationTerminalStatusCompleted,
+			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
 		}, nil
 	}
 	buildInvocationBootstrap = func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
@@ -178,9 +180,9 @@ func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResul
 		}),
 	}
 	result := apisurface.FactoryInvocationResult{
-		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "final answer"},
+		Status: interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "final answer"},
 		},
 	}
 
@@ -225,13 +227,13 @@ func TestHumanResponseStreamRenderer_TerminalBlockIsWrittenOnce(t *testing.T) {
 	}{
 		{
 			name: "success",
-			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "answer"}}},
+			result: apisurface.FactoryInvocationResult{Status: interfaces.InvocationTerminalStatusCompleted,
+				PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "answer"}}},
 			want: "answer",
 		},
 		{
 			name:   "failure",
-			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusFailed, ErrorCode: "FAILED_SAFE"},
+			result: apisurface.FactoryInvocationResult{Status: interfaces.InvocationTerminalStatusFailed, ErrorCode: "FAILED_SAFE"},
 			want:   "--- invocation outcome ---\nstatus: FAILED\nerror: FAILED_SAFE\n",
 		},
 	}
@@ -429,8 +431,8 @@ func TestHumanResponseStreamRenderer_CanonicalInvalidEventsDoNotLeakPayload(t *t
 
 	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{unknownKind, invalidPhase, invalidPayload})
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status:        factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: answer}},
+		Status:        interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
 	}); err != nil {
 		t.Fatalf("write final invocation result: %v", err)
 	}
@@ -630,7 +632,7 @@ func TestRun_RuntimeMetricsConfigPassedToServiceConfig(t *testing.T) {
 		}, nil
 	}
 
-	runtimeMetricsConfig := logging.RuntimeMetricsConfig{
+	runtimeMetricsConfig := platformmetrics.RuntimeMetricsConfig{
 		MaxSize:    14,
 		MaxBackups: 7,
 		MaxAge:     28,

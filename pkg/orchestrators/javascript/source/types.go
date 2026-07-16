@@ -3,7 +3,7 @@ package workflowsource
 import (
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // Request is the normalized workflow source request shared across API, CLI, MCP,

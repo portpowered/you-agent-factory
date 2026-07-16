@@ -8,18 +8,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +54,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 
 func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net:     moveWorkTestNet(),
 	}
 	srv := newAPITestServer(mf)
@@ -96,11 +98,11 @@ func TestMoveWork_Returns409ForDuplicateRequestId(t *testing.T) {
 
 func TestMoveWorkBySessionId_Returns404ForMissingSession(t *testing.T) {
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net:     moveWorkTestNet(),
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {
-				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 				Net:     moveWorkTestNet(),
 			},
 		},
@@ -120,11 +122,11 @@ func TestMoveWorkBySessionId_SucceedsForScopedSession(t *testing.T) {
 	now := time.Now().UTC()
 	beta := moveWorkMockFactory(now, "work-beta-move", "task", "init")
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net:     moveWorkTestNet(),
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {
-				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 				Net:     moveWorkTestNet(),
 			},
 			"beta": beta,
@@ -155,7 +157,7 @@ func TestMoveWork_IntegrationWithRuntimeFactoryWhilePaused(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	ctx := context.Background()
-	if _, err := f.SubmitWorkRequest(ctx, factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	if _, err := f.SubmitWorkRequest(ctx, factoryrequests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     "work-runtime-paused",
 		WorkTypeID: "task",
 		TraceID:    "trace-runtime-paused",
@@ -193,15 +195,15 @@ func newRuntimeMoveAPISurface(f factory.Factory) apisurface.APISurface {
 	}
 }
 
-func (r *runtimeMoveAPISurface) MoveWork(ctx context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (r *runtimeMoveAPISurface) MoveWork(ctx context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	return r.runtime.MoveWork(ctx, workID, stateName, source, requestID)
 }
 
-func (r *runtimeMoveAPISurface) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (r *runtimeMoveAPISurface) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	if sessionID != factorysessions.DefaultSessionID {
-		return interfaces.OperatorMoveResult{}, apisurface.ErrFactorySessionNotFound
+		return work.OperatorMoveResult{}, apisurface.ErrFactorySessionNotFound
 	}
-	return r.runtime.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+	return r.runtime.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
 func (r *runtimeMoveAPISurface) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
@@ -236,11 +238,11 @@ func moveWorkMockFactory(now time.Time, workID, workTypeID, stateName string) *t
 	placeID := state.PlaceID(workTypeID, stateName)
 	return &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				"tok-1": {
 					ID:      "tok-1",
 					PlaceID: placeID,
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID:     workID,
 						WorkTypeID: workTypeID,
 					},

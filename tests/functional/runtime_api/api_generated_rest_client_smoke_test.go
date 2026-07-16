@@ -11,7 +11,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/service"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -62,7 +63,7 @@ func TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies(t *testing.T
 // does not claim equivalence with the future Wire-composed production graph.
 func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		configureGeneratedRESTRunner(t, cfg)
@@ -139,7 +140,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 // caller-owned context bounds without claiming production-graph equivalence.
 func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		configureGeneratedRESTRunner(t, cfg)

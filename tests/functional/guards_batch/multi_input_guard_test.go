@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,11 +18,11 @@ func TestMultiInputGuard_PartialChildren_BlocksGuard(t *testing.T) {
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
-	h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("completer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.RunUntilComplete(t, 10*time.Second)
 
@@ -43,11 +43,11 @@ func TestMultiInputGuard_AllChildrenComplete(t *testing.T) {
 	parserExec := &fanoutParserExecutor{childCount: 3}
 	h.SetCustomExecutor("parser", parserExec)
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
-	completerMock := h.MockWorker("completer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	completerMock := h.MockWorker("completer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.RunUntilComplete(t, 10*time.Second)
 
@@ -76,17 +76,17 @@ func TestMultiInputGuard_IndependentChapters(t *testing.T) {
 	h.SetCustomExecutor("parser", parserExec)
 
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	completerMock := h.MockWorker("completer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)

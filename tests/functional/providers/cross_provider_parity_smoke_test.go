@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/agy"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 // TestCrossProviderParitySmoke_ProviderSuiteEntrypoint is the maintained provider
@@ -25,8 +25,8 @@ func TestCrossProviderParitySmoke_AgyRetainsCallerOwnedPTYEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("construct Agy adapter: %v", err)
 	}
-	if got := providerAdapter.Identity(); got != adapter.Identity(interfaces.ModelProviderAgy) {
-		t.Fatalf("provider identity = %q, want %q", got, interfaces.ModelProviderAgy)
+	if got := providerAdapter.Identity(); got != adapter.Identity(modelprovider.Agy) {
+		t.Fatalf("provider identity = %q, want %q", got, modelprovider.Agy)
 	}
 	got, err := providerAdapter.PTYAllocator()
 	if err != nil {

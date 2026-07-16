@@ -4,40 +4,44 @@ import (
 	"fmt"
 	"os/exec"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
+
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // RunnerStatus reports whether a built-in runner can be selected safely in the
 // current build before dispatch starts.
 type RunnerStatus struct {
-	Metadata          interfaces.RunnerMetadata
+	Metadata          workerexecution.RunnerMetadata
 	Available         bool
 	UnavailableReason string
 }
 
 var builtInRunnerStatus = map[string]RunnerStatus{
-	interfaces.RunnerIDCodex: {
-		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDCodex),
+	workerexecution.RunnerIDCodex: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCodex),
 		Available: true,
 	},
-	interfaces.RunnerIDGemini: {
-		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDGemini),
+	workerexecution.RunnerIDGemini: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDGemini),
 		Available: true,
 	},
-	interfaces.RunnerIDKiro: {
-		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDKiro),
+	workerexecution.RunnerIDKiro: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDKiro),
 		Available: true,
 	},
-	interfaces.RunnerIDCursorCLI: {
-		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDCursorCLI),
+	workerexecution.RunnerIDCursorCLI: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDCursorCLI),
 		Available: true,
 	},
-	interfaces.RunnerIDOpenCode: {
-		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDOpenCode),
+	workerexecution.RunnerIDOpenCode: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDOpenCode),
 		Available: true,
 	},
-	interfaces.RunnerIDPi: {
-		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDPi),
+	workerexecution.RunnerIDPi: {
+		Metadata:  mustBuiltInRunnerMetadata(workerexecution.RunnerIDPi),
 		Available: true,
 	},
 }
@@ -47,7 +51,7 @@ var lookPath = exec.LookPath
 // BuiltInRunnerStatus reports the build-local availability of one stable
 // runner registration.
 func BuiltInRunnerStatus(id string) (RunnerStatus, bool) {
-	status, ok := builtInRunnerStatus[interfaces.NormalizeRunnerID(id)]
+	status, ok := builtInRunnerStatus[workerrunner.NormalizeRunnerID(id)]
 	if !ok {
 		return RunnerStatus{}, false
 	}
@@ -59,7 +63,7 @@ func BuiltInRunnerStatus(id string) (RunnerStatus, bool) {
 func ValidateBuiltInRunnerPrerequisites(id string) error {
 	status, ok := BuiltInRunnerStatus(id)
 	if !ok {
-		return fmt.Errorf("unknown runner %q", interfaces.NormalizeRunnerID(id))
+		return fmt.Errorf("unknown runner %q", workerrunner.NormalizeRunnerID(id))
 	}
 	if !status.Available {
 		return fmt.Errorf("%s", status.UnavailableReason)
@@ -76,26 +80,26 @@ func ValidateBuiltInRunnerPrerequisites(id string) error {
 }
 
 func builtInRunnerCommand(id string) string {
-	switch interfaces.NormalizeRunnerID(id) {
-	case interfaces.RunnerIDCodex:
-		return string(interfaces.ModelProviderCodex)
-	case interfaces.RunnerIDGemini:
-		return string(interfaces.ModelProviderGemini)
-	case interfaces.RunnerIDKiro:
-		return string(interfaces.ModelProviderKiro)
-	case interfaces.RunnerIDCursorCLI:
-		return string(interfaces.ModelProviderCursor)
-	case interfaces.RunnerIDOpenCode:
-		return string(interfaces.ModelProviderOpenCode)
-	case interfaces.RunnerIDPi:
-		return string(interfaces.ModelProviderPi)
+	switch workerrunner.NormalizeRunnerID(id) {
+	case workerexecution.RunnerIDCodex:
+		return string(modelprovider.Codex)
+	case workerexecution.RunnerIDGemini:
+		return string(modelprovider.Gemini)
+	case workerexecution.RunnerIDKiro:
+		return string(modelprovider.Kiro)
+	case workerexecution.RunnerIDCursorCLI:
+		return string(modelprovider.Cursor)
+	case workerexecution.RunnerIDOpenCode:
+		return string(modelprovider.OpenCode)
+	case workerexecution.RunnerIDPi:
+		return string(modelprovider.Pi)
 	default:
 		return ""
 	}
 }
 
-func mustBuiltInRunnerMetadata(id string) interfaces.RunnerMetadata {
-	metadata, ok := interfaces.BuiltInRunnerMetadata(id)
+func mustBuiltInRunnerMetadata(id string) workerexecution.RunnerMetadata {
+	metadata, ok := workerrunner.BuiltInRunnerMetadata(id)
 	if !ok {
 		panic("missing built-in runner metadata: " + id)
 	}

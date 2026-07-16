@@ -8,10 +8,17 @@ import (
 	"sync"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type recordingLeaseHost struct {
@@ -37,7 +44,7 @@ type executionTestRuntime struct {
 	lastServingEndpoint string
 }
 
-func (r *executionTestRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
+func (r *executionTestRuntime) Supports(resource factoryresource.Config, worker *workerconfig.Config) bool {
 	return localmodels.CanonicalBackendName(resource.Backend) == "LLAMACPP" &&
 		localmodels.CanonicalModelName(worker.Model) == localmodels.CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
@@ -54,11 +61,11 @@ type executionTestHandle struct {
 	runtime *executionTestRuntime
 }
 
-func (h executionTestHandle) Invoke(_ context.Context, _ localmodels.InvocationRequest) (interfaces.InferenceResponse, error) {
+func (h executionTestHandle) Invoke(_ context.Context, _ localmodels.InvocationRequest) (workerexecution.InferenceResponse, error) {
 	h.runtime.mu.Lock()
 	defer h.runtime.mu.Unlock()
 	h.runtime.invocations++
-	return interfaces.InferenceResponse{Content: "ok"}, nil
+	return workerexecution.InferenceResponse{Content: "ok"}, nil
 }
 
 type executionTestAssetPuller struct {
@@ -69,11 +76,11 @@ func (p executionTestAssetPuller) PullModel(context.Context, *factoryconfig.Load
 	return apisurface.ModelPullResult{}, apisurface.ErrModelNotFound
 }
 
-func (p executionTestAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p executionTestAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p executionTestAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p executionTestAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return p.cache, nil
 }
 
@@ -89,8 +96,8 @@ func (p executionTestAssetPuller) InspectRuntimeCache(_ context.Context, _ *fact
 
 type noopProviderRunner struct{}
 
-func (noopProviderRunner) Execute(context.Context, interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
-	return interfaces.RunnerExecutionResult{Content: "provider"}, nil
+func (noopProviderRunner) Execute(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+	return workerexecution.RunnerExecutionResult{Content: "provider"}, nil
 }
 
 func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundInference(t *testing.T) {
@@ -125,8 +132,8 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundInference(t *testing.T
 	if _, ok := runner.(*leaseBoundRunner); !ok {
 		t.Fatalf("runner type = %T, want *leaseBoundRunner", runner)
 	}
-	result, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-1"},
+	result, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -155,7 +162,7 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundAgentWorker(t *testing
 	t.Cleanup(healthServer.Close)
 
 	cfg := supervisedCatalogFactoryConfig()
-	cfg.Workers[0].Type = interfaces.WorkerTypeAgent
+	cfg.Workers[0].Type = workertaxonomy.WorkerTypeAgent
 	loaded := mustLoadedCatalogConfig(t, cfg)
 	baseHost := newSupervisedTestHost(t, &fakeProcessLauncher{
 		newProcess: func(spec ProcessStartSpec) *fakeManagedProcess {
@@ -178,16 +185,16 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundAgentWorker(t *testing
 	if !ok {
 		t.Fatal("expected voice-local worker in loaded config")
 	}
-	if workerDef.Type != interfaces.WorkerTypeAgent {
-		t.Fatalf("worker type = %q, want %q", workerDef.Type, interfaces.WorkerTypeAgent)
+	if workerDef.Type != workertaxonomy.WorkerTypeAgent {
+		t.Fatalf("worker type = %q, want %q", workerDef.Type, workertaxonomy.WorkerTypeAgent)
 	}
 
 	runner := leaseExec.WrapRunner(noopProviderRunner{}, loaded, loaded.FactoryConfig(), workerDef)
 	if _, ok := runner.(*leaseBoundRunner); !ok {
 		t.Fatalf("runner type = %T, want *leaseBoundRunner", runner)
 	}
-	result, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-agent-1"},
+	result, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-agent-1"},
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

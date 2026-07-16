@@ -5,11 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestCalculateArcs(t *testing.T) {
@@ -31,15 +34,15 @@ func TestCalculateArcs(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		outcome   interfaces.WorkOutcome
+		outcome   workerexecution.WorkOutcome
 		wantArcID string
 		wantErr   bool
 	}{
-		{name: "Accepted_ReturnsOutputArcs", outcome: interfaces.OutcomeAccepted, wantArcID: "accepted-arc"},
-		{name: "Continue_ReturnsContinueArcs", outcome: interfaces.OutcomeContinue, wantArcID: "continue-arc"},
-		{name: "Rejected_ReturnsRejectionArcs", outcome: interfaces.OutcomeRejected, wantArcID: "rejected-arc"},
-		{name: "Failed_ReturnsFailureArcs", outcome: interfaces.OutcomeFailed, wantArcID: "failed-arc"},
-		{name: "UnknownOutcome_ReturnsError", outcome: interfaces.WorkOutcome("UNKNOWN"), wantErr: true},
+		{name: "Accepted_ReturnsOutputArcs", outcome: workerexecution.OutcomeAccepted, wantArcID: "accepted-arc"},
+		{name: "Continue_ReturnsContinueArcs", outcome: workerexecution.OutcomeContinue, wantArcID: "continue-arc"},
+		{name: "Rejected_ReturnsRejectionArcs", outcome: workerexecution.OutcomeRejected, wantArcID: "rejected-arc"},
+		{name: "Failed_ReturnsFailureArcs", outcome: workerexecution.OutcomeFailed, wantArcID: "failed-arc"},
+		{name: "UnknownOutcome_ReturnsError", outcome: workerexecution.WorkOutcome("UNKNOWN"), wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -86,7 +89,7 @@ func TestCalculateMutations(t *testing.T) {
 			arcs: []petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeAccepted,
+				outcome:      workerexecution.OutcomeAccepted,
 				output:       "compiled",
 			},
 			wantPlace:      "wt-code:done",
@@ -100,7 +103,7 @@ func TestCalculateMutations(t *testing.T) {
 			arcs: []petri.Arc{{ID: "reject", PlaceID: "wt-code:init"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeRejected,
+				outcome:      workerexecution.OutcomeRejected,
 				feedback:     "try again",
 			},
 			wantPlace:      "wt-code:init",
@@ -114,7 +117,7 @@ func TestCalculateMutations(t *testing.T) {
 			arcs: []petri.Arc{{ID: "fail", PlaceID: "wt-code:failed"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeFailed,
+				outcome:      workerexecution.OutcomeFailed,
 				err:          "agent crashed",
 			},
 			wantPlace:       "wt-code:failed",
@@ -129,7 +132,7 @@ func TestCalculateMutations(t *testing.T) {
 			arcs: []petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeAccepted,
+				outcome:      workerexecution.OutcomeAccepted,
 			},
 			wantPlace:      "wt-review:init",
 			wantWorkTypeID: "wt-review",
@@ -159,10 +162,10 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 		"wt-code":   {ID: "wt-code"},
 		"wt-review": {ID: "wt-review"},
 	}
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-1",
 		PlaceID: "wt-code:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-code-1",
 			WorkTypeID: "wt-code",
 			Name:       "story-1",
@@ -170,7 +173,7 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 		},
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -183,8 +186,8 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 		consumed:   consumed,
 		result: resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
-			recordedOutputWork: []interfaces.FactoryWorkItem{{
+			outcome:      workerexecution.OutcomeAccepted,
+			recordedOutputWork: []work.FactoryWorkItem{{
 				ID:                       "work-review-99",
 				WorkTypeID:               "wt-review",
 				DisplayName:              "review-override",
@@ -196,7 +199,7 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 			}},
 		},
 		now:         now,
-		history:     interfaces.TokenHistory{},
+		history:     factorytoken.History{},
 		inputColors: tokenColorsFromTokens(consumed),
 		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
 	})
@@ -241,10 +244,10 @@ func TestCalculateMutations_MultiOutputFanoutPreservesAuthoredNameAcrossAllLanes
 		"wt-review-b": {ID: "wt-review-b"},
 		"wt-review-c": {ID: "wt-review-c"},
 	}
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-1",
 		PlaceID: "wt-code:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-code-1",
 			WorkTypeID: "wt-code",
 			Name:       "prd-shared-name",
@@ -253,7 +256,7 @@ func TestCalculateMutations_MultiOutputFanoutPreservesAuthoredNameAcrossAllLanes
 		},
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -270,10 +273,10 @@ func TestCalculateMutations_MultiOutputFanoutPreservesAuthoredNameAcrossAllLanes
 		consumed: consumed,
 		result: resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 		},
 		now:         now,
-		history:     interfaces.TokenHistory{},
+		history:     factorytoken.History{},
 		inputColors: tokenColorsFromTokens(consumed),
 		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
 	})
@@ -317,10 +320,10 @@ func TestResolveWorkResult_RuntimeConfigStopWordsAcceptConfiguredMarker(t *testi
 		ID:   "transition-id",
 		Name: "runtime-station",
 	}
-	result := &interfaces.WorkResult{
+	result := &workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-id",
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 		Output:       "rendered output DONE",
 	}
 
@@ -330,7 +333,7 @@ func TestResolveWorkResult_RuntimeConfigStopWordsAcceptConfiguredMarker(t *testi
 		},
 	})
 
-	if resolved.outcome != interfaces.OutcomeAccepted {
+	if resolved.outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("resolved outcome = %s, want ACCEPTED", resolved.outcome)
 	}
 }
@@ -340,10 +343,10 @@ func TestResolveWorkResult_RuntimeConfigStopWordsFailMissingMarker(t *testing.T)
 		ID:   "transition-id",
 		Name: "runtime-station",
 	}
-	result := &interfaces.WorkResult{
+	result := &workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-id",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "rendered output without marker",
 	}
 
@@ -353,7 +356,7 @@ func TestResolveWorkResult_RuntimeConfigStopWordsFailMissingMarker(t *testing.T)
 		},
 	})
 
-	if resolved.outcome != interfaces.OutcomeFailed {
+	if resolved.outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("resolved outcome = %s, want FAILED", resolved.outcome)
 	}
 }
@@ -362,16 +365,16 @@ func TestResolveWorkResult_MissingRuntimeConfigPreservesOriginalOutcome(t *testi
 	transition := &petri.Transition{
 		ID: "runtime-station-id",
 	}
-	result := &interfaces.WorkResult{
+	result := &workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "runtime-station-id",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "rendered output without marker",
 	}
 
 	resolved := resolveWorkResult(transition, result, nil)
 
-	if resolved.outcome != interfaces.OutcomeAccepted {
+	if resolved.outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("resolved outcome = %s, want original ACCEPTED when runtime config is missing", resolved.outcome)
 	}
 }
@@ -396,14 +399,14 @@ func TestTransitioner_PreserveInput_SpawnedWorkKeepsConsumedWorkData(t *testing.
 
 	snapshot := workerBatchSnapshot("worker-output")
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Payload = []byte("input-payload")
-	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Tags = map[string]string{"objective": "goal-1"}
-	snapshot.Results[0].SpawnedWork = []interfaces.TokenColor{
-		{WorkID: "child-1", WorkTypeID: "child", DataType: interfaces.DataTypeWork, ParentID: "work-source"},
-		{WorkID: "child-2", WorkTypeID: "child", DataType: interfaces.DataTypeWork, ParentID: "work-source"},
+	snapshot.Results[0].SpawnedWork = []factorytoken.Color{
+		{WorkID: "child-1", WorkTypeID: "child", DataType: factorytoken.DataTypeWork, ParentID: "work-source"},
+		{WorkID: "child-2", WorkTypeID: "child", DataType: factorytoken.DataTypeWork, ParentID: "work-source"},
 	}
 
 	result, err := transitioner.Execute(context.Background(), snapshot)
@@ -414,7 +417,7 @@ func TestTransitioner_PreserveInput_SpawnedWorkKeepsConsumedWorkData(t *testing.
 		t.Fatal("expected transitioner result")
 	}
 
-	childTokens := make([]*interfaces.Token, 0, 2)
+	childTokens := make([]*factorytoken.Token, 0, 2)
 	for i := range result.Mutations {
 		if result.Mutations[i].ToPlace == "child:init" {
 			childTokens = append(childTokens, result.Mutations[i].NewToken)
@@ -441,12 +444,12 @@ func TestTransitioner_SpawnedWorkRelationsRemainDetachedFromResultMutation(t *te
 	net := workerBatchTestNet()
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
 	snapshot := workerBatchSnapshot("")
-	snapshot.Results[0].SpawnedWork = []interfaces.TokenColor{{
+	snapshot.Results[0].SpawnedWork = []factorytoken.Color{{
 		WorkID:     "child-work-1",
 		WorkTypeID: "child",
-		DataType:   interfaces.DataTypeWork,
-		Relations: []interfaces.Relation{{
-			Type:          interfaces.RelationDependsOn,
+		DataType:   factorytoken.DataTypeWork,
+		Relations: []work.Relation{{
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "work-source",
 			RequiredState: "complete",
 		}},
@@ -462,7 +465,7 @@ func TestTransitioner_SpawnedWorkRelationsRemainDetachedFromResultMutation(t *te
 
 	snapshot.Results[0].SpawnedWork[0].Relations[0].TargetWorkID = "mutated-after-execute"
 
-	var child *interfaces.Token
+	var child *factorytoken.Token
 	for i := range result.Mutations {
 		if result.Mutations[i].ToPlace == "child:init" {
 			child = result.Mutations[i].NewToken
@@ -485,10 +488,10 @@ func TestResolveWorkResult_RuntimeConfigUsesTransitionName(t *testing.T) {
 		ID:   "runtime-station-id",
 		Name: "runtime-station",
 	}
-	result := &interfaces.WorkResult{
+	result := &workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "runtime-station-id",
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 		Output:       "rendered output DONE",
 	}
 
@@ -498,7 +501,7 @@ func TestResolveWorkResult_RuntimeConfigUsesTransitionName(t *testing.T) {
 		},
 	})
 
-	if resolved.outcome != interfaces.OutcomeAccepted {
+	if resolved.outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("resolved outcome = %s, want ACCEPTED from transition name lookup", resolved.outcome)
 	}
 }
@@ -530,10 +533,10 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 				TransitionID:    "t1",
 				WorkstationName: "codex-worker",
 				StartTime:       now.Add(-2 * time.Second),
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:      "tok-1",
 					PlaceID: "task:init",
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID:     "work-1",
 						WorkTypeID: "task",
 						Tags:       map[string]string{"owner": "dispatcher"},
@@ -541,12 +544,12 @@ func TestTransitioner_CompletedDispatchPreservesProviderSession(t *testing.T) {
 				}},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "d-1",
 			TransitionID: "t1",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "done",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess_codex_123",
@@ -633,26 +636,26 @@ func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.Ma
 			"dispatch-1": {
 				DispatchID:   "dispatch-1",
 				TransitionID: "t1",
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:        "tok-source",
 					PlaceID:   "task:init",
 					CreatedAt: time.Date(2026, time.April, 16, 21, 0, 0, 0, time.UTC),
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						Name:       "source",
 						RequestID:  "request-source",
 						WorkID:     "work-source",
 						WorkTypeID: "task",
-						DataType:   interfaces.DataTypeWork,
+						DataType:   factorytoken.DataTypeWork,
 						TraceID:    "trace-source",
 						Tags:       map[string]string{"tenant": "port"},
 					},
 				}},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t1",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       output,
 		}},
 	}
@@ -662,24 +665,24 @@ func TestHistoryTransitionerPipeline_ProcessAcceptPreservesSiblingLaneReviewInit
 	now := time.Date(2026, 6, 15, 14, 30, 0, 0, time.UTC)
 
 	marking := petri.NewMarking("process-reconcile-pipeline-sibling")
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "review-lane-a-old", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-review-a-old", WorkTypeID: "review", Name: "lane-a",
 			CurrentChainingTraceID: traceID,
 		},
 	})
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "review-lane-b-sibling", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-review-b", WorkTypeID: "review", Name: "lane-b",
 			CurrentChainingTraceID: traceID,
 		},
 	})
 
-	taskToken := interfaces.Token{
+	taskToken := factorytoken.Token{
 		ID: "task-init", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-task-a", WorkTypeID: "task", Name: "lane-a",
 			CurrentChainingTraceID: traceID,
 		},
@@ -691,13 +694,13 @@ func TestHistoryTransitionerPipeline_ProcessAcceptPreservesSiblingLaneReviewInit
 			"d-process": {
 				DispatchID:     "d-process",
 				TransitionID:   "process",
-				ConsumedTokens: []interfaces.Token{taskToken},
+				ConsumedTokens: []factorytoken.Token{taskToken},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "d-process",
 			TransitionID: "process",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}},
 	}
 
@@ -729,24 +732,24 @@ func TestHistoryTransitionerPipeline_ProcessAcceptReconcilesDuplicateReviewInit(
 	now := time.Date(2026, 6, 15, 14, 0, 0, 0, time.UTC)
 
 	marking := petri.NewMarking("process-reconcile-pipeline")
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "review-old-1", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-review-old-1", WorkTypeID: "review", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
 	})
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "review-old-2", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-review-old-2", WorkTypeID: "review", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
 	})
 
-	taskToken := interfaces.Token{
+	taskToken := factorytoken.Token{
 		ID: "task-init", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-task-1", WorkTypeID: "task", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
@@ -758,13 +761,13 @@ func TestHistoryTransitionerPipeline_ProcessAcceptReconcilesDuplicateReviewInit(
 			"d-process": {
 				DispatchID:     "d-process",
 				TransitionID:   "process",
-				ConsumedTokens: []interfaces.Token{taskToken},
+				ConsumedTokens: []factorytoken.Token{taskToken},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "d-process",
 			TransitionID: "process",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}},
 	}
 
@@ -795,38 +798,38 @@ func TestHistoryTransitionerPipeline_ReviewAcceptReconcilesDuplicateReviewAndSta
 	now := time.Date(2026, 6, 15, 13, 0, 0, 0, time.UTC)
 
 	marking := petri.NewMarking("review-reconcile-pipeline")
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "review-extra", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-review-extra", WorkTypeID: "review", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
 	})
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "task-stale-init", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-task-stale-init", WorkTypeID: "task", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
 	})
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID: "task-stale-failed", PlaceID: "task:failed", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-task-stale-failed", WorkTypeID: "task", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
 	})
 
-	taskToken := interfaces.Token{
+	taskToken := factorytoken.Token{
 		ID: "task-in-review", PlaceID: "task:in-review", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-task-1", WorkTypeID: "task", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
 	}
-	reviewToken := interfaces.Token{
+	reviewToken := factorytoken.Token{
 		ID: "review-active", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-review-active", WorkTypeID: "review", Name: laneName,
 			CurrentChainingTraceID: traceID,
 		},
@@ -838,13 +841,13 @@ func TestHistoryTransitionerPipeline_ReviewAcceptReconcilesDuplicateReviewAndSta
 			"d-review": {
 				DispatchID:     "d-review",
 				TransitionID:   "review",
-				ConsumedTokens: []interfaces.Token{taskToken, reviewToken},
+				ConsumedTokens: []factorytoken.Token{taskToken, reviewToken},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "d-review",
 			TransitionID: "review",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}},
 	}
 

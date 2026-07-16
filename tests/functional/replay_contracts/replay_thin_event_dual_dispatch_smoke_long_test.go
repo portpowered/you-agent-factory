@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,7 +25,7 @@ func TestReplayThinEventDualDispatchSmoke_ReplayAndReadersReuseSharedArtifact(t 
 		HasNoTokenInPlace(dualDispatchSmokeScriptWorkType + ":failed")
 
 	finalTick := support.LastFactoryEventTick(smoke.artifact.Events)
-	worldState, err := projections.ReconstructFactoryWorldState(smoke.artifact.Events, finalTick)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(smoke.artifact.Events, finalTick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

@@ -8,14 +8,15 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	modelcatalogmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/modelcatalog"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -64,6 +65,15 @@ func (unavailableModelService) PullModel(context.Context, string) (apisurface.Mo
 
 func (unavailableModelService) InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
 	return apisurface.ModelInvocationResult{}, errModelServiceUnavailable
+}
+
+// AdaptModelService places generated catalog conversion outside the model
+// owner while retaining the public transport-facing service seam.
+func AdaptModelService(modelService *modelsservice.Service) apisurface.ModelAPI {
+	if modelService == nil {
+		return unavailableModelService{}
+	}
+	return modelcatalogmapping.NewAdapter(modelService)
 }
 
 // CurrentModelRuntimeConfig returns the active runtime configuration used by

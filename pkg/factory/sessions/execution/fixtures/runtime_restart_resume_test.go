@@ -15,15 +15,16 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorycontext "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *testing.T) {
@@ -47,7 +48,7 @@ func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *tes
 	if err != nil {
 		t.Fatalf("New Petri runtime: %v", err)
 	}
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkTypeID: "task", WorkID: "work-petri-recording", TraceID: "trace-petri-recording",
 	}})
 	if _, err := runtime.SubmitWorkRequest(context.Background(), request); err != nil {
@@ -56,8 +57,8 @@ func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *tes
 	if err := runtime.Run(context.Background()); err != nil {
 		t.Fatalf("Run Petri runtime: %v", err)
 	}
-	primaryResult := []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText, Text: "persisted Petri completion",
+	primaryResult := []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText, Text: "persisted Petri completion",
 	}}
 	if err := owner.RecordPetriSessionCompletion(sessionID, fse.PetriSessionCompletion{
 		Status: fse.LifecycleStatusSucceeded, PrimaryResult: primaryResult,

@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime resume smoke keeps interrupted setup, MCP control, and terminal continuity on one documented stdio path.
@@ -308,7 +308,7 @@ func newMCPRuntimeResumeService(
 	service, err := testharness.New(testharness.Config{
 		Mode:              testharness.ModeJavaScript,
 		ProjectRoot:       projectRoot,
-		Clock:             factory.RealClock{},
+		Clock:             platformclock.Real{},
 		Provider:          provider,
 		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
 		ChildExecutorMode: childExecutorMode,
@@ -841,7 +841,7 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -849,9 +849,9 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ int
 	p.mu.Unlock()
 
 	if call == 1 {
-		return interfaces.InferenceResponse{
+		return workerexecution.InferenceResponse{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -868,12 +868,12 @@ func (p *mcpRuntimeResumeSmokeBlockingProvider) Infer(ctx context.Context, _ int
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-2",

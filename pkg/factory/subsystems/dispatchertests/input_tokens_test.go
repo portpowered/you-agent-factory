@@ -1,14 +1,16 @@
 package subsystems_test
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import (
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+)
 
-func firstInputToken(rawTokens []any) interfaces.Token {
+func firstInputToken(rawTokens []any) factorytoken.Token {
 	if len(rawTokens) == 0 {
-		return interfaces.Token{}
+		return factorytoken.Token{}
 	}
-	tok, ok := rawTokens[0].(interfaces.Token)
+	tok, ok := rawTokens[0].(factorytoken.Token)
 	if !ok {
-		return interfaces.Token{}
+		return factorytoken.Token{}
 	}
 	return tok
 }

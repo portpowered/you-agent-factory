@@ -7,14 +7,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // mockScheduler returns pre-configured firing decisions.
@@ -114,8 +117,8 @@ func TestDispatcher_ExecuteExposesActiveThrottlePausesFromLoweredInferenceThrott
 		nil,
 		subsystems.WithDispatcherClock(func() time.Time { return now }),
 		subsystems.WithDispatcherRuntimeConfig(dispatcherRuntimeConfig(
-			interfaces.WorkerConfig{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
-			interfaces.WorkerConfig{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
+			workerconfig.Config{Name: "worker-a", ModelProvider: "claude", Model: "claude-sonnet"},
+			workerconfig.Config{Name: "worker-b", ModelProvider: "openai", Model: "gpt-5.4"},
 		)),
 	)
 
@@ -206,7 +209,7 @@ func TestDispatcher_ExecuteLeavesLaneRunnableWhenAuthoredThrottleRuntimeLookupIs
 	)
 
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok-a": {ID: "tok-a", PlaceID: "p-init"},
 		}),
 		DispatchHistory: []interfaces.CompletedDispatch{
@@ -274,15 +277,15 @@ func TestDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(t *t
 
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok1": {
 				ID:      "tok1",
 				PlaceID: "p-init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					RequestID:              "request-1",
 					WorkID:                 "w1",
 					WorkTypeID:             "task",
-					DataType:               interfaces.DataTypeWork,
+					DataType:               factorytoken.DataTypeWork,
 					CurrentChainingTraceID: "chain-1",
 					TraceID:                "trace-1",
 				},
@@ -352,9 +355,9 @@ func TestDispatcher_MultipleDecisionsProcessInOneTick(t *testing.T) {
 
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
-		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: interfaces.TokenColor{WorkID: "w-a", WorkTypeID: "wt"}},
-		"tok-b": {ID: "tok-b", PlaceID: "p-init-b", Color: interfaces.TokenColor{WorkID: "w-b", WorkTypeID: "wt"}},
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
+		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: factorytoken.Color{WorkID: "w-a", WorkTypeID: "wt"}},
+		"tok-b": {ID: "tok-b", PlaceID: "p-init-b", Color: factorytoken.Color{WorkID: "w-b", WorkTypeID: "wt"}},
 	})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
 
@@ -408,9 +411,9 @@ func TestDispatcher_AllowsRepeatedTransitionWithDistinctTokensInOneTick(t *testi
 		},
 	}
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
-	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
-		"tok-a": {ID: "tok-a", PlaceID: "p-init", Color: interfaces.TokenColor{WorkID: "w-a", WorkTypeID: "task"}},
-		"tok-b": {ID: "tok-b", PlaceID: "p-init", Color: interfaces.TokenColor{WorkID: "w-b", WorkTypeID: "task"}},
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
+		"tok-a": {ID: "tok-a", PlaceID: "p-init", Color: factorytoken.Color{WorkID: "w-a", WorkTypeID: "task"}},
+		"tok-b": {ID: "tok-b", PlaceID: "p-init", Color: factorytoken.Color{WorkID: "w-b", WorkTypeID: "task"}},
 	})}
 
 	result, err := dispatcher.Execute(context.Background(), &snapshot)
@@ -476,9 +479,9 @@ func TestDispatcher_InvalidAndDuplicateDecisionTargetsAreSkipped(t *testing.T) {
 
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
-		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: interfaces.TokenColor{WorkID: "w-a", WorkTypeID: "wt"}},
-		"tok-b": {ID: "tok-b", PlaceID: "p-init-b", Color: interfaces.TokenColor{WorkID: "w-b", WorkTypeID: "wt"}},
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
+		"tok-a": {ID: "tok-a", PlaceID: "p-init-a", Color: factorytoken.Color{WorkID: "w-a", WorkTypeID: "wt"}},
+		"tok-b": {ID: "tok-b", PlaceID: "p-init-b", Color: factorytoken.Color{WorkID: "w-b", WorkTypeID: "wt"}},
 	})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
 
@@ -536,8 +539,8 @@ func TestDispatcher_AlwaysProducesDispatches(t *testing.T) {
 
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
-		"tok1": {ID: "tok1", PlaceID: "p-init", Color: interfaces.TokenColor{WorkID: "w1", WorkTypeID: "wt-code"}},
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
+		"tok1": {ID: "tok1", PlaceID: "p-init", Color: factorytoken.Color{WorkID: "w1", WorkTypeID: "wt-code"}},
 	})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
 
@@ -575,7 +578,7 @@ func TestDispatcher_NoEnabledTransitions(t *testing.T) {
 	sched := &mockScheduler{}
 	dispatcher := subsystems.NewDispatcher(n, sched, nil, nil)
 
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{})
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
 
 	result, err := dispatcher.Execute(context.Background(), &snapshot)
@@ -592,10 +595,10 @@ func throttledCompletedDispatch(dispatchID string, transitionID string, endTime 
 	return interfaces.CompletedDispatch{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
-		Outcome:      interfaces.OutcomeFailed,
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		Outcome:      workerexecution.OutcomeFailed,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		},
 		EndTime: endTime,
 	}
@@ -633,8 +636,8 @@ func newSingleTransitionDispatchFixture() (*subsystems.DispatcherSubsystem, *int
 	}, nil)
 
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
-			"tok1": {ID: "tok1", PlaceID: "p-init", Color: interfaces.TokenColor{RequestID: "request-1", WorkID: "w1", TraceID: "trace-1"}},
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
+			"tok1": {ID: "tok1", PlaceID: "p-init", Color: factorytoken.Color{RequestID: "request-1", WorkID: "w1", TraceID: "trace-1"}},
 		}),
 		TickCount: 3,
 	}
@@ -695,7 +698,7 @@ func assertSingleTransitionRecordMutation(t *testing.T, mutations []interfaces.M
 	}
 }
 
-func makeDispatcherSnapshot(tokens map[string]*interfaces.Token) petri.MarkingSnapshot {
+func makeDispatcherSnapshot(tokens map[string]*factorytoken.Token) petri.MarkingSnapshot {
 	placeTokens := make(map[string][]string)
 	for id, tok := range tokens {
 		if tok.CreatedAt.IsZero() {
@@ -712,14 +715,14 @@ func makeDispatcherSnapshot(tokens map[string]*interfaces.Token) petri.MarkingSn
 	}
 }
 
-func dispatcherCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *interfaces.Token {
-	return &interfaces.Token{
+func dispatcherCronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) *factorytoken.Token {
+	return &factorytoken.Token{
 		ID:      id,
 		PlaceID: interfaces.SystemTimePendingPlaceID,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     id,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			Tags: map[string]string{
 				interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
 				interfaces.TimeWorkTagKeyCronWorkstation: workstation,
@@ -730,7 +733,7 @@ func dispatcherCronTimeToken(id string, workstation string, dueAt time.Time, exp
 	}
 }
 
-func dispatchHasInputWorkID(tokens []interfaces.Token, workID string) bool {
+func dispatchHasInputWorkID(tokens []factorytoken.Token, workID string) bool {
 	for _, token := range tokens {
 		if token.Color.WorkID == workID {
 			return true
@@ -748,7 +751,7 @@ func dispatchSequences(dispatches []interfaces.DispatchRecord) ([]string, []stri
 		transitionIDs = append(transitionIDs, dispatch.Dispatch.TransitionID)
 		for _, token := range workers.WorkDispatchInputTokens(dispatch.Dispatch) {
 			switch token.Color.DataType {
-			case interfaces.DataTypeResource:
+			case factorytoken.DataTypeResource:
 				resourceTokenIDs = append(resourceTokenIDs, token.ID)
 			default:
 				workTokenIDs = append(workTokenIDs, token.ID)
@@ -759,9 +762,9 @@ func dispatchSequences(dispatches []interfaces.DispatchRecord) ([]string, []stri
 	return transitionIDs, workTokenIDs, resourceTokenIDs
 }
 
-func dispatcherRuntimeConfig(workers ...interfaces.WorkerConfig) runtimefixtures.RuntimeDefinitionLookupFixture {
+func dispatcherRuntimeConfig(workers ...workerconfig.Config) runtimefixtures.RuntimeDefinitionLookupFixture {
 	lookup := runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers: make(map[string]*interfaces.WorkerConfig, len(workers)),
+		Workers: make(map[string]*workerconfig.Config, len(workers)),
 	}
 	for i := range workers {
 		worker := workers[i]

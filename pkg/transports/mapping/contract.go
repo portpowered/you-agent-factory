@@ -7,18 +7,25 @@ import (
 	"sort"
 	"strings"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	modelassets "github.com/portpowered/infinite-you/pkg/models/assets"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-// ModelAPI is the model catalog and direct-invocation seam for API handlers and
-// bounded test doubles.
+// ModelAPI is the model catalog and direct-invocation seam for API handlers and bounded test doubles.
 type ModelAPI interface {
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
@@ -58,8 +65,8 @@ type SessionAPI interface {
 
 // WorkAPI is the session-scoped work submission, operator move, and runtime observability seam.
 type WorkAPI interface {
-	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
-	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error)
+	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
+	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error)
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
@@ -139,7 +146,7 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 	response := factoryapi.InvocationResponse{
 		RequestId: result.RequestID,
 		TraceId:   result.TraceID,
-		Status:    result.Status,
+		Status:    factoryapi.InvocationTerminalStatus(result.Status),
 	}
 	if content := contentcontract.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
 		response.PrimaryResult = content
@@ -171,7 +178,7 @@ type stopSummaryWork struct {
 	name     string
 	workType string
 	state    string
-	token    *interfaces.Token
+	token    *factorytoken.Token
 }
 
 type stopSummaryRecovery struct {
@@ -226,7 +233,7 @@ func BuildFactorySessionStopSummary(
 func BuildWorkStopSummary(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	token *interfaces.Token,
+	token *factorytoken.Token,
 	sessionStopSummary *factoryapi.FactoryStopSummary,
 ) *factoryapi.FactoryStopSummary {
 	sessionID = strings.TrimSpace(sessionID)
@@ -515,7 +522,7 @@ func activeDispatchSummary(dispatchID string, entry interfaces.DispatchEntry) st
 func completedDispatchSummary(completed interfaces.CompletedDispatch) stopSummaryDispatch {
 	status := factoryapi.FactoryDispatchStatusCOMPLETED
 	switch completed.Outcome {
-	case interfaces.OutcomeFailed, interfaces.OutcomeRejected:
+	case workerexecution.OutcomeFailed, workerexecution.OutcomeRejected:
 		status = factoryapi.FactoryDispatchStatusFAILED
 	}
 	return stopSummaryDispatch{
@@ -619,7 +626,7 @@ func workByID(materialized materialize.PublicWorkTokens, workID string) *stopSum
 	return nil
 }
 
-func workFromToken(token *interfaces.Token, topology *state.Net) stopSummaryWork {
+func workFromToken(token *factorytoken.Token, topology *state.Net) stopSummaryWork {
 	if token == nil {
 		return stopSummaryWork{}
 	}
@@ -671,7 +678,7 @@ func snapshotTopology(
 	return snapshot.Topology
 }
 
-func dispatchTouchesWork(tokens []interfaces.Token, workID string) bool {
+func dispatchTouchesWork(tokens []factorytoken.Token, workID string) bool {
 	for _, token := range tokens {
 		if strings.TrimSpace(token.Color.WorkID) == workID {
 			return true
@@ -810,7 +817,7 @@ func failureMessageFromWork(work stopSummaryWork) string {
 	return firstNonEmpty(work.token.History.LastError, latestFailureLogMessage(work.token.History))
 }
 
-func latestFailureLogMessage(history interfaces.TokenHistory) string {
+func latestFailureLogMessage(history factorytoken.History) string {
 	if len(history.FailureLog) == 0 {
 		return ""
 	}
@@ -870,17 +877,13 @@ type RequestValidationError = interfaces.RequestValidationError
 // attempted while the current runtime still had active work.
 var ErrFactoryActivationRequiresIdle = errors.New("factory activation requires idle runtime")
 
-// ErrInvalidNamedFactoryName reports that the requested named-factory name is
-// not a safe canonical layout segment.
-var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
-
-// ErrInvalidNamedFactory reports that the submitted named-factory payload could
-// not be persisted or validated as a runnable runtime config.
-var ErrInvalidNamedFactory = errors.New("invalid named factory")
+// ErrInvalidNamedFactory retains the public compatibility identity while
+// invalid persisted Factory definitions are classified by the config owner.
+var ErrInvalidNamedFactory = factoryconfig.ErrInvalidNamedFactory
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory
 // pointer could be resolved for named-factory readback.
-var ErrCurrentFactoryNotFound = errors.New("current factory not found")
+var ErrCurrentFactoryNotFound = interfaces.ErrCurrentFactoryNotFound
 
 // ErrFactorySessionNotFound reports that no live session matched the requested
 // public session identifier.
@@ -894,71 +897,45 @@ var ErrInvalidEventReconnectCursor = errors.New("invalid event reconnect cursor"
 // expose JavaScript result or partial-result reads.
 var ErrFactorySessionResultUnavailable = errors.New("factory session result unavailable")
 
-// ErrFactoryVersionStale reports that a complete current-factory
-// save was based on an older factory definition version than the current one.
-var ErrFactoryVersionStale = errors.New("factory version is stale")
+// ErrFactoryVersionStale retains the public compatibility error identity while
+// Factory definition version policy is owned by the Factory domain.
+var ErrFactoryVersionStale = interfaces.ErrFactoryVersionStale
 
 // ErrModelNotFound reports that the requested discovered model identifier is
 // not present in the current runtime configuration.
-var ErrModelNotFound = errors.New("model not found")
+var ErrModelNotFound = managedruntime.ErrNotFound
 
 // ErrModelNotAvailable reports that a discovered local model exists but its
 // required local assets are not present in the managed cache.
-var ErrModelNotAvailable = errors.New("model not available")
+var ErrModelNotAvailable = modelassets.ErrNotAvailable
 
 // ErrModelPullUnsupported reports that the requested model does not support
 // managed local asset pulls in the current runtime or platform.
-var ErrModelPullUnsupported = errors.New("model pull is not supported")
+var ErrModelPullUnsupported = modelassets.ErrPullUnsupported
 
 // ErrManagedRuntimeSourceFetchFailed reports that required managed runtime
 // assets could not be fetched from the configured backend source.
-var ErrManagedRuntimeSourceFetchFailed = errors.New("managed runtime source fetch failed")
+var ErrManagedRuntimeSourceFetchFailed = modelassets.ErrSourceFetchFailed
 
 // ErrModelInvocationUnsupportedMode reports that the requested direct
 // invocation response mode is not valid for the selected operation output.
-var ErrModelInvocationUnsupportedMode = errors.New("model invocation response mode is not supported")
+var ErrModelInvocationUnsupportedMode = modelinference.ErrUnsupportedResponseMode
 
 // ErrModelInvocationUnsupportedOperation reports that the targeted model does
 // not expose the requested provider-agnostic operation.
-var ErrModelInvocationUnsupportedOperation = errors.New("model invocation operation is not supported")
+var ErrModelInvocationUnsupportedOperation = modelcatalog.ErrUnsupportedOperation
 
 // ModelInvocationResult carries the backend-owned direct invocation result used
 // by the API transport for either JSON metadata or streamed audio responses.
-type ModelInvocationResult struct {
-	ModelName         string
-	Worker            string
-	Operation         string
-	ProviderLocality  string
-	Content           []interfaces.WorkContentPart
-	Bindings          []interfaces.ResolvedModelOperationBinding
-	StreamFile        string
-	StreamContentType string
-}
+type ModelInvocationResult = modelinference.Result
 
 // ModelPullDownloadedFile describes one cached artifact materialized by a
 // managed local-model asset pull.
-type ModelPullDownloadedFile struct {
-	Path   string
-	Bytes  int64
-	SHA256 string
-}
+type ModelPullDownloadedFile = modelassets.DownloadedFile
 
 // ModelPullResult carries the service-owned result of pulling one model into
 // the managed local cache.
-type ModelPullResult struct {
-	ModelName          string
-	ProviderLocality   string
-	Outcome            string
-	CachePath          string
-	Revision           string
-	DownloadedFiles    []ModelPullDownloadedFile
-	ManagedPullOutcome string
-	ReadinessState     string
-	LifecycleState     string
-	SourceKind         string
-	SourceID           string
-	ResolverNotes      string
-}
+type ModelPullResult = modelassets.PullResult
 
 // TopologyValidationError carries validation targets that the graph editor can
 // map back to form fields, nodes, edges, or save-level messages.

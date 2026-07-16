@@ -15,9 +15,10 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -47,7 +48,7 @@ args:
 		workID    = "work-cli-http-stability"
 		traceID   = "trace-cli-http-stability"
 	)
-	support.WriteWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	support.WriteWorkRequestFile(t, workFile, work.SubmitRequest{
 		RequestID:  requestID,
 		Name:       "cli-http-stability",
 		WorkID:     workID,

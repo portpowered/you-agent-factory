@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,8 +16,8 @@ func TestConfigDriven_DynamicFanout_OneChild(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Single child fanout"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Page done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Page done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
 	)
 
 	parserExec := &fanoutParserExecutor{childCount: 1}
@@ -51,7 +51,7 @@ func TestConfigDriven_DynamicFanout_ZeroChildren(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "chapter", []byte(`{"title": "Zero child fanout"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Chapter finalized. COMPLETE"},
 	)
 
 	parserExec := &fanoutParserExecutor{childCount: 0}

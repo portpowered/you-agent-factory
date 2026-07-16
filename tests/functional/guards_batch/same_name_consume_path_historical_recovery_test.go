@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -111,7 +111,7 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "idea",
 		TargetState: "to-complete",
@@ -124,7 +124,7 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 		t.Fatalf("historical repair preconditions = %#v, want blocked while idea twin is still queued", preconditions)
 	}
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
 		TargetState: "to-complete",
@@ -234,7 +234,7 @@ func TestSameNameConsumePathHistoricalRecovery_TaskOnlyWithoutIdeaTwin_BlocksBou
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
 		TargetState: "to-complete",

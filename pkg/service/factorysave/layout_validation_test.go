@@ -4,17 +4,18 @@ import (
 	"context"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateEditableFactoryTopology_AllowsRecoverableLayoutWarnings(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}

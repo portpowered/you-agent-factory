@@ -6,12 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestConfigMapping_SimplePath(t *testing.T) {
@@ -557,7 +560,7 @@ func TestConfigMapping_LowersFactoryInferenceThrottleGuardOnlyAcrossMatchingWork
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "claude-worker", ModelProvider: "claude", Model: "claude-sonnet"},
 			{Name: "codex-worker", ModelProvider: "codex", Model: "gpt-5-codex"},
 		},
@@ -618,7 +621,7 @@ func TestConfigMapping_FactoryInferenceThrottleGuardBlocksOnlyMatchingLaneAtRunt
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "claude-worker", ModelProvider: "claude", Model: "claude-sonnet"},
 			{Name: "codex-worker", ModelProvider: "codex", Model: "gpt-5-codex"},
 		},
@@ -645,17 +648,17 @@ func TestConfigMapping_FactoryInferenceThrottleGuardBlocksOnlyMatchingLaneAtRunt
 	}
 
 	marking := petri.NewMarking("workflow")
-	marking.AddToken(&interfaces.Token{ID: "tok-claude", PlaceID: "task:init"})
-	marking.AddToken(&interfaces.Token{ID: "tok-codex", PlaceID: "task:init"})
+	marking.AddToken(&factorytoken.Token{ID: "tok-claude", PlaceID: "task:init"})
+	marking.AddToken(&factorytoken.Token{ID: "tok-codex", PlaceID: "task:init"})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking: marking.Snapshot(),
 		DispatchHistory: []interfaces.CompletedDispatch{
 			{
 				DispatchID:   "d-throttle",
 				TransitionID: "claude-step",
-				FailureMetadata: &interfaces.WorkFailureMetadata{
-					Family: interfaces.WorkFailureFamilyThrottle,
-					Type:   interfaces.WorkFailureTypeThrottled,
+				FailureMetadata: &workerexecution.WorkFailureMetadata{
+					Family: workerexecution.WorkFailureFamilyThrottle,
+					Type:   workerexecution.WorkFailureTypeThrottled,
 				},
 				EndTime: time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC),
 			},
@@ -664,7 +667,7 @@ func TestConfigMapping_FactoryInferenceThrottleGuardBlocksOnlyMatchingLaneAtRunt
 	evaluator := scheduler.NewEnablementEvaluator(nil, scheduler.WithEnablementClock(func() time.Time {
 		return time.Date(2026, time.May, 1, 10, 5, 0, 0, time.UTC)
 	}), scheduler.WithEnablementRuntimeConfig(runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"claude-worker": {ModelProvider: "claude", Model: "claude-sonnet"},
 			"codex-worker":  {ModelProvider: "codex", Model: "gpt-5-codex"},
 		},
@@ -688,7 +691,7 @@ func TestConfigMapping_ValidationRejectsMatchesFieldsMissingInputKey(t *testing.
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "matcher"}},
+		Workers: []workerconfig.Config{{Name: "matcher"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "processor",
 			WorkerTypeName: "matcher",
@@ -714,7 +717,7 @@ func TestConfigMapping_ValidationRejectsMatchesFieldsEmptyInputKey(t *testing.T)
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "matcher"}},
+		Workers: []workerconfig.Config{{Name: "matcher"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "processor",
 			WorkerTypeName: "matcher",
@@ -751,7 +754,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossInputs(t *tes
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{{Name: "matcher"}},
+		Workers: []workerconfig.Config{{Name: "matcher"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "match-items",
 			WorkerTypeName: "matcher",
@@ -829,7 +832,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossAllInputsByDe
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{{Name: "matcher"}},
+		Workers: []workerconfig.Config{{Name: "matcher"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "match-triplet",
 			WorkerTypeName: "matcher",

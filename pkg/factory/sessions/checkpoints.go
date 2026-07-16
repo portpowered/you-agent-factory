@@ -5,24 +5,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
-// ProjectCheckpointArtifactRef maps one internal checkpoint record to public
-// artifact metadata without raw VM state or host paths.
-func ProjectCheckpointArtifactRef(record interfaces.JavaScriptCheckpointRecord) factoryapi.FactoryArtifactRef {
+// ProjectCheckpointArtifactRef maps one internal checkpoint record to detached
+// domain artifact metadata without raw VM state or host paths.
+func ProjectCheckpointArtifactRef(record interfaces.JavaScriptCheckpointRecord) interfaces.FactoryArtifactRef {
 	artifactID := strings.TrimSpace(record.ArtifactID)
 	if artifactID == "" {
 		artifactID = record.ID
 	}
-	ref := factoryapi.FactoryArtifactRef{
-		Id:         artifactID,
-		Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
-		Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+	ref := interfaces.FactoryArtifactRef{
+		ID:         artifactID,
+		Kind:       "CHECKPOINT",
+		Visibility: "INTERNAL_CHECKPOINT",
 	}
 	if hash := strings.TrimSpace(record.ContentHash); hash != "" {
 		ref.ContentHash = &hash
@@ -34,11 +33,11 @@ func ProjectCheckpointArtifactRef(record interfaces.JavaScriptCheckpointRecord) 
 	return ref
 }
 
-// ProjectCheckpointRef maps one internal checkpoint record to the public
+// ProjectCheckpointRef maps one internal checkpoint record to the Factory-owned
 // session/event checkpoint ref shape.
-func ProjectCheckpointRef(record interfaces.JavaScriptCheckpointRecord) factoryapi.FactorySessionJavaScriptCheckpointRef {
-	ref := factoryapi.FactorySessionJavaScriptCheckpointRef{
-		Id:          record.ID,
+func ProjectCheckpointRef(record interfaces.JavaScriptCheckpointRecord) interfaces.FactorySessionJavaScriptCheckpointEventRef {
+	ref := interfaces.FactorySessionJavaScriptCheckpointEventRef{
+		ID:          record.ID,
 		ArtifactRef: artifactRefPointer(ProjectCheckpointArtifactRef(record)),
 	}
 	if label := strings.TrimSpace(record.Label); label != "" {
@@ -55,11 +54,11 @@ func ProjectCheckpointRef(record interfaces.JavaScriptCheckpointRecord) factorya
 }
 
 // ProjectCheckpointRefs maps internal checkpoint records to public refs.
-func ProjectCheckpointRefs(records []interfaces.JavaScriptCheckpointRecord) []factoryapi.FactorySessionJavaScriptCheckpointRef {
+func ProjectCheckpointRefs(records []interfaces.JavaScriptCheckpointRecord) []interfaces.FactorySessionJavaScriptCheckpointEventRef {
 	if len(records) == 0 {
 		return nil
 	}
-	projected := make([]factoryapi.FactorySessionJavaScriptCheckpointRef, 0, len(records))
+	projected := make([]interfaces.FactorySessionJavaScriptCheckpointEventRef, 0, len(records))
 	for _, record := range records {
 		projected = append(projected, ProjectCheckpointRef(record))
 	}
@@ -87,24 +86,24 @@ func JavaScriptRuntimeStateFromCheckpoints(
 	for _, record := range records {
 		projected := ProjectCheckpointRef(record)
 		state.Checkpoints = append(state.Checkpoints, interfaces.FactorySessionJavaScriptCheckpointRef{
-			ID:          projected.Id,
+			ID:          projected.ID,
 			Label:       stringValue(projected.Label),
 			Summary:     stringValue(projected.Summary),
 			Timestamp:   timeValue(projected.Timestamp),
-			ArtifactRef: projectInterfaceArtifactRef(projected.ArtifactRef),
+			ArtifactRef: projectRuntimeArtifactRef(projected.ArtifactRef),
 		})
 	}
 	return state
 }
 
-func projectInterfaceArtifactRef(ref *factoryapi.FactoryArtifactRef) *interfaces.JavaScriptCheckpointArtifactRef {
+func projectRuntimeArtifactRef(ref *interfaces.FactoryArtifactRef) *interfaces.JavaScriptCheckpointArtifactRef {
 	if ref == nil {
 		return nil
 	}
 	artifact := &interfaces.JavaScriptCheckpointArtifactRef{
-		ID:         ref.Id,
-		Kind:       string(ref.Kind),
-		Visibility: string(ref.Visibility),
+		ID:         ref.ID,
+		Kind:       ref.Kind,
+		Visibility: ref.Visibility,
 	}
 	if ref.ContentHash != nil {
 		artifact.ContentHash = *ref.ContentHash
@@ -115,7 +114,7 @@ func projectInterfaceArtifactRef(ref *factoryapi.FactoryArtifactRef) *interfaces
 	return artifact
 }
 
-func artifactRefPointer(ref factoryapi.FactoryArtifactRef) *factoryapi.FactoryArtifactRef {
+func artifactRefPointer(ref interfaces.FactoryArtifactRef) *interfaces.FactoryArtifactRef {
 	copied := ref
 	return &copied
 }
@@ -140,11 +139,11 @@ func ProjectSessionResult(
 	sessionID string,
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
-) factoryapi.FactorySessionLiveResult {
-	runtime := ProjectRuntime(ctx)
+) workflowresult.LiveSessionResult {
+	runtime := ProjectRuntimeContract(ctx)
 	input := workflowresult.SessionResultInput{
 		SessionID: sessionID,
-		Status:    runtime.Status,
+		Status:    interfaces.RuntimeStatus(runtime.Status),
 	}
 	if ctx.JavaScript != nil {
 		input.Artifacts = append(input.Artifacts, ctx.JavaScript.Artifacts...)
@@ -162,19 +161,19 @@ func ProjectSessionResult(
 	if input.ResultArtifact == nil {
 		input.ResultArtifact = finalResultArtifactRef(input.Artifacts)
 	}
-	return apisurface.BuildWorkflowSessionLiveResult(input)
+	return workflowresult.BuildLiveSessionResult(input)
 }
 
-func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) *factoryapi.FactoryArtifactRef {
+func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) *interfaces.FactoryArtifactRef {
 	for _, artifact := range artifacts {
 		if strings.EqualFold(strings.TrimSpace(artifact.Kind), "FINAL_RESULT") {
-			ref := factoryapi.FactoryArtifactRef{
-				Id:         strings.TrimSpace(artifact.ID),
-				Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
-				Visibility: factoryapi.FactoryArtifactVisibility(strings.TrimSpace(artifact.Visibility)),
+			ref := interfaces.FactoryArtifactRef{
+				ID:         strings.TrimSpace(artifact.ID),
+				Kind:       "FINAL_RESULT",
+				Visibility: strings.TrimSpace(artifact.Visibility),
 			}
 			if ref.Visibility == "" {
-				ref.Visibility = factoryapi.FactoryArtifactVisibilityPUBLIC
+				ref.Visibility = "PUBLIC"
 			}
 			if hash := strings.TrimSpace(artifact.ContentHash); hash != "" {
 				ref.ContentHash = &hash
@@ -189,12 +188,12 @@ func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) 
 	return nil
 }
 
-func primaryResultJSON(parts []interfaces.WorkContentPart) json.RawMessage {
+func primaryResultJSON(parts []work.WorkContentPart) json.RawMessage {
 	if len(parts) == 0 {
 		return nil
 	}
 	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeJSON && len(part.JSON) > 0 {
+		if part.Type.Normalized() == work.WorkContentPartTypeJSON && len(part.JSON) > 0 {
 			return part.JSON
 		}
 	}
@@ -225,21 +224,21 @@ func ProjectSessionPartialResult(
 	sessionID string,
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
-) factoryapi.FactorySessionPartialResult {
-	runtime := ProjectRuntime(ctx)
+) workflowresult.PartialSessionResult {
+	runtime := ProjectRuntimeContract(ctx)
 	phase := ""
-	if runtime.Javascript != nil && runtime.Javascript.Phase != nil {
-		phase = strings.TrimSpace(*runtime.Javascript.Phase)
+	if runtime.JavaScript != nil && runtime.JavaScript.Phase != nil {
+		phase = strings.TrimSpace(*runtime.JavaScript.Phase)
 	}
-	result := factoryapi.FactorySessionPartialResult{
-		SessionId: sessionID,
+	result := workflowresult.PartialSessionResult{
+		SessionID: sessionID,
 		Phase:     phase,
 	}
 	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {
-		result.CheckpointRefs = &checkpointRefs
+		result.CheckpointRefs = checkpointRefs
 		if latest := checkpointRefs[len(checkpointRefs)-1]; latest.ArtifactRef != nil {
-			artifactRef := *latest.ArtifactRef
-			result.PartialResultArtifactRef = &artifactRef
+			copied := *latest.ArtifactRef
+			result.PartialResultArtifactRef = &copied
 		}
 	}
 	return result

@@ -6,11 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -59,15 +60,15 @@ func TestDispatcher_CronTransitionDispatchesThroughWorkerPathWithTimeToken(t *te
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 	)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"signal-token": {
 				ID:      "signal-token",
 				PlaceID: "signal:init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					RequestID:  "request-signal",
 					WorkID:     "signal-work",
 					WorkTypeID: "signal",
-					DataType:   interfaces.DataTypeWork,
+					DataType:   factorytoken.DataTypeWork,
 					TraceID:    "trace-signal",
 				},
 			},
@@ -155,13 +156,13 @@ func TestDispatcher_RepeatedRunsProduceStableDispatchAndTokenSequences(t *testin
 		dispatcher := subsystems.NewDispatcher(n, scheduler.NewFIFOScheduler(), nil, nil)
 		snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 			Marking: petri.MarkingSnapshot{
-				Tokens: map[string]*interfaces.Token{
-					"tok-b":    {ID: "tok-b", PlaceID: "p-work-b", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
-					"tok-a":    {ID: "tok-a", PlaceID: "p-work-a", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
-					"slot-a-2": {ID: "slot-a-2", PlaceID: "slot-a:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
-					"slot-a-1": {ID: "slot-a-1", PlaceID: "slot-a:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
-					"slot-b-2": {ID: "slot-b-2", PlaceID: "slot-b:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
-					"slot-b-1": {ID: "slot-b-1", PlaceID: "slot-b:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
+				Tokens: map[string]*factorytoken.Token{
+					"tok-b":    {ID: "tok-b", PlaceID: "p-work-b", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
+					"tok-a":    {ID: "tok-a", PlaceID: "p-work-a", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
+					"slot-a-2": {ID: "slot-a-2", PlaceID: "slot-a:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
+					"slot-a-1": {ID: "slot-a-1", PlaceID: "slot-a:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
+					"slot-b-2": {ID: "slot-b-2", PlaceID: "slot-b:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
+					"slot-b-1": {ID: "slot-b-1", PlaceID: "slot-b:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
 				},
 				PlaceTokens: map[string][]string{
 					"p-work-b":         {"tok-b"},
@@ -230,7 +231,7 @@ func TestDispatcher_UsesDispatcherClockForCronTimeWindowGuard(t *testing.T) {
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 	)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"time-refresh": dispatcherCronTimeToken("time-refresh", "refresh", dueAt, expiresAt),
 		}),
 	}
@@ -293,7 +294,7 @@ func TestDispatcher_CronLogicalMoveDispatchUsesWorkstationRunnerKey(t *testing.T
 		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
 	)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"time-route": dispatcherCronTimeToken("time-route", "scheduled-route", currentTime.Add(-time.Second), currentTime.Add(time.Minute)),
 		}),
 	}

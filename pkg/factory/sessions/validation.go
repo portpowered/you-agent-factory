@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const validationTargetKind = "factory-session-validation"
@@ -56,7 +55,7 @@ type validationError struct {
 	field   string
 	err     error
 	code    string
-	targets []factoryapi.FactoryValidationTarget
+	targets []factoryvalidation.Target
 }
 
 func (e *validationError) Error() string {
@@ -73,14 +72,14 @@ func (e *validationError) Unwrap() error {
 	return e.err
 }
 
-func (e *validationError) ErrorTargets() []factoryapi.FactoryValidationTarget {
+func (e *validationError) ErrorTargets() []factoryvalidation.Target {
 	if e == nil {
 		return nil
 	}
 	if len(e.targets) > 0 {
-		return append([]factoryapi.FactoryValidationTarget(nil), e.targets...)
+		return append([]factoryvalidation.Target(nil), e.targets...)
 	}
-	return []factoryapi.FactoryValidationTarget{validationErrorTarget(e.reason, e.field, e.Error())}
+	return []factoryvalidation.Target{validationErrorTarget(e.reason, e.field, e.Error())}
 }
 
 func (e *validationError) ErrorCode() string {
@@ -107,11 +106,11 @@ func NewConfigLoadFailedError(failures []DiscoveryFailure) error {
 	if len(failures) == 0 {
 		return nil
 	}
-	targets := make([]factoryapi.FactoryValidationTarget, 0, len(failures))
+	targets := make([]factoryvalidation.Target, 0, len(failures))
 	for _, failure := range failures {
 		targetID := TargetDisplayName(failure.Ref)
 		message := fmt.Sprintf("Factory target %q at %q could not be loaded: %s", targetID, failure.FactoryDir, failure.Summary)
-		targets = append(targets, factoryvalidation.FactorySessionTargetTarget(validationReasonConfigLoadFailed, targetID, message))
+		targets = append(targets, validationTargetErrorTarget(validationReasonConfigLoadFailed, targetID, message))
 	}
 	return &validationError{
 		reason:  validationReasonConfigLoadFailed,
@@ -131,9 +130,31 @@ func ValidationReasonFromError(err error) (reason string, field string, ok bool)
 	return ve.reason, ve.field, true
 }
 
-func validationErrorTarget(reason string, field string, message string) factoryapi.FactoryValidationTarget {
+func validationErrorTarget(reason string, field string, message string) factoryvalidation.Target {
 	if message == "" {
 		message = "factory session validation failed"
 	}
-	return factoryvalidation.FactorySessionFieldTarget(reason, field, message)
+	return factoryvalidation.Target{
+		Code:     factoryvalidation.CodeFactorySessionField + "." + reason,
+		Severity: factoryvalidation.SeverityError,
+		Message:  message,
+		Subject: factoryvalidation.Subject{
+			Type:     factoryvalidation.SubjectTypeFactory,
+			ID:       field,
+			Location: factoryvalidation.SubjectLocationReference,
+		},
+	}
+}
+
+func validationTargetErrorTarget(reason string, targetID string, message string) factoryvalidation.Target {
+	return factoryvalidation.Target{
+		Code:     factoryvalidation.CodeFactorySessionTarget + "." + reason,
+		Severity: factoryvalidation.SeverityError,
+		Message:  message,
+		Subject: factoryvalidation.Subject{
+			Type:     factoryvalidation.SubjectTypeFactory,
+			ID:       targetID,
+			Location: factoryvalidation.SubjectLocationReference,
+		},
+	}
 }

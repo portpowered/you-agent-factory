@@ -9,7 +9,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 var (
@@ -57,8 +57,8 @@ type Host interface {
 // Identity resolves one managed runtime identity for host operations.
 type Identity struct {
 	Name                string
-	Locality            factoryapi.WorkerModelLocality
-	SupportedOperations []factoryapi.ModelOperation
+	Locality            managedruntime.Locality
+	SupportedOperations []managedruntime.Operation
 	Backend             string
 	LoadPolicy          string
 	SourceKind          string
@@ -80,8 +80,8 @@ type CacheInspection struct {
 // ReadinessSnapshot carries managed-runtime-compatible readiness for one identity.
 type ReadinessSnapshot struct {
 	Identity       Identity
-	ReadinessState factoryapi.ManagedRuntimeReadinessState
-	LifecycleState factoryapi.ManagedRuntimeLifecycleState
+	ReadinessState managedruntime.ReadinessState
+	LifecycleState managedruntime.LifecycleState
 	FailureClass   FailureClass
 	Diagnostics    map[string]string
 }
@@ -96,7 +96,7 @@ type PullDownloadedFile struct {
 // PullSnapshot carries managed-runtime-compatible pull outcomes.
 type PullSnapshot struct {
 	ReadinessSnapshot
-	PullOutcome     factoryapi.ManagedRuntimePullOutcome
+	PullOutcome     managedruntime.PullOutcome
 	LegacyOutcome   string
 	CachePath       string
 	Revision        string
@@ -139,7 +139,7 @@ type SourceResolver interface {
 
 // AssetPullResult carries pull metadata projected through the model host boundary.
 type AssetPullResult struct {
-	PullOutcome     factoryapi.ManagedRuntimePullOutcome
+	PullOutcome     managedruntime.PullOutcome
 	Snapshot        ReadinessSnapshot
 	LegacyOutcome   string
 	CachePath       string
@@ -207,37 +207,37 @@ const (
 )
 
 // ReadinessStateForFailureClass maps a failure class to managed-runtime readiness.
-func ReadinessStateForFailureClass(class FailureClass) factoryapi.ManagedRuntimeReadinessState {
+func ReadinessStateForFailureClass(class FailureClass) managedruntime.ReadinessState {
 	switch class {
 	case FailureClassMissingAssets:
-		return factoryapi.ManagedRuntimeReadinessStateMISSING
+		return managedruntime.ReadinessStateMissing
 	case FailureClassLoadingTimeout:
-		return factoryapi.ManagedRuntimeReadinessStateLOADING
+		return managedruntime.ReadinessStateLoading
 	case FailureClassProcessCrash:
-		return factoryapi.ManagedRuntimeReadinessStateFAILED
+		return managedruntime.ReadinessStateFailed
 	case FailureClassCancelled:
-		return factoryapi.ManagedRuntimeReadinessStateFAILED
+		return managedruntime.ReadinessStateFailed
 	case FailureClassCapacityExhausted:
-		return factoryapi.ManagedRuntimeReadinessStateFAILED
+		return managedruntime.ReadinessStateFailed
 	case FailureClassUnsupportedRuntime:
-		return factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED
+		return managedruntime.ReadinessStateUnsupported
 	default:
-		return factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED
+		return managedruntime.ReadinessStateUnsupported
 	}
 }
 
 // FailureClassForReadinessState derives the primary failure class for a readiness state.
-func FailureClassForReadinessState(readiness factoryapi.ManagedRuntimeReadinessState) FailureClass {
+func FailureClassForReadinessState(readiness managedruntime.ReadinessState) FailureClass {
 	switch readiness {
-	case factoryapi.ManagedRuntimeReadinessStateREADY:
+	case managedruntime.ReadinessStateReady:
 		return FailureClassNone
-	case factoryapi.ManagedRuntimeReadinessStateMISSING:
+	case managedruntime.ReadinessStateMissing:
 		return FailureClassMissingAssets
-	case factoryapi.ManagedRuntimeReadinessStateLOADING:
+	case managedruntime.ReadinessStateLoading:
 		return FailureClassLoadingTimeout
-	case factoryapi.ManagedRuntimeReadinessStateFAILED:
+	case managedruntime.ReadinessStateFailed:
 		return FailureClassProcessCrash
-	case factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED:
+	case managedruntime.ReadinessStateUnsupported:
 		return FailureClassUnsupportedRuntime
 	default:
 		return FailureClassUnsupportedRuntime
@@ -271,21 +271,21 @@ func FailureClassFromError(err error) FailureClass {
 }
 
 // ManagedRuntimeFromSnapshot projects one host readiness snapshot into the public contract.
-func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) factoryapi.ManagedRuntime {
-	diagnostics := factoryapi.StringMap{}
+func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) managedruntime.Runtime {
+	diagnostics := map[string]string{}
 	for key, value := range snapshot.Diagnostics {
 		diagnostics[key] = value
 	}
 	if snapshot.FailureClass != FailureClassNone {
 		diagnostics["failureClass"] = string(snapshot.FailureClass)
 	}
-	return factoryapi.ManagedRuntime{
+	return managedruntime.Runtime{
 		Identity:            snapshot.Identity.Name,
 		ReadinessState:      snapshot.ReadinessState,
 		LifecycleState:      snapshot.LifecycleState,
 		Locality:            snapshot.Identity.Locality,
-		SupportedOperations: append([]factoryapi.ModelOperation(nil), snapshot.Identity.SupportedOperations...),
-		Diagnostics:         &diagnostics,
+		SupportedOperations: cloneOperations(snapshot.Identity.SupportedOperations),
+		Diagnostics:         diagnostics,
 	}
 }
 
@@ -294,10 +294,10 @@ func ClassifyReadiness(identity Identity, inspection CacheInspection, unsupporte
 	if unsupported {
 		return ReadinessSnapshot{
 			Identity:       identity,
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE,
+			ReadinessState: managedruntime.ReadinessStateUnsupported,
+			LifecycleState: managedruntime.LifecycleStateNotApplicable,
 			FailureClass:   FailureClassUnsupportedRuntime,
-			Diagnostics:    managedDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED, factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE),
+			Diagnostics:    managedDiagnostics(identity, managedruntime.ReadinessStateUnsupported, managedruntime.LifecycleStateNotApplicable),
 		}
 	}
 	if inspection.Supported {
@@ -322,52 +322,52 @@ func ClassifyReadiness(identity Identity, inspection CacheInspection, unsupporte
 }
 
 func readinessFromCacheInspection(inspection CacheInspection) (
-	factoryapi.ManagedRuntimeReadinessState,
-	factoryapi.ManagedRuntimeLifecycleState,
+	managedruntime.ReadinessState,
+	managedruntime.LifecycleState,
 	FailureClass,
 ) {
 	if inspection.Installed {
-		return factoryapi.ManagedRuntimeReadinessStateREADY,
-			factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+		return managedruntime.ReadinessStateReady,
+			managedruntime.LifecycleStateInstalled,
 			FailureClassNone
 	}
 	if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
-		return factoryapi.ManagedRuntimeReadinessStateFAILED,
-			factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+		return managedruntime.ReadinessStateFailed,
+			managedruntime.LifecycleStateNotInstalled,
 			FailureClassMissingAssets
 	}
 	if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
-		return factoryapi.ManagedRuntimeReadinessStateLOADING,
-			factoryapi.ManagedRuntimeLifecycleStateINSTALLING,
+		return managedruntime.ReadinessStateLoading,
+			managedruntime.LifecycleStateInstalling,
 			FailureClassLoadingTimeout
 	}
-	return factoryapi.ManagedRuntimeReadinessStateMISSING,
-		factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+	return managedruntime.ReadinessStateMissing,
+		managedruntime.LifecycleStateNotInstalled,
 		FailureClassMissingAssets
 }
 
-func readinessFromLocality(locality factoryapi.WorkerModelLocality) factoryapi.ManagedRuntimeReadinessState {
+func readinessFromLocality(locality managedruntime.Locality) managedruntime.ReadinessState {
 	switch locality {
-	case factoryapi.WorkerModelLocalityLocal:
-		return factoryapi.ManagedRuntimeReadinessStateMISSING
+	case managedruntime.LocalityLocal:
+		return managedruntime.ReadinessStateMissing
 	default:
-		return factoryapi.ManagedRuntimeReadinessStateREADY
+		return managedruntime.ReadinessStateReady
 	}
 }
 
-func lifecycleFromLocality(locality factoryapi.WorkerModelLocality) factoryapi.ManagedRuntimeLifecycleState {
+func lifecycleFromLocality(locality managedruntime.Locality) managedruntime.LifecycleState {
 	switch locality {
-	case factoryapi.WorkerModelLocalityLocal:
-		return factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+	case managedruntime.LocalityLocal:
+		return managedruntime.LifecycleStateNotInstalled
 	default:
-		return factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE
+		return managedruntime.LifecycleStateNotApplicable
 	}
 }
 
 func managedDiagnostics(
 	identity Identity,
-	readiness factoryapi.ManagedRuntimeReadinessState,
-	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+	readiness managedruntime.ReadinessState,
+	lifecycle managedruntime.LifecycleState,
 ) map[string]string {
 	diagnostics := map[string]string{
 		"readinessState": string(readiness),
@@ -385,8 +385,8 @@ func managedDiagnostics(
 
 func mergeDiagnostics(
 	identity Identity,
-	readiness factoryapi.ManagedRuntimeReadinessState,
-	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+	readiness managedruntime.ReadinessState,
+	lifecycle managedruntime.LifecycleState,
 	extra map[string]string,
 ) map[string]string {
 	diagnostics := managedDiagnostics(identity, readiness, lifecycle)
@@ -394,6 +394,29 @@ func mergeDiagnostics(
 		diagnostics[key] = value
 	}
 	return diagnostics
+}
+
+func cloneOperations(operations []managedruntime.Operation) []managedruntime.Operation {
+	cloned := make([]managedruntime.Operation, len(operations))
+	for index, operation := range operations {
+		cloned[index] = operation
+		cloned[index].Inputs = cloneOperationSlots(operation.Inputs)
+		cloned[index].Outputs = cloneOperationSlots(operation.Outputs)
+	}
+	return cloned
+}
+
+func cloneOperationSlots(slots []managedruntime.OperationSlot) []managedruntime.OperationSlot {
+	cloned := make([]managedruntime.OperationSlot, len(slots))
+	for index, slot := range slots {
+		cloned[index] = slot
+		cloned[index].ContentTypes = append([]string(nil), slot.ContentTypes...)
+		if slot.Required != nil {
+			required := *slot.Required
+			cloned[index].Required = &required
+		}
+	}
+	return cloned
 }
 
 func sourceDiagnostics(identity Identity) map[string]string {

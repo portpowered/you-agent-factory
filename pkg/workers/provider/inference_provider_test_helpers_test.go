@@ -15,9 +15,14 @@ import (
 	"testing"
 	"time"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
@@ -58,13 +63,13 @@ func openCodeResolverForExecutable(t *testing.T, mode opencodeadapter.Mode, exec
 func newScriptWrapProviderForTest(t *testing.T, runner CommandRunner, modelProvider string) *ScriptWrapProvider {
 	t.Helper()
 	options := []ScriptWrapProviderOption{WithProviderCommandRunner(runner)}
-	if modelProvider == string(interfaces.ModelProviderOpenCode) {
+	if modelProvider == string(modelprovider.OpenCode) {
 		options = append(options, WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeFinalOnly)))
 	}
 	return NewScriptWrapProvider(options...)
 }
 
-func InputTokens(tokens ...interfaces.Token) []any {
+func InputTokens(tokens ...factorytoken.Token) []any {
 	if len(tokens) == 0 {
 		return nil
 	}
@@ -75,7 +80,7 @@ func InputTokens(tokens ...interfaces.Token) []any {
 	return out
 }
 
-func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
+func CommandRequestInputTokens(request CommandRequest) []factorytoken.Token {
 	return cloneInputTokens(request.InputTokens)
 }
 
@@ -102,7 +107,7 @@ func mapValues(values map[string]string) []string {
 	return out
 }
 
-func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+func assertExecutionMetadataEqual(t *testing.T, want, got work.ExecutionMetadata) {
 	t.Helper()
 	if got.DispatchCreatedTick != want.DispatchCreatedTick {
 		t.Fatalf("DispatchCreatedTick = %d, want %d", got.DispatchCreatedTick, want.DispatchCreatedTick)
@@ -138,16 +143,16 @@ type april11FailureShapeFixture struct {
 }
 
 type april11FailureShapeSample struct {
-	Name                  string                     `json:"name"`
-	ExitCode              int                        `json:"exit_code"`
-	Stdout                string                     `json:"stdout"`
-	Stderr                string                     `json:"stderr"`
-	WantType              interfaces.WorkFailureType `json:"want_type"`
-	WantMessage           string                     `json:"want_message"`
-	WantRetryable         bool                       `json:"want_retryable"`
-	WantTerminal          bool                       `json:"want_terminal"`
-	WantThrottlePause     bool                       `json:"want_throttle_pause"`
-	RejectMessageContains []string                   `json:"reject_message_contains"`
+	Name                  string                          `json:"name"`
+	ExitCode              int                             `json:"exit_code"`
+	Stdout                string                          `json:"stdout"`
+	Stderr                string                          `json:"stderr"`
+	WantType              workerexecution.WorkFailureType `json:"want_type"`
+	WantMessage           string                          `json:"want_message"`
+	WantRetryable         bool                            `json:"want_retryable"`
+	WantTerminal          bool                            `json:"want_terminal"`
+	WantThrottlePause     bool                            `json:"want_throttle_pause"`
+	RejectMessageContains []string                        `json:"reject_message_contains"`
 }
 
 func loadApril11FailureShapeFixture(t *testing.T) april11FailureShapeFixture {
@@ -178,7 +183,7 @@ type recordingProviderExec struct {
 
 func (r *recordingProviderExec) Run(_ context.Context, req CommandRequest) (CommandResult, error) {
 	r.calls++
-	r.request = CommandRequest(interfaces.CloneSubprocessExecutionRequest(req))
+	r.request = CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req))
 	return r.result, r.err
 }
 
@@ -460,27 +465,27 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
-	_, err = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCodex),
+	_, err = provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider:    string(modelprovider.Codex),
 		Model:            "gpt-5-codex",
 		UserMessage:      "inspect the images",
 		WorkingDirectory: workspace,
 		InputTokens: InputTokens(
-			interfaces.Token{
+			factorytoken.Token{
 				ID: "token-1",
-				Color: interfaces.TokenColor{
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeText, Text: "before"},
-						{Type: interfaces.WorkContentPartTypeImage, URL: imageOneURL},
+				Color: factorytoken.Color{
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "before"},
+						{Type: work.WorkContentPartTypeImage, URL: imageOneURL},
 					},
 				},
 			},
-			interfaces.Token{
+			factorytoken.Token{
 				ID: "token-2",
-				Color: interfaces.TokenColor{
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeImage, URL: imageTwoURL},
-						{Type: interfaces.WorkContentPartTypeText, Text: "after"},
+				Color: factorytoken.Color{
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeImage, URL: imageTwoURL},
+						{Type: work.WorkContentPartTypeText, Text: "after"},
 					},
 				},
 			},
@@ -501,15 +506,15 @@ func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *te
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCodex),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Codex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "text only",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "only text"},
+			Color: factorytoken.Color{
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "only text"},
 				},
 			},
 		}),
@@ -531,16 +536,16 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 		t.Fatalf("missing url: %v", err)
 	}
 
-	_, err = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCodex),
+	_, err = provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider:    string(modelprovider.Codex),
 		Model:            "gpt-5-codex",
 		UserMessage:      "inspect",
 		WorkingDirectory: t.TempDir(),
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: missingURL},
+			Color: factorytoken.Color{
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: missingURL},
 				},
 			},
 		}),
@@ -552,8 +557,8 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("expected ProviderError, got %T: %v", err, providerErr)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypePermanentBadRequest)
+	if providerErr.Type != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[0].url`) ||
 		!strings.Contains(providerErr.Message, `media url not readable`) ||
@@ -585,15 +590,15 @@ func TestScriptWrapProvider_Infer_CodexRemoteImageMaterializesToTempPath(t *test
 		}),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCodex),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Codex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "inspect remote image",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: server.URL},
+			Color: factorytoken.Color{
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: server.URL},
 				},
 			},
 		}),
@@ -644,15 +649,15 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 		}),
 	)
 
-	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCodex),
+	_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Codex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "inspect remote image",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: server.URL},
+			Color: factorytoken.Color{
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: server.URL},
 				},
 			},
 		}),
@@ -664,8 +669,8 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("expected ProviderError, got %T: %v", err, providerErr)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypePermanentBadRequest)
+	if providerErr.Type != workerexecution.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[0].url`) ||
 		!strings.Contains(providerErr.Message, `media url inaccessible`) {
@@ -708,17 +713,17 @@ func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T
 		}),
 	)
 
-	_, err = provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCodex),
+	_, err = provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider:    string(modelprovider.Codex),
 		Model:            "gpt-5-codex",
 		UserMessage:      "inspect both images",
 		WorkingDirectory: workspace,
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: localURL},
-					{Type: interfaces.WorkContentPartTypeImage, URL: server.URL},
+			Color: factorytoken.Color{
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: localURL},
+					{Type: work.WorkContentPartTypeImage, URL: server.URL},
 				},
 			},
 		}),
@@ -819,7 +824,7 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 
 func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
 	scriptDir := t.TempDir()
-	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	scriptPath := filepath.Join(scriptDir, string(modelprovider.Cursor))
 	writeProviderOutputFixture(t, scriptPath, []byte(
 		"{not json}\n"+
 			"{\"type\":\"mystery\"}\n"+
@@ -837,7 +842,7 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 	}, nil)
 
 	result, err := runner.Run(context.Background(), CommandRequest{
-		Command:    string(interfaces.ModelProviderCursor),
+		Command:    string(modelprovider.Cursor),
 		DispatchID: "dispatch-stream-cursor",
 	})
 	if err != nil {
@@ -905,7 +910,7 @@ func assertInferenceProgressFragment(
 	wantDispatchID string,
 	wantKind string,
 	wantPayload string,
-	wantSession *interfaces.ProviderSessionMetadata,
+	wantSession *workerexecution.ProviderSessionMetadata,
 ) {
 	t.Helper()
 	if fragment.DispatchID != wantDispatchID {

@@ -15,8 +15,11 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -57,7 +60,7 @@ func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
 
 	var submitCalls atomic.Int32
 	var submittedWorkID string
-	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
+	submitter := Submitter(func(_ context.Context, request work.WorkRequest) error {
 		submitCalls.Add(1)
 		if len(request.Works) > 0 {
 			submittedWorkID = request.Works[0].WorkID
@@ -67,17 +70,17 @@ func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
 
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "linear-poller",
 	}
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			PollInterval: "1h",
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{
+			Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 				WorkType: "story",
 				State:    "init",
 			},
@@ -86,7 +89,7 @@ func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
 	runtimeCfg, err := config.NewLoadedFactoryConfig(
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: worker.Name}},
+			Workers:      []workerconfig.Config{{Name: worker.Name}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
 		nil,
@@ -143,17 +146,17 @@ func TestStartLinearPoller_StopsAndLogsLifecycle(t *testing.T) {
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "linear-poller",
 	}
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			PollInterval: "1h",
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{
+			Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 				WorkType: "story",
 				State:    "init",
 			},
@@ -172,7 +175,7 @@ func TestStartLinearPoller_StopsAndLogsLifecycle(t *testing.T) {
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 
@@ -192,16 +195,16 @@ func TestStartLinearPoller_StopsAndLogsLifecycle(t *testing.T) {
 func TestStartLinearPoller_RejectsMissingAuthBeforeStarting(t *testing.T) {
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "linear-poller",
 	}
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			PollInterval: "1h",
-			Mapping: interfaces.HostedLinearWorkerMappingConfig{
+			Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 				WorkType: "story",
 				State:    "init",
 			},
@@ -213,7 +216,7 @@ func TestStartLinearPoller_RejectsMissingAuthBeforeStarting(t *testing.T) {
 	}
 
 	var sidecars sync.WaitGroup
-	err = StartLinearPoller(context.Background(), &sidecars, Config{}, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	err = StartLinearPoller(context.Background(), &sidecars, Config{}, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 	if err == nil || !strings.Contains(err.Error(), "auth.secretRef is required") {
@@ -227,13 +230,13 @@ func TestNewLinearPoller_AppliesProductionDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
-	worker := &interfaces.WorkerConfig{
-		Name: "linear-poller", Auth: &interfaces.HostedWorkerAuthConfig{SecretRef: "linear-key"},
-		Linear: &interfaces.HostedLinearWorkerConfig{},
+	worker := &workerconfig.Config{
+		Name: "linear-poller", Auth: &workerconfig.HostedWorkerAuthConfig{SecretRef: "linear-key"},
+		Linear: &workerconfig.HostedLinearWorkerConfig{},
 	}
 	poller, err := NewLinearPoller(LinearPollerDependencies{
 		RuntimeConfig: runtimeCfg, Worker: worker,
-		Submitter: func(context.Context, interfaces.WorkRequest) error { return nil },
+		Submitter: func(context.Context, work.WorkRequest) error { return nil },
 	})
 	if err != nil {
 		t.Fatalf("NewLinearPoller() error = %v", err)
@@ -265,7 +268,7 @@ func TestStartLinearPoller_RedactsResolvedSecretFromProviderErrors(t *testing.T)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	if err := StartLinearPoller(ctx, &sidecars, pollerCfg, runtimeCfg, workstation, worker, func(context.Context, interfaces.WorkRequest) error { return nil }); err != nil {
+	if err := StartLinearPoller(ctx, &sidecars, pollerCfg, runtimeCfg, workstation, worker, func(context.Context, work.WorkRequest) error { return nil }); err != nil {
 		t.Fatalf("StartLinearPoller() error = %v", err)
 	}
 	waitForObservedLogMessage(t, observedLogs, "hosted linear poller restarting", time.Second)
@@ -308,7 +311,7 @@ func TestStartLinearPoller_KeepsPollingOverTime(t *testing.T) {
 	var submitCalls atomic.Int32
 	var submittedWorkIDs []string
 	var submitMu sync.Mutex
-	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
+	submitter := Submitter(func(_ context.Context, request work.WorkRequest) error {
 		submitMu.Lock()
 		defer submitMu.Unlock()
 		submitCalls.Add(1)
@@ -322,7 +325,7 @@ func TestStartLinearPoller_KeepsPollingOverTime(t *testing.T) {
 		t,
 		factoryDir,
 		server,
-		func(cfg *interfaces.HostedLinearWorkerConfig) {
+		func(cfg *workerconfig.HostedLinearWorkerConfig) {
 			cfg.PollInterval = "50ms"
 		},
 	)
@@ -379,7 +382,7 @@ func TestStartLinearPoller_RestartsOnProviderHTTPFailure(t *testing.T) {
 	writeHostedLinearSecretForTest(t, factoryDir)
 
 	var submitCalls atomic.Int32
-	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
+	submitter := Submitter(func(_ context.Context, request work.WorkRequest) error {
 		submitCalls.Add(1)
 		return nil
 	})
@@ -459,17 +462,17 @@ func hostedLinearPollerFixtureForTest(
 	t *testing.T,
 	factoryDir string,
 	server *httptest.Server,
-	mutateLinear func(*interfaces.HostedLinearWorkerConfig),
-) (Config, *config.LoadedFactoryConfig, interfaces.FactoryWorkstationConfig, *interfaces.WorkerConfig) {
+	mutateLinear func(*workerconfig.HostedLinearWorkerConfig),
+) (Config, *config.LoadedFactoryConfig, interfaces.FactoryWorkstationConfig, *workerconfig.Config) {
 	t.Helper()
 	poller := interfaces.FactoryWorkstationConfig{
 		Name:           "linear-ingress",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "linear-poller",
 	}
-	linearCfg := &interfaces.HostedLinearWorkerConfig{
+	linearCfg := &workerconfig.HostedLinearWorkerConfig{
 		PollInterval: "1h",
-		Mapping: interfaces.HostedLinearWorkerMappingConfig{
+		Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 			WorkType: "story",
 			State:    "init",
 		},
@@ -477,17 +480,17 @@ func hostedLinearPollerFixtureForTest(
 	if mutateLinear != nil {
 		mutateLinear(linearCfg)
 	}
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
 		Linear:   linearCfg,
 	}
 	runtimeCfg, err := config.NewLoadedFactoryConfig(
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: worker.Name}},
+			Workers:      []workerconfig.Config{{Name: worker.Name}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
 		nil,

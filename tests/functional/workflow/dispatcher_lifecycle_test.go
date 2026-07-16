@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,13 +21,13 @@ func TestDispatcherLifecycle_IdeaToArchive(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_lifecycle_dir"))
 
 	originTraceID := "trace-idea-lifecycle-test"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "improve onboarding flow"}`),
 		TraceID:    originTraceID,
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"planner":  {{Content: "success<COMPLETE>"}},
 		"executor": {{Content: "success<COMPLETE>"}},
 		"reviewer": {{Content: "success<COMPLETE>"}},
@@ -65,7 +66,7 @@ func TestDispatcherLifecycle_PlannerFailure(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title": "broken idea"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"planner": {{Content: "failed"}},
 	})
 

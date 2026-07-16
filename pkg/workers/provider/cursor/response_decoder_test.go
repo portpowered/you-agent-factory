@@ -9,8 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 )
@@ -379,7 +380,7 @@ func TestResponseEventDecoder_TerminalFixtureAndInferenceResultStayAligned(t *te
 	}
 	assertCursorMessageSnapshot(t, decoded.Drafts[3], "Plan done")
 
-	parsed, failure := ParseInferenceResult(string(interfaces.ModelProviderCursor), raw)
+	parsed, failure := ParseInferenceResult(string(modelprovider.Cursor), raw)
 	if failure != nil || parsed == nil || parsed.Content != "Plan done" {
 		t.Fatalf("parsed = %#v failure = %#v, want aligned terminal result", parsed, failure)
 	}

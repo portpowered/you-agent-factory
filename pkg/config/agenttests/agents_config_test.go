@@ -1,14 +1,15 @@
 package agenttests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func containsAll(value string, substrings ...string) bool {

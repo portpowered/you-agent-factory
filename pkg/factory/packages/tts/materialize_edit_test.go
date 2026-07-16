@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestEditedMaterializedPackagedTTSFactoryChangesInvocationBackendMetadata(t *testing.T) {
@@ -45,7 +47,7 @@ func materializePackagedTTSFactory(t *testing.T, globalRoot string) string {
 	return factoryDir
 }
 
-func loadPackagedTTSWorker(t *testing.T, factoryDir string) *interfaces.WorkerConfig {
+func loadPackagedTTSWorker(t *testing.T, factoryDir string) *workerconfig.Config {
 	t.Helper()
 	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
 	if err != nil {
@@ -100,7 +102,7 @@ func setWorkerCommand(factoryDoc map[string]any, workerName, command string) boo
 	return false
 }
 
-func metadataBackendForWorker(t *testing.T, output string, worker *interfaces.WorkerConfig) string {
+func metadataBackendForWorker(t *testing.T, output string, worker *workerconfig.Config) string {
 	t.Helper()
 	content, err := MetadataContentFromWorkerOutput(output, "trace-edit", "session-edit", BackendLabelFromWorker(worker))
 	if err != nil {
@@ -109,7 +111,7 @@ func metadataBackendForWorker(t *testing.T, output string, worker *interfaces.Wo
 	return metadataBackend(t, content)
 }
 
-func metadataBackend(t *testing.T, content []interfaces.WorkContentPart) string {
+func metadataBackend(t *testing.T, content []work.WorkContentPart) string {
 	t.Helper()
 	if len(content) != 1 {
 		t.Fatalf("metadata content = %#v, want one text part", content)

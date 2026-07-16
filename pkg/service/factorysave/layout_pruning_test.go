@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -16,7 +16,7 @@ import (
 func TestPreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestPreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
 func TestPreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersion(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestPrepareFactoryLayoutPayload_PrunesStaleLayoutOnNamedFactoryPersistPath(
 func namedFactoryPayloadWithStaleLayout(t *testing.T) []byte {
 	t.Helper()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}

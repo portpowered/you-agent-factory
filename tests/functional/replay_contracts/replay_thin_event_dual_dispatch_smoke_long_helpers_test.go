@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func assertThinEventReconstructedModelReader(t *testing.T, smoke dualDispatchSmokeFixture, worldState interfaces.FactoryWorldState) {
@@ -16,7 +17,7 @@ func assertThinEventReconstructedModelReader(t *testing.T, smoke dualDispatchSmo
 
 	dispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.modelWorkID)
 	completion := thinEventCompletedDispatchForID(t, worldState.CompletedDispatches, dispatchID)
-	if completion.Result.Outcome != string(interfaces.OutcomeAccepted) {
+	if completion.Result.Outcome != string(workerexecution.OutcomeAccepted) {
 		t.Fatalf("model dispatch outcome = %q, want ACCEPTED", completion.Result.Outcome)
 	}
 	if len(completion.InputWorkItems) != 1 || completion.InputWorkItems[0].ID != smoke.modelWorkID {
@@ -48,7 +49,7 @@ func assertThinEventReconstructedScriptReader(t *testing.T, smoke dualDispatchSm
 
 	dispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.scriptWorkID)
 	completion := thinEventCompletedDispatchForID(t, worldState.CompletedDispatches, dispatchID)
-	if completion.Result.Outcome != string(interfaces.OutcomeAccepted) {
+	if completion.Result.Outcome != string(workerexecution.OutcomeAccepted) {
 		t.Fatalf("script dispatch outcome = %q, want ACCEPTED", completion.Result.Outcome)
 	}
 	if len(completion.InputWorkItems) != 1 || completion.InputWorkItems[0].ID != smoke.scriptWorkID {

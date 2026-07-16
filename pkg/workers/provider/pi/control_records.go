@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -69,9 +70,9 @@ func piRetryFailure(stdout []byte) *adapter.FailureFacts {
 	if latest == nil {
 		return nil
 	}
-	family, failureType := interfaces.WorkFailureFamilyRetryable, interfaces.WorkFailureTypeInternalServerError
+	family, failureType := workerexecution.WorkFailureFamilyRetryable, workerexecution.WorkFailureTypeInternalServerError
 	if status, ok := boundedStatus(latest.ErrorStatus); ok && status == 429 {
-		family, failureType = interfaces.WorkFailureFamilyThrottle, interfaces.WorkFailureTypeThrottled
+		family, failureType = workerexecution.WorkFailureFamilyThrottle, workerexecution.WorkFailureTypeThrottled
 	}
 	return &adapter.FailureFacts{
 		Family: family, Type: failureType, Message: "Pi reported a retryable provider API failure.",

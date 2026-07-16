@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	processinitializer "github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
 func TestRunTranslatesSuccessfulAndFailingProcessOutcomes(t *testing.T) {

@@ -2,14 +2,17 @@ package mappingtests
 
 import (
 	"encoding/json"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-config-roundtrip-fixture review=2026-07-18 removal=split-roundtrip-assertions-before-next-config-schema-change
@@ -32,8 +35,8 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 				},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
-		Workers:   []interfaces.WorkerConfig{{Name: "executor"}},
+		Resources: []factoryresource.Config{{Name: "agent-slot", Capacity: 2}},
+		Workers:   []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				ID:             "execute-story-id",
@@ -52,7 +55,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T
 					Workstation: "review-story",
 					MaxVisits:   3,
 				}},
-				Resources: []interfaces.ResourceConfig{
+				Resources: []factoryresource.Config{
 					{Name: "agent-slot", Capacity: 2},
 				},
 				StopWords: []string{"DONE", "RETRY"},
@@ -127,7 +130,7 @@ func TestFactoryConfigMapper_FlattenOmitsEmptyOptionalCollectionsAndExpandsPopul
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			ID:               "execute-story-id",
 			Name:             "execute-story",
@@ -197,7 +200,7 @@ func TestFactoryConfigToOpenAPI_CopiesOptionalCollections(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			ID:             "execute-story-id",
 			Name:           "execute-story",
@@ -355,7 +358,7 @@ func TestFactoryConfigInvocationSignature_RoundTripsThroughGeneratedBoundary(t *
 				{Name: "done", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",
@@ -428,7 +431,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesNonSuccessRouteArrays(t *t
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",
@@ -496,7 +499,7 @@ func TestFactoryConfigMapper_FlattenAndExpandPreservesClassificationRoutes(t *te
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "classifier"}},
+		Workers: []workerconfig.Config{{Name: "classifier"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "classify-task",
 			Type:           interfaces.WorkstationTypeClassify,

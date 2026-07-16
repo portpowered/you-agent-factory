@@ -9,11 +9,13 @@ import (
 
 	"github.com/google/uuid"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -163,8 +165,8 @@ func (d *DispatcherSubsystem) dispatchRecordFromDecision(snapshot *interfaces.En
 	return interfaces.DispatchRecord{Dispatch: dispatch, Mutations: consumeMutations}, true
 }
 
-func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) ([]interfaces.Token, bool) {
-	inputTokens := make([]interfaces.Token, 0, len(decision.ConsumeTokens))
+func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, claimedTokens map[string]bool) ([]factorytoken.Token, bool) {
+	inputTokens := make([]factorytoken.Token, 0, len(decision.ConsumeTokens))
 	seenTokens := make(map[string]bool)
 	for _, tokenID := range decision.ConsumeTokens {
 		if seenTokens[tokenID] {
@@ -191,7 +193,7 @@ func (d *DispatcherSubsystem) collectDecisionTokens(snapshot *interfaces.EngineS
 	return inputTokens, true
 }
 
-func consumeMutationsForDecision(transitionID string, inputTokens []interfaces.Token, claimedTokens map[string]bool) []interfaces.MarkingMutation {
+func consumeMutationsForDecision(transitionID string, inputTokens []factorytoken.Token, claimedTokens map[string]bool) []interfaces.MarkingMutation {
 	consumeMutations := make([]interfaces.MarkingMutation, 0, len(inputTokens))
 	for _, token := range inputTokens {
 		consumeMutations = append(consumeMutations, interfaces.MarkingMutation{
@@ -205,13 +207,13 @@ func consumeMutationsForDecision(transitionID string, inputTokens []interfaces.T
 	return consumeMutations
 }
 
-func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, tr *petri.Transition, inputTokens []interfaces.Token) interfaces.WorkDispatch {
-	dispatch := interfaces.WorkDispatch{
+func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, tr *petri.Transition, inputTokens []factorytoken.Token) work.WorkDispatch {
+	dispatch := work.WorkDispatch{
 		DispatchID:               uuid.NewString(),
 		TransitionID:             decision.TransitionID,
 		WorkerType:               decision.WorkerType,
-		CurrentChainingTraceID:   interfaces.CurrentChainingTraceIDFromTokens(inputTokens),
-		PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokens(inputTokens),
+		CurrentChainingTraceID:   factorytoken.CurrentChainingTraceID(inputTokens, interfaces.SystemTimeWorkTypeID),
+		PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDs(inputTokens),
 		Execution:                executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens),
 		InputTokens:              workers.InputTokens(inputTokens...),
 		InputBindings:            cloneDispatchInputBindings(decision.InputBindings),
@@ -223,7 +225,7 @@ func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineState
 	return dispatch
 }
 
-func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []interfaces.Token, dispatch interfaces.WorkDispatch) {
+func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []factorytoken.Token, dispatch work.WorkDispatch) {
 	d.logger.Info("dispatcher: dispatching work to worker",
 		workers.WorkLogFields(dispatch.Execution,
 			"transition_id", decision.TransitionID,
@@ -338,7 +340,7 @@ func transitionWorkerTypesForNet(net *state.Net) map[string]string {
 // workTypeFromTokens extracts the work type from the first non-resource input token.
 // Resource tokens (semaphores like agent-slot) are skipped to ensure metrics
 // reflect the actual work being done, not the slot being consumed.
-func (d *DispatcherSubsystem) workTypeFromTokens(tokens []interfaces.Token) string {
+func (d *DispatcherSubsystem) workTypeFromTokens(tokens []factorytoken.Token) string {
 	if token := preferredIdentityToken(tokens); token != nil {
 		return token.Color.WorkTypeID
 	}
@@ -348,15 +350,15 @@ func (d *DispatcherSubsystem) workTypeFromTokens(tokens []interfaces.Token) stri
 // workIDFromTokens extracts the work ID from the first non-resource input token.
 // Resource tokens (semaphores like agent-slot) are skipped to ensure metrics
 // reflect the actual work being done, not the slot being consumed.
-func (d *DispatcherSubsystem) workIDFromTokens(tokens []interfaces.Token) string {
+func (d *DispatcherSubsystem) workIDFromTokens(tokens []factorytoken.Token) string {
 	if token := preferredIdentityToken(tokens); token != nil {
 		return token.Color.WorkID
 	}
 	return ""
 }
 
-func executionMetadataForDispatch(transitionID string, currentTick int, inputTokens []interfaces.Token) interfaces.ExecutionMetadata {
-	metadata := interfaces.ExecutionMetadata{
+func executionMetadataForDispatch(transitionID string, currentTick int, inputTokens []factorytoken.Token) work.ExecutionMetadata {
+	metadata := work.ExecutionMetadata{
 		CurrentTick: currentTick,
 	}
 	for _, token := range identityTokens(inputTokens) {
@@ -374,7 +376,7 @@ func executionMetadataForDispatch(transitionID string, currentTick int, inputTok
 	return metadata
 }
 
-func preferredIdentityToken(tokens []interfaces.Token) *interfaces.Token {
+func preferredIdentityToken(tokens []factorytoken.Token) *factorytoken.Token {
 	for i := range tokens {
 		if isCustomerIdentityToken(tokens[i]) {
 			return &tokens[i]
@@ -388,9 +390,9 @@ func preferredIdentityToken(tokens []interfaces.Token) *interfaces.Token {
 	return nil
 }
 
-func identityTokens(tokens []interfaces.Token) []interfaces.Token {
-	customerTokens := make([]interfaces.Token, 0, len(tokens))
-	fallbackTokens := make([]interfaces.Token, 0, len(tokens))
+func identityTokens(tokens []factorytoken.Token) []factorytoken.Token {
+	customerTokens := make([]factorytoken.Token, 0, len(tokens))
+	fallbackTokens := make([]factorytoken.Token, 0, len(tokens))
 	for i := range tokens {
 		if !isDispatchIdentityToken(tokens[i]) {
 			continue
@@ -407,12 +409,12 @@ func identityTokens(tokens []interfaces.Token) []interfaces.Token {
 	return fallbackTokens
 }
 
-func isCustomerIdentityToken(token interfaces.Token) bool {
+func isCustomerIdentityToken(token factorytoken.Token) bool {
 	return isDispatchIdentityToken(token) && token.Color.WorkTypeID != interfaces.SystemTimeWorkTypeID
 }
 
-func isDispatchIdentityToken(token interfaces.Token) bool {
-	return token.Color.DataType != interfaces.DataTypeResource
+func isDispatchIdentityToken(token factorytoken.Token) bool {
+	return token.Color.DataType != factorytoken.DataTypeResource
 }
 
 func replayKeyForDispatch(transitionID string, traceID string, workIDs []string) string {

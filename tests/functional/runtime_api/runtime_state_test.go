@@ -6,15 +6,18 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestRuntimeState_FailureRouting(t *testing.T) {
@@ -68,10 +71,10 @@ func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 	tickTimes := []time.Time{t0.Add(1 * time.Minute), t0.Add(2 * time.Minute), t0.Add(3 * time.Minute)}
 	clockIndex := 0
 	initialMarking := petri.NewMarking(n.ID)
-	initialMarking.AddToken(&interfaces.Token{
+	initialMarking.AddToken(&factorytoken.Token{
 		ID: "tok-initial", PlaceID: "task:init", CreatedAt: t0, EnteredAt: t0,
-		Color: interfaces.TokenColor{WorkID: "task-1", WorkTypeID: "task", DataType: interfaces.DataTypeWork},
-		History: interfaces.TokenHistory{
+		Color: factorytoken.Color{WorkID: "task-1", WorkTypeID: "task", DataType: factorytoken.DataTypeWork},
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -79,7 +82,7 @@ func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 	})
 
 	sched := scheduler.NewFIFOScheduler()
-	resultBuffer := buffers.NewTypedBuffer[interfaces.WorkResult](16)
+	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](16)
 	historySubsystem := subsystems.NewHistory(nil)
 	transitionerSubsystem := subsystems.NewTransitioner(n, nil, subsystems.WithTransitionerClock(func() time.Time {
 		current := tickTimes[clockIndex]
@@ -94,7 +97,7 @@ func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 		n,
 		initialMarking,
 		[]subsystems.Subsystem{dispatcher, historySubsystem, transitionerSubsystem, termination},
-		engine.WithDispatchHandler(func(dispatch interfaces.WorkDispatch) { _ = dispatch }),
+		engine.WithDispatchHandler(func(dispatch work.WorkDispatch) { _ = dispatch }),
 		engine.WithResultBuffer(resultBuffer),
 	)
 
@@ -203,7 +206,7 @@ func (h *threeStageHarness) SetExecutor(workerType string, exec workers.WorkerEx
 
 func (h *threeStageHarness) submitWork(workTypeID, workID string) {
 	h.t.Helper()
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
 	if _, err := h.eng.SubmitWorkRequest(context.Background(), request); err != nil {
 		h.t.Fatalf("failed to submit work: %v", err)
 	}
@@ -211,8 +214,8 @@ func (h *threeStageHarness) submitWork(workTypeID, workID string) {
 
 type failingExecutor struct{ errorMsg string }
 
-func (e *failingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeFailed, Error: e.errorMsg}, nil
+func (e *failingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeFailed, Error: e.errorMsg}, nil
 }
 
 type threeStgSyncDispatcher struct {
@@ -245,7 +248,7 @@ func (sd *threeStgSyncDispatcher) Execute(ctx context.Context, snapshot *interfa
 			mutations = append(mutations, interfaces.MarkingMutation{Type: interfaces.MutationConsume, TokenID: tokenID, FromPlace: tok.PlaceID, Reason: "consumed by transition " + decision.TransitionID})
 		}
 
-		inputTokens := make([]interfaces.Token, 0, len(decision.ConsumeTokens))
+		inputTokens := make([]factorytoken.Token, 0, len(decision.ConsumeTokens))
 		for _, id := range decision.ConsumeTokens {
 			if tok, ok := snapshot.Marking.Tokens[id]; ok {
 				inputTokens = append(inputTokens, *tok)
@@ -253,7 +256,7 @@ func (sd *threeStgSyncDispatcher) Execute(ctx context.Context, snapshot *interfa
 		}
 
 		tr := sd.net.Transitions[decision.TransitionID]
-		dispatch := interfaces.WorkDispatch{
+		dispatch := work.WorkDispatch{
 			DispatchID:      fmt.Sprintf("%s-dispatch", decision.TransitionID),
 			TransitionID:    decision.TransitionID,
 			WorkerType:      tr.WorkerType,

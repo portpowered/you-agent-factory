@@ -4,16 +4,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 )
 
 func TestRunnerInferencer_UsesConversationPrompt(t *testing.T) {
 	t.Parallel()
 
 	runner := &stubRunner{response: "assistant reply"}
-	inferencer := newRunnerInferencer(runner, interfaces.ProviderInferenceRequest{
+	inferencer := newRunnerInferencer(runner, workerexecution.ProviderInferenceRequest{
 		SystemPrompt: "base system",
 		UserMessage:  "fallback",
 	})
@@ -39,7 +39,7 @@ func TestRunnerInferencer_UsesConversationPrompt(t *testing.T) {
 func TestRunnerInferencer_InferStreamEmitsDeltas(t *testing.T) {
 	t.Parallel()
 
-	inferencer := newRunnerInferencer(&stubRunner{response: "streamed"}, interfaces.ProviderInferenceRequest{
+	inferencer := newRunnerInferencer(&stubRunner{response: "streamed"}, workerexecution.ProviderInferenceRequest{
 		UserMessage: "hello",
 	})
 	ch, err := inferencer.InferStream(context.Background(), messages.InferenceRequest{

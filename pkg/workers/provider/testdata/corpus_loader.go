@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 //go:embed provider_error_corpus.json
@@ -14,14 +16,14 @@ var corpusJSON []byte
 
 // Entry is one shared provider-failure fixture entry for owned-package tests.
 type Entry struct {
-	Name                  string                     `json:"name"`
-	Provider              interfaces.ModelProvider   `json:"provider"`
-	ExitCode              int                        `json:"exit_code"`
-	Stdout                string                     `json:"stdout"`
-	Stderr                string                     `json:"stderr"`
-	ExpectedType          interfaces.WorkFailureType `json:"expected_type"`
-	ExpectedMessage       string                     `json:"expected_message,omitempty"`
-	RejectMessageContains []string                   `json:"reject_message_contains,omitempty"`
+	Name                  string                          `json:"name"`
+	Provider              modelprovider.ID                `json:"provider"`
+	ExitCode              int                             `json:"exit_code"`
+	Stdout                string                          `json:"stdout"`
+	Stderr                string                          `json:"stderr"`
+	ExpectedType          workerexecution.WorkFailureType `json:"expected_type"`
+	ExpectedMessage       string                          `json:"expected_message,omitempty"`
+	RejectMessageContains []string                        `json:"reject_message_contains,omitempty"`
 }
 
 // FailureInput is the subprocess output contract used by owned failure parsers.

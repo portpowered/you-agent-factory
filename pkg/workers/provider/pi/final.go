@@ -6,13 +6,13 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FinalResult is the authoritative Pi terminal response.
 type FinalResult struct {
 	Content         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 type nativeRecord struct {

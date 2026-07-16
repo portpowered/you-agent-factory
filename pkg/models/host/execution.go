@@ -7,8 +7,15 @@ import (
 	"sync"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -34,7 +41,7 @@ type leaseBoundRunner struct {
 	inner      workers.Runner
 	runtimeCfg interfaces.RuntimeConfigLookup
 	factoryCfg *interfaces.FactoryConfig
-	workerDef  *interfaces.WorkerConfig
+	workerDef  *workerconfig.Config
 }
 
 // NewLeaseExecution constructs a host-owned local model execution seam.
@@ -56,12 +63,12 @@ func (l *LeaseExecution) WrapRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 ) workers.Runner {
 	if inner == nil || l == nil || runtimeCfg == nil || factoryCfg == nil || workerDef == nil {
 		return inner
 	}
-	if !interfaces.UsesModelhostLease(workerDef.Type, workerDef.ModelLocality) {
+	if !workertaxonomy.UsesModelhostLease(workerDef.Type, workerDef.ModelLocality) {
 		return inner
 	}
 	return &leaseBoundRunner{
@@ -73,7 +80,7 @@ func (l *LeaseExecution) WrapRunner(
 	}
 }
 
-func (r *leaseBoundRunner) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (r *leaseBoundRunner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if r == nil || r.execution == nil {
 		return r.inner.Execute(ctx, request)
 	}
@@ -83,13 +90,13 @@ func (r *leaseBoundRunner) Execute(ctx context.Context, request interfaces.Runne
 	}
 	loaded, err := runtimeCfgForLeaseExecution(r.runtimeCfg)
 	if err != nil {
-		return interfaces.RunnerExecutionResult{}, err
+		return workerexecution.RunnerExecutionResult{}, err
 	}
 	lease, err := r.execution.Host.AcquireLease(ctx, loaded, r.workerDef.Model, LeaseOptions{
 		Holder: leaseHolderFromRequest(request),
 	})
 	if err != nil {
-		return interfaces.RunnerExecutionResult{}, err
+		return workerexecution.RunnerExecutionResult{}, err
 	}
 	defer func() {
 		_ = r.execution.Host.ReleaseLease(ctx, lease.ID)
@@ -97,7 +104,7 @@ func (r *leaseBoundRunner) Execute(ctx context.Context, request interfaces.Runne
 
 	response, err := r.execution.executeWithLease(ctx, loaded, resource, resourceKey, r.workerDef, request, lease)
 	if err != nil {
-		return interfaces.RunnerExecutionResult{}, err
+		return workerexecution.RunnerExecutionResult{}, err
 	}
 	return response, nil
 }
@@ -105,18 +112,18 @@ func (r *leaseBoundRunner) Execute(ctx context.Context, request interfaces.Runne
 func (l *LeaseExecution) executeWithLease(
 	ctx context.Context,
 	loaded *factoryconfig.LoadedFactoryConfig,
-	resource interfaces.ResourceConfig,
+	resource factoryresource.Config,
 	resourceKey string,
-	workerDef *interfaces.WorkerConfig,
-	request interfaces.RunnerExecutionRequest,
+	workerDef *workerconfig.Config,
+	request workerexecution.RunnerExecutionRequest,
 	lease Lease,
-) (interfaces.InferenceResponse, error) {
+) (workerexecution.InferenceResponse, error) {
 	if workerDef == nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("worker config is required for host-owned local model execution")
+		return workerexecution.InferenceResponse{}, fmt.Errorf("worker config is required for host-owned local model execution")
 	}
 	cacheLayout, err := l.Assets.ResolveModelCache(ctx, loaded, workerDef)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	loadWorker := factoryconfig.CloneWorkerConfig(*workerDef)
 	handle, err := l.loadHandle(ctx, leaseExecutionCacheKey(resourceKey, lease.Endpoint), localmodels.LoadRequest{
@@ -129,13 +136,13 @@ func (l *LeaseExecution) executeWithLease(
 		ServingEndpoint: strings.TrimSpace(lease.Endpoint),
 	})
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	invokeWorker := factoryconfig.CloneWorkerConfig(*workerDef)
 	return handle.Invoke(ctx, localmodels.InvocationRequest{
 		Resource: resource,
 		Worker:   &invokeWorker,
-		Request:  interfaces.CloneProviderInferenceRequest(request),
+		Request:  workerexecution.CloneProviderInferenceRequest(request),
 	})
 }
 
@@ -188,7 +195,7 @@ func runtimeCfgForLeaseExecution(runtimeCfg interfaces.RuntimeConfigLookup) (*fa
 	return loaded, nil
 }
 
-func leaseHolderFromRequest(request interfaces.RunnerExecutionRequest) string {
+func leaseHolderFromRequest(request workerexecution.RunnerExecutionRequest) string {
 	dispatchID := strings.TrimSpace(request.Dispatch.DispatchID)
 	if dispatchID != "" {
 		return dispatchID

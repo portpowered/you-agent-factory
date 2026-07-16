@@ -10,11 +10,12 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -492,16 +493,20 @@ func decodeGeneratedFactoryForSmoke(t *testing.T, data []byte) factoryapi.Factor
 func generatedFactoryForSmoke(t *testing.T, loaded *config.LoadedFactoryConfig) factoryapi.Factory {
 	t.Helper()
 
-	generated, err := replay.GeneratedFactoryFromRuntimeConfig(
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		"smoke-factory",
 		loaded.FactoryConfig(),
 		loaded,
-		replay.WithGeneratedFactorySourceDirectory("smoke-factory"),
+		replay.WithFactorySnapshotSourceDirectory("smoke-factory"),
 	)
 	if err != nil {
-		t.Fatalf("GeneratedFactoryFromRuntimeConfig: %v", err)
+		t.Fatalf("FactorySnapshotFromRuntimeConfig: %v", err)
 	}
-	return generated
+	generated, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		t.Fatalf("map Factory snapshot: %v", err)
+	}
+	return *generated
 }
 
 func marshalJSONForSmoke(t *testing.T, v any) []byte {

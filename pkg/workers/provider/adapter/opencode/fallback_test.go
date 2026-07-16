@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
@@ -27,7 +29,7 @@ func TestOpenCodeFinalOnlyAdapterConformance(t *testing.T) {
 	}
 	testkit.RunFinalOnly(t, testkit.FinalOnlyFixture{
 		NewAdapter: newAdapter,
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Model: "openai/gpt-5", UserMessage: privatePrompt,
 		},
 		Success: workerprocess.CommandResult{Stdout: []byte("Complete response\n")},
@@ -223,13 +225,13 @@ func TestFallbackFailureUsesDirectFinalOnlyTerminalSemantics(t *testing.T) {
 	testCases := []struct {
 		name   string
 		result workerprocess.CommandResult
-		want   interfaces.WorkFailureType
+		want   workerexecution.WorkFailureType
 	}{
-		{name: "authentication", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"type":"error","error":{"name":"ProviderAuthError"}}`)}, want: interfaces.WorkFailureTypeAuthFailure},
-		{name: "bad request", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"type":"error","error":{"name":"APIError","data":{"status":400}}}`)}, want: interfaces.WorkFailureTypePermanentBadRequest},
-		{name: "throttle", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("Error: rate limit exceeded")}, want: interfaces.WorkFailureTypeThrottled},
-		{name: "timeout", result: workerprocess.CommandResult{ExitCode: 124}, want: interfaces.WorkFailureTypeTimeout},
-		{name: "server", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("API Error: internal server error")}, want: interfaces.WorkFailureTypeInternalServerError},
+		{name: "authentication", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"type":"error","error":{"name":"ProviderAuthError"}}`)}, want: workerexecution.WorkFailureTypeAuthFailure},
+		{name: "bad request", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte(`{"type":"error","error":{"name":"APIError","data":{"status":400}}}`)}, want: workerexecution.WorkFailureTypePermanentBadRequest},
+		{name: "throttle", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("Error: rate limit exceeded")}, want: workerexecution.WorkFailureTypeThrottled},
+		{name: "timeout", result: workerprocess.CommandResult{ExitCode: 124}, want: workerexecution.WorkFailureTypeTimeout},
+		{name: "server", result: workerprocess.CommandResult{ExitCode: 1, Stderr: []byte("API Error: internal server error")}, want: workerexecution.WorkFailureTypeInternalServerError},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -249,7 +251,7 @@ func TestFallbackFailureUsesDirectFinalOnlyTerminalSemantics(t *testing.T) {
 	}
 }
 
-func assertTerminalParity(t *testing.T, fallback, direct *adapter.FailureFacts, want interfaces.WorkFailureType) {
+func assertTerminalParity(t *testing.T, fallback, direct *adapter.FailureFacts, want workerexecution.WorkFailureType) {
 	t.Helper()
 	if fallback == nil || direct == nil || direct.Type != want {
 		t.Fatalf("failures = %#v / %#v, want %s", fallback, direct, want)
@@ -265,8 +267,8 @@ func TestRequiredStructuredOutputRejectsUnsupportedModeWithoutFallback(t *testin
 		decision: opencode.Decision{Version: "1.2.3", Mode: opencode.ModeStructured},
 	})
 	decision := resolve(t, resolver)
-	providerAdapter, err := opencode.NewNegotiatedAdapterForRequest(decision, resolver, interfaces.ProviderInferenceRequest{
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	providerAdapter, err := opencode.NewNegotiatedAdapterForRequest(decision, resolver, workerexecution.ProviderInferenceRequest{
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{workerexecution.RunnerOptionalCapabilityStructuredOutput},
 	})
 	if err != nil {
 		t.Fatalf("NewNegotiatedAdapterForRequest() error = %v", err)
@@ -277,7 +279,7 @@ func TestRequiredStructuredOutputRejectsUnsupportedModeWithoutFallback(t *testin
 	}}}
 
 	result, executeErr := executeOpenCode(t, providerAdapter, runner)
-	if executeErr == nil || result.Failure == nil || result.Failure.Type != interfaces.WorkFailureTypePermanentBadRequest {
+	if executeErr == nil || result.Failure == nil || result.Failure.Type != workerexecution.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("result = %#v, error = %v; want permanent bad request", result, executeErr)
 	}
 	if len(runner.requests) != 1 || len(result.CapabilityUpdates) != 0 {
@@ -316,8 +318,8 @@ func executeOpenCode(t *testing.T, providerAdapter adapter.Adapter, runner adapt
 	}
 	return adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-fallback"},
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-fallback"},
 			Model:    "openai/gpt-5", UserMessage: privatePrompt,
 		}},
 		Decoder: adapter.DecoderContext{RunID: "run-fallback", DispatchID: "dispatch-fallback"},

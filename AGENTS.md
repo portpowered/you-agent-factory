@@ -82,8 +82,11 @@ the standards.
 - `pkg/factory/sessions/` contains live and durable session state, projections,
   lifecycle gateways, response streams, execution contracts, and live
   invocation orchestration.
-- `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
-  types used across subsystems.
+- `pkg/factory/contracts/` contains canonical Factory definition, runtime,
+  event, and projection value contracts shared across domain boundaries;
+  Factory Event vocabulary inventory lives under `pkg/factory/events/kinds/`,
+  and Factory Session response-event contracts live under
+  `pkg/factory/sessions/responseevents/`.
 - `pkg/work/` contains canonical Work content, materialization, query, graph,
   time-work, and pure invocation input/return-policy behavior.
 - `pkg/models/local/` contains managed model runtime catalog, readiness,

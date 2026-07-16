@@ -9,7 +9,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 type splitRuntimeExpansionOptions struct {
@@ -221,13 +222,13 @@ func resolvePortableBundledCopyTarget(
 	return target, true, nil
 }
 
-func writeExpandedWorkerFiles(targetDir string, workerConfigs []interfaces.WorkerConfig, opts splitRuntimeExpansionOptions) (int, error) {
+func writeExpandedWorkerFiles(targetDir string, workerConfigs []workerconfig.Config, opts splitRuntimeExpansionOptions) (int, error) {
 	workersDir := filepath.Join(targetDir, interfaces.WorkersDir)
 	if err := os.MkdirAll(workersDir, 0o755); err != nil {
 		return 0, fmt.Errorf("create workers directory %s: %w", workersDir, err)
 	}
 
-	configs := append([]interfaces.WorkerConfig(nil), workerConfigs...)
+	configs := append([]workerconfig.Config(nil), workerConfigs...)
 	sort.Slice(configs, func(i, j int) bool {
 		return configs[i].Name < configs[j].Name
 	})
@@ -368,7 +369,7 @@ func writeExpandedReferencedScripts(sourceDir, targetDir string, cfg *interfaces
 		return nil
 	}
 
-	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
+	workersByName := make(map[string]workerconfig.Config, len(cfg.Workers))
 	for _, workerCfg := range cfg.Workers {
 		workersByName[workerCfg.Name] = CloneWorkerConfig(workerCfg)
 	}
@@ -398,7 +399,7 @@ func writeExpandedReferencedScripts(sourceDir, targetDir string, cfg *interfaces
 
 func workstationReferencedScriptPaths(
 	workstation interfaces.FactoryWorkstationConfig,
-	workersByName map[string]interfaces.WorkerConfig,
+	workersByName map[string]workerconfig.Config,
 ) ([]string, error) {
 	if strings.TrimSpace(workstation.WorkerTypeName) == "" {
 		return nil, nil
@@ -414,7 +415,7 @@ func workstationReferencedScriptPaths(
 	return supportedReferencedScriptPaths(workerCfg)
 }
 
-func supportedReferencedScriptPaths(worker interfaces.WorkerConfig) ([]string, error) {
+func supportedReferencedScriptPaths(worker workerconfig.Config) ([]string, error) {
 	paths := make([]string, 0, 2)
 
 	commandPath, err := referencedScriptPath(worker.Command)

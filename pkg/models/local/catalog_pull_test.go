@@ -5,10 +5,14 @@ import (
 	"errors"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestPullModelWithOptions_ProjectsManagedRuntimeOutcomes(t *testing.T) {
@@ -16,7 +20,7 @@ func TestPullModelWithOptions_ProjectsManagedRuntimeOutcomes(t *testing.T) {
 	puller := &managedPullTestAssetPuller{
 		result: apisurface.ModelPullResult{
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Outcome:          legacyPullOutcomeAlreadyPresent,
 			CachePath:        "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
 			Revision:         "rev1",
@@ -53,12 +57,12 @@ func TestPullModelWithOptions_ProjectsManagedRuntimeOutcomes(t *testing.T) {
 func TestPullModelWithOptions_ClassifiesUnsupportedLocalModel(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, &interfaces.FactoryConfig{
 		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "cloud-model",
-			Type:          interfaces.WorkerTypeModel,
+			Type:          workertaxonomy.WorkerTypeModel,
 			Model:         "CLOUD_ONLY",
-			ModelLocality: interfaces.ModelLocalityCloud,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityCloud,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
 	})
 	_, err := PullModelWithOptions(&managedPullTestAssetPuller{}, context.Background(), loaded, "CLOUD_ONLY", PullOptions{})
@@ -76,11 +80,11 @@ func (p *managedPullTestAssetPuller) PullModel(context.Context, *factoryconfig.L
 	return p.result, p.err
 }
 
-func (p *managedPullTestAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *managedPullTestAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *managedPullTestAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (CacheLayout, error) {
+func (p *managedPullTestAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (CacheLayout, error) {
 	return CacheLayout{}, nil
 }
 

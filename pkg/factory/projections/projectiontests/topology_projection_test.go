@@ -2,18 +2,82 @@ package projections_test
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
+
+func TestReconstructCanonicalFactoryWorldState_DecodesTopologyFromFactorySnapshot(t *testing.T) {
+	t0 := time.Date(2026, 7, 16, 3, 0, 0, 0, time.UTC)
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":      "canonical-factory",
+		"resources": []any{map[string]any{"name": "agent-slot", "capacity": 2}},
+		"workers": []any{map[string]any{
+			"name": "reviewer", "type": "MODEL", "executorProvider": "codex-cli",
+		}},
+		"workTypes": []any{map[string]any{
+			"name": "task",
+			"states": []any{
+				map[string]any{"name": "init", "type": "INITIAL"},
+				map[string]any{"name": "done", "type": "TERMINAL"},
+			},
+		}},
+		"workstations": []any{map[string]any{
+			"id": "review", "name": "Review", "worker": "reviewer", "behavior": "STANDARD",
+			"inputs":  []any{map[string]any{"workType": "task", "state": "init"}},
+			"outputs": []any{map[string]any{"workType": "task", "state": "done"}},
+		}},
+		"futureTopologyField": map[string]any{"preserved": true},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	payload, err := json.Marshal(interfaces.InitialStructureRequestEventPayload{Factory: snapshot})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	event := interfaces.FactoryEvent{
+		Id: "canonical-initial", SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:    interfaces.FactoryEventTypeInitialStructureRequest,
+		Context: interfaces.FactoryEventContext{Tick: 0, EventTime: t0}, Payload: payload,
+	}
+
+	worldState, err := ReconstructCanonicalFactoryWorldState([]interfaces.FactoryEvent{event}, 0)
+	if err != nil {
+		t.Fatalf("ReconstructCanonicalFactoryWorldState: %v", err)
+	}
+	if worldState.Topology.Name != "canonical-factory" || len(worldState.Topology.Workstations) != 1 {
+		t.Fatalf("topology = %#v, want canonical Factory snapshot topology", worldState.Topology)
+	}
+	if got := worldState.PlaceOccupancyByID["agent-slot:available"].TokenCount; got != 2 {
+		t.Fatalf("agent-slot occupancy = %d, want 2", got)
+	}
+	if worldState.Factory == nil || !json.Valid(*worldState.Factory) {
+		t.Fatalf("Factory snapshot = %#v, want retained valid JSON", worldState.Factory)
+	}
+	var retained map[string]any
+	if err := worldState.Factory.Decode(&retained); err != nil {
+		t.Fatalf("decode retained Factory snapshot: %v", err)
+	}
+	if _, ok := retained["futureTopologyField"]; !ok {
+		t.Fatalf("retained Factory snapshot = %#v, want unknown field preserved", retained)
+	}
+	if !reflect.DeepEqual(worldState.Topology.Workstations[0].OutputPlaceIDs, []string{"task:done"}) {
+		t.Fatalf("output routes = %#v, want task:done", worldState.Topology.Workstations[0].OutputPlaceIDs)
+	}
+}
 
 func TestProjectInitialStructure_NilNet_ReturnsEmptyPayload(t *testing.T) {
 	got := ProjectInitialStructure(nil)
@@ -81,7 +145,7 @@ func TestProjectInitialStructure_NetOnlyTopology_ProjectsCanonicalPayload(t *tes
 			{ID: "story:init", TypeID: "story", State: "init", Category: "INITIAL"},
 			{ID: "story:review", TypeID: "story", State: "review", Category: "PROCESSING"},
 		},
-		Relations: []interfaces.FactoryRelation{
+		Relations: []work.FactoryRelation{
 			{Type: "INPUT", TargetWorkID: "story:init", RequiredState: "work"},
 			{Type: "INPUT", TargetWorkID: "cpu:available", RequiredState: "cpu"},
 			{Type: "OUTPUT", SourceWorkID: "build", TargetWorkID: "story:review"},
@@ -128,7 +192,7 @@ func TestProjectInitialStructure_ConfigMappedCronImplicitFailureRoutesAppearInTo
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workers: []workerconfig.Config{{Name: "cron-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "poll-for-work",
 			Kind:           interfaces.WorkstationKindCron,
@@ -172,7 +236,7 @@ func TestProjectInitialStructure_NetOnlyTopology_OrdersMapDerivedOutputDetermini
 func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "codex-cli",
@@ -258,7 +322,7 @@ func TestProjectInitialStructure_RuntimeConfig_NilFactoryConfigLeavesNameEmpty(t
 func TestProjectInitialStructure_RuntimeConfig_MissingWorkerKeepsWorkstationTopology(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"reviewer": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "claude-cli",
@@ -309,7 +373,7 @@ func projectionNetAndRuntimeConfigWithConstraints() (*state.Net, projectionRunti
 		MaxVisits:    3,
 	}
 	return net, projectionRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:        interfaces.WorkerTypeModel,
 				Concurrency: 2,
@@ -328,7 +392,7 @@ func projectionNetAndRuntimeConfigWithConstraints() (*state.Net, projectionRunti
 					Jitter:         "30s",
 					ExpiryWindow:   "2m",
 				},
-				Resources: []interfaces.ResourceConfig{{Name: "cpu", Capacity: 1}},
+				Resources: []factoryresource.Config{{Name: "cpu", Capacity: 1}},
 				Guards: []interfaces.GuardConfig{
 					{Type: interfaces.GuardTypeVisitCount, Workstation: "Build", MaxVisits: 3},
 				},
@@ -605,13 +669,13 @@ func assertSingleConstraint(t *testing.T, constraints []interfaces.FactoryConstr
 type projectionRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 type runtimeDefinitionOnlyFixture struct {
-	Workers      map[string]*interfaces.WorkerConfig
+	Workers      map[string]*workerconfig.Config
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
 var _ interfaces.RuntimeDefinitionLookup = runtimeDefinitionOnlyFixture{}
 
-func (f runtimeDefinitionOnlyFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (f runtimeDefinitionOnlyFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.Workers[name]
 	return worker, ok
 }

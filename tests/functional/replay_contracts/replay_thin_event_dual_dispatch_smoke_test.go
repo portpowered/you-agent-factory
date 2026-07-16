@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,21 +35,23 @@ type dualDispatchSmokeFixture struct {
 
 func TestReplayThinEventDualDispatchSmoke_SharedArtifactCapturesModelAndScriptDispatches(t *testing.T) {
 	smoke := runThinEventDualDispatchSmoke(t)
+	recordedEvents := testutil.GeneratedFactoryEvents(t, smoke.artifact.Events)
 
 	assertThinEventWorkRequestContainsBothPaths(t, smoke.liveEvents, smoke.requestID, smoke.traceID, smoke.modelWorkID, smoke.scriptWorkID)
 	assertThinEventDispatchLifecycleForWork(t, smoke.liveEvents, smoke.modelWorkID, factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse)
 	assertThinEventDispatchLifecycleForWork(t, smoke.liveEvents, smoke.scriptWorkID, factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse)
-	assertThinEventDispatchLifecycleForWork(t, smoke.artifact.Events, smoke.modelWorkID, factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse)
-	assertThinEventDispatchLifecycleForWork(t, smoke.artifact.Events, smoke.scriptWorkID, factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse)
+	assertThinEventDispatchLifecycleForWork(t, recordedEvents, smoke.modelWorkID, factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse)
+	assertThinEventDispatchLifecycleForWork(t, recordedEvents, smoke.scriptWorkID, factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse)
 	assertLiveEventsMatchRecordedArtifact(t, smoke.liveEvents, smoke.artifact)
 }
 
 func TestReplayThinEventDualDispatchSmoke_SharedArtifactGuardsThinRawContract(t *testing.T) {
 	smoke := runThinEventDualDispatchSmoke(t)
+	recordedEvents := testutil.GeneratedFactoryEvents(t, smoke.artifact.Events)
 
-	assertThinEventRawArtifactOmitsRetiredFields(t, smoke.artifact.Events)
-	assertThinEventModelAttemptCorrelation(t, smoke.artifact.Events, smoke.modelWorkID)
-	assertThinEventScriptBoundaryFacts(t, smoke.artifact.Events, smoke.scriptWorkID)
+	assertThinEventRawArtifactOmitsRetiredFields(t, recordedEvents)
+	assertThinEventModelAttemptCorrelation(t, recordedEvents, smoke.modelWorkID)
+	assertThinEventScriptBoundaryFacts(t, recordedEvents, smoke.scriptWorkID)
 }
 
 func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
@@ -57,7 +61,7 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 	configureThinEventDualDispatchFixture(t, dir)
 
 	artifactPath := filepath.Join(t.TempDir(), "thin-event-dual-dispatch.replay.json")
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"worker-a": {{
 			Content: "model draft complete. COMPLETE",
 		}},
@@ -79,10 +83,10 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 		modelWorkID:  dualDispatchSmokeModelWorkID,
 		scriptWorkID: dualDispatchSmokeScriptWorkID,
 	}
-	harness.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: smoke.requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{
 				Name:       "model-path",
 				WorkID:     smoke.modelWorkID,
@@ -531,13 +535,13 @@ func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi
 	t.Helper()
 
 	recordedByID := make(map[string]factoryapi.FactoryEvent, len(artifact.Events))
-	for _, event := range artifact.Events {
+	for _, event := range testutil.GeneratedFactoryEvents(t, artifact.Events) {
 		recordedByID[event.Id] = event
 	}
 	for _, live := range liveEvents {
 		recorded, ok := recordedByID[live.Id]
 		if !ok {
-			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, replayContractEventTypes(artifact.Events))
+			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, replayContractEventTypes(testutil.GeneratedFactoryEvents(t, artifact.Events)))
 		}
 		if recorded.Type != live.Type || recorded.Context.Tick != live.Context.Tick {
 			t.Fatalf("recorded event %s = type %s tick %d, live type %s tick %d", live.Id, recorded.Type, recorded.Context.Tick, live.Type, live.Context.Tick)

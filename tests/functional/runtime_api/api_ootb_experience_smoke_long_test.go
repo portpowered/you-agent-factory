@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -17,7 +17,7 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 	support.SkipLongFunctional(t, "slow OOTB API simple pipeline sweep")
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-ootb-001",
 		Payload:    []byte(`{"title":"Hello World"}`),
@@ -54,7 +54,7 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 	support.SkipLongFunctional(t, "slow OOTB API two-stage pipeline sweep")
 
 	dir := support.ScaffoldFactory(t, ootbTwoStagePipelineConfig())
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-ootb-multistage-001",
 		Payload:    []byte(`{"title":"Multi-stage test"}`),
@@ -83,7 +83,7 @@ func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
 	support.SkipLongFunctional(t, "slow OOTB API status-across-completion sweep")
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-ootb-status-001",
 		Payload:    []byte(`{"title":"Status check"}`),

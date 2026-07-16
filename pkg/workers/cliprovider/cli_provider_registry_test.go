@@ -6,19 +6,22 @@ import (
 	"strings"
 	"testing"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestRegisteredCLIProviders_IncludeEverySupportedProvider(t *testing.T) {
 	wantCommands := map[CLIProviderIdentity]string{
-		CLIProviderIdentityClaude:   string(interfaces.ModelProviderClaude),
-		CLIProviderIdentityCodex:    string(interfaces.ModelProviderCodex),
-		CLIProviderIdentityGemini:   string(interfaces.ModelProviderGemini),
-		CLIProviderIdentityKiro:     string(interfaces.ModelProviderKiro),
-		CLIProviderIdentityCursor:   string(interfaces.ModelProviderCursor),
-		CLIProviderIdentityOpenCode: string(interfaces.ModelProviderOpenCode),
-		CLIProviderIdentityPi:       string(interfaces.ModelProviderPi),
+		CLIProviderIdentityClaude:   string(modelprovider.Claude),
+		CLIProviderIdentityCodex:    string(modelprovider.Codex),
+		CLIProviderIdentityGemini:   string(modelprovider.Gemini),
+		CLIProviderIdentityKiro:     string(modelprovider.Kiro),
+		CLIProviderIdentityCursor:   string(modelprovider.Cursor),
+		CLIProviderIdentityOpenCode: string(modelprovider.OpenCode),
+		CLIProviderIdentityPi:       string(modelprovider.Pi),
 	}
 
 	registrations := RegisteredCLIProviders()
@@ -142,12 +145,12 @@ type cliProviderProbeCase struct {
 
 func fakeCLIProviderProbeCases() []cliProviderProbeCase {
 	commands := []string{
-		string(interfaces.ModelProviderClaude),
-		string(interfaces.ModelProviderCodex),
-		string(interfaces.ModelProviderCursor),
-		string(interfaces.ModelProviderOpenCode),
-		string(interfaces.ModelProviderGemini),
-		string(interfaces.ModelProviderKiro),
+		string(modelprovider.Claude),
+		string(modelprovider.Codex),
+		string(modelprovider.Cursor),
+		string(modelprovider.OpenCode),
+		string(modelprovider.Gemini),
+		string(modelprovider.Kiro),
 	}
 	cases := make([]cliProviderProbeCase, 0, len(commands)*2)
 	for _, command := range commands {
@@ -163,7 +166,7 @@ func fakeCLIProviderProbeCases() []cliProviderProbeCase {
 				command:         command,
 				presentCommands: map[string]bool{},
 				wantAvailable:   false,
-				wantReason:      string(interfaces.WorkFailureTypeMissingExecutable),
+				wantReason:      string(workerexecution.WorkFailureTypeMissingExecutable),
 			},
 		)
 	}
@@ -228,33 +231,33 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 		{
 			name: "all providers present prefers highest rank codex",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex):    true,
-				string(interfaces.ModelProviderClaude):   true,
-				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode): true,
-				string(interfaces.ModelProviderGemini):   true,
-				string(interfaces.ModelProviderKiro):     true,
-				string(interfaces.ModelProviderPi):       true,
+				string(modelprovider.Codex):    true,
+				string(modelprovider.Claude):   true,
+				string(modelprovider.Cursor):   true,
+				string(modelprovider.OpenCode): true,
+				string(modelprovider.Gemini):   true,
+				string(modelprovider.Kiro):     true,
+				string(modelprovider.Pi):       true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityCodex),
 			wantProbeCommands: []string{
-				string(interfaces.ModelProviderCodex),
-				string(interfaces.ModelProviderClaude),
-				string(interfaces.ModelProviderCursor),
-				string(interfaces.ModelProviderOpenCode),
-				string(interfaces.ModelProviderGemini),
-				string(interfaces.ModelProviderKiro),
-				string(interfaces.ModelProviderPi),
+				string(modelprovider.Codex),
+				string(modelprovider.Claude),
+				string(modelprovider.Cursor),
+				string(modelprovider.OpenCode),
+				string(modelprovider.Gemini),
+				string(modelprovider.Kiro),
+				string(modelprovider.Pi),
 			},
 		},
 		{
 			name: "codex absent falls through to claude",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderClaude):   true,
-				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode): true,
-				string(interfaces.ModelProviderGemini):   true,
-				string(interfaces.ModelProviderKiro):     true,
+				string(modelprovider.Claude):   true,
+				string(modelprovider.Cursor):   true,
+				string(modelprovider.OpenCode): true,
+				string(modelprovider.Gemini):   true,
+				string(modelprovider.Kiro):     true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityClaude),
 			wantUnavailable: []CLIProviderIdentity{
@@ -264,9 +267,9 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 		{
 			name: "codex and claude absent falls through to cursor",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode): true,
-				string(interfaces.ModelProviderGemini):   true,
+				string(modelprovider.Cursor):   true,
+				string(modelprovider.OpenCode): true,
+				string(modelprovider.Gemini):   true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityCursor),
 			wantUnavailable: []CLIProviderIdentity{
@@ -277,8 +280,8 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 		{
 			name: "only lower ranked providers present selects gemini before kiro",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderGemini): true,
-				string(interfaces.ModelProviderKiro): true,
+				string(modelprovider.Gemini): true,
+				string(modelprovider.Kiro):   true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityGemini),
 			wantUnavailable: []CLIProviderIdentity{
@@ -307,13 +310,13 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 
 func registeredCLIProviderProbeCommands() []string {
 	return []string{
-		string(interfaces.ModelProviderCodex),
-		string(interfaces.ModelProviderClaude),
-		string(interfaces.ModelProviderCursor),
-		string(interfaces.ModelProviderOpenCode),
-		string(interfaces.ModelProviderGemini),
-		string(interfaces.ModelProviderKiro),
-		string(interfaces.ModelProviderPi),
+		string(modelprovider.Codex),
+		string(modelprovider.Claude),
+		string(modelprovider.Cursor),
+		string(modelprovider.OpenCode),
+		string(modelprovider.Gemini),
+		string(modelprovider.Kiro),
+		string(modelprovider.Pi),
 	}
 }
 
@@ -350,11 +353,11 @@ func assertCLIProviderDiscoveryUnavailable(
 		if item.Available {
 			continue
 		}
-		if item.UnavailableReason != string(interfaces.WorkFailureTypeMissingExecutable) {
+		if item.UnavailableReason != string(workerexecution.WorkFailureTypeMissingExecutable) {
 			t.Fatalf("identity %q unavailable reason = %q, want %q",
 				item.Registration.Identity,
 				item.UnavailableReason,
-				interfaces.WorkFailureTypeMissingExecutable,
+				workerexecution.WorkFailureTypeMissingExecutable,
 			)
 		}
 		unavailable[item.Registration.Identity] = struct{}{}
@@ -427,13 +430,13 @@ func TestProbeRegisteredCLIProviderAvailability_FakePATHReturnsRankOrder(t *test
 	}()
 
 	presentCommands := map[string]bool{
-		string(interfaces.ModelProviderCodex):    true,
-		string(interfaces.ModelProviderClaude):   true,
-		string(interfaces.ModelProviderCursor):   true,
-		string(interfaces.ModelProviderOpenCode): true,
-		string(interfaces.ModelProviderGemini):   true,
-		string(interfaces.ModelProviderKiro):     true,
-		string(interfaces.ModelProviderPi):       true,
+		string(modelprovider.Codex):    true,
+		string(modelprovider.Claude):   true,
+		string(modelprovider.Cursor):   true,
+		string(modelprovider.OpenCode): true,
+		string(modelprovider.Gemini):   true,
+		string(modelprovider.Kiro):     true,
+		string(modelprovider.Pi):       true,
 	}
 	lookPath = func(file string) (string, error) {
 		if presentCommands[file] {
@@ -473,12 +476,12 @@ func TestProbeCLIProviderAvailability_IsDeterministicForFixedFakePATH(t *testing
 	}()
 
 	presentCommands := map[string]bool{
-		string(interfaces.ModelProviderCodex):    true,
-		string(interfaces.ModelProviderClaude):   false,
-		string(interfaces.ModelProviderCursor):   true,
-		string(interfaces.ModelProviderOpenCode): false,
-		string(interfaces.ModelProviderGemini):   true,
-		string(interfaces.ModelProviderKiro):     false,
+		string(modelprovider.Codex):    true,
+		string(modelprovider.Claude):   false,
+		string(modelprovider.Cursor):   true,
+		string(modelprovider.OpenCode): false,
+		string(modelprovider.Gemini):   true,
+		string(modelprovider.Kiro):     false,
 	}
 
 	lookPath = func(file string) (string, error) {

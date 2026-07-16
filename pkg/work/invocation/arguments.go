@@ -8,7 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -88,7 +89,7 @@ type NormalizeArgumentsInput struct {
 	DirectArgs           []NamedArgumentInput
 	StdinText            *string
 	CompatibilityText    *string
-	CompatibilityContent []interfaces.WorkContentPart
+	CompatibilityContent []work.WorkContentPart
 }
 
 type ArgumentError struct {
