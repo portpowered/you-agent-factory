@@ -25,6 +25,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
@@ -34,7 +35,6 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
@@ -1276,15 +1276,21 @@ func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
 	return fs.cfg.ModelPullMetricsRecorder
 }
 
-func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
+func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) json.RawMessage {
+	var safe *workerdiagnostics.SafeWorkDiagnostics
 	if success != nil {
-		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
+		safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(success)
+	} else {
+		var providerErr *workerprovider.ProviderError
+		if errors.As(err, &providerErr) {
+			safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+		}
 	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) {
-		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+	payload, encodeErr := workerdiagnostics.SafeWorkDiagnosticsEventPayload(safe)
+	if encodeErr != nil || string(payload) == "null" {
+		return nil
 	}
-	return nil
+	return payload
 }
 
 func modelEventErrorClass(err error) string {

@@ -447,14 +447,43 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workere
 	))
 }
 
-// RecordModelEvent appends a model-execution boundary event to the same
-// canonical history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordModelEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isModelEventType(event.Type) {
+// RecordModelEvent appends worker-owned model execution facts to canonical
+// history while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordModelEvent(event workerexecution.ModelEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
+	eventType, payload := modelFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		},
+		payload,
+	))
+}
+
+func modelFactoryEventPayload(event workerexecution.ModelEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ModelEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeModelRequest, *event.Request
+		}
+	case workerexecution.ModelEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeModelResponse, *event.Response
+		}
+	}
+	return "", nil
 }
 
 // RecordScriptEvent appends worker-owned script facts to the canonical history
@@ -829,15 +858,6 @@ func slicePtr[T any](values []T) *[]T {
 	out := make([]T, len(values))
 	copy(out, values)
 	return &out
-}
-
-func isModelEventType(eventType factoryapi.FactoryEventType) bool {
-	switch eventType {
-	case factoryapi.FactoryEventTypeModelRequest, factoryapi.FactoryEventTypeModelResponse:
-		return true
-	default:
-		return false
-	}
 }
 
 func workItemFromToken(token factorytoken.Token) work.FactoryWorkItem {

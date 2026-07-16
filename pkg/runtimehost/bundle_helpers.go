@@ -1,13 +1,13 @@
 package runtimehost
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -42,13 +42,19 @@ func runtimeLogStartTimeString(value time.Time) string {
 	return value.UTC().Format(time.RFC3339Nano)
 }
 
-func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
+func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) json.RawMessage {
+	var safe *workerdiagnostics.SafeWorkDiagnostics
 	if success != nil {
-		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
+		safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(success)
+	} else {
+		var providerErr *workerprovider.ProviderError
+		if errors.As(err, &providerErr) {
+			safe = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+		}
 	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) {
-		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+	payload, encodeErr := workerdiagnostics.SafeWorkDiagnosticsEventPayload(safe)
+	if encodeErr != nil || string(payload) == "null" {
+		return nil
 	}
-	return nil
+	return payload
 }

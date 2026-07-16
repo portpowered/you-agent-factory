@@ -36,6 +36,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -4472,9 +4473,7 @@ func testModelEventDiagnosticsBranches(t *testing.T) {
 			ResponseMetadata: map[string]string{"request_id": "req-1"},
 		},
 	}
-	if got := modelEventDiagnostics(successDiagnostics, nil); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-1" {
-		t.Fatalf("success diagnostics = %#v", got)
-	}
+	assertModelEventDiagnosticsRequestID(t, modelEventDiagnostics(successDiagnostics, nil), "req-1")
 
 	providerDiagnostics := &workerexecution.WorkDiagnostics{
 		Provider: &workerexecution.ProviderDiagnostic{
@@ -4483,8 +4482,17 @@ func testModelEventDiagnosticsBranches(t *testing.T) {
 	}
 	providerErr := workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
 	providerErr.Diagnostics = providerDiagnostics
-	if got := modelEventDiagnostics(nil, providerErr); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-2" {
-		t.Fatalf("provider diagnostics = %#v", got)
+	assertModelEventDiagnosticsRequestID(t, modelEventDiagnostics(nil, providerErr), "req-2")
+}
+
+func assertModelEventDiagnosticsRequestID(t *testing.T, payload json.RawMessage, want string) {
+	t.Helper()
+	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(payload)
+	if err != nil {
+		t.Fatalf("decode model event diagnostics: %v", err)
+	}
+	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata["request_id"] != want {
+		t.Fatalf("model event diagnostics = %#v, want request_id %q", diagnostics, want)
 	}
 }
 

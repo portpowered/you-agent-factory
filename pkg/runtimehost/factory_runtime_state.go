@@ -20,9 +20,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -35,7 +33,7 @@ const (
 	modelExecutionOutputPreviewMax = 200
 )
 
-type modelEventRecorder func(factoryapi.FactoryEvent)
+type modelEventRecorder func(workerexecution.ModelEvent)
 
 type recordingModelRunner struct {
 	inner      workers.Runner
@@ -127,7 +125,7 @@ func (r *recordingModelRunner) Execute(ctx context.Context, request workerexecut
 	return response, err
 }
 
-func (r *recordingModelRunner) record(event factoryapi.FactoryEvent) {
+func (r *recordingModelRunner) record(event workerexecution.ModelEvent) {
 	if r != nil && r.recorder != nil {
 		r.recorder(event)
 	}
@@ -160,9 +158,9 @@ func modelRequestEvent(
 	attempt int,
 	modelRequestID string,
 	eventTime time.Time,
-) factoryapi.FactoryEvent {
-	payload := factoryapi.ModelRequestEventPayload{
-		ModelRequestId: modelRequestID,
+) workerexecution.ModelEvent {
+	payload := workerexecution.ModelRequestEventPayload{
+		ModelRequestID: modelRequestID,
 		Attempt:        attempt,
 		Operation:      strings.TrimSpace(request.ModelOperation),
 		Worker:         modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
@@ -177,17 +175,7 @@ func modelRequestEvent(
 		Worktree:         modelEventStringPtr(request.Worktree),
 	}
 
-	var union factoryapi.FactoryEvent_Payload
-	if err := union.FromModelRequestEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("model request event payload: %v", err))
-	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeModelRequest,
-		Id:            fmt.Sprintf("%s/%s", modelRequestEventIDPrefix, modelRequestID),
-		Context:       modelEventContext(request, eventTime),
-		Payload:       union,
-	}
+	return modelEvent(request, workerexecution.ModelEventKindRequest, fmt.Sprintf("%s/%s", modelRequestEventIDPrefix, modelRequestID), eventTime, &payload, nil)
 }
 
 func modelResponseEvent(
@@ -201,9 +189,9 @@ func modelResponseEvent(
 	modelRequestID string,
 	duration time.Duration,
 	eventTime time.Time,
-) factoryapi.FactoryEvent {
-	payload := factoryapi.ModelResponseEventPayload{
-		ModelRequestId: modelRequestID,
+) workerexecution.ModelEvent {
+	payload := workerexecution.ModelResponseEventPayload{
+		ModelRequestID: modelRequestID,
 		Attempt:        attempt,
 		Operation:      strings.TrimSpace(request.ModelOperation),
 		Worker:         modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
@@ -218,14 +206,14 @@ func modelResponseEvent(
 	}
 
 	if err != nil {
-		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		payload.FailureDetail = &factoryapi.FailureDetail{
-			Reason:  factoryapi.WorkFailureTypeUnknown,
+		payload.Outcome = workerexecution.InferenceOutcomeFailed
+		payload.FailureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureTypeUnknown,
 			Message: "The model request failed without an available explanation.",
 		}
 		payload.Diagnostics = modelEventDiagnostics(nil, err)
 	} else {
-		payload.Outcome = factoryapi.InferenceOutcomeSucceeded
+		payload.Outcome = workerexecution.InferenceOutcomeSucceeded
 		payload.Diagnostics = modelEventDiagnostics(response.Diagnostics, nil)
 	}
 	if trace != nil {
@@ -243,27 +231,17 @@ func modelResponseEvent(
 		payload.OutputPreview = modelEventStringPtr(truncate(strings.TrimSpace(response.Content), modelExecutionOutputPreviewMax))
 	}
 
-	var union factoryapi.FactoryEvent_Payload
-	if err := union.FromModelResponseEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("model response event payload: %v", err))
-	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeModelResponse,
-		Id:            fmt.Sprintf("%s/%s", modelResponseEventIDPrefix, modelRequestID),
-		Context:       modelEventContext(request, eventTime),
-		Payload:       union,
-	}
+	return modelEvent(request, workerexecution.ModelEventKindResponse, fmt.Sprintf("%s/%s", modelResponseEventIDPrefix, modelRequestID), eventTime, nil, &payload)
 }
 
-func modelEventContext(request workerexecution.RunnerExecutionRequest, eventTime time.Time) factoryapi.FactoryEventContext {
-	return factoryapi.FactoryEventContext{
-		Tick:       workersExecutionTick(request.Dispatch.Execution),
-		EventTime:  interfaces.CanonicalEventTime(eventTime),
-		DispatchId: modelEventStringPtr(request.Dispatch.DispatchID),
-		RequestId:  modelEventStringPtr(request.Dispatch.Execution.RequestID),
-		TraceIds:   modelEventStringSlicePtr(request.Dispatch.Execution.TraceID),
-		WorkIds:    modelEventStringSlicePtr(request.Dispatch.Execution.WorkIDs...),
+func modelEvent(request workerexecution.RunnerExecutionRequest, kind workerexecution.ModelEventKind, id string, eventTime time.Time, requestPayload *workerexecution.ModelRequestEventPayload, responsePayload *workerexecution.ModelResponseEventPayload) workerexecution.ModelEvent {
+	return workerexecution.ModelEvent{
+		ID: id, Kind: kind, EventTime: interfaces.CanonicalEventTime(eventTime),
+		Tick: workersExecutionTick(request.Dispatch.Execution), DispatchID: request.Dispatch.DispatchID,
+		RequestID: request.Dispatch.Execution.RequestID,
+		TraceIDs:  modelEventStrings(request.Dispatch.Execution.TraceID),
+		WorkIDs:   modelEventStrings(request.Dispatch.Execution.WorkIDs...),
+		Request:   requestPayload, Response: responsePayload,
 	}
 }
 
@@ -335,22 +313,15 @@ func modelLocalityForModelEvents(workerDef *workerconfig.Config) string {
 	return strings.TrimSpace(workerDef.ModelLocality)
 }
 
-func modelEventResolvedBindings(bindings []workerexecution.ResolvedModelOperationBinding) *[]factoryapi.ResolvedModelOperationBinding {
+func modelEventResolvedBindings(bindings []workerexecution.ResolvedModelOperationBinding) *[]workerexecution.ResolvedModelOperationBinding {
 	if len(bindings) == 0 {
 		return nil
 	}
-	generated := make([]factoryapi.ResolvedModelOperationBinding, 0, len(bindings))
-	for _, binding := range bindings {
-		generated = append(generated, factoryapi.ResolvedModelOperationBinding{
-			Slot:    binding.Slot,
-			Source:  factoryapi.ResolvedModelOperationBindingSource(binding.Source),
-			Content: modelEventGeneratedWorkContent(binding.Content),
-		})
-	}
-	return &generated
+	cloned := workerexecution.CloneResolvedModelOperationBindings(bindings)
+	return &cloned
 }
 
-func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *workerconfig.Config) *[]factoryapi.ModelResourceSummary {
+func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *workerconfig.Config) *[]workerexecution.ModelResourceSummary {
 	if factoryCfg == nil || workerDef == nil || len(workerDef.Resources) == 0 {
 		return nil
 	}
@@ -358,7 +329,7 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 	for _, resource := range factoryCfg.Resources {
 		resourcesByName[resource.Name] = resource
 	}
-	summaries := make([]factoryapi.ModelResourceSummary, 0, len(workerDef.Resources))
+	summaries := make([]workerexecution.ModelResourceSummary, 0, len(workerDef.Resources))
 	seen := make(map[string]struct{}, len(workerDef.Resources))
 	for _, requirement := range workerDef.Resources {
 		resource, ok := resourcesByName[requirement.Name]
@@ -368,7 +339,11 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 		if _, ok := seen[resource.Name]; ok {
 			continue
 		}
-		summaries = append(summaries, localmodels.ResourceSummary(resource))
+		summaries = append(summaries, workerexecution.ModelResourceSummary{
+			Name: resource.Name, Type: strings.TrimSpace(resource.Type), Capacity: resource.Capacity,
+			Model: modelEventStringPtr(resource.Model), Backend: modelEventStringPtr(resource.Backend),
+			LoadPolicy: modelEventStringPtr(resource.LoadPolicy), Provider: modelEventStringPtr(resource.Provider),
+		})
 		seen[resource.Name] = struct{}{}
 	}
 	if len(summaries) == 0 {
@@ -377,26 +352,26 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 	return &summaries
 }
 
-func modelEventOutputContent(raw string) *factoryapi.WorkContent {
+func modelEventOutputContent(raw string) *[]work.WorkContentPart {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil
 	}
 
-	var content factoryapi.WorkContent
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &content); err == nil && len(content) != 0 {
 		return &content
 	}
 	var envelope struct {
-		Content factoryapi.WorkContent `json:"content"`
+		Content []work.WorkContentPart `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) != 0 {
 		return &envelope.Content
 	}
-	return contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
+	return &[]work.WorkContentPart{{
 		Type: work.WorkContentPartTypeText,
 		Text: raw,
-	}})
+	}}
 }
 
 func truncate(value string, limit int) string {
@@ -482,14 +457,6 @@ func int64PtrIfPositive(value int64) *int64 {
 	return &value
 }
 
-func modelEventGeneratedWorkContent(parts []work.WorkContentPart) factoryapi.WorkContent {
-	content := contentcontract.GeneratedPtrFromParts(parts)
-	if content == nil {
-		return nil
-	}
-	return *content
-}
-
 func modelEventStringPtr(value string) *string {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -497,7 +464,7 @@ func modelEventStringPtr(value string) *string {
 	return &value
 }
 
-func modelEventStringSlicePtr(values ...string) *[]string {
+func modelEventStrings(values ...string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		if strings.TrimSpace(value) == "" {
@@ -508,7 +475,7 @@ func modelEventStringSlicePtr(values ...string) *[]string {
 	if len(out) == 0 {
 		return nil
 	}
-	return &out
+	return out
 }
 
 func modelEventFirstNonEmpty(values ...string) string {

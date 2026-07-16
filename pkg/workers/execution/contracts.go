@@ -91,6 +91,80 @@ type InferenceResponseFailureDetail struct {
 	Message string          `json:"message"`
 }
 
+// ModelEventKind identifies which model-execution boundary fact was observed.
+// Factory owns the corresponding canonical event vocabulary and envelope.
+type ModelEventKind string
+
+const (
+	ModelEventKindRequest  ModelEventKind = "REQUEST"
+	ModelEventKindResponse ModelEventKind = "RESPONSE"
+)
+
+// ModelEvent carries model-worker execution facts to Factory history without
+// coupling worker composition to a transport or Factory event envelope.
+type ModelEvent struct {
+	ID         string
+	Kind       ModelEventKind
+	EventTime  time.Time
+	Tick       int
+	DispatchID string
+	RequestID  string
+	TraceIDs   []string
+	WorkIDs    []string
+	Request    *ModelRequestEventPayload
+	Response   *ModelResponseEventPayload
+}
+
+// ModelResourceSummary records the concrete resource facts used by one model
+// execution without exposing the Factory configuration or transport model.
+type ModelResourceSummary struct {
+	Backend    *string `json:"backend,omitempty"`
+	Capacity   int     `json:"capacity"`
+	LoadPolicy *string `json:"loadPolicy,omitempty"`
+	Model      *string `json:"model,omitempty"`
+	Name       string  `json:"name"`
+	Provider   *string `json:"provider,omitempty"`
+	Type       string  `json:"type"`
+}
+
+// ModelRequestEventPayload records the resolved model invocation boundary.
+type ModelRequestEventPayload struct {
+	Attempt          int                              `json:"attempt"`
+	Bindings         *[]ResolvedModelOperationBinding `json:"bindings,omitempty"`
+	Model            string                           `json:"model"`
+	ModelRequestID   string                           `json:"modelRequestId"`
+	Operation        string                           `json:"operation"`
+	ProviderLocality string                           `json:"providerLocality"`
+	Resources        *[]ModelResourceSummary          `json:"resources,omitempty"`
+	Worker           string                           `json:"worker"`
+	WorkingDirectory *string                          `json:"workingDirectory,omitempty"`
+	Worktree         *string                          `json:"worktree,omitempty"`
+}
+
+// ModelResponseEventPayload records one model invocation result. Diagnostics
+// retain their public camel-case event encoding as detached JSON.
+type ModelResponseEventPayload struct {
+	Attempt            int                              `json:"attempt"`
+	Bindings           *[]ResolvedModelOperationBinding `json:"bindings,omitempty"`
+	Diagnostics        json.RawMessage                  `json:"diagnostics,omitempty"`
+	DurationMillis     int64                            `json:"durationMillis"`
+	FailureDetail      *FailureDetail                   `json:"failureDetail,omitempty"`
+	LoadDurationMillis *int64                           `json:"loadDurationMillis,omitempty"`
+	LoadRequested      *bool                            `json:"loadRequested,omitempty"`
+	LoadReused         *bool                            `json:"loadReused,omitempty"`
+	Model              string                           `json:"model"`
+	ModelRequestID     string                           `json:"modelRequestId"`
+	Operation          string                           `json:"operation"`
+	Outcome            InferenceOutcome                 `json:"outcome"`
+	OutputContent      *[]work.WorkContentPart          `json:"outputContent,omitempty"`
+	OutputPreview      *string                          `json:"outputPreview,omitempty"`
+	ProviderLocality   string                           `json:"providerLocality"`
+	ResourceAcquired   *bool                            `json:"resourceAcquired,omitempty"`
+	ResourceWaitMillis *int64                           `json:"resourceWaitMillis,omitempty"`
+	Resources          *[]ModelResourceSummary          `json:"resources,omitempty"`
+	Worker             string                           `json:"worker"`
+}
+
 // AgentRunResponseEvent carries worker-owned agent-loop completion facts to a
 // Factory event recorder without coupling worker execution to a transport or
 // Factory event envelope.

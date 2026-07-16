@@ -363,7 +363,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSourceMutation(t *testing.T) {
 	eventTime := time.Date(2026, time.May, 24, 8, 30, 0, 0, time.UTC)
 	workerDef := localModelRuntimeWorkersWithCloneCoverage()["tts-worker"]
-	var events []factoryapi.FactoryEvent
+	var events []workerexecution.ModelEvent
 	runner := newRecordingModelRunner(
 		recordingModelRunnerFunc(func(_ context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 			return workerexecution.RunnerExecutionResult{
@@ -372,7 +372,7 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 		}),
 		localModelFactoryConfig(),
 		workerDef,
-		func(event factoryapi.FactoryEvent) {
+		func(event workerexecution.ModelEvent) {
 			events = append(events, event)
 		},
 		func() time.Time { return eventTime },
@@ -399,9 +399,9 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	if len(events) != 2 {
 		t.Fatalf("recorded events = %d, want 2", len(events))
 	}
-	requestPayload, err := events[0].Payload.AsModelRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode model request payload: %v", err)
+	requestPayload := events[0].Request
+	if requestPayload == nil {
+		t.Fatal("model request payload = nil")
 	}
 	if requestPayload.Worker != "tts-worker" {
 		t.Fatalf("request worker = %q, want tts-worker", requestPayload.Worker)
@@ -415,9 +415,9 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	if requestPayload.Resources == nil || len(*requestPayload.Resources) != 1 || (*requestPayload.Resources)[0].Name != "omnivoice-cache" {
 		t.Fatalf("request resources = %#v, want omnivoice-cache", requestPayload.Resources)
 	}
-	responsePayload, err := events[1].Payload.AsModelResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode model response payload: %v", err)
+	responsePayload := events[1].Response
+	if responsePayload == nil {
+		t.Fatal("model response payload = nil")
 	}
 	if responsePayload.Resources == nil || len(*responsePayload.Resources) != 1 || (*responsePayload.Resources)[0].Name != "omnivoice-cache" {
 		t.Fatalf("response resources = %#v, want omnivoice-cache", responsePayload.Resources)
@@ -566,17 +566,17 @@ func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.F
 
 func TestModelEventContext_NormalizesEventTimeToUTC(t *testing.T) {
 	localZone := time.FixedZone("Model/Local", 9*60*60)
-	context := modelEventContext(workerexecution.RunnerExecutionRequest{
+	event := modelEvent(workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-model",
 			Execution:  work.ExecutionMetadata{CurrentTick: 6},
 		},
-	}, time.Date(2026, 4, 20, 21, 15, 0, 0, localZone))
+	}, workerexecution.ModelEventKindRequest, "model-request", time.Date(2026, 4, 20, 21, 15, 0, 0, localZone), &workerexecution.ModelRequestEventPayload{}, nil)
 
-	if context.EventTime.Location() != time.UTC {
-		t.Fatalf("event time location = %v, want UTC", context.EventTime.Location())
+	if event.EventTime.Location() != time.UTC {
+		t.Fatalf("event time location = %v, want UTC", event.EventTime.Location())
 	}
-	if got, want := context.EventTime.Format(time.RFC3339), "2026-04-20T12:15:00Z"; got != want {
+	if got, want := event.EventTime.Format(time.RFC3339), "2026-04-20T12:15:00Z"; got != want {
 		t.Fatalf("event time = %q, want %q", got, want)
 	}
 }

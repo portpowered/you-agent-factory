@@ -79,6 +79,14 @@ and time normalization. Keep resolved command arguments and bounded process
 results in the worker payload while excluding environment values and stdin;
 prove the generated OpenAPI union only at the compatibility boundary.
 
+Model-backed worker composition publishes worker-execution-owned request and
+response facts through `pkg/workers/execution`; Factory event history owns the
+canonical `MODEL_REQUEST` and `MODEL_RESPONSE` envelopes, vocabulary, ordering,
+correlation context, and UTC normalization. Keep resolved bindings, resource
+summaries, safe diagnostic JSON, output content, and load timing in the worker
+payload, and prove generated OpenAPI union compatibility after history appends
+the canonical event rather than constructing generated events in composition.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected

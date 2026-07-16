@@ -428,11 +428,6 @@ func generatedModelOperationSlot(slot workerconfig.ModelOperationSlot) factoryap
 	return generated
 }
 
-// ResourceSummary maps a factory resource config to the API model-resource summary shape.
-func ResourceSummary(resource factoryresource.Config) factoryapi.ModelResourceSummary {
-	return generatedModelResourceSummary(resource)
-}
-
 func generatedModelResourceSummary(resource factoryresource.Config) factoryapi.ModelResourceSummary {
 	summary := factoryapi.ModelResourceSummary{
 		Name:     resource.Name,
