@@ -64,3 +64,20 @@ func TestRunRejectsRetiredPackagedFactoryTransportImport(t *testing.T) {
 		t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
 	}
 }
+
+func TestRunRejectsRetiredResponseStreamRemovalGateTransportImport(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	path := "pkg/factory/sessions/responsestream/removalgate/gate.go"
+	writeGoImportFile(t, repoRoot, path, "removalgate", "github.com/portpowered/infinite-you/pkg/transports/cli/docs")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want migrated response-stream removal-gate import rejected")
+	}
+	if want := "prohibited Factory domain transport import: github.com/portpowered/infinite-you/pkg/transports/cli/docs (" + path + ")"; !strings.Contains(stderr.String(), want) {
+		t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+	}
+}

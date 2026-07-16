@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
-	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
@@ -91,7 +90,7 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 	if strings.TrimSpace(repoRoot) == "" {
 		return fmt.Errorf("repo root is required")
 	}
-	if err := AssertDocsPrerequisite(); err != nil {
+	if err := AssertDocsPrerequisite(repoRoot); err != nil {
 		return fmt.Errorf("%s prerequisite: %w", PrerequisiteDocsStoryID, err)
 	}
 	if err := parityfixtures.AssertCrossProviderParityCatalog(ctx); err != nil {
@@ -112,21 +111,27 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 	return nil
 }
 
-// AssertDocsPrerequisite proves packaged S22 docs advertise only the public
-// response-stream vocabulary and omit retired private NDJSON record types.
-func AssertDocsPrerequisite() error {
+// AssertDocsPrerequisite proves the canonical packaged-doc sources advertise
+// only the public response-stream vocabulary and omit retired private NDJSON
+// record types.
+func AssertDocsPrerequisite(repoRoot string) error {
+	if strings.TrimSpace(repoRoot) == "" {
+		return fmt.Errorf("repo root is required")
+	}
 	for _, topic := range []string{"run", "sessions", "workers"} {
-		doc, err := docscli.Markdown(topic)
+		path := filepath.Join(repoRoot, "docs", "reference", topic+".md")
+		doc, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("load docs topic %q: %w", topic, err)
+			return fmt.Errorf("read canonical docs topic %q: %w", topic, err)
 		}
+		text := string(doc)
 		for _, marker := range docsTopicRequiredMarkers[topic] {
-			if !strings.Contains(doc, marker) {
+			if !strings.Contains(text, marker) {
 				return fmt.Errorf("docs topic %q missing public marker %q", topic, marker)
 			}
 		}
 		for _, retired := range docsForbiddenMarkers {
-			if strings.Contains(doc, retired) {
+			if strings.Contains(text, retired) {
 				return fmt.Errorf("docs topic %q advertises retired private-contract marker %q", topic, retired)
 			}
 		}

@@ -159,8 +159,16 @@ func TestPrivateContractRemovalGate_Batch09Closure(t *testing.T) {
 }
 
 func TestPrivateContractRemovalGate_DocsPrerequisite(t *testing.T) {
-	if err := removalgate.AssertDocsPrerequisite(); err != nil {
+	repoRoot := testutil.MustRepoRoot(t)
+	if err := removalgate.AssertDocsPrerequisite(repoRoot); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAssertDocsPrerequisite_RejectsMissingCanonicalTopic(t *testing.T) {
+	err := removalgate.AssertDocsPrerequisite(t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), `read canonical docs topic "run"`) {
+		t.Fatalf("expected missing canonical docs topic error, got %v", err)
 	}
 }
 
