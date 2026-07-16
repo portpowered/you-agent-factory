@@ -185,6 +185,38 @@ func TestBuiltInRalphFactory_AppliesOperatorModelAndProviderDefaultsToBothWorker
 			t.Fatalf("worker %q runtime selection = provider %q model %q, want %s/gpt-5-codex", workerName, worker.ModelProvider, worker.Model, interfaces.ModelProviderCodex)
 		}
 	}
+
+	args, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:      spec.LoadedFactoryCfg.FactoryConfig().InvocationSignature,
+		PositionalArgs: []string{"Ship the login fix"},
+		NamedArgs: []invocations.NamedArgumentInput{
+			{Key: "planning-detail", Values: []string{"brief"}},
+			{Key: "execution-style", Values: []string{"direct"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments: %v", err)
+	}
+	runtimeArgs := invocations.RuntimeInvocationArguments(spec.LoadedFactoryCfg.FactoryConfig().InvocationSignature, &args)
+	planner, err := invocations.InterpolateWorkstationConfig(
+		findWorkstation(t, spec.LoadedFactoryCfg.FactoryConfig().Workstations, PackagedPlanWorkstationName),
+		runtimeArgs,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig(planner): %v", err)
+	}
+	executor, err := invocations.InterpolateWorkstationConfig(
+		findWorkstation(t, spec.LoadedFactoryCfg.FactoryConfig().Workstations, PackagedExecuteWorkstationName),
+		runtimeArgs,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig(executor): %v", err)
+	}
+	if !strings.Contains(planner.Body, "Planning detail: brief") || !strings.Contains(executor.Body, "Execution style: direct") {
+		t.Fatalf("configured workstation prompts = planner %q executor %q, want brief/direct settings", planner.Body, executor.Body)
+	}
 }
 
 func TestBuiltInRalphFactory_RejectsInvalidOperatorProviderBeforeDispatch(t *testing.T) {
