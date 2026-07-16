@@ -57,10 +57,10 @@ func TestNormalizeMCP_RejectsReorderedCanonicalEventCursors(t *testing.T) {
 	if err := json.Unmarshal(mcp, &bundle); err != nil {
 		t.Fatalf("unmarshal MCP bundle: %v", err)
 	}
-	eventsResponse := bundle["events"].(map[string]any)
-	eventsResult := eventsResponse["result"].(map[string]any)
-	events := eventsResult["events"].([]any)
-	events[0], events[1] = events[1], events[0]
+	mutateMCPToolResult(t, bundle, "events", func(result map[string]any) {
+		events := result["events"].([]any)
+		events[0], events[1] = events[1], events[0]
+	})
 	encoded, err := json.Marshal(bundle)
 	if err != nil {
 		t.Fatalf("marshal MCP bundle: %v", err)
@@ -118,15 +118,19 @@ func TestNormalizers_PreserveDistinctLargeIntegerResultValues(t *testing.T) {
 
 func replacePrimaryResult(t *testing.T, observation []byte, number string) []byte {
 	t.Helper()
-	old := []byte(`"primaryResult":[{"type":"text","text":"done"}]`)
-	if !bytes.Contains(observation, old) {
-		old = []byte(`"primaryResult":[{"text":"done","type":"text"}]`)
+	bundle := observationObject(t, observation)
+	setResult := func(result map[string]any) {
+		result["primaryResult"] = []any{json.Number(number)}
 	}
-	updated := bytes.Replace(observation, old, []byte(`"primaryResult":[`+number+`]`), 1)
-	if bytes.Equal(updated, observation) {
-		t.Fatal("representative observation did not contain the expected primary result")
+	result := bundle["result"].(map[string]any)
+	if callResult, ok := result["result"].(map[string]any); ok {
+		if _, ok := callResult["content"]; ok {
+			mutateMCPToolResult(t, bundle, "result", setResult)
+			return mustMarshal(t, bundle)
+		}
 	}
-	return updated
+	setResult(result)
+	return mustMarshal(t, bundle)
 }
 
 func representativeObservationBundles(t *testing.T) ([]byte, []byte, []byte) {
@@ -153,24 +157,48 @@ func representativeObservationBundles(t *testing.T) ([]byte, []byte, []byte) {
 		{"id":"cursor-11","type":"DISPATCH_RESPONSE","schemaVersion":"agent-factory.event.v1","context":{"sequence":11,"sessionId":"dur-sess-parity-001","tick":1,"eventTime":"2026-07-16T00:00:00Z"},"payload":{}},
 		{"id":"cursor-12","type":"SESSION_RESULT_UPDATED","schemaVersion":"agent-factory.event.v1","context":{"sequence":12,"sessionId":"dur-sess-parity-001","tick":2,"eventTime":"2026-07-16T00:00:01Z"},"payload":{}}
 	]`)
-	rest := marshalBundle(t, session, dispatches, artifacts, result, events, false)
-	cli := marshalBundle(t, session, dispatches, artifacts, cliResult, events, false)
+	restEvents := mustMarshal(t, factoryEventSSE(string(events)))
+	rest := marshalBundle(t, session, dispatches, artifacts, result, restEvents)
+	cli := marshalBundle(t, session, dispatches, artifacts, cliResult, events)
 	mcpEvents := mustMarshal(t, map[string]any{"sessionId": "dur-sess-parity-001", "events": json.RawMessage(events)})
-	mcp := marshalBundle(t, session, dispatches, artifacts, result, mcpEvents, true)
+	mcp := marshalMCPBundle(t, session, dispatches, artifacts, result, mcpEvents)
 	return rest, cli, mcp
 }
 
-func marshalBundle(t *testing.T, session, dispatches, artifacts, result, events json.RawMessage, mcp bool) []byte {
+func marshalBundle(t *testing.T, session, dispatches, artifacts, result, events json.RawMessage) []byte {
 	t.Helper()
 	values := map[string]json.RawMessage{
 		"session": session, "dispatches": dispatches, "artifacts": artifacts, "result": result, "events": events,
 	}
-	if mcp {
-		for field, value := range values {
-			values[field] = mustMarshal(t, map[string]any{"jsonrpc": "2.0", "id": "request-" + field, "result": value})
-		}
+	return mustMarshal(t, values)
+}
+
+func marshalMCPBundle(t *testing.T, session, dispatches, artifacts, result, events json.RawMessage) []byte {
+	t.Helper()
+	values := map[string]json.RawMessage{
+		"session": session, "dispatches": dispatches, "artifacts": artifacts, "result": result, "events": events,
+	}
+	for field, value := range values {
+		values[field] = json.RawMessage(mcpCallResponse("request-"+field, string(value)))
 	}
 	return mustMarshal(t, values)
+}
+
+func mutateMCPToolResult(t *testing.T, bundle map[string]any, field string, mutate func(map[string]any)) {
+	t.Helper()
+	response := bundle[field].(map[string]any)
+	callResult := response["result"].(map[string]any)
+	content := callResult["content"].([]any)
+	textBlock := content[0].(map[string]any)
+	decoder := json.NewDecoder(bytes.NewBufferString(textBlock["text"].(string)))
+	decoder.UseNumber()
+	var toolResponse map[string]any
+	if err := decoder.Decode(&toolResponse); err != nil {
+		t.Fatalf("decode MCP %s tool response: %v", field, err)
+	}
+	result := toolResponse["result"].(map[string]any)
+	mutate(result)
+	textBlock["text"] = string(mustMarshal(t, toolResponse))
 }
 
 func mustMarshal(t *testing.T, value any) []byte {

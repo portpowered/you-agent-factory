@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // NormalizationError identifies a captured customer-boundary value that cannot
@@ -20,9 +21,10 @@ func (e *NormalizationError) Error() string {
 }
 
 // A captured observation is a test-only bundle of the separate customer reads
-// needed to inspect one durable Factory Session. REST and CLI members contain
-// the direct JSON response/output shape. MCP members contain one tool response,
-// whose typed customer value is directly under result.
+// needed to inspect one durable Factory Session. REST and CLI JSON members
+// contain direct response/output bodies; the REST events member is the raw SSE
+// body encoded as a JSON string. MCP members contain complete JSON-RPC
+// tools/call responses.
 type capturedObservation struct {
 	Session    json.RawMessage `json:"session"`
 	Dispatches json.RawMessage `json:"dispatches"`
@@ -112,7 +114,7 @@ type rawEventContext struct {
 // NormalizeREST normalizes a bundle of captured REST response bodies. HTTP
 // status, headers, request details, and any other bundle metadata are ignored.
 func NormalizeREST(observation []byte) (Projection, error) {
-	return normalizeCaptured("REST", observation, directCustomerValue, directEvents)
+	return normalizeCaptured("REST", observation, directCustomerValue, restSSEEvents)
 }
 
 // NormalizeCLIJSON normalizes a bundle of captured --json command outputs.
@@ -177,12 +179,30 @@ func directCustomerValue(_ string, raw json.RawMessage) (json.RawMessage, error)
 
 func mcpCustomerValue(_ string, raw json.RawMessage) (json.RawMessage, error) {
 	var response struct {
-		Result json.RawMessage `json:"result"`
+		Result *struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+			IsError *bool `json:"isError"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(raw, &response); err != nil || missingJSON(response.Result) {
+	if err := json.Unmarshal(raw, &response); err != nil || response.Result == nil {
 		return nil, fmt.Errorf("result is required")
 	}
-	return response.Result, nil
+	if response.Result.IsError == nil || *response.Result.IsError {
+		return nil, fmt.Errorf("result must be a successful tools/call response")
+	}
+	if len(response.Result.Content) != 1 || response.Result.Content[0].Type != "text" || response.Result.Content[0].Text == "" {
+		return nil, fmt.Errorf("result.content[0].text is required")
+	}
+	var toolResponse struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(response.Result.Content[0].Text), &toolResponse); err != nil || missingJSON(toolResponse.Result) {
+		return nil, fmt.Errorf("result.content[0].text must contain a tool result")
+	}
+	return toolResponse.Result, nil
 }
 
 func directEvents(name string, raw json.RawMessage) (rawEventResult, error) {
@@ -191,6 +211,55 @@ func directEvents(name string, raw json.RawMessage) (rawEventResult, error) {
 		return rawEventResult{}, normalizationError(name, "eventCursors", "has incompatible value")
 	}
 	return rawEventResult{Events: &events}, nil
+}
+
+func restSSEEvents(name string, raw json.RawMessage) (rawEventResult, error) {
+	var body string
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return rawEventResult{}, normalizationError(name, "eventCursors", "must contain a captured SSE response body")
+	}
+	events, err := decodeSSEEvents(body)
+	if err != nil {
+		return rawEventResult{}, normalizationError(name, "eventCursors", err.Error())
+	}
+	return rawEventResult{Events: &events}, nil
+}
+
+func decodeSSEEvents(body string) ([]rawEvent, error) {
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	events := make([]rawEvent, 0)
+	dataLines := make([]string, 0, 1)
+	flush := func() error {
+		if len(dataLines) == 0 {
+			return nil
+		}
+		var event rawEvent
+		if err := json.Unmarshal([]byte(strings.Join(dataLines, "\n")), &event); err != nil {
+			return fmt.Errorf("contains incompatible SSE event data")
+		}
+		events = append(events, event)
+		dataLines = dataLines[:0]
+		return nil
+	}
+	for _, line := range lines {
+		if line == "" {
+			if err := flush(); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if strings.HasPrefix(line, "data:") {
+			data := strings.TrimPrefix(line, "data:")
+			if strings.HasPrefix(data, " ") {
+				data = strings.TrimPrefix(data, " ")
+			}
+			dataLines = append(dataLines, data)
+		}
+	}
+	if err := flush(); err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 func mcpEvents(name string, raw json.RawMessage) (rawEventResult, error) {

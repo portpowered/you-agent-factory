@@ -44,11 +44,16 @@ bundles. A bundle groups the separate customer reads needed for parity:
 - the session result response; and
 - the ordered canonical Factory Event response.
 
-REST bundle members are direct response bodies. CLI JSON bundle members are the
-direct outputs of the corresponding `--json` commands. Each MCP bundle member
-is the response from the corresponding `you.factory_session.*` tool, with its
-typed value directly under `result`. The bundle itself is only a caller-supplied
-capture container; it is not a product response or an alternate session model.
+REST bundle members are direct response bodies, except that the raw
+`text/event-stream` events body is JSON-string encoded so it can live in the
+capture bundle. Its `data:` frames contain the canonical Factory Event values
+emitted by the HTTP handler. CLI JSON bundle members are the direct outputs of
+the corresponding `--json` commands, including the events array. Each MCP
+bundle member is a complete JSON-RPC `tools/call` response: the server's
+`CallToolResult` is under the outer `result`, and `content[0].text` contains the
+serialized `ToolResponse` whose inner `result` is the typed customer value. The
+bundle itself is only a caller-supplied capture container; it is not a product
+response or an alternate session model.
 
 The normalizers map `sessionId`, `status`, hashes, progress counts, dispatch
 `id`/`status`/`dispatchKind`, artifact `id`/`kind`, result status and canonical
@@ -71,9 +76,12 @@ Session state:
   the HTTP exchange rather than the session.
 - CLI presentation choices and command diagnostics describe rendering and the
   local command invocation rather than the session.
+- REST SSE comments plus `event`, `id`, and `retry` fields describe stream
+  framing; each Factory Event JSON value under `data:` remains fully retained.
 - MCP JSON-RPC versions, envelope fields, request IDs, and tracing or
   request-correlation metadata describe the tool exchange rather than the
-  session. The typed value under each `result` remains fully retained.
+  session. `CallToolResult` framing is decoded, while the typed value serialized
+  through `content[0].text` remains fully retained.
 
 Focused tests mutate each of these exclusions on its real capture shape and
 require an unchanged projection. The same tests mutate the retained session
@@ -95,10 +103,11 @@ transport formatting, observation timestamps, or protocol metadata.
 ## Deterministic fixture observations
 
 `TerminalSuccessObservations` and `TerminalFailureObservations` provide static
-capture bundles using the real REST body, CLI `--json`, and MCP tool-result
-shapes. The success fixture has two completed dispatches, a result artifact, a
-final result, and ordered terminal-success cursors. The failure fixture has a
-completed dispatch, a failed dispatch, a diagnostic artifact, session and
-dispatch failure facts, and ordered terminal-failure cursors. Neither fixture
-starts a process or constructs runtime composition; later functional scenarios
-may instead pass their own capture bundles to the normalizers.
+capture bundles using real REST JSON and SSE bodies, CLI `--json` outputs, and
+MCP JSON-RPC `tools/call` response shapes. The success fixture has two completed
+dispatches, a result artifact, a final result, and ordered terminal-success
+cursors. The failure fixture has a completed dispatch, a failed dispatch, a
+diagnostic artifact, session and dispatch failure facts, and ordered
+terminal-failure cursors. Neither fixture starts a process or constructs runtime
+composition; later functional scenarios may instead pass their own capture
+bundles to the normalizers.

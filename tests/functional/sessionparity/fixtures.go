@@ -1,5 +1,11 @@
 package sessionparity
 
+import (
+	"bytes"
+	"encoding/json"
+	"strconv"
+)
+
 // CapturedObservations contains equivalent Factory Session capture bundles from
 // each customer interface. Every bundle contains the separate session,
 // dispatch, artifact, result, and event reads used by the parity projection.
@@ -31,17 +37,41 @@ type scenarioCapture struct {
 }
 
 func capturedObservations(capture scenarioCapture) CapturedObservations {
-	direct := []byte(`{"session":` + capture.Session + `,"dispatches":` + capture.Dispatches +
-		`,"artifacts":` + capture.Artifacts + `,"result":` + capture.Result + `,"events":` + capture.Events + `}`)
 	eventResult := `{"sessionId":"` + capture.SessionID + `","events":` + capture.Events + `}`
-	mcp := []byte(`{"session":{"jsonrpc":"2.0","id":"fixture-session","result":` + capture.Session + `},` +
-		`"dispatches":{"jsonrpc":"2.0","id":"fixture-dispatches","result":` + capture.Dispatches + `},` +
-		`"artifacts":{"jsonrpc":"2.0","id":"fixture-artifacts","result":` + capture.Artifacts + `},` +
-		`"result":{"jsonrpc":"2.0","id":"fixture-result","result":` + capture.Result + `},` +
-		`"events":{"jsonrpc":"2.0","id":"fixture-events","result":` + eventResult + `}}`)
 	return CapturedObservations{
-		REST: append([]byte(nil), direct...), CLIJSON: append([]byte(nil), direct...), MCP: mcp,
+		REST:    captureBundle(capture, strconv.Quote(factoryEventSSE(capture.Events))),
+		CLIJSON: captureBundle(capture, capture.Events),
+		MCP: []byte(`{"session":` + mcpCallResponse("fixture-session", capture.Session) +
+			`,"dispatches":` + mcpCallResponse("fixture-dispatches", capture.Dispatches) +
+			`,"artifacts":` + mcpCallResponse("fixture-artifacts", capture.Artifacts) +
+			`,"result":` + mcpCallResponse("fixture-result", capture.Result) +
+			`,"events":` + mcpCallResponse("fixture-events", eventResult) + `}`),
 	}
+}
+
+func captureBundle(capture scenarioCapture, events string) []byte {
+	return []byte(`{"session":` + capture.Session + `,"dispatches":` + capture.Dispatches +
+		`,"artifacts":` + capture.Artifacts + `,"result":` + capture.Result + `,"events":` + events + `}`)
+}
+
+func mcpCallResponse(id, result string) string {
+	toolResponse := `{"result":` + result + `}`
+	return `{"jsonrpc":"2.0","id":"` + id + `","result":{"content":[{"type":"text","text":` +
+		strconv.Quote(toolResponse) + `}],"isError":false}}`
+}
+
+func factoryEventSSE(rawEvents string) string {
+	var events []json.RawMessage
+	if err := json.Unmarshal([]byte(rawEvents), &events); err != nil {
+		panic("invalid static Factory Event fixture: " + err.Error())
+	}
+	var stream bytes.Buffer
+	for _, event := range events {
+		stream.WriteString("data: ")
+		stream.Write(bytes.TrimSpace(event))
+		stream.WriteString("\n\n")
+	}
+	return stream.String()
 }
 
 const successSession = `{

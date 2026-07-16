@@ -156,8 +156,9 @@ func changeDirectSessionStatus(t *testing.T, observation []byte) []byte {
 func changeMCPSessionStatus(t *testing.T, observation []byte) []byte {
 	t.Helper()
 	bundle := observationObject(t, observation)
-	response := bundle["session"].(map[string]any)
-	response["result"].(map[string]any)["status"] = "SUCCEEDED"
+	mutateMCPToolResult(t, bundle, "session", func(result map[string]any) {
+		result["status"] = "SUCCEEDED"
+	})
 	return mustMarshal(t, bundle)
 }
 
