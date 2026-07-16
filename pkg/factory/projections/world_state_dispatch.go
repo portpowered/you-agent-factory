@@ -626,42 +626,42 @@ func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.Facto
 	}
 }
 
-func (r *factoryWorldReducer) applyDispatchLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
+func (r *factoryWorldReducer) applyDispatchLifecycleEvent(event interfaces.FactoryEvent) (bool, error) {
 	switch event.Type {
-	case factoryapi.FactoryEventTypeDispatchQueued:
+	case interfaces.FactoryEventTypeDispatchQueued:
 		return true, r.applyDispatchQueuedEvent(event)
-	case factoryapi.FactoryEventTypeDispatchInterrupted:
+	case interfaces.FactoryEventTypeDispatchInterrupted:
 		return true, r.applyDispatchInterruptedEvent(event)
-	case factoryapi.FactoryEventTypeDispatchReconciled:
+	case interfaces.FactoryEventTypeDispatchReconciled:
 		return true, r.applyDispatchReconciledEvent(event)
 	default:
 		return false, nil
 	}
 }
 
-func (r *factoryWorldReducer) applyDispatchQueuedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchQueuedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchQueuedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.DispatchQueuedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
-	dispatchID := stringValue(event.Context.DispatchId)
+	dispatchID := stringValue(event.Context.DispatchID)
 	if dispatchID == "" {
 		return nil
 	}
 	state := interfaces.FactorySessionDispatchState{
 		ID:             dispatchID,
 		DispatchKind:   string(payload.DispatchKind),
-		Status:         string(factoryapi.FactoryDispatchStatusQUEUED),
+		Status:         string(interfaces.FactoryDispatchStatusQueued),
 		Phase:          dispatchLifecyclePhase(event.Context),
 		Label:          stringValue(payload.Label),
-		RunnerID:       stringValue(payload.RunnerId),
+		RunnerID:       stringValue(payload.RunnerID),
 		Model:          stringValue(payload.Model),
 		Provider:       stringValue(payload.Provider),
 		PromptDigest:   stringValue(payload.PromptDigest),
 		SchemaDigest:   stringValue(payload.SchemaDigest),
-		RelatedWorkIDs: cloneStringSlice(sliceValue(payload.InputWorkIds)),
+		RelatedWorkIDs: cloneStringSlice(sliceValue(payload.InputWorkIDs)),
 	}
-	if payload.DispatchKind == factoryapi.FactoryDispatchKindPETRITRANSITION {
+	if payload.DispatchKind == interfaces.FactoryDispatchKindPetriTransition {
 		state.Petri = &interfaces.FactorySessionDispatchPetriState{
 			TransitionID: dispatchID,
 		}
@@ -675,12 +675,12 @@ func (r *factoryWorldReducer) applyDispatchQueuedEvent(event factoryapi.FactoryE
 	return nil
 }
 
-func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchInterruptedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.DispatchInterruptedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
-	dispatchID := stringValue(event.Context.DispatchId)
+	dispatchID := stringValue(event.Context.DispatchID)
 	if dispatchID == "" {
 		return nil
 	}
@@ -690,7 +690,7 @@ func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event factoryapi.Fac
 	r.interruptedDispatchIDs[dispatchID] = struct{}{}
 	state := interfaces.FactorySessionDispatchState{
 		ID:     dispatchID,
-		Status: string(factoryapi.FactoryDispatchStatusINTERRUPTED),
+		Status: string(interfaces.FactoryDispatchStatusInterrupted),
 		Phase:  dispatchLifecyclePhase(event.Context),
 	}
 	if payload.Reason != "" {
@@ -702,12 +702,12 @@ func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event factoryapi.Fac
 	return nil
 }
 
-func (r *factoryWorldReducer) applyDispatchReconciledEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchReconciledEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchReconciledEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.DispatchReconciledEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
-	dispatchID := stringValue(event.Context.DispatchId)
+	dispatchID := stringValue(event.Context.DispatchID)
 	if dispatchID == "" {
 		return nil
 	}
@@ -718,14 +718,14 @@ func (r *factoryWorldReducer) applyDispatchReconciledEvent(event factoryapi.Fact
 		ID:          dispatchID,
 		Status:      string(payload.ReconciledStatus),
 		Phase:       dispatchLifecyclePhase(event.Context),
-		ArtifactIDs: cloneStringSlice(sliceValue(payload.ArtifactIds)),
+		ArtifactIDs: cloneStringSlice(sliceValue(payload.ArtifactIDs)),
 	}
 	if payload.Usage != nil {
 		state.Usage = &interfaces.FactorySessionDispatchUsage{
 			InputTokens:    int64Value(payload.Usage.InputTokens),
 			OutputTokens:   int64Value(payload.Usage.OutputTokens),
 			TotalTokens:    int64Value(payload.Usage.TotalTokens),
-			CostUSD:        float64Value(payload.Usage.CostUsd),
+			CostUSD:        float64Value(payload.Usage.CostUSD),
 			DurationMillis: int64Value(payload.Usage.DurationMillis),
 			RetryCount:     int32Value(payload.Usage.RetryCount),
 		}
@@ -737,7 +737,7 @@ func (r *factoryWorldReducer) applyDispatchReconciledEvent(event factoryapi.Fact
 		}
 	}
 	if payload.ResultArtifactRef != nil {
-		state.ArtifactIDs = appendUnique(state.ArtifactIDs, payload.ResultArtifactRef.Id)
+		state.ArtifactIDs = appendUnique(state.ArtifactIDs, payload.ResultArtifactRef.ID)
 	}
 	r.upsertJavaScriptDispatch(state)
 	return nil
@@ -829,12 +829,12 @@ func (r *factoryWorldReducer) recountJavaScriptDispatchTotals() {
 	runtime := r.ensureJavaScriptRuntime()
 	var queued, running, completed int
 	for _, dispatch := range runtime.Dispatches {
-		switch factoryapi.FactoryDispatchStatus(strings.TrimSpace(dispatch.Status)) {
-		case factoryapi.FactoryDispatchStatusQUEUED:
+		switch interfaces.FactoryDispatchStatus(strings.TrimSpace(dispatch.Status)) {
+		case interfaces.FactoryDispatchStatusQueued:
 			queued++
-		case factoryapi.FactoryDispatchStatusRUNNING:
+		case interfaces.FactoryDispatchStatusRunning:
 			running++
-		case factoryapi.FactoryDispatchStatusCOMPLETED:
+		case interfaces.FactoryDispatchStatusCompleted:
 			completed++
 		}
 	}
@@ -843,24 +843,24 @@ func (r *factoryWorldReducer) recountJavaScriptDispatchTotals() {
 	runtime.CompletedDispatches = completed
 }
 
-func dispatchLifecyclePhase(context factoryapi.FactoryEventContext) string {
+func dispatchLifecyclePhase(context interfaces.FactoryEventContext) string {
 	if phase := stringValue(context.PhaseName); phase != "" {
 		return phase
 	}
-	return stringValue(context.PhaseId)
+	return stringValue(context.PhaseID)
 }
 
-func javaScriptTaskKindFromDispatchKind(kind factoryapi.FactoryDispatchKind) string {
+func javaScriptTaskKindFromDispatchKind(kind interfaces.FactoryDispatchKind) string {
 	switch kind {
-	case factoryapi.FactoryDispatchKindJAVASCRIPTVERIFY:
+	case interfaces.FactoryDispatchKindJavaScriptVerify:
 		return "VERIFY"
-	case factoryapi.FactoryDispatchKindJAVASCRIPTSYNTHESIZE:
+	case interfaces.FactoryDispatchKindJavaScriptSynthesize:
 		return "SYNTHESIZE"
-	case factoryapi.FactoryDispatchKindJAVASCRIPTTOOL:
+	case interfaces.FactoryDispatchKindJavaScriptTool:
 		return "TOOL"
-	case factoryapi.FactoryDispatchKindJAVASCRIPTSCRIPT:
+	case interfaces.FactoryDispatchKindJavaScriptScript:
 		return "SCRIPT"
-	case factoryapi.FactoryDispatchKindJAVASCRIPTSYSTEM:
+	case interfaces.FactoryDispatchKindJavaScriptSystem:
 		return "SYSTEM"
 	default:
 		return "AGENT"

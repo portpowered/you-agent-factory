@@ -678,6 +678,49 @@ func TestCanonicalOrchestratorProgressEventsReconstructPhaseAndCheckpoint(t *tes
 	assertCanonicalOrchestratorProgress(t, reducer.stateValue.JavaScriptRuntime, phaseName, checkpointID, artifactHash, artifactSize)
 }
 
+func TestCanonicalDispatchLifecycleEventsReconstructQueueInterruptAndReplay(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 2, 0, 0, 0, time.UTC)
+	dispatchID, phaseName := "dispatch-1", "execute"
+	reducer := newFactoryWorldReducer(3)
+	artifactIDs := []string{"artifact-1"}
+	events := []interfaces.FactoryEvent{
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchQueued, interfaces.FactoryEventContext{
+			DispatchID: &dispatchID, EventTime: eventTime, PhaseName: &phaseName,
+		}, interfaces.DispatchQueuedEventPayload{
+			DispatchKind: interfaces.FactoryDispatchKindJavaScriptAgent,
+			InputWorkIDs: &[]string{"work-1"}, PromptDigest: stringPtrForProjectionTest("sha256:prompt"),
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchInterrupted, interfaces.FactoryEventContext{
+			DispatchID: &dispatchID, EventTime: eventTime.Add(time.Second),
+		}, interfaces.DispatchInterruptedEventPayload{
+			InterruptedAt: eventTime.Add(time.Second), ObservedStatus: interfaces.FactoryDispatchStatusFailed, Reason: "provider disconnected", RetryPlanned: true,
+		}),
+		canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchReconciled, interfaces.FactoryEventContext{
+			DispatchID: &dispatchID, EventTime: eventTime.Add(2 * time.Second),
+		}, interfaces.DispatchReconciledEventPayload{
+			ArtifactIDs: &artifactIDs, ReconciledStatus: interfaces.FactoryDispatchStatusCompleted,
+			ReconciliationSource: interfaces.DispatchReconciliationSourceStreamReplay, Replayed: true,
+		}),
+	}
+	for _, event := range events {
+		handled, err := reducer.applyDispatchLifecycleEvent(event)
+		if err != nil || !handled {
+			t.Fatalf("applyDispatchLifecycleEvent(%s) = handled %t, err %v", event.Type, handled, err)
+		}
+	}
+	dispatch := reducer.stateValue.JavaScriptRuntime.Dispatches[0]
+	if dispatch.ID != dispatchID || dispatch.Status != string(interfaces.FactoryDispatchStatusCompleted) || dispatch.Phase != phaseName {
+		t.Fatalf("dispatch = %#v, want completed %q dispatch in %q", dispatch, dispatchID, phaseName)
+	}
+	if dispatch.JavaScript == nil || dispatch.JavaScript.TaskKind != "AGENT" || dispatch.PromptDigest != "sha256:prompt" {
+		t.Fatalf("dispatch metadata = %#v, want domain-owned JavaScript queue facts", dispatch)
+	}
+	if len(dispatch.RelatedWorkIDs) != 1 || dispatch.RelatedWorkIDs[0] != "work-1" || len(dispatch.ArtifactIDs) != 1 || dispatch.ArtifactIDs[0] != "artifact-1" {
+		t.Fatalf("dispatch lineage/artifacts = %#v / %#v", dispatch.RelatedWorkIDs, dispatch.ArtifactIDs)
+	}
+}
+
 func assertCanonicalOrchestratorProgress(
 	t *testing.T,
 	runtime *interfaces.FactorySessionJavaScriptRuntimeState,

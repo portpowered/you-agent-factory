@@ -142,7 +142,15 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		_, err = r.applySessionLifecycleEvent(canonicalEvent)
 		return err
 	}
-	if handled, err := r.applyDispatchLifecycleEvent(event); handled {
+	switch interfaces.FactoryEventType(event.Type) {
+	case interfaces.FactoryEventTypeDispatchQueued,
+		interfaces.FactoryEventTypeDispatchInterrupted,
+		interfaces.FactoryEventTypeDispatchReconciled:
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		_, err = r.applyDispatchLifecycleEvent(canonicalEvent)
 		return err
 	}
 	return nil
