@@ -250,20 +250,20 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
-	packageGateEnabled := !cfg.totalOnly && cfg.generateManifest == "" && cfg.updateManifest == ""
+	legacyPackageGateEnabled := !cfg.totalOnly && cfg.generateManifest == "" && cfg.updateManifest == "" && strings.TrimSpace(cfg.packageManifest) == ""
 	baselinePackages := map[string]struct{}{}
-	if packageGateEnabled {
+	if legacyPackageGateEnabled {
 		baselinePackages, err = packageCoverageBaselinePackages(cfg, repoRoot)
 		if err != nil {
 			return coverageResult{}, err
 		}
 	}
 
-	result, totalLine, err := evaluateCoverage(stdout.String(), "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, packageGateEnabled)
+	result, totalLine, err := evaluateCoverage(stdout.String(), "", profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages, legacyPackageGateEnabled)
 	if err != nil {
 		return coverageResult{}, err
 	}
-	if packageGateEnabled && strings.TrimSpace(cfg.packageManifest) != "" {
+	if !cfg.totalOnly && strings.TrimSpace(cfg.packageManifest) != "" {
 		manifestPath := cfg.packageManifest
 		if !filepath.IsAbs(manifestPath) {
 			manifestPath = filepath.Join(repoRoot, manifestPath)
