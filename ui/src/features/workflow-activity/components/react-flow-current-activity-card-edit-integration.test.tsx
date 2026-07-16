@@ -1,4 +1,4 @@
-// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: integration flows share one mocked React Flow harness.
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/style/noExcessiveLinesPerFile: integration flows share one mocked React Flow harness.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 

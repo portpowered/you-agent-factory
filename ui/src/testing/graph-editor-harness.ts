@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: shared graph-editor fixtures and editable-graph test helpers stay colocated so hook and card tests import one stable harness seam.
+// biome-ignore lint/style/noExcessiveLinesPerFile: shared graph-editor fixtures and editable-graph test helpers stay colocated so hook and card tests import one stable harness seam.
 import type { Mock } from "vitest";
 import { vi } from "vitest";
 

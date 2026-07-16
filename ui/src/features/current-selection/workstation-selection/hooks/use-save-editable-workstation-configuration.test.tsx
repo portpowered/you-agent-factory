@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: save-hook coverage includes invalid-to-valid prompt validation regressions alongside scoped save wiring.
+// biome-ignore lint/style/noExcessiveLinesPerFile: save-hook coverage includes invalid-to-valid prompt validation regressions alongside scoped save wiring.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";

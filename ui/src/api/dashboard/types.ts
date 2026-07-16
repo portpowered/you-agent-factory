@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard snapshot types stay centralized so runtime projection consumers share one import seam.
+// biome-ignore lint/style/noExcessiveLinesPerFile: dashboard snapshot types stay centralized so runtime projection consumers share one import seam.
 import type { FactoryDefinition, InferenceOutcome } from "../events";
 import type { components } from "../generated/openapi";
 import type { DashboardAgentRunInspection } from "./agent-run-inspection-types";

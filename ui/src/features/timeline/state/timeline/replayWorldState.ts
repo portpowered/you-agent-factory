@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: Replay projection is intentionally centralized until checkpoint replay can be split safely.
+// biome-ignore lint/style/noExcessiveLinesPerFile: Replay projection is intentionally centralized until checkpoint replay can be split safely.
 import type { FactoryEvent, FactoryRelation } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {

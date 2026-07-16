@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: Monaco theme derivation keeps palette token fallback precedence in one module.
+// biome-ignore lint/style/noExcessiveLinesPerFile: Monaco theme derivation keeps palette token fallback precedence in one module.
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 
 const FALLBACK_THEME_TOKENS = {

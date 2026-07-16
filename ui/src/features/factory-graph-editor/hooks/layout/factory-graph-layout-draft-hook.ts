@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: coordinates layout draft session state with typed undo history and visual groups.
+// biome-ignore lint/style/noExcessiveLinesPerFile: coordinates layout draft session state with typed undo history and visual groups.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CurrentFactoryDocument } from "../../lib/draft/factory-graph-draft-types";

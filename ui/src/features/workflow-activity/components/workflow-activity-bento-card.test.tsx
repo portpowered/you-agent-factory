@@ -1,4 +1,4 @@
-/* biome-ignore lint/nursery/noExcessiveLinesPerFile: keeps the workflow-activity bento coverage in one file while the toolbar migration settles. */
+/* biome-ignore lint/style/noExcessiveLinesPerFile: keeps the workflow-activity bento coverage in one file while the toolbar migration settles. */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

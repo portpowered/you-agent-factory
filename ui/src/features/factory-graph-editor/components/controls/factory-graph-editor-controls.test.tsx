@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
+// biome-ignore lint/style/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";

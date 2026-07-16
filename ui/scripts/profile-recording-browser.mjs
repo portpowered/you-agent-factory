@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: Standalone diagnostic CLI keeps setup, serving, probing, and reporting together.
+// biome-ignore lint/style/noExcessiveLinesPerFile: Standalone diagnostic CLI keeps setup, serving, probing, and reporting together.
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";

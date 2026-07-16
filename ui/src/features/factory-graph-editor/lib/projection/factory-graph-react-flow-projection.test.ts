@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: projection contract scenarios stay together around one adapter.
+// biome-ignore lint/style/noExcessiveLinesPerFile: projection contract scenarios stay together around one adapter.
 import { describe, expect, it, vi } from "vitest";
 import { WorkerType, WorkstationType } from "../../../../api/generated/openapi";
 import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";

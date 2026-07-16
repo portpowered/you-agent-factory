@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: layout draft hook scenarios stay grouped for undo coverage.
+// biome-ignore lint/style/noExcessiveLinesPerFile: layout draft hook scenarios stay grouped for undo coverage.
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: graph view-model selection contract cases stay together.
+// biome-ignore lint/style/noExcessiveLinesPerFile: graph view-model selection contract cases stay together.
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

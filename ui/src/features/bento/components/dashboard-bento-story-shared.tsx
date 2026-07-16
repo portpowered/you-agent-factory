@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: Shared fixtures and render helpers for split bento card catalog stories.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: Shared fixtures and render helpers for split bento card catalog stories.
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: feature-local locale catalogs keep required language coverage in one typed asset set.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: feature-local locale catalogs keep required language coverage in one typed asset set.
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,

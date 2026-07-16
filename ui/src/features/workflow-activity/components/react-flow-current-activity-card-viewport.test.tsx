@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: viewport coverage keeps related mocked React Flow click paths together.
+// biome-ignore lint/style/noExcessiveLinesPerFile: viewport coverage keeps related mocked React Flow click paths together.
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
 import { type ReactNode, useEffect } from "react";

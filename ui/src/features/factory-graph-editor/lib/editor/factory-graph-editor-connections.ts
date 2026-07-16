@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: connection anchor registry and draft edge helpers stay co-located for one graph-editor seam.
+// biome-ignore lint/style/noExcessiveLinesPerFile: connection anchor registry and draft edge helpers stay co-located for one graph-editor seam.
 import {
   type WorkstationProgressOutcomeRouteContext,
   workstationSupportsProgressOutcomeFailureRoute,

@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: graph view-model composes projection, selection bridge, and React Flow presentation in one hook module.
+// biome-ignore lint/style/noExcessiveLinesPerFile: graph view-model composes projection, selection bridge, and React Flow presentation in one hook module.
 import type { FitViewOptions, NodeChange, OnSelectionChangeFunc, EdgeChange } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 

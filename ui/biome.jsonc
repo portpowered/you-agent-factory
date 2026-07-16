@@ -37,16 +37,14 @@
           }
         }
       },
-      "nursery": {
+      "style": {
         "noExcessiveLinesPerFile": {
           "level": "error",
           "options": {
             "maxLines": 450,
             "skipBlankLines": true
           }
-        }
-      },
-      "style": {
+        },
         "noRestrictedImports": {
           "level": "error",
           "options": {
@@ -80,7 +78,12 @@
       }
     },
     {
-      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.test-support.tsx", "**/*.stories.tsx"],
+      "includes": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.test-support.tsx",
+        "**/*.stories.tsx"
+      ],
       "linter": {
         "rules": {
           "style": {
@@ -113,7 +116,7 @@
           "complexity": {
             "noExcessiveLinesPerFunction": "off"
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": "off"
           }
         }
@@ -212,7 +215,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -245,7 +248,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -274,7 +277,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -300,7 +303,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -336,7 +339,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -364,7 +367,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -394,7 +397,7 @@
               }
             }
           },
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -410,7 +413,7 @@
       "includes": ["scripts/loadtest-agent-fails-memory.ts"],
       "linter": {
         "rules": {
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
@@ -426,7 +429,7 @@
       "includes": ["scripts/*-allowlist.mjs"],
       "linter": {
         "rules": {
-          "nursery": {
+          "style": {
             "noExcessiveLinesPerFile": "off"
           }
         }

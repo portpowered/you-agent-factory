@@ -1,4 +1,4 @@
-/* biome-ignore lint/nursery/noExcessiveLinesPerFile: keeps one dispatch-history renderer together while the current-selection card migration is still settling. */
+/* biome-ignore lint/style/noExcessiveLinesPerFile: keeps one dispatch-history renderer together while the current-selection card migration is still settling. */
 import {
   formatDurationMillis,
   formatLocalDateTime,

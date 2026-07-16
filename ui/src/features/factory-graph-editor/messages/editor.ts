@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: factory graph editor copy stays consolidated so message keys and locale fallbacks remain auditable during hardcoded-copy cleanup.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: factory graph editor copy stays consolidated so message keys and locale fallbacks remain auditable during hardcoded-copy cleanup.
 
 import type { components } from "../../../api/generated/openapi";
 import {

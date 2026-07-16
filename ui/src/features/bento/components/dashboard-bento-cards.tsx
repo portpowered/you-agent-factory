@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard bento card wiring keeps widget render and selection bridge callbacks colocated.
+// biome-ignore lint/style/noExcessiveLinesPerFile: dashboard bento card wiring keeps widget render and selection bridge callbacks colocated.
 import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";

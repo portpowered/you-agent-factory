@@ -1,4 +1,4 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: trace workstation path coverage shares one mocked React Flow harness for lineage, layout bounds, and semantics regressions.
+// biome-ignore lint/style/noExcessiveLinesPerFile: trace workstation path coverage shares one mocked React Flow harness for lineage, layout bounds, and semantics regressions.
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";

@@ -1,4 +1,4 @@
-// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: save-current coverage shares one API fixture seam split from the oversized api.test.ts suite.
+// biome-ignore-all lint/style/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: save-current coverage shares one API fixture seam split from the oversized api.test.ts suite.
 import {
   factoryRuntimeNotIdleTarget,
   staleFactoryVersionTarget,
