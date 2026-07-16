@@ -33,6 +33,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -202,11 +203,15 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	} else if cfg != nil && cfg.ModelAPI != nil {
 		service = AttachModelServiceCollaborator(shell, cfg.ModelAPI)
 	} else {
-		// Compatibility construction does not own model graph policy. Production
-		// and functional startup attach the model service built by pkg/wire; direct
-		// compatibility callers receive an explicit unavailable boundary unless
-		// they supply the already-constructed collaborator.
-		service = AttachModelServiceCollaborator(shell, unavailableModelService{})
+		deps, modelErr := ModelServiceDependencies(shell)
+		if modelErr != nil {
+			return nil, modelErr
+		}
+		models, modelErr := modelsservice.NewService(deps)
+		if modelErr != nil {
+			return nil, fmt.Errorf("construct model service: %w", modelErr)
+		}
+		service = AttachModelServiceCollaborator(shell, models)
 	}
 	service = AttachFactorySaveCollaborator(
 		FactoryServiceShell{Service: service},

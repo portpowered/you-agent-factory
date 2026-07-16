@@ -15,9 +15,11 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -265,11 +267,49 @@ func buildCore(
 	if err != nil {
 		return nil, err
 	}
-	// Model-service construction belongs to pkg/wire. This bridge returns the
-	// inert runtime core so the canonical provider can attach the one service
-	// instance consumed by transports and compatibility facades.
-	if cfg != nil && cfg.ModelAPI != nil {
-		runtimehost.AttachModelService(core, cfg.ModelAPI)
+	models, modelErr := composeModelService(core, cfg)
+	if modelErr != nil {
+		return nil, modelErr
 	}
+	runtimehost.AttachModelService(core, models)
 	return core, nil
+}
+
+// composeModelService adapts the already-built runtime core to the canonical
+// model-package constructor. Construction remains inert: it neither starts a
+// runtime nor selects application lifecycle or process-mode policy.
+func composeModelService(core *runtimehost.Core, cfg *runtimehost.Config) (apisurface.ModelAPI, error) {
+	if cfg != nil && cfg.ModelAPI != nil {
+		return cfg.ModelAPI, nil
+	}
+	if core == nil || core.Clock() == nil {
+		return nil, fmt.Errorf("construct model service: runtime core and clock are required")
+	}
+	host := runtimehost.NewHostFromCore(core)
+	var metrics modelsservice.PullMetricsRecorder
+	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
+		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
+	}
+	models, err := modelsservice.NewService(modelsservice.Dependencies{
+		RuntimeConfig:           host.CurrentModelRuntimeConfig,
+		ModelHost:               core.ModelHost(),
+		ModelAssetPuller:        core.ModelAssetPuller(),
+		Logger:                  core.Logger(),
+		Clock:                   core.Clock().Now,
+		ModelPullMetrics:        metrics,
+		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
+		FactoryRunnerID:         cfg.RunnerID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct model service: %w", err)
+	}
+	return models, nil
+}
+
+type modelPullMetricsAdapter struct {
+	inner runtimehost.ModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }

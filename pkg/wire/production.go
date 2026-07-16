@@ -83,40 +83,6 @@ func provideFactoryModelServiceDependencies(
 	return service.ModelServiceDependencies(service.FactoryServiceShell{Service: shell.Service})
 }
 
-func provideRuntimeModelServiceDependencies(
-	core *runtimehost.Core,
-	cfg *runtimehost.Config,
-) (modelsservice.Dependencies, error) {
-	if core == nil || isNil(core.Clock()) {
-		return modelsservice.Dependencies{}, fmt.Errorf(
-			"construct model service dependencies: runtime core and clock are required",
-		)
-	}
-	host := runtimehost.NewHostFromCore(core)
-	var metrics modelsservice.PullMetricsRecorder
-	if cfg != nil && !isNil(cfg.ModelPullMetricsRecorder) {
-		metrics = runtimeModelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
-	}
-	return modelsservice.Dependencies{
-		RuntimeConfig:           host.CurrentModelRuntimeConfig,
-		ModelHost:               core.ModelHost(),
-		ModelAssetPuller:        core.ModelAssetPuller(),
-		Logger:                  core.Logger(),
-		Clock:                   core.Clock().Now,
-		ModelPullMetrics:        metrics,
-		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
-		FactoryRunnerID:         cfg.RunnerID,
-	}, nil
-}
-
-type runtimeModelPullMetricsAdapter struct {
-	inner runtimehost.ModelPullMetricsRecorder
-}
-
-func (a runtimeModelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
-}
-
 func newModelService(deps modelsservice.Dependencies) (*modelsservice.Service, error) {
 	models, err := modelsservice.NewService(deps)
 	if err != nil {
@@ -277,15 +243,6 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build production application graph: construct runtime core: %w", err)
 	}
-	modelDeps, err := provideRuntimeModelServiceDependencies(core, &cfg)
-	if err != nil {
-		return nil, fmt.Errorf("build production application graph: %w", err)
-	}
-	models, err := provideModelService(modelDeps, service.FactoryServiceConfigFromRuntimeHost(&cfg))
-	if err != nil {
-		return nil, fmt.Errorf("build production application graph: %w", err)
-	}
-	runtimehost.AttachModelService(core, models)
 	resources := &resourceSet{}
 	if bundle := core.StartupBundle(); bundle != nil {
 		resources.add("runtime core", closeFunc(func() error {
