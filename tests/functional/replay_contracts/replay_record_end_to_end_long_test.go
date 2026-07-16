@@ -13,12 +13,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -187,7 +189,7 @@ Finish the input task.
 `)
 
 	generatedBatchOutput := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]},"metadata":{"parentLineage":["request-replay-external-batch","work-external-fanout"],"relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]}}`
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "record external first"},
 			{Content: generatedBatchOutput},
@@ -246,7 +248,7 @@ Finish the input task.
 	if got := len(factoryRelationsValue(generatedRequest.Payload.Relations)); got != 1 {
 		t.Fatalf("generated relations = %d, want 1", got)
 	}
-	assertGeneratedReplayRequestMetadata(t, artifact.Events, generatedRequest.RequestID)
+	assertGeneratedReplayRequestMetadata(t, testutil.GeneratedFactoryEvents(t, artifact.Events), generatedRequest.RequestID)
 }
 
 func assertReplayWorkRequestRecorded(t *testing.T, artifact *interfaces.ReplayArtifact, requestID, source string, workItems int, relations int) {
@@ -324,7 +326,7 @@ func replayWorkRequestEvents(t *testing.T, artifact *interfaces.ReplayArtifact) 
 	if t != nil {
 		t.Helper()
 	}
-	return replayWorkRequestEventsFromEvents(t, artifact.Events)
+	return replayWorkRequestEventsFromEvents(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 }
 
 func replayWorkRequestEventsFromEvents(t *testing.T, events []factoryapi.FactoryEvent) []recordedFactoryWorkRequestEvent {
@@ -405,7 +407,7 @@ args:
 func writeRecordReplayWorkFile(t *testing.T, path string) {
 	t.Helper()
 
-	req := interfaces.SubmitRequest{
+	req := work.SubmitRequest{
 		WorkID:     "record-replay-e2e-work",
 		WorkTypeID: "task",
 		TraceID:    "record-replay-e2e-trace",

@@ -9,4 +9,3 @@ pkg/runtimehost/runtime_sessions.go: unreachable func: Host.inferenceProgressPub
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.openFactorySession
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.sessionResponseStream
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.startBackgroundSession
-tests/functional/internal/support/replay_fixture.go: unreachable func: RecordReplayFixture

@@ -125,8 +125,8 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 	assertCommandWorkDispatch(t, run.request, want)
 	indices := requireScriptResponseEventIndices(t, run.events)
 	assertDispatchSmokeEventCorrelation(t, run.events, indices, run.request, want, run.commandOutput)
-	assertDispatchSmokeEventsRecordedInArtifact(t, run.events, run.artifact.Events)
-	assertScriptEventsRecordedInArtifact(t, run.events, run.artifact.Events)
+	assertDispatchSmokeEventsRecordedInArtifact(t, run.events, testutil.GeneratedFactoryEvents(t, run.artifact.Events))
+	assertScriptEventsRecordedInArtifact(t, run.events, testutil.GeneratedFactoryEvents(t, run.artifact.Events))
 
 	replayHarness := testutil.AssertReplaySucceeds(t, run.artifactPath, 10*time.Second)
 	replayHarness.Service.Assert().

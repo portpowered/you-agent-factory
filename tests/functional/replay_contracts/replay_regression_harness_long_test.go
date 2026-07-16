@@ -8,10 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -46,16 +47,20 @@ func TestReplayRegressionHarness_ReportsCorruptedArtifactFailure(t *testing.T) {
 	if err == nil {
 		t.Fatalf("corrupted replay CLI succeeded unexpectedly: %s", output)
 	}
+	if !strings.Contains(output, "replay divergence: category=dispatch_mismatch") {
+		t.Fatalf("corrupted replay CLI output = %q, want stable dispatch-mismatch replay failure", output)
+	}
 }
 
 func mutateFirstDispatchRequest(t *testing.T, artifact *interfaces.ReplayArtifact) {
 	t.Helper()
 
 	for i := range artifact.Events {
-		if artifact.Events[i].Type != factoryapi.FactoryEventTypeDispatchRequest {
+		event := testutil.GeneratedFactoryEvent(t, artifact.Events[i])
+		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
 		}
-		payload, err := artifact.Events[i].Payload.AsDispatchRequestEventPayload()
+		payload, err := event.Payload.AsDispatchRequestEventPayload()
 		if err != nil {
 			t.Fatalf("decode dispatch request event: %v", err)
 		}
@@ -64,7 +69,8 @@ func mutateFirstDispatchRequest(t *testing.T, artifact *interfaces.ReplayArtifac
 		if err := union.FromDispatchRequestEventPayload(payload); err != nil {
 			t.Fatalf("encode dispatch request event: %v", err)
 		}
-		artifact.Events[i].Payload = union
+		event.Payload = union
+		artifact.Events[i] = testutil.FactoryEvent(t, event)
 		return
 	}
 	t.Fatal("artifact has no DISPATCH_REQUEST event")
@@ -86,7 +92,7 @@ func runReplayCLI(t *testing.T, artifactPath string) (string, error) {
 	t.Helper()
 
 	binaryPath := buildReplayCLIBinary(t)
-	command := exec.Command(binaryPath, "run", "--quiet", "--replay", artifactPath)
+	command := exec.Command(binaryPath, "run", "--replay", artifactPath)
 	command.Dir = t.TempDir()
 	command.Env = replayCLIEnvironment(t)
 	output, err := command.CombinedOutput()
