@@ -4,6 +4,7 @@ package packages
 import (
 	"sort"
 
+	builtinclassifier "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/classifier"
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
@@ -18,6 +19,11 @@ type Definition struct {
 }
 
 var catalog = map[string]Definition{
+	"@you/classifier": {
+		Name:    "@you/classifier",
+		Project: "builtin-classifier",
+		JSON:    builtinclassifier.BuiltInFactoryJSON,
+	},
 	"@you/fusion": {
 		Name:    "@you/fusion",
 		Project: "builtin-fusion",
