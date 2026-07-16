@@ -39,7 +39,11 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 		return nil, err
 	}
 	wireFactoryServiceShell := provideFactoryServiceShell(factoryCore)
-	modelAPI, err := provideModelService(factoryCore, wireFactoryServiceShell, cfg)
+	dependencies, err := provideFactoryModelServiceDependencies(factoryCore, wireFactoryServiceShell)
+	if err != nil {
+		return nil, err
+	}
+	modelAPI, err := provideModelService(dependencies, cfg)
 	if err != nil {
 		return nil, err
 	}

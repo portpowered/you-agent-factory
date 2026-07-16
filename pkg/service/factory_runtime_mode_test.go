@@ -25,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
@@ -1249,8 +1248,8 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if svc.modelService == nil {
 		t.Fatal("expected explicit model service collaborator")
 	}
-	if _, ok := svc.modelService.(*modelsservice.Service); !ok {
-		t.Fatalf("modelService type = %T, want *modelsservice.Service for production wiring", svc.modelService)
+	if _, ok := svc.modelService.(unavailableModelService); !ok {
+		t.Fatalf("modelService type = %T, want explicit unavailable compatibility boundary", svc.modelService)
 	}
 	if svc.factorySave == nil {
 		t.Fatal("expected explicit factorysave collaborator")

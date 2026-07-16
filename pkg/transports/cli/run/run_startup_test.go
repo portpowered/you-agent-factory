@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -641,7 +642,10 @@ func TestRun_WireBuiltFactoryServiceServesStatus(t *testing.T) {
 	}
 }
 
-func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
+func TestRun_ExplicitModelServiceListsModels(t *testing.T) {
+	SetBuildFactoryService(FactoryServiceBuilderFromService(buildRunTestFactoryServiceWithModels))
+	defer SetBuildFactoryService(nil)
+
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	writeRunWireTestWorkerAgentsMD(t, dir, "worker-a")
@@ -733,6 +737,26 @@ func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for Run to exit after cancel")
 	}
+}
+
+func buildRunTestFactoryServiceWithModels(
+	ctx context.Context,
+	cfg *service.FactoryServiceConfig,
+) (*service.FactoryService, error) {
+	svc, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	shell := service.FactoryServiceShell{Service: svc}
+	deps, err := service.ModelServiceDependencies(shell)
+	if err != nil {
+		return nil, err
+	}
+	models, err := modelsservice.NewService(deps)
+	if err != nil {
+		return nil, err
+	}
+	return service.AttachModelServiceCollaborator(shell, models), nil
 }
 
 func writeRunWireTestWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {

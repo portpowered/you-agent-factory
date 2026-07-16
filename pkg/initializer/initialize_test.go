@@ -17,7 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )
 
@@ -98,7 +100,12 @@ func TestInitialize_ComposesDomainServicesWithoutFactoryService(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 
 	ctx := context.Background()
-	services, err := initializer.Initialize(ctx, &initializer.Config{Dir: dir})
+	services, err := initializer.Initialize(ctx, &initializer.Config{
+		Dir: dir,
+		ModelAPI: &testutil.MockFactory{Models: factoryapi.ListModelsResponse{
+			Results: []factoryapi.ModelSummary{},
+		}},
+	})
 	if err != nil {
 		t.Fatalf("Initialize: %v", err)
 	}

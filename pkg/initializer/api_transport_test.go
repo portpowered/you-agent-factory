@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -130,6 +131,7 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Port:              port,
 		Logger:            zap.NewNop(),
+		ModelAPI:          &testutil.MockFactory{},
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, bindPort int, l *zap.Logger) error {
 			startedSurface = runtime
 			apiListener, listenErr := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", bindPort))

@@ -33,10 +33,11 @@ func BuildModelInvocation(ctx context.Context, request modelscli.InvocationReque
 		cfg.RuntimeLogDir = defaultpaths.RuntimeLogsRoot(request.HomeDir)
 		cfg.RuntimeMetricsDir = defaultpaths.RuntimeMetricsRoot(request.HomeDir)
 	}
-	bootstrap, err := service.BuildInvocationBootstrap(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+	svc, err := InjectFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
 	if err != nil {
 		return nil, err
 	}
+	bootstrap := &service.InvocationBootstrap{Service: svc}
 	return &modelInvocationRunner{bootstrap: bootstrap}, nil
 }
 

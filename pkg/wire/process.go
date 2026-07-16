@@ -228,7 +228,11 @@ func buildInvocationRunner(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 ) (runcli.InvocationRunner, error) {
-	return service.BuildInvocationBootstrap(ctx, cfg)
+	svc, err := InjectFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	return &service.InvocationBootstrap{Service: svc}, nil
 }
 
 func applicationModeForProcess(mode initializer.ProcessMode) (initializer.Mode, error) {

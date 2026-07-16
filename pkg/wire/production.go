@@ -41,6 +41,7 @@ type Inputs struct {
 var modelProviderSet = wire.NewSet(
 	provideLocalModelDomain,
 	provideFactoryServiceShell,
+	provideFactoryModelServiceDependencies,
 	provideModelService,
 )
 
@@ -58,24 +59,62 @@ func provideLocalModelDomain(cfg *service.FactoryServiceConfig) (service.LocalMo
 }
 
 func provideModelService(
-	core *service.FactoryCore,
-	shell factoryServiceShell,
+	deps modelsservice.Dependencies,
 	cfg *service.FactoryServiceConfig,
 ) (apisurface.ModelAPI, error) {
 	if cfg != nil && !isNil(cfg.ModelAPI) {
 		return cfg.ModelAPI, nil
 	}
+	return newModelService(deps)
+}
+
+func provideFactoryModelServiceDependencies(
+	core *service.FactoryCore,
+	shell factoryServiceShell,
+) (modelsservice.Dependencies, error) {
 	if core == nil || shell.Service == nil {
-		return nil, fmt.Errorf("construct model service: factory core and service shell are required")
+		return modelsservice.Dependencies{}, fmt.Errorf(
+			"construct model service dependencies: factory core and service shell are required",
+		)
 	}
 	if isNil(core.Clock()) {
-		return nil, fmt.Errorf("construct model service: clock is required")
+		return modelsservice.Dependencies{}, fmt.Errorf("construct model service dependencies: clock is required")
 	}
-	deps, err := service.ModelServiceDependencies(service.FactoryServiceShell{Service: shell.Service})
-	if err != nil {
-		return nil, err
+	return service.ModelServiceDependencies(service.FactoryServiceShell{Service: shell.Service})
+}
+
+func provideRuntimeModelServiceDependencies(
+	core *runtimehost.Core,
+	cfg *runtimehost.Config,
+) (modelsservice.Dependencies, error) {
+	if core == nil || isNil(core.Clock()) {
+		return modelsservice.Dependencies{}, fmt.Errorf(
+			"construct model service dependencies: runtime core and clock are required",
+		)
 	}
-	return newModelService(deps)
+	host := runtimehost.NewHostFromCore(core)
+	var metrics modelsservice.PullMetricsRecorder
+	if cfg != nil && !isNil(cfg.ModelPullMetricsRecorder) {
+		metrics = runtimeModelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
+	}
+	return modelsservice.Dependencies{
+		RuntimeConfig:           host.CurrentModelRuntimeConfig,
+		ModelHost:               core.ModelHost(),
+		ModelAssetPuller:        core.ModelAssetPuller(),
+		Logger:                  core.Logger(),
+		Clock:                   core.Clock().Now,
+		ModelPullMetrics:        metrics,
+		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
+		FactoryRunnerID:         cfg.RunnerID,
+	}, nil
+}
+
+type runtimeModelPullMetricsAdapter struct {
+	inner runtimehost.ModelPullMetricsRecorder
+}
+
+func (a runtimeModelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }
 
 func newModelService(deps modelsservice.Dependencies) (*modelsservice.Service, error) {
@@ -238,6 +277,15 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	if err != nil {
 		return nil, fmt.Errorf("build production application graph: construct runtime core: %w", err)
 	}
+	modelDeps, err := provideRuntimeModelServiceDependencies(core, &cfg)
+	if err != nil {
+		return nil, fmt.Errorf("build production application graph: %w", err)
+	}
+	models, err := provideModelService(modelDeps, service.FactoryServiceConfigFromRuntimeHost(&cfg))
+	if err != nil {
+		return nil, fmt.Errorf("build production application graph: %w", err)
+	}
+	runtimehost.AttachModelService(core, models)
 	resources := &resourceSet{}
 	if bundle := core.StartupBundle(); bundle != nil {
 		resources.add("runtime core", closeFunc(func() error {

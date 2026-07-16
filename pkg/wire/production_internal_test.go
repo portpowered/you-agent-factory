@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
@@ -59,10 +60,74 @@ func TestModelServiceProviderRejectsMissingExplicitClock(t *testing.T) {
 
 	core := &service.FactoryCore{}
 	shell := factoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
-	models, err := provideModelService(core, shell, &service.FactoryServiceConfig{})
-	if models != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
-		t.Fatalf("provideModelService() = (%T, %v), want missing-clock construction error", models, err)
+	_, depsErr := provideFactoryModelServiceDependencies(core, shell)
+	if depsErr == nil || !strings.Contains(depsErr.Error(), "clock is required") {
+		t.Fatalf("provideFactoryModelServiceDependencies() error = %v, want missing-clock error", depsErr)
 	}
+}
+
+func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryCfg := factoryfixtures.MinimalFactoryConfig()
+	factoryCfg["workers"] = []map[string]any{
+		{"name": "worker-a", "type": "SCRIPT_WORKER", "command": "test", "body": "Process work."},
+		{
+			"name": "model-worker", "type": "INFERENCE_WORKER", "modelProvider": "CODEX",
+			"model": "OMNIVOICE_Q4_K_M", "modelLocality": interfaces.ModelLocalityLocal,
+			"resources": []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
+		},
+	}
+	factoryCfg["workstations"].([]map[string]any)[0]["type"] = "SCRIPT_RUN"
+	factoryCfg["workstations"].([]map[string]any)[0]["body"] = "Run the worker."
+	factoryCfg["resources"] = []map[string]any{{
+		"name": "omnivoice-cache", "type": "MODEL", "capacity": 1,
+		"model": "OMNIVOICE_Q4_K_M", "backend": "LLAMACPP", "loadPolicy": "ON_DEMAND",
+	}}
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryCfg)
+	assets := &recordingModelAssets{AssetPuller: localmodels.NewAssetPuller(t.TempDir())}
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
+			Clock: productionInternalClock{}, ModelAssets: assets,
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	t.Cleanup(func() { _ = graph.Close() })
+
+	if graph.core == nil || graph.core.ModelService() == nil ||
+		graph.core.ModelService() != graph.Models || graph.Models != graph.Transport.Models {
+		t.Fatal("production core, graph, and transport did not retain the default model service instance")
+	}
+	models, err := graph.Transport.Models.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("transport model catalog call error = %v", err)
+	}
+	if len(models.Results) != 1 || assets.inspectCalls != 1 {
+		t.Fatalf("catalog results/asset inspections = (%d, %d), want (1, 1)", len(models.Results), assets.inspectCalls)
+	}
+}
+
+type recordingModelAssets struct {
+	localmodels.AssetPuller
+	inspectCalls int
+}
+
+func (assets *recordingModelAssets) InspectRuntimeCache(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (localmodels.RuntimeCacheInspection, error) {
+	assets.inspectCalls++
+	return assets.AssetPuller.InspectRuntimeCache(ctx, runtimeCfg, modelName)
 }
 
 func TestProductionGraphRetainsCoreModelServiceAndInjectedCatalogEdge(t *testing.T) {

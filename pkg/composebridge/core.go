@@ -15,7 +15,6 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -266,48 +265,11 @@ func buildCore(
 	if err != nil {
 		return nil, err
 	}
-	modelDeps, err := modelServiceDependencies(core, cfg)
-	if err != nil {
-		return nil, err
-	}
-	models := ModelService(nil)
+	// Model-service construction belongs to pkg/wire. This bridge returns the
+	// inert runtime core so the canonical provider can attach the one service
+	// instance consumed by transports and compatibility facades.
 	if cfg != nil && cfg.ModelAPI != nil {
-		models = cfg.ModelAPI
-	} else {
-		constructed, modelErr := modelsservice.NewService(modelDeps)
-		if modelErr != nil {
-			return nil, fmt.Errorf("construct model service: %w", modelErr)
-		}
-		models = constructed
+		runtimehost.AttachModelService(core, cfg.ModelAPI)
 	}
-	return runtimehost.AttachModelService(core, models), nil
-}
-
-type modelPullMetricsAdapter struct {
-	inner runtimehost.ModelPullMetricsRecorder
-}
-
-func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
-}
-
-func modelServiceDependencies(core *runtimehost.Core, cfg *runtimehost.Config) (modelsservice.Dependencies, error) {
-	if core == nil || core.Clock() == nil {
-		return modelsservice.Dependencies{}, fmt.Errorf("construct model service: runtime core and clock are required")
-	}
-	host := runtimehost.NewHostFromCore(core)
-	var metrics modelsservice.PullMetricsRecorder
-	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
-		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
-	}
-	return modelsservice.Dependencies{
-		RuntimeConfig:           host.CurrentModelRuntimeConfig,
-		ModelHost:               core.ModelHost(),
-		ModelAssetPuller:        core.ModelAssetPuller(),
-		Logger:                  core.Logger(),
-		Clock:                   core.Clock().Now,
-		ModelPullMetrics:        metrics,
-		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
-		FactoryRunnerID:         cfg.RunnerID,
-	}, nil
+	return core, nil
 }
