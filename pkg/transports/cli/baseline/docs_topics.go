@@ -8,8 +8,9 @@ import (
 
 // SerializeDocsTopicIndex records the production packaged docs topic index in
 // a deterministic textual form. Each line is
-// "<name>\t<description>\t<aliases>" where aliases are comma-separated and
-// sorted. Lines follow the production display order from TopicIndexEntries.
+// "<name>\t<description>" or "<name>\t<description>\t<aliases>" when
+// aliases are present. Lines follow the production display order from
+// TopicIndexEntries.
 func SerializeDocsTopicIndex() string {
 	entries := docscli.TopicIndexEntries()
 	lines := make([]string, 0, len(entries))
@@ -22,5 +23,8 @@ func SerializeDocsTopicIndex() string {
 func formatDocsTopicLine(entry docscli.TopicIndexEntry) string {
 	description := strings.ReplaceAll(entry.Description, "\t", " ")
 	description = strings.ReplaceAll(description, "\n", " ")
+	if len(entry.Aliases) == 0 {
+		return entry.Name + "\t" + description
+	}
 	return entry.Name + "\t" + description + "\t" + strings.Join(entry.Aliases, ",")
 }

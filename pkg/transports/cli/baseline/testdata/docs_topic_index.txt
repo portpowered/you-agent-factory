@@ -1,20 +1,20 @@
-agents	Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.	
-authoring-factories	Practical factory authoring workflow, runnable examples, mock workers, and replay.	
-run	Supported local, one-shot, batch, continuous, and mock-worker run shapes.	
-config	Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.	
+agents	Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.
+authoring-factories	Practical factory authoring workflow, runnable examples, mock workers, and replay.
+run	Supported local, one-shot, batch, continuous, and mock-worker run shapes.
+config	Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.
 loop	The supported @you/loop packaged Factory: recurring request invocation, cadence, worktree isolation, and session recovery.
-mock-workers	Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.	
-record-replay	Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.	
-guards	Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.	
-relationships	Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.	
-work	Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.	
-sessions	Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.	
-orchestrators	Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.	
-javascript-workflows	Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.	
-mcp	Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.	
+mock-workers	Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.
+record-replay	Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.
+guards	Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.
+relationships	Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.
+work	Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.
+sessions	Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.
+orchestrators	Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.
+javascript-workflows	Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.
+mcp	Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.
 workstations	Workstation kinds, route fields, runtime step behavior, and scoped execution settings.	workstation
-workers	Worker types, model providers, script workers, and worker configuration.	
-resources	Resource capacity, bounded concurrency, and workstation resource requirements.	
-models	Local and hosted model setup for workers and CLI model commands.	
+workers	Worker types, model providers, script workers, and worker configuration.
+resources	Resource capacity, bounded concurrency, and workstation resource requirements.
+models	Local and hosted model setup for workers and CLI model commands.
 batch-inputs	Batch input files, request shape, dependencies, and validation.	batch-work
-templates	Prompt template variables, context fields, and Go template behavior.	
+templates	Prompt template variables, context fields, and Go template behavior.
