@@ -56,7 +56,7 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		HasNoTokenInPlace("task:failed")
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	runStarted := requireFactoryOnlyRunStartedPayload(t, artifact.Events)
+	runStarted := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertFactoryOnlyArtifactJSON(t, artifactPath)
 	assertFactoryOnlyPayloadCoversRepresentativeConfig(t, runStarted.Factory)
 	if err := os.RemoveAll(dir); err != nil {

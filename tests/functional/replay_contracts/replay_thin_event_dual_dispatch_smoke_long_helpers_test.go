@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -15,7 +16,7 @@ import (
 func assertThinEventReconstructedModelReader(t *testing.T, smoke dualDispatchSmokeFixture, worldState interfaces.FactoryWorldState) {
 	t.Helper()
 
-	dispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.modelWorkID)
+	dispatchID := thinEventDispatchIDForWork(t, testutil.GeneratedFactoryEvents(t, smoke.artifact.Events), smoke.modelWorkID)
 	completion := thinEventCompletedDispatchForID(t, worldState.CompletedDispatches, dispatchID)
 	if completion.Result.Outcome != string(workerexecution.OutcomeAccepted) {
 		t.Fatalf("model dispatch outcome = %q, want ACCEPTED", completion.Result.Outcome)
@@ -47,7 +48,7 @@ func assertThinEventReconstructedModelReader(t *testing.T, smoke dualDispatchSmo
 func assertThinEventReconstructedScriptReader(t *testing.T, smoke dualDispatchSmokeFixture, worldState interfaces.FactoryWorldState) {
 	t.Helper()
 
-	dispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.scriptWorkID)
+	dispatchID := thinEventDispatchIDForWork(t, testutil.GeneratedFactoryEvents(t, smoke.artifact.Events), smoke.scriptWorkID)
 	completion := thinEventCompletedDispatchForID(t, worldState.CompletedDispatches, dispatchID)
 	if completion.Result.Outcome != string(workerexecution.OutcomeAccepted) {
 		t.Fatalf("script dispatch outcome = %q, want ACCEPTED", completion.Result.Outcome)
@@ -103,7 +104,7 @@ func assertThinEventWorkstationRequestProjection(t *testing.T, smoke dualDispatc
 	}
 	requests := *projection.WorkstationRequestsByDispatchId
 
-	modelDispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.modelWorkID)
+	modelDispatchID := thinEventDispatchIDForWork(t, testutil.GeneratedFactoryEvents(t, smoke.artifact.Events), smoke.modelWorkID)
 	model := requests[modelDispatchID]
 	assertReplayProjectionOmitsInferenceFields(
 		t,
@@ -128,7 +129,7 @@ func assertThinEventWorkstationRequestProjection(t *testing.T, smoke dualDispatc
 		}
 	}
 
-	scriptDispatchID := thinEventDispatchIDForWork(t, smoke.artifact.Events, smoke.scriptWorkID)
+	scriptDispatchID := thinEventDispatchIDForWork(t, testutil.GeneratedFactoryEvents(t, smoke.artifact.Events), smoke.scriptWorkID)
 	script := requests[scriptDispatchID]
 	if script.Request.ScriptRequest == nil || script.Request.ScriptRequest.Command == nil || *script.Request.ScriptRequest.Command != "script-tool" {
 		t.Fatalf("script workstation request = %#v, want script request command", script.Request.ScriptRequest)
