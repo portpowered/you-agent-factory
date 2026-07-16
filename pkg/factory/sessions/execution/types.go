@@ -296,6 +296,11 @@ type InlineWorkflowSource struct {
 	InlineSource string
 	Entrypoint   string
 	Metadata     map[string]string
+	// Factory declaration fields retain constraints when a caller has already
+	// resolved a JavaScript factory asset and supplies its source directly.
+	Agents        map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	ArgsSchema    json.RawMessage
+	DefaultPolicy json.RawMessage
 }
 
 // Source is the normalized durable execution source selector.
@@ -360,6 +365,8 @@ type ResolvedSource struct {
 	ResolutionOrder []string
 	Metadata        map[string]string
 	Agents          map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	ArgsSchema      json.RawMessage `json:"argsSchema,omitempty"`
+	DefaultPolicy   json.RawMessage `json:"defaultPolicy,omitempty"`
 }
 
 // InspectionLinks are API-relative links for polling and inspecting one session.

@@ -89,7 +89,7 @@ func connectRecordingClient(t *testing.T, ctx context.Context) (*Client, *frameR
 	t.Helper()
 	serverInput, pipeWriter := io.Pipe()
 	pipeReader, serverOutput := io.Pipe()
-	requests := newFrameRecorder(2)
+	requests := newFrameRecorder(0)
 	responses := newFrameRecorder(0)
 	serverErr := make(chan error, 1)
 	go func() {

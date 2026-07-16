@@ -703,6 +703,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		SourceRef:      resolved.SourceRef,
 		SessionID:      sessionID,
 		Args:           argsJSON,
+		ArgsSchema:     resolved.ArgsSchema,
 		Metadata:       workflowMetadataFromResolved(resolved, normalized),
 		Policy:         policyResolution.Policy,
 		Agents:         resolved.Agents,

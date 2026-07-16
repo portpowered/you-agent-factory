@@ -148,6 +148,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+- JavaScript named-factory lookup carries the authored `argsSchema` and `defaultPolicy` through `pkg/orchestrators/javascript/source/` into `pkg/factory/sessions/execution/PrepareStart`. Validate resolved arguments before runtime execution and resolve policy with that default; `workflowruntime.Request.ArgsSchema` preserves the same no-side-effect guard for direct runtime callers.
 - `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
   interpolation validation. Keep file-contents substitution, omitted-exact-field
@@ -253,6 +254,24 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `config init` subcommand; installer smoke coverage lives in
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
+- JavaScript packaged factories keep authored workflow files in the package
+  definition's `scripts/` assets and assemble them through
+  `pkg/factory/packages/packageassets`. Their `sourceRef` must use the
+  corresponding materialized `scripts/...` path, which `you config init`
+  installs as editable factory files.
+- Package-owned execution selections belong in the invocation signature and
+  JavaScript args schema. Mirror their defaults in the workflow and constrain
+  selectable model and reasoning values with the package `defaultPolicy`
+  allowlists before specialist dispatch can begin.
+- Packaged JavaScript workflows can use `parallel([...])` with literal
+  `agent.run` specifications for bounded specialist dispatches, followed by a
+  lead `agent.run` whose computed prompt consumes their completed outputs.
+  Computed supported agent fields are runtime-normalized and policy-validated
+  before dispatch; literal non-string fields remain a source-validation error.
+  Keep the factory `defaultPolicy.maxAgents` and `concurrency` explicit (the
+  lead consumes one total dispatch slot in addition to any specialists), and
+  prove both a no-delegation completion and specialist-informed lead synthesis
+  through the materialized workflow runtime.
 - Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
   approved compatibility-only command metadata belongs in
   `contracts/cli/deprecated-commands.json`, while its classification, successor,
@@ -1009,6 +1028,25 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   boundaries. `pkg/service/runtime_sessions.go` and
   `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,
   logs, and metrics to those hooks.
+- `pkg/service/javascript_session_invocation.go` adapts JavaScript current-factory
+  invocation to `pkg/factory/sessions/execution.Service.StartSync`; JavaScript
+  factories do not submit Petri Work. Keep signature normalization shared with
+  `pkg/factory/sessions/invocation`, then coerce declared JSON-schema scalar
+  types before durable JavaScript validation so CLI/API string carriers retain
+  the workflow's typed argument contract. When the current factory has already
+  resolved an authored workflow asset, pass that asset as an inline durable
+  source together with its source identity, args schema, agents, and default
+  policy; resolving its scoped name again from the session directory loses the
+  materialized named-factory context.
+- Functional coverage for `@you/deep-research` belongs in
+  `tests/functional/smoke/cli_named_deep_research_smoke_test.go` and
+  `tests/functional/runtime_api/api_packaged_deep_research_invocation_test.go`.
+  For a signature-backed CLI run with `--with-mock-workers`, place the mock-worker
+  config path before `--`, then place factory-defined arguments after `--`; this
+  keeps the run-level config-path convention separate from signature parsing.
+  Verify delegated runs through the durable session ID returned by invocation and
+  `GET /factory-sessions/{session_id}/dispatches`, rather than inferring child
+  activity from the final synthesis alone.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata

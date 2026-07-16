@@ -252,6 +252,16 @@ func TestValidate_RejectsInvalidSupportedAgentRunFieldValues(t *testing.T) {
 	}
 }
 
+func TestValidate_AcceptsComputedAgentRunPromptForLeadSynthesis(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:    `const findings = [{ output: { text: "specialist finding" } }]; agent.run({ prompt: "Synthesize findings: " + findings[0].output.text, label: "lead" });`,
+		SourceRef: "inline",
+	})
+	if result.HasIssues() {
+		t.Fatalf("validation issues = %#v, want computed lead-synthesis prompt accepted", result.Issues)
+	}
+}
+
 func TestValidate_RejectsUnsupportedAgentRunFieldsWithoutExposingValues(t *testing.T) {
 	unsupported := []string{
 		"writableRoots", "allowNetwork", "network", "allowDangerFullAccess", "dangerFullAccess",

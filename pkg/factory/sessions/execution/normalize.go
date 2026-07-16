@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -99,15 +100,29 @@ func normalizeSource(source Source) (Source, error) {
 		return Source{
 			Kind: source.Kind,
 			InlineWorkflow: &InlineWorkflowSource{
-				Dialect:      strings.TrimSpace(source.InlineWorkflow.Dialect),
-				InlineSource: inlineSource,
-				Entrypoint:   strings.TrimSpace(source.InlineWorkflow.Entrypoint),
-				Metadata:     cloneStringMap(source.InlineWorkflow.Metadata),
+				Dialect:       strings.TrimSpace(source.InlineWorkflow.Dialect),
+				InlineSource:  inlineSource,
+				Entrypoint:    strings.TrimSpace(source.InlineWorkflow.Entrypoint),
+				Metadata:      cloneStringMap(source.InlineWorkflow.Metadata),
+				Agents:        cloneJavaScriptAgents(source.InlineWorkflow.Agents),
+				ArgsSchema:    append(json.RawMessage(nil), source.InlineWorkflow.ArgsSchema...),
+				DefaultPolicy: append(json.RawMessage(nil), source.InlineWorkflow.DefaultPolicy...),
 			},
 		}, nil
 	default:
 		return Source{}, NewValidationError("source.kind", "source.kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW")
 	}
+}
+
+func cloneJavaScriptAgents(agents map[string]interfaces.FactoryOrchestratorJavaScriptAgent) map[string]interfaces.FactoryOrchestratorJavaScriptAgent {
+	if len(agents) == 0 {
+		return nil
+	}
+	cloned := make(map[string]interfaces.FactoryOrchestratorJavaScriptAgent, len(agents))
+	for name, agent := range agents {
+		cloned[name] = agent
+	}
+	return cloned
 }
 
 func cloneArgs(args map[string]any) map[string]any {

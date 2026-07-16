@@ -1,6 +1,7 @@
 package workflowsource_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -163,6 +164,12 @@ func TestResolve_FactoryID_ResolvesJavaScriptFactory(t *testing.T) {
 	}
 	if resolution.SourceRef != "factory:review-flow:workflows/review.js" {
 		t.Fatalf("source ref = %q", resolution.SourceRef)
+	}
+	if !bytes.Contains(resolution.ArgsSchema, []byte(`"topic"`)) {
+		t.Fatalf("args schema = %s, want authored factory schema", resolution.ArgsSchema)
+	}
+	if !bytes.Contains(resolution.DefaultPolicy, []byte(`"maxAgents":2`)) {
+		t.Fatalf("default policy = %s, want authored factory policy", resolution.DefaultPolicy)
 	}
 }
 
@@ -327,7 +334,8 @@ func javascriptFactoryPayload(name, sourceRef string) string {
 			"kind":"JAVASCRIPT",
 			"javascript":{
 				"sourceRef":"` + sourceRef + `",
-				"argsSchema":{"type":"object"}
+				"argsSchema":{"type":"object","properties":{"topic":{"type":"string"}},"required":["topic"]},
+				"defaultPolicy":{"mode":"READ_ONLY","maxAgents":2,"concurrency":2}
 			}
 		}
 	}`

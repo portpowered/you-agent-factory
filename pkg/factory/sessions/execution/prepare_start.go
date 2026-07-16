@@ -86,13 +86,17 @@ func PrepareStart(req StartRequest, ctx StartPrepareContext) (PreparedStart, err
 	if err := validateResolvedSourceContent(resolution); err != nil {
 		return PreparedStart{}, err
 	}
+	if err := workflowvalidation.ValidateArgs(resolution.ArgsSchema, normalized.Args); err != nil {
+		return PreparedStart{}, NewValidationError("args", err.Error())
+	}
 	if err := validateNamedAgentPresets(resolution.Agents, ctx.WorkerPresetIDs); err != nil {
 		return PreparedStart{}, err
 	}
 
 	policyResolution := workflowpolicy.Resolve(workflowpolicy.Request{
-		Requested:     normalized.RequestedPolicy,
-		DeploymentCap: ctx.DeploymentCap,
+		Requested:      normalized.RequestedPolicy,
+		FactoryDefault: resolution.DefaultPolicy,
+		DeploymentCap:  ctx.DeploymentCap,
 	})
 	if err := validationErrorFromPolicyIssues(policyResolution.Issues); err != nil {
 		return PreparedStart{}, err
@@ -156,6 +160,7 @@ func resolveStartSourceWithResolution(req StartRequest, ctx StartSourceContext) 
 	}
 
 	resolution := workflowsource.Resolve(startSourceRequest(req.Source), sourceCtx)
+	applyInlineFactoryDeclaration(&resolution, req.Source)
 	if !resolution.Found {
 		message := "workflow source could not be resolved"
 		if len(resolution.Diagnostics) > 0 && strings.TrimSpace(resolution.Diagnostics[0].Message) != "" {
@@ -172,12 +177,27 @@ func resolveStartSourceWithResolution(req StartRequest, ctx StartSourceContext) 
 		Metadata: map[string]string{
 			"project": sourceCtx.ProjectRoot,
 		},
-		Agents: resolution.Agents,
+		Agents:        resolution.Agents,
+		ArgsSchema:    append(json.RawMessage(nil), resolution.ArgsSchema...),
+		DefaultPolicy: append(json.RawMessage(nil), resolution.DefaultPolicy...),
 	}
 	if stage := resolutionOrderForLookupStage(resolution.LookupStage); stage != "" {
 		resolved.ResolutionOrder = []string{stage}
 	}
 	return resolved, resolution, nil
+}
+
+func applyInlineFactoryDeclaration(resolution *workflowsource.Resolution, source Source) {
+	if resolution == nil || source.Kind != workflowsource.KindInlineWorkflow || source.InlineWorkflow == nil {
+		return
+	}
+	inline := source.InlineWorkflow
+	if sourceRef := strings.TrimSpace(inline.Metadata["sourceRef"]); sourceRef != "" {
+		resolution.SourceRef = sourceRef
+	}
+	resolution.Agents = cloneJavaScriptAgents(inline.Agents)
+	resolution.ArgsSchema = append(json.RawMessage(nil), inline.ArgsSchema...)
+	resolution.DefaultPolicy = append(json.RawMessage(nil), inline.DefaultPolicy...)
 }
 
 func validateResolvedSourceContent(resolution workflowsource.Resolution) error {
@@ -199,6 +219,7 @@ func validateResolvedSourceContent(resolution workflowsource.Resolution) error {
 		SourceRef:  resolution.SourceRef,
 		ConfigPath: "orchestrator.javascript",
 		Metadata:   map[string]string{"project": resolution.SourceRef},
+		ArgsSchema: resolution.ArgsSchema,
 	})
 	if validationResult.HasIssues() {
 		return validationErrorFromSourceIssues(validationResult.Issues)

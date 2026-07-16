@@ -129,6 +129,10 @@
       "minimum": 100.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch",
+      "minimum": 80.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion",
       "exception": {
         "kind": "measurement",

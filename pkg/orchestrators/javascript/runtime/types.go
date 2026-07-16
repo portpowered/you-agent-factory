@@ -25,6 +25,7 @@ type Request struct {
 	SourceRef      string
 	SessionID      string
 	Args           json.RawMessage
+	ArgsSchema     json.RawMessage
 	Metadata       map[string]string
 	Policy         workflowpolicy.EffectivePolicy
 	Resume         *ResumeContext
