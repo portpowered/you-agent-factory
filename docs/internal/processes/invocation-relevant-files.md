@@ -158,6 +158,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
   `InvocationDiagnostic`; execution layers should reuse that summary instead of
   inventing transport- or worker-specific argument telemetry.
+- A defaulted invocation parameter can feed a later Go-template field: resolve
+  `${parameter}` first, then let workstation template resolution apply dynamic
+  runtime values such as `TraceID`. Use this composition when a caller-selected
+  prefix must stay session-isolated by a trace suffix; validate the final
+  worktree name through `pkg/workers/worktree` before its git preparation side
+  effect.
 - `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
   on enum-backed authored fields that support invocation interpolation (for
   example `workers[].modelProvider`) instead of rejecting them as invalid public

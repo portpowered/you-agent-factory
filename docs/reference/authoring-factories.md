@@ -299,8 +299,19 @@ readiness, direct invocation, and audio or JSON result choices.
 
 ### Built-in `@you/fix` workflow
 
-The shipped fix factory creates a factory-managed Codex worktree named from the
-invocation trace before planning begins. It then routes one `fix` request through
+The shipped fix factory creates a factory-managed Codex worktree before planning
+begins. By default its name is trace-scoped (`fix-<trace-id>`); provide a stable
+relative name prefix for an invocation with `--worktree <name>`, for example:
+
+```bash
+you run --named @you/fix --worktree login-retry-fix "Repair the login retry regression"
+```
+
+The invocation trace is appended to a supplied prefix, keeping concurrent
+sessions isolated. Names are confined to the factory's worktree parent. Empty,
+absolute, or parent-traversing names are rejected before any worktree filesystem
+operation.
+The workflow then routes one `fix` request through
 `plan-fix`, the repeating `implement-fix` stage, and `review-fix`. Rejected
 review returns the same request to implementation; only an approved response
 ending with `<COMPLETE>` reaches `fix:complete` and becomes the invocation

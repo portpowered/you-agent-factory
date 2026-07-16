@@ -6,6 +6,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
+	"github.com/portpowered/infinite-you/pkg/workers/worktree"
 )
 
 func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) {
@@ -32,10 +34,11 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 		if !ok {
 			t.Fatalf("missing workstation %q", name)
 		}
-		if workstation.Worktree != "fix-{{ (index .Inputs 0).TraceID }}" {
-			t.Fatalf("%s worktree = %q, want stable isolated invocation worktree", name, workstation.Worktree)
+		if workstation.Worktree != "${worktree}-{{ (index .Inputs 0).TraceID }}" {
+			t.Fatalf("%s worktree = %q, want invocation-selected isolated worktree", name, workstation.Worktree)
 		}
 	}
+	assertFixWorktreeInvocation(t, cfg, workstations)
 	if workstations[PackagedImplementWorkstationName].Kind != interfaces.WorkstationKindRepeater {
 		t.Fatalf("implement workstation kind = %q, want repeater", workstations[PackagedImplementWorkstationName].Kind)
 	}
@@ -46,6 +49,47 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 		if target.Severity == factoryvalidation.SeverityError {
 			t.Fatalf("validation target = %#v", target)
 		}
+	}
+}
+
+func assertFixWorktreeInvocation(t *testing.T, cfg *interfaces.FactoryConfig, workstations map[string]interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+	var worktreeParameter *interfaces.InvocationParameterConfig
+	for i := range cfg.InvocationSignature.Parameters {
+		parameter := &cfg.InvocationSignature.Parameters[i]
+		if parameter.Name == "worktree" {
+			worktreeParameter = parameter
+			break
+		}
+	}
+	if worktreeParameter == nil || worktreeParameter.DefaultValue != "fix" {
+		t.Fatalf("worktree invocation parameter = %#v, want fix prefix default", worktreeParameter)
+	}
+	normalized, err := workinvocation.NormalizeArguments(workinvocation.NormalizeArgumentsInput{
+		Signature:      cfg.InvocationSignature,
+		PositionalArgs: []string{"repair the login retry regression"},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments(default worktree): %v", err)
+	}
+	if got := normalized.Arguments["worktree"].Values; len(got) != 1 || got[0] != "fix" {
+		t.Fatalf("default worktree argument = %#v, want [fix]", got)
+	}
+
+	for _, name := range []string{PackagedPlanWorkstationName, PackagedImplementWorkstationName, PackagedReviewWorkstationName} {
+		resolved, err := workinvocation.InterpolateWorkstationConfig(workstations[name], &interfaces.InvocationArguments{
+			Arguments: map[string]interfaces.InvocationArgument{"worktree": {Values: []string{"customer-fix"}}},
+		}, nil)
+		if err != nil {
+			t.Fatalf("InterpolateWorkstationConfig(%s): %v", name, err)
+		}
+		if resolved.Worktree != "customer-fix-{{ (index .Inputs 0).TraceID }}" {
+			t.Fatalf("%s resolved worktree = %q, want customer prefix plus trace", name, resolved.Worktree)
+		}
+	}
+
+	if _, err := worktree.ResolveFactoryWorktreeCheckoutPath(t.TempDir(), "../escape"); err == nil {
+		t.Fatal("invalid requested worktree name was accepted")
 	}
 }
 
