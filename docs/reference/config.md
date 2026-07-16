@@ -30,9 +30,9 @@ own provider or model:
 ```
 
 New configurations also include the three operator presets used by
-`@you/classifier`. They are explicit CODEX model selections: `classifier-small`
-uses `gpt-5-mini`, `classifier-medium` uses `gpt-5`, and `classifier-large`
-uses `gpt-5.4`. The classifier uses these presets for small, medium, and large
+`@you/classifier`. They are explicit CODEX model selections: `small` uses
+`gpt-5-mini`, `medium` uses `gpt-5`, and `large` uses `gpt-5.4`. The classifier
+uses these presets for small, medium, and large
 complexity routes respectively. The initializer never adds or changes presets
 in an existing configuration; define equivalent preset ids yourself when
 migrating an existing home before using the packaged classifier.

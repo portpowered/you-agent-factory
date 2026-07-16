@@ -26,13 +26,13 @@ const (
 
 	// ClassifierSmallPresetID is the baseline low-cost preset used by
 	// @you/classifier for simple requests.
-	ClassifierSmallPresetID = "classifier-small"
+	ClassifierSmallPresetID = "small"
 	// ClassifierMediumPresetID is the baseline preset used by
 	// @you/classifier for moderately complex requests.
-	ClassifierMediumPresetID = "classifier-medium"
+	ClassifierMediumPresetID = "medium"
 	// ClassifierLargePresetID is the baseline highest-capability preset used by
 	// @you/classifier for complex requests.
-	ClassifierLargePresetID = "classifier-large"
+	ClassifierLargePresetID = "large"
 )
 
 // BaselineClassifierWorkerPresets returns isolated validated defaults for the
