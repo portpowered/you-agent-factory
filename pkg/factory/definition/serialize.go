@@ -109,6 +109,21 @@ func (s *Service) withCurrentFactoryVersion(
 	return serialized, nil
 }
 
+func factoryVersionFromAPI(version *factoryapi.HybridLogicalTimestamp) *interfaces.FactoryVersion {
+	if version == nil {
+		return nil
+	}
+	mapped := factoryVersionFromAPIValue(*version)
+	return &mapped
+}
+
+func factoryVersionFromAPIValue(version factoryapi.HybridLogicalTimestamp) interfaces.FactoryVersion {
+	return interfaces.FactoryVersion{
+		Logical:  version.Logical.Int64(),
+		Physical: version.Physical.UTC(),
+	}
+}
+
 // SerializeNamedFactoryUpsertResponse returns the PUT upsert read model with thin
 // portable DOC/SCRIPT bundled files (disk-backed targets without inline content).
 func (s *Service) SerializeNamedFactoryUpsertResponse(

@@ -351,13 +351,13 @@ func TestService_NilReceiverReturnsRequiredErrors(t *testing.T) {
 	if _, err := svc.SerializeNamedFactory("alpha", nil, true); err == nil {
 		t.Fatal("SerializeNamedFactory: expected error for nil service")
 	}
-	if _, err := svc.PrepareEditableFactoryPersistView("alpha", factoryapi.Factory{}); err == nil {
+	if _, err := svc.PrepareEditableFactoryPersistView("alpha", nil); err == nil {
 		t.Fatal("PrepareEditableFactoryPersistView: expected error for nil service")
 	}
-	if _, err := svc.PersistPayloadFromView(nil, factoryapi.HybridLogicalTimestamp{}); err == nil {
+	if _, err := svc.PersistPayloadFromView(nil, interfaces.FactoryVersion{}); err == nil {
 		t.Fatal("PersistPayloadFromView: expected error for nil service")
 	}
-	if _, err := svc.PreparePersistedFactoryPayload("alpha", factoryapi.Factory{}, factoryapi.HybridLogicalTimestamp{}); err == nil {
+	if _, err := svc.PreparePersistedFactoryPayload("alpha", nil, interfaces.FactoryVersion{}); err == nil {
 		t.Fatal("PreparePersistedFactoryPayload: expected error for nil service")
 	}
 	if err := svc.ValidateEditableFactoryTopology(factoryapi.Factory{}); err == nil {

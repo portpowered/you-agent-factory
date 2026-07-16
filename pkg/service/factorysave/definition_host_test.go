@@ -4,10 +4,12 @@ import (
 	"context"
 	"time"
 
+	apitypes "github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
@@ -80,14 +82,15 @@ func requireFreshEditableFactoryVersion(
 	baseVersion *factoryapi.HybridLogicalTimestamp,
 	currentVersion factoryapi.HybridLogicalTimestamp,
 ) error {
-	return testDefinitionService.RequireFreshEditableFactoryVersion(baseVersion, currentVersion)
+	return testDefinitionService.RequireFreshEditableFactoryVersion(testFactoryVersionFromAPI(baseVersion), *testFactoryVersionFromAPI(&currentVersion))
 }
 
 func nextEditableFactoryVersion(
 	current *factoryapi.HybridLogicalTimestamp,
 	now time.Time,
 ) factoryapi.HybridLogicalTimestamp {
-	return testDefinitionService.NextEditableFactoryVersion(current, now)
+	version := testDefinitionService.NextEditableFactoryVersion(testFactoryVersionFromAPI(current), now)
+	return factoryapi.HybridLogicalTimestamp{Logical: apitypes.Int64String(version.Logical), Physical: version.Physical}
 }
 
 func preparePersistedFactoryPayload(
@@ -95,14 +98,29 @@ func preparePersistedFactoryPayload(
 	factory factoryapi.Factory,
 	version factoryapi.HybridLogicalTimestamp,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
-	return testDefinitionService.PreparePersistedFactoryPayload(segment, factory, version)
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		return nil, err
+	}
+	return testDefinitionService.PreparePersistedFactoryPayload(segment, snapshot, *testFactoryVersionFromAPI(&version))
 }
 
 func prepareEditableFactoryPersistView(
 	segment string,
 	factory factoryapi.Factory,
 ) (*configpersist.PreparedFactoryLayoutPayload, error) {
-	return testDefinitionService.PrepareEditableFactoryPersistView(segment, factory)
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		return nil, err
+	}
+	return testDefinitionService.PrepareEditableFactoryPersistView(segment, snapshot)
+}
+
+func testFactoryVersionFromAPI(version *factoryapi.HybridLogicalTimestamp) *interfaces.FactoryVersion {
+	if version == nil {
+		return nil
+	}
+	return &interfaces.FactoryVersion{Logical: version.Logical.Int64(), Physical: version.Physical.UTC()}
 }
 
 type saveDefinitionHostAdapter struct {

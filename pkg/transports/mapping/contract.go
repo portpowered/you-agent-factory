@@ -896,9 +896,9 @@ var ErrInvalidEventReconnectCursor = errors.New("invalid event reconnect cursor"
 // expose JavaScript result or partial-result reads.
 var ErrFactorySessionResultUnavailable = errors.New("factory session result unavailable")
 
-// ErrFactoryVersionStale reports that a complete current-factory
-// save was based on an older factory definition version than the current one.
-var ErrFactoryVersionStale = errors.New("factory version is stale")
+// ErrFactoryVersionStale retains the public compatibility error identity while
+// Factory definition version policy is owned by the Factory domain.
+var ErrFactoryVersionStale = interfaces.ErrFactoryVersionStale
 
 // ErrModelNotFound reports that the requested discovered model identifier is
 // not present in the current runtime configuration.

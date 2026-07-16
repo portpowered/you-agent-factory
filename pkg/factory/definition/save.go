@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 
@@ -92,11 +93,16 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		if err != nil {
 			return err
 		}
-		if err := s.RequireFreshEditableFactoryVersion(request.Version, currentVersion); err != nil {
+		if err := s.RequireFreshEditableFactoryVersion(factoryVersionFromAPI(request.Version), factoryVersionFromAPIValue(currentVersion)); err != nil {
 			return err
 		}
-		nextVersion := s.NextEditableFactoryVersion(&currentVersion, s.host.SaveNow())
-		prepared, err := s.PreparePersistedFactoryPayload(string(current.Name), sanitized, nextVersion)
+		currentDomainVersion := factoryVersionFromAPIValue(currentVersion)
+		nextVersion := s.NextEditableFactoryVersion(&currentDomainVersion, s.host.SaveNow())
+		snapshot, err := interfaces.NewFactorySnapshot(sanitized)
+		if err != nil {
+			return fmt.Errorf("capture editable factory snapshot: %w", err)
+		}
+		prepared, err := s.PreparePersistedFactoryPayload(string(current.Name), snapshot, nextVersion)
 		if err != nil {
 			return err
 		}

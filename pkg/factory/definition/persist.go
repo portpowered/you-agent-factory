@@ -8,14 +8,14 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // PrepareEditableFactoryPersistView normalizes one editable factory definition
 // into the durable split-layout persist view without optimistic-concurrency metadata.
 func (s *Service) PrepareEditableFactoryPersistView(
 	segment string,
-	factory factoryapi.Factory,
+	factory *interfaces.FactorySnapshot,
 ) (*configpersist.PreparedFactoryLayoutPayload, error) {
 	if s == nil {
 		return nil, fmt.Errorf("factory definition service is required")
@@ -26,7 +26,7 @@ func (s *Service) PrepareEditableFactoryPersistView(
 // PersistPayloadFromView stamps version metadata onto a prepared persist view.
 func (s *Service) PersistPayloadFromView(
 	view *configpersist.PreparedFactoryLayoutPayload,
-	version factoryapi.HybridLogicalTimestamp,
+	version interfaces.FactoryVersion,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
 	if s == nil {
 		return nil, fmt.Errorf("factory definition service is required")
@@ -38,8 +38,8 @@ func (s *Service) PersistPayloadFromView(
 // the durable split-layout payload shape, including version metadata.
 func (s *Service) PreparePersistedFactoryPayload(
 	segment string,
-	factory factoryapi.Factory,
-	version factoryapi.HybridLogicalTimestamp,
+	factory *interfaces.FactorySnapshot,
+	version interfaces.FactoryVersion,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
 	if s == nil {
 		return nil, fmt.Errorf("factory definition service is required")
@@ -53,10 +53,17 @@ func (s *Service) PreparePersistedFactoryPayload(
 
 func prepareEditableFactoryPersistView(
 	segment string,
-	factory factoryapi.Factory,
+	factory *interfaces.FactorySnapshot,
 ) (*configpersist.PreparedFactoryLayoutPayload, error) {
-	factory.Version = nil
-	raw, err := json.Marshal(factory)
+	if factory == nil {
+		return nil, fmt.Errorf("editable factory snapshot is required")
+	}
+	var editable map[string]any
+	if err := factory.Decode(&editable); err != nil {
+		return nil, fmt.Errorf("decode editable factory snapshot: %w", err)
+	}
+	delete(editable, "version")
+	raw, err := json.Marshal(editable)
 	if err != nil {
 		return nil, fmt.Errorf("marshal editable factory payload: %w", err)
 	}
@@ -65,7 +72,7 @@ func prepareEditableFactoryPersistView(
 
 func persistPayloadFromView(
 	view *configpersist.PreparedFactoryLayoutPayload,
-	version factoryapi.HybridLogicalTimestamp,
+	version interfaces.FactoryVersion,
 ) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
 	if view == nil {
 		return nil, fmt.Errorf("persist factory view is required")
@@ -82,14 +89,14 @@ func persistPayloadFromView(
 
 func withCanonicalFactoryVersion(
 	canonical []byte,
-	version factoryapi.HybridLogicalTimestamp,
+	version interfaces.FactoryVersion,
 ) ([]byte, error) {
 	var decoded map[string]any
 	if err := json.Unmarshal(canonical, &decoded); err != nil {
 		return nil, fmt.Errorf("unmarshal canonical factory payload: %w", err)
 	}
 	decoded["version"] = map[string]any{
-		"logical":  strconv.FormatInt(version.Logical.Int64(), 10),
+		"logical":  strconv.FormatInt(version.Logical, 10),
 		"physical": version.Physical.UTC().Format(time.RFC3339Nano),
 	}
 	payload, err := json.Marshal(decoded)

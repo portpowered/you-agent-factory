@@ -6,6 +6,7 @@ package factorycontracts
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -168,6 +169,10 @@ type FactoryVersion struct {
 	Logical  int64     `json:"logical"`
 	Physical time.Time `json:"physical"`
 }
+
+// ErrFactoryVersionStale reports that a complete current-Factory save was
+// based on an older definition version than the durable current version.
+var ErrFactoryVersionStale = errors.New("factory version is stale")
 
 // FactoryLayoutConfig carries non-executable portable graph editor layout
 // metadata keyed by canonical graph ids.

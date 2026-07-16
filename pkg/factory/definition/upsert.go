@@ -11,6 +11,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
@@ -51,7 +52,11 @@ func (s *Service) SaveUpsertNamedAndActivateForSession(
 		}
 
 		nextVersion := s.NextEditableFactoryVersion(currentVersion, s.host.SaveNow())
-		prepared, err := s.PreparePersistedFactoryPayload(string(request.Name), request, nextVersion)
+		snapshot, err := interfaces.NewFactorySnapshot(request)
+		if err != nil {
+			return fmt.Errorf("capture editable factory snapshot: %w", err)
+		}
+		prepared, err := s.PreparePersistedFactoryPayload(string(request.Name), snapshot, nextVersion)
 		if err != nil {
 			return err
 		}
@@ -87,7 +92,7 @@ func (s *Service) upsertCurrentVersionAtSessionRoot(
 	sessionRootDir string,
 	request factoryapi.Factory,
 	replaceExisting bool,
-) (*factoryapi.HybridLogicalTimestamp, error) {
+) (*interfaces.FactoryVersion, error) {
 	if !replaceExisting {
 		return nil, nil
 	}
@@ -95,10 +100,11 @@ func (s *Service) upsertCurrentVersionAtSessionRoot(
 	if err != nil {
 		return nil, err
 	}
-	if err := s.RequireFreshEditableFactoryVersion(request.Version, version); err != nil {
+	domainVersion := factoryVersionFromAPIValue(version)
+	if err := s.RequireFreshEditableFactoryVersion(factoryVersionFromAPI(request.Version), domainVersion); err != nil {
 		return nil, err
 	}
-	return &version, nil
+	return &domainVersion, nil
 }
 
 func (s *Service) finalizeUpsertNamedAndActivateForSession(
