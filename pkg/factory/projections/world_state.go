@@ -114,7 +114,11 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		}
 		return r.applyRelationshipChangeEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeDispatchRequest:
-		return r.applyDispatchRequestEvent(event)
+		canonicalEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return err
+		}
+		return r.applyDispatchRequestEvent(canonicalEvent)
 	case factoryapi.FactoryEventTypeInferenceRequest:
 		return r.applyInferenceRequestEvent(event)
 	case factoryapi.FactoryEventTypeInferenceResponse:
@@ -235,9 +239,9 @@ func (r *factoryWorldReducer) applyRelationshipChangeEvent(event interfaces.Fact
 	return nil
 }
 
-func (r *factoryWorldReducer) applyDispatchRequestEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsDispatchRequestEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyDispatchRequestEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.DispatchRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	r.applyDispatchCreated(event, payload)
@@ -495,18 +499,20 @@ func (r *factoryWorldReducer) seedResourceTokens(resource interfaces.FactoryReso
 	}
 }
 
-func (r *factoryWorldReducer) consumeResourceUnits(resources *[]factoryapi.Resource) []interfaces.FactoryResourceUnit {
-	generated := resourceUnitsFromGenerated(resources)
-	if len(generated) == 0 {
+func (r *factoryWorldReducer) consumeResourceUnits(resources *[]interfaces.DispatchResourceRef) []interfaces.FactoryResourceUnit {
+	if resources == nil || len(*resources) == 0 {
 		return nil
 	}
-	consumed := make([]interfaces.FactoryResourceUnit, 0, len(generated))
-	for _, resource := range generated {
-		tokenID := r.firstAvailableResourceTokenID(resource.ResourceID)
+	consumed := make([]interfaces.FactoryResourceUnit, 0, len(*resources))
+	for _, resource := range *resources {
+		if resource.Name == "" {
+			continue
+		}
+		tokenID := r.firstAvailableResourceTokenID(resource.Name)
 		unit := interfaces.FactoryResourceUnit{
-			ResourceID: resource.ResourceID,
+			ResourceID: resource.Name,
 			TokenID:    tokenID,
-			PlaceID:    resourceAvailablePlaceID(resource.ResourceID),
+			PlaceID:    resourceAvailablePlaceID(resource.Name),
 		}
 		if tokenID != "" {
 			r.removeToken(tokenID)

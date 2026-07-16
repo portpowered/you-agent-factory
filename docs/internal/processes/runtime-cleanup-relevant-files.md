@@ -67,6 +67,13 @@ request/trace context fallbacks, detached Work content and tags, and name-based
 relationship resolution in the reducer; a generated event may be converted
 only at the temporary outer projection compatibility entrypoint.
 
+Dispatch-request world-state reduction follows the same boundary: decode the
+Factory-owned event and dispatch payload before consuming Work or resource
+tokens. Preserve context-first Work and chaining-trace correlation, dispatch
+input snapshots, and topology-derived workstation, worker, provider, and model
+metadata; generated event conversion remains at the temporary outer projection
+compatibility entrypoint.
+
 Initial-structure and run-request producers carry the Factory-owned detached
 `FactorySnapshot` inside Factory-owned payloads. Runtime composition should
 hand the editable snapshot to event history without decoding it through a

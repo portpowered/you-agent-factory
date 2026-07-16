@@ -686,6 +686,88 @@ func TestCanonicalWorkEventsReconstructRequestAndRelationships(t *testing.T) {
 	}
 }
 
+func TestCanonicalDispatchRequestReconstructsActiveDispatchAndConsumedLineage(t *testing.T) {
+	t.Parallel()
+	eventTime := time.Date(2026, time.July, 16, 4, 0, 0, 0, time.UTC)
+	requestID, traceID, dispatchID := "request-1", "trace-1", "dispatch-1"
+	currentTraceID := "chain-current"
+	reducer := newFactoryWorldReducer(2)
+	reducer.applyInitialStructure(interfaces.InitialStructurePayload{
+		Resources: []interfaces.FactoryResource{{ID: "gpu", Name: "gpu", Capacity: 1}},
+		Workers: []interfaces.FactoryWorker{{
+			ID: "worker-1", Provider: "provider-1", Model: "model-1",
+		}},
+		Workstations: []interfaces.FactoryWorkstation{{
+			ID: "review", Name: "Review", WorkerID: "worker-1", InputPlaceIDs: []string{"task:ready"},
+		}},
+		Places: []interfaces.FactoryPlace{
+			{ID: "gpu:available", TypeID: "gpu", State: "available", Category: "PROCESSING"},
+			{ID: "task:ready", TypeID: "task", State: "ready", Category: "INITIAL"},
+		},
+	})
+	requestEvent := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeWorkRequest, interfaces.FactoryEventContext{
+		EventTime: eventTime, RequestID: &requestID, Tick: 1, TraceIDs: &[]string{traceID},
+	}, work.WorkRequestEventPayload{
+		Type: work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.WorkRequestEventWork{{
+			WorkID: "work-1", WorkTypeID: "task", Name: "Draft", Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "payload"}},
+		}},
+	})
+	if err := reducer.applyWorkRequestEvent(requestEvent); err != nil {
+		t.Fatalf("applyWorkRequestEvent: %v", err)
+	}
+
+	dispatchEvent := canonicalWorldProjectionEvent(t, interfaces.FactoryEventTypeDispatchRequest, interfaces.FactoryEventContext{
+		CurrentChainingTraceID:   &currentTraceID,
+		DispatchID:               &dispatchID,
+		EventTime:                eventTime.Add(time.Second),
+		PreviousChainingTraceIDs: &[]string{"chain-parent"},
+		Tick:                     2,
+		TraceIDs:                 &[]string{traceID},
+		WorkIDs:                  &[]string{"work-1"},
+	}, interfaces.DispatchRequestEventPayload{
+		CurrentChainingTraceID:   stringPtrForProjectionTest("payload-current"),
+		Inputs:                   []interfaces.DispatchConsumedWorkRef{{WorkID: "work-1"}},
+		PreviousChainingTraceIDs: &[]string{"payload-parent"},
+		Resources:                &[]interfaces.DispatchResourceRef{{Name: "gpu", Capacity: 1}},
+		TransitionID:             "review",
+	})
+	if err := reducer.applyDispatchRequestEvent(dispatchEvent); err != nil {
+		t.Fatalf("applyDispatchRequestEvent: %v", err)
+	}
+	assertCanonicalDispatchMetadata(t, reducer, dispatchID, currentTraceID)
+	assertCanonicalDispatchSideEffects(t, reducer, dispatchID)
+}
+
+func assertCanonicalDispatchMetadata(t *testing.T, reducer *factoryWorldReducer, dispatchID, currentTraceID string) {
+	t.Helper()
+	dispatch := reducer.stateValue.ActiveDispatches[dispatchID]
+	if dispatch.TransitionID != "review" || dispatch.Workstation.Name != "Review" || dispatch.Provider != "provider-1" || dispatch.Model != "model-1" {
+		t.Fatalf("active dispatch metadata = %#v", dispatch)
+	}
+	if dispatch.CurrentChainingTraceID != currentTraceID || len(dispatch.PreviousChainingTraceIDs) != 1 || dispatch.PreviousChainingTraceIDs[0] != "chain-parent" {
+		t.Fatalf("active dispatch chaining trace = current %q previous %#v", dispatch.CurrentChainingTraceID, dispatch.PreviousChainingTraceIDs)
+	}
+	if len(dispatch.Inputs) != 1 || dispatch.Inputs[0].WorkItem == nil || dispatch.Inputs[0].WorkItem.Content[0].Text != "payload" {
+		t.Fatalf("active dispatch inputs = %#v", dispatch.Inputs)
+	}
+}
+
+func assertCanonicalDispatchSideEffects(t *testing.T, reducer *factoryWorldReducer, dispatchID string) {
+	t.Helper()
+	dispatch := reducer.stateValue.ActiveDispatches[dispatchID]
+	if len(dispatch.Resources) != 1 || dispatch.Resources[0].ResourceID != "gpu" || dispatch.Resources[0].TokenID == "" {
+		t.Fatalf("active dispatch resources = %#v", dispatch.Resources)
+	}
+	if _, available := reducer.tokenPlaces[resourceTokenID("gpu", 0)]; available {
+		t.Fatal("consumed gpu token remains available")
+	}
+	resolution := reducer.stateValue.PayloadLineage.ResolveConsumedInputSnapshot(dispatchID, "work-1")
+	if resolution.Status != work.WorkPayloadResolutionResolved || resolution.Snapshot == nil || resolution.Snapshot.WorkItem.Content[0].Text != "payload" {
+		t.Fatalf("consumed payload lineage = %#v", resolution)
+	}
+}
+
 func TestCanonicalOrchestratorProgressEventsReconstructPhaseAndCheckpoint(t *testing.T) {
 	t.Parallel()
 	eventTime := time.Date(2026, time.July, 16, 1, 0, 0, 0, time.UTC)

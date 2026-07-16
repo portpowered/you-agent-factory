@@ -11,12 +11,12 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent, payload factoryapi.DispatchRequestEventPayload) {
-	dispatchID := stringValue(event.Context.DispatchId)
+func (r *factoryWorldReducer) applyDispatchCreated(event interfaces.FactoryEvent, payload interfaces.DispatchRequestEventPayload) {
+	dispatchID := stringValue(event.Context.DispatchID)
 	if dispatchID == "" {
 		return
 	}
-	inputWorkIDs := dispatchInputWorkIDs(payload, event.Context.WorkIds)
+	inputWorkIDs := dispatchInputWorkIDs(payload, event.Context.WorkIDs)
 	workIDs := make([]string, 0, len(inputWorkIDs))
 	traceIDs := make([]string, 0, len(inputWorkIDs))
 	inputWorkItems := make([]workdomain.FactoryWorkItem, 0, len(inputWorkIDs))
@@ -30,7 +30,7 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 			item = workdomain.FactoryWorkItem{ID: workID}
 		}
 		if item.TraceID == "" {
-			item.TraceID = firstString(event.Context.TraceIds)
+			item.TraceID = firstString(event.Context.TraceIDs)
 		}
 		placeID := r.workPlaces[item.ID]
 		if placeID == "" {
@@ -55,11 +55,11 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 		})
 	}
 
-	worker := r.workerForTransition(payload.TransitionId)
+	worker := r.workerForTransition(payload.TransitionID)
 	dispatch := interfaces.FactoryWorldDispatch{
 		DispatchID:   dispatchID,
-		TransitionID: payload.TransitionId,
-		Workstation:  r.workstationRefForTransition(payload.TransitionId),
+		TransitionID: payload.TransitionID,
+		Workstation:  r.workstationRefForTransition(payload.TransitionID),
 		Provider:     worker.Provider,
 		Model:        worker.Model,
 		StartedTick:  event.Context.Tick,
@@ -67,13 +67,13 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 		Inputs:       inputs,
 		WorkItemIDs:  sortedStrings(workIDs),
 		CurrentChainingTraceID: dispatchCurrentChainingTraceID(
-			event.Context.CurrentChainingTraceId,
-			payload.CurrentChainingTraceId,
+			event.Context.CurrentChainingTraceID,
+			payload.CurrentChainingTraceID,
 			inputWorkItems,
 		),
 		PreviousChainingTraceIDs: dispatchPreviousChainingTraceIDs(
-			event.Context.PreviousChainingTraceIds,
-			payload.PreviousChainingTraceIds,
+			event.Context.PreviousChainingTraceIDs,
+			payload.PreviousChainingTraceIDs,
 			inputWorkItems,
 		),
 		TraceIDs: work.CanonicalChainingTraceIDs(traceIDs),
@@ -85,10 +85,10 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 	}
 }
 
-func dispatchInputWorkIDs(payload factoryapi.DispatchRequestEventPayload, contextWorkIDs *[]string) []string {
+func dispatchInputWorkIDs(payload interfaces.DispatchRequestEventPayload, contextWorkIDs *[]string) []string {
 	ordered := make([]string, 0, len(payload.Inputs)+len(sliceValue(contextWorkIDs)))
 	for _, ref := range payload.Inputs {
-		ordered = appendUnique(ordered, ref.WorkId)
+		ordered = appendUnique(ordered, ref.WorkID)
 	}
 	for _, workID := range sliceValue(contextWorkIDs) {
 		ordered = appendUnique(ordered, workID)
