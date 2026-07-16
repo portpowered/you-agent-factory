@@ -165,9 +165,21 @@ describe("runStorybookCI", () => {
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(3, [
       "run",
-      "storybook:choose-file-check",
+      "storybook:factory-graph-touch-check",
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(4, [
+      "run",
+      "storybook:header-responsive-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(5, [
+      "run",
+      "storybook:dashboard-viewport-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(6, [
+      "run",
+      "storybook:choose-file-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(7, [
       "run",
       "storybook:checkbox-consistency-check",
     ]);

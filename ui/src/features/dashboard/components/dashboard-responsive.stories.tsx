@@ -28,13 +28,16 @@ export const DashboardImprovementsSmokeNarrow = {
     },
   },
   render: () => (
-    <div style={{ maxWidth: "100%", width: "320px" }}>
+    <div
+      data-dashboard-narrow-frame
+      style={{ maxWidth: "100%", width: "320px" }}
+    >
       <App />
     </div>
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const frame = canvasElement.firstElementChild;
+    const frame = canvasElement.querySelector("[data-dashboard-narrow-frame]");
 
     await expect(
       await canvas.findByRole("article", { name: "Submit work" }),

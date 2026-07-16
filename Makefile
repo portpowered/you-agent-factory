@@ -491,6 +491,8 @@ ifeq ($(BUN_BIN),)
 else
 	cd ui && $(UI_SCRIPT) test:integration
 endif
+	$(MAKE) ui-storybook
+	$(MAKE) ui-test-storybook
 
 ui-durable-session-real-backend-integration-test:
 ifeq ($(BUN_BIN),)

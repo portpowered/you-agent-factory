@@ -332,6 +332,18 @@ export async function runStorybookCI({
       serverExit,
     ]);
     await Promise.race([
+      runCommand(["run", "storybook:factory-graph-touch-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:header-responsive-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:dashboard-viewport-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
       runCommand(["run", "storybook:choose-file-check"]),
       serverExit,
     ]);
