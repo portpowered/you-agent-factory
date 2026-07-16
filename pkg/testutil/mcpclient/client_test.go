@@ -70,7 +70,7 @@ func TestClientNegotiatesDiscoversAndCorrelatesToolTrafficOverRealStdio(t *testi
 	listResult, callResult := runConcurrentOperations(t, ctx, client)
 	assertDiscoveredTool(t, listResult, mcpfactorysession.ToolListSessions)
 	assertSuccessfulTextToolResult(t, callResult)
-	assertConversationFrames(t, requests.frames(), responses.frames())
+	assertConversationFrames(t, requests.frames(), responses.waitForFrames(t, ctx, 3))
 	if err := client.Close(ctx); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
@@ -214,17 +214,22 @@ func assertErrorStage(t *testing.T, err error, want Stage) {
 }
 
 type frameRecorder struct {
-	mu        sync.Mutex
-	buffer    bytes.Buffer
-	recorded  [][]byte
-	operation int
-	target    int
-	ready     chan struct{}
-	once      sync.Once
+	mu         sync.Mutex
+	buffer     bytes.Buffer
+	recorded   [][]byte
+	recordedCh chan struct{}
+	operation  int
+	target     int
+	ready      chan struct{}
+	once       sync.Once
 }
 
 func newFrameRecorder(operationTarget int) *frameRecorder {
-	recorder := &frameRecorder{target: operationTarget, ready: make(chan struct{})}
+	recorder := &frameRecorder{
+		target:     operationTarget,
+		ready:      make(chan struct{}),
+		recordedCh: make(chan struct{}, 1),
+	}
 	if operationTarget == 0 {
 		close(recorder.ready)
 	}
@@ -246,6 +251,10 @@ func (r *frameRecorder) record(data []byte) {
 			continue
 		}
 		r.recorded = append(r.recorded, bytes.Clone(line))
+		select {
+		case r.recordedCh <- struct{}{}:
+		default:
+		}
 		var frame rpcFrame
 		if json.Unmarshal(line, &frame) == nil && (frame.Method == "tools/list" || frame.Method == "tools/call") {
 			r.operation++
@@ -260,6 +269,21 @@ func (r *frameRecorder) frames() [][]byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([][]byte(nil), r.recorded...)
+}
+
+func (r *frameRecorder) waitForFrames(t *testing.T, ctx context.Context, want int) [][]byte {
+	t.Helper()
+	for {
+		frames := r.frames()
+		if len(frames) >= want {
+			return frames
+		}
+		select {
+		case <-r.recordedCh:
+		case <-ctx.Done():
+			t.Fatalf("recorded server response count = %d, want at least %d before %v", len(frames), want, ctx.Err())
+		}
+	}
 }
 
 type recordingWriter struct {
