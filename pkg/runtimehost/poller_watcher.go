@@ -52,29 +52,3 @@ func (fs *Host) requireWorkersScheduler() (workerSidecarOwner, error) {
 	}
 	return fs.workersScheduler, nil
 }
-
-func (fs *Host) submitCronTick(
-	ctx context.Context,
-	ws interfaces.FactoryWorkstationConfig,
-	firedAt time.Time,
-) error {
-	workersScheduler, err := fs.requireWorkersScheduler()
-	if err != nil {
-		return err
-	}
-	runtimeCfg := fs.currentRuntimeConfig()
-	workflowIdentity := ""
-	runtimeLookup := interfaces.FirstRuntimeWorkstationLookup(runtimeCfg)
-	submitter := fs.currentRuntimeSubmitter()
-	if runtimeCfg != nil {
-		workflowIdentity = workersScheduler.WorkflowIdentityForFactoryDir(runtimeCfg.FactoryDir())
-	}
-	return workersScheduler.SubmitCronTick(
-		ctx,
-		runtimeLookup,
-		workflowIdentity,
-		workersservice.WorkRequestSubmitter(submitter),
-		ws,
-		firedAt,
-	)
-}

@@ -291,19 +291,6 @@ func EnabledPersistence(store runtimepersist.Store) PersistenceChoice {
 	return PersistenceChoice{store: store}
 }
 
-// Store returns the enabled persistence collaborator. Disabled persistence has
-// no store and returns nil.
-func (choice PersistenceChoice) Store() runtimepersist.Store {
-	return choice.store
-}
-
-// Validate reports whether composition explicitly selected enabled or disabled
-// persistence without performing snapshot IO.
-func (choice PersistenceChoice) Validate() error {
-	_, err := choice.resolve()
-	return err
-}
-
 // DisabledPersistence explicitly selects in-memory-only session execution.
 func DisabledPersistence() PersistenceChoice {
 	return PersistenceChoice{disabled: true}

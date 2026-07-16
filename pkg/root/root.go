@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/spf13/cobra"
 )
 
@@ -20,15 +21,16 @@ func NewCommand(input ProcessInput) *cobra.Command {
 // NewCommandWithDependencies constructs a command using explicit process
 // construction and lifecycle boundaries.
 func NewCommandWithDependencies(input ProcessInput, dependencies Dependencies) *cobra.Command {
-	dependencies = normalizeDependencies(dependencies)
-	command := cli.NewRootCommandWithOptions(cli.RootCommandOptions{
+	core := wire.InjectWireCore()
+	resolved := dependenciesFromWireCore(core, dependencies)
+	command := resolved.core.BuildCLICommand(cli.RootCommandOptions{
 		HomeDir:   func() (string, error) { return homeDir(input) },
 		LookupEnv: input.LookupEnv,
 		Startup: func(ctx context.Context, request startupcli.Request) error {
-			return executeStartup(ctx, request, dependencies)
+			return executeStartup(ctx, request, resolved)
 		},
-		BuildSessionExecution: dependencies.BuildSessionExecution,
-		BuildModelInvocation:  dependencies.BuildModelInvocation,
+		BuildSessionExecution: resolved.core.BuildSessionExecution,
+		BuildModelInvocation:  resolved.core.BuildModelInvocation,
 	})
 	command.SetArgs(input.Arguments())
 	command.SetIn(input.stdin)

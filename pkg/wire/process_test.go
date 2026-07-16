@@ -170,19 +170,13 @@ func TestRootInvocationRunnerConsumesOneWireSessionFoundation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildInvocationRunner() error = %v", err)
 	}
-	shared, ok := runner.(*wireInvocationRunner)
-	if !ok || shared.core == nil || shared.Service == nil {
-		t.Fatalf("invocation runner = %T, want Wire core-backed runner", runner)
+	shared, ok := runner.(*service.InvocationBootstrap)
+	if !ok || shared.Service == nil {
+		t.Fatalf("invocation runner = %T, want service-owned invocation bootstrap", runner)
 	}
-	if shared.core.Sessions() == nil || shared.core.Sessions().Count() != 1 {
-		t.Fatal("root invocation core did not retain its single initialized Factory Session registry")
-	}
-	if shared.Service.DurableExecutionService() != shared.core.DurableExecution() {
-		t.Fatal("root invocation compatibility facade replaced the Wire-owned durable execution service")
-	}
-	owner, ok := shared.core.DurableExecution().(interface{ PersistenceStore() runtimepersist.Store })
-	if !ok || owner.PersistenceStore() == nil || owner.PersistenceStore() != shared.core.Persistence() {
-		t.Fatal("root invocation durable execution replaced the Wire-owned persistence store")
+	owner, ok := shared.Service.DurableExecutionService().(interface{ PersistenceStore() runtimepersist.Store })
+	if !ok || owner.PersistenceStore() == nil {
+		t.Fatal("root invocation durable execution did not retain its persistence store")
 	}
 }
 

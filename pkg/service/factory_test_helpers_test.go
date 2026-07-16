@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -1555,6 +1556,29 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 	}
 	if invoker.request.RequestId == nil || *invoker.request.RequestId != requestID || invoker.request.Args == nil || (*invoker.request.Args)["input"] != "hello" {
 		t.Fatalf("forwarded request = %#v", invoker.request)
+	}
+}
+
+func TestInvocationBootstrap_InvokeModelRequiresService(t *testing.T) {
+	if runtimeMetricsPath(nil) != "" {
+		t.Fatal("runtimeMetricsPath(nil) returned a path")
+	}
+	invocationMetricsAdapter{}.RecordInvocationMetric(factoryservice.InvocationMetric{})
+	if _, err := NewInvocationBootstrap(nil); err == nil {
+		t.Fatal("NewInvocationBootstrap(nil) succeeded")
+	}
+	var bootstrap *InvocationBootstrap
+	if _, err := bootstrap.InvokeModel(context.Background(), "model", factoryapi.ModelInvocationRequest{}); err == nil {
+		t.Fatal("InvokeModel succeeded without an invocation bootstrap")
+	}
+	service := AttachModelServiceCollaborator(
+		FactoryServiceShell{Service: &FactoryService{}},
+		&stubModelService{invokeResult: apisurface.ModelInvocationResult{ModelName: "model"}},
+	)
+	bootstrap = &InvocationBootstrap{Service: service}
+	result, err := bootstrap.InvokeModel(context.Background(), "model", factoryapi.ModelInvocationRequest{})
+	if err != nil || result.ModelName != "model" {
+		t.Fatalf("InvokeModel = (%#v, %v)", result, err)
 	}
 }
 
