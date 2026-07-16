@@ -249,6 +249,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `config init` subcommand; installer smoke coverage lives in
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
+- JavaScript packaged factories keep authored workflow files in the package
+  definition's `scripts/` assets and assemble them through
+  `pkg/factory/packages/packageassets`. Their `sourceRef` must use the
+  corresponding materialized `scripts/...` path, which `you config init`
+  installs as editable factory files.
 - Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
   approved compatibility-only command metadata belongs in
   `contracts/cli/deprecated-commands.json`, while its classification, successor,

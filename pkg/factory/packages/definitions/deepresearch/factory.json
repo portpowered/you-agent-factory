@@ -1,0 +1,46 @@
+{
+  "name": "@you/deep-research",
+  "id": "builtin-deep-research",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "topic",
+        "description": "Research topic for the lead research workflow.",
+        "required": true,
+        "bindings": [
+          {"kind": "POSITIONAL", "position": 1},
+          {"kind": "STDIN"}
+        ]
+      }
+    ],
+    "examples": [
+      {
+        "name": "positional-topic",
+        "argv": ["Compare event sourcing and state machines for workflow orchestration"]
+      },
+      {
+        "name": "stdin-topic",
+        "argv": [],
+        "stdin": "What are the trade-offs of retrieval-augmented generation?"
+      }
+    ]
+  },
+  "orchestrator": {
+    "kind": "JAVASCRIPT",
+    "javascript": {
+      "sourceRef": "scripts/deep-research.workflow.js",
+      "argsSchema": {
+        "type": "object",
+        "required": ["topic"],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The subject to investigate."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
