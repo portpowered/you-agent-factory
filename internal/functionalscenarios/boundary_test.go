@@ -1,6 +1,8 @@
 package functionalscenarios
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,6 +113,59 @@ func direct() { service.BuildFactoryService() }
 	}
 }
 
+func TestCheckFunctionalTestBoundariesQuarantinesExactLegacyFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	content := `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+func direct() { service.BuildFactoryService() }
+`
+	writeBoundaryFixture(t, root, content)
+	writeBoundaryBaselineFixture(t, root, content)
+
+	report, err := CheckFunctionalTestBoundariesReport(root)
+	if err != nil {
+		t.Fatalf("CheckFunctionalTestBoundariesReport() error = %v", err)
+	}
+	if report.BaselinedLegacyFiles != 1 {
+		t.Fatalf("BaselinedLegacyFiles = %d, want 1", report.BaselinedLegacyFiles)
+	}
+}
+
+func TestCheckFunctionalTestBoundariesRejectsChangedLegacyFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	content := `package fixture
+import service "github.com/portpowered/infinite-you/pkg/service"
+func direct() { service.BuildFactoryService() }
+`
+	writeBoundaryFixture(t, root, content)
+	writeBoundaryBaselineFixture(t, root, content+"// reviewed before this change\n")
+
+	_, err := CheckFunctionalTestBoundariesReport(root)
+	want := `functional test boundary [invalid-boundary-baseline]: baseline path "tests/functional/fixture_test.go" changed`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckFunctionalTestBoundariesReport() error = %v, want %q", err, want)
+	}
+}
+
+func TestCheckFunctionalTestBoundariesRejectsStaleLegacyFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	content := "package fixture\nfunc allowed() {}\n"
+	writeBoundaryFixture(t, root, content)
+	writeBoundaryBaselineFixture(t, root, content)
+
+	_, err := CheckFunctionalTestBoundariesReport(root)
+	want := `functional test boundary [invalid-boundary-baseline]: baseline path "tests/functional/fixture_test.go" has no direct product-boundary violation; remove its stale entry`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckFunctionalTestBoundariesReport() error = %v, want %q", err, want)
+	}
+}
+
 func writeBoundaryFixture(t *testing.T, root, content string) {
 	t.Helper()
 	path := filepath.Join(root, "tests", "functional", "fixture_test.go")
@@ -119,5 +174,18 @@ func writeBoundaryFixture(t *testing.T, root, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write functional fixture: %v", err)
+	}
+}
+
+func writeBoundaryBaselineFixture(t *testing.T, root, hashedContent string) {
+	t.Helper()
+	hash := sha256.Sum256([]byte(hashedContent))
+	content := fmt.Sprintf(`{"formatVersion":"functional-boundary-baseline/v1","migrationTask":"task.md","files":[{"path":"tests/functional/fixture_test.go","sha256":"%x"}]}`, hash)
+	path := filepath.Join(root, filepath.FromSlash(functionalBoundaryBaselinePath))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create boundary baseline directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write boundary baseline: %v", err)
 	}
 }

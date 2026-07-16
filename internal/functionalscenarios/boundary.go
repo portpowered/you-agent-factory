@@ -1,6 +1,7 @@
 package functionalscenarios
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -26,6 +27,12 @@ type FunctionalBoundaryViolation struct {
 	Symbol   string
 }
 
+// FunctionalBoundaryReport identifies exact legacy files held behind the
+// reviewed content-hash baseline. New or changed violations still fail.
+type FunctionalBoundaryReport struct {
+	BaselinedLegacyFiles int
+}
+
 func (violation FunctionalBoundaryViolation) Error() string {
 	return fmt.Sprintf(
 		"functional test boundary [%s]: %s:%d directly uses %s implementation %q; invoke or observe the product through REST, CLI, MCP, or SSE, and keep composition options or injected edge fakes in functional support",
@@ -42,6 +49,13 @@ func (violation FunctionalBoundaryViolation) Error() string {
 // service. Approved client, contract, composition, and external-edge packages
 // are excluded before implementation-use inspection.
 func CheckFunctionalTestBoundaries(repositoryRoot string) error {
+	_, err := CheckFunctionalTestBoundariesReport(repositoryRoot)
+	return err
+}
+
+// CheckFunctionalTestBoundariesReport checks the complete functional tree and
+// reports exact unchanged legacy files quarantined by the reviewed baseline.
+func CheckFunctionalTestBoundariesReport(repositoryRoot string) (FunctionalBoundaryReport, error) {
 	scanRoot := filepath.Join(repositoryRoot, "tests", "functional")
 	var violations []FunctionalBoundaryViolation
 	err := filepath.WalkDir(scanRoot, func(path string, entry fs.DirEntry, walkErr error) error {
@@ -59,40 +73,20 @@ func CheckFunctionalTestBoundaries(repositoryRoot string) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("scan functional test boundaries: %w", err)
+		return FunctionalBoundaryReport{}, fmt.Errorf("scan functional test boundaries: %w", err)
 	}
-	return firstFunctionalBoundaryViolation(violations)
+	baseline, err := loadFunctionalBoundaryBaseline(repositoryRoot)
+	if err != nil {
+		return FunctionalBoundaryReport{}, err
+	}
+	legacyFiles, violations, err := applyFunctionalBoundaryBaseline(repositoryRoot, violations, baseline)
+	if err != nil {
+		return FunctionalBoundaryReport{}, err
+	}
+	return FunctionalBoundaryReport{BaselinedLegacyFiles: legacyFiles}, functionalBoundaryViolationsError(violations)
 }
 
-// CheckRequiredFunctionalTestBoundaries checks the exact test files bound into
-// the reviewed required short lane. CheckRequiredScenarios should run first so
-// each path and symbol has already been validated.
-func CheckRequiredFunctionalTestBoundaries(repositoryRoot string, manifest *RequiredManifest) error {
-	if manifest == nil {
-		return fmt.Errorf("check required functional test boundaries: manifest is nil")
-	}
-	checked := make(map[string]bool, len(manifest.Scenarios))
-	var violations []FunctionalBoundaryViolation
-	for _, scenario := range manifest.Scenarios {
-		testPath, _, found := strings.Cut(scenario.Test, "::")
-		if !found || testPath == "" {
-			return fmt.Errorf("check required functional test boundaries: scenario %q has invalid test identity %q", scenario.StableID, scenario.Test)
-		}
-		normalizedPath := filepath.ToSlash(filepath.Clean(testPath))
-		if checked[normalizedPath] {
-			continue
-		}
-		checked[normalizedPath] = true
-		fileViolations, err := checkFunctionalBoundaryFile(repositoryRoot, filepath.Join(repositoryRoot, filepath.FromSlash(normalizedPath)))
-		if err != nil {
-			return err
-		}
-		violations = append(violations, fileViolations...)
-	}
-	return firstFunctionalBoundaryViolation(violations)
-}
-
-func firstFunctionalBoundaryViolation(violations []FunctionalBoundaryViolation) error {
+func functionalBoundaryViolationsError(violations []FunctionalBoundaryViolation) error {
 	if len(violations) == 0 {
 		return nil
 	}
@@ -105,7 +99,11 @@ func firstFunctionalBoundaryViolation(violations []FunctionalBoundaryViolation) 
 		}
 		return strings.Compare(left.Symbol, right.Symbol)
 	})
-	return violations[0]
+	errs := make([]error, len(violations))
+	for index := range violations {
+		errs[index] = violations[index]
+	}
+	return errors.Join(errs...)
 }
 
 type functionalBoundaryImport struct {

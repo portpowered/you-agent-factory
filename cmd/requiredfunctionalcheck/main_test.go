@@ -19,7 +19,7 @@ func TestRunChecksRepositoryRequiredScenarioManifest(t *testing.T) {
 	if err := run(config{root: root, manifestPath: defaultManifestPath}, &stdout); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
-	if got := stdout.String(); got != "[agent-factory:required-functional] 1 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit; functional tests use approved customer boundaries\n" {
+	if got := stdout.String(); got != "[agent-factory:required-functional] 1 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit; the full functional tree is boundary-enforced; 38 unchanged legacy file(s) remain quarantined by the reviewed migration baseline\n" {
 		t.Fatalf("stdout = %q", got)
 	}
 }
@@ -55,6 +55,27 @@ func TestDirect(t *testing.T) { service.BuildFactoryService() }
 
 	err := run(config{root: root, manifestPath: defaultManifestPath}, &bytes.Buffer{})
 	want := `functional test boundary [direct-product-boundary]: tests/functional/direct_test.go:4 directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.BuildFactoryService"`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("run() error = %v, want %q", err, want)
+	}
+}
+
+func TestRunReturnsStableBoundaryDiagnosticOutsideManifest(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeCommandFixture(t, root, defaultManifestPath, `{"formatVersion":"required-functional-scenarios/v1","scenarios":[{"stableId":"cli/allowed","test":"tests/functional/allowed_test.go::TestAllowed","interface":"cli","lane":"short","executionClass":"deterministic","customerBoundary":true}]}`)
+	writeCommandFixture(t, root, "tests/functional/allowed_test.go", `package functional
+import "testing"
+func TestAllowed(t *testing.T) {}
+`)
+	writeCommandFixture(t, root, "tests/functional/non_manifest_test.go", `package functional
+import service "github.com/portpowered/infinite-you/pkg/service"
+func direct() { service.BuildFactoryService() }
+`)
+
+	err := run(config{root: root, manifestPath: defaultManifestPath}, &bytes.Buffer{})
+	want := `functional test boundary [direct-product-boundary]: tests/functional/non_manifest_test.go:3 directly uses service implementation "github.com/portpowered/infinite-you/pkg/service.BuildFactoryService"`
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("run() error = %v, want %q", err, want)
 	}
