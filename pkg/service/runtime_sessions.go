@@ -2152,6 +2152,15 @@ func (fs *FactoryService) InvokeFactorySession(
 	sessionID string,
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
+	if fs.sessionInvoker == nil {
+		factoryCfg, err := fs.sessionInvocationFactoryConfig(sessionID)
+		if err != nil {
+			return apisurface.FactoryInvocationResult{}, err
+		}
+		if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
+			return fs.invokeJavaScriptFactorySession(ctx, sessionID, factoryCfg, request)
+		}
+	}
 	result, err := fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
 	if err != nil {
 		return result, err

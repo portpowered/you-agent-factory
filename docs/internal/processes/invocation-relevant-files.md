@@ -1017,6 +1017,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   boundaries. `pkg/service/runtime_sessions.go` and
   `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,
   logs, and metrics to those hooks.
+- `pkg/service/javascript_session_invocation.go` adapts JavaScript current-factory
+  invocation to `pkg/factory/sessions/execution.Service.StartSync`; JavaScript
+  factories do not submit Petri Work. Keep signature normalization shared with
+  `pkg/factory/sessions/invocation`, then coerce declared JSON-schema scalar
+  types before durable JavaScript validation so CLI/API string carriers retain
+  the workflow's typed argument contract.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
