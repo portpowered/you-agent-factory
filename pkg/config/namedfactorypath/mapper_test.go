@@ -7,7 +7,7 @@ import (
 )
 
 func TestMapDir_UnscopedName(t *testing.T) {
-	root := filepath.Join("home", ".you-agent-factory", "you-agent-factories")
+	root := filepath.Join("home", ".you-agent-factory", "factories")
 	got, err := MapDir(root, "alpha")
 	if err != nil {
 		t.Fatalf("MapDir(alpha): %v", err)
@@ -19,7 +19,7 @@ func TestMapDir_UnscopedName(t *testing.T) {
 }
 
 func TestMapDir_ScopedName(t *testing.T) {
-	root := filepath.Join("home", ".you-agent-factory", "you-agent-factories")
+	root := filepath.Join("home", ".you-agent-factory", "factories")
 	got, err := MapDir(root, "@you/goal")
 	if err != nil {
 		t.Fatalf("MapDir(@you/goal): %v", err)
@@ -35,8 +35,8 @@ func TestMapDir_ScopedName(t *testing.T) {
 
 func TestPathSegments_ValidCases(t *testing.T) {
 	tests := []struct {
-		name     string
-		want     []string
+		name string
+		want []string
 	}{
 		{name: "alpha", want: []string{"alpha"}},
 		{name: "@you/goal", want: []string{"@you", "goal"}},

@@ -16,12 +16,12 @@ type platformRootFixture struct {
 var namedFactoryPlatformRoots = []platformRootFixture{
 	{
 		name:      "unix",
-		root:      "/home/alice/.you-agent-factory/you-agent-factories",
+		root:      "/home/alice/.you-agent-factory/factories",
 		separator: '/',
 	},
 	{
 		name:      "windows",
-		root:      `C:\Users\alice\.you-agent-factory\you-agent-factories`,
+		root:      `C:\Users\alice\.you-agent-factory\factories`,
 		separator: '\\',
 	},
 }
@@ -144,7 +144,7 @@ func TestCrossPlatformPathTable_RejectCases(t *testing.T) {
 }
 
 func TestCrossPlatformPathTable_PortableRelativeRoot(t *testing.T) {
-	root := filepath.Join("home", ".you-agent-factory", "you-agent-factories")
+	root := filepath.Join("home", ".you-agent-factory", "factories")
 	for _, tc := range namedFactoryResolveCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := MapDir(root, tc.name)

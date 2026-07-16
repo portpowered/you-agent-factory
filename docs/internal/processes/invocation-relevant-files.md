@@ -1008,6 +1008,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invocation result.
 - `docs/reference/run.md` (`you docs run`) owns supported `@you/goal` batch
   invocation, stdout primary-result, and response-stream guidance.
+- `pkg/config/defaultpaths/default_paths.go` owns the canonical shared named-factory
+  root for both `you config init` materialization and `you run --named` lookup;
+  use `defaultpaths.NamedFactoriesRoot` instead of duplicating the home-relative
+  directory in runtime code or tests.
   `docs/reference/sessions.md` owns operator controls and inspect-first recovery;
   `docs/reference/authoring-factories.md` owns named Factory authoring and
   materialization. Prove packaged guidance through the installed command in

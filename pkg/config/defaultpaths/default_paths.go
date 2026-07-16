@@ -9,16 +9,16 @@ import (
 
 const (
 	sharedHomeDirName     = ".you-agent-factory"
-	namedFactoriesDirName = "you-agent-factories"
+	namedFactoriesDirName = "factories"
 	operatorConfigFile    = "config.json"
 	recordingsDirName     = "recordings"
 	runtimeLogsDirName    = "logs"
 	runtimeMetricsName    = "metrics"
-	recordingsMonthFmt  = "2006-01"
-	recordingsDateFmt   = "2006-01-02"
-	runtimeMetricsYear  = "2006"
-	runtimeMetricsMonth = "01"
-	runtimeMetricsDay   = "02"
+	recordingsMonthFmt    = "2006-01"
+	recordingsDateFmt     = "2006-01-02"
+	runtimeMetricsYear    = "2006"
+	runtimeMetricsMonth   = "01"
+	runtimeMetricsDay     = "02"
 )
 
 // SharedRoot returns the canonical shared root below the supplied home

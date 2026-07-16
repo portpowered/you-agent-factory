@@ -135,6 +135,9 @@ func TestConfigInitCommand_FreshIsolatedHomeCreatesSystemConfig(t *testing.T) {
 	}
 
 	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	if !strings.Contains(got, namedFactoriesRoot) {
+		t.Fatalf("stdout = %q, want canonical named-factory root %q", got, namedFactoriesRoot)
+	}
 	for _, name := range factorypackages.Names() {
 		wantDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, name)
 		if err != nil {
@@ -170,6 +173,9 @@ func TestConfigInitCommand_JSONFreshHomeEmitsStructuredSummary(t *testing.T) {
 	}
 	if payload.ConfigPath != filepath.Clean(defaultpaths.OperatorConfigPath(homeDir)) {
 		t.Fatalf("configPath = %q, want %q", payload.ConfigPath, defaultpaths.OperatorConfigPath(homeDir))
+	}
+	if want := filepath.Clean(defaultpaths.NamedFactoriesRoot(homeDir)); payload.NamedFactoriesRoot != want {
+		t.Fatalf("namedFactoriesRoot = %q, want %q", payload.NamedFactoriesRoot, want)
 	}
 }
 
