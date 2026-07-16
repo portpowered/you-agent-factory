@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -1561,6 +1562,10 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 func TestInvocationBootstrap_InvokeModelRequiresService(t *testing.T) {
 	if runtimeMetricsPath(nil) != "" {
 		t.Fatal("runtimeMetricsPath(nil) returned a path")
+	}
+	invocationMetricsAdapter{}.RecordInvocationMetric(factoryservice.InvocationMetric{})
+	if _, err := NewInvocationBootstrap(nil); err == nil {
+		t.Fatal("NewInvocationBootstrap(nil) succeeded")
 	}
 	var bootstrap *InvocationBootstrap
 	if _, err := bootstrap.InvokeModel(context.Background(), "model", factoryapi.ModelInvocationRequest{}); err == nil {
