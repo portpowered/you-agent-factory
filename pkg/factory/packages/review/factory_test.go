@@ -16,12 +16,23 @@ func TestBuiltInFactoryJSON_LoadsReviewGatedTopology(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
+	assertBuiltInFactoryIdentity(t, cfg)
+	assertReviewGatedTopology(t, cfg)
+	assertFactoryConfigValid(t, cfg)
+}
+
+func assertBuiltInFactoryIdentity(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	if cfg.Name != PackagedFactoryName || cfg.Project != PackagedFactoryProject {
 		t.Fatalf("identity = %q/%q", cfg.Name, cfg.Project)
 	}
 	if cfg.InvocationReturn == nil || cfg.InvocationReturn.WorkTypeName != PackagedWorkTypeName || cfg.InvocationReturn.TerminalState != PackagedInvocationReturnTerminalState {
 		t.Fatalf("invocationReturn = %#v", cfg.InvocationReturn)
 	}
+}
+
+func assertReviewGatedTopology(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	if len(cfg.Workstations) != 2 || len(cfg.Workers) != 2 {
 		t.Fatalf("topology = %#v", cfg)
 	}
@@ -39,6 +50,10 @@ func TestBuiltInFactoryJSON_LoadsReviewGatedTopology(t *testing.T) {
 	if review.OutcomeFormat != interfaces.WorkstationOutcomeFormatDecisionEnvelope {
 		t.Fatalf("outcomeFormat = %q", review.OutcomeFormat)
 	}
+}
+
+func assertFactoryConfigValid(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	for _, target := range factoryvalidation.Validate(cfg).Targets {
 		if target.Severity == factoryvalidation.SeverityError {
 			t.Fatalf("validation target = %#v", target)

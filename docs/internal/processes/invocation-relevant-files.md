@@ -9,6 +9,9 @@ primary-result behavior.
   `RejectionFeedback` from the retry prompt. This keeps the request, candidate,
   and reviewer feedback available without weakening the approval-only terminal
   return contract. Focused coverage belongs with the packaged invocation tests.
+- Package tests are subject to the same `pkg-maint` cyclomatic-complexity limit
+  as production code. Keep topology fixtures readable by delegating independent
+  identity, routing, and validation assertions to named test helpers.
 
 ## CLI run and submit command contracts
 
