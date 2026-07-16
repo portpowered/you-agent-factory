@@ -834,7 +834,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/agy",
-      "minimum": 10.82
+      "minimum": 11.01
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/claude",

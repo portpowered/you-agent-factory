@@ -308,7 +308,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer",
-      "minimum": 86.50
+      "minimum": 86.66
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/initializer/dashboard",
@@ -642,7 +642,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/wire",
-      "minimum": 73.38
+      "minimum": 74.32
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/work/content",
