@@ -92,9 +92,11 @@ Initial-structure, run-request, Factory-change, Factory-state, and Work-state
 world-state reduction follows the same rule: decode the Factory-owned event and
 owner-defined payload first, retain a detached `FactorySnapshot`, and apply
 state or topology changes from those domain values. Generated event unions may
-enter only through the temporary outer projection compatibility path; decoding
-the snapshot's public topology shape remains an explicit compatibility helper
-until that final transport-shaped projection adapter migrates.
+enter only through the temporary outer projection compatibility path. Decode
+the detached snapshot's topology subset beside the Factory reducer into
+Factory-owned projection contracts; do not decode it into a generated HTTP
+Factory first. Preserve the full detached snapshot separately so unknown
+forward-compatible fields survive reconstruction.
 
 JavaScript checkpoint/phase and artifact world-state reduction also consumes
 Factory-owned event payloads. Keep checkpoint timestamps UTC-normalized, detach

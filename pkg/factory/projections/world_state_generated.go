@@ -6,29 +6,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func placeIDsFromGeneratedIOs(values []factoryapi.WorkstationIO) []string {
-	if len(values) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(values))
-	for _, value := range values {
-		ids = append(ids, placeIDFromGeneratedIO(value))
-	}
-	return ids
-}
-
-func placeIDsFromGeneratedIOsPtr(values *[]factoryapi.WorkstationIO) []string {
-	if values == nil {
-		return nil
-	}
-	return placeIDsFromGeneratedIOs(*values)
-}
-
-func placeIDFromGeneratedIO(value factoryapi.WorkstationIO) string {
-	return generatedPlaceID(value.WorkType, value.State)
-}
-
-func generatedPlaceID(workTypeID string, stateValue string) string {
+func topologyPlaceID(workTypeID string, stateValue string) string {
 	if workTypeID == "" || stateValue == "" {
 		return ""
 	}
@@ -73,13 +51,6 @@ func intValue(value *int) int {
 }
 
 func enumStringValue[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
-}
-
-func workstationKindString(value *factoryapi.WorkstationKind) string {
 	if value == nil {
 		return ""
 	}

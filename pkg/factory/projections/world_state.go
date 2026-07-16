@@ -277,12 +277,12 @@ func (r *factoryWorldReducer) applyCanonicalFactory(snapshot *interfaces.Factory
 	if snapshot == nil {
 		return fmt.Errorf("decode Factory snapshot for world projection: snapshot is required")
 	}
-	var factory factoryapi.Factory
-	if err := snapshot.Decode(&factory); err != nil {
+	topology, err := initialStructureFromSnapshot(snapshot)
+	if err != nil {
 		return err
 	}
 	r.stateValue.Factory = snapshot.Clone()
-	r.applyInitialStructure(initialStructureFromGenerated(factoryapi.InitialStructureRequestEventPayload{Factory: factory}))
+	r.applyInitialStructure(topology)
 	return nil
 }
 
@@ -536,7 +536,7 @@ type worldStateWorkerMetadata struct {
 }
 
 func resourceAvailablePlaceID(resourceID string) string {
-	return generatedPlaceID(resourceID, interfaces.ResourceStateAvailable)
+	return topologyPlaceID(resourceID, interfaces.ResourceStateAvailable)
 }
 
 func resourceTokenID(resourceID string, index int) string {
