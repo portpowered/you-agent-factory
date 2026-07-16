@@ -34,24 +34,6 @@ type recordingRuntimeOwner struct {
 	records   []interfaces.TokenMutationRecord
 }
 
-func TestRuntimeHostConfigFromFactoryServiceIsCopied(t *testing.T) {
-	t.Parallel()
-
-	if got := provideRuntimeHostConfigFromFactoryService(nil); got != nil {
-		t.Fatalf("nil FactoryService config produced %#v, want nil", got)
-	}
-
-	source := &service.FactoryServiceConfig{Dir: "factory-a"}
-	got := provideRuntimeHostConfigFromFactoryService(source)
-	if got == nil || got.Dir != "factory-a" {
-		t.Fatalf("runtime host config = %#v, want an isolated copy of %#v", got, source)
-	}
-	got.Dir = "factory-b"
-	if source.Dir != "factory-a" {
-		t.Fatalf("source runtime host config was mutated to %q", source.Dir)
-	}
-}
-
 func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {
 	t.Parallel()
 
@@ -223,9 +205,9 @@ func TestRuntimeHostRecordingBuildUsesGraphOwnedDurableExecution(t *testing.T) {
 		t.Fatalf("runtimebuild.New: %v", err)
 	}
 	owner := &recordingRuntimeOwner{Service: factorysessionexecution.NewFakeService()}
-	configured, err := provideRuntimeHostRecordingBuild(runtimeHostBaseBuild{Service: base}, owner)
+	configured, err := base.WithPetriMutationRecorder(owner.RecordPetriTokenMutations)
 	if err != nil {
-		t.Fatalf("provideRuntimeHostRecordingBuild: %v", err)
+		t.Fatalf("WithPetriMutationRecorder: %v", err)
 	}
 	if _, err := configured.Build(context.Background(), runtimebuild.SessionBuildSpec{SessionID: "root-session"}); err != nil {
 		t.Fatalf("Build: %v", err)

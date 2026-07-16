@@ -4,6 +4,7 @@ package packages
 import (
 	"sort"
 
+	builtindeepresearch "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/deepresearch"
 	builtinfix "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fix"
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
@@ -19,6 +20,11 @@ type Definition struct {
 }
 
 var catalog = map[string]Definition{
+	"@you/deep-research": {
+		Name:    "@you/deep-research",
+		Project: "builtin-deep-research",
+		JSON:    builtindeepresearch.BuiltInFactoryJSON,
+	},
 	"@you/fix": {
 		Name:    "@you/fix",
 		Project: "builtin-fix",

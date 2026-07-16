@@ -1,6 +1,10 @@
 package workflowsource
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import (
+	"encoding/json"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
 
 // Request is the normalized workflow source request shared across API, CLI, MCP,
 // and website adapters.
@@ -48,6 +52,8 @@ type Resolution struct {
 	Dialect          string
 	Content          string
 	Agents           map[string]interfaces.FactoryOrchestratorJavaScriptAgent
+	ArgsSchema       json.RawMessage
+	DefaultPolicy    json.RawMessage
 	Diagnostics      []Diagnostic
 	ArtifactRoot     ArtifactRootDecision
 	Found            bool

@@ -316,7 +316,7 @@ func TestConfigInitCommand_FactoryMaterializationFailureReportsActionableError(t
 	got := err.Error()
 	for _, want := range []string{
 		"install packaged factory",
-		"@you/fix",
+		"@you/deep-research",
 		namedFactoriesRoot,
 	} {
 		if !strings.Contains(got, want) {

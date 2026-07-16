@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -52,6 +53,38 @@ func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
 	}
 	if _, ok := input.LookupEnv("ABSENT"); ok {
 		t.Fatal("LookupEnv(ABSENT) reported an absent value as present")
+	}
+}
+
+func TestHomeDirRejectsMissingEnvironment(t *testing.T) {
+	input, err := Normalize(Input{Args: []string{"you"}})
+	if err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if _, err := homeDir(input); err == nil {
+		t.Fatal("homeDir succeeded without a home environment variable")
+	}
+}
+
+func TestProductionInitializerUsesInjectedLifecycle(t *testing.T) {
+	t.Parallel()
+	graph := &ApplicationGraph{}
+	called := false
+	runner := productionInitializer{initialize: func(_ context.Context, got *initializer.ProcessGraph) error {
+		called = true
+		if got != graph {
+			t.Fatalf("graph = %p, want %p", got, graph)
+		}
+		return nil
+	}}
+	if err := runner.Run(context.Background(), Initialization{Graph: graph}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !called {
+		t.Fatal("injected initializer was not called")
+	}
+	if err := (productionInitializer{}).Run(context.Background(), Initialization{}); err == nil {
+		t.Fatal("default initializer accepted a nil application graph")
 	}
 }
 
