@@ -46,7 +46,11 @@ func testModelInvocationBuilder(ctx context.Context, request InvocationRequest) 
 }
 
 func buildRealTestModelInvocationBootstrap(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
-	bootstrap, err := service.BuildInvocationBootstrap(ctx, cfg)
+	svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
+	if err != nil {
+		return nil, err
+	}
+	bootstrap, err := service.NewInvocationBootstrap(svc)
 	if err != nil {
 		return nil, err
 	}

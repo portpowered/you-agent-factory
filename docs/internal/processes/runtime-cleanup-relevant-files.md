@@ -23,7 +23,7 @@ delegation to the target owner or part of an active removal lane.
 | Work domain | target `pkg/work` | Put Work content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts in the collapsed Work owner. Until Batch 006 moves a slice, use its registered migration root and do not create a parallel implementation. |
 | Platform infrastructure | target `pkg/platform` | Put logging, replay/artifact infrastructure, metrics, cursor storage, and non-domain clocks in the collapsed platform owner. Until Batch 006 moves a slice, use its registered narrow migration root; never put domain policy in platform code. |
 | Transport boundaries | target `pkg/transports` | Put HTTP, CLI, MCP, generated transport contracts/clients, and boundary mapping at the process edge. Until Batch 006 moves a slice, use its registered migration root; transport adapters must not own domain policy. |
-| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin, normalize process input and select mode in `pkg/root`, expose one concrete graph constructor in `pkg/wire`, and execute startup/shutdown lifecycle for already-built transports and sidecars in `pkg/initializer`. Construction-phase callback bundles are test harnesses, not a public composition API. During migration, concrete graph assembly may reuse `composebridge.BuildCore`, but it must do so once inside `pkg/wire`, copy caller-owned config before normalization, project only narrow domain contracts into the graph, and retain cleanup ownership for the startup bundle rather than exposing `runtimehost.Host` or the bridge core. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. A fallible graph phase should retain any closeable construction resource so `pkg/wire` can unwind acquired resources once, in reverse order, before returning a later phase failure. Initializer should record only successfully started collaborators, stop them in reverse order on partial failure or shutdown, and make graph close part of the same idempotent shutdown result. |
+| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin, normalize process input and select mode in `pkg/root`, expose one concrete graph constructor in `pkg/wire`, and execute startup/shutdown lifecycle for already-built transports and sidecars in `pkg/initializer`. Construction-phase callback bundles are test harnesses, not a public composition API. Compose the runtime core through the generated `pkg/wire` application set, copy caller-owned config before normalization, project only narrow domain contracts into the graph, and retain cleanup ownership for the startup bundle rather than exposing `runtimehost.Host` or the bridge core. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. `pkg/initializer` must not expose config-based session, runtime-host, API, CLI, or MCP constructors; it accepts the completed graph and owns lifecycle only. A fallible graph phase should retain any closeable construction resource so `pkg/wire` can unwind acquired resources once, in reverse order, before returning a later phase failure. Initializer should record only successfully started collaborators, stop them in reverse order on partial failure or shutdown, and make graph close part of the same idempotent shutdown result. |
 
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
@@ -69,12 +69,18 @@ non-cancellation failures, report them in declared lifecycle-plan order rather
 than arrival order so goroutine scheduling cannot change terminal precedence.
 
 The production `you mcp serve` branch follows the same ownership path even
-though it does not activate run sidecars. Resolve the selected fixture-backed
-or runtime-backed durable execution service before startup, retain that exact
-instance in `wire.Graph`, construct the MCP stdio lifecycle from the request's
-explicit reader and writer, and let `pkg/initializer` start, wait for, stop, and
-close that graph. Do not return a separately composed MCP application from the
-process graph builder.
+though it does not activate run sidecars. Fixture-backed MCP may construct its
+narrow fake execution edge, but runtime-backed MCP must construct and retain
+the completed `wire.Graph`, including its registry, persistence, runtime-build,
+durable-execution, and startup-bundle cleanup ownership. Construct the MCP
+stdio lifecycle from the request's explicit reader and writer, and let
+`pkg/initializer` start, wait for, stop, and close that graph. Runtime-backed
+CLI session execution follows the same rule by retaining its complete graph in
+the returned closable execution owner; it must not discard the graph after
+extracting durable execution. The CLI command boundary must retain that owner
+for the full workflow or durable-list operation and close it exactly once after
+both successful and failed command execution. Do not return a separately
+composed MCP application from the process graph builder.
 
 Factory Session selectors at that graph-owned transport boundary must round-trip
 the canonical ID returned by list responses. Registry aliases such as
@@ -172,6 +178,19 @@ composition boundary in `pkg/factory/sessions/execution/service.go`; production
 runtime code must receive either that injected store or an explicit disabled
 policy and must not use a persistence boolean.
 
+Construct `pkg/service/runtimebuild.Service` with an explicit clock, logger, and
+runtime bundle builder, and propagate its constructor error before initializer
+lifecycle begins. Before building any session runtime, application composition
+must attach the graph-owned durable execution service's Petri mutation recorder;
+that preserves one canonical Factory Session event and snapshot owner across
+startup, replacement, and resume builds.
+
+The shared Wire provider set constructs persistence, durable execution, and the
+recorder-configured runtime-build service before passing completed collaborators
+to `composebridge.ComposeCore`. Root one-shot invocation and the legacy
+`InjectFactoryService` facade both adapt that same runtime core; neither path may
+re-enter `BuildFactoryService` to create a replacement session foundation.
+
 The guard also rejects `BuildInvocationBootstrap`, `NewExecutionService`,
 `NewFakeServiceFromContractFixtures`, and `ProjectPersistence` calls outside
 approved application-composition owners. Transport packages consume injected
@@ -185,6 +204,13 @@ typed builder flows through the root-owned production graph builder into
 `pkg/wire/process.go`, and `pkg/transports/cli/mcp` accepts only the resulting
 service. Production-composition tests should execute the real root command and
 also assert that the wire graph retains the exact injected service instance.
+Runtime-backed MCP serve and CLI session-execution adapters share
+`buildRuntimeBackedSessionExecutionService` in `pkg/wire/session_execution.go`:
+they must construct one completed `InjectRuntimeCore` graph and return its exact
+durable execution collaborator, never project persistence or construct a second
+execution service. Keep fixture-backed requests as explicit edge substitutions,
+and prove each runtime-backed adapter's one-core identity plus persistence-store
+identity in `pkg/wire/process_test.go`.
 
 Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not
@@ -202,6 +228,10 @@ Petri output mutations become final in the post-transition response boundary;
 wire them with `factory.WithPetriMutationRecorder` to
 `JavaScriptRuntimeService.RecordPetriTokenMutations`, and propagate persistence
 errors so an unrecorded completion cannot finish its tick.
+After session invocation selects its terminal result, route that result through
+the same execution owner before returning it so the durable lifecycle, result,
+canonical completion event, and primary result become visible atomically to a
+subsequent API, CLI, or MCP process.
 `make durable-runtime-construction-check` reports those bypasses with remediation
 to use the Factory Session recorder, while allowing package tests and explicitly
 typed JavaScript checkpoint or Petri internal records.

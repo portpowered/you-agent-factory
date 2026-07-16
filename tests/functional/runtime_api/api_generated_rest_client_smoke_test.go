@@ -16,6 +16,7 @@ import (
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"github.com/portpowered/infinite-you/tests/functional/internal/restclient"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -64,7 +65,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = generatedRESTStreamingRunner{}
+		configureGeneratedRESTRunner(t, cfg)
 	})
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
@@ -141,7 +142,7 @@ func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = generatedRESTStreamingRunner{}
+		configureGeneratedRESTRunner(t, cfg)
 	})
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
@@ -169,6 +170,17 @@ func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
 
 		assertGeneratedRESTContextError(t, result, context.DeadlineExceeded)
 	})
+}
+
+func configureGeneratedRESTRunner(t *testing.T, cfg *service.FactoryServiceConfig) {
+	t.Helper()
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
+		ProviderCommandRunner: generatedRESTStreamingRunner{},
+	})
+	if err != nil {
+		t.Fatalf("construct worker application: %v", err)
+	}
+	cfg.WorkerApplication = components
 }
 
 type generatedRESTCallResult struct {

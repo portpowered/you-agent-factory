@@ -5,6 +5,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -49,6 +50,7 @@ type Core struct {
 	logger           *zap.Logger
 	modelAssets      modelAssetPuller
 	durableExecution factorysessionexecution.Service
+	persistence      runtimepersist.Store
 }
 
 // ServiceConfig returns the normalized service config used to compose the core.
@@ -165,6 +167,15 @@ func (core *Core) DurableExecution() factorysessionexecution.Service {
 	return core.durableExecution
 }
 
+// Persistence returns the durable snapshot store constructed for this graph.
+// Explicitly disabled persistence returns nil.
+func (core *Core) Persistence() runtimepersist.Store {
+	if core == nil {
+		return nil
+	}
+	return core.persistence
+}
+
 // ComposeCollaboratorSnapshot reports initialized core collaborators for
 // equivalence tests.
 func (core *Core) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
@@ -203,6 +214,7 @@ func NewCore(
 	logger *zap.Logger,
 	modelAssets modelAssetPuller,
 	durableExecution factorysessionexecution.Service,
+	persistence runtimepersist.Store,
 ) *Core {
 	return &Core{
 		cfg:              cfg,
@@ -218,5 +230,6 @@ func NewCore(
 		logger:           logger,
 		modelAssets:      modelAssets,
 		durableExecution: durableExecution,
+		persistence:      persistence,
 	}
 }
