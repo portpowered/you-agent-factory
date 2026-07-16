@@ -11,6 +11,7 @@ import (
 	"github.com/dop251/goja"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 // Run executes one simple JavaScript workflow source with explicit inputs and hooks.
@@ -18,17 +19,8 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	if err := ctx.Err(); err != nil {
 		return contextTerminationOutcome(err), nil
 	}
-	if strings.TrimSpace(req.Source) == "" {
-		return Outcome{
-			OK: false,
-			Failure: Failure{
-				Code:    CodePreExecutionInvalid,
-				Message: "workflow source is required",
-			},
-		}, nil
-	}
-	if issue := validatePreExecution(req); issue != nil {
-		return preExecutionFailure(req, *issue), nil
+	if outcome := preExecutionOutcome(req); outcome != nil {
+		return *outcome, nil
 	}
 	policy := req.Policy
 	if policy.Mode == "" {
@@ -57,6 +49,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 
 	argsValue, err := argsValueForRequest(vm, req.Args)
 	if err != nil {
+		return invalidArgsFailure(err), nil
+	}
+	if err := validateRequestArgs(req.Args, req.ArgsSchema); err != nil {
 		return invalidArgsFailure(err), nil
 	}
 	globals.bindArgs(argsValue)
@@ -113,6 +108,40 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		}
 	}
 	return Outcome{OK: true, Value: typed, Records: records.list()}, nil
+}
+
+func preExecutionOutcome(req Request) *Outcome {
+	if strings.TrimSpace(req.Source) == "" {
+		return &Outcome{OK: false, Failure: Failure{
+			Code:    CodePreExecutionInvalid,
+			Message: "workflow source is required",
+		}}
+	}
+	if issue := validatePreExecution(req); issue != nil {
+		outcome := preExecutionFailure(req, *issue)
+		return &outcome
+	}
+	return nil
+}
+
+func validateRequestArgs(rawArgs, schema json.RawMessage) error {
+	args, err := argsMapForRequest(rawArgs)
+	if err != nil {
+		return err
+	}
+	return workflowvalidation.ValidateArgs(schema, args)
+}
+
+func argsMapForRequest(raw json.RawMessage) (map[string]any, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return map[string]any{}, nil
+	}
+	var args map[string]any
+	if err := json.Unmarshal(raw, &args); err != nil || args == nil {
+		return nil, fmt.Errorf("workflow args must be a JSON object")
+	}
+	return args, nil
 }
 
 func argsValueForRequest(vm *goja.Runtime, raw json.RawMessage) (goja.Value, error) {

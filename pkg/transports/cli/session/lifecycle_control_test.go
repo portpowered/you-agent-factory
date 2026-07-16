@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,18 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+func TestLifecycleControlStatusErrorIncludesAPIMessage(t *testing.T) {
+	t.Parallel()
+	resp := &http.Response{
+		StatusCode: http.StatusConflict,
+		Body:       io.NopCloser(strings.NewReader(`{"message":"session is terminal"}`)),
+	}
+	err := lifecycleControlStatusError("pause", resp)
+	if !strings.Contains(err.Error(), "session is terminal") {
+		t.Fatalf("lifecycleControlStatusError = %q", err)
+	}
+}
 
 func TestPause_OmittedSessionIDRoutesToDefaultCompatibilitySession(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

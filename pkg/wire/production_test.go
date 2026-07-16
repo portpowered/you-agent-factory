@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
-	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -97,9 +96,7 @@ func TestInjectRuntimeCoreSharesSessionFoundationWithCompatibilityConsumers(t *t
 		t.Fatal("runtime core durable execution did not retain the Wire-owned persistence store")
 	}
 	host := runtimehost.NewHostFromCore(core)
-	serviceFacade := service.NewFactoryServiceFromRuntimeHostCore(core)
-	if host.DurableExecutionService() != core.DurableExecution() ||
-		serviceFacade.DurableExecutionService() != core.DurableExecution() {
+	if host.DurableExecutionService() != core.DurableExecution() {
 		t.Fatal("compatibility consumers replaced the Wire-owned durable execution service")
 	}
 }

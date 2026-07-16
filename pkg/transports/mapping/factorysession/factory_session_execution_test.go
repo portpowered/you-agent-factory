@@ -1,6 +1,7 @@
 package factorysession_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,14 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
+
+func TestDurableAPIListRequiresExecutionService(t *testing.T) {
+	t.Parallel()
+	api := factorysession.NewDurableAPI(nil, nil)
+	if _, err := api.ListDurableFactorySessions(context.Background(), factoryapi.ListFactorySessionsParams{}); err == nil {
+		t.Fatal("ListDurableFactorySessions succeeded without an execution service")
+	}
+}
 
 type durableFixtureCatalog struct {
 	Scenarios        []durableFixtureScenario       `json:"scenarios"`
