@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -15,10 +17,11 @@ import (
 // the template is resolved from the token's Name → the resolved value
 // arrives as InferenceRequest.Worktree on the mock provider call.
 //
-// The factory does NOT create the worktree or chdir — it only resolves the
-// template and passes it as --worktree to CLI dispatchers.
+// The factory materializes the resolved worktree before dispatch and passes
+// its name as --worktree to CLI dispatchers that support that flag.
 func TestWorktreePassthrough(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
+	initGitRepositoryForProviderWorktreeFunctionalTest(t, dir)
 
 	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
 		Name:       "my-feature-branch",
@@ -69,6 +72,10 @@ Process the input task.
 	if runner.CallCount() != 1 {
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
+	wantCheckout := filepath.Join(dir, ".worktrees", "my-feature-branch")
+	if _, err := os.Stat(wantCheckout); err != nil {
+		t.Fatalf("expected factory-managed worktree at %q: %v", wantCheckout, err)
+	}
 	call := runner.LastRequest()
 	if call.Command != string(interfaces.ModelProviderClaude) {
 		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
@@ -78,5 +85,40 @@ Process the input task.
 	support.AssertArgsContainSequence(t, call.Args, []string{"--output-format", "stream-json", "--include-partial-messages"})
 	if len(call.Stdin) != 0 {
 		t.Fatalf("expected Claude prompt to stay in args, got stdin %q", string(call.Stdin))
+	}
+}
+
+func TestWorktreePassthroughFailsBeforeProviderForNonGitFactory(t *testing.T) {
+	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
+	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+		Name:       "my-feature-branch",
+		WorkID:     "work-wt-non-git",
+		WorkTypeID: "task",
+		TraceID:    "trace-wt-non-git",
+		Payload:    []byte("worktree test payload"),
+	})
+	support.WriteAgentConfig(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: test-model
+modelProvider: claude
+stopToken: COMPLETE
+---
+Process the input task.
+`)
+	runner := testutil.NewProviderCommandRunner()
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithProviderCommandRunner(runner),
+		testutil.WithFullWorkerPoolAndScriptWrap(),
+	)
+
+	h.RunUntilComplete(t, 15*time.Second)
+
+	h.Assert().
+		HasTokenInPlace("task:failed").
+		HasNoTokenInPlace("task:init").
+		HasNoTokenInPlace("task:complete").
+		TokenCount(1)
+	if runner.CallCount() != 0 {
+		t.Fatalf("expected worktree preparation to fail before provider dispatch, got %d calls", runner.CallCount())
 	}
 }

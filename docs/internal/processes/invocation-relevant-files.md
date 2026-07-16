@@ -97,6 +97,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `model` fields. `runtimebuild.Service` applies those resolved operator
   defaults to each omitted model-worker field before dispatch; a
   factory-managed worktree must remain prepared when that selection changes.
+- Functional scenarios that resolve a workstation `worktree` must use a
+  Git-backed factory root: factory-managed checkout preparation happens before
+  provider dispatch for every supported provider, and a non-Git root must
+  produce the observable failed lifecycle without calling that provider.
 
 - `docs/reference/run.md` (invocation output modes and copyable examples);
   cross-link `you docs config` for return/output policy

@@ -35,7 +35,7 @@ func TestCodexWorktreeWorkstationDispatch_MaterializesCheckoutAndOmitsCLIWorktre
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			repoRoot := initGitRepositoryForCodexWorktreeFunctionalTest(t)
+			repoRoot := initGitRepositoryForProviderWorktreeFunctionalTest(t, t.TempDir())
 			factoryDir := filepath.Join(repoRoot, "factory")
 			if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 				t.Fatalf("create factory dir: %v", err)
@@ -165,21 +165,20 @@ func writeCodexWorktreeFactoryConfig(t *testing.T, factoryDir string) {
 	}
 }
 
-func initGitRepositoryForCodexWorktreeFunctionalTest(t *testing.T) string {
+func initGitRepositoryForProviderWorktreeFunctionalTest(t *testing.T, repoRoot string) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available in PATH")
 	}
 
-	repoRoot := t.TempDir()
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "init")
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "config", "user.email", "codex-worktree-functional@example.com")
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "config", "user.name", "codex worktree functional")
-	runGitForCodexWorktreeFunctionalTest(t, repoRoot, "commit", "--allow-empty", "-m", "init")
+	runGitForProviderWorktreeFunctionalTest(t, repoRoot, "init")
+	runGitForProviderWorktreeFunctionalTest(t, repoRoot, "config", "user.email", "provider-worktree-functional@example.com")
+	runGitForProviderWorktreeFunctionalTest(t, repoRoot, "config", "user.name", "provider worktree functional")
+	runGitForProviderWorktreeFunctionalTest(t, repoRoot, "commit", "--allow-empty", "-m", "init")
 	return repoRoot
 }
 
-func runGitForCodexWorktreeFunctionalTest(t *testing.T, dir string, args ...string) {
+func runGitForProviderWorktreeFunctionalTest(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
 	cmd := exec.Command("git", args...)
