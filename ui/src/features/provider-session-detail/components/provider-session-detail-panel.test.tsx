@@ -1,6 +1,12 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing provider-session detail coverage stayed intact during sibling-feature extraction.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
@@ -145,6 +151,133 @@ describe("ProviderSessionDetailPanel", () => {
 
     expect(screen.getAllByText("sess_active").length).toBeGreaterThan(0);
     expect(screen.queryByText("mystery_kind")).toBeNull();
+  });
+
+  it("shows exactly the requested five-field selected-session preview and consolidates deeper details above the transcript", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          parse: {
+            tokenUsage: {
+              cachedInputTokens: 40,
+              inputTokens: 100,
+              outputTokens: 25,
+              reasoningOutputTokens: 5,
+              totalTokens: 130,
+            },
+          },
+          source: {
+            modifiedAt: "2026-05-18T14:09:59Z",
+            relativePath: "2026/05/18/rollout-sess_active.jsonl",
+            sizeBytes: 2048,
+          },
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    const selectedDetailsToggle = await screen.findByRole("button", {
+      name: "Expand Selected Session Details",
+    });
+    const selectedDetailsSection = selectedDetailsToggle.closest("section");
+    expect(selectedDetailsSection).toBeTruthy();
+    const selectedDetails = within(selectedDetailsSection as HTMLElement);
+
+    await waitFor(() => {
+      expect(
+        selectedDetails
+          .getAllByRole("definition")
+          .map((definition) => definition.textContent),
+      ).toEqual([
+        "sess_active",
+        "100",
+        "25",
+        "40",
+        "2026/05/18/rollout-sess_active.jsonl",
+      ]);
+    });
+
+    expect(selectedDetailsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      selectedDetails.getAllByRole("term").map((term) => term.textContent),
+    ).toEqual([
+      "Session ID",
+      "Input Tokens",
+      "Output Tokens",
+      "Cached Tokens",
+      "Source File",
+    ]);
+    expect(
+      screen.queryByRole("heading", { name: "Source Metadata" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Session Analysis" }),
+    ).toBeNull();
+
+    fireEvent.click(selectedDetailsToggle);
+
+    const sourceMetadataHeading = screen.getByRole("heading", {
+      name: "Source Metadata",
+    });
+    const sessionAnalysisHeading = screen.getByRole("heading", {
+      name: "Session Analysis",
+    });
+    const transcriptHeading = screen.getByRole("heading", {
+      name: "Transcript",
+    });
+    expect(selectedDetailsSection?.contains(sourceMetadataHeading)).toBe(true);
+    expect(selectedDetailsSection?.contains(sessionAnalysisHeading)).toBe(true);
+    expect(selectedDetailsSection?.contains(transcriptHeading)).toBe(false);
+    expect(
+      sourceMetadataHeading.compareDocumentPosition(transcriptHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Expand Source File" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Expand Session Analysis" }),
+    ).toBeNull();
+    expect(selectedDetailsToggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(selectedDetailsToggle);
+    expect(selectedDetailsToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      screen.queryByRole("heading", { name: "Source Metadata" }),
+    ).toBeNull();
+  });
+
+  it("uses unavailable preview values when loaded token measurements are absent", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(buildProviderSessionDetailResponse({ parse: {} })),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel selectedProviderSession={SELECTED_SESSION} />,
+    );
+
+    const selectedDetailsToggle = await screen.findByRole("button", {
+      name: "Expand Selected Session Details",
+    });
+    const selectedDetails = within(
+      selectedDetailsToggle.closest("section") as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(
+        selectedDetails
+          .getAllByRole("definition")
+          .map((definition) => definition.textContent),
+      ).toEqual([
+        "sess_active",
+        "Unavailable",
+        "Unavailable",
+        "Unavailable",
+        "2026/05/18/rollout-sess_active.jsonl",
+      ]);
+    });
   });
 
   it("shows a not-found state when the session file is missing", async () => {
@@ -299,10 +432,10 @@ describe("ProviderSessionDetailPanel", () => {
         "The selected session was parsed, but it did not contain any transcript-visible entries.",
       );
     });
+    expandDisclosure("Expand Selected Session Details");
     expect(
       screen.getByRole("heading", { name: "Session Analysis" }),
     ).toBeTruthy();
-    expandDisclosure("Expand Session Analysis");
     expect(screen.getByRole("heading", { name: "Token Usage" })).toBeTruthy();
     expect(
       screen.getByRole("heading", { name: "Maintainer Diagnostics" }),
@@ -382,18 +515,16 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: "Session Analysis" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
     expect(
       screen.getByText("2026/05/18/rollout-sess_active.jsonl"),
     ).toBeTruthy();
+    expandDisclosure("Expand Selected Session Details");
     expect(
       screen.getByRole("heading", { name: "Session Analysis" }),
     ).toBeTruthy();
-    expandDisclosure("Expand Session Analysis");
     expandDisclosure("Expand Execution Turns");
     expect(screen.getByText("Turn 1")).toBeTruthy();
     expect(screen.queryByText("list_dir")).toBeNull();
@@ -656,9 +787,8 @@ describe("ProviderSessionDetailPanel", () => {
     const turnStartedAt = formatDateTime("2026-05-18T14:10:00Z");
     const transcriptTimestamp = formatDateTime("2026-05-18T14:10:01Z");
 
-    expandDisclosure("Expand Source File");
+    expandDisclosure("Expand Selected Session Details");
     expandDisclosure("Expand Transcript");
-    expandDisclosure("Expand Session Analysis");
     expandDisclosure("Expand Execution Turns");
 
     expect(
@@ -862,7 +992,7 @@ describe("ProviderSessionDetailPanel", () => {
     });
 
     expandDisclosure("展开会话记录");
-    expandDisclosure("展开会话分析");
+    expandDisclosure("展开已选会话详情");
     expandDisclosure("展开执行轮次");
 
     expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
@@ -872,7 +1002,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.queryByText("原始 ISO 时间戳")).toBeNull();
   });
 
-  it("renders the transcript before summary sections in the success state", async () => {
+  it("renders consolidated selected-session analysis before the transcript", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse(
         buildProviderSessionDetailResponse({
@@ -933,7 +1063,7 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
-    expandDisclosure("Expand Session Analysis");
+    expandDisclosure("Expand Selected Session Details");
     const headingNames = screen
       .getAllByRole("heading")
       .map((heading) => heading.textContent ?? "");
@@ -941,7 +1071,7 @@ describe("ProviderSessionDetailPanel", () => {
     const supportingHeadings = [
       "Session Analysis",
       "Token Usage",
-      "Turns",
+      "Execution Turns",
       "Maintainer Diagnostics",
     ];
 
@@ -949,7 +1079,11 @@ describe("ProviderSessionDetailPanel", () => {
     for (const headingName of supportingHeadings) {
       const headingIndex = headingNames.indexOf(headingName);
       if (headingIndex !== -1) {
-        expect(transcriptIndex).toBeLessThan(headingIndex);
+        if (headingName === "Maintainer Diagnostics") {
+          expect(transcriptIndex).toBeLessThan(headingIndex);
+        } else {
+          expect(headingIndex).toBeLessThan(transcriptIndex);
+        }
       }
     }
   });
@@ -1175,9 +1309,9 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "会话分析" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
     });
-    expandDisclosure("展开会话分析");
+    expandDisclosure("展开已选会话详情");
     expandDisclosure("展开令牌用量");
     expandDisclosure("展开执行轮次");
     expandDisclosure("展开维护诊断");
@@ -1188,8 +1322,8 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getAllByText("sess_active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
     expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
-    expect(screen.getByText("输入")).toBeTruthy();
-    expect(screen.getByText("缓存输入")).toBeTruthy();
+    expect(screen.getAllByText("推理数").length).toBeGreaterThan(0);
+    expect(screen.getByText("总计")).toBeTruthy();
     expect(screen.getByText("轮次 2")).toBeTruthy();
     expect(screen.getByText("无时间戳")).toBeTruthy();
     expect(screen.queryByText("顺序 3 / 轮次 2")).toBeNull();
@@ -1370,7 +1504,7 @@ describe("ProviderSessionDetailPanel", () => {
     });
 
     expandDisclosure("展开会话记录");
-    expandDisclosure("展开会话分析");
+    expandDisclosure("展开已选会话详情");
     expandDisclosure("展开维护诊断");
 
     const headingNames = screen
@@ -1380,7 +1514,7 @@ describe("ProviderSessionDetailPanel", () => {
     const analysisIndex = headingNames.indexOf("会话分析");
 
     expect(transcriptIndex).toBeGreaterThan(-1);
-    expect(analysisIndex).toBeGreaterThan(transcriptIndex);
+    expect(analysisIndex).toBeLessThan(transcriptIndex);
     expect(screen.getByText("会话 ID")).toBeTruthy();
     expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
     expect(screen.getAllByText("助手").length).toBeGreaterThan(0);

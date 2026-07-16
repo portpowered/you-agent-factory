@@ -11,7 +11,7 @@ const providerSessionDetailMessagesByLocale = {
     argumentsLabel: "Arguments",
     bytesLabel: "bytes",
     callIdLabel: "Call ID",
-    cachedInputLabel: "Cached Input",
+    cachedTokensLabel: "Cached Tokens",
     collapseAction: "Collapse",
     dispatchLabel: "Dispatch",
     emptyState:
@@ -36,6 +36,7 @@ const providerSessionDetailMessagesByLocale = {
     functionCallsHeading: "Function Calls",
     functionCallsUnavailable: "No function or tool calls were recorded.",
     inputLabel: "Input",
+    inputTokensLabel: "Input Tokens",
     lineLabel: ({ lineNumber }) => `Line ${lineNumber}`,
     lineCountLabel: "Lines",
     loadingState: "Loading session details...",
@@ -54,6 +55,7 @@ const providerSessionDetailMessagesByLocale = {
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `Order ${order} / Turn ${turnIndex}` : `Order ${order}`,
     outputLabel: "Output",
+    outputTokensLabel: "Output Tokens",
     parseDiagnosticsHeading: "Parse Diagnostics",
     parseErrorsHeading: "Malformed Records",
     parseErrorState:
@@ -62,7 +64,6 @@ const providerSessionDetailMessagesByLocale = {
     reasoningCountLabel: "Reasoning",
     reasoningHeading: "Reasoning",
     reasoningUnavailable: "No reasoning entries were recorded.",
-    relativePathLabel: "Relative Path",
     responseItemsLabel: "Response Items",
     sessionAnalysisDescription:
       "Counts, inferred turns, token usage, and supporting summaries stay available here as secondary inspection aids.",
@@ -83,6 +84,7 @@ const providerSessionDetailMessagesByLocale = {
     sessionStatusLabel: "Status",
     sizeBytesLabel: "File Size",
     sourceHeading: "Source File",
+    sourceMetadataHeading: "Source Metadata",
     systemEventLabel: "System Event",
     tokenUsageHeading: "Token Usage",
     tokenUsageUnavailable: "Token usage was not reported for this session.",
@@ -113,7 +115,7 @@ const providerSessionDetailMessagesByLocale = {
     argumentsLabel: "引数",
     bytesLabel: "bytes",
     callIdLabel: "Call ID",
-    cachedInputLabel: "キャッシュ入力",
+    cachedTokensLabel: "キャッシュ済みトークン",
     collapseAction: "折りたたむ",
     dispatchLabel: "ディスパッチ",
     emptyState:
@@ -139,6 +141,7 @@ const providerSessionDetailMessagesByLocale = {
     functionCallsUnavailable:
       "関数またはツールの呼び出しは記録されていません。",
     inputLabel: "入力",
+    inputTokensLabel: "入力トークン",
     lineLabel: ({ lineNumber }) => `${lineNumber} 行`,
     lineCountLabel: "行数",
     loadingState: "セッション詳細を読み込み中...",
@@ -157,6 +160,7 @@ const providerSessionDetailMessagesByLocale = {
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `順序 ${order} / ターン ${turnIndex}` : `順序 ${order}`,
     outputLabel: "出力",
+    outputTokensLabel: "出力トークン",
     parseDiagnosticsHeading: "解析診断",
     parseErrorsHeading: "不正なレコード",
     parseErrorState:
@@ -165,7 +169,6 @@ const providerSessionDetailMessagesByLocale = {
     reasoningCountLabel: "推論",
     reasoningHeading: "推論",
     reasoningUnavailable: "推論エントリは記録されていません。",
-    relativePathLabel: "相対パス",
     responseItemsLabel: "応答項目",
     sessionAnalysisDescription:
       "件数、推定ターン、トークン使用量、補助サマリーを、読み取りの主導線ではなく補助情報としてここにまとめます。",
@@ -186,6 +189,7 @@ const providerSessionDetailMessagesByLocale = {
     sessionStatusLabel: "状態",
     sizeBytesLabel: "ファイルサイズ",
     sourceHeading: "ソースファイル",
+    sourceMetadataHeading: "ソースメタデータ",
     systemEventLabel: "システムイベント",
     tokenUsageHeading: "トークン使用量",
     tokenUsageUnavailable:
@@ -218,7 +222,7 @@ const providerSessionDetailMessagesByLocale = {
     argumentsLabel: "인수",
     bytesLabel: "bytes",
     callIdLabel: "호출 ID",
-    cachedInputLabel: "캐시된 입력",
+    cachedTokensLabel: "캐시된 토큰",
     collapseAction: "접기",
     dispatchLabel: "디스패치",
     emptyState:
@@ -243,6 +247,7 @@ const providerSessionDetailMessagesByLocale = {
     functionCallsHeading: "함수 호출",
     functionCallsUnavailable: "함수 또는 도구 호출이 기록되지 않았습니다.",
     inputLabel: "입력",
+    inputTokensLabel: "입력 토큰",
     lineLabel: ({ lineNumber }) => `${lineNumber}행`,
     lineCountLabel: "줄 수",
     loadingState: "세션 세부 정보를 불러오는 중...",
@@ -260,6 +265,7 @@ const providerSessionDetailMessagesByLocale = {
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `순서 ${order} / 턴 ${turnIndex}` : `순서 ${order}`,
     outputLabel: "출력",
+    outputTokensLabel: "출력 토큰",
     parseDiagnosticsHeading: "파싱 진단",
     parseErrorsHeading: "잘못된 레코드",
     parseErrorState:
@@ -268,7 +274,6 @@ const providerSessionDetailMessagesByLocale = {
     reasoningCountLabel: "추론",
     reasoningHeading: "추론",
     reasoningUnavailable: "추론 항목이 기록되지 않았습니다.",
-    relativePathLabel: "상대 경로",
     responseItemsLabel: "응답 항목",
     sessionAnalysisDescription:
       "개수, 추론된 턴, 토큰 사용량, 보조 요약을 기본 읽기 흐름을 해치지 않는 보조 점검 정보로 이곳에 유지합니다.",
@@ -289,6 +294,7 @@ const providerSessionDetailMessagesByLocale = {
     sessionStatusLabel: "상태",
     sizeBytesLabel: "파일 크기",
     sourceHeading: "소스 파일",
+    sourceMetadataHeading: "소스 메타데이터",
     systemEventLabel: "시스템 이벤트",
     tokenUsageHeading: "토큰 사용량",
     tokenUsageUnavailable: "이 세션에는 토큰 사용량이 보고되지 않았습니다.",
@@ -319,7 +325,7 @@ const providerSessionDetailMessagesByLocale = {
     argumentsLabel: "参数",
     bytesLabel: "字节",
     callIdLabel: "调用 ID",
-    cachedInputLabel: "缓存输入",
+    cachedTokensLabel: "缓存令牌",
     collapseAction: "折叠",
     dispatchLabel: "分派",
     emptyState: "所选会话不包含任何可解析的事件记录。",
@@ -343,6 +349,7 @@ const providerSessionDetailMessagesByLocale = {
     functionCallsHeading: "函数调用",
     functionCallsUnavailable: "没有记录任何函数或工具调用。",
     inputLabel: "输入",
+    inputTokensLabel: "输入令牌",
     lineLabel: ({ lineNumber }) => `第 ${lineNumber} 行`,
     lineCountLabel: "行数",
     loadingState: "正在加载会话详情...",
@@ -360,6 +367,7 @@ const providerSessionDetailMessagesByLocale = {
     orderLabel: ({ order, turnIndex }) =>
       turnIndex ? `顺序 ${order} / 轮次 ${turnIndex}` : `顺序 ${order}`,
     outputLabel: "输出",
+    outputTokensLabel: "输出令牌",
     parseDiagnosticsHeading: "解析诊断",
     parseErrorsHeading: "损坏记录",
     parseErrorState: "无法解析所选会话。请检查下面的损坏行诊断。",
@@ -367,7 +375,6 @@ const providerSessionDetailMessagesByLocale = {
     reasoningCountLabel: "推理数",
     reasoningHeading: "推理",
     reasoningUnavailable: "没有记录任何推理条目。",
-    relativePathLabel: "相对路径",
     responseItemsLabel: "响应项数",
     sessionAnalysisDescription:
       "计数、推断出的轮次、令牌用量和辅助摘要会作为次级检查信息保留在这里，不再与主会话记录争夺视觉优先级。",
@@ -388,6 +395,7 @@ const providerSessionDetailMessagesByLocale = {
     sessionStatusLabel: "状态",
     sizeBytesLabel: "文件大小",
     sourceHeading: "源文件",
+    sourceMetadataHeading: "源元数据",
     systemEventLabel: "系统事件",
     tokenUsageHeading: "令牌用量",
     tokenUsageUnavailable: "该会话没有报告 token 用量。",

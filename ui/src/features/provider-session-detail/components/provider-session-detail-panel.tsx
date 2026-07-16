@@ -1,14 +1,7 @@
+import { WidgetDetailCopy } from "@you-agent-factory/components/recipes";
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import {
-  AlertPanel,
-  Heading,
-  Label,
-  Text,
-} from "../../../components/ui";
-import {
-  WidgetDetailCopy,
-} from "@you-agent-factory/components/recipes";
+import { AlertPanel, Heading, Label, Text } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { CurrentSelectionHistoryCard } from "../../current-selection/history/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -65,6 +58,7 @@ function LoadedProviderSessionDetailPanel({
     detailState.status === "success"
       ? detailState.sessionDetail
       : null;
+  const tokenUsage = detail?.parse.tokenUsage;
 
   return (
     <section
@@ -81,16 +75,30 @@ function LoadedProviderSessionDetailPanel({
                 label: messages.sessionIdLabel,
                 value: selectedProviderSession.id,
               },
+              {
+                label: messages.inputTokensLabel,
+                value: tokenUsage?.inputTokens ?? messages.unavailableValue,
+              },
+              {
+                label: messages.outputTokensLabel,
+                value: tokenUsage?.outputTokens ?? messages.unavailableValue,
+              },
+              {
+                label: messages.cachedTokensLabel,
+                value:
+                  tokenUsage?.cachedInputTokens ?? messages.unavailableValue,
+              },
+              {
+                label: messages.sourceHeading,
+                value: detail?.source.relativePath ?? messages.unavailableValue,
+              },
             ]}
           />
         }
       >
-        <div className="grid gap-4">
-          <DetailMetric
-            label={messages.sessionIdLabel}
-            value={selectedProviderSession.id}
-          />
-        </div>
+        {detail ? (
+          <SelectedSessionDetails detail={detail} locale={locale} />
+        ) : null}
       </ProviderSessionExpandableSection>
       {detailState.status === "loading" ? (
         <StatusNotice>{messages.loadingState}</StatusNotice>
@@ -106,14 +114,6 @@ function LoadedProviderSessionDetailPanel({
       ) : null}
       {detail ? (
         <>
-          <SourceFileSection detail={detail} locale={locale} />
-          {detailState.status !== "empty" &&
-          detailState.status !== "success" ? (
-            <SessionAnalysisSection detail={detail} locale={locale}>
-              <ParseOverview detail={detail} locale={locale} />
-              <TokenUsageSection detail={detail} locale={locale} />
-            </SessionAnalysisSection>
-          ) : null}
           {detailState.status === "empty" ? (
             <StatusNotice>{messages.emptyState}</StatusNotice>
           ) : null}
@@ -146,11 +146,6 @@ function LoadedProviderSessionDetailPanel({
                   showHeading={false}
                 />
               </ProviderSessionExpandableSection>
-              <SessionAnalysisSection detail={detail} locale={locale}>
-                <ParseOverview detail={detail} locale={locale} />
-                <TokenUsageSection detail={detail} locale={locale} />
-                <TurnsSection detail={detail} locale={locale} />
-              </SessionAnalysisSection>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
           ) : null}
@@ -160,46 +155,7 @@ function LoadedProviderSessionDetailPanel({
   );
 }
 
-function SessionAnalysisSection({
-  children,
-  detail,
-  locale,
-}: {
-  children: ReactNode;
-  detail: SessionDetail;
-  locale?: string;
-}) {
-  const messages = getProviderSessionDetailMessages(locale);
-
-  return (
-    <ProviderSessionExpandableSection
-      heading={messages.sessionAnalysisHeading}
-      locale={locale}
-      preview={
-        <SectionMetricPreview
-          items={[
-            {
-              label: messages.eventCountLabel,
-              value: detail.parse.eventCount,
-            },
-            {
-              label: messages.turnsHeading,
-              value: detail.parse.turns.length,
-            },
-            {
-              label: messages.totalLabel,
-              value: detail.parse.tokenUsage?.totalTokens ?? 0,
-            },
-          ]}
-        />
-      }
-    >
-      {children}
-    </ProviderSessionExpandableSection>
-  );
-}
-
-function SourceFileSection({
+function SelectedSessionDetails({
   detail,
   locale,
 }: {
@@ -209,41 +165,37 @@ function SourceFileSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <ProviderSessionExpandableSection
-      heading={messages.sourceHeading}
-      locale={locale}
-      preview={
-        <SectionMetricPreview
-          items={[
-            {
-              label: messages.relativePathLabel,
-              value: detail.source.relativePath,
-            },
-          ]}
-        />
-      }
-    >
-      <div className="grid gap-4">
-        <DetailMetric
-          label={messages.relativePathLabel}
-          value={detail.source.relativePath}
-        />
-        <DetailMetric
-          label={messages.sizeBytesLabel}
-          value={`${detail.source.sizeBytes.toLocaleString()} ${messages.bytesLabel}`}
-        />
-        <DetailMetric
-          label={messages.modifiedAtLabel}
-          value={
-            <TimestampMetricValue
-              locale={locale}
-              timestamp={detail.source.modifiedAt}
-              unavailableLabel={messages.unavailableValue}
-            />
-          }
-        />
-      </div>
-    </ProviderSessionExpandableSection>
+    <div className="grid gap-6">
+      <DetailMetric
+        label={messages.sessionIdLabel}
+        value={detail.providerSession.id}
+      />
+      <section className="grid gap-3">
+        <Heading as="h4">{messages.sourceMetadataHeading}</Heading>
+        <div className="grid gap-4">
+          <DetailMetric
+            label={messages.sizeBytesLabel}
+            value={`${detail.source.sizeBytes.toLocaleString()} ${messages.bytesLabel}`}
+          />
+          <DetailMetric
+            label={messages.modifiedAtLabel}
+            value={
+              <TimestampMetricValue
+                locale={locale}
+                timestamp={detail.source.modifiedAt}
+                unavailableLabel={messages.unavailableValue}
+              />
+            }
+          />
+        </div>
+      </section>
+      <section className="grid gap-3">
+        <Heading as="h4">{messages.sessionAnalysisHeading}</Heading>
+        <ParseOverview detail={detail} locale={locale} />
+        <TokenUsageSection detail={detail} locale={locale} />
+        <TurnsSection detail={detail} locale={locale} />
+      </section>
+    </div>
   );
 }
 
@@ -355,24 +307,14 @@ function TokenUsageSection({
       {tokenUsage ? (
         <div className="grid gap-4">
           <DetailMetric
-            label={messages.inputLabel}
-            value={tokenUsage.inputTokens ?? 0}
-          />
-          <DetailMetric
-            label={messages.cachedInputLabel}
-            value={tokenUsage.cachedInputTokens ?? 0}
-          />
-          <DetailMetric
-            label={messages.outputLabel}
-            value={tokenUsage.outputTokens ?? 0}
-          />
-          <DetailMetric
             label={messages.reasoningCountLabel}
-            value={tokenUsage.reasoningOutputTokens ?? 0}
+            value={
+              tokenUsage.reasoningOutputTokens ?? messages.unavailableValue
+            }
           />
           <DetailMetric
             label={messages.totalLabel}
-            value={tokenUsage.totalTokens ?? 0}
+            value={tokenUsage.totalTokens ?? messages.unavailableValue}
           />
         </div>
       ) : (
@@ -422,9 +364,7 @@ function TurnsSection({
           {detail.parse.turns.map((turn) => (
             <article className="grid gap-3 py-1.5" key={turn.index}>
               <div className="grid gap-1">
-                <Label>
-                  {messages.turnLabel({ index: turn.index })}
-                </Label>
+                <Label>{messages.turnLabel({ index: turn.index })}</Label>
                 <Text
                   as="div"
                   className="text-on-surface-subtle"
@@ -501,9 +441,7 @@ function ParseDiagnosticsSection({
       }
     >
       <section className="grid gap-3">
-        <Heading as="h5">
-          {messages.parseErrorsHeading}
-        </Heading>
+        <Heading as="h5">{messages.parseErrorsHeading}</Heading>
         <div className="grid gap-3">
           {detail.parse.parseErrors.map((error) => (
             <CurrentSelectionHistoryCard
@@ -512,9 +450,7 @@ function ParseDiagnosticsSection({
               <strong>
                 {messages.lineLabel({ lineNumber: error.lineNumber })}
               </strong>
-              <Text className="m-0 mt-1.5">
-                {error.message}
-              </Text>
+              <Text className="m-0 mt-1.5">{error.message}</Text>
             </CurrentSelectionHistoryCard>
           ))}
           {detail.parse.unknownEvents.map((event) => (
