@@ -76,7 +76,10 @@ func TestClientNegotiatesDiscoversAndCorrelatesToolTrafficOverRealStdio(t *testi
 	}
 	select {
 	case err := <-serverErr:
-		if err != nil {
+		// The SDK owns and closes its reader during shutdown. The server can
+		// therefore observe a closed output pipe while flushing its final
+		// concurrent response after both operations have completed.
+		if err != nil && !errors.Is(err, io.ErrClosedPipe) {
 			t.Fatalf("ServeStdio() error = %v", err)
 		}
 	case <-ctx.Done():
