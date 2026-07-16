@@ -1,6 +1,6 @@
 // Package removalgate records Batch 09 private-contract removal prerequisites
 // and residual-use evidence before deleting migrated NDJSON record types.
-package removalgate
+package responsestreamremovalgate
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 const (

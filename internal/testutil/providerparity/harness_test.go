@@ -1,12 +1,12 @@
-package parityfixtures_test
+package providerparity_test
 
 import (
 	"context"
 	"testing"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 func TestCatalog_CoversAllFidelityClasses(t *testing.T) {

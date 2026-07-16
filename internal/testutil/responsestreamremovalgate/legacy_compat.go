@@ -1,4 +1,4 @@
-package removalgate
+package responsestreamremovalgate
 
 import (
 	"fmt"

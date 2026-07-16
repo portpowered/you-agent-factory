@@ -1,12 +1,12 @@
-package parityfixtures_test
+package providerparity_test
 
 import (
 	"context"
 	"reflect"
 	"testing"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 func TestTransportParity_FullStreamCLIAndAPIAgree(t *testing.T) {

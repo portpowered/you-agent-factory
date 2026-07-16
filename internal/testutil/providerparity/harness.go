@@ -1,4 +1,4 @@
-package parityfixtures
+package providerparity
 
 import (
 	"context"
@@ -134,7 +134,7 @@ func openCodeAdapterForFixture(fixture Fixture) (adapter.Adapter, error) {
 func ReadTranscript(relPath string) ([]byte, error) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
-		return nil, fmt.Errorf("resolve parityfixtures package path")
+		return nil, fmt.Errorf("resolve provider parity package path")
 	}
 	path := filepath.Join(filepath.Dir(file), relPath)
 	contents, err := os.ReadFile(path)

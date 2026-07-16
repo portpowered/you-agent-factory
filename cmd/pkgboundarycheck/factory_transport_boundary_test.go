@@ -83,6 +83,18 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
 		t.Fatal("run() error = nil, want migrated agent-run failure import rejected")
 	}
+
+	for _, path := range []string{
+		"pkg/workers/provider/parityfixtures/mode_parity.go",
+		"pkg/workers/provider/parityfixtures/suite.go",
+		"pkg/workers/provider/parityfixtures/transport.go",
+	} {
+		writeGoImportFile(t, repoRoot, path, "parityfixtures", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	}
+	stderr.Reset()
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
+		t.Fatal("run() error = nil, want internalized provider parity imports rejected")
+	}
 }
 
 func TestRunRejectsRetiredPackagedFactoryTransportImport(t *testing.T) {

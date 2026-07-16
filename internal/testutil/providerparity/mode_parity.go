@@ -1,4 +1,4 @@
-package parityfixtures
+package providerparity
 
 import (
 	"fmt"

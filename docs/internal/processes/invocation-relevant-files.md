@@ -524,8 +524,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `primary_result_regression_test.go` without wiring the mapper into selection.
   Provider-native typed adapters live under `pkg/workers/provider/<provider>`
   and emit validated `responseevents.Draft` values. Sanitized cross-provider
-  parity transcripts and the adapter-neutral terminal harness live in
-  `pkg/workers/provider/parityfixtures` with fidelity-class fixtures under
+  parity transcripts and the adapter-neutral terminal harness are repository-only
+  support under `internal/testutil/providerparity`, with fidelity-class fixtures under
   `testdata/`; extend that catalog for CLI/API parity proofs instead of
   inventing parallel fixture trees. Use `parityfixtures.RunTransportParity`
   plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
@@ -539,14 +539,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   terminal `InvocationResponse` outcomes for the same fixture run. Consolidated
   Batch 09 parity proofs live in `parityfixtures.AssertCrossProviderParityCatalog`
   and `AssertCrossProviderParityForFixture`; run them from
-  `pkg/workers/provider/parityfixtures/suite_test.go`
+  `internal/testutil/providerparity/suite_test.go`
   (`TestCrossProviderParitySuite_Catalog`) and the provider-suite entrypoint
   `tests/functional/providers/cross_provider_parity_smoke_test.go`
   (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
   Batch 09 private-contract removal gates live in
-  `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`, `AssertClosure`,
+  `internal/testutil/responsestreamremovalgate` (`AssertGate`, `AssertClosure`,
   `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
   `AssertPublicTransportLayersDoNotImportLegacyCompat`,
   `AssertLegacyCompatMapperDeleted`,
@@ -562,7 +562,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`TestResponseStreamPrivateContractClosureSmoke`). Supported CLI NDJSON
   recordType constants and retired-record rejection live in
   `pkg/factory/sessions/responsestream/ndjsoncontract`; the canonical decoder in
-  `pkg/workers/provider/parityfixtures/transport.go` rejects retired private
+  `internal/testutil/providerparity/transport.go` rejects retired private
   record types before validating public envelopes. Run these before deleting
   private NDJSON record types. The retired `responsestream/compat` mapper package
   must stay deleted; internal fragment projection now lives in `fragmentmap`.

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
@@ -18,7 +19,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 type gatedResponseStreamWriter struct {

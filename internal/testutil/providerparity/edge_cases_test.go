@@ -1,4 +1,4 @@
-package parityfixtures_test
+package providerparity_test
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 func TestFixtureByID_Unknown(t *testing.T) {

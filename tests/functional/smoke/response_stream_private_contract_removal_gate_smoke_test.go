@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/removalgate"
+	removalgate "github.com/portpowered/infinite-you/internal/testutil/responsestreamremovalgate"
 )
 
 // TestResponseStreamPrivateContractRemovalGateSmoke is the maintained functional

@@ -337,10 +337,6 @@
       "minimum": 50.00
     },
     {
-      "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/removalgate",
-      "minimum": 71.83
-    },
-    {
       "package": "github.com/portpowered/infinite-you/pkg/factory/sessions/service",
       "minimum": 34.09
     },
@@ -975,10 +971,6 @@
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/kiro",
       "minimum": 75.32
-    },
-    {
-      "package": "github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures",
-      "minimum": 67.48
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/workers/provider/pi",

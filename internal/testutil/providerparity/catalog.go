@@ -1,6 +1,6 @@
-// Package parityfixtures provides sanitized deterministic provider transcripts
+// Package providerparity provides sanitized deterministic provider transcripts
 // for cross-provider CLI/API parity proofs across fidelity classes.
-package parityfixtures
+package providerparity
 
 import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"

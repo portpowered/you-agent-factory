@@ -1,11 +1,11 @@
-package removalgate
+package responsestreamremovalgate
 
 import (
 	"encoding/json"
 	"fmt"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 // AssertPrivateNDJSONRecordTypesRejected proves the canonical CLI NDJSON decoder

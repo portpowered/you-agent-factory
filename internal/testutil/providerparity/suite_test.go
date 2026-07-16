@@ -1,10 +1,10 @@
-package parityfixtures_test
+package providerparity_test
 
 import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 )
 
 func TestCrossProviderParitySuite_Catalog(t *testing.T) {

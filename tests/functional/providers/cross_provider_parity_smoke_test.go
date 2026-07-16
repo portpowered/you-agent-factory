@@ -4,11 +4,11 @@ import (
 	"context"
 	"testing"
 
+	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/agy"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
 // TestCrossProviderParitySmoke_ProviderSuiteEntrypoint is the maintained provider
