@@ -1231,6 +1231,26 @@ func newRuntimeBuildService(
 	)
 }
 
+// NewRuntimeBuildServiceWithObservers constructs the runtime builder with the
+// session-owner callbacks selected by the application composition root.
+func NewRuntimeBuildServiceWithObservers(
+	cfg *FactoryServiceConfig,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+	localModels *LocalModelDomain,
+	progressPublisherFactory func(string) workerprovider.InferenceProgressPublisher,
+	dispatchCompletionFactory func(string) func(string),
+) (*runtimebuild.Service, error) {
+	return newRuntimeBuildService(
+		cfg,
+		clock,
+		baseLogger,
+		localModels,
+		inferenceProgressPublisherFactory(progressPublisherFactory),
+		dispatchCompletionObserverFactory(dispatchCompletionFactory),
+	)
+}
+
 func workerApplicationWithProgress(input runtimeBundleBuildInput) (workerapplication.Components, error) {
 	if input.workerApplication.ProviderCommandInjected {
 		return input.workerApplication, nil

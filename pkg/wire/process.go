@@ -10,18 +10,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
@@ -469,40 +465,11 @@ func buildInvocationRunner(
 	if normalized == nil {
 		return nil, fmt.Errorf("build invocation bootstrap: config is required")
 	}
-	runtimeCfg := service.RuntimeHostConfigFromFactoryService(normalized)
-	copied := *runtimeCfg
-	runtimeCfg = &copied
-	if runtimeCfg.Logger == nil {
-		runtimeCfg.Logger = zap.NewNop()
-	}
-	runtimeCfg.Clock = factory.EnsureClock(runtimeCfg.Clock)
-	core, err := InjectRuntimeCore(ctx, runtimeCfg)
+	svc, err := InjectFactoryService(ctx, normalized)
 	if err != nil {
 		return nil, err
 	}
-	svc := completeInvocationServiceFacade(core, normalized)
-	bootstrap, err := service.NewInvocationBootstrap(svc)
-	if err != nil {
-		return nil, err
-	}
-	return &wireInvocationRunner{InvocationBootstrap: bootstrap, core: core}, nil
-}
-
-type wireInvocationRunner struct {
-	*service.InvocationBootstrap
-	core *runtimehost.Core
-}
-
-func (runner *wireInvocationRunner) InvokeModel(
-	ctx context.Context,
-	modelName string,
-	request factoryapi.ModelInvocationRequest,
-) (apisurface.ModelInvocationResult, error) {
-	return runner.Service.InvokeModel(ctx, modelName, request)
-}
-
-func completeInvocationServiceFacade(core *runtimehost.Core, cfg *service.FactoryServiceConfig) *service.FactoryService {
-	return provideFactoryServiceFromRuntimeHostCore(core, cfg)
+	return service.NewInvocationBootstrap(svc)
 }
 
 func applicationModeForProcess(mode initializer.ProcessMode) (initializer.Mode, error) {

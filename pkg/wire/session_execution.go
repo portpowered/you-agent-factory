@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -21,6 +21,7 @@ import (
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	"go.uber.org/zap"
 )
 
@@ -44,10 +45,40 @@ func BuildSessionExecutionWithApplication(
 	request sessionexecutioncli.ServiceRequest,
 	application workerapplication.Components,
 ) (sessionexecutioncli.ServiceOwner, error) {
-	return buildSessionExecutionService(ctx, request, func(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
-		cfg.WorkerApplication = application
-		return InjectRuntimeCore(ctx, cfg)
+	provider, err := normalizeSessionExecutionProvider(request.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if provider != factorysessionexecution.ExecutionProviderJavaScriptRuntime {
+		return buildSessionExecutionService(ctx, request, InjectRuntimeCore)
+	}
+	projectRoot, err := resolveSessionExecutionProjectRoot(request.ProjectRoot)
+	if err != nil {
+		return nil, err
+	}
+	persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	var workerProvider workers.Provider
+	if request.ChildExecutorMode == factorysessionexecution.ChildExecutorModeLive {
+		if !application.Valid() {
+			return nil, fmt.Errorf("construct session worker provider: worker application is required")
+		}
+		workerProvider, err = application.Provider.New()
+		if err != nil {
+			return nil, fmt.Errorf("construct session worker provider: %w", err)
+		}
+	}
+	execution, err := factorysessionexecution.NewExecutionService(provider, factorysessionexecution.ServiceConfig{
+		ProjectRoot: projectRoot, ChildExecutorMode: request.ChildExecutorMode,
+		Provider: workerProvider, ProviderExecutor: providerexecution.NewExecutor(workerProvider),
+		Persistence: persistence, Clock: factory.EnsureClock(nil),
 	})
+	if err != nil {
+		return nil, err
+	}
+	return ownedExecutionService{Service: execution}, nil
 }
 
 // SessionExecutionBuilderWithEdges binds process-selected worker edges to the
@@ -203,7 +234,7 @@ func buildRuntimeBackedSessionExecutionGraph(
 	resources := &resourceSet{}
 	if bundle := core.StartupBundle(); bundle != nil {
 		resources.add("runtime core", closeFunc(func() error {
-			return composebridge.CloseRuntimeBundleSinks(bundle.LogSink, bundle.MetricsSink)
+			return factoryservice.CloseBundleSinks(bundle.LogSink, bundle.MetricsSink)
 		}))
 	}
 	graph, err := assembleProductionGraph(core, cfg, Inputs{MCPInput: input, MCPOutput: output}, resources)

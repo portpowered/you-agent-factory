@@ -37,7 +37,7 @@ Read these architecture notes when the work touches their area:
 
 - `docs/architecture/architecture.md` for backend loop, service/session
   boundaries, event stream, frontend composition, and graph-editor state flow.
-- `docs/architecture/structures.md` to understand the overall interaction of components within the system. 
+- `docs/architecture/structures.md` to understand the overall interaction of components within the system.
 - `docs/architecture/data-model.md` for public resource vocabulary and the
   customer/internal data-model split.
 

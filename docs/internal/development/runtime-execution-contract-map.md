@@ -89,8 +89,8 @@ These names describe destination ownership, not the current package topology:
 | `pkg/wire` | Construct one explicit application dependency graph from normalized configuration and injected filesystem, environment, time, process, persistence, runtime, and provider dependencies. It owns construction, not domain policy or process startup. | May import inward domain/platform owners to assemble them. It must not be imported by domain packages or transport packages, and it must not start transports. |
 | `pkg/initializer` | Start, stop, cancel, join, and unwind API, CLI, MCP, sidecars, and other already-built process adapters. | Must receive constructed core collaborators; it must not lazily construct domain services or rebuild Factory Session runtimes, providers, persistence, model hosts, or other core dependencies. |
 
-Current composition remains under `cmd/factory/compose`, `pkg/composebridge`,
-`pkg/runtimehost`, broad `pkg/service` construction paths, and the existing
+Current composition remains under `pkg/wire`, `pkg/runtimehost`, broad
+`pkg/service` construction paths, and the existing
 `pkg/initializer` adapters. Existing architecture notes call the future graph
 builder `pkg/inject`; for the foundation batch, that provisional name is
 superseded by the approved `pkg/wire` destination above. This story does not
