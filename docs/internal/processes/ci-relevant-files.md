@@ -11,6 +11,12 @@
   smoke checks. Do not publish a dashboard artifact unless a downstream lane
   genuinely consumes that exact bundle; the browser integration harness builds
   its own origin-scoped bundle.
+  The `Build, Lint, and API` compatibility job publishes the legacy required
+  status after those three independent jobs finish. It uses `always()` so a
+  failed or cancelled prerequisite becomes an explicit failed compatibility
+  result instead of leaving the required context pending. Keep this transition
+  job free of verification work, and remove it once the repository ruleset
+  requires the three focused statuses directly.
   Release Surface Smoke and PR Inference Approval are also independent jobs:
   neither may depend on Build, Lint, or API. Release smoke rebuilds the dashboard
   and CLI and installs Playwright locally; inference approval restores its own

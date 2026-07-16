@@ -311,6 +311,39 @@ jobs:
         timeout-minutes: 30
         run: make verify-api
 
+  build-lint-api-compatibility:
+    name: Build, Lint, and API
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - build
+      - lint
+      - api
+    if: ${{ always() }}
+    steps:
+      - name: Reconcile legacy required status
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          API_RESULT: ${{ needs.api.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Build, Lint, and API compatibility status"
+            echo
+            echo "- Build: ${BUILD_RESULT}"
+            echo "- Lint: ${LINT_RESULT}"
+            echo "- API: ${API_RESULT}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$BUILD_RESULT" != "success" || "$LINT_RESULT" != "success" || "$API_RESULT" != "success" ]]; then
+            echo "Build, Lint, and API must all succeed; got Build=${BUILD_RESULT}, Lint=${LINT_RESULT}, API=${API_RESULT}." >&2
+            exit 1
+          fi
+
+          echo "Independent Build, Lint, and API checks succeeded."
+
   release-surface-smoke:
     name: Release Surface Smoke
     runs-on: ubuntu-latest
