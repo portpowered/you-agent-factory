@@ -298,7 +298,7 @@ func (r *recordingReader) Read(data []byte) (int, error) {
 	n, err := r.source.Read(data)
 	if n > 0 {
 		r.recorder.record(data[:n])
-		if r.recorder.responseCount() > 1 {
+		if r.gate != nil && r.recorder.responseCount() > 1 {
 			select {
 			case <-r.gate:
 			case <-time.After(testTimeout):
