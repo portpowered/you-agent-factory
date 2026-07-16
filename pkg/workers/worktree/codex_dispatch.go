@@ -2,17 +2,13 @@ package worktree
 
 import (
 	"strings"
-
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// ShouldPrepareFactoryWorktreeForCodex reports whether a Codex model workstation
-// dispatch should materialize a factory-local git worktree before execution.
-// Preparation runs when execution will use the Codex provider, a worktree template
-// resolved to a name, and the workstation did not also author a workingDirectory
-// template. Callers must pass the resolved execution model provider (not runner ID
-// alone) so legacy modelProvider: claude workstations with default runner selection
-// keep CLI --worktree passthrough.
+// ShouldPrepareFactoryWorktreeForCodex reports whether a model workstation dispatch
+// should materialize a factory-local git worktree before execution. The historical
+// name remains for compatibility. A resolved worktree is factory-managed for every
+// supported agent provider, so model/provider selection cannot bypass isolation.
+// A workstation with an authored workingDirectory retains CLI worktree passthrough.
 func ShouldPrepareFactoryWorktreeForCodex(
 	executionModelProvider string,
 	authoredWorkingDirectory string,
@@ -24,5 +20,5 @@ func ShouldPrepareFactoryWorktreeForCodex(
 	if strings.TrimSpace(authoredWorkingDirectory) != "" {
 		return false
 	}
-	return strings.TrimSpace(executionModelProvider) == string(interfaces.ModelProviderCodex)
+	return strings.TrimSpace(executionModelProvider) != ""
 }

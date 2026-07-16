@@ -92,6 +92,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 
 **Packaged operator guidance**
 
+- Packaged factories that must honor `--default-worker-model-provider` and
+  `--default-worker-model` should omit authored worker `modelProvider` and
+  `model` fields. `runtimebuild.Service` applies those resolved operator
+  defaults to each omitted model-worker field before dispatch; a
+  factory-managed worktree must remain prepared when that selection changes.
+
 - `docs/reference/run.md` (invocation output modes and copyable examples);
   cross-link `you docs config` for return/output policy
 - Provider fidelity variability:

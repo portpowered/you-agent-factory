@@ -1,13 +1,19 @@
 package fix
 
 import (
+	"context"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"github.com/portpowered/infinite-you/pkg/workers/worktree"
+	"go.uber.org/zap"
 )
 
 func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) {
@@ -39,6 +45,11 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 		}
 	}
 	assertFixWorktreeInvocation(t, cfg, workstations)
+	for _, worker := range cfg.Workers {
+		if worker.ModelProvider != "" || worker.Model != "" {
+			t.Fatalf("worker %q has fixed model selection %#v, want operator-configurable fields", worker.Name, worker)
+		}
+	}
 	if workstations[PackagedImplementWorkstationName].Kind != interfaces.WorkstationKindRepeater {
 		t.Fatalf("implement workstation kind = %q, want repeater", workstations[PackagedImplementWorkstationName].Kind)
 	}
@@ -48,6 +59,49 @@ func TestBuiltInFactoryJSON_ModelsIsolatedPlanImplementReviewLoop(t *testing.T) 
 	for _, target := range factoryvalidation.Validate(cfg).Targets {
 		if target.Severity == factoryvalidation.SeverityError {
 			t.Fatalf("validation target = %#v", target)
+		}
+	}
+}
+
+func TestBuiltInFixFactory_AppliesOperatorModelSelectionToEveryStage(t *testing.T) {
+	globalRoot := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+	application, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	if err != nil {
+		t.Fatalf("workerapplication.New: %v", err)
+	}
+	builder, err := runtimebuild.New(runtimebuild.Config{
+		ApplyOperatorDefaults: true,
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider: "CLAUDE",
+			WorkerModel:         "claude-sonnet-4-20250514",
+		},
+		WorkerApplication: application,
+	}, factory.EnsureClock(nil), zap.NewNop(), func(context.Context, runtimebuild.SessionBuildSpec) (any, error) {
+		return struct{}{}, nil
+	})
+	if err != nil {
+		t.Fatalf("runtimebuild.New: %v", err)
+	}
+	spec, err := builder.BuildSpec(context.Background(), runtimebuild.SessionSpecInput{
+		Dir: resolution.FactoryDir, FolderPath: resolution.FactoryDir, SessionID: "~default", ExecutionBaseDir: resolution.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("BuildSpec: %v", err)
+	}
+	for _, name := range []string{"fix-planner", "fix-implementer", "fix-reviewer"} {
+		worker, ok := spec.LoadedFactoryCfg.Worker(name)
+		if !ok {
+			t.Fatalf("worker %q missing", name)
+		}
+		if worker.ModelProvider != "claude" || worker.Model != "claude-sonnet-4-20250514" {
+			t.Fatalf("worker %q selection = %q/%q, want claude/claude-sonnet-4-20250514", name, worker.ModelProvider, worker.Model)
 		}
 	}
 }

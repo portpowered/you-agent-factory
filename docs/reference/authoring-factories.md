@@ -311,6 +311,13 @@ The invocation trace is appended to a supplied prefix, keeping concurrent
 sessions isolated. Names are confined to the factory's worktree parent. Empty,
 absolute, or parent-traversing names are rejected before any worktree filesystem
 operation.
+
+`@you/fix` leaves planner, implementer, and reviewer model fields unset so the
+supported `--default-worker-model-provider` and `--default-worker-model`
+operator selections apply consistently to every stage. Invalid provider values
+fail through the normal invocation configuration diagnostics. The selected
+provider still uses the same factory-managed isolated worktree and review gate.
+
 The workflow then routes one `fix` request through
 `plan-fix`, the repeating `implement-fix` stage, and `review-fix`. Rejected
 review returns the same request to implementation; only an approved response

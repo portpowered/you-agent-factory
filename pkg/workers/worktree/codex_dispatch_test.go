@@ -36,10 +36,10 @@ func TestShouldPrepareFactoryWorktreeForCodex(t *testing.T) {
 			want:                   false,
 		},
 		{
-			name:                   "SkipsForNonCodexExecutionProvider",
+			name:                   "PreservesIsolationForNonCodexExecutionProvider",
 			executionModelProvider: string(interfaces.ModelProviderClaude),
 			resolvedWorktree:       "feature-a",
-			want:                   false,
+			want:                   true,
 		},
 	}
 

@@ -42,9 +42,9 @@
     }
   ],
   "workers": [
-    {"name": "fix-planner", "type": "AGENT_WORKER", "modelProvider": "CODEX", "promptFile": "prompts/planner.md"},
-    {"name": "fix-implementer", "type": "AGENT_WORKER", "modelProvider": "CODEX", "stopToken": "<COMPLETE>", "promptFile": "prompts/implementer.md"},
-    {"name": "fix-reviewer", "type": "AGENT_WORKER", "modelProvider": "CODEX", "stopToken": "<COMPLETE>", "promptFile": "prompts/reviewer.md"}
+    {"name": "fix-planner", "type": "AGENT_WORKER", "promptFile": "prompts/planner.md"},
+    {"name": "fix-implementer", "type": "AGENT_WORKER", "stopToken": "<COMPLETE>", "promptFile": "prompts/implementer.md"},
+    {"name": "fix-reviewer", "type": "AGENT_WORKER", "stopToken": "<COMPLETE>", "promptFile": "prompts/reviewer.md"}
   ],
   "workstations": [
     {
