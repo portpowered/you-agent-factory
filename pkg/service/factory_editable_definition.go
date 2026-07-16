@@ -309,9 +309,6 @@ func newFactorySaveService(fs *FactoryService) *factorysave.Service {
 }
 
 func wireFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) factorySaveSaver {
-	if cfg != nil && cfg.FactorySave != nil {
-		return cfg.FactorySave
-	}
 	return newFactorySaveService(fs)
 }
 
