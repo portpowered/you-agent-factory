@@ -254,6 +254,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/factory/packages/packageassets`. Their `sourceRef` must use the
   corresponding materialized `scripts/...` path, which `you config init`
   installs as editable factory files.
+- Packaged JavaScript workflows can use `parallel([...])` with literal
+  `agent.run` specifications for bounded specialist dispatches. Keep the
+  factory `defaultPolicy.maxAgents` and `concurrency` explicit, and prove both
+  a no-delegation completion and completed child-dispatch synthesis through the
+  materialized workflow runtime.
 - Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
   approved compatibility-only command metadata belongs in
   `contracts/cli/deprecated-commands.json`, while its classification, successor,
