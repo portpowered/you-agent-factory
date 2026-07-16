@@ -898,6 +898,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Complement with `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
   and `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` for
   transitioner and topology-level routing proofs.
+- Named `@you/review` CLI invocation coverage lives in
+  `tests/functional/smoke/cli_named_review_invocation_smoke_test.go`. Materialize
+  the package beneath an isolated home, run the built CLI with scripted mock
+  workers, and use a durable reviewer counter to prove a rejection precedes
+  approval. Run the same gate for default configuration, edited materialized
+  worker configuration, and `--default-worker-model-provider` /
+  `--default-worker-model` operator overrides.
 - Named `@you/goal` operator-control smoke coverage lives in
   `tests/functional/smoke/cli_named_goal_operator_controls_smoke_test.go`,
   proving API and CLI pause/resume buffering, ordered post-resume drain via
