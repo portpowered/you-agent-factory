@@ -2215,12 +2215,12 @@
             "canonicalEnglish": "List persisted named factories"
           },
           "description": {
-            "canonicalEnglish": "List persisted named factories stored under a factory root.\n\nBy default the command lists project-local named factories from ./factory and writes a human-readable table with each factory name, on-disk directory, and whether it is selected by .current-factory. Global built-ins and customer-edited shared factories live under ~/.you-agent-factory/you-agent-factories and are listed only when you point --dir there explicitly. The command lists exactly one root at a time and never merges project-local and global entries. Use global --json for scripting output."
+            "canonicalEnglish": "List persisted named factories stored under a factory root.\n\nBy default the command lists project-local named factories from ./factory and writes a human-readable table with each factory name, on-disk directory, and whether it is selected by .current-factory. Global built-ins and customer-edited shared factories live under ~/.you-agent-factory/factories and are listed only when you point --dir there explicitly. The command lists exactly one root at a time and never merges project-local and global entries. Use global --json for scripting output."
           }
         },
         "examples": [
           "you factory list",
-          "you factory list --dir ~/.you-agent-factory/you-agent-factories",
+          "you factory list --dir ~/.you-agent-factory/factories",
           "you --json factory list --dir my-factory"
         ]
       },
@@ -2234,7 +2234,7 @@
       "runnable": true,
       "usage": {
         "line": "list",
-        "example": "  # List named factories under the default factory root.\n  you factory list\n\n  # List global built-ins and shared factories.\n  you factory list --dir ~/.you-agent-factory/you-agent-factories\n\n  # List factories from a custom root as JSON.\n  you --json factory list --dir my-factory"
+        "example": "  # List named factories under the default factory root.\n  you factory list\n\n  # List global built-ins and shared factories.\n  you factory list --dir ~/.you-agent-factory/factories\n\n  # List factories from a custom root as JSON.\n  you --json factory list --dir my-factory"
       },
       "arguments": {
         "you.factory.list.arg.0": {

@@ -269,7 +269,7 @@ you factory create my-team-review --from ./factory.json
 
 By default persisted project factories live under `./factory`, and
 `you run --named <name>` resolves that project-local root before checking the
-global shared root at `~/.you-agent-factory/you-agent-factories`.
+global shared root at `~/.you-agent-factory/factories`.
 
 ```bash
 you run --named my-team-review "Review the release notes"
@@ -368,7 +368,7 @@ also surface `INVOCATION_BLOCKED` or `INVOCATION_NEEDS_HUMAN`. Run
 add goal-specific inspect or resume commands.
 
 `you config init` installs the built-in into
-`~/.you-agent-factory/you-agent-factories`; named invocations only read the
+`~/.you-agent-factory/factories`; named invocations only read the
 project-local and global copies already on disk. That keeps the built-in
 editable: if you modify the installed
 `workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
@@ -381,8 +381,13 @@ factories:
 
 ```bash
 you factory list
-you factory list --dir ~/.you-agent-factory/you-agent-factories
+you factory list --dir ~/.you-agent-factory/factories
 ```
+
+On upgrade, `you config init` moves valid factories from the retired
+`~/.you-agent-factory/you-agent-factories` root into the canonical root. If a
+factory already exists in both locations, initialization preserves both copies
+and reports the conflict so you can compare them without losing customer edits.
 
 ### 4. Submit work
 

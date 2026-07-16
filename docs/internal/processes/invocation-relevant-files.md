@@ -247,6 +247,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/config/operatorconfig` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
+- When global named-factory guidance changes, update the handwritten CLI help in
+  `pkg/transports/cli/root_factory.go` and `root_work.go`, the authored
+  `contracts/cli/commands.json` records, and `docs/reference/authoring-factories.md`
+  plus `config.md`. Run `make cli-manifest-generate` and
+  `make contracts-generate` for derived CLI artifacts, then update intentional
+  CLI baselines and run `make docs-reference-smoke`.
 - Persisted local `backendScopeID` values live in the same
   `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
   logic in `pkg/config/systemconfig`, resolve it during `service.BuildFactoryCore`

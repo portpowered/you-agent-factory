@@ -679,6 +679,7 @@ func TestRunCommand_HelpUsesCanonicalDocsAndCompleteInputs(t *testing.T) {
 		"you docs packaged-goal",
 		"you docs packaged-tts",
 		"you run --named @you/tts\n",
+		"~/.you-agent-factory/you-agent-factories",
 	} {
 		if strings.Contains(got, retired) {
 			t.Fatalf("run help contains retired or incomplete guidance %q:\n%s", retired, got)

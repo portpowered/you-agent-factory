@@ -5,7 +5,7 @@ default-worker-model-provider			default worker model provider for model workers 
 dir		factory	factory base directory
 factory			path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input
 json		false	emit structured JSON on stdout for supported commands; diagnostics remain on stderr
-named			canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/you-agent-factories; built-ins materialize there on first use and remain editable
+named			canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable
 no-record		false	disable the default replay artifact for this invocation
 output			invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs
 port		0	deprecated; use --server

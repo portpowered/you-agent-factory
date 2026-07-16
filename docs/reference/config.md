@@ -12,10 +12,13 @@ Run the initializer once for a new user home:
 you config init
 ```
 
-It creates `~/.you-agent-factory/config.json` and the named-factory root used by
-packaged defaults. Re-running it preserves an existing configuration and
-already-materialized packaged factories. Add global `--json` when automation
-needs the paths and per-file outcomes.
+It creates `~/.you-agent-factory/config.json` and materializes packaged defaults
+under `~/.you-agent-factory/factories`. Re-running it preserves an existing
+configuration and already-materialized packaged factories. During upgrade it
+moves valid factories from the retired `~/.you-agent-factory/you-agent-factories`
+root unless a same-named canonical factory already exists; conflicts preserve
+both copies and report the locations. Add global `--json` when automation needs
+the paths and per-file outcomes.
 
 The operator file can supply defaults for model-backed workers that omit their
 own provider or model:

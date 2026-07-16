@@ -235,13 +235,13 @@ func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) 
 			"By default the command lists project-local named factories from ./factory and writes a " +
 			"human-readable table with each factory name, on-disk directory, and whether it is selected " +
 			"by .current-factory. Global built-ins and customer-edited shared factories live under " +
-			"~/.you-agent-factory/you-agent-factories and are listed only when you point --dir there explicitly. " +
+			"~/.you-agent-factory/factories and are listed only when you point --dir there explicitly. " +
 			"The command lists exactly one root at a time and never merges project-local and global entries. " +
 			"Use global --json for scripting output.",
 		Example: "  # List named factories under the default factory root.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
 			"  # List global built-ins and shared factories.\n" +
-			"  " + cliBinaryName + " factory list --dir ~/.you-agent-factory/you-agent-factories\n\n" +
+			"  " + cliBinaryName + " factory list --dir ~/.you-agent-factory/factories\n\n" +
 			"  # List factories from a custom root as JSON.\n" +
 			"  " + cliBinaryName + " --json factory list --dir my-factory",
 		SilenceUsage: true,
