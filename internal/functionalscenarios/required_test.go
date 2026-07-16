@@ -22,6 +22,81 @@ func TestRequiredCustomerFlow(t *testing.T) {}
 	}
 }
 
+func TestCheckRequiredScenariosAcceptsReviewedNonRequiredSSEDispositions(t *testing.T) {
+	t.Parallel()
+
+	manifest := &RequiredManifest{
+		FormatVersion: RequiredManifestFormatVersion,
+		NonRequiredScenarios: []NonRequiredDisposition{
+			{
+				StableID: globalEventsStableID, Interface: InterfaceSSE,
+				Disposition: SSEDeprecatedLaterRemoval, ReviewedReason: "Compatibility stream is retained only until removal.",
+			},
+			{
+				StableID: responseEventsStableID, Interface: InterfaceSSE,
+				Disposition: SSECurrentlyDeferred, ReviewedReason: "Response-event stream coverage is deferred.",
+			},
+		},
+	}
+	if err := CheckRequiredScenarios(t.TempDir(), manifest); err != nil {
+		t.Fatalf("CheckRequiredScenarios() error = %v", err)
+	}
+}
+
+func TestCheckRequiredScenariosRejectsWaivedOrUnclassifiedRequiredSSE(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		manifest *RequiredManifest
+		want     string
+	}{
+		{
+			name: "required canonical stream cannot use non-required disposition",
+			manifest: &RequiredManifest{
+				FormatVersion: RequiredManifestFormatVersion,
+				NonRequiredScenarios: []NonRequiredDisposition{{
+					StableID: sessionEventsStableID, Interface: InterfaceSSE,
+					Disposition: SSECurrentlyDeferred, ReviewedReason: "incorrect waiver",
+				}},
+			},
+			want: `non-required functional scenario "sse/getEventsBySessionId" [invalid-disposition]`,
+		},
+		{
+			name: "required SSE needs qualifying classification",
+			manifest: &RequiredManifest{
+				FormatVersion: RequiredManifestFormatVersion,
+				Scenarios: []RequiredScenario{{
+					StableID: sessionEventsStableID, Interface: InterfaceSSE, Lane: LaneShort,
+				}},
+			},
+			want: `required functional scenario "sse/getEventsBySessionId" [invalid-classification]`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			err := CheckRequiredScenarios(t.TempDir(), test.manifest)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("CheckRequiredScenarios() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCheckRequiredScenariosKeepsRequiredCanonicalSSEInRequiredLane(t *testing.T) {
+	t.Parallel()
+
+	manifest := requiredFixture("tests/functional/missing_sse_test.go::TestCanonicalSessionEvents")
+	manifest.Scenarios[0].StableID = sessionEventsStableID
+	manifest.Scenarios[0].Interface = InterfaceSSE
+	err := CheckRequiredScenarios(t.TempDir(), manifest)
+	want := `required functional scenario "sse/getEventsBySessionId" [missing-test]`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckRequiredScenarios() error = %v, want %q", err, want)
+	}
+}
+
 func TestCheckRequiredScenariosReportsStableViolationCategories(t *testing.T) {
 	t.Parallel()
 

@@ -19,7 +19,7 @@ func TestRunChecksRepositoryRequiredScenarioManifest(t *testing.T) {
 	if err := run(config{root: root, manifestPath: defaultManifestPath}, &stdout); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
-	if got := stdout.String(); got != "[agent-factory:required-functional] 1 required short customer-boundary scenario(s) are current\n" {
+	if got := stdout.String(); got != "[agent-factory:required-functional] 1 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit\n" {
 		t.Fatalf("stdout = %q", got)
 	}
 }

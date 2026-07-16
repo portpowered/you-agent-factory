@@ -20,13 +20,25 @@ const (
 	ViolationSkippedTest           = "skipped-test"
 	ViolationLongOnly              = "long-only"
 	ViolationInvalidClassification = "invalid-classification"
+	ViolationInvalidDisposition    = "invalid-disposition"
 )
 
-// RequiredManifest is the reviewed minimum set that must remain runnable in
-// the deterministic short functional lane through a customer boundary.
+// RequiredManifest records both the reviewed minimum that must remain runnable
+// and the narrow set of reviewed SSE surfaces that are explicitly non-required.
 type RequiredManifest struct {
-	FormatVersion string             `json:"formatVersion"`
-	Scenarios     []RequiredScenario `json:"scenarios"`
+	FormatVersion        string                   `json:"formatVersion"`
+	Scenarios            []RequiredScenario       `json:"scenarios"`
+	NonRequiredScenarios []NonRequiredDisposition `json:"nonRequiredScenarios,omitempty"`
+}
+
+// NonRequiredDisposition records a reviewed exception to required short-lane
+// coverage. Only known public SSE surfaces with an explicit product decision
+// may appear here; required streams cannot be waived through this list.
+type NonRequiredDisposition struct {
+	StableID       string `json:"stableId"`
+	Interface      string `json:"interface"`
+	Disposition    string `json:"disposition"`
+	ReviewedReason string `json:"reviewedReason"`
 }
 
 // RequiredScenario binds one stable public scenario to its required test and
@@ -75,7 +87,7 @@ func CheckRequiredScenarios(repositoryRoot string, manifest *RequiredManifest) e
 	if manifest.FormatVersion != RequiredManifestFormatVersion {
 		return fmt.Errorf("check required functional scenarios: unknown formatVersion %q", manifest.FormatVersion)
 	}
-	seen := make(map[string]bool, len(manifest.Scenarios))
+	seen := make(map[string]bool, len(manifest.Scenarios)+len(manifest.NonRequiredScenarios))
 	for _, scenario := range manifest.Scenarios {
 		if seen[scenario.StableID] {
 			return requiredViolation(scenario, ViolationInvalidClassification, "stable ID is declared more than once")
@@ -87,6 +99,34 @@ func CheckRequiredScenarios(repositoryRoot string, manifest *RequiredManifest) e
 		if err := checkRequiredTest(repositoryRoot, scenario); err != nil {
 			return err
 		}
+	}
+	for _, disposition := range manifest.NonRequiredScenarios {
+		if seen[disposition.StableID] {
+			return nonRequiredViolation(disposition, "stable ID is also declared as a required scenario or non-required disposition")
+		}
+		seen[disposition.StableID] = true
+		if err := checkNonRequiredDisposition(disposition); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkNonRequiredDisposition(disposition NonRequiredDisposition) error {
+	wantDisposition := ""
+	switch disposition.StableID {
+	case globalEventsStableID:
+		wantDisposition = SSEDeprecatedLaterRemoval
+	case responseEventsStableID:
+		wantDisposition = SSECurrentlyDeferred
+	default:
+		return nonRequiredViolation(disposition, "stable ID is not a reviewed non-required SSE surface")
+	}
+	if disposition.Interface != InterfaceSSE || disposition.Disposition != wantDisposition || strings.TrimSpace(disposition.ReviewedReason) == "" {
+		return nonRequiredViolation(
+			disposition,
+			fmt.Sprintf("interface=%q disposition=%q reviewedReasonPresent=%t; want interface=%q disposition=%q and a reviewed reason", disposition.Interface, disposition.Disposition, strings.TrimSpace(disposition.ReviewedReason) != "", InterfaceSSE, wantDisposition),
+		)
 	}
 	return nil
 }
@@ -183,4 +223,13 @@ func hasFunctionalLongBuildConstraint(file *ast.File) bool {
 
 func requiredViolation(scenario RequiredScenario, category, detail string) error {
 	return RequiredViolation{StableID: scenario.StableID, Category: category, Detail: detail}
+}
+
+func nonRequiredViolation(disposition NonRequiredDisposition, detail string) error {
+	return fmt.Errorf(
+		"non-required functional scenario %q [%s]: %s; record only the reviewed deprecated or deferred SSE disposition, or move the scenario into the required short customer-boundary list",
+		disposition.StableID,
+		ViolationInvalidDisposition,
+		detail,
+	)
 }
