@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factoryevent"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestFactoryEventTransportMappingRejectsMalformedCanonicalPayload(t *testing.T) {
-	_, err := factoryevent.SliceToAPI([]interfaces.FactoryEvent{{
+	_, err := apisurface.FactoryEventsToAPI([]interfaces.FactoryEvent{{
 		Id:            "factory-event/run-finished",
 		Payload:       json.RawMessage(`{"state":`),
 		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,

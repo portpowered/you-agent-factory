@@ -7,7 +7,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
@@ -320,26 +319,6 @@ func canonicalDispatchLifecycleEventTime(eventTime time.Time) time.Time {
 // ErrReconnectCursorNotFound reports that the reconnect cursor did not match
 // any recorded event.
 var ErrReconnectCursorNotFound = fmt.Errorf("reconnect cursor not found in event history")
-
-// BuildReconnectReplay returns the historical events a client should apply after
-// reconnecting from a last acknowledged event id or sequence. When durable
-// dispatch state advanced beyond the acknowledged projection, synthetic
-// DISPATCH_RECONCILED facts are appended with replayed=true.
-func BuildReconnectReplay(
-	events []factoryapi.FactoryEvent,
-	cursor interfaces.FactoryEventReconnectCursor,
-	scope interfaces.FactoryEventReconnectScope,
-) ([]factoryapi.FactoryEvent, error) {
-	domainEvents, err := domainFactoryEvents(events)
-	if err != nil {
-		return nil, err
-	}
-	replay, err := buildDomainReconnectReplay(domainEvents, cursor, scope)
-	if err != nil {
-		return nil, err
-	}
-	return generatedFactoryEvents(replay), nil
-}
 
 // BuildCanonicalReconnectReplay returns the historical canonical events a
 // domain consumer should apply after reconnecting from an acknowledged cursor.

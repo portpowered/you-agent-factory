@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -984,11 +982,11 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	}
 
 	handle := liveSessionHandle(session)
-	eventsSnapshot := []factoryapi.FactoryEvent(nil)
+	eventsSnapshot := []interfaces.FactoryEvent(nil)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
-		eventsSnapshot = handle.Bundle.EventHistory.Events()
+		eventsSnapshot = handle.Bundle.EventHistory.CanonicalEvents()
 	}
-	_, err = events.BuildReconnectReplay(
+	_, err = events.BuildCanonicalReconnectReplay(
 		eventsSnapshot,
 		*options.Reconnect,
 		interfaces.FactoryEventReconnectScope{SessionID: session.ID},
@@ -1196,7 +1194,7 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	bracket := (*interfaces.FactoryWorldSessionBracketState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
-		worldState, err := factoryeventprojection.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
+		worldState, err := projections.ReconstructCanonicalFactoryWorldState(handle.Bundle.EventHistory.CanonicalEvents(), selectedTick)
 		if err != nil {
 			return nil, nil, err
 		}

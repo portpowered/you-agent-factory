@@ -598,13 +598,6 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 			history = append(history, generated)
 		}
 	}
-	if reconnect != nil {
-		replayed, err := factoryevents.BuildReconnectReplay(history, *reconnect, scope)
-		if err != nil {
-			return nil, err
-		}
-		history = replayed
-	}
 	domainHistory := make([]interfaces.FactoryEvent, 0, len(history))
 	for _, event := range history {
 		domainEvent, err := interfaces.NewFactoryEvent(event)
@@ -612,6 +605,13 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 			return nil, err
 		}
 		domainHistory = append(domainHistory, domainEvent)
+	}
+	if reconnect != nil {
+		replayed, err := factoryevents.BuildCanonicalReconnectReplay(domainHistory, *reconnect, scope)
+		if err != nil {
+			return nil, err
+		}
+		domainHistory = replayed
 	}
 	if m.FactoryEventStream != nil {
 		return &interfaces.FactoryEventStream{

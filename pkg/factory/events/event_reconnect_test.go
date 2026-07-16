@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -114,7 +113,7 @@ func TestFactoryEventHistory_Subscribe_DoesNotMissEventsDuringRegistration(t *te
 func TestBuildReconnectReplay_AfterEventIDReturnsOnlyNewerEvents(t *testing.T) {
 	events := reconnectFixtureEvents(t)
 
-	replay, err := BuildReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
+	replay, err := BuildCanonicalReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "dispatch-queued/dispatch-js-1",
 	}, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
 	if err != nil {
@@ -123,10 +122,10 @@ func TestBuildReconnectReplay_AfterEventIDReturnsOnlyNewerEvents(t *testing.T) {
 	if len(replay) != 2 {
 		t.Fatalf("replay = %d events, want interrupted and reconciled only", len(replay))
 	}
-	if replay[0].Type != factoryapi.FactoryEventTypeDispatchInterrupted {
+	if replay[0].Type != interfaces.FactoryEventTypeDispatchInterrupted {
 		t.Fatalf("first replay event = %q, want DISPATCH_INTERRUPTED", replay[0].Type)
 	}
-	if replay[1].Type != factoryapi.FactoryEventTypeDispatchReconciled {
+	if replay[1].Type != interfaces.FactoryEventTypeDispatchReconciled {
 		t.Fatalf("second replay event = %q, want DISPATCH_RECONCILED", replay[1].Type)
 	}
 }
@@ -135,7 +134,7 @@ func TestBuildReconnectReplay_AfterSessionSequenceReturnsOnlyNewerSessionEvents(
 	events := reconnectFixtureEvents(t)
 	sequence := 0
 
-	replay, err := BuildReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
+	replay, err := BuildCanonicalReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
 		AfterSequence: &sequence,
 	}, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
 	if err != nil {
@@ -148,14 +147,14 @@ func TestBuildReconnectReplay_AfterSessionSequenceReturnsOnlyNewerSessionEvents(
 
 func TestBuildReconnectReplay_ReconstructsDispatchStateWithoutSessionCompleted(t *testing.T) {
 	events := reconnectFixtureEvents(t)
-	replay, err := BuildReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
+	replay, err := BuildCanonicalReconnectReplay(events, interfaces.FactoryEventReconnectCursor{
 		AfterEventID: "dispatch-queued/dispatch-js-1",
 	}, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
 	if err != nil {
 		t.Fatalf("BuildReconnectReplay: %v", err)
 	}
 
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(replay, 3)
+	worldState, err := projections.ReconstructCanonicalFactoryWorldState(replay, 3)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -184,11 +183,11 @@ func TestBuildReconnectReplay_IdempotentWhenNoNewEvents(t *testing.T) {
 	events := reconnectFixtureEvents(t)
 	cursor := interfaces.FactoryEventReconnectCursor{AfterEventID: "dispatch-reconciled/dispatch-js-1"}
 
-	first, err := BuildReconnectReplay(events, cursor, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
+	first, err := BuildCanonicalReconnectReplay(events, cursor, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
 	if err != nil {
 		t.Fatalf("first BuildReconnectReplay: %v", err)
 	}
-	second, err := BuildReconnectReplay(events, cursor, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
+	second, err := BuildCanonicalReconnectReplay(events, cursor, interfaces.FactoryEventReconnectScope{SessionID: "session-js"})
 	if err != nil {
 		t.Fatalf("second BuildReconnectReplay: %v", err)
 	}
@@ -197,13 +196,13 @@ func TestBuildReconnectReplay_IdempotentWhenNoNewEvents(t *testing.T) {
 	}
 }
 
-func reconnectFixtureEvents(t *testing.T) []factoryapi.FactoryEvent {
+func reconnectFixtureEvents(t *testing.T) []interfaces.FactoryEvent {
 	t.Helper()
 	t0 := time.Date(2026, 6, 9, 15, 0, 0, 0, time.UTC)
 	sessionID := "session-js"
 	kind := factoryapi.JAVASCRIPT
 	dispatchID := "dispatch-js-1"
-	events := []factoryapi.FactoryEvent{
+	generated := []factoryapi.FactoryEvent{
 		reconnectFixtureEvent(factoryapi.FactoryEventTypeDispatchQueued, "dispatch-queued/"+dispatchID, 1, t0, 0, factoryapi.FactoryEventContext{
 			Sequence:         0,
 			SessionId:        &sessionID,
@@ -235,6 +234,14 @@ func reconnectFixtureEvents(t *testing.T) []factoryapi.FactoryEvent {
 			ReconciliationSource: factoryapi.PROVIDERSESSION,
 			Replayed:             false,
 		}),
+	}
+	events := make([]interfaces.FactoryEvent, len(generated))
+	for index, event := range generated {
+		canonical, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("canonical reconnect fixture event %d: %v", index, err)
+		}
+		events[index] = canonical
 	}
 	return events
 }

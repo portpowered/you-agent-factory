@@ -16,18 +16,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func domainFactoryEvents(events []factoryapi.FactoryEvent) ([]interfaces.FactoryEvent, error) {
-	converted := make([]interfaces.FactoryEvent, 0, len(events))
-	for _, event := range events {
-		domainEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return nil, fmt.Errorf("convert factory event %q to domain envelope: %w", event.Id, err)
-		}
-		converted = append(converted, domainEvent)
-	}
-	return converted, nil
-}
-
 func generatedFactoryEvents(events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
 	converted := make([]factoryapi.FactoryEvent, len(events))
 	for index, event := range events {
