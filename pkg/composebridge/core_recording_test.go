@@ -2,7 +2,6 @@ package composebridge
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -11,15 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"go.uber.org/zap"
 )
-
-func TestNewCollaboratorsRejectsMissingSessionRegistry(t *testing.T) {
-	t.Parallel()
-
-	collaborators, err := NewCollaborators(nil, factory.EnsureClock(nil), zap.NewNop(), nil)
-	if collaborators != (Collaborators{}) || err == nil || !strings.Contains(err.Error(), "registry is required") {
-		t.Fatalf("NewCollaborators() = (%#v, %v), want empty collaborators and registry error", collaborators, err)
-	}
-}
 
 type recordingDurableExecution struct {
 	factorysessionexecution.Service

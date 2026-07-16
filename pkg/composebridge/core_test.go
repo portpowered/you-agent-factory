@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -68,7 +69,7 @@ func TestBuildCore_RejectsRecordAndReplayTogether(t *testing.T) {
 		Logger:     zap.NewNop(),
 	}
 
-	core, err := composebridge.BuildCore(ctx, cfg)
+	core, err := buildCoreForTest(ctx, cfg)
 	if core != nil {
 		t.Fatal("expected BuildCore to return nil core for conflicting record/replay paths")
 	}
@@ -86,7 +87,7 @@ func TestBuildCore_RejectsMissingFactoryConfig(t *testing.T) {
 		Logger: zap.NewNop(),
 	}
 
-	core, err := composebridge.BuildCore(ctx, cfg)
+	core, err := buildCoreForTest(ctx, cfg)
 	if core != nil {
 		t.Fatal("expected BuildCore to return nil core without factory.json")
 	}
@@ -109,7 +110,7 @@ func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	}
 
-	core, err := composebridge.BuildCore(ctx, cfg)
+	core, err := buildCoreForTest(ctx, cfg)
 	if err != nil {
 		t.Fatalf("BuildCore: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestBuildCore_ComposesExplicitlyDisabledPersistence(t *testing.T) {
 
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
+	core, err := buildCoreForTest(context.Background(), &runtimehost.Config{
 		Dir:                                     dir,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
@@ -169,7 +170,7 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 	if err := os.WriteFile(blockedRoot, []byte("blocked"), 0o600); err != nil {
 		t.Fatalf("write blocked root: %v", err)
 	}
-	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
+	core, err := buildCoreForTest(context.Background(), &runtimehost.Config{
 		Dir:                                     dir,
 		ExecutionBaseDir:                        blockedRoot,
 		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
@@ -183,4 +184,36 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 	if !errors.As(err, &validation) || validation.Field != "persistence" {
 		t.Fatalf("BuildCore error = %#v, want wrapped persistence ValidationError", err)
 	}
+}
+
+func buildCoreForTest(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+	root, err := service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
+	if err != nil {
+		return nil, err
+	}
+	if err := service.EnsureBackendScopeForCompose(cfg, root.BaseLogger); err != nil {
+		return nil, err
+	}
+	load, err := service.LoadFactoryConfigForStartup(cfg, root)
+	if err != nil {
+		return nil, err
+	}
+	clock := composebridge.ClockForCompose(cfg, load)
+	sessions := factorysessions.NewRegistry()
+	localModels := composebridge.NewLocalModelDomain(cfg)
+	runtimeBuild, err := composebridge.NewRuntimeBuildService(
+		cfg, clock, root.BaseLogger, &localModels, sessions,
+	)
+	if err != nil {
+		return nil, err
+	}
+	hostedWorkers := composebridge.HostedWorkers(cfg, root.BaseLogger, clock)
+	collaborators := composebridge.Collaborators{
+		Sessions: sessions, LocalModels: localModels, RuntimeBuild: runtimeBuild,
+		WorkersScheduler: composebridge.NewWorkersScheduler(cfg, clock, root.BaseLogger, hostedWorkers),
+	}
+	return composebridge.ComposeCore(
+		ctx, cfg, root, collaborators, load, clock,
+		hostedWorkers,
+	)
 }

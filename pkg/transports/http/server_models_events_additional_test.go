@@ -14,10 +14,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
@@ -479,20 +477,20 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
 
-	transport, err := initializer.InitializeAPITransport(context.Background(), &initializer.Config{
+	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
 		Dir:                      dir,
 		MockWorkersConfig:        factoryconfig.NewEmptyMockWorkersConfig(),
 		Logger:                   zap.NewNop(),
 		SystemConfigHomeDir:      dir,
-		RuntimeFileLoggingPolicy: runtimehost.RuntimeFileLoggingPolicyDisabled,
-		RuntimeMetricsPolicy:     runtimehost.RuntimeMetricsPolicyDisabled,
+		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:     service.RuntimeMetricsPolicyDisabled,
 		ModelAssets:              listModelsWiringAssetPuller{},
 	})
 	if err != nil {
-		t.Fatalf("InitializeAPITransport: %v", err)
+		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	srv := NewServer(transport.SessionAPISurface(), 0, zap.NewNop())
+	srv := NewServer(svc, 0, zap.NewNop())
 	req := httptest.NewRequest(http.MethodGet, "/models", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -506,23 +504,16 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	}
 }
 
-func TestInjectAPITransport_RejectsInvalidFactoryBeforeServing(t *testing.T) {
+func TestServerCompositionRejectsInvalidFactoryBeforeServing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	cfg := &service.FactoryServiceConfig{Dir: t.TempDir()}
 
-	_, errInit := initializer.InitializeAPITransport(ctx, &initializer.Config{Dir: cfg.Dir})
 	_, errService := service.BuildFactoryService(ctx, cfg)
 
-	if errInit == nil {
-		t.Fatal("expected InitializeAPITransport to fail without factory.json")
-	}
 	if errService == nil {
-		t.Fatal("expected BuildFactoryService to fail without factory.json")
-	}
-	if errService.Error() != errInit.Error() {
-		t.Fatalf("InitializeAPITransport error = %q, want %q", errInit, errService)
+		t.Fatal("expected server dependency construction to fail without factory.json")
 	}
 }
 

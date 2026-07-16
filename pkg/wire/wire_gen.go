@@ -8,10 +8,40 @@ package wire
 
 import (
 	"context"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 )
 
 // Injectors from wire.go:
+
+// InjectRuntimeCore constructs the single Factory Session core consumed by the
+// application graph before initializer lifecycle execution.
+func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+	v, err := provideRuntimeHostRoot(cfg)
+	if err != nil {
+		return nil, err
+	}
+	registry := provideFactorySessionsRegistry()
+	v2 := provideRuntimeHostLocalModels(cfg)
+	v3, err := provideRuntimeHostConfigLoad(cfg, v)
+	if err != nil {
+		return nil, err
+	}
+	clock := provideRuntimeHostClock(cfg, v3)
+	logger := provideRuntimeHostBaseLogger(v)
+	service, err := provideRuntimeHostRuntimeBuild(cfg, clock, logger, v2, registry)
+	if err != nil {
+		return nil, err
+	}
+	config := provideRuntimeHostHostedWorkers(cfg, logger, clock)
+	serviceService := provideRuntimeHostWorkers(cfg, clock, logger, config)
+	collaborators := provideRuntimeHostCollaborators(registry, v2, service, serviceService)
+	core, err := provideRuntimeHostCore(ctx, cfg, v, collaborators, v3, clock, config)
+	if err != nil {
+		return nil, err
+	}
+	return core, nil
+}
 
 // InjectFactoryService is the wireinject entry for the factory composition root.
 func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig) (*service.FactoryService, error) {

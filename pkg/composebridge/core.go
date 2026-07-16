@@ -22,7 +22,6 @@ import (
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
 )
 
 // Collaborators groups explicit composition collaborators.
@@ -31,30 +30,6 @@ type Collaborators struct {
 	LocalModels      LocalModelDomain
 	RuntimeBuild     *runtimebuild.Service
 	WorkersScheduler *workersservice.Service
-}
-
-// NewCollaborators builds composition collaborators for startup.
-func NewCollaborators(
-	cfg *runtimehost.Config,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	sessions *factorysessions.Registry,
-) (Collaborators, error) {
-	if sessions == nil {
-		return Collaborators{}, fmt.Errorf("compose session collaborators: registry is required")
-	}
-	startupLocalModels := NewLocalModelDomain(cfg)
-	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
-	runtimeBuild, err := NewRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, sessions)
-	if err != nil {
-		return Collaborators{}, err
-	}
-	return Collaborators{
-		Sessions:         sessions,
-		LocalModels:      startupLocalModels,
-		RuntimeBuild:     runtimeBuild,
-		WorkersScheduler: NewWorkersScheduler(cfg, clock, baseLogger, hostedWorkers),
-	}, nil
 }
 
 // ComposeCore constructs a runtimehost.Core using explicit composition collaborators.
@@ -265,36 +240,4 @@ func composeDurableExecution(
 		return nil, nil, err
 	}
 	return service, persistence.Store(), nil
-}
-
-// BuildCore constructs the normalized runtime graph without attaching a transport host.
-func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
-	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
-		return nil, err
-	}
-	root, err := resolveRoot(cfg)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensurebackendScope(cfg, root.BaseLogger); err != nil {
-		return nil, err
-	}
-	load, err := loadConfig(cfg, root)
-	if err != nil {
-		return nil, err
-	}
-	clock := ClockForCompose(cfg, load)
-	collaborators, err := NewCollaborators(cfg, clock, root.BaseLogger, factorysessions.NewRegistry())
-	if err != nil {
-		return nil, err
-	}
-	return ComposeCore(
-		ctx,
-		cfg,
-		root,
-		collaborators,
-		load,
-		clock,
-		HostedWorkers(cfg, root.BaseLogger, clock),
-	)
 }

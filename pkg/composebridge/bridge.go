@@ -1,5 +1,5 @@
-// Package composebridge exposes runtime-build seams for pkg/initializer startup
-// composition without creating an import cycle between initializer and service.
+// Package composebridge exposes narrow runtime-build adapters consumed by the
+// pkg/wire application graph without creating a runtimehost/service import cycle.
 package composebridge
 
 import (
@@ -108,11 +108,6 @@ func NewStartupLiveSessionHandle(bundle *factoryservice.Bundle, spec *runtimebui
 // WireModelAssetPuller selects the model asset puller for core composition.
 func WireModelAssetPuller(cfg *runtimehost.Config, production LocalModelDomain) localmodels.AssetPuller {
 	return service.WireModelAssetPullerForCompose(cfg, production.Assets)
-}
-
-// NewSessionsRegistry constructs the live session registry collaborator.
-func NewSessionsRegistry() *factorysessions.Registry {
-	return factorysessions.NewRegistry()
 }
 
 // NewModelServiceFromCore constructs a model service from a composed core.

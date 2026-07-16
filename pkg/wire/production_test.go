@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -63,6 +64,43 @@ func TestBuildConstructsRealGraphOnceWithoutStartingLifecycle(t *testing.T) {
 	}
 	if err := graph.Close(); err != nil {
 		t.Fatalf("second Graph.Close() error = %v", err)
+	}
+}
+
+func TestInjectRuntimeCoreSharesSessionFoundationWithCompatibilityConsumers(t *testing.T) {
+	t.Parallel()
+
+	factoryDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, factoryDir, factoryfixtures.MinimalFactoryConfig())
+	starts := 0
+	core, err := wire.InjectRuntimeCore(context.Background(), &runtimehost.Config{
+		Dir: factoryDir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(), Clock: productionClock{},
+		RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+		RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		APIServerStarter: func(context.Context, apisurface.APISurface, int, *zap.Logger) error {
+			starts++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("InjectRuntimeCore() error = %v", err)
+	}
+	if starts != 0 {
+		t.Fatalf("runtime core construction started API lifecycle %d times, want zero", starts)
+	}
+	if core.Sessions() == nil || core.Sessions().Count() != 1 || core.RuntimeBuild() == nil {
+		t.Fatal("runtime core omitted its single initialized registry or runtime-build service")
+	}
+	owner, ok := core.DurableExecution().(interface{ PersistenceStore() runtimepersist.Store })
+	if !ok || core.Persistence() == nil || owner.PersistenceStore() != core.Persistence() {
+		t.Fatal("runtime core durable execution did not retain the Wire-owned persistence store")
+	}
+	host := runtimehost.NewHostFromCore(core)
+	serviceFacade := service.NewFactoryServiceFromRuntimeHostCore(core)
+	if host.DurableExecutionService() != core.DurableExecution() ||
+		serviceFacade.DurableExecutionService() != core.DurableExecution() {
+		t.Fatal("compatibility consumers replaced the Wire-owned durable execution service")
 	}
 }
 

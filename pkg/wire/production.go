@@ -128,6 +128,86 @@ func provideFactoryCore(
 	return service.ComposeFactoryCore(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
 }
 
+func provideRuntimeHostRoot(cfg *runtimehost.Config) (composebridge.Root, error) {
+	return service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
+}
+
+func provideRuntimeHostBaseLogger(root composebridge.Root) *zap.Logger {
+	return root.BaseLogger
+}
+
+func provideRuntimeHostConfigLoad(
+	cfg *runtimehost.Config,
+	root composebridge.Root,
+) (composebridge.ConfigLoad, error) {
+	if err := service.EnsureBackendScopeForCompose(cfg, root.BaseLogger); err != nil {
+		return composebridge.ConfigLoad{}, err
+	}
+	return service.LoadFactoryConfigForStartup(cfg, root)
+}
+
+func provideRuntimeHostClock(
+	cfg *runtimehost.Config,
+	load composebridge.ConfigLoad,
+) factory.Clock {
+	return composebridge.ClockForCompose(cfg, load)
+}
+
+func provideRuntimeHostLocalModels(cfg *runtimehost.Config) composebridge.LocalModelDomain {
+	return composebridge.NewLocalModelDomain(cfg)
+}
+
+func provideRuntimeHostRuntimeBuild(
+	cfg *runtimehost.Config,
+	clock factory.Clock,
+	logger *zap.Logger,
+	localModels composebridge.LocalModelDomain,
+	sessions *factorysessions.Registry,
+) (*runtimebuild.Service, error) {
+	return composebridge.NewRuntimeBuildService(cfg, clock, logger, &localModels, sessions)
+}
+
+func provideRuntimeHostHostedWorkers(
+	cfg *runtimehost.Config,
+	logger *zap.Logger,
+	clock factory.Clock,
+) hostedworkers.Config {
+	return composebridge.HostedWorkers(cfg, logger, clock)
+}
+
+func provideRuntimeHostWorkers(
+	cfg *runtimehost.Config,
+	clock factory.Clock,
+	logger *zap.Logger,
+	hostedWorkers hostedworkers.Config,
+) *workersservice.Service {
+	return composebridge.NewWorkersScheduler(cfg, clock, logger, hostedWorkers)
+}
+
+func provideRuntimeHostCollaborators(
+	sessions *factorysessions.Registry,
+	localModels composebridge.LocalModelDomain,
+	runtimeBuild *runtimebuild.Service,
+	workers *workersservice.Service,
+) composebridge.Collaborators {
+	return composebridge.Collaborators{
+		Sessions: sessions, LocalModels: localModels,
+		RuntimeBuild: runtimeBuild, WorkersScheduler: workers,
+	}
+}
+
+func provideRuntimeHostCore(
+	ctx context.Context,
+	cfg *runtimehost.Config,
+	root composebridge.Root,
+	collaborators composebridge.Collaborators,
+	load composebridge.ConfigLoad,
+	clock factory.Clock,
+	hostedWorkers hostedworkers.Config,
+) (*runtimehost.Core, error) {
+	return composebridge.ComposeCore(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
+}
+
 // Build eagerly constructs the real runtime core, domain services,
 // and transport lifecycle handles without starting listeners or goroutines.
 func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
@@ -139,7 +219,7 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	}
 
 	cfg := *inputs.Config
-	core, err := composebridge.BuildCore(ctx, &cfg)
+	core, err := InjectRuntimeCore(ctx, &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("build production application graph: construct runtime core: %w", err)
 	}

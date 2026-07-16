@@ -6,8 +6,28 @@ import (
 	"context"
 
 	"github.com/google/wire"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 )
+
+// InjectRuntimeCore constructs the single Factory Session core consumed by the
+// application graph before initializer lifecycle execution.
+func InjectRuntimeCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+	wire.Build(
+		provideRuntimeHostRoot,
+		provideRuntimeHostBaseLogger,
+		provideFactorySessionsRegistry,
+		provideRuntimeHostConfigLoad,
+		provideRuntimeHostClock,
+		provideRuntimeHostLocalModels,
+		provideRuntimeHostRuntimeBuild,
+		provideRuntimeHostHostedWorkers,
+		provideRuntimeHostWorkers,
+		provideRuntimeHostCollaborators,
+		provideRuntimeHostCore,
+	)
+	return nil, nil
+}
 
 // InjectFactoryService is the wireinject entry for the factory composition root.
 func InjectFactoryService(
