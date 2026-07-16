@@ -16,7 +16,7 @@ func TestTerminalFixtureObservations_NormalizeAcrossCustomerInterfaces(t *testin
 		failures     int
 	}{
 		{name: "success", observations: TerminalSuccessObservations(), status: "SUCCEEDED", results: 1, failures: 0},
-		{name: "failure", observations: TerminalFailureObservations(), status: "FAILED", results: 0, failures: 1},
+		{name: "failure", observations: TerminalFailureObservations(), status: "FAILED", results: 0, failures: 3},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			got := normalizeFixtureObservations(t, test.observations)

@@ -6,12 +6,8 @@ import (
 	"testing"
 )
 
-func TestNormalizers_EquivalentCapturedObservationsProduceOneProjection(t *testing.T) {
-	session := stableSessionJSON(t)
-	rest := append([]byte(`{"session":`), append(session, '}')...)
-	cli := append([]byte(`{"factorySession":`), append(session, '}')...)
-	mcp := append([]byte(`{"jsonrpc":"2.0","id":"request-7","result":{"factorySession":`), append(session, "}}"...)...)
-
+func TestNormalizers_MapRepresentativeRealCustomerShapes(t *testing.T) {
+	rest, cli, mcp := representativeObservationBundles(t)
 	want, err := NormalizeREST(rest)
 	if err != nil {
 		t.Fatalf("NormalizeREST: %v", err)
@@ -20,51 +16,55 @@ func TestNormalizers_EquivalentCapturedObservationsProduceOneProjection(t *testi
 		name      string
 		normalize func([]byte) (Projection, error)
 		input     []byte
-	}{
-		{name: "CLI JSON", normalize: NormalizeCLIJSON, input: cli},
-		{name: "MCP", normalize: NormalizeMCP, input: mcp},
-	} {
+	}{{"CLI JSON", NormalizeCLIJSON, cli}, {"MCP", NormalizeMCP, mcp}} {
 		t.Run(test.name, func(t *testing.T) {
-			got, err := test.normalize(test.input)
-			if err != nil {
-				t.Fatalf("normalize: %v", err)
+			got, normalizeErr := test.normalize(test.input)
+			if normalizeErr != nil {
+				t.Fatalf("normalize: %v", normalizeErr)
 			}
 			if !reflect.DeepEqual(got, want) {
 				t.Fatalf("projection mismatch\n got: %#v\nwant: %#v", got, want)
 			}
 		})
 	}
+	if got, wantID := want.Results[0].ID, "dur-sess-parity-001:result"; got != wantID {
+		t.Fatalf("derived result correlation id = %q, want %q", got, wantID)
+	}
 }
 
-func TestNormalizeREST_RejectsMissingRequiredStableFact(t *testing.T) {
-	_, err := NormalizeREST([]byte(`{"session":{"identity":{"sessionId":"session-1"}}}`))
-	if err == nil {
-		t.Fatal("NormalizeREST error = nil, want missing lifecycle error")
-	}
-	want := &NormalizationError{Interface: "REST", Field: "lifecycle", Reason: "is required"}
-	if !reflect.DeepEqual(err, want) {
-		t.Fatalf("NormalizeREST error = %#v, want %#v", err, want)
+func TestNormalizers_RejectEveryMissingRequiredScalarFact(t *testing.T) {
+	rest, _, _ := representativeObservationBundles(t)
+	for _, field := range []string{
+		"identity.sessionId", "lifecycle.status", "hashes.sourceHash",
+		"progress.totalDispatches", "progress.completedDispatches",
+		"progress.failedDispatches", "progress.inFlightDispatches",
+	} {
+		t.Run(field, func(t *testing.T) {
+			mutated := removeRequiredScalar(t, rest, field)
+			_, err := NormalizeREST(mutated)
+			want := &NormalizationError{Interface: "REST", Field: field, Reason: "is required"}
+			if !reflect.DeepEqual(err, want) {
+				t.Fatalf("NormalizeREST error = %#v, want %#v", err, want)
+			}
+		})
 	}
 }
 
 func TestNormalizeMCP_RejectsReorderedCanonicalEventCursors(t *testing.T) {
-	session := stableSessionJSON(t)
-	var value map[string]any
-	if err := json.Unmarshal(session, &value); err != nil {
-		t.Fatalf("unmarshal stable session: %v", err)
+	_, _, mcp := representativeObservationBundles(t)
+	var bundle map[string]any
+	if err := json.Unmarshal(mcp, &bundle); err != nil {
+		t.Fatalf("unmarshal MCP bundle: %v", err)
 	}
-	value["eventCursors"] = []any{
-		map[string]any{"sessionId": "session-1", "cursor": "cursor-12", "sequence": 12, "eventType": "DISPATCH_COMPLETED"},
-		map[string]any{"sessionId": "session-1", "cursor": "cursor-11", "sequence": 11, "eventType": "SESSION_COMPLETED"},
-	}
-	encoded, err := json.Marshal(map[string]any{"result": map[string]any{"factorySession": value}})
+	eventsResponse := bundle["events"].(map[string]any)
+	eventsResult := eventsResponse["result"].(map[string]any)
+	events := eventsResult["events"].([]any)
+	events[0], events[1] = events[1], events[0]
+	encoded, err := json.Marshal(bundle)
 	if err != nil {
-		t.Fatalf("marshal observation: %v", err)
+		t.Fatalf("marshal MCP bundle: %v", err)
 	}
 	_, err = NormalizeMCP(encoded)
-	if err == nil {
-		t.Fatal("NormalizeMCP error = nil, want reordered event cursor error")
-	}
 	want := &NormalizationError{Interface: "MCP", Field: "eventCursors[1]", Reason: "must retain a correlated, strictly ordered event cursor"}
 	if !reflect.DeepEqual(err, want) {
 		t.Fatalf("NormalizeMCP error = %#v, want %#v", err, want)
@@ -72,7 +72,8 @@ func TestNormalizeMCP_RejectsReorderedCanonicalEventCursors(t *testing.T) {
 }
 
 func TestNormalizeCLIJSON_PreservesCustomerVisibleCollectionOrder(t *testing.T) {
-	projection, err := NormalizeCLIJSON([]byte(`{"factorySession":` + string(stableSessionJSON(t)) + `}`))
+	_, cli, _ := representativeObservationBundles(t)
+	projection, err := NormalizeCLIJSON(cli)
 	if err != nil {
 		t.Fatalf("NormalizeCLIJSON: %v", err)
 	}
@@ -84,25 +85,81 @@ func TestNormalizeCLIJSON_PreservesCustomerVisibleCollectionOrder(t *testing.T) 
 	}
 }
 
-func stableSessionJSON(t *testing.T) []byte {
+func representativeObservationBundles(t *testing.T) ([]byte, []byte, []byte) {
 	t.Helper()
-	value := Projection{
-		Identity:  FactorySessionIdentity{SessionID: "session-1"},
-		Lifecycle: LifecycleFacts{Status: "SUCCEEDED"},
-		Hashes:    HashFacts{SourceHash: "sha256:source"},
-		Progress:  ProgressFacts{TotalDispatches: 2, CompletedDispatches: 2},
-		Dispatches: []DispatchFact{
-			{SessionID: "session-1", ID: "dispatch-2", Order: 1, Status: "SUCCEEDED", Kind: "WORK"},
-			{SessionID: "session-1", ID: "dispatch-1", Order: 2, Status: "SUCCEEDED", Kind: "WORK"},
-		},
-		Artifacts:    []ArtifactFact{{SessionID: "session-1", ID: "artifact-1", Order: 1, Kind: "RESULT"}},
-		Results:      []ResultFact{{SessionID: "session-1", ID: "result-1", Order: 1, Status: "FINAL", Value: "done"}},
-		Failures:     []FailureFact{},
-		EventCursors: []FactoryEventCursor{{SessionID: "session-1", Cursor: "cursor-11", Sequence: 11, EventType: "DISPATCH_COMPLETED"}},
+	session := json.RawMessage(`{
+		"sessionId":"dur-sess-parity-001","status":"SUCCEEDED","phase":"completed",
+		"sourceHash":"sha256:source","resolvedSource":{"kind":"WORKFLOW_NAME","sourceHash":"sha256:source"},
+		"requestedPolicy":{"policyHash":"sha256:requested"},
+		"effectivePolicyHash":"sha256:effective",
+		"progress":{"totalDispatches":2,"completedDispatches":2,"failedDispatches":0,"inFlightDispatches":0}
+	}`)
+	dispatches := json.RawMessage(`{"sessionId":"dur-sess-parity-001","dispatches":[
+		{"id":"dispatch-2","status":"COMPLETED","dispatchKind":"JAVASCRIPT_TASK"},
+		{"id":"dispatch-1","status":"COMPLETED","dispatchKind":"JAVASCRIPT_TASK"}
+	]}`)
+	artifacts := json.RawMessage(`{"sessionId":"dur-sess-parity-001","artifacts":[
+		{"id":"artifact-1","kind":"FINAL_RESULT","visibility":"PUBLIC"}
+	]}`)
+	result := json.RawMessage(`{"sessionId":"dur-sess-parity-001","resultStatus":"FINAL","sessionStatus":"SUCCEEDED",
+		"primaryResult":[{"type":"text","text":"done"}]}`)
+	cliResult := json.RawMessage(`{"resultStatus":"FINAL","sessionId":"dur-sess-parity-001","sessionStatus":"SUCCEEDED",
+		"primaryResult":[{"text":"done","type":"text"}]}`)
+	events := json.RawMessage(`[
+		{"id":"cursor-11","type":"DISPATCH_RESPONSE","schemaVersion":"agent-factory.event.v1","context":{"sequence":11,"sessionId":"dur-sess-parity-001","tick":1,"eventTime":"2026-07-16T00:00:00Z"},"payload":{}},
+		{"id":"cursor-12","type":"SESSION_RESULT_UPDATED","schemaVersion":"agent-factory.event.v1","context":{"sequence":12,"sessionId":"dur-sess-parity-001","tick":2,"eventTime":"2026-07-16T00:00:01Z"},"payload":{}}
+	]`)
+	rest := marshalBundle(t, session, dispatches, artifacts, result, events, false)
+	cli := marshalBundle(t, session, dispatches, artifacts, cliResult, events, false)
+	mcpEvents := mustMarshal(t, map[string]any{"sessionId": "dur-sess-parity-001", "events": json.RawMessage(events)})
+	mcp := marshalBundle(t, session, dispatches, artifacts, result, mcpEvents, true)
+	return rest, cli, mcp
+}
+
+func marshalBundle(t *testing.T, session, dispatches, artifacts, result, events json.RawMessage, mcp bool) []byte {
+	t.Helper()
+	values := map[string]json.RawMessage{
+		"session": session, "dispatches": dispatches, "artifacts": artifacts, "result": result, "events": events,
 	}
+	if mcp {
+		for field, value := range values {
+			values[field] = mustMarshal(t, map[string]any{"jsonrpc": "2.0", "id": "request-" + field, "result": value})
+		}
+	}
+	return mustMarshal(t, values)
+}
+
+func mustMarshal(t *testing.T, value any) []byte {
+	t.Helper()
 	encoded, err := json.Marshal(value)
 	if err != nil {
-		t.Fatalf("marshal stable session: %v", err)
+		t.Fatalf("marshal observation: %v", err)
 	}
 	return encoded
+}
+
+func removeRequiredScalar(t *testing.T, observation []byte, field string) []byte {
+	t.Helper()
+	var bundle map[string]any
+	if err := json.Unmarshal(observation, &bundle); err != nil {
+		t.Fatalf("unmarshal observation: %v", err)
+	}
+	session := bundle["session"].(map[string]any)
+	switch field {
+	case "identity.sessionId":
+		delete(session, "sessionId")
+	case "lifecycle.status":
+		delete(session, "status")
+	case "hashes.sourceHash":
+		delete(session, "sourceHash")
+		delete(session["resolvedSource"].(map[string]any), "sourceHash")
+	default:
+		progress := session["progress"].(map[string]any)
+		paths := map[string]string{
+			"progress.totalDispatches": "totalDispatches", "progress.completedDispatches": "completedDispatches",
+			"progress.failedDispatches": "failedDispatches", "progress.inFlightDispatches": "inFlightDispatches",
+		}
+		delete(progress, paths[field])
+	}
+	return mustMarshal(t, bundle)
 }

@@ -1,6 +1,7 @@
 package sessionparity
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 )
@@ -60,7 +61,15 @@ func TestCompare_ReportsMissingUnexpectedDuplicateAndReorderedFacts(t *testing.T
 func TestCompare_IsDeterministicAndIgnoresTransportOnlyObservationFields(t *testing.T) {
 	observations := TerminalFailureObservations()
 	first := normalizedFixtureProjection(t, observations)
-	transportOnlyREST := append([]byte(`{"requestId":"rest-request-2","headers":{"x-request-id":"rest-request-2"},"status":200,"session":`), observations.REST[len(`{"session":`):]...)
+	var captured map[string]any
+	if err := json.Unmarshal(observations.REST, &captured); err != nil {
+		t.Fatalf("unmarshal REST capture: %v", err)
+	}
+	captured["http"] = map[string]any{"requestId": "rest-request-2", "headers": map[string]any{"x-request-id": "rest-request-2"}, "status": 200}
+	transportOnlyREST, err := json.Marshal(captured)
+	if err != nil {
+		t.Fatalf("marshal REST capture: %v", err)
+	}
 	second := normalizedFixtureProjection(t, CapturedObservations{REST: transportOnlyREST})
 	if differences := Compare(first, second); len(differences) != 0 {
 		t.Fatalf("equivalent projections have differences: %#v", differences)
