@@ -311,6 +311,37 @@ describe("projectFactoryWorkProgressAtTick edge evidence", () => {
       Object.values(completed.counts).reduce((sum, count) => sum + count, 0),
     ).toBe(completed.total);
   });
+});
+
+describe("projectFactoryWorkProgressAtTick request evidence", () => {
+  it("retains request input and context Work without Dispatch correlation", () => {
+    const result = projectFactoryWorkProgressAtTick({
+      events: [
+        event(
+          "request",
+          "DISPATCH_REQUEST",
+          2,
+          0,
+          {
+            inputs: [{ workId: "input-work" }, { workId: "input-work" }],
+            transitionId: "review",
+          },
+          { workIds: ["context-work", "context-work"] },
+        ),
+      ],
+      tick: 2,
+    });
+
+    expect(result.total).toBe(2);
+    expect(result.active).toEqual([]);
+    expect(result.unclassified).toEqual([
+      { id: "context-work" },
+      { id: "input-work" },
+    ]);
+    expect(
+      Object.values(result.counts).reduce((sum, count) => sum + count, 0),
+    ).toBe(result.total);
+  });
 
   it("uses same-tick Work-state order and failed precedence over active evidence", () => {
     const events = [

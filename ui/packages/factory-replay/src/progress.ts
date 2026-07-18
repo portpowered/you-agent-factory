@@ -215,14 +215,14 @@ function applyDispatchRequest(
   payload: Record<string, unknown> | undefined,
 ): void {
   const dispatchId = event.context.dispatchId;
+  const transitionId = payload?.transitionId;
   if (
-    !dispatchId ||
-    typeof payload?.transitionId !== "string" ||
-    payload.transitionId.startsWith("__system_time:")
+    typeof transitionId !== "string" ||
+    transitionId.startsWith("__system_time:")
   ) {
     return;
   }
-  const inputIds = arrayValue(payload.inputs).flatMap((input) => {
+  const inputIds = arrayValue(payload?.inputs).flatMap((input) => {
     const record = objectRecord(input);
     return typeof record?.workId === "string" && record.workId
       ? [record.workId]
@@ -234,7 +234,7 @@ function applyDispatchRequest(
   for (const workId of workIds) {
     if (!state.works.has(workId)) state.works.set(workId, { id: workId });
   }
-  state.activeDispatches.set(dispatchId, workIds);
+  if (dispatchId) state.activeDispatches.set(dispatchId, workIds);
 }
 
 function applyDispatchResponse(
