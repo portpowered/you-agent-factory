@@ -58,6 +58,8 @@ const CONNECTION_HANDLES = {
   "work-type-state": ["work-type-state-source", "work-type-state-target"],
 };
 
+const RESOURCE_AVAILABILITY_STATE = "available";
+
 /** @param {string | undefined} explicitID @param {string} name */
 function entityID(explicitID, name) {
   return explicitID?.trim() || name;
@@ -294,9 +296,17 @@ function appendWorkstationRoutes(context, workstation, workstationId) {
   ];
   for (const [kind, ios] of routes) {
     for (const io of ios) {
-      const stateId = context.workStatesByName
-        .get(io.workType)
-        ?.get(io.state);
+      const stateId = context.workStatesByName.get(io.workType)?.get(io.state);
+      // Canonical backend snapshots include internal resource acquisition and
+      // release arcs in workstation IO. Resource relationships are projected
+      // separately and must not become public Work-State routes or issues.
+      if (
+        !stateId &&
+        io.state === RESOURCE_AVAILABILITY_STATE &&
+        context.resourcesByName.has(io.workType)
+      ) {
+        continue;
+      }
       const workStateId = stateId && nodeID("work-state", stateId);
       const input = kind === "workstation-input";
       addConnection(

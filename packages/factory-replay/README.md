@@ -29,7 +29,9 @@ Canonical initial and replacement topology events retain durable IDs for
 resources, workers, workstations, Work Types, and Work States, plus authored
 worker and workstation resource requirements. This lets recordings preserve
 stable graph identity and both resource connection kinds even when public
-entity names change.
+entity names change. Internal resource availability arcs present in canonical
+workstation IO are excluded from public Work-State routes and do not create
+false unresolved-connection issues.
 
 `projectFactoryActivityAtTick` reconstructs active customer Dispatches,
 affected workstations, consumed Work IDs, workers, and resource occupancy from

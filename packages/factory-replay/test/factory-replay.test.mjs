@@ -299,6 +299,8 @@ test("backend canonical topology snapshots preserve stable IDs and resource conn
   const before = projectFactoryTopologyAtTick({ events, tick: 0 });
   const after = projectFactoryTopologyAtTick({ events, tick: 3 });
 
+  assert.deepEqual(before.issues, []);
+  assert.deepEqual(after.issues, []);
   assert.deepEqual(
     before.nodes.map(({ id }) => id),
     after.nodes.map(({ id }) => id),
@@ -321,6 +323,22 @@ test("backend canonical topology snapshots preserve stable IDs and resource conn
       "workstation-on-failure",
       "workstation-on-rejection",
     ]),
+  );
+  assert.ok(
+    before.connections.some(
+      ({ kind, source, target }) =>
+        kind === "workstation-input" &&
+        source.nodeId === "work-state:task-stable:queued-stable" &&
+        target.nodeId === "workstation:review-stable",
+    ),
+  );
+  assert.ok(
+    before.connections.some(
+      ({ kind, source, target }) =>
+        kind === "workstation-output" &&
+        source.nodeId === "workstation:review-stable" &&
+        target.nodeId === "work-state:task-stable:done-stable",
+    ),
   );
 });
 

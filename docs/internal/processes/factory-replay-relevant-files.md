@@ -13,6 +13,8 @@ that consumes the replay kernel.
   IDs aligned with `pkg/factory/contracts/factory_graph_ids.go` and the graph
   editor connection-anchor vocabulary. Unknown references must become sorted
   projection issues instead of synthesized nodes or dangling connections.
+  Backend resource availability arcs are internal workstation IO evidence;
+  project their authored resource relationship once, not as Work-State routes.
 - `pkg/factory/events/snapshot/initial_structure.go` owns the canonical public
   Factory definition serialized into initial and replacement topology events.
   Preserve durable public entity IDs and worker/workstation resource
