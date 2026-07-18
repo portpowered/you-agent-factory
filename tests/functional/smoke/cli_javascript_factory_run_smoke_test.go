@@ -20,7 +20,115 @@ import (
 
 const javascriptFactoryRunTimeout = 30 * time.Second
 
+const parallelJavaScriptFanoutResult = "alpha=ALPHA_RESULT;beta=BETA_RESULT"
 const orderedJavaScriptPipelineResult = "ordered-pipeline-complete"
+
+func TestJavaScriptFactoryRun_RealCLIParallelFanoutCorrelatesChildren(t *testing.T) {
+	t.Parallel()
+
+	isolatedRoot := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dynamic"))
+	binaryPath := buildYouCLIBinary(t)
+	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	isolatedHome := t.TempDir()
+	port, err := reserveLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve loopback port: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), javascriptFactoryRunTimeout)
+	t.Cleanup(cancel)
+	cmd := exec.CommandContext(ctx, binaryPath,
+		"--json", "run",
+		"--factory", "./parallel_fanout.js",
+		"--with-mock-workers="+mockWorkersPath,
+		"--output", "primary",
+		"--no-record",
+		"--server", fmt.Sprintf("http://127.0.0.1:%d", port),
+		"--quiet",
+	)
+	cmd.Dir = isolatedRoot
+	cmd.Env = javascriptFactoryRunEnvironmentForHome(isolatedHome)
+	cmd.WaitDelay = 2 * time.Second
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	assertParallelFanoutProcessResult(t, ctx, runErr, stdout.String(), stderr.String())
+	assertParallelFanoutResult(t, decodeSingleJavaScriptFactoryRunResult(t, stdout.String()))
+}
+
+func assertParallelFanoutProcessResult(t *testing.T, ctx context.Context, runErr error, stdout, stderr string) {
+	t.Helper()
+	if ctx.Err() != nil {
+		t.Fatalf("you run parallel fanout timed out after %s: %v\nstdout:\n%s\nstderr:\n%s", javascriptFactoryRunTimeout, ctx.Err(), stdout, stderr)
+	}
+	if runErr != nil {
+		t.Fatalf("you run parallel fanout exited non-zero: %v\nstdout:\n%s\nstderr:\n%s", runErr, stdout, stderr)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr = %q, want empty stderr on successful quiet JSON invocation", stderr)
+	}
+}
+
+type parallelFanoutEvidence struct {
+	FinalValue string `json:"finalValue"`
+	Children   []struct {
+		Name         string `json:"name"`
+		DispatchID   string `json:"dispatchId"`
+		ResultStatus string `json:"resultStatus"`
+		Response     string `json:"response"`
+		RawResponse  string `json:"rawResponse"`
+	} `json:"children"`
+}
+
+func assertParallelFanoutResult(t *testing.T, result factoryapi.FactorySessionSyncExecutionResponse) {
+	t.Helper()
+	if result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted || result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("terminal outcome = %s (%s), want COMPLETED (SUCCEEDED)", result.SyncOutcome, result.Status)
+	}
+	if result.EffectivePolicy == nil || result.EffectivePolicy.AdditionalProperties["allowNetwork"] != false {
+		t.Fatalf("effective policy = %#v, want public network disabled", result.EffectivePolicy)
+	}
+	if result.Result == nil || result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal || result.Result.PrimaryResult == nil || len(*result.Result.PrimaryResult) != 1 {
+		t.Fatalf("result = %#v, want exactly one FINAL Factory Session result with one content part", result.Result)
+	}
+	part, err := (*result.Result.PrimaryResult)[0].AsWorkJsonContentPart()
+	if err != nil {
+		t.Fatalf("decode parallel fanout result content part: %v", err)
+	}
+	encoded, err := json.Marshal(part.Json)
+	if err != nil {
+		t.Fatalf("encode parallel fanout evidence: %v", err)
+	}
+	var evidence parallelFanoutEvidence
+	if err := json.Unmarshal(encoded, &evidence); err != nil {
+		t.Fatalf("decode parallel fanout evidence: %v", err)
+	}
+	assertParallelFanoutEvidence(t, evidence)
+}
+
+func assertParallelFanoutEvidence(t *testing.T, evidence parallelFanoutEvidence) {
+	t.Helper()
+	if evidence.FinalValue != parallelJavaScriptFanoutResult || len(evidence.Children) != 2 {
+		t.Fatalf("parallel fanout evidence = %#v, want final %q and exactly 2 children", evidence, parallelJavaScriptFanoutResult)
+	}
+	wantResponses := map[string]string{"alpha": "ALPHA_RESULT", "beta": "BETA_RESULT"}
+	seenNames, seenDispatches := map[string]bool{}, map[string]bool{}
+	for _, child := range evidence.Children {
+		wantResponse, expected := wantResponses[child.Name]
+		responseMarker := ":" + child.Name + ":" + wantResponse + ":"
+		if !expected || seenNames[child.Name] || child.DispatchID == "" || seenDispatches[child.DispatchID] || child.ResultStatus != "COMPLETED" || child.Response != wantResponse || !strings.Contains(child.RawResponse, responseMarker) {
+			t.Fatalf("child evidence = %#v, want one distinct completed dispatch correlated to %q", child, wantResponse)
+		}
+		seenNames[child.Name], seenDispatches[child.DispatchID] = true, true
+	}
+	for name := range wantResponses {
+		if !seenNames[name] {
+			t.Fatalf("missing child evidence for %q", name)
+		}
+	}
+}
 
 func TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline(t *testing.T) {
 	t.Parallel()
@@ -234,13 +342,15 @@ func javascriptFactoryRunEnvironment(t *testing.T) []string {
 }
 
 func javascriptFactoryRunEnvironmentForHome(isolatedHome string) []string {
-	environment := make([]string, 0, len(os.Environ())+3)
+	environment := make([]string, 0, len(os.Environ())+6)
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
 		upperName := strings.ToUpper(name)
-		if strings.EqualFold(name, "HOME") || strings.EqualFold(name, "USERPROFILE") ||
-			strings.HasSuffix(upperName, "_API_KEY") || strings.HasSuffix(upperName, "_AUTH_TOKEN") ||
-			strings.HasPrefix(upperName, "AWS_") {
+		if upperName == "HOME" || upperName == "USERPROFILE" || upperName == "APPDATA" ||
+			upperName == "LOCALAPPDATA" || upperName == "XDG_CONFIG_HOME" || upperName == "XDG_CACHE_HOME" ||
+			strings.HasPrefix(upperName, "YOU_") || strings.Contains(upperName, "API_KEY") ||
+			strings.Contains(upperName, "TOKEN") || strings.Contains(upperName, "SECRET") ||
+			strings.Contains(upperName, "CREDENTIAL") || strings.HasPrefix(upperName, "AWS_") {
 			continue
 		}
 		environment = append(environment, entry)
@@ -248,6 +358,9 @@ func javascriptFactoryRunEnvironmentForHome(isolatedHome string) []string {
 	return append(environment,
 		"HOME="+isolatedHome,
 		"USERPROFILE="+isolatedHome,
+		"APPDATA="+filepath.Join(isolatedHome, "AppData", "Roaming"),
+		"LOCALAPPDATA="+filepath.Join(isolatedHome, "AppData", "Local"),
 		"XDG_CONFIG_HOME="+filepath.Join(isolatedHome, ".config"),
+		"XDG_CACHE_HOME="+filepath.Join(isolatedHome, ".cache"),
 	)
 }
