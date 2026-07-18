@@ -32,3 +32,11 @@ can call `projectFactoryActivity` directly. Occupancy reports known occupied
 and available quantities, or explicitly reports unavailable evidence when an
 active Dispatch lacks resource facts; it never turns missing evidence into a
 fabricated zero occupancy.
+
+`projectFactoryWorkProgressAtTick` reconstructs known customer Work and active
+Dispatch consumption at an explicit logical tick, then assigns every Work ID
+to exactly one of failed, completed, active, queued, or unclassified. The
+classification applies that precedence once, excludes internal time Work, and
+uses `unclassified` when partial event or topology evidence cannot safely
+determine a lifecycle category. `projectFactoryWorkProgress` exposes the same
+pure partition for consumers that already hold selected replay evidence.

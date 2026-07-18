@@ -162,6 +162,63 @@ export interface FactoryActivityAtTickInput {
   tick: number;
 }
 
+export type FactoryWorkStateCategory =
+  | "FAILED"
+  | "INITIAL"
+  | "PROCESSING"
+  | "TERMINAL";
+
+export type FactoryWorkProgressCategory =
+  | "failed"
+  | "completed"
+  | "active"
+  | "queued"
+  | "unclassified";
+
+export interface FactoryWorkProgressStateEvidence {
+  category?: FactoryWorkStateCategory;
+  id?: string;
+  name?: string;
+}
+
+export interface FactoryWorkProgressEvidence {
+  id: string;
+  state?: FactoryWorkProgressStateEvidence;
+  workTypeId?: string;
+}
+
+export interface FactoryWorkProgressItem {
+  id: string;
+  stateId?: string;
+  stateName?: string;
+  workTypeId?: string;
+}
+
+export type FactoryWorkProgressCounts = Record<FactoryWorkProgressCategory, number>;
+
+export interface FactoryWorkProgressProjection {
+  active: FactoryWorkProgressItem[];
+  completed: FactoryWorkProgressItem[];
+  counts: FactoryWorkProgressCounts;
+  failed: FactoryWorkProgressItem[];
+  queued: FactoryWorkProgressItem[];
+  selectedTick: number;
+  total: number;
+  unclassified: FactoryWorkProgressItem[];
+}
+
+export interface FactoryWorkProgressProjectionInput {
+  activeWorkIds: readonly string[];
+  factory?: FactoryDefinition | undefined;
+  selectedTick: number;
+  works: readonly FactoryWorkProgressEvidence[];
+}
+
+export interface FactoryWorkProgressAtTickInput {
+  events: readonly FactoryEvent[];
+  tick: number;
+}
+
 export type FactoryReplaySelection =
   | { mode: "current" }
   | { mode: "fixed"; tick: number };
@@ -257,3 +314,11 @@ export function projectFactoryActivity(
 export function projectFactoryActivityAtTick(
   input: FactoryActivityAtTickInput,
 ): FactoryActivityProjection;
+
+export function projectFactoryWorkProgress(
+  input: FactoryWorkProgressProjectionInput,
+): FactoryWorkProgressProjection;
+
+export function projectFactoryWorkProgressAtTick(
+  input: FactoryWorkProgressAtTickInput,
+): FactoryWorkProgressProjection;

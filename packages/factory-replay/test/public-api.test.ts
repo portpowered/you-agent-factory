@@ -10,6 +10,9 @@ import {
   projectFactoryTopologyAtTick,
   projectFactoryActivity,
   projectFactoryActivityAtTick,
+  type FactoryWorkProgressItem,
+  projectFactoryWorkProgress,
+  projectFactoryWorkProgressAtTick,
 } from "../src/index.js";
 
 interface ReplayState {
@@ -77,3 +80,13 @@ const typedDispatch: FactoryActiveDispatchProjection | undefined =
 void typedDispatch;
 void projectFactoryActivityAtTick({ events: [event], tick: 1 })
   .resourceOccupancy;
+
+const progress = projectFactoryWorkProgress({
+  activeWorkIds: [],
+  selectedTick: 1,
+  works: [{ id: "work-1", state: { category: "INITIAL" } }],
+});
+const typedWork: FactoryWorkProgressItem | undefined = progress.queued[0];
+void typedWork;
+void projectFactoryWorkProgressAtTick({ events: [event], tick: 1 }).counts
+  .unclassified;

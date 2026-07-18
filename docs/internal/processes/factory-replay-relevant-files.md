@@ -17,6 +17,10 @@ that consumes the replay kernel.
   Dispatch, affected-workstation, Work-reference, and resource-occupancy
   projection. Missing optional relationships retain identifiable Dispatches
   and use structured issues or unavailable occupancy evidence.
+- `packages/factory-replay/src/progress.js` owns the pure, mutually exclusive
+  customer Work progress partition. Keep failed, completed, active, queued,
+  and unclassified precedence centralized there; canonical event-to-evidence
+  reconstruction remains in `index.js`.
 - `packages/factory-replay/src/index.d.ts` is the public typed boundary. It
   uses `FactoryEvent` from `@you-agent-factory/client`; do not substitute a
   dashboard-local event type at this boundary.
@@ -28,6 +32,10 @@ that consumes the replay kernel.
 - `packages/factory-replay/test/activity.test.mjs` proves Dispatch
   start/completion, concurrency, historical and same-tick selection, stable
   topology references, occupancy certainty, partial input, and immutability.
+- `packages/factory-replay/test/progress.test.mjs` proves every Work category,
+  precedence overlap, lifecycle and recovery transitions, same-tick ordering,
+  identity deduplication, system-Work filtering, incomplete-data fallback, and
+  category-total equality.
 - `ui/src/features/timeline/state/timeline/buildSnapshot.ts` supplies the
   hosted reducer/projection adapter to the public kernel. It owns no replay
   ordering or accepted-tail logic; keep its cloning and tick-setting adapters
