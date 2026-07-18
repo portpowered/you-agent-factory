@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -372,7 +373,8 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST /factory-sessions/~default/invocations status = %d", response.StatusCode)
+		payload, _ := io.ReadAll(response.Body)
+		t.Fatalf("POST /factory-sessions/~default/invocations status = %d: %s", response.StatusCode, payload)
 	}
 
 	var decoded factoryapi.InvocationResponse
