@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const javascriptFactoryRunTimeout = 30 * time.Second
@@ -85,6 +86,8 @@ func TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult(t *t
 	if result.EffectivePolicy == nil || result.EffectivePolicy.AdditionalProperties["allowNetwork"] != false {
 		t.Fatalf("effective policy = %#v, want public network disabled", result.EffectivePolicy)
 	}
+
+	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func decodeSingleJavaScriptFactoryRunResult(t *testing.T, stdout string) factoryapi.FactorySessionSyncExecutionResponse {

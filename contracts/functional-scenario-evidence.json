@@ -35,6 +35,12 @@
       ]
     },
     {
+      "test": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go::TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult",
+      "stableIds": [
+        "cli/you.run"
+      ]
+    },
+    {
       "test": "tests/functional/smoke/cli_submit_batch_smoke_test.go::TestSubmitBatch_RealCLIUpsertsToRunningFactory",
       "stableIds": [
         "cli/you.submit.batch"
