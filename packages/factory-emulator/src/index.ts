@@ -32,3 +32,39 @@ export type {
   FactoryEmulatorTick,
   FactoryEmulatorTickCalculator,
 } from "./emulator.js";
+export type {
+  EmulatorExhaustionBehavior,
+  EmulatorInitialSubmission,
+  EmulatorLineageCursor,
+  EmulatorMatcher,
+  EmulatorOutcome,
+  EmulatorRule,
+  EmulatorScenario,
+  EmulatorScenarioVersion,
+  EmulatorUnmatchedBehavior,
+} from "./generated/scenario.js";
+export {
+  scenarioSchema,
+  SUPPORTED_SCENARIO_VERSION,
+} from "./generated/scenario-schema.js";
+export {
+  parseEmulatorScenario,
+  type EmulatorFactoryDefinition,
+  type EmulatorScenarioDiagnostic,
+  type EmulatorScenarioDiagnosticCode,
+  type EmulatorScenarioParseResult,
+} from "./parser.js";
+export {
+  emulatorScenarioExamples,
+  type EmulatorScenarioExample,
+} from "./examples.js";
+export {
+  inspectEmulatorSupport,
+  type EmulatorSupportInspection,
+} from "./support.js";
+export {
+  resolveEmulatorScenarioResult,
+  selectEmulatorRule,
+  type EmulatorScenarioResolution,
+  type EmulatorSubmission,
+} from "./semantics.js";

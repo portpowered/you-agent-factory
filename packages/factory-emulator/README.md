@@ -1,4 +1,74 @@
-# Factory emulator event sink
+# `@you-agent-factory/factory-emulator`
+
+This package publishes the stable v1 JSON Schema and generated TypeScript
+contract for deterministic Factory-emulator scenarios. The schema is available
+as raw JSON from `@you-agent-factory/factory-emulator/schema`; the root module
+exports `scenarioSchema` and `SUPPORTED_SCENARIO_VERSION`.
+
+Every scenario declares a version, id, deterministic seed, UTC `startAt`,
+ordered rules, and explicit unmatched behavior. Rules use finite scripted
+outcomes with explicit exhaustion behavior. Initial submissions and lineage
+cursors are structurally represented here; the parser validates the scenario
+shape and supported Factory execution subset before emulation begins.
+
+`activityLabel` is optional, limited to 120 characters, and only represents
+transient emulator activity. It is never canonical Factory event content.
+
+The schema under `contracts/factory-emulator/` is authored source. Run
+`npm run generate` from this package to regenerate its committed schema and
+TypeScript artifacts. The TypeScript declarations are derived from the schema's
+properties, required fields, references, variants, and documented runtime
+constraints rather than a separately authored type template. Run
+`make generate-emulator` to verify they are current; when it reports drift,
+regenerate them and commit the resulting artifacts.
+
+## Parsing a scenario for browser emulation
+
+`parseEmulatorScenario(scenario, factory)` is a pure preflight boundary. It
+returns either the typed authored scenario and supported Factory definition, or
+structured diagnostics with a stable JSON Pointer `path`, `code`, `message`,
+and `expectation`. It never starts emulator activity or creates Factory events.
+
+The v1 emulator accepts static Petri Factory topology only. It rejects
+JavaScript orchestration, configured Factory resources or guards, and cron,
+repeater, or poller workstation scheduling before emulation starts. This keeps
+scripted browser behavior deterministic while the runtime support subset grows.
+
+## Rule semantics
+
+Rules are evaluated in authored order; `selectEmulatorRule` returns the first
+matching rule and no later rule can change that result. Parsing rejects a later
+rule only when an earlier rule provably covers its supported domain, including a
+known initial-submission id covered by an earlier work-type rule. It deliberately
+does not report uncertain overlap as shadowing.
+
+`resolveEmulatorScenarioResult(scenario, submission, invocationIndex)` is a
+pure helper for a zero-based invocation count of the selected rule. It returns a
+scripted outcome while one is available, repeats the final outcome only for
+`repeatLast`, delegates only `useUnmatchedBehavior` exhaustion to the explicit
+unmatched behavior, and otherwise returns the explicit exhaustion rejection.
+
+Initial submission ids and rule ids must be unique. Initial submissions and
+work-type matchers must name Factory work types. Lineage cursors may target one
+known initial submission or one earlier `complete` scripted outcome; missing,
+forward, cyclic, and incompatible targets are rejected with diagnostics before
+emulation begins.
+
+## Inspecting support and using examples
+
+`inspectEmulatorSupport()` returns the stable machine-readable v1 capability
+report. It covers the accepted static Factory subset, explicitly unsupported
+Factory behavior, matchers, outcomes, lineage cursors, exhaustion and unmatched
+options, initial-submission constraints, and `activityLabel` limits. The parser
+uses that same Factory support policy, so the report cannot advertise execution
+capabilities that parsing rejects.
+
+`emulatorScenarioExamples` exports a minimal scenario and a multi-rule scenario.
+The latter shows ordered priority matching, initial submissions, a scripted
+lineage cursor, finite exhaustion, explicit unmatched rejection, and transient
+`activityLabel` metadata. Both examples are validated through the public parser.
+
+## Event sink and logical tick runtime
 
 `@you-agent-factory/factory-emulator` provides the transport-neutral,
 caller-owned `FactoryEventSink` contract used by Factory emulator hosts.
