@@ -30,6 +30,26 @@ JavaScript orchestration, configured Factory resources or guards, and cron,
 repeater, or poller workstation scheduling before emulation starts. This keeps
 scripted browser behavior deterministic while the runtime support subset grows.
 
+## Rule semantics
+
+Rules are evaluated in authored order; `selectEmulatorRule` returns the first
+matching rule and no later rule can change that result. Parsing rejects a later
+rule only when an earlier rule provably covers its supported domain, including a
+known initial-submission id covered by an earlier work-type rule. It deliberately
+does not report uncertain overlap as shadowing.
+
+`resolveEmulatorScenarioResult(scenario, submission, invocationIndex)` is a
+pure helper for a zero-based invocation count of the selected rule. It returns a
+scripted outcome while one is available, repeats the final outcome only for
+`repeatLast`, delegates only `useUnmatchedBehavior` exhaustion to the explicit
+unmatched behavior, and otherwise returns the explicit exhaustion rejection.
+
+Initial submission ids and rule ids must be unique. Initial submissions and
+work-type matchers must name Factory work types. Lineage cursors may target one
+known initial submission or one earlier `complete` scripted outcome; missing,
+forward, cyclic, and incompatible targets are rejected with diagnostics before
+emulation begins.
+
 ## Event sink and logical tick runtime
 
 `@you-agent-factory/factory-emulator` provides the transport-neutral,

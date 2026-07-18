@@ -4,7 +4,15 @@ export type EmulatorScenarioDiagnosticCode =
   | "INVALID_SCENARIO_SHAPE"
   | "UNSUPPORTED_SCENARIO_VERSION"
   | "INVALID_FACTORY_DEFINITION"
-  | "UNSUPPORTED_FACTORY_CAPABILITY";
+  | "UNSUPPORTED_FACTORY_CAPABILITY"
+  | "DUPLICATE_SCENARIO_IDENTIFIER"
+  | "UNKNOWN_FACTORY_WORK_TYPE"
+  | "UNKNOWN_INITIAL_SUBMISSION"
+  | "MISSING_LINEAGE_CURSOR_TARGET"
+  | "FORWARD_LINEAGE_CURSOR"
+  | "CYCLIC_LINEAGE_CURSOR"
+  | "INCOMPATIBLE_LINEAGE_CURSOR"
+  | "SHADOWED_RULE";
 
 export interface EmulatorScenarioDiagnostic {
   code: EmulatorScenarioDiagnosticCode;
@@ -18,6 +26,7 @@ export interface EmulatorFactoryDefinition {
   orchestrator?: { kind?: string };
   resources?: unknown[];
   guards?: unknown[];
+  workTypes?: Array<{ name?: string }>;
   workstations?: Array<{ behavior?: string; cron?: unknown }>;
 }
 

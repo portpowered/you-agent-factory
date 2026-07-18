@@ -80,6 +80,9 @@ void emulatorCloseReceipt;
 
 import {
   parseEmulatorScenario,
+  resolveEmulatorScenarioResult,
+  selectEmulatorRule,
+  type EmulatorScenarioResolution,
   type EmulatorScenarioParseResult,
   type EmulatorScenario,
   type EmulatorScenarioVersion,
@@ -112,3 +115,12 @@ const parseResult: EmulatorScenarioParseResult = parseEmulatorScenario(
   { workstations: [{ behavior: "STANDARD" }] },
 );
 void parseResult;
+
+const rule = selectEmulatorRule(scenario, { id: "public-1", workType: "task" });
+const resolution: EmulatorScenarioResolution = resolveEmulatorScenarioResult(
+  scenario,
+  { id: "public-1", workType: "task" },
+  0,
+);
+void rule;
+void resolution;

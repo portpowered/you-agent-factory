@@ -1,6 +1,7 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { scenarioSchema } from "./generated/scenario-schema.js";
+import { scenarioSemanticDiagnostics } from "./semantics.js";
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -21,7 +22,11 @@ export function parseEmulatorScenario(scenario, factory) {
     return failure(shapeDiagnostics(validateScenarioShape.errors ?? []));
   }
 
-  const diagnostics = factorySupportDiagnostics(factory);
+  const factoryDiagnostics = factorySupportDiagnostics(factory);
+  const diagnostics =
+    factoryDiagnostics.length === 0
+      ? scenarioSemanticDiagnostics(scenario, factory)
+      : factoryDiagnostics;
   return diagnostics.length === 0
     ? { success: true, scenario, factory }
     : failure(diagnostics);

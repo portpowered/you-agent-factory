@@ -54,3 +54,9 @@ export {
   type EmulatorScenarioDiagnosticCode,
   type EmulatorScenarioParseResult,
 } from "./parser.js";
+export {
+  resolveEmulatorScenarioResult,
+  selectEmulatorRule,
+  type EmulatorScenarioResolution,
+  type EmulatorSubmission,
+} from "./semantics.js";

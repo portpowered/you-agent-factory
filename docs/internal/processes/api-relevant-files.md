@@ -2,6 +2,14 @@
 
 Use this map when changing the public REST contract.
 
+- The standalone `@you-agent-factory/factory-emulator` package keeps authored
+  scenario structure in `contracts/factory-emulator/scenario.schema.json`,
+  generated schema/type exports under `packages/factory-emulator`, and pure
+  runtime preflight and rule semantics in `src/parser.js` and `src/semantics.js`.
+  Keep semantic diagnostics as stable JSON-Pointer records, validate semantic
+  references before any emulator activity, and exercise authored rule ordering,
+  lineage, exhaustion, and unmatched behavior through the package's public API.
+
 - Public TypeScript consumer contracts live in `packages/client`: generated
   OpenAPI namespaces stay in `src/generated/openapi.ts`, while stable aliases
   stay handwritten in `src/contracts.ts`. Recording shape validation consumes a

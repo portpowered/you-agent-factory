@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   parseEmulatorScenario,
+  resolveEmulatorScenarioResult,
+  selectEmulatorRule,
   SUPPORTED_SCENARIO_VERSION,
 } from "@you-agent-factory/factory-emulator";
 
@@ -104,4 +106,281 @@ test("accepts activityLabel only through the bounded scenario contract", () => {
 
   assert.equal(result.success, false);
   assert.equal(result.diagnostics[0].path, "/activityLabel");
+});
+
+test("validates initial submissions and backward complete lineage cursors", () => {
+  const scenario = validScenario({
+    initialSubmissions: [{ id: "checkout-1", workType: "checkout" }],
+    rules: [
+      {
+        id: "complete-checkout",
+        match: { kind: "workType", workType: "checkout" },
+        outcomes: [
+          {
+            kind: "complete",
+            lineageCursor: {
+              kind: "initialSubmission",
+              submissionId: "checkout-1",
+            },
+          },
+        ],
+        exhaustionBehavior: { kind: "repeatLast" },
+      },
+      {
+        id: "complete-fulfillment",
+        match: { kind: "workType", workType: "fulfillment" },
+        outcomes: [
+          {
+            kind: "complete",
+            lineageCursor: {
+              kind: "scriptedOutcome",
+              ruleId: "complete-checkout",
+              outcomeIndex: 0,
+            },
+          },
+        ],
+        exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+      },
+    ],
+  });
+
+  const result = parseEmulatorScenario(
+    scenario,
+    supportedFactory({
+      workTypes: [{ name: "checkout" }, { name: "fulfillment" }],
+    }),
+  );
+
+  assert.deepEqual(result, {
+    success: true,
+    scenario,
+    factory: supportedFactory({
+      workTypes: [{ name: "checkout" }, { name: "fulfillment" }],
+    }),
+  });
+});
+
+for (const invalidCase of [
+  {
+    name: "an unknown Factory work type",
+    scenario: validScenario({
+      initialSubmissions: [{ id: "unknown", workType: "unknown" }],
+    }),
+    code: "UNKNOWN_FACTORY_WORK_TYPE",
+  },
+  {
+    name: "a missing initial-submission lineage target",
+    scenario: validScenario({
+      rules: [
+        {
+          ...validScenario().rules[0],
+          outcomes: [
+            {
+              kind: "complete",
+              lineageCursor: { kind: "initialSubmission", submissionId: "missing" },
+            },
+          ],
+        },
+      ],
+    }),
+    code: "MISSING_LINEAGE_CURSOR_TARGET",
+  },
+  {
+    name: "a forward scripted lineage target",
+    scenario: validScenario({
+      rules: [
+        {
+          ...validScenario().rules[0],
+          id: "first",
+          outcomes: [
+            {
+              kind: "complete",
+              lineageCursor: {
+                kind: "scriptedOutcome",
+                ruleId: "second",
+                outcomeIndex: 0,
+              },
+            },
+          ],
+        },
+        {
+          ...validScenario().rules[0],
+          id: "second",
+          match: { kind: "workType", workType: "fulfillment" },
+        },
+      ],
+    }),
+    code: "FORWARD_LINEAGE_CURSOR",
+  },
+  {
+    name: "a cyclic scripted lineage target",
+    scenario: validScenario({
+      rules: [
+        {
+          ...validScenario().rules[0],
+          id: "first",
+          outcomes: [
+            {
+              kind: "complete",
+              lineageCursor: {
+                kind: "scriptedOutcome",
+                ruleId: "second",
+                outcomeIndex: 0,
+              },
+            },
+          ],
+        },
+        {
+          ...validScenario().rules[0],
+          id: "second",
+          match: { kind: "workType", workType: "fulfillment" },
+          outcomes: [
+            {
+              kind: "complete",
+              lineageCursor: {
+                kind: "scriptedOutcome",
+                ruleId: "first",
+                outcomeIndex: 0,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+    code: "CYCLIC_LINEAGE_CURSOR",
+  },
+  {
+    name: "an incompatible reject lineage target",
+    scenario: validScenario({
+      rules: [
+        {
+          ...validScenario().rules[0],
+          id: "first",
+          outcomes: [{ kind: "reject", reason: "not complete" }],
+        },
+        {
+          ...validScenario().rules[0],
+          id: "second",
+          match: { kind: "workType", workType: "fulfillment" },
+          outcomes: [
+            {
+              kind: "complete",
+              lineageCursor: {
+                kind: "scriptedOutcome",
+                ruleId: "first",
+                outcomeIndex: 0,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+    code: "INCOMPATIBLE_LINEAGE_CURSOR",
+  },
+]) {
+  test(`rejects ${invalidCase.name} before emulator activity`, () => {
+    const result = parseEmulatorScenario(
+      invalidCase.scenario,
+      supportedFactory({
+        workTypes: [{ name: "checkout" }, { name: "fulfillment" }],
+      }),
+    );
+
+    assert.equal(result.success, false);
+    assert.ok(result.diagnostics.some(({ code }) => code === invalidCase.code));
+  });
+}
+
+test("reports only provably shadowed rules and resolves the first match", () => {
+  const scenario = validScenario({
+    initialSubmissions: [{ id: "checkout-1", workType: "checkout" }],
+    rules: [
+      {
+        id: "checkout-first",
+        match: { kind: "workType", workType: "checkout" },
+        outcomes: [{ kind: "complete", output: { winner: "first" } }],
+        exhaustionBehavior: { kind: "repeatLast" },
+      },
+      {
+        id: "checkout-later",
+        match: { kind: "submissionId", submissionId: "checkout-1" },
+        outcomes: [{ kind: "reject", reason: "unreachable" }],
+        exhaustionBehavior: { kind: "reject", reason: "unreachable" },
+      },
+      {
+        id: "all-later",
+        match: { kind: "all" },
+        outcomes: [{ kind: "reject", reason: "fallback" }],
+        exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+      },
+    ],
+  });
+
+  const parsed = parseEmulatorScenario(scenario, supportedFactory());
+  assert.equal(parsed.success, false);
+  assert.deepEqual(
+    parsed.diagnostics
+      .filter(({ code }) => code === "SHADOWED_RULE")
+      .map(({ path }) => path),
+    ["/rules/1"],
+  );
+  assert.equal(
+    selectEmulatorRule(scenario, { id: "checkout-1", workType: "checkout" }).id,
+    "checkout-first",
+  );
+});
+
+test("resolves finite outcomes, explicit exhaustion, and unmatched behavior", () => {
+  const scenario = validScenario({
+    rules: [
+      {
+        id: "checkout",
+        match: { kind: "workType", workType: "checkout" },
+        outcomes: [
+          { kind: "complete", output: { attempt: 1 } },
+          { kind: "reject", reason: "second attempt" },
+        ],
+        exhaustionBehavior: { kind: "repeatLast" },
+      },
+    ],
+    unmatchedBehavior: { kind: "reject", reason: "no matching rule" },
+  });
+
+  assert.deepEqual(
+    resolveEmulatorScenarioResult(
+      scenario,
+      { id: "checkout-1", workType: "checkout" },
+      0,
+    ),
+    {
+      kind: "outcome",
+      rule: scenario.rules[0],
+      outcome: scenario.rules[0].outcomes[0],
+    },
+  );
+  assert.deepEqual(
+    resolveEmulatorScenarioResult(
+      scenario,
+      { id: "checkout-1", workType: "checkout" },
+      2,
+    ).outcome,
+    scenario.rules[0].outcomes[1],
+  );
+  assert.deepEqual(
+    resolveEmulatorScenarioResult(
+      scenario,
+      { id: "other-1", workType: "other" },
+      0,
+    ),
+    { kind: "unmatched", behavior: scenario.unmatchedBehavior },
+  );
+  assert.throws(
+    () =>
+      resolveEmulatorScenarioResult(
+        scenario,
+        { id: "checkout-1", workType: "checkout" },
+        -1,
+      ),
+    /zero-based safe integer/,
+  );
 });
