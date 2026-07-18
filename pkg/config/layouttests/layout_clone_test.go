@@ -132,6 +132,10 @@ func TestCloneFactoryConfig_PreservesPortableLayout(t *testing.T) {
 				Position: interfaces.FactoryLayoutPointConfig{X: 144, Y: 288},
 				Size:     &interfaces.FactoryLayoutSizeConfig{Width: 320, Height: 180},
 				Locked:   &locked,
+				EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{Image: &interfaces.FactoryLayoutImageConfig{
+					Source:          interfaces.FactoryLayoutImageSourceConfig{Kind: "EMBEDDED", MediaType: "image/png", Data: "AQID"},
+					AlternativeText: "Planning queue is empty",
+				}},
 			}},
 			Edges: []interfaces.FactoryLayoutEdgeConfig{{
 				ID: "output:workstation:plan-task->work-type:story",
@@ -167,6 +171,7 @@ func TestCloneFactoryConfig_PreservesPortableLayout(t *testing.T) {
 	}
 
 	cfg.Layout.Nodes[0].Position.X = 999
+	cfg.Layout.Nodes[0].EmptyState.Image.AlternativeText = "mutated empty state"
 	cfg.Layout.Edges[0].Waypoints[0].X = 777
 	cfg.Layout.Groups[0].NodeIDs[0] = "mutated"
 	cfg.Layout.Viewport.Zoom = 0.5
@@ -174,6 +179,9 @@ func TestCloneFactoryConfig_PreservesPortableLayout(t *testing.T) {
 
 	if cloned.Layout.Nodes[0].Position.X != 144 {
 		t.Fatalf("cloned layout node position mutated with source: %#v", cloned.Layout.Nodes[0].Position)
+	}
+	if cloned.Layout.Nodes[0].EmptyState.Image.AlternativeText != "Planning queue is empty" {
+		t.Fatalf("cloned node empty state mutated with source: %#v", cloned.Layout.Nodes[0].EmptyState)
 	}
 	if cloned.Layout.Edges[0].Waypoints[0].X != 200 {
 		t.Fatalf("cloned layout edge waypoint mutated with source: %#v", cloned.Layout.Edges[0].Waypoints)

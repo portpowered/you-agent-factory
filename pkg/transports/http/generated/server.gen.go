@@ -1844,6 +1844,22 @@ type FactoryLayoutEdge struct {
 	Waypoints *[]FactoryLayoutPoint `json:"waypoints,omitempty"`
 }
 
+// FactoryLayoutEmptyState Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
+type FactoryLayoutEmptyState struct {
+	// Image Inert embedded-raster image content with required alternative text.
+	Image *FactoryLayoutImage `json:"image,omitempty"`
+
+	// Text Literal empty-state text. It is not rendered as HTML or Markdown.
+	Text  *string `json:"text,omitempty"`
+	union json.RawMessage
+}
+
+// FactoryLayoutEmptyState0 defines model for .
+type FactoryLayoutEmptyState0 = interface{}
+
+// FactoryLayoutEmptyState1 defines model for .
+type FactoryLayoutEmptyState1 = interface{}
+
 // FactoryLayoutGroup Portable background grouping metadata for graph canvas presentation.
 type FactoryLayoutGroup struct {
 	// Bounds Authored rectangular bounds in graph canvas units.
@@ -1897,6 +1913,9 @@ type FactoryLayoutImageSourceMediaType string
 
 // FactoryLayoutNode Portable graph node layout keyed by canonical graph node id.
 type FactoryLayoutNode struct {
+	// EmptyState Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
+	EmptyState *FactoryLayoutEmptyState `json:"emptyState,omitempty"`
+
 	// Id Canonical graph node id such as workstation:<workstationId>.
 	Id string `json:"id"`
 
@@ -7655,6 +7674,116 @@ func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 
 func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactoryLayoutEmptyState0 returns the union data inside the FactoryLayoutEmptyState as a FactoryLayoutEmptyState0
+func (t FactoryLayoutEmptyState) AsFactoryLayoutEmptyState0() (FactoryLayoutEmptyState0, error) {
+	var body FactoryLayoutEmptyState0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutEmptyState0 overwrites any union data inside the FactoryLayoutEmptyState as the provided FactoryLayoutEmptyState0
+func (t *FactoryLayoutEmptyState) FromFactoryLayoutEmptyState0(v FactoryLayoutEmptyState0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutEmptyState0 performs a merge with any union data inside the FactoryLayoutEmptyState, using the provided FactoryLayoutEmptyState0
+func (t *FactoryLayoutEmptyState) MergeFactoryLayoutEmptyState0(v FactoryLayoutEmptyState0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryLayoutEmptyState1 returns the union data inside the FactoryLayoutEmptyState as a FactoryLayoutEmptyState1
+func (t FactoryLayoutEmptyState) AsFactoryLayoutEmptyState1() (FactoryLayoutEmptyState1, error) {
+	var body FactoryLayoutEmptyState1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutEmptyState1 overwrites any union data inside the FactoryLayoutEmptyState as the provided FactoryLayoutEmptyState1
+func (t *FactoryLayoutEmptyState) FromFactoryLayoutEmptyState1(v FactoryLayoutEmptyState1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutEmptyState1 performs a merge with any union data inside the FactoryLayoutEmptyState, using the provided FactoryLayoutEmptyState1
+func (t *FactoryLayoutEmptyState) MergeFactoryLayoutEmptyState1(v FactoryLayoutEmptyState1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryLayoutEmptyState) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Image != nil {
+		object["image"], err = json.Marshal(t.Image)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'image': %w", err)
+		}
+	}
+
+	if t.Text != nil {
+		object["text"], err = json.Marshal(t.Text)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'text': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *FactoryLayoutEmptyState) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["image"]; found {
+		err = json.Unmarshal(raw, &t.Image)
+		if err != nil {
+			return fmt.Errorf("error reading 'image': %w", err)
+		}
+	}
+
+	if raw, found := object["text"]; found {
+		err = json.Unmarshal(raw, &t.Text)
+		if err != nil {
+			return fmt.Errorf("error reading 'text': %w", err)
+		}
+	}
+
 	return err
 }
 

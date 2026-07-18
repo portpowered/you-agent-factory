@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "8d8cb665ddafd502a66f237a2fa5e99003e57b466ab6a02795b5e9c35e19fd94",
+      "artifactHash": "ad5dfb5cc4a057212f81e7474c9f79f65c7ab0fb4fb1f1d5adfeff54249f0989",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "8d8cb665ddafd502a66f237a2fa5e99003e57b466ab6a02795b5e9c35e19fd94",
+        "sourceHash": "ad5dfb5cc4a057212f81e7474c9f79f65c7ab0fb4fb1f1d5adfeff54249f0989",
         "visibility": "public"
       },
       "family": "openapi",
@@ -211,7 +211,7 @@
       "path": "generated/openapi/openapi.yaml"
     },
     "generated.schemas.factory": {
-      "artifactHash": "4e594c87bc446e6af90348d40363c5db2de41c22fc6d1eee85ef381092acfa0a",
+      "artifactHash": "9a347870005d19f4b179d2f9cca48df88ae6741e7fc170c020ade11bcd3f361e",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory",
-        "sourceHash": "4e594c87bc446e6af90348d40363c5db2de41c22fc6d1eee85ef381092acfa0a",
+        "sourceHash": "9a347870005d19f4b179d2f9cca48df88ae6741e7fc170c020ade11bcd3f361e",
         "visibility": "public"
       },
       "family": "config",
@@ -241,7 +241,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.factory-event": {
-      "artifactHash": "e95e7a5d42ee4d5092126aab4757e99ccdf47863fb2cd9fce62ab14c0d776861",
+      "artifactHash": "4ad396c79c61df25d6834903e0b58c3374a1828ffe8da0aac8e898fb9cf2548e",
       "documentation": {
         "documentation": {
           "description": {
@@ -258,7 +258,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-event",
-        "sourceHash": "e95e7a5d42ee4d5092126aab4757e99ccdf47863fb2cd9fce62ab14c0d776861",
+        "sourceHash": "4ad396c79c61df25d6834903e0b58c3374a1828ffe8da0aac8e898fb9cf2548e",
         "visibility": "public"
       },
       "family": "config",
@@ -271,7 +271,7 @@
       "path": "generated/schemas/factory-event.schema.json"
     },
     "generated.schemas.factory-recording": {
-      "artifactHash": "1802bb6c2d0fd1b0a0689d21fc7d39c7e2f41e99a72d4b6c246a7e95da276d39",
+      "artifactHash": "b9e1f73f42f4c0b3c5aa530cc9a7c598f70d25b1d1c9dd7b068728f2da765c15",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory-recording",
-        "sourceHash": "1802bb6c2d0fd1b0a0689d21fc7d39c7e2f41e99a72d4b6c246a7e95da276d39",
+        "sourceHash": "b9e1f73f42f4c0b3c5aa530cc9a7c598f70d25b1d1c9dd7b068728f2da765c15",
         "visibility": "public"
       },
       "family": "config",
@@ -372,5 +372,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "fb6b00d4e0badcd61352657b6d05c0edc5ba024e"
+  "sourceCommit": "2ef85ea2bc5f8e84704d86c9bd9f12da6242db17"
 }

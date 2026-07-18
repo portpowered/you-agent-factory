@@ -15,3 +15,5 @@ properties:
   locked:
     type: boolean
     description: Optional authored node lock flag for future editor affordances.
+  emptyState:
+    $ref: './FactoryLayoutEmptyState.yaml'

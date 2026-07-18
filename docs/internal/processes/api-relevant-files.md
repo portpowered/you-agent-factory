@@ -168,6 +168,14 @@ Use this map when changing the public REST contract.
   staged bytes in `internal/contractstaging/openapi_test.go`; prove
   `make generate-api` and Go/UI generator inputs still reference
   `api/openapi.yaml` rather than the staged package path in the same test file.
+- Factory layout node presentation metadata is authored under
+  `api/components/schemas/data-models/FactoryLayoutNode.yaml` and its referenced
+  fragments, then must cross the generated boundary, `pkg/config` internal/API
+  mappers, and `CloneFactoryConfig`. Validate strict embedded-raster data before
+  generated `format: byte` decoding, and carry node empty-state image bytes in
+  the same Factory-wide budget as annotations. Canonical-node membership remains
+  a `pkg/factory/validation` concern, where an empty state on an unknown node is
+  a blocking layout target rather than a runtime/topology mutation.
 - Publication manifest generation lives in `internal/contractstaging/manifest.go`
   (`generateManifest`, `resolveSourceCommit`, `SourceIdentityPaths`). The emitted
   `packages/api/generated/manifest.json` validates against the joined manifest

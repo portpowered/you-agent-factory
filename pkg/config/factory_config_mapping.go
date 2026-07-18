@@ -311,7 +311,8 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	if err := requireNumber(layout, "schemaVersion", "layout"); err != nil {
 		return err
 	}
-	if err := validateLayoutNodeArray(layout, "nodes", "layout"); err != nil {
+	totalImageBytes := 0
+	if err := validateLayoutNodeArray(layout, "nodes", "layout", &totalImageBytes); err != nil {
 		return err
 	}
 	if err := validateLayoutEdgeArray(layout, "edges", "layout"); err != nil {
@@ -320,7 +321,7 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	if err := validateLayoutGroupArray(layout, "groups", "layout"); err != nil {
 		return err
 	}
-	if err := validateLayoutAnnotationArray(layout, "annotations", "layout"); err != nil {
+	if err := validateLayoutAnnotationArray(layout, "annotations", "layout", &totalImageBytes); err != nil {
 		return err
 	}
 	if err := validateOptionalPointObject(layout, "viewport", "layout", true, "zoom"); err != nil {
@@ -332,13 +333,12 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	return nil
 }
 
-func validateLayoutAnnotationArray(parent map[string]any, key string, path string) error {
+func validateLayoutAnnotationArray(parent map[string]any, key string, path string, totalImageBytes *int) error {
 	values, ok, err := optionalObjectArray(parent, key, path)
 	if !ok || err != nil {
 		return err
 	}
 	seenIDs := make(map[string]struct{}, len(values))
-	totalImageBytes := 0
 	for index, annotation := range values {
 		annotationPath := fmt.Sprintf("%s.%s[%d]", path, key, index)
 		if err := validateLayoutAnnotationFields(annotation, annotationPath); err != nil {
@@ -359,8 +359,8 @@ func validateLayoutAnnotationArray(parent map[string]any, key string, path strin
 		if err != nil {
 			return err
 		}
-		totalImageBytes += imageBytes
-		if totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
+		*totalImageBytes += imageBytes
+		if *totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
 			return fmt.Errorf("%s.image.source.data exceeds the %d-byte Factory embedded-image budget", annotationPath, factoryLayoutEmbeddedImageTotalMaxBytes)
 		}
 	}
@@ -510,30 +510,34 @@ func validateLayoutAnnotationImage(annotation map[string]any, path string) (int,
 	if err != nil {
 		return 0, err
 	}
-	if err := requireString(image, "alternativeText", path+".image"); err != nil {
+	return validateLayoutImage(image, path+".image")
+}
+
+func validateLayoutImage(image map[string]any, path string) (int, error) {
+	if err := requireString(image, "alternativeText", path); err != nil {
 		return 0, err
 	}
-	if err := validateLayoutLiteralText(image["alternativeText"].(string), path+".image.alternativeText", 1, factoryLayoutImageAlternativeTextMaxRunes); err != nil {
+	if err := validateLayoutLiteralText(image["alternativeText"].(string), path+".alternativeText", 1, factoryLayoutImageAlternativeTextMaxRunes); err != nil {
 		return 0, err
 	}
-	source, err := requiredObject(image, "source", path+".image")
+	source, err := requiredObject(image, "source", path)
 	if err != nil {
 		return 0, err
 	}
 	for _, key := range []string{"kind", "mediaType", "data"} {
-		if err := requireString(source, key, path+".image.source"); err != nil {
+		if err := requireString(source, key, path+".source"); err != nil {
 			return 0, err
 		}
 	}
 	if source["kind"].(string) != "EMBEDDED" {
-		return 0, fmt.Errorf("%s.image.source.kind must be EMBEDDED", path)
+		return 0, fmt.Errorf("%s.source.kind must be EMBEDDED", path)
 	}
 	switch source["mediaType"].(string) {
 	case "image/png", "image/jpeg", "image/webp":
 	default:
-		return 0, fmt.Errorf("%s.image.source.mediaType must be image/png, image/jpeg, or image/webp", path)
+		return 0, fmt.Errorf("%s.source.mediaType must be image/png, image/jpeg, or image/webp", path)
 	}
-	return decodeStrictFactoryLayoutImageData(source["data"].(string), path+".image.source.data")
+	return decodeStrictFactoryLayoutImageData(source["data"].(string), path+".source.data")
 }
 
 func validateLayoutLiteralText(value string, path string, minimumCharacters, maximumCharacters int) error {
@@ -606,11 +610,12 @@ func onlyBase64Padding(value string) bool {
 	return true
 }
 
-func validateLayoutNodeArray(parent map[string]any, key string, path string) error {
+func validateLayoutNodeArray(parent map[string]any, key string, path string, totalImageBytes *int) error {
 	values, ok, err := optionalObjectArray(parent, key, path)
 	if !ok || err != nil {
 		return err
 	}
+	seenEmptyStateNodeIDs := make(map[string]struct{}, len(values))
 	for index, node := range values {
 		nodePath := fmt.Sprintf("%s.%s[%d]", path, key, index)
 		if err := requireString(node, "id", nodePath); err != nil {
@@ -622,8 +627,68 @@ func validateLayoutNodeArray(parent map[string]any, key string, path string) err
 		if err := validateOptionalSizeObject(node, "size", nodePath, false); err != nil {
 			return err
 		}
+		imageBytes, err := validateLayoutNodeEmptyState(node, nodePath)
+		if err != nil {
+			return err
+		}
+		if imageBytes > 0 || nodeHasTextEmptyState(node) {
+			nodeID := node["id"].(string)
+			if _, duplicate := seenEmptyStateNodeIDs[nodeID]; duplicate {
+				return fmt.Errorf("%s.emptyState duplicates an empty state for canonical node %q", nodePath, nodeID)
+			}
+			seenEmptyStateNodeIDs[nodeID] = struct{}{}
+		}
+		*totalImageBytes += imageBytes
+		if *totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
+			return fmt.Errorf("%s.emptyState.image.source.data exceeds the %d-byte Factory embedded-image budget", nodePath, factoryLayoutEmbeddedImageTotalMaxBytes)
+		}
 	}
 	return nil
+}
+
+func nodeHasTextEmptyState(node map[string]any) bool {
+	emptyState, ok := node["emptyState"].(map[string]any)
+	if !ok {
+		return false
+	}
+	_, hasText := emptyState["text"]
+	return hasText
+}
+
+func validateLayoutNodeEmptyState(node map[string]any, nodePath string) (int, error) {
+	value, ok := node["emptyState"]
+	if !ok || value == nil {
+		return 0, nil
+	}
+	emptyState, ok := value.(map[string]any)
+	if !ok {
+		return 0, fmt.Errorf("%s.emptyState must be an object", nodePath)
+	}
+	for field := range emptyState {
+		if field != "text" && field != "image" {
+			return 0, fmt.Errorf("%s.emptyState.%s is not allowed", nodePath, field)
+		}
+	}
+	text, hasText := emptyState["text"]
+	image, hasImage := emptyState["image"]
+	if (hasText && text == nil) || (hasImage && image == nil) {
+		return 0, fmt.Errorf("%s.emptyState must contain exactly one of text or image", nodePath)
+	}
+	if hasText == hasImage {
+		return 0, fmt.Errorf("%s.emptyState must contain exactly one of text or image", nodePath)
+	}
+	if hasText {
+		literalText, ok := text.(string)
+		if !ok {
+			return 0, fmt.Errorf("%s.emptyState.text must be a string", nodePath)
+		}
+		return 0, validateLayoutLiteralText(literalText, nodePath+".emptyState.text", 1, factoryLayoutImageAlternativeTextMaxRunes)
+	}
+	emptyImage, ok := image.(map[string]any)
+	if !ok {
+		return 0, fmt.Errorf("%s.emptyState.image must be an object", nodePath)
+	}
+	return validateLayoutImage(emptyImage, nodePath+".emptyState.image")
 }
 
 func validateLayoutEdgeArray(parent map[string]any, key string, path string) error {
@@ -957,13 +1022,24 @@ func factoryLayoutNodesAPIFromInternal(nodes []interfaces.FactoryLayoutNodeConfi
 	values := make([]factoryapi.FactoryLayoutNode, len(nodes))
 	for i, node := range nodes {
 		values[i] = factoryapi.FactoryLayoutNode{
-			Id:       node.ID,
-			Position: factoryLayoutPointAPIFromInternal(node.Position),
-			Size:     factoryLayoutSizeAPIFromInternal(node.Size),
-			Locked:   node.Locked,
+			Id:         node.ID,
+			Position:   factoryLayoutPointAPIFromInternal(node.Position),
+			Size:       factoryLayoutSizeAPIFromInternal(node.Size),
+			Locked:     node.Locked,
+			EmptyState: factoryLayoutEmptyStateAPIFromInternal(node.EmptyState),
 		}
 	}
 	return &values
+}
+
+func factoryLayoutEmptyStateAPIFromInternal(emptyState *interfaces.FactoryLayoutEmptyStateConfig) *factoryapi.FactoryLayoutEmptyState {
+	if emptyState == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayoutEmptyState{
+		Text:  stringPtrIfNotEmpty(emptyState.Text),
+		Image: factoryLayoutImageAPIFromInternal(emptyState.Image),
+	}
 }
 
 func factoryLayoutEdgesAPIFromInternal(edges []interfaces.FactoryLayoutEdgeConfig) *[]factoryapi.FactoryLayoutEdge {

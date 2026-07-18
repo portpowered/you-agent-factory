@@ -182,6 +182,27 @@ func TestValidate_UnknownBundledDocLayoutNodeBlocksTopologyValidation(t *testing
 	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutUnknownNodeReference)
 }
 
+func TestValidate_EmptyStateRequiresCanonicalTopologyNode(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "workstation:missing",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+			Text: "No activity yet.",
+		},
+	})
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
+	for _, target := range result.BlockingTargets() {
+		if target.Code == factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference && target.Path != "factory.layout.nodes[1].emptyState" {
+			t.Fatalf("empty-state target path = %q", target.Path)
+		}
+	}
+}
+
 func TestValidate_LegacyBundledScriptDocLayoutNodeMatchesPendingTopology(t *testing.T) {
 	t.Parallel()
 

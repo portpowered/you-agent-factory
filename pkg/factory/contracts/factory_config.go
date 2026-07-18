@@ -221,10 +221,18 @@ type FactoryLayoutImageSourceConfig struct {
 }
 
 type FactoryLayoutNodeConfig struct {
-	ID       string                   `json:"id"`
-	Position FactoryLayoutPointConfig `json:"position"`
-	Size     *FactoryLayoutSizeConfig `json:"size,omitempty"`
-	Locked   *bool                    `json:"locked,omitempty"`
+	ID         string                         `json:"id"`
+	Position   FactoryLayoutPointConfig       `json:"position"`
+	Size       *FactoryLayoutSizeConfig       `json:"size,omitempty"`
+	Locked     *bool                          `json:"locked,omitempty"`
+	EmptyState *FactoryLayoutEmptyStateConfig `json:"emptyState,omitempty"`
+}
+
+// FactoryLayoutEmptyStateConfig is inert presentation metadata for a canonical
+// topology node. Exactly one of Text or Image is authored at the public boundary.
+type FactoryLayoutEmptyStateConfig struct {
+	Text  string                    `json:"text,omitempty"`
+	Image *FactoryLayoutImageConfig `json:"image,omitempty"`
 }
 
 type FactoryLayoutEdgeConfig struct {

@@ -96,5 +96,6 @@ func (r Result) HasBlockingTargets() bool {
 const DefaultTopologyValidationMessage = "Factory topology contains invalid graph references."
 
 func isBlockingLayoutTarget(target Target) bool {
-	return target.Code == CodeLayoutUnknownNodeReference && interfaces.IsBundledFileGraphNodeID(target.Subject.ID)
+	return target.Code == CodeLayoutEmptyStateUnknownNodeReference ||
+		(target.Code == CodeLayoutUnknownNodeReference && interfaces.IsBundledFileGraphNodeID(target.Subject.ID))
 }

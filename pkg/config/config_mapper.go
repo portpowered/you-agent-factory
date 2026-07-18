@@ -772,13 +772,24 @@ func cloneFactoryLayoutNodeConfigs(nodes []interfaces.FactoryLayoutNodeConfig) [
 	cloned := make([]interfaces.FactoryLayoutNodeConfig, len(nodes))
 	for i, node := range nodes {
 		cloned[i] = interfaces.FactoryLayoutNodeConfig{
-			ID:       node.ID,
-			Position: node.Position,
-			Size:     cloneFactoryLayoutSizeConfig(node.Size),
-			Locked:   cloneBoolPtr(node.Locked),
+			ID:         node.ID,
+			Position:   node.Position,
+			Size:       cloneFactoryLayoutSizeConfig(node.Size),
+			Locked:     cloneBoolPtr(node.Locked),
+			EmptyState: cloneFactoryLayoutEmptyStateConfig(node.EmptyState),
 		}
 	}
 	return cloned
+}
+
+func cloneFactoryLayoutEmptyStateConfig(emptyState *interfaces.FactoryLayoutEmptyStateConfig) *interfaces.FactoryLayoutEmptyStateConfig {
+	if emptyState == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutEmptyStateConfig{
+		Text:  emptyState.Text,
+		Image: cloneFactoryLayoutImageConfig(emptyState.Image),
+	}
 }
 
 func cloneFactoryLayoutEdgeConfigs(edges []interfaces.FactoryLayoutEdgeConfig) []interfaces.FactoryLayoutEdgeConfig {

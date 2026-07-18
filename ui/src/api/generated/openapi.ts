@@ -5055,6 +5055,36 @@ export interface components {
       /** @description Authored node height. */
       height: number;
     };
+    /** @description Extensible discriminated image-source shape. Version 1 supports only embedded raster data. */
+    FactoryLayoutImageSource: {
+      /**
+       * @description Source variant discriminator. EMBEDDED carries portable base64 raster data.
+       * @enum {string}
+       */
+      kind: FactoryLayoutImageSourceKind;
+      /**
+       * @description Declared media type for the embedded raster.
+       * @enum {string}
+       */
+      mediaType: FactoryLayoutImageSourceMediaType;
+      /**
+       * Format: byte
+       * @description Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
+       */
+      data: string;
+    };
+    /** @description Inert embedded-raster image content with required alternative text. */
+    FactoryLayoutImage: {
+      source: components["schemas"]["FactoryLayoutImageSource"];
+      /** @description Literal alternative text for the embedded image. */
+      alternativeText: string;
+    };
+    /** @description Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior. */
+    FactoryLayoutEmptyState: {
+      /** @description Literal empty-state text. It is not rendered as HTML or Markdown. */
+      text?: string;
+      image?: components["schemas"]["FactoryLayoutImage"];
+    } & (unknown | unknown);
     /** @description Portable graph node layout keyed by canonical graph node id. */
     FactoryLayoutNode: {
       /** @description Canonical graph node id such as workstation:<workstationId>. */
@@ -5063,6 +5093,7 @@ export interface components {
       size?: components["schemas"]["FactoryLayoutSize"];
       /** @description Optional authored node lock flag for future editor affordances. */
       locked?: boolean;
+      emptyState?: components["schemas"]["FactoryLayoutEmptyState"];
     };
     /** @description Portable graph edge layout keyed by canonical graph edge id. */
     FactoryLayoutEdge: {
@@ -5130,30 +5161,6 @@ export interface components {
       /** @description Required literal plain-text note body. */
       body: string;
       tone: components["schemas"]["FactoryLayoutNoteTone"];
-    };
-    /** @description Extensible discriminated image-source shape. Version 1 supports only embedded raster data. */
-    FactoryLayoutImageSource: {
-      /**
-       * @description Source variant discriminator. EMBEDDED carries portable base64 raster data.
-       * @enum {string}
-       */
-      kind: FactoryLayoutImageSourceKind;
-      /**
-       * @description Declared media type for the embedded raster.
-       * @enum {string}
-       */
-      mediaType: FactoryLayoutImageSourceMediaType;
-      /**
-       * Format: byte
-       * @description Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
-       */
-      data: string;
-    };
-    /** @description Inert embedded-raster image content with required alternative text. */
-    FactoryLayoutImage: {
-      source: components["schemas"]["FactoryLayoutImageSource"];
-      /** @description Literal alternative text for the embedded image. */
-      alternativeText: string;
     };
     /** @description Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid. */
     FactoryLayoutAnnotation: {
@@ -8027,6 +8034,18 @@ export const WorkTypeHandlingBehavior = {
 } as const;
 export type WorkTypeHandlingBehavior =
   (typeof WorkTypeHandlingBehavior)[keyof typeof WorkTypeHandlingBehavior];
+export const FactoryLayoutImageSourceKind = {
+  EMBEDDED: "EMBEDDED",
+} as const;
+export type FactoryLayoutImageSourceKind =
+  (typeof FactoryLayoutImageSourceKind)[keyof typeof FactoryLayoutImageSourceKind];
+export const FactoryLayoutImageSourceMediaType = {
+  image_png: "image/png",
+  image_jpeg: "image/jpeg",
+  image_webp: "image/webp",
+} as const;
+export type FactoryLayoutImageSourceMediaType =
+  (typeof FactoryLayoutImageSourceMediaType)[keyof typeof FactoryLayoutImageSourceMediaType];
 export const FactoryLayoutAnnotationKind = {
   NOTE: "NOTE",
   IMAGE: "IMAGE",
@@ -8043,18 +8062,6 @@ export const FactoryLayoutNoteTone = {
 } as const;
 export type FactoryLayoutNoteTone =
   (typeof FactoryLayoutNoteTone)[keyof typeof FactoryLayoutNoteTone];
-export const FactoryLayoutImageSourceKind = {
-  EMBEDDED: "EMBEDDED",
-} as const;
-export type FactoryLayoutImageSourceKind =
-  (typeof FactoryLayoutImageSourceKind)[keyof typeof FactoryLayoutImageSourceKind];
-export const FactoryLayoutImageSourceMediaType = {
-  image_png: "image/png",
-  image_jpeg: "image/jpeg",
-  image_webp: "image/webp",
-} as const;
-export type FactoryLayoutImageSourceMediaType =
-  (typeof FactoryLayoutImageSourceMediaType)[keyof typeof FactoryLayoutImageSourceMediaType];
 export const FactoryLayoutPreferencesDirection = {
   UP: "UP",
   DOWN: "DOWN",

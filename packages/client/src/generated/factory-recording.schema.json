@@ -2044,6 +2044,34 @@
       ],
       "type": "object"
     },
+    "FactoryLayoutEmptyState": {
+      "additionalProperties": false,
+      "description": "Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.",
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ]
+        },
+        {
+          "required": [
+            "image"
+          ]
+        }
+      ],
+      "properties": {
+        "image": {
+          "$ref": "#/$defs/FactoryLayoutImage"
+        },
+        "text": {
+          "description": "Literal empty-state text. It is not rendered as HTML or Markdown.",
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "FactoryLayoutGroup": {
       "additionalProperties": false,
       "description": "Portable background grouping metadata for graph canvas presentation.",
@@ -2148,6 +2176,9 @@
       "additionalProperties": false,
       "description": "Portable graph node layout keyed by canonical graph node id.",
       "properties": {
+        "emptyState": {
+          "$ref": "#/$defs/FactoryLayoutEmptyState"
+        },
         "id": {
           "description": "Canonical graph node id such as workstation:\u003cworkstationId\u003e.",
           "type": "string"

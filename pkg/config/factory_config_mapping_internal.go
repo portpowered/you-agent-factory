@@ -321,13 +321,24 @@ func factoryLayoutNodesInternalFromAPI(nodes *[]factoryapi.FactoryLayoutNode) []
 	values := make([]interfaces.FactoryLayoutNodeConfig, len(*nodes))
 	for i, node := range *nodes {
 		values[i] = interfaces.FactoryLayoutNodeConfig{
-			ID:       node.Id,
-			Position: factoryLayoutPointInternalFromAPI(node.Position),
-			Size:     factoryLayoutSizeInternalFromAPI(node.Size),
-			Locked:   node.Locked,
+			ID:         node.Id,
+			Position:   factoryLayoutPointInternalFromAPI(node.Position),
+			Size:       factoryLayoutSizeInternalFromAPI(node.Size),
+			Locked:     node.Locked,
+			EmptyState: factoryLayoutEmptyStateInternalFromAPI(node.EmptyState),
 		}
 	}
 	return values
+}
+
+func factoryLayoutEmptyStateInternalFromAPI(emptyState *factoryapi.FactoryLayoutEmptyState) *interfaces.FactoryLayoutEmptyStateConfig {
+	if emptyState == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutEmptyStateConfig{
+		Text:  stringValue(emptyState.Text),
+		Image: factoryLayoutImageInternalFromAPI(emptyState.Image),
+	}
 }
 
 func factoryLayoutEdgesInternalFromAPI(edges *[]factoryapi.FactoryLayoutEdge) []interfaces.FactoryLayoutEdgeConfig {

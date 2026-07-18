@@ -525,7 +525,7 @@ endif
 
 ui-test:
 ifeq ($(BUN_BIN),)
-	cd ui && $(NPM) exec vitest run --exclude 'integration/*.integration.test.mjs'
+	cd ui && $(NPM) run test:unit
 else
 	cd ui && $(UI_SCRIPT) test:unit
 endif

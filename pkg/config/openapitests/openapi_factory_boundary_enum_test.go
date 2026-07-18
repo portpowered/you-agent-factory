@@ -57,6 +57,57 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutAnnotationConte
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutEmptyStates(t *testing.T) {
+	const maxEmbeddedImageBytes = 2 * 1024 * 1024
+	maximumImageData := base64.StdEncoding.EncodeToString(make([]byte, maxEmbeddedImageBytes))
+	tests := []struct {
+		name  string
+		nodes string
+		path  string
+	}{
+		{"missing variant", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{}}`, "layout.nodes[0].emptyState"},
+		{"multiple variants", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here","image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Empty"}}}`, "layout.nodes[0].emptyState"},
+		{"empty text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":""}}`, "layout.nodes[0].emptyState.text"},
+		{"overlong text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"` + strings.Repeat("x", 501) + `"}}`, "layout.nodes[0].emptyState.text"},
+		{"empty image alternative text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":""}}}`, "layout.nodes[0].emptyState.image.alternativeText"},
+		{"unsupported image source", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/svg+xml","data":"AQID"},"alternativeText":"Empty"}}}`, "layout.nodes[0].emptyState.image.source.mediaType"},
+		{"duplicate node empty state", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"First"}},{"id":"workstation:review","position":{"x":20,"y":30},"emptyState":{"text":"Second"}}`, "layout.nodes[1].emptyState"},
+		{"factory image budget includes empty states", strings.Join([]string{
+			`{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"One"}}}`,
+			`{"id":"workstation:approve","position":{"x":20,"y":30},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Two"}}}`,
+			`{"id":"workstation:publish","position":{"x":30,"y":40},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Three"}}}`,
+			`{"id":"workstation:archive","position":{"x":40,"y":50},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Four"}}}`,
+			`{"id":"workstation:notify","position":{"x":50,"y":60},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"` + maximumImageData + `"},"alternativeText":"Five"}}}`,
+		}, ","), "layout.nodes[4].emptyState.image.source.data"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := FactoryConfigFromOpenAPIJSON(layoutFactoryJSONWithNodes(test.nodes))
+			if err == nil {
+				t.Fatal("expected unsafe layout empty state to be rejected")
+			}
+			if !strings.Contains(err.Error(), test.path) {
+				t.Fatalf("error = %v, want path %q", err, test.path)
+			}
+		})
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_PreservesLiteralLayoutEmptyStateTextAndImage(t *testing.T) {
+	nodes := `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"# Nothing\n[not a link](javascript:alert(1))"}},{"id":"workstation:approve","position":{"x":20,"y":30},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/webp","data":"AQID"},"alternativeText":"<img alt=literal>"}}}`
+	cfg, err := FactoryConfigFromOpenAPIJSON(layoutFactoryJSONWithNodes(nodes))
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.Layout.Nodes[0].EmptyState.Text != "# Nothing\n[not a link](javascript:alert(1))" {
+		t.Fatalf("literal empty-state text = %#v", cfg.Layout.Nodes[0].EmptyState)
+	}
+	if cfg.Layout.Nodes[1].EmptyState.Image.AlternativeText != "<img alt=literal>" || cfg.Layout.Nodes[1].EmptyState.Image.Source.MediaType != "image/webp" {
+		t.Fatalf("image empty state = %#v", cfg.Layout.Nodes[1].EmptyState)
+	}
+}
+
 func TestFactoryConfigFromOpenAPIJSON_PreservesLiteralLayoutAnnotationText(t *testing.T) {
 	literalText := "# Guidance\n[not a link](javascript:alert(1))\n<img src=example>"
 	annotations := layoutNoteAnnotation("literal-note", "", literalText) + "," +
@@ -107,6 +158,16 @@ func layoutFactoryJSON(annotations string) []byte {
 	return []byte(`{
 		"name":"layout-factory",
 		"layout":{"schemaVersion":1,"annotations":[` + annotations + `],"viewport":{"x":0,"y":0,"zoom":1}},
+		"workTypes":[{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
+		"workers":[{"name":"writer","type":"MODEL_WORKER"}],
+		"workstations":[{"name":"review","worker":"writer","inputs":[{"workType":"task","state":"ready"}],"outputs":[{"workType":"task","state":"done"}]}]
+	}`)
+}
+
+func layoutFactoryJSONWithNodes(nodes string) []byte {
+	return []byte(`{
+		"name":"layout-factory",
+		"layout":{"schemaVersion":1,"nodes":[` + nodes + `],"viewport":{"x":0,"y":0,"zoom":1}},
 		"workTypes":[{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
 		"workers":[{"name":"writer","type":"MODEL_WORKER"}],
 		"workstations":[{"name":"review","worker":"writer","inputs":[{"workType":"task","state":"ready"}],"outputs":[{"workType":"task","state":"done"}]}]

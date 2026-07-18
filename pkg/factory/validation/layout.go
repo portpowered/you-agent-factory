@@ -61,6 +61,16 @@ func layoutNodeTargets(layout *interfaces.FactoryLayoutConfig, topology interfac
 			continue
 		}
 		if _, ok := topology.NodeIDs[node.ID]; !ok {
+			if node.EmptyState != nil {
+				targets = append(targets, layoutReferenceTarget(
+					CodeLayoutEmptyStateUnknownNodeReference,
+					fmt.Sprintf("layout node empty state requires canonical graph node %q.", node.ID),
+					node.ID,
+					path+".emptyState",
+					SeverityError,
+				))
+				continue
+			}
 			targets = append(targets, layoutReferenceTarget(
 				CodeLayoutUnknownNodeReference,
 				fmt.Sprintf("layout node %q does not match any pending graph node.", node.ID),
@@ -303,11 +313,19 @@ func pruneLayoutNodes(
 			continue
 		}
 		if _, ok := topology.NodeIDs[node.ID]; !ok {
+			code := CodeLayoutUnknownNodeReference
+			message := fmt.Sprintf("layout node %q was pruned during save because it does not match any pending graph node.", node.ID)
+			pathSuffix := ".id"
+			if node.EmptyState != nil {
+				code = CodeLayoutEmptyStateUnknownNodeReference
+				message = fmt.Sprintf("layout node empty state for %q was rejected during save because it does not match any canonical graph node.", node.ID)
+				pathSuffix = ".emptyState"
+			}
 			targets = append(targets, prunedLayoutReferenceTarget(
-				CodeLayoutUnknownNodeReference,
-				fmt.Sprintf("layout node %q was pruned during save because it does not match any pending graph node.", node.ID),
+				code,
+				message,
 				node.ID,
-				path+".id",
+				path+pathSuffix,
 			))
 			continue
 		}
