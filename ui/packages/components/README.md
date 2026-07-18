@@ -171,6 +171,8 @@ From `ui/packages/components`:
 ```bash
 bun run typecheck
 bun run test
+bun run test:build
+bun run check:pack
 bun run check:package-boundary
 bun run check:package-dependency-direction
 bun run build-storybook
@@ -181,6 +183,13 @@ Package tests use `src/testing/vitest.setup.ts` and `src/testing/render.tsx`
 for DOM cleanup, accessible assertions, and user interactions. They do not
 require dashboard routes, providers, generated clients, API mocks, React
 Query, Zustand, Monaco, or Sonner.
+
+`check:pack` performs a clean production build, creates the registry-format
+tarball in a temporary directory, and validates npm's reported file inventory.
+It checks every manifest export and transitive local stylesheet or asset
+reference, rejects development-only files, and removes the temporary artifact
+after verification. `test:build` covers both the compiled output and this real
+pack flow, including actionable failure diagnostics.
 
 Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
 files. Preview decorators import the package token fixture stylesheet and
