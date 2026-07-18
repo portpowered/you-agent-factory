@@ -109,13 +109,27 @@ func (r *packagedGoalFailingCommandRunner) Run(_ context.Context, _ workers.Comm
 
 func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionControl(t *testing.T) {
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
 	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
 
 	pause := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
-		server.URL()+"/factory-sessions/~default/pause",
+		host.Endpoint()+"/factory-sessions/~default/pause",
 		factoryapi.FactorySessionLifecycleControlRequest{},
 		"pause packaged goal session",
 	)
@@ -123,18 +137,13 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 		t.Fatalf("pause response = %#v, want accepted pause", pause)
 	}
 
-	submitted := submitGeneratedGoalWork(t, server.URL(), "paused-goal-submit", "customer goal request text")
-	snapshot := server.GetEngineStateSnapshot(t)
-	if markingContainsWorkAtPlace(&snapshot.Marking, stringPointerValue(submitted.WorkId), "goal:init") {
-		t.Fatalf("paused submit reached goal:init while session was paused: %#v", snapshot.Marking.Tokens)
-	}
-	if markingContainsWorkAtPlace(&snapshot.Marking, stringPointerValue(submitted.WorkId), "goal:complete") {
-		t.Fatalf("paused submit reached goal:complete before resume: %#v", snapshot.Marking.Tokens)
-	}
+	submitted := submitGeneratedGoalWork(t, host.Endpoint(), "paused-goal-submit", "customer goal request text")
+	workID := stringPointerValue(submitted.WorkId)
+	assertPausedGoalSubmitHasNoTerminalPublicResult(t, host.Endpoint(), workID)
 
 	resume := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
-		server.URL()+"/factory-sessions/~default/resume",
+		host.Endpoint()+"/factory-sessions/~default/resume",
 		factoryapi.FactorySessionLifecycleControlRequest{},
 		"resume packaged goal session",
 	)
@@ -142,9 +151,21 @@ func TestPackagedGoalBuiltInTopology_SubmitWhilePausedResumesThroughSessionContr
 		t.Fatalf("resume response = %#v, want accepted resume", resume)
 	}
 
-	completed := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{stringPointerValue(submitted.WorkId)}, 15*time.Second)
+	assertTerminalDispatchForTrace(t, stream, submitted.TraceId)
+	completed := waitForGeneratedWorkIDsComplete(t, host.Endpoint(), []string{workID}, 15*time.Second)
 	if len(completed) != 1 || generatedWorkStateName(completed[0].State) != "complete" {
 		t.Fatalf("completed work = %#v, want one completed goal after resume", completed)
+	}
+}
+
+func assertPausedGoalSubmitHasNoTerminalPublicResult(t *testing.T, baseURL, workID string) {
+	t.Helper()
+
+	works := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	for _, candidate := range works.Results {
+		if stringPointerValue(candidate.WorkId) == workID && generatedWorkStateType(candidate.State) == factoryapi.WorkStateTypeTERMINAL {
+			t.Fatalf("GET /work paused submission state = %#v, want no terminal result before resume", candidate.State)
+		}
 	}
 }
 
