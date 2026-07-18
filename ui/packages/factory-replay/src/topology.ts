@@ -15,6 +15,10 @@ import type {
   FactoryTopologyProjectionIssue,
 } from "./topology-contract.js";
 import { FACTORY_TOPOLOGY_RELATIONSHIPS } from "./topology-contract.js";
+import {
+  factoryTopologyEntityId,
+  factoryTopologyNodeId,
+} from "./topology-identity.js";
 
 export { projectFactoryTopologyConnection } from "./topology-connection.js";
 export type {
@@ -38,6 +42,10 @@ export type {
   FactoryWorkTypeTopologyNode,
 } from "./topology-contract.js";
 export { FACTORY_TOPOLOGY_RELATIONSHIPS } from "./topology-contract.js";
+export {
+  factoryTopologyEntityId,
+  factoryTopologyNodeId,
+} from "./topology-identity.js";
 
 type Workstation = NonNullable<FactoryDefinition["workstations"]>[number];
 type WorkstationIO = Workstation["inputs"][number];
@@ -50,14 +58,6 @@ interface TopologyContext {
   workersByName: Map<string, string>;
   workStatesByName: Map<string, Map<string, string>>;
   workTypesByName: Map<string, string>;
-}
-
-function entityId(explicitId: string | undefined, name: string): string {
-  return explicitId?.trim() || name;
-}
-
-function nodeId(kind: FactoryTopologyNodeKind, id: string): string {
-  return `${kind}:${id}`;
 }
 
 function handlesFor(kind: FactoryTopologyNodeKind): FactoryTopologyHandle[] {
@@ -85,9 +85,10 @@ function sortedByIdentity<T extends { id?: string; name: string }>(
   values: readonly T[] | undefined,
 ): T[] {
   return [...(values ?? [])].sort((left, right) => {
-    const identityDifference = entityId(left.id, left.name).localeCompare(
-      entityId(right.id, right.name),
-    );
+    const identityDifference = factoryTopologyEntityId(
+      left.id,
+      left.name,
+    ).localeCompare(factoryTopologyEntityId(right.id, right.name));
     return identityDifference || left.name.localeCompare(right.name);
   });
 }
@@ -145,47 +146,47 @@ function appendNodes(
   context: TopologyContext,
 ): void {
   for (const resource of sortedByIdentity(factory.resources)) {
-    const id = entityId(resource.id, resource.name);
+    const id = factoryTopologyEntityId(resource.id, resource.name);
     context.resourcesByName.set(resource.name, id);
     addNode(context, {
       capacity: resource.capacity,
       entityId: id,
       handles: handlesFor("resource"),
-      id: nodeId("resource", id),
+      id: factoryTopologyNodeId("resource", id),
       kind: "resource",
       label: resource.name,
     });
   }
   for (const worker of sortedByIdentity(factory.workers)) {
-    const id = entityId(worker.id, worker.name);
+    const id = factoryTopologyEntityId(worker.id, worker.name);
     context.workersByName.set(worker.name, id);
     addNode(context, {
       entityId: id,
       handles: handlesFor("worker"),
-      id: nodeId("worker", id),
+      id: factoryTopologyNodeId("worker", id),
       kind: "worker",
       label: worker.name,
     });
   }
   for (const workType of sortedByIdentity(factory.workTypes)) {
-    const id = entityId(workType.id, workType.name);
+    const id = factoryTopologyEntityId(workType.id, workType.name);
     context.workTypesByName.set(workType.name, id);
     addNode(context, {
       entityId: id,
       handles: handlesFor("work-type"),
-      id: nodeId("work-type", id),
+      id: factoryTopologyNodeId("work-type", id),
       kind: "work-type",
       label: workType.name,
     });
     const states = new Map<string, string>();
     for (const state of sortedByIdentity(workType.states)) {
-      const stateId = `${id}:${entityId(state.id, state.name)}`;
+      const stateId = `${id}:${factoryTopologyEntityId(state.id, state.name)}`;
       states.set(state.name, stateId);
       addNode(context, {
         category: state.type,
         entityId: stateId,
         handles: handlesFor("work-state"),
-        id: nodeId("work-state", stateId),
+        id: factoryTopologyNodeId("work-state", stateId),
         kind: "work-state",
         label: state.name,
         workTypeId: id,
@@ -194,11 +195,11 @@ function appendNodes(
     context.workStatesByName.set(workType.name, states);
   }
   for (const workstation of sortedByIdentity(factory.workstations)) {
-    const id = entityId(workstation.id, workstation.name);
+    const id = factoryTopologyEntityId(workstation.id, workstation.name);
     addNode(context, {
       entityId: id,
       handles: handlesFor("workstation"),
-      id: nodeId("workstation", id),
+      id: factoryTopologyNodeId("workstation", id),
       kind: "workstation",
       label: workstation.name,
     });
@@ -216,8 +217,8 @@ function appendFoundationConnections(
       addConnection(
         context,
         "worker-resource",
-        resourceEntityId && nodeId("resource", resourceEntityId),
-        workerEntityId && nodeId("worker", workerEntityId),
+        resourceEntityId && factoryTopologyNodeId("resource", resourceEntityId),
+        workerEntityId && factoryTopologyNodeId("worker", workerEntityId),
         resource.name,
         worker.name,
       );
@@ -232,8 +233,9 @@ function appendFoundationConnections(
       addConnection(
         context,
         "work-type-state",
-        workTypeEntityId && nodeId("work-type", workTypeEntityId),
-        stateEntityId && nodeId("work-state", stateEntityId),
+        workTypeEntityId &&
+          factoryTopologyNodeId("work-type", workTypeEntityId),
+        stateEntityId && factoryTopologyNodeId("work-state", stateEntityId),
         workType.name,
         `${workType.name}:${state.name}`,
       );
@@ -284,7 +286,8 @@ function appendRoutes(
       ) {
         continue;
       }
-      const stateNodeId = stateEntityId && nodeId("work-state", stateEntityId);
+      const stateNodeId =
+        stateEntityId && factoryTopologyNodeId("work-state", stateEntityId);
       const isInput = kind === "workstation-input";
       addConnection(
         context,
@@ -303,16 +306,16 @@ function appendWorkstationConnections(
   context: TopologyContext,
 ): void {
   for (const workstation of sortedByIdentity(factory.workstations)) {
-    const workstationNodeId = nodeId(
+    const workstationNodeId = factoryTopologyNodeId(
       "workstation",
-      entityId(workstation.id, workstation.name),
+      factoryTopologyEntityId(workstation.id, workstation.name),
     );
     const workerEntityId = context.workersByName.get(workstation.worker);
     if (workstation.worker.trim()) {
       addConnection(
         context,
         "worker-assignment",
-        workerEntityId && nodeId("worker", workerEntityId),
+        workerEntityId && factoryTopologyNodeId("worker", workerEntityId),
         workstationNodeId,
         workstation.worker,
         workstation.name,
@@ -323,7 +326,7 @@ function appendWorkstationConnections(
       addConnection(
         context,
         "workstation-resource",
-        resourceEntityId && nodeId("resource", resourceEntityId),
+        resourceEntityId && factoryTopologyNodeId("resource", resourceEntityId),
         workstationNodeId,
         resource.name,
         workstation.name,

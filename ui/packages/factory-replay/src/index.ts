@@ -1,3 +1,16 @@
+export { projectFactoryLoad } from "./load.js";
+export type {
+  FactoryActiveResourceClaimsEvidence,
+  FactoryLoadAtTickInput,
+  FactoryLoadProjection,
+  FactoryLoadProjectionInput,
+  FactoryLoadProjectionIssue,
+  FactoryResourceClaimEvidence,
+  FactoryResourceOccupancyProjection,
+  FactoryWorkStateCountProjection,
+  FactoryWorkStateOccupancyEvidence,
+} from "./load-contract.js";
+export { projectFactoryLoadAtTick } from "./load-replay.js";
 export {
   type FactoryWorkProgressAtTickInput,
   type FactoryWorkProgressCategory,
@@ -44,6 +57,8 @@ export {
   type FactoryWorkStateTopologyNode,
   type FactoryWorkstationTopologyNode,
   type FactoryWorkTypeTopologyNode,
+  factoryTopologyEntityId,
+  factoryTopologyNodeId,
   projectFactoryTopology,
   projectFactoryTopologyAtTick,
   projectFactoryTopologyConnection,

@@ -35,6 +35,14 @@ sorted public node and connection identities without mutating caller data.
 vocabulary for renderers. Invalid relationship endpoints return a fail-closed
 result with structured issues and no partial graph.
 
+Use `projectFactoryLoadAtTick` to reconstruct distinct customer Work counts and
+resource occupancy from canonical events, or `projectFactoryLoad` with explicit
+selected-tick evidence. Count and occupancy entries reference the same stable
+Work State and resource node IDs as the topology projection. Missing evidence
+is reported as unavailable rather than fabricated as zero; dangling,
+contradictory, invalid-capacity, and over-capacity evidence remains visible
+through deterministic structured issues.
+
 ## Distribution verification
 
 Run `bun run verify` from this directory to typecheck and test the package,
