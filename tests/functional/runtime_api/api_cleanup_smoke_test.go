@@ -37,7 +37,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "cleanup smoke"},
 	})
-	assertCleanupSmokeStreamedTerminalDispatch(t, stream, traceID)
+	assertTerminalDispatchForTrace(t, stream, traceID)
 
 	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(host.Endpoint(), "/work"))
 	if len(work.Results) != 1 {
@@ -67,7 +67,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 	assertCleanupSmokeDashboardShell(t, host.Endpoint())
 }
 
-func assertCleanupSmokeStreamedTerminalDispatch(t *testing.T, stream *factoryEventHTTPStream, traceID string) {
+func assertTerminalDispatchForTrace(t *testing.T, stream *factoryEventHTTPStream, traceID string) {
 	t.Helper()
 
 	deadline := time.Now().Add(5 * time.Second)

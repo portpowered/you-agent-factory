@@ -2,6 +2,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -26,9 +27,25 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	support.SkipLongFunctional(t, "slow generated API and live runtime alignment smoke")
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+
+	traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
 		Name:         "generated-api-integration-smoke",
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated API integration smoke"},
@@ -36,8 +53,9 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	if traceID == "" {
 		t.Fatal("POST /work returned an empty trace_id")
 	}
+	assertTerminalDispatchForTrace(t, stream, traceID)
 
-	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(host.Endpoint(), "/work"))
 	if len(work.Results) != 1 {
 		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
 	}
@@ -55,15 +73,19 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", item.State)
 	}
 
-	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	if statusRead.TotalTokens != 1 {
-		t.Fatalf("GET /status total_tokens = %d, want 1", statusRead.TotalTokens)
+	statusRead, err := host.REST().GetStatus(context.Background())
+	if err != nil {
+		t.Fatalf("generated GetStatus() error = %v", err)
 	}
-	if statusRead.Categories.Terminal != 1 {
-		t.Fatalf("GET /status terminal count = %d, want 1", statusRead.Categories.Terminal)
+	if statusRead.StatusCode() != http.StatusOK || statusRead.JSON200 == nil {
+		t.Fatalf("generated GetStatus() response = %#v, want typed 200", statusRead)
 	}
-
-	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
+	if statusRead.JSON200.TotalTokens != 1 {
+		t.Fatalf("generated GET /status total_tokens = %d, want 1", statusRead.JSON200.TotalTokens)
+	}
+	if statusRead.JSON200.Categories.Terminal != 1 {
+		t.Fatalf("generated GET /status terminal count = %d, want 1", statusRead.JSON200.Categories.Terminal)
+	}
 	functionalevidence.Covers(
 		t,
 		"rest/getEventsBySessionId",
