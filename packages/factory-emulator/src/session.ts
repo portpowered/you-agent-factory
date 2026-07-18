@@ -1,5 +1,8 @@
 import type { FactoryEventBatch, FactoryEventSink } from "./contracts.js";
-import type { EmulatorScenario } from "./generated/scenario.js";
+import type {
+  EmulatorInitialSubmission,
+  EmulatorScenario,
+} from "./generated/scenario.js";
 import type {
   EmulatorFactoryDefinition,
   EmulatorScenarioDiagnostic,
@@ -12,8 +15,16 @@ export declare class FactoryEmulatorConfigurationError extends Error {
 
 export declare class FactoryEmulatorLifecycleError extends Error {
   readonly code: "INVALID_LIFECYCLE";
-  readonly command: "start" | "reset";
-  readonly phase: FactoryEmulatorSessionState["lifecycle"] | "starting";
+  readonly command: "start" | "submit" | "reset";
+  readonly phase:
+    | FactoryEmulatorSessionState["lifecycle"]
+    | "starting"
+    | "submitting";
+}
+
+export declare class FactoryEmulatorSubmissionError extends Error {
+  readonly code: "INVALID_SUBMISSION";
+  readonly diagnostics: readonly EmulatorScenarioDiagnostic[];
 }
 
 export interface FactoryEmulatorSessionOptions {
@@ -28,6 +39,7 @@ export interface FactoryEmulatorSessionWork {
   readonly traceId: string;
   readonly workId: string;
   readonly workType: string;
+  readonly phase: "active" | "ready" | "waiting" | "completed";
   readonly input?: Readonly<Record<string, unknown>>;
 }
 
@@ -69,10 +81,31 @@ export interface FactoryEmulatorResetReceipt {
   readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "pre-start" }>;
 }
 
+export interface FactoryEmulatorSubmitReceipt {
+  readonly status: "submitted";
+  readonly batch: FactoryEventBatch;
+  readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "started" }>;
+}
+
+export interface FactoryEmulatorSessionStatus {
+  readonly phase:
+    | "error"
+    | "closed"
+    | "active"
+    | "ready"
+    | "waiting"
+    | "idle";
+  readonly reason: string;
+}
+
 export interface FactoryEmulatorSession {
   start(): Promise<FactoryEmulatorStartReceipt>;
+  submit(
+    submissionOrBatch: EmulatorInitialSubmission | readonly EmulatorInitialSubmission[],
+  ): Promise<FactoryEmulatorSubmitReceipt>;
   reset(): FactoryEmulatorResetReceipt;
   state(): FactoryEmulatorSessionState;
+  status(): FactoryEmulatorSessionStatus;
 }
 
 /** Creates one validated, caller-owned deterministic Factory emulator session. */

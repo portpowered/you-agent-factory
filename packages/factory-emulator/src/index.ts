@@ -25,6 +25,7 @@ export {
 export {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorLifecycleError,
+  FactoryEmulatorSubmissionError,
   createFactoryEmulatorSession,
 } from "./session.js";
 export type {
@@ -33,8 +34,10 @@ export type {
   FactoryEmulatorSessionCounters,
   FactoryEmulatorSessionOptions,
   FactoryEmulatorSessionState,
+  FactoryEmulatorSessionStatus,
   FactoryEmulatorSessionWork,
   FactoryEmulatorStartReceipt,
+  FactoryEmulatorSubmitReceipt,
 } from "./session.js";
 export type {
   FactoryEmulator,

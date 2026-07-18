@@ -13,6 +13,7 @@ export {
 export {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorLifecycleError,
+  FactoryEmulatorSubmissionError,
   createFactoryEmulatorSession,
 } from "./session.js";
 export {

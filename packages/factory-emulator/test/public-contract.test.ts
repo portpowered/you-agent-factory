@@ -19,8 +19,10 @@ import {
 } from "@you-agent-factory/factory-emulator";
 import type {
   FactoryEmulatorSession,
+  FactoryEmulatorSessionStatus,
   FactoryEmulatorSessionState,
   FactoryEmulatorStartReceipt,
+  FactoryEmulatorSubmitReceipt,
 } from "@you-agent-factory/factory-emulator";
 import type { FactoryEvent } from "@you-agent-factory/client";
 
@@ -98,8 +100,15 @@ const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
 });
 const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
 const startReceipt: Promise<FactoryEmulatorStartReceipt> = emulatorSession.start();
+const submitReceipt: Promise<FactoryEmulatorSubmitReceipt> = emulatorSession.submit({
+  id: "public-work",
+  workType: "task",
+});
+const sessionStatus: FactoryEmulatorSessionStatus = emulatorSession.status();
 void sessionState;
 void startReceipt;
+void submitReceipt;
+void sessionStatus;
 
 import {
   parseEmulatorScenario,

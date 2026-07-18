@@ -3,6 +3,7 @@ import {
   canonicalStringify,
   deriveFactoryEmulatorIdentity,
 } from "./identity.js";
+import { selectEmulatorRule } from "./semantics.js";
 
 const EVENT_SCHEMA_VERSION = "agent-factory.event.v1";
 const WORK_REQUEST_TYPE = "FACTORY_REQUEST_BATCH";
@@ -26,6 +27,15 @@ export class FactoryEmulatorLifecycleError extends Error {
   }
 }
 
+export class FactoryEmulatorSubmissionError extends Error {
+  constructor(diagnostics) {
+    super("Factory emulator submission is not valid");
+    this.name = "FactoryEmulatorSubmissionError";
+    this.code = "INVALID_SUBMISSION";
+    this.diagnostics = copy(diagnostics);
+  }
+}
+
 /**
  * Creates one caller-owned deterministic Factory emulator session.
  *
@@ -41,11 +51,11 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
   const configuredFactory = copy(factory);
   const configuredScenario = copy(scenario);
   let committedState = preStartState();
-  let startInProgress = false;
+  let commandInProgress;
 
   return Object.freeze({
     async start() {
-      const phase = startInProgress ? "starting" : committedState.lifecycle;
+      const phase = commandInProgress ?? committedState.lifecycle;
       if (phase !== "pre-start") {
         throw new FactoryEmulatorLifecycleError("start", phase);
       }
@@ -56,7 +66,7 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       }
 
       const calculation = calculateStart(parsed.factory, parsed.scenario);
-      startInProgress = true;
+      commandInProgress = "starting";
       try {
         for (const batch of calculation.batches) {
           await sink.write(copy(batch));
@@ -68,11 +78,55 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
           state: committedState,
         });
       } finally {
-        startInProgress = false;
+        commandInProgress = undefined;
+      }
+    },
+    async submit(submissionOrBatch) {
+      const phase = commandInProgress ?? committedState.lifecycle;
+      if (phase !== "started") {
+        throw new FactoryEmulatorLifecycleError("submit", phase);
+      }
+
+      const submissions = normalizeSubmissions(submissionOrBatch);
+      const parsed = parseEmulatorScenario(
+        {
+          ...configuredScenario,
+          initialSubmissions: submissions,
+          rules: [],
+          unmatchedBehavior: { kind: "ignore" },
+        },
+        configuredFactory,
+      );
+      if (!parsed.success) {
+        throw new FactoryEmulatorSubmissionError(
+          parsed.diagnostics.map((diagnostic) => ({
+            ...diagnostic,
+            path: diagnostic.path.replace(/^\/initialSubmissions/, "/submissions"),
+          })),
+        );
+      }
+
+      const calculation = calculateSubmit(
+        parsed.factory,
+        configuredScenario,
+        committedState,
+        submissions,
+      );
+      commandInProgress = "submitting";
+      try {
+        await sink.write(copy(calculation.batch));
+        committedState = calculation.state;
+        return copy({
+          status: "submitted",
+          batch: calculation.batch,
+          state: committedState,
+        });
+      } finally {
+        commandInProgress = undefined;
       }
     },
     reset() {
-      const phase = startInProgress ? "starting" : committedState.lifecycle;
+      const phase = commandInProgress ?? committedState.lifecycle;
       if (phase !== "started") {
         throw new FactoryEmulatorLifecycleError("reset", phase);
       }
@@ -81,6 +135,42 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
     },
     state() {
       return copy(committedState);
+    },
+    status() {
+      return copy(sessionStatus(committedState, commandInProgress));
+    },
+  });
+}
+
+function calculateSubmit(factory, scenario, state, submissions) {
+  const identityCoordinates = sessionIdentityCoordinates(
+    factory,
+    scenario,
+    state.sessionId,
+  );
+  const commandSequence = state.counters.commands;
+  const { event, works } = calculateWorkRequest({
+    command: "submit",
+    commandSequence,
+    eventSequence: state.counters.events,
+    eventTime: state.virtualTime,
+    identityCoordinates,
+    scenario,
+    sessionId: state.sessionId,
+    submissions,
+  });
+  return copy({
+    batch: { events: [event] },
+    state: {
+      ...state,
+      works: [...state.works, ...works],
+      counters: {
+        ...state.counters,
+        commands: state.counters.commands + 1,
+        events: state.counters.events + 1,
+        requests: state.counters.requests + 1,
+        works: state.counters.works + works.length,
+      },
     },
   });
 }
@@ -95,12 +185,11 @@ function calculateStart(factory, scenario) {
     seed: scenario.seed,
     startAt: normalizedStartAt,
   });
-  const identityCoordinates = {
-    factory: factoryIdentity,
-    scenarioId: scenario.id,
-    seed: scenario.seed,
+  const identityCoordinates = sessionIdentityCoordinates(
+    factory,
+    scenario,
     sessionId,
-  };
+  );
 
   const bootstrapEvents = [
     createEvent({
@@ -125,61 +214,21 @@ function calculateStart(factory, scenario) {
   ];
 
   const initialSubmissions = scenario.initialSubmissions ?? [];
-  const requestId = initialSubmissions.length === 0
-    ? undefined
-    : deriveFactoryEmulatorIdentity("request", {
-      ...identityCoordinates,
-      command: "start",
-      sequence: 0,
-    });
-  const works = initialSubmissions.map((submission, ordinal) => {
-    const workCoordinates = {
-      ...identityCoordinates,
-      command: "start",
-      ordinal,
-      submissionId: submission.id,
-      workType: submission.workType,
-    };
-    const traceId = deriveFactoryEmulatorIdentity("trace", workCoordinates);
-    return {
-      submissionId: submission.id,
-      requestId,
-      traceId,
-      workId: deriveFactoryEmulatorIdentity("work", workCoordinates),
-      workType: submission.workType,
-      ...(submission.input === undefined ? {} : { input: submission.input }),
-    };
+  const initialRequest = initialSubmissions.length === 0 ? undefined : calculateWorkRequest({
+    command: "start",
+    commandSequence: 0,
+    eventSequence: bootstrapEvents.length,
+    eventTime: normalizedStartAt,
+    identityCoordinates,
+    scenario,
+    sessionId,
+    submissions: initialSubmissions,
   });
+  const works = initialRequest?.works ?? [];
 
   const batches = [{ events: bootstrapEvents }];
-  if (works.length > 0) {
-    batches.push({
-      events: [createEvent({
-        identityCoordinates,
-        sequence: bootstrapEvents.length,
-        sessionId,
-        eventTime: normalizedStartAt,
-        type: "WORK_REQUEST",
-        context: {
-          requestId,
-          traceIds: works.map((work) => work.traceId),
-          workIds: works.map((work) => work.workId),
-        },
-        payload: {
-          type: WORK_REQUEST_TYPE,
-          source: "emulator",
-          works: works.map((work) => ({
-            name: work.submissionId,
-            workId: work.workId,
-            requestId: work.requestId,
-            workTypeName: work.workType,
-            currentChainingTraceId: work.traceId,
-            traceId: work.traceId,
-            ...(work.input === undefined ? {} : { payload: work.input }),
-          })),
-        },
-      })],
-    });
+  if (initialRequest) {
+    batches.push({ events: [initialRequest.event] });
   }
 
   return copy({
@@ -201,6 +250,135 @@ function calculateStart(factory, scenario) {
       },
     },
   });
+}
+
+function calculateWorkRequest({
+  command,
+  commandSequence,
+  eventSequence,
+  eventTime,
+  identityCoordinates,
+  scenario,
+  sessionId,
+  submissions,
+}) {
+  const requestId = deriveFactoryEmulatorIdentity("request", {
+    ...identityCoordinates,
+    command,
+    sequence: commandSequence,
+  });
+  const works = submissions.map((submission, ordinal) => {
+    const workCoordinates = {
+      ...identityCoordinates,
+      command,
+      ...(command === "start" ? {} : { sequence: commandSequence }),
+      ordinal,
+      submissionId: submission.id,
+      workType: submission.workType,
+    };
+    const traceId = deriveFactoryEmulatorIdentity("trace", workCoordinates);
+    return {
+      submissionId: submission.id,
+      requestId,
+      traceId,
+      workId: deriveFactoryEmulatorIdentity("work", workCoordinates),
+      workType: submission.workType,
+      phase: submissionPhase(scenario, submission),
+      ...(submission.input === undefined ? {} : { input: submission.input }),
+    };
+  });
+  return {
+    works,
+    event: createEvent({
+      identityCoordinates,
+      sequence: eventSequence,
+      sessionId,
+      eventTime,
+      type: "WORK_REQUEST",
+      context: {
+        requestId,
+        traceIds: works.map((work) => work.traceId),
+        workIds: works.map((work) => work.workId),
+      },
+      payload: {
+        type: WORK_REQUEST_TYPE,
+        source: "emulator",
+        works: works.map((work) => ({
+          name: work.submissionId,
+          workId: work.workId,
+          requestId: work.requestId,
+          workTypeName: work.workType,
+          currentChainingTraceId: work.traceId,
+          traceId: work.traceId,
+          ...(work.input === undefined ? {} : { payload: work.input }),
+        })),
+      },
+    }),
+  };
+}
+
+function submissionPhase(scenario, submission) {
+  if (selectEmulatorRule(scenario, submission) !== undefined) {
+    return "ready";
+  }
+  return scenario.unmatchedBehavior.kind === "ignore" ? "waiting" : "ready";
+}
+
+function sessionIdentityCoordinates(factory, scenario, sessionId) {
+  return {
+    factory: canonicalStringify(factory),
+    scenarioId: scenario.id,
+    seed: scenario.seed,
+    sessionId,
+  };
+}
+
+function normalizeSubmissions(submissionOrBatch) {
+  let submissions;
+  try {
+    submissions = copy(Array.isArray(submissionOrBatch)
+      ? submissionOrBatch
+      : [submissionOrBatch]);
+  } catch {
+    throw new FactoryEmulatorSubmissionError([{
+      code: "INVALID_SCENARIO",
+      path: "/submissions",
+      message: "must contain structured-cloneable data values only",
+    }]);
+  }
+  if (submissions.length === 0) {
+    throw new FactoryEmulatorSubmissionError([{
+      code: "INVALID_SCENARIO",
+      path: "/submissions",
+      message: "must contain at least one Work request",
+    }]);
+  }
+  return submissions;
+}
+
+function sessionStatus(state, commandInProgress) {
+  if (state.error !== undefined) {
+    return { phase: "error", reason: state.error.code ?? "runtime-error" };
+  }
+  if (state.lifecycle === "closed") {
+    return { phase: "closed", reason: "session-closed" };
+  }
+  if (commandInProgress !== undefined) {
+    return { phase: "active", reason: commandInProgress };
+  }
+  if (state.lifecycle === "pre-start") {
+    return { phase: "idle", reason: "not-started" };
+  }
+  if (state.works.some((work) => work.phase === "active")) {
+    return { phase: "active", reason: "work-active" };
+  }
+  if (state.works.some((work) => work.phase === undefined || work.phase === "ready")) {
+    return { phase: "ready", reason: "work-ready" };
+  }
+  if (state.works.some((work) => work.phase === "waiting")) {
+    return { phase: "waiting", reason: "work-waiting" };
+  }
+  return { phase: "idle", reason: "no-unfinished-work" };
 }
 
 function createEvent({

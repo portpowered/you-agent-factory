@@ -134,3 +134,20 @@ virtual elapsed time, counters, and rule cursors and returns the session to
 `pre-start` without writing an event. Starting again with the same immutable
 configuration reproduces the original event bytes and committed snapshot;
 changing the seed creates a different deterministic identity stream.
+
+While started, `submit(work)` and `submit([work, ...])` accept the same
+`id`, `workType`, and optional data-only `input` shape as scenario initial
+submissions. The complete submission is detached and validated before the sink
+is called. One accepted batch adds all of its Work in caller order; any invalid
+member rejects the command without events, counter changes, or committed Work.
+Request, trace, Work, and event identities include stable command coordinates,
+so repeated sessions reproduce the same submission stream without relying on
+ambient counters.
+
+`status()` derives execution state from session facts. A started session with
+ready Work reports `ready`; one with no unfinished Work remains open and reports
+`idle`; unmatched unfinished Work configured to be ignored reports `waiting`.
+During an accepted submission write it reports `active`, while `state()`
+continues to expose only the prior committed snapshot. Once the sink accepts
+the batch, the new Work becomes visible and the session reports `ready` or
+`waiting` from its executable scenario facts.
