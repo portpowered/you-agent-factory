@@ -19,3 +19,10 @@ event bound.
 
 This package intentionally does not own replay history or depend on browser
 timers, React, Zustand, dashboard state, or transport code.
+
+`createFactoryEmulator({ initialState, calculateTick, sink })` provides the
+small logical-tick boundary used by an emulator host. It calculates a complete
+batch from a detached committed-state snapshot, waits for `sink.write`, and
+only then commits the calculated next state. A concurrent `advance` rejects
+while the write is unresolved, ensuring no later tick is calculated or
+committed ahead of an unaccepted batch.

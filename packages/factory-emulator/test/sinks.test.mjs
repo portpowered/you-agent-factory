@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  FactoryEmulatorAdvanceInProgressError,
   FactoryEventSinkCapacityError,
   FactoryEventSinkClosedError,
+  createFactoryEmulator,
   createFactoryRecordingSink,
   createMemoryFactoryEventSink,
 } from "@you-agent-factory/factory-emulator";
@@ -100,3 +102,51 @@ test("memory sink rejects writes after close", async () => {
     FactoryEventSinkClosedError,
   );
 });
+
+test("emulator commits its calculated state only after the logical-tick batch is accepted", async () => {
+  const pendingWrite = deferred();
+  const batches = [];
+  const sink = {
+    async close() {
+      return { status: "closed" };
+    },
+    async write(batch) {
+      batches.push(structuredClone(batch));
+      await pendingWrite.promise;
+      return { status: "accepted" };
+    },
+  };
+  const emulator = createFactoryEmulator({
+    initialState: { count: 0 },
+    sink,
+    calculateTick(state) {
+      return {
+        batch: { events: [event("event-1", 1)] },
+        state: { count: state.count + 1 },
+      };
+    },
+  });
+
+  const advance = emulator.advance();
+  assert.deepEqual(emulator.state(), { count: 0 });
+  assert.deepEqual(batches.map((batch) => batch.events.map((accepted) => accepted.id)), [
+    ["event-1"],
+  ]);
+  await assert.rejects(emulator.advance(), FactoryEmulatorAdvanceInProgressError);
+
+  pendingWrite.resolve();
+  const receipt = await advance;
+  assert.deepEqual(receipt, {
+    status: "committed",
+    batch: { events: [event("event-1", 1)] },
+  });
+  assert.deepEqual(emulator.state(), { count: 1 });
+});
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}

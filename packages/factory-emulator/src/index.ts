@@ -16,3 +16,14 @@ export type {
   MemoryFactoryEventSink,
   MemoryFactoryEventSinkOptions,
 } from "./sinks.js";
+export {
+  FactoryEmulatorAdvanceInProgressError,
+  createFactoryEmulator,
+} from "./emulator.js";
+export type {
+  FactoryEmulator,
+  FactoryEmulatorAdvanceReceipt,
+  FactoryEmulatorOptions,
+  FactoryEmulatorTick,
+  FactoryEmulatorTickCalculator,
+} from "./emulator.js";

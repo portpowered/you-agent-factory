@@ -1,4 +1,7 @@
 import type {
+  FactoryEmulator,
+  FactoryEmulatorAdvanceReceipt,
+  FactoryEmulatorTick,
   FactoryEventBatch,
   FactoryEventSink,
   FactoryEventSinkCloseReceipt,
@@ -7,6 +10,7 @@ import type {
   MemoryFactoryEventSink,
 } from "@you-agent-factory/factory-emulator";
 import {
+  createFactoryEmulator,
   createFactoryRecordingSink,
   createMemoryFactoryEventSink,
 } from "@you-agent-factory/factory-emulator";
@@ -54,3 +58,13 @@ const recordingSink: FactoryRecordingSink = createFactoryRecordingSink({
 });
 const recordingEvents: readonly FactoryEvent[] = recordingSink.recording().events;
 void recordingEvents;
+
+const emulator: FactoryEmulator<{ readonly count: number }> = createFactoryEmulator({
+  initialState: { count: 0 },
+  sink,
+  calculateTick(state): FactoryEmulatorTick<{ readonly count: number }> {
+    return { batch, state: { count: state.count + 1 } };
+  },
+});
+const advanceReceipt: Promise<FactoryEmulatorAdvanceReceipt> = emulator.advance();
+void advanceReceipt;
