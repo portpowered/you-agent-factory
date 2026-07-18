@@ -10,13 +10,11 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -57,25 +55,6 @@ func simplePipelineConfig() map[string]any {
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
-	}
-}
-
-func persistTestPipelineConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "task",
-			States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "stage1", Type: interfaces.StateTypeProcessing},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			},
-		}},
-		Workers: []workerconfig.Config{{Name: "step-worker"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{Name: "step1", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
-			{Name: "finish", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}},
-		},
 	}
 }
 
