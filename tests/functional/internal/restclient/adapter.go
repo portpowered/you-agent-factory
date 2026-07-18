@@ -45,6 +45,21 @@ func (a *Adapter) GetFactoryResponseEventsBySessionID(
 	return a.client.GetFactoryResponseEventsBySessionIdWithResponse(ctx, sessionID, params)
 }
 
+// GetStatus executes the generated readiness/status operation.
+func (a *Adapter) GetStatus(ctx context.Context) (*generatedclient.GetStatusClientResponse, error) {
+	return a.client.GetStatusWithResponse(ctx)
+}
+
+// OpenFactoryEventsBySessionID opens the canonical session-scoped Factory
+// Event SSE response. The caller owns the returned response body.
+func (a *Adapter) OpenFactoryEventsBySessionID(
+	ctx context.Context,
+	sessionID generatedclient.SessionID,
+	params *generatedclient.GetEventsBySessionIdParams,
+) (*http.Response, error) {
+	return a.client.GetEventsBySessionId(ctx, sessionID, params)
+}
+
 func validateBaseURL(baseURL string) error {
 	parsed, err := url.ParseRequestURI(baseURL)
 	if err != nil {

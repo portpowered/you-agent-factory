@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -121,6 +122,7 @@ func provideRunSessionExecutionBuilder() RunSessionExecutionBuilder {
 // production-shaped functional graph may replace. Its zero value preserves
 // every production edge.
 type FunctionalEdges struct {
+	APIServerListener     net.Listener
 	ProviderCommandRunner workers.CommandRunner
 	ScriptCommandRunner   workers.CommandRunner
 	AgyPTYAllocator       agypty.PTYAllocator
@@ -322,6 +324,11 @@ func configWithProcessDependencies(
 		return nil, fmt.Errorf("construct worker application: service config is required")
 	}
 	copied := *cfg
+	if dependencies.FunctionalEdges.APIServerListener != nil {
+		copied.APIServerStarter = runcli.APIServerStarterWithListener(
+			dependencies.FunctionalEdges.APIServerListener,
+		)
+	}
 	if len(shared) > 0 && shared[0] != nil && shared[0].Valid() {
 		copied.WorkerApplication = *shared[0]
 		return &copied, nil

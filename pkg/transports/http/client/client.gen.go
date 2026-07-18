@@ -26,22 +26,22 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	BADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
-	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
-	FACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
-	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
-	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
-	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
-	INVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
-	INVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
-	INVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
-	MOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	NOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
-	RESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
-	RESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
-	STALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeBADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeFACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	ErrorResponseCodeFACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
+	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
+	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
+	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryResponseEventKind.
@@ -58,6 +58,30 @@ const (
 	FactoryResponseEventKindTool       FactoryResponseEventKind = "TOOL"
 	FactoryResponseEventKindTurn       FactoryResponseEventKind = "TURN"
 	FactoryResponseEventKindUsage      FactoryResponseEventKind = "USAGE"
+)
+
+// Defines values for FactorySessionDurableLifecycleStatus.
+const (
+	FactorySessionDurableLifecycleStatusAwaitingApproval FactorySessionDurableLifecycleStatus = "AWAITING_APPROVAL"
+	FactorySessionDurableLifecycleStatusCanceled         FactorySessionDurableLifecycleStatus = "CANCELED"
+	FactorySessionDurableLifecycleStatusCanceling        FactorySessionDurableLifecycleStatus = "CANCELING"
+	FactorySessionDurableLifecycleStatusFailed           FactorySessionDurableLifecycleStatus = "FAILED"
+	FactorySessionDurableLifecycleStatusInterrupted      FactorySessionDurableLifecycleStatus = "INTERRUPTED"
+	FactorySessionDurableLifecycleStatusPaused           FactorySessionDurableLifecycleStatus = "PAUSED"
+	FactorySessionDurableLifecycleStatusQueued           FactorySessionDurableLifecycleStatus = "QUEUED"
+	FactorySessionDurableLifecycleStatusResuming         FactorySessionDurableLifecycleStatus = "RESUMING"
+	FactorySessionDurableLifecycleStatusRunning          FactorySessionDurableLifecycleStatus = "RUNNING"
+	FactorySessionDurableLifecycleStatusSucceeded        FactorySessionDurableLifecycleStatus = "SUCCEEDED"
+	FactorySessionDurableLifecycleStatusTerminated       FactorySessionDurableLifecycleStatus = "TERMINATED"
+	FactorySessionDurableLifecycleStatusTimedOut         FactorySessionDurableLifecycleStatus = "TIMED_OUT"
+)
+
+// Defines values for FactorySessionEventStreamRecoveryOutcome.
+const (
+	FactorySessionEventStreamRecoveryOutcomeCURSORSTALE    FactorySessionEventStreamRecoveryOutcome = "CURSOR_STALE"
+	FactorySessionEventStreamRecoveryOutcomeINTERNALERROR  FactorySessionEventStreamRecoveryOutcome = "INTERNAL_ERROR"
+	FactorySessionEventStreamRecoveryOutcomeSTREAMREADY    FactorySessionEventStreamRecoveryOutcome = "STREAM_READY"
+	FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION FactorySessionEventStreamRecoveryOutcome = "UNKNOWN_SESSION"
 )
 
 // Defines values for FactoryValidationSeverity.
@@ -112,6 +136,31 @@ type ErrorResponseCode string
 // FactoryResponseEventKind Semantic category of one FactoryResponseEvent. Response events are ephemeral observation records and must not derive canonical factory replay state.
 type FactoryResponseEventKind string
 
+// FactorySessionDurableLifecycleStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+type FactorySessionDurableLifecycleStatus string
+
+// FactorySessionEventStreamRecovery defines model for FactorySessionEventStreamRecovery.
+type FactorySessionEventStreamRecovery struct {
+	// FactorySessionId Session identifier for the event stream being probed.
+	FactorySessionId string `json:"factorySessionId"`
+
+	// Outcome Structured session event reconnect probe outcome for one session-scoped event stream.
+	Outcome FactorySessionEventStreamRecoveryOutcome `json:"outcome"`
+	Retry   FactorySessionEventStreamRecoveryRetry   `json:"retry"`
+}
+
+// FactorySessionEventStreamRecoveryOutcome Structured session event reconnect probe outcome for one session-scoped event stream.
+type FactorySessionEventStreamRecoveryOutcome string
+
+// FactorySessionEventStreamRecoveryRetry defines model for FactorySessionEventStreamRecoveryRetry.
+type FactorySessionEventStreamRecoveryRetry struct {
+	// OmitAfterEventId True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+	OmitAfterEventId bool `json:"omitAfterEventId"`
+
+	// OmitAfterSequence True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+	OmitAfterSequence bool `json:"omitAfterSequence"`
+}
+
 // FactoryValidationSeverity Validation severity for one factory validation target.
 type FactoryValidationSeverity string
 
@@ -146,6 +195,39 @@ type FactoryValidationTarget struct {
 	Subject  FactoryValidationSubject  `json:"subject"`
 }
 
+// ResourceUsage defines model for ResourceUsage.
+type ResourceUsage struct {
+	Available int    `json:"available"`
+	Name      string `json:"name"`
+	Total     int    `json:"total"`
+}
+
+// StatusCategories defines model for StatusCategories.
+type StatusCategories struct {
+	Failed     int `json:"failed"`
+	Initial    int `json:"initial"`
+	Processing int `json:"processing"`
+	Terminal   int `json:"terminal"`
+}
+
+// StatusResponse defines model for StatusResponse.
+type StatusResponse struct {
+	Categories   StatusCategories `json:"categories"`
+	FactoryState string           `json:"factoryState"`
+
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
+	Resources              *[]ResourceUsage                      `json:"resources,omitempty"`
+	RuntimeStatus          string                                `json:"runtimeStatus"`
+	TotalTokens            int                                   `json:"totalTokens"`
+}
+
+// AfterEventId defines model for AfterEventId.
+type AfterEventId = string
+
+// AfterSequence defines model for AfterSequence.
+type AfterSequence = int
+
 // ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
 type ResponseEventAfterSequence = int64
 
@@ -158,8 +240,14 @@ type ResponseEventKind = []FactoryResponseEventKind
 // SessionID defines model for SessionID.
 type SessionID = string
 
+// BadRequest defines model for BadRequest.
+type BadRequest = ErrorResponse
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
+
+// NotFound defines model for NotFound.
+type NotFound = ErrorResponse
 
 // ResponseEventBadRequest defines model for ResponseEventBadRequest.
 type ResponseEventBadRequest = ErrorResponse
@@ -169,6 +257,15 @@ type ResponseEventSessionNotFound = ErrorResponse
 
 // ResponseEventStreamExpired defines model for ResponseEventStreamExpired.
 type ResponseEventStreamExpired = ErrorResponse
+
+// GetEventsBySessionIdParams defines parameters for GetEventsBySessionId.
+type GetEventsBySessionIdParams struct {
+	// AfterEventId Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins.
+	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
+
+	// AfterSequence Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+}
 
 // GetFactoryResponseEventsBySessionIdParams defines parameters for GetFactoryResponseEventsBySessionId.
 type GetFactoryResponseEventsBySessionIdParams struct {
@@ -255,8 +352,26 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// GetEventsBySessionId request
+	GetEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetFactoryResponseEventsBySessionId request
 	GetFactoryResponseEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetStatus request
+	GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) GetEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetEventsBySessionIdRequest(c.Server, sessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -269,6 +384,90 @@ func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessio
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+func (c *Client) GetStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewGetEventsBySessionIdRequest generates requests for GetEventsBySessionId
+func NewGetEventsBySessionIdRequest(server string, sessionId SessionID, params *GetEventsBySessionIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/factory-sessions/%s/events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AfterEventId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_event_id", runtime.ParamLocationQuery, *params.AfterEventId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.AfterSequence != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_sequence", runtime.ParamLocationQuery, *params.AfterSequence); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewGetFactoryResponseEventsBySessionIdRequest generates requests for GetFactoryResponseEventsBySessionId
@@ -359,6 +558,33 @@ func NewGetFactoryResponseEventsBySessionIdRequest(server string, sessionId Sess
 	return req, nil
 }
 
+// NewGetStatusRequest generates requests for GetStatus
+func NewGetStatusRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/status")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -402,8 +628,39 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// GetEventsBySessionIdWithResponse request
+	GetEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetEventsBySessionIdClientResponse, error)
+
 	// GetFactoryResponseEventsBySessionIdWithResponse request
 	GetFactoryResponseEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetFactoryResponseEventsBySessionIdClientResponse, error)
+
+	// GetStatusWithResponse request
+	GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error)
+}
+
+type GetEventsBySessionIdClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *FactorySessionEventStreamRecovery
+	JSON400      *BadRequest
+	JSON404      *NotFound
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetEventsBySessionIdClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetEventsBySessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type GetFactoryResponseEventsBySessionIdClientResponse struct {
@@ -431,6 +688,38 @@ func (r GetFactoryResponseEventsBySessionIdClientResponse) StatusCode() int {
 	return 0
 }
 
+type GetStatusClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *StatusResponse
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetStatusClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetStatusClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// GetEventsBySessionIdWithResponse request returning *GetEventsBySessionIdClientResponse
+func (c *ClientWithResponses) GetEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetEventsBySessionIdClientResponse, error) {
+	rsp, err := c.GetEventsBySessionId(ctx, sessionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetEventsBySessionIdClientResponse(rsp)
+}
+
 // GetFactoryResponseEventsBySessionIdWithResponse request returning *GetFactoryResponseEventsBySessionIdClientResponse
 func (c *ClientWithResponses) GetFactoryResponseEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetFactoryResponseEventsBySessionIdClientResponse, error) {
 	rsp, err := c.GetFactoryResponseEventsBySessionId(ctx, sessionId, params, reqEditors...)
@@ -438,6 +727,65 @@ func (c *ClientWithResponses) GetFactoryResponseEventsBySessionIdWithResponse(ct
 		return nil, err
 	}
 	return ParseGetFactoryResponseEventsBySessionIdClientResponse(rsp)
+}
+
+// GetStatusWithResponse request returning *GetStatusClientResponse
+func (c *ClientWithResponses) GetStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetStatusClientResponse, error) {
+	rsp, err := c.GetStatus(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetStatusClientResponse(rsp)
+}
+
+// ParseGetEventsBySessionIdClientResponse parses an HTTP response from a GetEventsBySessionIdWithResponse call
+func ParseGetEventsBySessionIdClientResponse(rsp *http.Response) (*GetEventsBySessionIdClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetEventsBySessionIdClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FactorySessionEventStreamRecovery
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case rsp.StatusCode == 200:
+		// Content-type (text/event-stream) unsupported
+
+	}
+
+	return response, nil
 }
 
 // ParseGetFactoryResponseEventsBySessionIdClientResponse parses an HTTP response from a GetFactoryResponseEventsBySessionIdWithResponse call
@@ -474,6 +822,39 @@ func ParseGetFactoryResponseEventsBySessionIdClientResponse(rsp *http.Response) 
 			return nil, err
 		}
 		response.JSON410 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetStatusClientResponse parses an HTTP response from a GetStatusWithResponse call
+func ParseGetStatusClientResponse(rsp *http.Response) (*GetStatusClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetStatusClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest StatusResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest InternalError
