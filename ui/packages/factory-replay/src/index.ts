@@ -25,12 +25,16 @@ export {
   projectFactoryStateAtTick,
 } from "./replay.js";
 export {
+  FACTORY_TOPOLOGY_RELATIONSHIPS,
   type FactoryResourceTopologyNode,
   type FactoryTopologyAtTickInput,
   type FactoryTopologyConnection,
+  type FactoryTopologyConnectionCandidate,
   type FactoryTopologyConnectionEndpoint,
   type FactoryTopologyConnectionKind,
+  type FactoryTopologyConnectionResult,
   type FactoryTopologyHandle,
+  type FactoryTopologyHandleId,
   type FactoryTopologyNode,
   type FactoryTopologyNodeKind,
   type FactoryTopologyProjection,
@@ -42,4 +46,5 @@ export {
   type FactoryWorkTypeTopologyNode,
   projectFactoryTopology,
   projectFactoryTopologyAtTick,
+  projectFactoryTopologyConnection,
 } from "./topology.js";

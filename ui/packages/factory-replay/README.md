@@ -31,6 +31,9 @@ Use `projectFactoryTopologyAtTick` to reconstruct the last canonical Factory
 topology effective at a selected tick. Use `projectFactoryTopology` when the
 consumer already has the selected-tick Factory definition. Both return stable,
 sorted public node and connection identities without mutating caller data.
+`FACTORY_TOPOLOGY_RELATIONSHIPS` is the shared semantic node-kind and handle
+vocabulary for renderers. Invalid relationship endpoints return a fail-closed
+result with structured issues and no partial graph.
 
 ## Distribution verification
 

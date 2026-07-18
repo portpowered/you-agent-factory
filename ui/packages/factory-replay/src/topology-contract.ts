@@ -10,19 +10,84 @@ export type FactoryTopologyNodeKind =
   | "work-type"
   | "workstation";
 
+/**
+ * The canonical relationship vocabulary used to declare node handles and
+ * project connection endpoints. Renderers can use this same value to render
+ * handles without maintaining a parallel mapping.
+ */
+export const FACTORY_TOPOLOGY_RELATIONSHIPS = {
+  "worker-assignment": {
+    source: { handleId: "worker-assignment-source", nodeKind: "worker" },
+    target: {
+      handleId: "worker-assignment-target",
+      nodeKind: "workstation",
+    },
+  },
+  "worker-resource": {
+    source: { handleId: "worker-resource-source", nodeKind: "resource" },
+    target: { handleId: "worker-input-target", nodeKind: "worker" },
+  },
+  "workstation-input": {
+    source: { handleId: "workstation-input-source", nodeKind: "work-state" },
+    target: {
+      handleId: "workstation-input-target",
+      nodeKind: "workstation",
+    },
+  },
+  "workstation-on-continue": {
+    source: {
+      handleId: "workstation-on-continue-source",
+      nodeKind: "workstation",
+    },
+    target: { handleId: "work-state-input-target", nodeKind: "work-state" },
+  },
+  "workstation-on-failure": {
+    source: {
+      handleId: "workstation-on-failure-source",
+      nodeKind: "workstation",
+    },
+    target: { handleId: "work-state-input-target", nodeKind: "work-state" },
+  },
+  "workstation-on-rejection": {
+    source: {
+      handleId: "workstation-on-rejection-source",
+      nodeKind: "workstation",
+    },
+    target: { handleId: "work-state-input-target", nodeKind: "work-state" },
+  },
+  "workstation-output": {
+    source: {
+      handleId: "workstation-output-source",
+      nodeKind: "workstation",
+    },
+    target: { handleId: "work-state-input-target", nodeKind: "work-state" },
+  },
+  "workstation-resource": {
+    source: {
+      handleId: "workstation-resource-source",
+      nodeKind: "resource",
+    },
+    target: {
+      handleId: "workstation-resource-target",
+      nodeKind: "workstation",
+    },
+  },
+  "work-type-state": {
+    source: { handleId: "work-type-state-source", nodeKind: "work-type" },
+    target: { handleId: "work-type-state-target", nodeKind: "work-state" },
+  },
+} as const;
+
 export type FactoryTopologyConnectionKind =
-  | "worker-assignment"
-  | "worker-resource"
-  | "workstation-input"
-  | "workstation-on-continue"
-  | "workstation-on-failure"
-  | "workstation-on-rejection"
-  | "workstation-output"
-  | "workstation-resource"
-  | "work-type-state";
+  keyof typeof FACTORY_TOPOLOGY_RELATIONSHIPS;
+
+export type FactoryTopologyHandleId =
+  (typeof FACTORY_TOPOLOGY_RELATIONSHIPS)[FactoryTopologyConnectionKind][
+    | "source"
+    | "target"]["handleId"];
 
 export interface FactoryTopologyHandle {
-  id: string;
+  id: FactoryTopologyHandleId;
   role: "source" | "target";
 }
 
@@ -80,8 +145,17 @@ export interface FactoryTopologyConnection {
 }
 
 export interface FactoryTopologyProjectionIssue {
-  code: "DUPLICATE_ENTITY_ID" | "MISSING_FACTORY" | "UNRESOLVED_CONNECTION";
-  connectionKind?: FactoryTopologyConnectionKind;
+  code:
+    | "DUPLICATE_ENTITY_ID"
+    | "INVALID_CONNECTION_ENDPOINT"
+    | "MISSING_FACTORY"
+    | "UNSUPPORTED_CONNECTION_KIND";
+  connectionId?: string;
+  connectionKind?: string;
+  endpoint?: "source" | "target";
+  endpointReason?: "MISSING_HANDLE" | "MISSING_NODE" | "NODE_KIND_MISMATCH";
+  expectedNodeKind?: FactoryTopologyNodeKind;
+  handleId?: string;
   id: string;
   message: string;
   nodeId?: string;
@@ -93,8 +167,21 @@ export interface FactoryTopologyProjection {
   connections: FactoryTopologyConnection[];
   issues: FactoryTopologyProjectionIssue[];
   nodes: FactoryTopologyNode[];
+  ok: boolean;
   selectedTick: number;
 }
+
+export interface FactoryTopologyConnectionCandidate {
+  kind: string;
+  sourceNodeId?: string;
+  sourceReference: string;
+  targetNodeId?: string;
+  targetReference: string;
+}
+
+export type FactoryTopologyConnectionResult =
+  | { connection: FactoryTopologyConnection; issue?: never; ok: true }
+  | { connection?: never; issue: FactoryTopologyProjectionIssue; ok: false };
 
 export interface FactoryTopologyProjectionInput {
   factory?: FactoryDefinition;

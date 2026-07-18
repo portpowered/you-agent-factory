@@ -5,8 +5,10 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import {
+  FACTORY_TOPOLOGY_RELATIONSHIPS,
   projectFactoryTopology,
   projectFactoryTopologyAtTick,
+  projectFactoryTopologyConnection,
 } from "./index.js";
 
 const factory: FactoryDefinition = {
@@ -38,7 +40,9 @@ const factory: FactoryDefinition = {
       id: "review-stable",
       inputs: [{ state: "ready", workType: "story" }],
       name: "review",
+      onContinue: [{ state: "ready", workType: "story" }],
       onFailure: [{ state: "failed", workType: "story" }],
+      onRejection: [{ state: "ready", workType: "story" }],
       outputs: [{ state: "done", workType: "story" }],
       resources: [{ capacity: 1, name: "network" }],
       worker: "writer",
@@ -121,7 +125,9 @@ describe("projectFactoryTopology", () => {
         "worker-assignment",
         "worker-resource",
         "workstation-input",
+        "workstation-on-continue",
         "workstation-on-failure",
+        "workstation-on-rejection",
         "workstation-output",
         "workstation-resource",
         "work-type-state",
@@ -166,7 +172,172 @@ describe("projectFactoryTopology", () => {
   it("returns a valid empty projection for an empty Factory", () => {
     expect(
       projectFactoryTopology({ factory: { name: "empty" }, selectedTick: 0 }),
-    ).toEqual({ connections: [], issues: [], nodes: [], selectedTick: 0 });
+    ).toEqual({
+      connections: [],
+      issues: [],
+      nodes: [],
+      ok: true,
+      selectedTick: 0,
+    });
+  });
+});
+
+describe("Factory topology semantic relationships", () => {
+  it("derives every edge endpoint from the handles declared by its nodes", () => {
+    const result = projectFactoryTopology({ factory, selectedTick: 4 });
+    const nodes = new Map(result.nodes.map((node) => [node.id, node]));
+
+    expect(result.ok).toBe(true);
+    expect(new Set(result.connections.map(({ kind }) => kind))).toEqual(
+      new Set(Object.keys(FACTORY_TOPOLOGY_RELATIONSHIPS)),
+    );
+    expect(new Set(result.connections.map(({ id }) => id))).toHaveLength(
+      result.connections.length,
+    );
+    for (const connection of result.connections) {
+      const relationship = FACTORY_TOPOLOGY_RELATIONSHIPS[connection.kind];
+      const source = nodes.get(connection.source.nodeId);
+      const target = nodes.get(connection.target.nodeId);
+      expect(source?.kind).toBe(relationship.source.nodeKind);
+      expect(target?.kind).toBe(relationship.target.nodeKind);
+      expect(connection.source.handleId).toBe(relationship.source.handleId);
+      expect(connection.target.handleId).toBe(relationship.target.handleId);
+      expect(source?.handles).toContainEqual({
+        id: connection.source.handleId,
+        role: "source",
+      });
+      expect(target?.handles).toContainEqual({
+        id: connection.target.handleId,
+        role: "target",
+      });
+    }
+  });
+
+  it("keeps semantic connection and handle identities stable across ticks", () => {
+    const earlier = projectFactoryTopology({ factory, selectedTick: 2 });
+    const later = projectFactoryTopology({ factory, selectedTick: 9 });
+
+    expect(later.nodes).toEqual(earlier.nodes);
+    expect(later.connections).toEqual(earlier.connections);
+  });
+
+  it("fails closed when a canonical relationship references an unknown node", () => {
+    const result = projectFactoryTopology({
+      factory: {
+        name: "invalid",
+        workers: [
+          {
+            name: "runner",
+            resources: [{ capacity: 1, name: "missing" }],
+          },
+        ],
+      },
+      selectedTick: 3,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.nodes).toEqual([]);
+    expect(result.connections).toEqual([]);
+    expect(result.issues).toMatchObject([
+      {
+        code: "INVALID_CONNECTION_ENDPOINT",
+        connectionKind: "worker-resource",
+        endpoint: "source",
+        endpointReason: "MISSING_NODE",
+        sourceReference: "missing",
+        targetReference: "runner",
+      },
+    ]);
+  });
+});
+
+describe("projectFactoryTopologyConnection", () => {
+  const projection = projectFactoryTopology({ factory, selectedTick: 4 });
+  const workType = projection.nodes.find((node) => node.kind === "work-type");
+  const workState = projection.nodes.find((node) => node.kind === "work-state");
+
+  if (!workType || !workState) {
+    throw new Error("expected topology connection fixtures");
+  }
+
+  const candidate = {
+    kind: "work-type-state",
+    sourceNodeId: workType.id,
+    sourceReference: workType.label,
+    targetNodeId: workState.id,
+    targetReference: workState.label,
+  };
+
+  it("reports an unsupported semantic relationship", () => {
+    const result = projectFactoryTopologyConnection(projection.nodes, {
+      ...candidate,
+      kind: "generic-output",
+    });
+
+    expect(result).toMatchObject({
+      issue: {
+        code: "UNSUPPORTED_CONNECTION_KIND",
+        connectionKind: "generic-output",
+      },
+      ok: false,
+    });
+  });
+
+  it("reports a missing declared endpoint handle", () => {
+    const nodesWithoutSourceHandle = projection.nodes.map((node) =>
+      node.id === workType.id ? { ...node, handles: [] } : node,
+    );
+    const result = projectFactoryTopologyConnection(
+      nodesWithoutSourceHandle,
+      candidate,
+    );
+
+    expect(result).toMatchObject({
+      issue: {
+        code: "INVALID_CONNECTION_ENDPOINT",
+        endpoint: "source",
+        endpointReason: "MISSING_HANDLE",
+        handleId: "work-type-state-source",
+        nodeId: workType.id,
+      },
+      ok: false,
+    });
+  });
+
+  it("reports invalid relationship direction instead of binding generic handles", () => {
+    const result = projectFactoryTopologyConnection(projection.nodes, {
+      ...candidate,
+      sourceNodeId: workState.id,
+      targetNodeId: workType.id,
+    });
+
+    expect(result).toMatchObject({
+      issue: {
+        code: "INVALID_CONNECTION_ENDPOINT",
+        endpoint: "source",
+        endpointReason: "NODE_KIND_MISMATCH",
+        expectedNodeKind: "work-type",
+        nodeId: workState.id,
+      },
+      ok: false,
+    });
+  });
+
+  it("reports a missing target node with the connection identity", () => {
+    const result = projectFactoryTopologyConnection(projection.nodes, {
+      ...candidate,
+      targetNodeId: "work-state:missing",
+    });
+
+    expect(result).toMatchObject({
+      issue: {
+        code: "INVALID_CONNECTION_ENDPOINT",
+        connectionId: `work-type-state:${workType.id}->work-state:missing`,
+        endpoint: "target",
+        endpointReason: "MISSING_NODE",
+      },
+      ok: false,
+    });
   });
 });
 
@@ -227,6 +398,7 @@ describe("projectFactoryTopologyAtTick", () => {
         },
       ],
       nodes: [],
+      ok: false,
       selectedTick: 5,
     });
   });

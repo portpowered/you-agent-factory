@@ -1,25 +1,32 @@
 import type { FactoryDefinition } from "@you-agent-factory/client";
 
 import { canonicalizeFactoryEvents } from "./replay.js";
+import { projectFactoryTopologyConnection } from "./topology-connection.js";
 import type {
   FactoryTopologyAtTickInput,
   FactoryTopologyConnection,
   FactoryTopologyConnectionKind,
   FactoryTopologyHandle,
+  FactoryTopologyHandleId,
   FactoryTopologyNode,
   FactoryTopologyNodeKind,
   FactoryTopologyProjection,
   FactoryTopologyProjectionInput,
   FactoryTopologyProjectionIssue,
 } from "./topology-contract.js";
+import { FACTORY_TOPOLOGY_RELATIONSHIPS } from "./topology-contract.js";
 
+export { projectFactoryTopologyConnection } from "./topology-connection.js";
 export type {
   FactoryResourceTopologyNode,
   FactoryTopologyAtTickInput,
   FactoryTopologyConnection,
+  FactoryTopologyConnectionCandidate,
   FactoryTopologyConnectionEndpoint,
   FactoryTopologyConnectionKind,
+  FactoryTopologyConnectionResult,
   FactoryTopologyHandle,
+  FactoryTopologyHandleId,
   FactoryTopologyNode,
   FactoryTopologyNodeKind,
   FactoryTopologyProjection,
@@ -30,65 +37,7 @@ export type {
   FactoryWorkstationTopologyNode,
   FactoryWorkTypeTopologyNode,
 } from "./topology-contract.js";
-
-const HANDLES_BY_KIND: Record<
-  FactoryTopologyNodeKind,
-  readonly FactoryTopologyHandle[]
-> = {
-  resource: [
-    { id: "worker-resource-source", role: "source" },
-    { id: "workstation-resource-source", role: "source" },
-  ],
-  worker: [
-    { id: "worker-input-target", role: "target" },
-    { id: "worker-assignment-source", role: "source" },
-  ],
-  "work-state": [
-    { id: "workstation-input-source", role: "source" },
-    { id: "work-state-input-target", role: "target" },
-    { id: "work-type-state-target", role: "target" },
-  ],
-  "work-type": [{ id: "work-type-state-source", role: "source" }],
-  workstation: [
-    { id: "workstation-input-target", role: "target" },
-    { id: "worker-assignment-target", role: "target" },
-    { id: "workstation-resource-target", role: "target" },
-    { id: "workstation-output-source", role: "source" },
-    { id: "workstation-on-continue-source", role: "source" },
-    { id: "workstation-on-failure-source", role: "source" },
-    { id: "workstation-on-rejection-source", role: "source" },
-  ],
-};
-
-const CONNECTION_HANDLES: Record<
-  FactoryTopologyConnectionKind,
-  readonly [string, string]
-> = {
-  "worker-assignment": ["worker-assignment-source", "worker-assignment-target"],
-  "worker-resource": ["worker-resource-source", "worker-input-target"],
-  "workstation-input": ["workstation-input-source", "workstation-input-target"],
-  "workstation-on-continue": [
-    "workstation-on-continue-source",
-    "work-state-input-target",
-  ],
-  "workstation-on-failure": [
-    "workstation-on-failure-source",
-    "work-state-input-target",
-  ],
-  "workstation-on-rejection": [
-    "workstation-on-rejection-source",
-    "work-state-input-target",
-  ],
-  "workstation-output": [
-    "workstation-output-source",
-    "work-state-input-target",
-  ],
-  "workstation-resource": [
-    "workstation-resource-source",
-    "workstation-resource-target",
-  ],
-  "work-type-state": ["work-type-state-source", "work-type-state-target"],
-};
+export { FACTORY_TOPOLOGY_RELATIONSHIPS } from "./topology-contract.js";
 
 type Workstation = NonNullable<FactoryDefinition["workstations"]>[number];
 type WorkstationIO = Workstation["inputs"][number];
@@ -112,7 +61,24 @@ function nodeId(kind: FactoryTopologyNodeKind, id: string): string {
 }
 
 function handlesFor(kind: FactoryTopologyNodeKind): FactoryTopologyHandle[] {
-  return HANDLES_BY_KIND[kind].map((handle) => ({ ...handle }));
+  const handles = new Map<FactoryTopologyHandleId, FactoryTopologyHandle>();
+  for (const relationship of Object.values(FACTORY_TOPOLOGY_RELATIONSHIPS)) {
+    if (relationship.source.nodeKind === kind) {
+      handles.set(relationship.source.handleId, {
+        id: relationship.source.handleId,
+        role: "source",
+      });
+    }
+    if (relationship.target.nodeKind === kind) {
+      handles.set(relationship.target.handleId, {
+        id: relationship.target.handleId,
+        role: "target",
+      });
+    }
+  }
+  return [...handles.values()].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
 }
 
 function sortedByIdentity<T extends { id?: string; name: string }>(
@@ -155,36 +121,23 @@ function addNode(context: TopologyContext, node: FactoryTopologyNode): void {
 function addConnection(
   context: TopologyContext,
   kind: FactoryTopologyConnectionKind,
-  sourceId: string | undefined,
-  targetId: string | undefined,
+  sourceNodeId: string | undefined,
+  targetNodeId: string | undefined,
   sourceReference: string,
   targetReference: string,
 ): void {
-  if (
-    !sourceId ||
-    !targetId ||
-    !context.nodes.has(sourceId) ||
-    !context.nodes.has(targetId)
-  ) {
-    const id = `unresolved-connection:${kind}:${sourceReference}->${targetReference}`;
-    context.issues.set(id, {
-      code: "UNRESOLVED_CONNECTION",
-      connectionKind: kind,
-      id,
-      message: `Cannot resolve ${kind} connection from ${sourceReference} to ${targetReference}.`,
-      sourceReference,
-      targetReference,
-    });
+  const result = projectFactoryTopologyConnection([...context.nodes.values()], {
+    kind,
+    sourceNodeId,
+    sourceReference,
+    targetNodeId,
+    targetReference,
+  });
+  if (!result.ok) {
+    context.issues.set(result.issue.id, result.issue);
     return;
   }
-  const [sourceHandle, targetHandle] = CONNECTION_HANDLES[kind];
-  const id = `${kind}:${sourceId}->${targetId}`;
-  context.connections.set(id, {
-    id,
-    kind,
-    source: { handleId: sourceHandle, nodeId: sourceId },
-    target: { handleId: targetHandle, nodeId: targetId },
-  });
+  context.connections.set(result.connection.id, result.connection);
 }
 
 function appendNodes(
@@ -395,6 +348,7 @@ export function projectFactoryTopology(
         },
       ],
       nodes: [],
+      ok: false,
       selectedTick: input.selectedTick,
     };
   }
@@ -402,16 +356,27 @@ export function projectFactoryTopology(
   appendNodes(input.factory, context);
   appendFoundationConnections(input.factory, context);
   appendWorkstationConnections(input.factory, context);
+  const issues = [...context.issues.values()].sort((left, right) =>
+    left.id.localeCompare(right.id),
+  );
+  if (issues.length > 0) {
+    return {
+      connections: [],
+      issues,
+      nodes: [],
+      ok: false,
+      selectedTick: input.selectedTick,
+    };
+  }
   return {
     connections: [...context.connections.values()].sort((left, right) =>
       left.id.localeCompare(right.id),
     ),
-    issues: [...context.issues.values()].sort((left, right) =>
-      left.id.localeCompare(right.id),
-    ),
+    issues,
     nodes: [...context.nodes.values()].sort((left, right) =>
       left.id.localeCompare(right.id),
     ),
+    ok: true,
     selectedTick: input.selectedTick,
   };
 }
