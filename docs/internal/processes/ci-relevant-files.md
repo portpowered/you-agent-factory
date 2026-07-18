@@ -1,6 +1,15 @@
 # CI Relevant Files
 
+- `make verify-api` includes `make generate-emulator`, which is the freshness gate for the public Factory Emulator generated contract. Keep it non-mutating so CI rejects stale committed artifacts with a maintainer-actionable regeneration command.
+
 ## Pull-request verification workflow
+
+- Public standalone package checks belong in explicit root Make targets and in
+  the gates that already execute those targets. For `packages/factory-emulator`,
+  `make factory-emulator-typecheck` installs and typechecks the package, while
+  `make factory-emulator-test` runs its behavioral and packed isolated-consumer
+  tests; root `make typecheck` and `make test` compose those targets so the
+  Development Package workflow exercises the same contract.
 
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable
