@@ -22,6 +22,38 @@ export {
   FactoryEmulatorPendingTransactionError,
   createFactoryEmulator,
 } from "./emulator.js";
+export {
+  FactoryEmulatorConfigurationError,
+  FactoryEmulatorDurationError,
+  FactoryEmulatorExecutionPausedError,
+  FactoryEmulatorLifecycleError,
+  FactoryEmulatorPendingCommandError,
+  FactoryEmulatorSubmissionError,
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
+  createFactoryEmulatorSession,
+} from "./session.js";
+export type {
+  FactoryEmulatorCommandError,
+  FactoryEmulatorSessionAdvanceReceipt,
+  FactoryEmulatorBudgetUsage,
+  FactoryEmulatorSessionCloseReceipt,
+  FactoryEmulatorResetReceipt,
+  FactoryEmulatorSession,
+  FactoryEmulatorSessionCounters,
+  FactoryEmulatorConfigurationDiagnostic,
+  FactoryEmulatorDataError,
+  FactoryEmulatorExecutionDiagnostic,
+  FactoryEmulatorLimits,
+  FactoryEmulatorSessionOptions,
+  FactoryEmulatorPendingTransactionStatus,
+  FactoryEmulatorSessionError,
+  FactoryEmulatorSessionState,
+  FactoryEmulatorSessionStatus,
+  FactoryEmulatorSessionWork,
+  FactoryEmulatorStartReceipt,
+  FactoryEmulatorSubmitReceipt,
+} from "./session.js";
 export type {
   FactoryEmulator,
   FactoryEmulatorAdvanceReceipt,

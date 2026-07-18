@@ -15,6 +15,11 @@ test("inspection reports the parser-supported v1 scenario and Factory subset", (
   assert.equal(support.scenarioVersion, SUPPORTED_SCENARIO_VERSION);
   assert.deepEqual(support.ruleMatchers, ["all", "workType", "submissionId"]);
   assert.deepEqual(support.outcomeVariants, ["complete", "reject"]);
+  assert.deepEqual(support.outcomeDuration, {
+    field: "durationMs",
+    unit: "virtual milliseconds",
+    default: 0,
+  });
   assert.deepEqual(support.exhaustionBehaviors, [
     "repeatLast",
     "useUnmatchedBehavior",
@@ -28,14 +33,14 @@ test("inspection reports the parser-supported v1 scenario and Factory subset", (
   const unsupportedFactories = [
     {
       ...emulatorScenarioExamples[0].factory,
-      resources: [{ name: "quota" }],
+      resources: [{ name: "quota", capacity: 1 }],
     },
     {
       ...emulatorScenarioExamples[0].factory,
       workstations: [
         {
           ...emulatorScenarioExamples[0].factory.workstations[0],
-          guards: [{ type: "VISIT_COUNT" }],
+          guards: [{ type: "VISIT_COUNT", maxVisits: 1 }],
         },
       ],
     },

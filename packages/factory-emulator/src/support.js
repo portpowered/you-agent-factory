@@ -19,6 +19,11 @@ export const emulatorSupport = deepFreeze({
   },
   ruleMatchers: ["all", "workType", "submissionId"],
   outcomeVariants: ["complete", "reject"],
+  outcomeDuration: {
+    field: "durationMs",
+    unit: "virtual milliseconds",
+    default: 0,
+  },
   lineageCursors: {
     initialSubmission: "one unique initial submission id",
     scriptedOutcome: "one earlier complete scripted outcome",

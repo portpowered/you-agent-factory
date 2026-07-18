@@ -6,8 +6,13 @@ export const emulatorScenarioExamples = Object.freeze([
     name: "minimal",
     factory: {
       name: "minimal-emulator-factory",
-      workTypes: [{ name: "checkout" }],
-      workstations: [{ name: "complete", behavior: "STANDARD" }],
+      workTypes: [{ name: "checkout", states: [] }],
+      workstations: [{
+        name: "complete",
+        worker: "emulator",
+        inputs: [],
+        behavior: "STANDARD",
+      }],
     },
     scenario: {
       version: SUPPORTED_SCENARIO_VERSION,
@@ -27,8 +32,17 @@ export const emulatorScenarioExamples = Object.freeze([
     name: "multi-rule-lineage",
     factory: {
       name: "multi-rule-emulator-factory",
-      workTypes: [{ name: "checkout" }, { name: "fulfillment" }, { name: "other" }],
-      workstations: [{ name: "complete", behavior: "STANDARD" }],
+      workTypes: [
+        { name: "checkout", states: [] },
+        { name: "fulfillment", states: [] },
+        { name: "other", states: [] },
+      ],
+      workstations: [{
+        name: "complete",
+        worker: "emulator",
+        inputs: [],
+        behavior: "STANDARD",
+      }],
     },
     scenario: {
       version: SUPPORTED_SCENARIO_VERSION,

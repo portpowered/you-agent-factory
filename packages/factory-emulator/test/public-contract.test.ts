@@ -13,8 +13,30 @@ import type {
 } from "@you-agent-factory/factory-emulator";
 import {
   createFactoryEmulator,
+  createFactoryEmulatorSession,
   createFactoryRecordingSink,
   createMemoryFactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
+import type {
+  FactoryEmulatorCommandError,
+  FactoryEmulatorConfigurationDiagnostic,
+  FactoryEmulatorSession,
+  FactoryEmulatorSessionAdvanceReceipt,
+  FactoryEmulatorBudgetUsage,
+  FactoryEmulatorSessionCloseReceipt,
+  FactoryEmulatorSessionStatus,
+  FactoryEmulatorPendingTransactionStatus,
+  FactoryEmulatorSessionError,
+  FactoryEmulatorSessionState,
+  FactoryEmulatorExecutionDiagnostic,
+  FactoryEmulatorLimits,
+  FactoryEmulatorStartReceipt,
+  FactoryEmulatorSubmitReceipt,
+} from "@you-agent-factory/factory-emulator";
+import {
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
+  FactoryEmulatorExecutionPausedError,
 } from "@you-agent-factory/factory-emulator";
 import type { FactoryEvent } from "@you-agent-factory/client";
 
@@ -77,6 +99,81 @@ const emulatorCloseReceipt: Promise<FactoryEmulatorCloseReceipt> = emulator.clos
 void emulatorStatus;
 void pendingBatch;
 void emulatorCloseReceipt;
+
+const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
+  factory: { name: "public-contract" },
+  scenario: {
+    version: "you-agent-factory.emulator.scenario.v1",
+    id: "public-contract",
+    seed: "public-seed",
+    startAt: "2026-07-18T07:30:00Z",
+    rules: [],
+    unmatchedBehavior: { kind: "ignore" },
+  },
+  sink,
+  limits: {
+    maxCompletedDispatches: DEFAULT_FACTORY_EMULATOR_LIMITS.maxCompletedDispatches,
+    maxEvents: FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents,
+    maxVirtualElapsedMs: 1_000,
+    maxZeroDurationBatches: 10,
+    maxSynchronousBatches: 5,
+    maxSynchronousWorkItems: 25,
+  },
+  yieldControl: async () => {},
+});
+const limits: FactoryEmulatorLimits = { maxEvents: 100 };
+const initialInputLimitDiagnostic: FactoryEmulatorConfigurationDiagnostic = {
+  code: "SYNCHRONOUS_WORK_LIMIT_EXCEEDED",
+  path: "/initialSubmissions",
+  message: "initial input exceeds the synchronous Work limit",
+  expectation: "a bounded initial Work batch",
+};
+declare const pausedError: FactoryEmulatorExecutionPausedError;
+const commandError: FactoryEmulatorCommandError = pausedError;
+const executionDiagnostic: FactoryEmulatorExecutionDiagnostic = pausedError.diagnostic;
+void limits;
+void initialInputLimitDiagnostic;
+void commandError;
+void executionDiagnostic;
+const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
+if (sessionState.lifecycle !== "pre-start") {
+  const currentTokenId: string | undefined = sessionState.works[0]?.tokenId;
+  const lineageTokenId: string | undefined =
+    sessionState.works[0]?.dispatch?.lineageTokenId;
+  const outputTokenId: string | undefined =
+    sessionState.works[0]?.dispatch?.outputTokenId;
+  void currentTokenId;
+  void lineageTokenId;
+  void outputTokenId;
+}
+const startReceipt: Promise<FactoryEmulatorStartReceipt> = emulatorSession.start();
+const submitReceipt: Promise<FactoryEmulatorSubmitReceipt> = emulatorSession.submit({
+  id: "public-work",
+  workType: "task",
+});
+const sessionStatus: FactoryEmulatorSessionStatus = emulatorSession.status();
+const budgetUsage: FactoryEmulatorBudgetUsage = sessionStatus.budgetUsage;
+const sessionError: FactoryEmulatorSessionError | undefined = sessionStatus.error;
+const pendingStatus: FactoryEmulatorPendingTransactionStatus | undefined =
+  sessionStatus.pendingTransaction;
+const sessionAdvanceReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
+  emulatorSession.advanceBy(5);
+const sessionNextReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
+  emulatorSession.advanceToNext();
+const sessionCloseReceipt: Promise<FactoryEmulatorSessionCloseReceipt> =
+  emulatorSession.close();
+const sessionPendingBatch: FactoryEventBatch | undefined = emulatorSession.pending();
+void sessionState;
+void startReceipt;
+void submitReceipt;
+void sessionStatus;
+void budgetUsage;
+void sessionError;
+void pendingStatus;
+void sessionAdvanceReceipt;
+void sessionNextReceipt;
+void sessionCloseReceipt;
+void sessionPendingBatch;
 
 import {
   parseEmulatorScenario,

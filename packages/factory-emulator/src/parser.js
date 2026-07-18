@@ -1,8 +1,10 @@
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import { scenarioSchema } from "./generated/scenario-schema.js";
+import { factorySchema } from "./generated/factory-schema.js";
 import { scenarioSemanticDiagnostics } from "./semantics.js";
 import { factorySupportDiagnostics } from "./support.js";
+import { dataOnlyDiagnostics } from "./data-only.js";
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -12,18 +14,40 @@ const ajv = new Ajv2020({
   useDefaults: false,
 });
 addFormats(ajv);
+ajv.addFormat("int32", true);
+ajv.addFormat("int64", true);
 const validateScenarioShape = ajv.compile(scenarioSchema);
+const validateFactoryShape = ajv.compile(factorySchema);
 
 /**
  * Parses only data. It neither creates Factory events nor starts emulator
  * activity, so callers can reject unsupported input before any runtime work.
  */
 export function parseEmulatorScenario(scenario, factory) {
+  const scenarioDataDiagnostics = dataOnlyDiagnostics(scenario, {
+    code: "INVALID_SCENARIO_SHAPE",
+  });
+  if (scenarioDataDiagnostics.length > 0) {
+    return failure(scenarioDataDiagnostics);
+  }
   if (!validateScenarioShape(scenario)) {
     return failure(shapeDiagnostics(validateScenarioShape.errors ?? []));
   }
 
-  const factoryDiagnostics = factorySupportDiagnostics(factory);
+  const factoryDiagnostics = dataOnlyDiagnostics(factory, {
+    code: "INVALID_FACTORY_DEFINITION",
+  });
+  if (factoryDiagnostics.length === 0 && !validateFactoryShape(factory)) {
+    factoryDiagnostics.push(
+      ...shapeDiagnostics(
+        validateFactoryShape.errors ?? [],
+        "INVALID_FACTORY_DEFINITION",
+      ),
+    );
+  }
+  if (factoryDiagnostics.length === 0) {
+    factoryDiagnostics.push(...factorySupportDiagnostics(factory));
+  }
   const diagnostics =
     factoryDiagnostics.length === 0
       ? scenarioSemanticDiagnostics(scenario, factory)
@@ -37,7 +61,7 @@ function failure(diagnostics) {
   return { success: false, diagnostics: Object.freeze(diagnostics) };
 }
 
-function shapeDiagnostics(errors) {
+function shapeDiagnostics(errors, defaultCode = "INVALID_SCENARIO_SHAPE") {
   return errors
     .map((error) => {
       const path = errorPath(error);
@@ -45,7 +69,7 @@ function shapeDiagnostics(errors) {
         code:
           error.keyword === "const" && path === "/version"
             ? "UNSUPPORTED_SCENARIO_VERSION"
-            : "INVALID_SCENARIO_SHAPE",
+            : defaultCode,
         path,
         message: `${path} ${error.message ?? "does not match the Emulator Scenario schema"}.`,
         expectation: shapeExpectation(error),

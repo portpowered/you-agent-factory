@@ -37,11 +37,15 @@ export type EmulatorMatcher =
 export type EmulatorOutcome =
   | {
       kind: "complete";
+      /** Deterministic virtual execution duration in milliseconds. Defaults to zero. Minimum: 0. */
+      durationMs?: number;
       output?: Record<string, unknown>;
       lineageCursor?: EmulatorLineageCursor;
     }
   | {
       kind: "reject";
+      /** Deterministic virtual execution duration in milliseconds. Defaults to zero. Minimum: 0. */
+      durationMs?: number;
       /** Minimum length: 1. Maximum length: 512. */
       reason: string;
     };
