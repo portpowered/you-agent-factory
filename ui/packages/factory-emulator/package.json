@@ -1,0 +1,47 @@
+{
+  "name": "@you-agent-factory/factory-emulator",
+  "version": "0.0.0",
+  "description": "Deterministic Factory emulator contracts and caller-owned event sinks.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git",
+    "directory": "ui/packages/factory-emulator"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "examples",
+    "schema",
+    "LICENSE.md",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schema": "./schema/scenario.schema.json",
+    "./examples/customer-support.scenario.v1.json": "./examples/customer-support.scenario.v1.json"
+  },
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "verify": "bun run typecheck && bun run test && bun run build"
+  },
+  "dependencies": {
+    "@you-agent-factory/client": "file:../client",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "4.1.3"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "factory-emulator-scenario/v1",
+  "id": "customer-support-happy-path",
+  "factory": {
+    "name": "customer-support"
+  },
+  "seed": "customer-support-seed-001",
+  "startAt": "2026-07-18T16:00:00.000Z",
+  "rules": [
+    {
+      "id": "triage-new-ticket",
+      "selector": {
+        "workstation": "triage",
+        "worker": "support-agent",
+        "input": {
+          "workType": "ticket",
+          "state": "new"
+        }
+      },
+      "cursor": {
+        "scope": "lineage",
+        "input": "rootWorkId"
+      },
+      "outcomes": [
+        {
+          "result": "accepted",
+          "durationMs": 25,
+          "output": "Ticket classified"
+        }
+      ],
+      "exhaustion": "repeat-last"
+    }
+  ],
+  "unmatched": {
+    "behavior": "error"
+  },
+  "initialSubmissions": [
+    {
+      "name": "ticket-001",
+      "workType": "ticket",
+      "state": "new",
+      "input": "Customer cannot sign in"
+    }
+  ]
+}
