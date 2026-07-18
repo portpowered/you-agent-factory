@@ -195,11 +195,11 @@ describe("Factory replay selection", () => {
   });
 });
 
-describe("Factory replay checkpoint advancement", () => {
-  function checkpoint(events: readonly FactoryEvent[], tick: number) {
-    return projectFactoryStateAtTick({ events, reducer, tick });
-  }
+function checkpoint(events: readonly FactoryEvent[], tick: number) {
+  return projectFactoryStateAtTick({ events, reducer, tick });
+}
 
+describe("Factory replay checkpoint advancement", () => {
   it("returns an independent result for an empty tail", () => {
     const original = checkpoint([event("accepted", 1, 1)], 1);
     const advanced = advanceFactoryReplayCheckpoint({
@@ -245,7 +245,63 @@ describe("Factory replay checkpoint advancement", () => {
     expect(advanced.state.appliedIds).toEqual(["first", "second"]);
     expect(advanced.selectedTick).toBe(3);
   });
+});
 
+describe("Factory replay checkpoint canonical reconstruction", () => {
+  it("replays an unseen earlier-tick tail event before checkpoint history", () => {
+    const later = event("later", 2, 2);
+    const earlier = event("earlier", 1, 1);
+    const original = checkpoint([later], 2);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [earlier],
+      tick: 2,
+    });
+    const full = checkpoint([later, earlier], 2);
+
+    expect(advanced.state).toEqual(full.state);
+    expect(advanced.events).toEqual(full.appliedEvents);
+    expect(advanced.state.appliedIds).toEqual(["earlier", "later"]);
+  });
+
+  it("replays an unseen lower-sequenced same-tick event before checkpoint history", () => {
+    const later = event("later", 3, 8);
+    const earlier = event("earlier", 3, 4);
+    const original = checkpoint([later], 3);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [earlier],
+      tick: 3,
+    });
+    const full = checkpoint([later, earlier], 3);
+
+    expect(advanced.state).toEqual(full.state);
+    expect(advanced.events).toEqual(full.appliedEvents);
+    expect(advanced.state.appliedIds).toEqual(["earlier", "later"]);
+  });
+
+  it("reconstructs checkpoint history when the target tick moves backward", () => {
+    const earlier = event("earlier", 1, 1);
+    const later = event("later", 2, 2);
+    const original = checkpoint([earlier, later], 2);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [],
+      tick: 1,
+    });
+    const full = checkpoint([earlier, later], 1);
+
+    expect(advanced.state).toEqual(full.state);
+    expect(advanced.events).toEqual(full.appliedEvents);
+    expect(advanced.acceptedEventIds).toEqual(full.acceptedEventIds);
+    expect(advanced.state.appliedIds).toEqual(["earlier"]);
+  });
+});
+
+describe("Factory replay checkpoint ownership and equivalence", () => {
   it("keeps checkpoint IDs, events, and reachable state isolated from the result", () => {
     const original = checkpoint([event("accepted", 1, 1)], 1);
     const originalEvent = structuredClone(original.appliedEvents[0]);

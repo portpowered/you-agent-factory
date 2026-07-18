@@ -147,17 +147,16 @@ export function advanceFactoryReplayCheckpoint<State>(
     (event) =>
       event.context.tick <= input.tick && !checkpointEventIds.has(event.id),
   );
-  let state = input.reducer.cloneState(input.checkpoint.state, input.tick);
-  for (const event of eligibleTail) {
+  const events = canonicalizeFactoryEvents([
+    ...input.checkpoint.appliedEvents.map(cloneFactoryEvent),
+    ...eligibleTail.map(cloneFactoryEvent),
+  ]).filter((event) => event.context.tick <= input.tick);
+  let state = input.reducer.createState(input.tick);
+  for (const event of events) {
     state = input.reducer.applyEvent(state, event);
   }
 
-  const events = [
-    ...input.checkpoint.appliedEvents.map(cloneFactoryEvent),
-    ...eligibleTail.map(cloneFactoryEvent),
-  ];
-  const acceptedEventIds = new Set(input.checkpoint.acceptedEventIds);
-  for (const event of eligibleTail) acceptedEventIds.add(event.id);
+  const acceptedEventIds = new Set(events.map(({ id }) => id));
 
   return {
     acceptedEventIds,
