@@ -208,8 +208,10 @@ export function responseCompletion(
       active?.previousChainingTraceIDs,
     providerSession:
       latestAttempt?.provider_session ?? legacyPayload.providerSession,
+    resourceEvidenceAvailable: active?.resourceEvidenceAvailable,
     resources: active?.resources ?? [],
     startedAt: active?.startedAt ?? "",
+    startedTick: active?.startedTick ?? event.context.tick,
     systemOnly:
       active?.systemOnly ??
       (event.payload.transitionId === SYSTEM_TIME_EXPIRY_TRANSITION_ID &&

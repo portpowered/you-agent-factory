@@ -40,12 +40,21 @@ that consumes the replay kernel.
   hosted reducer/projection adapter to the public kernel. It owns no replay
   ordering or accepted-tail logic; keep its cloning and tick-setting adapters
   explicit because dashboard replay state remains domain-owned.
+- `ui/src/features/timeline/state/timeline/projections/projectFactoryReplay.ts`
+  maps the hosted selected replay state into the package's direct-state topology,
+  activity, occupancy, and Work-progress operations. Keep this adapter free of
+  renderer types and derive it from checkpoint-safe replay state rather than a
+  hidden copy of event history.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.
 - `ui/src/features/timeline/state/timeline/factory-replay-kernel.compatibility.test.ts`
   compares the package-selected historical projection with the existing hosted
   reducer and projection.
+- `ui/src/features/timeline/state/timeline/projections/factory-replay-projections.compatibility.test.ts`
+  proves the hosted adapter preserves shared topology IDs and handle parity,
+  Dispatch/resource occupancy, exclusive Work progress, and same-tick
+  recomputation through observable selected-tick output.
 - `ui/src/features/timeline/state/timeline/replayWorldState.ts` owns only the
   dashboard-specific Factory-world event reducer; `projectSnapshot.ts` owns
   its projection. Keep browser state, checkpoints, persistence, and Zustand

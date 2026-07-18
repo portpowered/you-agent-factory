@@ -3,8 +3,11 @@ import type {
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
-import type { WorldState } from "../features/timeline/state/factoryTimelineStore";
-import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
+import {
+  emptyHostedFactoryReplayProjection,
+  useFactoryTimelineStore,
+  type WorldState,
+} from "../features/timeline/state/factoryTimelineStore";
 
 function timelineSnapshot(
   snapshot: DashboardSnapshot,
@@ -16,6 +19,7 @@ function timelineSnapshot(
 ): WorldState {
   return {
     ...snapshot,
+    factoryReplay: emptyHostedFactoryReplayProjection(snapshot.tick_count),
     relationsByWorkID: {},
     tracesByWorkID,
     workstationRequestsByDispatchID,

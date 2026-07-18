@@ -3,6 +3,7 @@ import {
   cloneTracesByWorkID,
   cloneWorkRequestsByID,
 } from "./cloneTimelineSnapshot";
+import { projectHostedFactoryReplay } from "./projections/projectFactoryReplay";
 import { projectRuntime } from "./projectRuntime";
 import { projectTopology } from "./projectTopology";
 import { projectWorkstationDispatchRequestsByID } from "./projectWorkstationRequests";
@@ -36,6 +37,7 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
   );
 
   return {
+    factoryReplay: projectHostedFactoryReplay(state),
     factory_state: state.factory_state,
     factory: state.factory ? structuredClone(state.factory) : undefined,
     runtime,

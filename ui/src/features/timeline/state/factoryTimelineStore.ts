@@ -16,6 +16,7 @@ import {
   buildFactoryTimelineSnapshot as buildProjectedTimelineSnapshot,
 } from "./timeline/buildSnapshot";
 
+export { emptyHostedFactoryReplayProjection } from "./timeline/projections/projectFactoryReplay";
 export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 
 

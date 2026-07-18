@@ -21,6 +21,7 @@ import type {
   FactoryTerminalWork,
   FactoryWorkItem,
 } from "../../../../api/events";
+import type { HostedFactoryReplayProjection } from "./projections/projectFactoryReplay";
 import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 
 export interface ResourceUnit {
@@ -37,8 +38,10 @@ export interface WorldDispatch {
   modelProvider?: string;
   previousChainingTraceIDs?: string[];
   provider?: string;
+  resourceEvidenceAvailable?: boolean;
   resources: ResourceUnit[];
   startedAt: string;
+  startedTick?: number;
   systemOnly: boolean;
   traceIDs: string[];
   transitionID: string;
@@ -230,6 +233,7 @@ export interface ReplayWorldState extends TimelineWorldViewBase {
 }
 
 export interface WorldState extends DashboardSnapshot {
+  factoryReplay: HostedFactoryReplayProjection;
   relationsByWorkID: Record<string, FactoryRelation[]>;
   tracesByWorkID: Record<string, DashboardTrace>;
   workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;

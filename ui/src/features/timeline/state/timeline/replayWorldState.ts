@@ -278,8 +278,10 @@ function applyRequest(
           ? [...legacyPayload.previous_chaining_trace_ids]
           : undefined,
     provider: legacyPayload.worker?.executorProvider ?? worker?.provider,
+    resourceEvidenceAvailable: Array.isArray(event.payload.resources),
     resources: consumeResourceUnits(state, event.payload.resources),
     startedAt: event.context.eventTime,
+    startedTick: event.context.tick,
     systemOnly:
       event.payload.transitionId === "__system_time:expire" &&
       publicWorkItems.length === 0,

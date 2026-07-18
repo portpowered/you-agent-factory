@@ -40,3 +40,9 @@ classification applies that precedence once, excludes internal time Work, and
 uses `unclassified` when partial event or topology evidence cannot safely
 determine a lifecycle category. `projectFactoryWorkProgress` exposes the same
 pure partition for consumers that already hold selected replay evidence.
+
+The hosted dashboard projects these three public read models from its selected
+checkpoint-safe replay state and exposes them together on the timeline world as
+`factoryReplay`. Its Petri-shaped topology and occupancy structures remain
+reducer state for the legacy dashboard snapshot contract; they are not a
+second public topology or progress classifier.
