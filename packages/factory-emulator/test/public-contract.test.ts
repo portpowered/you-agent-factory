@@ -80,6 +80,8 @@ void emulatorCloseReceipt;
 
 import {
   parseEmulatorScenario,
+  emulatorScenarioExamples,
+  inspectEmulatorSupport,
   resolveEmulatorScenarioResult,
   selectEmulatorRule,
   type EmulatorScenarioResolution,
@@ -109,6 +111,8 @@ const scenario: EmulatorScenario = {
 
 void scenario;
 void scenarioSchema;
+void emulatorScenarioExamples;
+void inspectEmulatorSupport;
 
 const parseResult: EmulatorScenarioParseResult = parseEmulatorScenario(
   scenario,

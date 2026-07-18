@@ -55,6 +55,14 @@ export {
   type EmulatorScenarioParseResult,
 } from "./parser.js";
 export {
+  emulatorScenarioExamples,
+  type EmulatorScenarioExample,
+} from "./examples.js";
+export {
+  inspectEmulatorSupport,
+  type EmulatorSupportInspection,
+} from "./support.js";
+export {
   resolveEmulatorScenarioResult,
   selectEmulatorRule,
   type EmulatorScenarioResolution,

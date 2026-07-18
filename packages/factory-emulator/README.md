@@ -50,6 +50,20 @@ known initial submission or one earlier `complete` scripted outcome; missing,
 forward, cyclic, and incompatible targets are rejected with diagnostics before
 emulation begins.
 
+## Inspecting support and using examples
+
+`inspectEmulatorSupport()` returns the stable machine-readable v1 capability
+report. It covers the accepted static Factory subset, explicitly unsupported
+Factory behavior, matchers, outcomes, lineage cursors, exhaustion and unmatched
+options, initial-submission constraints, and `activityLabel` limits. The parser
+uses that same Factory support policy, so the report cannot advertise execution
+capabilities that parsing rejects.
+
+`emulatorScenarioExamples` exports a minimal scenario and a multi-rule scenario.
+The latter shows ordered priority matching, initial submissions, a scripted
+lineage cursor, finite exhaustion, explicit unmatched rejection, and transient
+`activityLabel` metadata. Both examples are validated through the public parser.
+
 ## Event sink and logical tick runtime
 
 `@you-agent-factory/factory-emulator` provides the transport-neutral,
