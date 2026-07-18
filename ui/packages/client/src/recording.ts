@@ -1,4 +1,5 @@
 import {
+  FACTORY_EVENT_SCHEMA_VERSIONS,
   FACTORY_EVENT_TYPES,
   type FactoryDefinition,
   type FactoryEvent,
@@ -19,7 +20,11 @@ export type RecordingValidationIssueCode =
   | "invalid_type"
   | "missing_required_field"
   | "unsupported_recording_schema_version"
-  | "unsupported_event_type";
+  | "unsupported_event_type"
+  | "unsupported_event_schema_version"
+  | "duplicate_event_id"
+  | "mixed_factory_session_identity"
+  | "missing_topology_bootstrap";
 
 export interface RecordingValidationIssue {
   category: "structure" | "semantic";
@@ -49,6 +54,14 @@ export class FactoryRecordingValidationError extends Error {
 type InputRecord = Record<string, unknown>;
 
 const supportedEventTypes = new Set<string>(Object.values(FACTORY_EVENT_TYPES));
+const supportedEventSchemaVersions = new Set<string>(
+  Object.values(FACTORY_EVENT_SCHEMA_VERSIONS),
+);
+const topologyEventTypes = new Set<string>([
+  FACTORY_EVENT_TYPES.FactoryEventTypeRunRequest,
+  FACTORY_EVENT_TYPES.FactoryEventTypeInitialStructureRequest,
+  FACTORY_EVENT_TYPES.FactoryEventTypeFactoryChange,
+]);
 
 function isRecord(value: unknown): value is InputRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -194,6 +207,130 @@ export function validateFactoryEventEnvelope(
   return issues;
 }
 
+function hasUsableFactoryDefinition(input: unknown): boolean {
+  return (
+    isRecord(input) &&
+    typeof input.name === "string" &&
+    input.name.trim().length > 0
+  );
+}
+
+function validateEventSchemaVersions(
+  events: readonly InputRecord[],
+  issues: RecordingValidationIssue[],
+): void {
+  for (const [index, event] of events.entries()) {
+    if (
+      typeof event.schemaVersion === "string" &&
+      !supportedEventSchemaVersions.has(event.schemaVersion)
+    ) {
+      issues.push({
+        category: "semantic",
+        code: "unsupported_event_schema_version",
+        path: ["events", index, "schemaVersion"],
+        message: `Unsupported Factory event schema version: ${event.schemaVersion}.`,
+      });
+    }
+  }
+}
+
+function validateUniqueEventIds(
+  events: readonly InputRecord[],
+  issues: RecordingValidationIssue[],
+): void {
+  const locationsById = new Map<string, number[]>();
+  for (const [index, event] of events.entries()) {
+    const locations = locationsById.get(event.id as string) ?? [];
+    locations.push(index);
+    locationsById.set(event.id as string, locations);
+  }
+
+  for (const [eventId, locations] of locationsById) {
+    if (locations.length < 2) {
+      continue;
+    }
+    const locationList = locations.join(", ");
+    for (const index of locations) {
+      issues.push({
+        category: "semantic",
+        code: "duplicate_event_id",
+        path: ["events", index, "id"],
+        message: `Event ID ${eventId} is duplicated at event indexes ${locationList}.`,
+      });
+    }
+  }
+}
+
+function validateFactorySessionIdentity(
+  events: readonly InputRecord[],
+  issues: RecordingValidationIssue[],
+): void {
+  const sessionIds = events.map((event) =>
+    isRecord(event.context) && typeof event.context.sessionId === "string"
+      ? event.context.sessionId
+      : undefined,
+  );
+  const presentSessionIds = new Set(
+    sessionIds.filter(
+      (sessionId): sessionId is string => sessionId !== undefined,
+    ),
+  );
+  const identitiesAreMixed =
+    presentSessionIds.size > 1 ||
+    (presentSessionIds.size === 1 && sessionIds.some((id) => id === undefined));
+
+  if (!identitiesAreMixed) {
+    return;
+  }
+  for (const [index, sessionId] of sessionIds.entries()) {
+    issues.push({
+      category: "semantic",
+      code: "mixed_factory_session_identity",
+      path: ["events", index, "context", "sessionId"],
+      message:
+        sessionId === undefined
+          ? "Expected a Factory Session ID consistent with the other recording events."
+          : `Factory Session ID ${sessionId} is inconsistent with the recording event history.`,
+    });
+  }
+}
+
+function validateTopologyBootstrap(
+  factory: unknown,
+  events: readonly InputRecord[],
+  issues: RecordingValidationIssue[],
+): void {
+  const hasTopologyEvent = events.some(
+    (event) =>
+      typeof event.type === "string" &&
+      topologyEventTypes.has(event.type) &&
+      isRecord(event.payload) &&
+      hasUsableFactoryDefinition(event.payload.factory),
+  );
+
+  if (!hasUsableFactoryDefinition(factory) && !hasTopologyEvent) {
+    issues.push({
+      category: "semantic",
+      code: "missing_topology_bootstrap",
+      path: ["events"],
+      message:
+        "Expected a usable top-level factory or a topology-establishing Factory event.",
+    });
+  }
+}
+
+function validateRecordingSemantics(
+  input: InputRecord,
+  events: readonly InputRecord[],
+): RecordingValidationIssue[] {
+  const issues: RecordingValidationIssue[] = [];
+  validateEventSchemaVersions(events, issues);
+  validateUniqueEventIds(events, issues);
+  validateFactorySessionIdentity(events, issues);
+  validateTopologyBootstrap(input.factory, events, issues);
+  return issues;
+}
+
 export function safeParseFactoryRecording(
   input: unknown,
 ): SafeParseFactoryRecordingResult {
@@ -252,6 +389,12 @@ export function safeParseFactoryRecording(
     for (const [index, event] of input.events.entries()) {
       issues.push(...validateFactoryEventEnvelope(event, ["events", index]));
     }
+  }
+
+  if (issues.length === 0 && Array.isArray(input.events)) {
+    issues.push(
+      ...validateRecordingSemantics(input, input.events as InputRecord[]),
+    );
   }
 
   return issues.length > 0

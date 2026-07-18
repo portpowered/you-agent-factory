@@ -1,5 +1,6 @@
 import {
   type components,
+  FactoryEventSchemaVersion as GENERATED_FACTORY_EVENT_SCHEMA_VERSIONS,
   FactoryEventType as GENERATED_FACTORY_EVENT_TYPES,
   type operations,
   type paths,
@@ -28,3 +29,7 @@ export const FACTORY_EVENT_TYPES =
     keyof typeof GENERATED_FACTORY_EVENT_TYPES,
     FactoryEventType
   >;
+
+/** Runtime versions accepted by the canonical Factory event envelope. */
+export const FACTORY_EVENT_SCHEMA_VERSIONS =
+  GENERATED_FACTORY_EVENT_SCHEMA_VERSIONS;

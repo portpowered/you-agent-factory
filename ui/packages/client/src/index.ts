@@ -1,5 +1,6 @@
 export {
   type components,
+  FACTORY_EVENT_SCHEMA_VERSIONS,
   FACTORY_EVENT_TYPES,
   type FactoryDefinition,
   type FactoryEvent,
