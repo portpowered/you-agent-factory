@@ -166,6 +166,20 @@ continues to expose only the prior committed snapshot. Once the sink accepts
 the batch, the new Work becomes visible and the session reports `ready` or
 `waiting` from its executable scenario facts.
 
+Every status value also reports the current virtual instant, cumulative
+completed-dispatch, event, and virtual-time usage with configured limits, and a
+bounded summary of any rejected sink transaction. Error details are plain data,
+including sink operation/message or execution-pause diagnostics. Status never
+contains canonical event history, playback controls, timers, visibility state,
+or framework-owned objects.
+
+Configuration and command inputs are detached before runtime ownership, and
+every receipt, status, pending batch, and state snapshot is a fresh
+structured-cloneable data value. Mutating any returned value cannot alter
+committed state or a later retry. The session retains current execution facts
+and at most one bounded recovery transaction; accepted canonical batch history
+belongs exclusively to the caller-owned sink.
+
 Every session command follows the same calculate/write/commit boundary. If a
 logical batch is rejected, `state()` and virtual time remain at the last
 accepted transition, `status()` reports `error`, and `pending()` returns a

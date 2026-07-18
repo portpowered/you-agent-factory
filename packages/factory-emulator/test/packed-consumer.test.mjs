@@ -118,8 +118,13 @@ test("packed emulator resolves its canonical contract from a clean consumer", as
   await writeFile(
     join(consumerDirectory, "consumer.ts"),
     `import type { FactoryEvent } from "@you-agent-factory/client";
-import { createMemoryFactoryEventSink } from "@you-agent-factory/factory-emulator";
+import {
+  createFactoryEmulatorSession,
+  createMemoryFactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
 import type {
+  FactoryEmulatorSession,
+  FactoryEmulatorSessionStatus,
   FactoryEventBatch,
   FactoryEventSink,
 } from "@you-agent-factory/factory-emulator";
@@ -129,6 +134,10 @@ const batch: FactoryEventBatch = { events: [event] };
 declare const sink: FactoryEventSink;
 void sink.write(batch);
 void createMemoryFactoryEventSink({ maxEvents: 1 });
+declare const session: FactoryEmulatorSession;
+const status: FactoryEmulatorSessionStatus = session.status();
+void createFactoryEmulatorSession;
+void status;
 `,
   );
   await writeFile(
@@ -156,7 +165,10 @@ void createMemoryFactoryEventSink({ maxEvents: 1 });
   await writeFile(
     join(consumerDirectory, "consumer.mjs"),
     `import assert from "node:assert/strict";
-import { parseEmulatorScenario } from "@you-agent-factory/factory-emulator";
+import {
+  createFactoryEmulatorSession,
+  parseEmulatorScenario,
+} from "@you-agent-factory/factory-emulator";
 
 const scenario = {
   version: "you-agent-factory.emulator.scenario.v1",
@@ -182,6 +194,46 @@ assert.deepEqual(parseEmulatorScenario(scenario, factory), {
   scenario,
   factory,
 });
+
+const batches = [];
+const sink = {
+  async write(batch) {
+    batches.push(structuredClone(batch));
+    return { status: "accepted" };
+  },
+  async close() {
+    return { status: "closed" };
+  },
+};
+const emulator = createFactoryEmulatorSession({ factory, scenario, sink });
+const clone = (value) => structuredClone(value);
+
+const firstStart = clone(await emulator.start());
+const input = { id: "packed-work", workType: "checkout", input: { total: 42 } };
+const submitted = clone(await emulator.submit(input));
+input.input.total = 99;
+const dispatched = clone(await emulator.advanceToNext());
+const completed = clone(await emulator.advanceToNext());
+const status = clone(emulator.status());
+const snapshot = clone(emulator.state());
+clone(emulator.pending());
+
+assert.equal(firstStart.status, "started");
+assert.equal(submitted.state.works[0].input.total, 42);
+assert.equal(dispatched.batches[0].events[0].type, "DISPATCH_REQUEST");
+assert.equal(completed.batches[0].events[0].type, "DISPATCH_RESPONSE");
+assert.equal(status.phase, "idle");
+assert.equal(status.budgetUsage.completedDispatches.used, 1);
+assert.equal(snapshot.works[0].phase, "completed");
+
+snapshot.works[0].input.total = 7;
+assert.equal(emulator.state().works[0].input.total, 42);
+clone(emulator.reset());
+clone(await emulator.start());
+const closed = clone(await emulator.close());
+assert.equal(closed.status, "closed");
+assert.equal(emulator.status().phase, "closed");
+assert.ok(batches.length >= 6);
 `,
   );
   await run(process.execPath, ["consumer.mjs"], { cwd: consumerDirectory });

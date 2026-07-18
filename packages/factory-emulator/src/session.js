@@ -478,7 +478,13 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
       return copy(committedState);
     },
     status() {
-      return copy(sessionStatus(committedState, commandInProgress, runtimeError));
+      return copy(sessionStatus({
+        configuredLimits,
+        commandInProgress,
+        pendingTransaction,
+        runtimeError,
+        state: committedState,
+      }));
     },
   });
 }
@@ -713,7 +719,40 @@ function normalizeSubmissions(submissionOrBatch) {
   return submissions;
 }
 
-function sessionStatus(state, commandInProgress, runtimeError) {
+function sessionStatus({
+  configuredLimits,
+  commandInProgress,
+  pendingTransaction,
+  runtimeError,
+  state,
+}) {
+  const status = executionStatus(state, commandInProgress, runtimeError);
+  return {
+    ...status,
+    ...(state.virtualTime === undefined ? {} : { virtualTime: state.virtualTime }),
+    virtualElapsedMs: state.virtualElapsedMs,
+    budgetUsage: {
+      completedDispatches: {
+        used: state.counters.completions,
+        limit: configuredLimits.maxCompletedDispatches,
+      },
+      events: {
+        used: state.counters.events,
+        limit: configuredLimits.maxEvents,
+      },
+      virtualElapsedMs: {
+        used: state.virtualElapsedMs,
+        limit: configuredLimits.maxVirtualElapsedMs,
+      },
+    },
+    ...(pendingTransaction === undefined
+      ? {}
+      : { pendingTransaction: pendingTransactionStatus(pendingTransaction) }),
+    ...(runtimeError === undefined ? {} : { error: runtimeError }),
+  };
+}
+
+function executionStatus(state, commandInProgress, runtimeError) {
   if (runtimeError !== undefined) {
     return runtimeError.code === "EXECUTION_PAUSED"
       ? {
@@ -742,6 +781,16 @@ function sessionStatus(state, commandInProgress, runtimeError) {
     return { phase: "waiting", reason: "work-waiting" };
   }
   return { phase: "idle", reason: "no-unfinished-work" };
+}
+
+function pendingTransactionStatus(transaction) {
+  return {
+    command: transaction.command,
+    phase: transaction.progress.terminalAccepted === true
+      ? "sink-close"
+      : "sink-write",
+    eventCount: transaction.batch.events.length,
+  };
 }
 
 function calculateClose(state, factory, scenario) {

@@ -35,6 +35,7 @@ export {
 } from "./session.js";
 export type {
   FactoryEmulatorSessionAdvanceReceipt,
+  FactoryEmulatorBudgetUsage,
   FactoryEmulatorSessionCloseReceipt,
   FactoryEmulatorResetReceipt,
   FactoryEmulatorSession,
@@ -43,6 +44,8 @@ export type {
   FactoryEmulatorExecutionDiagnostic,
   FactoryEmulatorLimits,
   FactoryEmulatorSessionOptions,
+  FactoryEmulatorPendingTransactionStatus,
+  FactoryEmulatorSessionError,
   FactoryEmulatorSessionState,
   FactoryEmulatorSessionStatus,
   FactoryEmulatorSessionWork,

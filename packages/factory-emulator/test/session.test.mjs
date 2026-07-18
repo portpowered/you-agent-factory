@@ -85,6 +85,35 @@ function assertPaused(error, kind, limit, configured, observed) {
   return true;
 }
 
+function assertStatus(actualOrEmulator, expected) {
+  const actual = typeof actualOrEmulator.status === "function"
+    ? actualOrEmulator.status()
+    : actualOrEmulator;
+  for (const [name, value] of Object.entries(expected)) {
+    assert.deepEqual(actual[name], value);
+  }
+  return actual;
+}
+
+function assertDataOnly(value) {
+  structuredClone(value);
+  const visit = (current) => {
+    if (current === null || typeof current !== "object") {
+      assert.notEqual(typeof current, "function");
+      return;
+    }
+    const prototype = Object.getPrototypeOf(current);
+    assert.ok(
+      prototype === Object.prototype || prototype === Array.prototype,
+      `expected a data-only value, received ${prototype?.constructor?.name ?? "null"}`,
+    );
+    for (const child of Object.values(current)) {
+      visit(child);
+    }
+  };
+  visit(value);
+}
+
 test("start emits deterministic bootstrap and initial submission batches at virtual time zero", async () => {
   const { batches, emulator } = harness();
 
@@ -239,7 +268,7 @@ test("submit accepts single and batch Work requests in deterministic order", asy
   assert.equal(firstBatch.state.counters.commands, 3);
   assert.equal(firstBatch.state.counters.requests, 3);
   assert.equal(firstBatch.state.counters.works, 5);
-  assert.deepEqual(first.emulator.status(), { phase: "ready", reason: "work-ready" });
+  assertStatus(first.emulator, { phase: "ready", reason: "work-ready" });
   assert.equal(JSON.stringify(firstSingle), JSON.stringify(secondSingle));
   assert.equal(JSON.stringify(firstBatch), JSON.stringify(secondBatch));
 
@@ -313,7 +342,7 @@ test("an idle session exposes submission atomically and returns to ready", async
     },
   });
   await emulator.start();
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "idle",
     reason: "no-unfinished-work",
   });
@@ -326,13 +355,13 @@ test("an idle session exposes submission atomically and returns to ready", async
   });
   await Promise.resolve();
 
-  assert.deepEqual(emulator.status(), { phase: "active", reason: "submitting" });
+  assertStatus(emulator, { phase: "active", reason: "submitting" });
   assert.deepEqual(emulator.state(), before);
   assert.equal(writes.length, 2);
   releaseWrite();
   await pendingSubmit;
 
-  assert.deepEqual(emulator.status(), { phase: "ready", reason: "work-ready" });
+  assertStatus(emulator, { phase: "ready", reason: "work-ready" });
   assert.deepEqual(
     emulator.state().works.map((work) => work.submissionId),
     ["checkout-after-idle"],
@@ -345,7 +374,7 @@ test("status distinguishes blocked unfinished Work from an idle session", async 
   await emulator.start();
 
   assert.ok(emulator.state().works.every((work) => work.phase === "waiting"));
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "waiting",
     reason: "work-waiting",
   });
@@ -384,7 +413,7 @@ test("advanceToNext starts ready Work then completes simultaneous deadlines", as
     (event) => event.context.eventTime === "2026-07-18T07:30:00.025Z",
   ));
   assert.equal(completed.virtualElapsedMs, 25);
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "idle",
     reason: "no-unfinished-work",
   });
@@ -446,7 +475,7 @@ test("advancement changes only virtual time when waiting and is a no-op when idl
   assert.equal(waited.status, "advanced");
   assert.deepEqual(waited.batches, []);
   assert.equal(waited.virtualTime, "2026-07-18T07:30:00.050Z");
-  assert.deepEqual(waiting.emulator.status(), {
+  assertStatus(waiting.emulator, {
     phase: "waiting",
     reason: "work-waiting",
   });
@@ -520,7 +549,7 @@ test("exhausted rules defer ignored Work without inventing a dispatch", async ()
     ["active", "waiting"],
   );
   await emulator.advanceToNext();
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "waiting",
     reason: "work-waiting",
   });
@@ -555,7 +584,7 @@ test("session publishes a submission only after acceptance and retries rejection
   await Promise.resolve();
 
   assert.deepEqual(emulator.state(), before);
-  assert.deepEqual(emulator.status(), { phase: "active", reason: "submitting" });
+  assertStatus(emulator, { phase: "active", reason: "submitting" });
   await assert.rejects(
     emulator.advanceToNext(),
     (error) => error instanceof FactoryEmulatorLifecycleError
@@ -567,7 +596,7 @@ test("session publishes a submission only after acceptance and retries rejection
   const rejectedBatch = structuredClone(writes.at(-1));
   assert.deepEqual(emulator.state(), before);
   assert.deepEqual(emulator.pending(), rejectedBatch);
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "error",
     reason: "SINK_WRITE_REJECTED",
   });
@@ -700,7 +729,7 @@ test("close retries terminal write and then only sink close without duplicate ev
   await assert.rejects(emulator.close(), /close unavailable/);
   assert.deepEqual(writeAttempts.at(-1), terminal);
   assert.equal(emulator.state().lifecycle, "closed");
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "error",
     reason: "SINK_CLOSE_REJECTED",
   });
@@ -711,7 +740,7 @@ test("close retries terminal write and then only sink close without duplicate ev
   assert.equal(closeAttempts, 2);
   assert.equal(receipt.status, "closed");
   assert.equal(receipt.batch.events[0].type, "RUN_RESPONSE");
-  assert.deepEqual(emulator.status(), { phase: "closed", reason: "session-closed" });
+  assertStatus(emulator, { phase: "closed", reason: "session-closed" });
   await assert.rejects(emulator.close(), FactoryEmulatorLifecycleError);
   await assert.rejects(
     emulator.submit({ id: "post-close", workType: "checkout" }),
@@ -761,7 +790,7 @@ test("event budget accepts the exact limit and pauses before the next batch", as
   );
   assert.deepEqual(emulator.state(), before);
   assert.equal(batches.flatMap((batch) => batch.events).length, 3);
-  assert.deepEqual(emulator.status(), {
+  assertStatus(emulator, {
     phase: "error",
     reason: "budget-exceeded",
     diagnostic: {
@@ -907,8 +936,99 @@ test("cooperative scheduler yielding keeps the active command serialized", async
   await advance;
   await Promise.resolve();
 
-  assert.deepEqual(statusAtBoundary, { phase: "active", reason: "advancing" });
+  assertStatus(statusAtBoundary, { phase: "active", reason: "advancing" });
   assert.ok(overlappingError instanceof FactoryEmulatorLifecycleError);
   assert.equal(overlappingError.phase, "advancing");
   assert.equal(emulator.state().virtualElapsedMs, 1);
+});
+
+test("public observations are detached data and status summarizes bounded recovery state", async () => {
+  const configuredFactory = supportedFactory();
+  const configuredScenario = scenario({ initialSubmissions: [] });
+  const attempts = [];
+  let rejectNextWrite = false;
+  const emulator = createFactoryEmulatorSession({
+    factory: configuredFactory,
+    scenario: configuredScenario,
+    limits: { maxCompletedDispatches: 5, maxEvents: 20, maxVirtualElapsedMs: 100 },
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write(batch) {
+        attempts.push(structuredClone(batch));
+        if (rejectNextWrite) {
+          rejectNextWrite = false;
+          throw new Error("detached sink failure");
+        }
+        return { status: "accepted" };
+      },
+    },
+  });
+
+  configuredFactory.name = "mutated-factory";
+  configuredScenario.id = "mutated-scenario";
+  const started = await emulator.start();
+  assertDataOnly(started);
+  assertDataOnly(emulator.state());
+  const readyStatus = emulator.status();
+  assertDataOnly(readyStatus);
+  assert.deepEqual(readyStatus, {
+    phase: "idle",
+    reason: "no-unfinished-work",
+    virtualTime: "2026-07-18T07:30:00.000Z",
+    virtualElapsedMs: 0,
+    budgetUsage: {
+      completedDispatches: { used: 0, limit: 5 },
+      events: { used: 2, limit: 20 },
+      virtualElapsedMs: { used: 0, limit: 100 },
+    },
+  });
+  assert.equal(started.batches[0].events[0].payload.factory.name, "checkout");
+
+  rejectNextWrite = true;
+  const submission = {
+    id: "detached-work",
+    workType: "checkout",
+    input: { nested: { value: 1 } },
+  };
+  const rejected = emulator.submit(submission);
+  submission.input.nested.value = 99;
+  await assert.rejects(rejected, /detached sink failure/);
+
+  const pending = emulator.pending();
+  const failedStatus = emulator.status();
+  assertDataOnly(pending);
+  assertDataOnly(failedStatus);
+  assert.deepEqual(failedStatus.pendingTransaction, {
+    command: "submit",
+    phase: "sink-write",
+    eventCount: 1,
+  });
+  assert.deepEqual(failedStatus.error, {
+    code: "SINK_WRITE_REJECTED",
+    operation: "write",
+    command: "submit",
+    message: "detached sink failure",
+  });
+  pending.events[0].payload.works[0].payload.nested.value = 77;
+  failedStatus.error.message = "caller mutation";
+
+  const receipt = await emulator.submit({
+    id: "detached-work",
+    workType: "checkout",
+    input: { nested: { value: 1 } },
+  });
+  assertDataOnly(receipt);
+  assert.equal(receipt.state.works[0].input.nested.value, 1);
+  assert.equal(attempts.at(-1).events[0].payload.works[0].payload.nested.value, 1);
+  receipt.state.works[0].input.nested.value = 55;
+  receipt.batch.events[0].payload.works[0].payload.nested.value = 66;
+  assert.equal(emulator.state().works[0].input.nested.value, 1);
+  assert.equal(emulator.pending(), undefined);
+
+  const state = emulator.state();
+  assert.equal(Object.hasOwn(state, "events"), false);
+  assert.equal(Object.hasOwn(state, "batches"), false);
+  assert.equal(attempts.length, 3);
 });

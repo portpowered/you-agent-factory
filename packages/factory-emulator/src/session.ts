@@ -190,6 +190,39 @@ export interface FactoryEmulatorSessionCloseReceipt {
   readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "closed" }>;
 }
 
+export interface FactoryEmulatorBudgetUsage {
+  readonly completedDispatches: {
+    readonly used: number;
+    readonly limit: number;
+  };
+  readonly events: {
+    readonly used: number;
+    readonly limit: number;
+  };
+  readonly virtualElapsedMs: {
+    readonly used: number;
+    readonly limit: number;
+  };
+}
+
+export type FactoryEmulatorSessionError =
+  | {
+      readonly code: "EXECUTION_PAUSED";
+      readonly diagnostic: FactoryEmulatorExecutionDiagnostic;
+    }
+  | {
+      readonly code: "SINK_WRITE_REJECTED" | "SINK_CLOSE_REJECTED";
+      readonly operation: "write" | "close";
+      readonly command: "start" | "submit" | "advanceBy" | "advanceToNext" | "close";
+      readonly message: string;
+    };
+
+export interface FactoryEmulatorPendingTransactionStatus {
+  readonly command: "start" | "submit" | "advanceBy" | "advanceToNext" | "close";
+  readonly phase: "sink-write" | "sink-close";
+  readonly eventCount: number;
+}
+
 export interface FactoryEmulatorSessionStatus {
   readonly phase:
     | "error"
@@ -199,6 +232,11 @@ export interface FactoryEmulatorSessionStatus {
     | "waiting"
     | "idle";
   readonly reason: string;
+  readonly virtualTime?: string;
+  readonly virtualElapsedMs: number;
+  readonly budgetUsage: FactoryEmulatorBudgetUsage;
+  readonly pendingTransaction?: FactoryEmulatorPendingTransactionStatus;
+  readonly error?: FactoryEmulatorSessionError;
   readonly diagnostic?: FactoryEmulatorExecutionDiagnostic;
 }
 

@@ -20,8 +20,11 @@ import {
 import type {
   FactoryEmulatorSession,
   FactoryEmulatorSessionAdvanceReceipt,
+  FactoryEmulatorBudgetUsage,
   FactoryEmulatorSessionCloseReceipt,
   FactoryEmulatorSessionStatus,
+  FactoryEmulatorPendingTransactionStatus,
+  FactoryEmulatorSessionError,
   FactoryEmulatorSessionState,
   FactoryEmulatorExecutionDiagnostic,
   FactoryEmulatorLimits,
@@ -126,6 +129,10 @@ const submitReceipt: Promise<FactoryEmulatorSubmitReceipt> = emulatorSession.sub
   workType: "task",
 });
 const sessionStatus: FactoryEmulatorSessionStatus = emulatorSession.status();
+const budgetUsage: FactoryEmulatorBudgetUsage = sessionStatus.budgetUsage;
+const sessionError: FactoryEmulatorSessionError | undefined = sessionStatus.error;
+const pendingStatus: FactoryEmulatorPendingTransactionStatus | undefined =
+  sessionStatus.pendingTransaction;
 const sessionAdvanceReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
   emulatorSession.advanceBy(5);
 const sessionNextReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
@@ -137,6 +144,9 @@ void sessionState;
 void startReceipt;
 void submitReceipt;
 void sessionStatus;
+void budgetUsage;
+void sessionError;
+void pendingStatus;
 void sessionAdvanceReceipt;
 void sessionNextReceipt;
 void sessionCloseReceipt;
