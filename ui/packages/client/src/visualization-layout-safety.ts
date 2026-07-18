@@ -129,17 +129,18 @@ export function validateDuplicateAnnotationIds(
 ): void {
   const indexesById = new Map<string, number[]>();
   for (const [index, annotation] of annotations.entries()) {
+    const record = annotation as Record<string, unknown>;
     if (
       typeof annotation !== "object" ||
       annotation === null ||
-      !("id" in annotation) ||
-      typeof annotation.id !== "string"
+      !Object.hasOwn(record, "id") ||
+      typeof record.id !== "string"
     ) {
       continue;
     }
-    const indexes = indexesById.get(annotation.id) ?? [];
+    const indexes = indexesById.get(record.id) ?? [];
     indexes.push(index);
-    indexesById.set(annotation.id, indexes);
+    indexesById.set(record.id, indexes);
   }
   for (const [id, indexes] of indexesById) {
     if (indexes.length < 2) continue;
@@ -160,18 +161,19 @@ export function validateDuplicateNodeIds(
 ): void {
   const indexesById = new Map<string, number[]>();
   for (const [index, emptyState] of emptyStates.entries()) {
+    const record = emptyState as Record<string, unknown>;
     if (
       typeof emptyState !== "object" ||
       emptyState === null ||
-      !("nodeId" in emptyState) ||
-      typeof emptyState.nodeId !== "string" ||
-      emptyState.nodeId.trim().length === 0
+      !Object.hasOwn(record, "nodeId") ||
+      typeof record.nodeId !== "string" ||
+      record.nodeId.trim().length === 0
     ) {
       continue;
     }
-    const indexes = indexesById.get(emptyState.nodeId) ?? [];
+    const indexes = indexesById.get(record.nodeId) ?? [];
     indexes.push(index);
-    indexesById.set(emptyState.nodeId, indexes);
+    indexesById.set(record.nodeId, indexes);
   }
   for (const [nodeId, indexes] of indexesById) {
     if (indexes.length < 2) continue;

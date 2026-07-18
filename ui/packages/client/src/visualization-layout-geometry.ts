@@ -38,7 +38,7 @@ function validateNumericShape(
     }
   }
   for (const field of fields) {
-    if (!(field in record)) {
+    if (!Object.hasOwn(record, field)) {
       issues.push({
         category: "structure",
         code: "missing_required_field",

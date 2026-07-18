@@ -49,4 +49,87 @@ describe("Factory visualization plain-data projection", () => {
       data: { schemaVersion: "factory-visualization-layout/v1" },
     });
   });
+
+  it("returns structured diagnostics for cyclic and deeply nested input", () => {
+    const cyclic: Record<string, unknown> = {
+      schemaVersion: "factory-visualization-layout/v1",
+      annotations: [],
+    };
+    cyclic.self = cyclic;
+
+    expect(() =>
+      safeParseFactoryVisualizationLayout(cyclic, exampleFactory()),
+    ).not.toThrow();
+    expect(
+      safeParseFactoryVisualizationLayout(cyclic, exampleFactory()),
+    ).toEqual({
+      success: false,
+      issues: [
+        expect.objectContaining({
+          code: "non_plain_data",
+          path: ["self"],
+        }),
+      ],
+    });
+
+    const deeplyNested: Record<string, unknown> = {};
+    let cursor = deeplyNested;
+    for (let depth = 0; depth < 10_000; depth += 1) {
+      const child: Record<string, unknown> = {};
+      cursor.child = child;
+      cursor = child;
+    }
+    const deepInput = {
+      schemaVersion: "factory-visualization-layout/v1",
+      annotations: [],
+      extra: deeplyNested,
+    };
+    expect(() =>
+      safeParseFactoryVisualizationLayout(deepInput, exampleFactory()),
+    ).not.toThrow();
+    expect(
+      safeParseFactoryVisualizationLayout(deepInput, exampleFactory()),
+    ).toMatchObject({ success: false });
+  });
+
+  it.each([
+    ["position", "x", { y: 0 }],
+    ["size", "width", { height: 1 }],
+  ])(
+    "rejects missing own %s.%s when Object.prototype supplies the field",
+    (shape, inheritedField, geometry) => {
+      const annotation = {
+        id: "inherited-geometry",
+        kind: "note",
+        position: shape === "position" ? geometry : { x: 0, y: 0 },
+        ...(shape === "size" ? { size: geometry } : {}),
+        body: "Plain body",
+      };
+      const input = {
+        schemaVersion: "factory-visualization-layout/v1",
+        annotations: [annotation],
+      };
+      Object.defineProperty(Object.prototype, inheritedField, {
+        value: 1,
+        configurable: true,
+      });
+      try {
+        const result = safeParseFactoryVisualizationLayout(
+          input,
+          exampleFactory(),
+        );
+        expect(result).toMatchObject({ success: false });
+        if (!result.success) {
+          expect(result.issues).toContainEqual(
+            expect.objectContaining({
+              code: "missing_required_field",
+              path: ["annotations", 0, shape, inheritedField],
+            }),
+          );
+        }
+      } finally {
+        delete (Object.prototype as Record<string, unknown>)[inheritedField];
+      }
+    },
+  );
 });

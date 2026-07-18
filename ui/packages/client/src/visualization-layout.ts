@@ -137,10 +137,8 @@ function validateImageSource(
       message: "Expected image source kind embedded.",
     });
   }
-  if (
-    stringField(input, "mediaType", path, issues) &&
-    !imageMediaTypes.has(input.mediaType as string)
-  ) {
+  const validMediaType = stringField(input, "mediaType", path, issues);
+  if (validMediaType && !imageMediaTypes.has(input.mediaType as string)) {
     issues.push({
       category: "semantic",
       code: "unsupported_image_media_type",
@@ -151,6 +149,7 @@ function validateImageSource(
   const validBase64Type = stringField(input, "base64", path, issues);
   if (
     validBase64Type &&
+    validMediaType &&
     typeof input.base64 === "string" &&
     typeof input.mediaType === "string" &&
     imageMediaTypes.has(input.mediaType)
@@ -253,7 +252,7 @@ function validateAnnotation(
         message: `Unsupported note tone ${input.tone}.`,
       });
     }
-    if (input.size !== undefined) {
+    if (Object.hasOwn(input, "size")) {
       validateSize(input.size, [...path, "size"], issues);
     }
   } else {
@@ -395,7 +394,7 @@ export function safeParseFactoryVisualizationLayout(
     });
   }
 
-  if (input.annotations !== undefined) {
+  if (Object.hasOwn(input, "annotations")) {
     if (!Array.isArray(input.annotations)) {
       issues.push({
         category: "structure",
@@ -411,7 +410,7 @@ export function safeParseFactoryVisualizationLayout(
     }
   }
 
-  if (input.nodeEmptyStates !== undefined) {
+  if (Object.hasOwn(input, "nodeEmptyStates")) {
     if (!Array.isArray(input.nodeEmptyStates)) {
       issues.push({
         category: "structure",
