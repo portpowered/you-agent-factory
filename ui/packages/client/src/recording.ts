@@ -4,6 +4,7 @@ import {
   type FactoryDefinition,
   type FactoryEvent,
 } from "./contracts.js";
+import { orderFactoryEvents } from "./event-ordering.js";
 
 export const FACTORY_RECORDING_SCHEMA_VERSION = "factory-recording/v1" as const;
 
@@ -182,6 +183,18 @@ export function validateFactoryEventEnvelope(
       [...path, "context"],
       issues,
     );
+    if (
+      input.context.sessionSequence !== undefined &&
+      (typeof input.context.sessionSequence !== "number" ||
+        !Number.isFinite(input.context.sessionSequence))
+    ) {
+      issues.push({
+        category: "structure",
+        code: "invalid_type",
+        path: [...path, "context", "sessionSequence"],
+        message: "Expected sessionSequence to be a finite number when present.",
+      });
+    }
   }
 
   if (!isRecord(input.payload)) {
@@ -220,18 +233,31 @@ function validateEventSchemaVersions(
   issues: RecordingValidationIssue[],
 ): void {
   for (const [index, event] of events.entries()) {
-    if (
-      typeof event.schemaVersion === "string" &&
-      !supportedEventSchemaVersions.has(event.schemaVersion)
-    ) {
-      issues.push({
-        category: "semantic",
-        code: "unsupported_event_schema_version",
-        path: ["events", index, "schemaVersion"],
-        message: `Unsupported Factory event schema version: ${event.schemaVersion}.`,
-      });
-    }
+    issues.push(...validateFactoryEventSchemaVersion(event, ["events", index]));
   }
+}
+
+/** Validate the generated Factory event schema version for any input source. */
+export function validateFactoryEventSchemaVersion(
+  input: unknown,
+  path: readonly (string | number)[] = [],
+): RecordingValidationIssue[] {
+  if (
+    !isRecord(input) ||
+    typeof input.schemaVersion !== "string" ||
+    supportedEventSchemaVersions.has(input.schemaVersion)
+  ) {
+    return [];
+  }
+
+  return [
+    {
+      category: "semantic",
+      code: "unsupported_event_schema_version",
+      path: [...path, "schemaVersion"],
+      message: `Unsupported Factory event schema version: ${input.schemaVersion}.`,
+    },
+  ];
 }
 
 function validateUniqueEventIds(
@@ -399,7 +425,13 @@ export function safeParseFactoryRecording(
 
   return issues.length > 0
     ? { success: false, issues }
-    : { success: true, data: input as unknown as FactoryRecording };
+    : {
+        success: true,
+        data: {
+          ...(input as unknown as FactoryRecording),
+          events: orderFactoryEvents(input.events as FactoryEvent[]),
+        },
+      };
 }
 
 export function parseFactoryRecording(input: unknown): FactoryRecording {

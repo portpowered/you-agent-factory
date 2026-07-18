@@ -9,6 +9,13 @@ export {
   type paths,
 } from "./contracts.js";
 export {
+  compareFactoryEvents,
+  createFactoryEventCursor,
+  type FactoryEventCursor,
+  getFactoryEventEffectiveSequence,
+  orderFactoryEvents,
+} from "./event-ordering.js";
+export {
   FACTORY_RECORDING_SCHEMA_VERSION,
   type FactoryRecording,
   FactoryRecordingValidationError,
@@ -18,3 +25,11 @@ export {
   type SafeParseFactoryRecordingResult,
   safeParseFactoryRecording,
 } from "./recording.js";
+export {
+  type FactoryReplayTextIssue,
+  type FactoryReplayTextIssueCode,
+  FactoryReplayTextParseError,
+  parseFactoryEventReplayText,
+  type SafeParseFactoryEventReplayTextResult,
+  safeParseFactoryEventReplayText,
+} from "./replay.js";

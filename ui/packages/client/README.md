@@ -22,6 +22,14 @@ The packaged
 is a backend-free example of the public `factory-recording/v1` contract. It
 includes both a top-level Factory definition and a canonical topology event.
 
+## Replay helpers
+
+Replay consumers can use `orderFactoryEvents` for deterministic tick-first
+ordering, `createFactoryEventCursor` for reconnect positions, and
+`parseFactoryEventReplayText` (or its non-throwing safe-parser counterpart) to
+validate and order canonical JSON `data` frames from captured SSE text. These
+helpers are pure and do not open or retain a live transport.
+
 ## Contract generation
 
 Run `bun run generate` from this directory after the checked-in dashboard
