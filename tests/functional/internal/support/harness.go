@@ -77,15 +77,6 @@ func PlaceTokenCount(marking petri.MarkingSnapshot, placeID string) int {
 	return len(marking.PlaceTokens[placeID])
 }
 
-func HasWorkTokenInPlace(marking petri.MarkingSnapshot, placeID, workID string) bool {
-	for _, tok := range marking.Tokens {
-		if tok.PlaceID == placeID && tok.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
-}
-
 type TokenIdentitySet struct {
 	WorkIDs    []string
 	WorkTypes  []string

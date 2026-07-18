@@ -91,7 +91,14 @@ Execute the script.
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
 	}
-	if !support.HasWorkTokenInPlace(finalState.Marking, "task:done", workID) {
+	completed := false
+	for _, token := range finalState.Marking.Tokens {
+		if token.PlaceID == "task:done" && token.Color.WorkID == workID {
+			completed = true
+			break
+		}
+	}
+	if !completed {
 		t.Fatalf("missing completed token for %q in task:done; marking=%#v", workID, finalState.Marking.PlaceTokens)
 	}
 
