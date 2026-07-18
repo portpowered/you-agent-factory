@@ -173,8 +173,12 @@ including sink operation/message or execution-pause diagnostics. Status never
 contains canonical event history, playback controls, timers, visibility state,
 or framework-owned objects.
 
-Configuration and command inputs are detached before runtime ownership, and
-every receipt, status, pending batch, and state snapshot is a fresh
+Configuration and command inputs are validated before runtime ownership and
+must contain only plain objects, dense arrays, `null`, booleans, strings, and
+finite numbers. Structured-cloneable class instances such as `Date`, `Map`,
+`Set`, typed arrays, and regular expressions are rejected as configuration or
+submission errors instead of entering scripted outputs, state, retries, or
+events. Every receipt, status, pending batch, and state snapshot is a fresh
 structured-cloneable data value. Mutating any returned value cannot alter
 committed state or a later retry. The session retains current execution facts
 and at most one bounded recovery transaction; accepted canonical batch history

@@ -19,6 +19,7 @@ import {
   virtualTimeAt,
 } from "./virtual-time.js";
 import { defineDataError } from "./data-error.js";
+import { dataOnlyDiagnostics } from "./data-only.js";
 
 export { FactoryEmulatorDurationError } from "./virtual-time.js";
 export {
@@ -88,6 +89,13 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
     throw new TypeError("sink must provide write and close functions");
   }
 
+  const configurationDiagnostics = [
+    ...dataOnlyDiagnostics(scenario, { code: "INVALID_SCENARIO_SHAPE" }),
+    ...dataOnlyDiagnostics(factory, { code: "INVALID_FACTORY_DEFINITION" }),
+  ];
+  if (configurationDiagnostics.length > 0) {
+    throw new FactoryEmulatorConfigurationError(configurationDiagnostics);
+  }
   const configuredFactory = copy(factory);
   const configuredScenario = copy(scenario);
   const normalizedLimits = normalizeFactoryEmulatorLimits(limits);
@@ -698,23 +706,33 @@ function sessionIdentityCoordinates(factory, scenario, sessionId) {
 }
 
 function normalizeSubmissions(submissionOrBatch) {
+  const submissionValues = Array.isArray(submissionOrBatch)
+    ? submissionOrBatch
+    : [submissionOrBatch];
+  const diagnostics = dataOnlyDiagnostics(submissionValues, {
+    code: "INVALID_SCENARIO_SHAPE",
+    rootPath: "/submissions",
+  });
+  if (diagnostics.length > 0) {
+    throw new FactoryEmulatorSubmissionError(diagnostics);
+  }
   let submissions;
   try {
-    submissions = copy(Array.isArray(submissionOrBatch)
-      ? submissionOrBatch
-      : [submissionOrBatch]);
+    submissions = copy(submissionValues);
   } catch {
     throw new FactoryEmulatorSubmissionError([{
-      code: "INVALID_SCENARIO",
+      code: "INVALID_SCENARIO_SHAPE",
       path: "/submissions",
       message: "must contain structured-cloneable data values only",
+      expectation: "plain objects, dense arrays, null, booleans, strings, or finite numbers",
     }]);
   }
   if (submissions.length === 0) {
     throw new FactoryEmulatorSubmissionError([{
-      code: "INVALID_SCENARIO",
+      code: "INVALID_SCENARIO_SHAPE",
       path: "/submissions",
       message: "must contain at least one Work request",
+      expectation: "at least one Work request",
     }]);
   }
   return submissions;

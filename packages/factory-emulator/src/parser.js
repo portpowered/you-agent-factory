@@ -3,6 +3,7 @@ import addFormats from "ajv-formats";
 import { scenarioSchema } from "./generated/scenario-schema.js";
 import { scenarioSemanticDiagnostics } from "./semantics.js";
 import { factorySupportDiagnostics } from "./support.js";
+import { dataOnlyDiagnostics } from "./data-only.js";
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -19,11 +20,22 @@ const validateScenarioShape = ajv.compile(scenarioSchema);
  * activity, so callers can reject unsupported input before any runtime work.
  */
 export function parseEmulatorScenario(scenario, factory) {
+  const scenarioDataDiagnostics = dataOnlyDiagnostics(scenario, {
+    code: "INVALID_SCENARIO_SHAPE",
+  });
+  if (scenarioDataDiagnostics.length > 0) {
+    return failure(scenarioDataDiagnostics);
+  }
   if (!validateScenarioShape(scenario)) {
     return failure(shapeDiagnostics(validateScenarioShape.errors ?? []));
   }
 
-  const factoryDiagnostics = factorySupportDiagnostics(factory);
+  const factoryDiagnostics = dataOnlyDiagnostics(factory, {
+    code: "INVALID_FACTORY_DEFINITION",
+  });
+  if (factoryDiagnostics.length === 0) {
+    factoryDiagnostics.push(...factorySupportDiagnostics(factory));
+  }
   const diagnostics =
     factoryDiagnostics.length === 0
       ? scenarioSemanticDiagnostics(scenario, factory)

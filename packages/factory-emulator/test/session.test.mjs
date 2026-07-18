@@ -1136,3 +1136,91 @@ test("public observations are detached data and status summarizes bounded recove
   assert.equal(Object.hasOwn(state, "batches"), false);
   assert.equal(attempts.length, 3);
 });
+
+test("scripted outputs reject structured-cloneable class instances before sink activity", () => {
+  const cases = [
+    ["Date", new Date("2026-01-01T00:00:00Z")],
+    ["Map", new Map([["status", "complete"]])],
+    ["Set", new Set(["complete"])],
+    ["RegExp", /complete/u],
+    ["Uint8Array", new Uint8Array([1, 2])],
+  ];
+
+  for (const [name, value] of cases) {
+    const writes = [];
+    const error = thrownValue(() => createFactoryEmulatorSession({
+      factory: supportedFactory(),
+      scenario: scenario({
+        initialSubmissions: [],
+        rules: [{
+          id: "complete-checkout",
+          match: { kind: "workType", workType: "checkout" },
+          outcomes: [{ kind: "complete", output: { value } }],
+          exhaustionBehavior: { kind: "repeatLast" },
+        }],
+      }),
+      sink: {
+        async close() {
+          return { status: "closed" };
+        },
+        async write(batch) {
+          writes.push(batch);
+          return { status: "accepted" };
+        },
+      },
+    }));
+
+    assertCommandError(error, FactoryEmulatorConfigurationError, {
+      name: "FactoryEmulatorConfigurationError",
+      code: "INVALID_CONFIGURATION",
+    });
+    assert.equal(error.diagnostics.length, 1, name);
+    assert.equal(
+      error.diagnostics[0].path,
+      "/rules/0/outcomes/0/output/value",
+      name,
+    );
+    assert.equal(writes.length, 0, name);
+  }
+});
+
+test("submissions reject non-plain cloneable values without state or retry residue", async () => {
+  const { batches, emulator } = harness(scenario({ initialSubmissions: [] }));
+  await emulator.start();
+  const acceptedState = emulator.state();
+  const acceptedBatchCount = batches.length;
+  const cases = [
+    ["Date", new Date("2026-01-01T00:00:00Z")],
+    ["Map", new Map([["status", "complete"]])],
+    ["Set", new Set(["complete"])],
+    ["RegExp", /complete/u],
+    ["Uint8Array", new Uint8Array([1, 2])],
+  ];
+
+  for (const [name, value] of cases) {
+    const error = await rejectedValue(emulator.submit({
+      id: `invalid-${name}`,
+      workType: "checkout",
+      input: { value },
+    }));
+
+    assertCommandError(error, FactoryEmulatorSubmissionError, {
+      name: "FactoryEmulatorSubmissionError",
+      code: "INVALID_SUBMISSION",
+    });
+    assert.equal(error.diagnostics.length, 1, name);
+    assert.equal(error.diagnostics[0].path, "/submissions/0/input/value", name);
+    assert.deepEqual(emulator.state(), acceptedState, name);
+    assert.equal(emulator.pending(), undefined, name);
+    assert.equal(batches.length, acceptedBatchCount, name);
+  }
+
+  const receipt = await emulator.submit({
+    id: "valid-after-rejections",
+    workType: "checkout",
+    input: { nested: [null, true, "complete", 1] },
+  });
+  assertDataOnly(receipt);
+  assertDataOnly(batches.at(-1));
+  assert.equal(emulator.pending(), undefined);
+});

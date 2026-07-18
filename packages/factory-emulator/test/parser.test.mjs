@@ -44,6 +44,36 @@ test("parses a valid scenario without changing deterministic inputs or emitting 
   assert.deepEqual(result, { success: true, scenario, factory });
 });
 
+test("rejects nested structured-cloneable class instances at the data boundary", () => {
+  const cases = [
+    ["Date", new Date("2026-01-01T00:00:00Z")],
+    ["Map", new Map([["status", "complete"]])],
+    ["Set", new Set(["complete"])],
+    ["RegExp", /complete/u],
+    ["Uint8Array", new Uint8Array([1, 2])],
+  ];
+
+  for (const [name, value] of cases) {
+    const result = parseEmulatorScenario(
+      validScenario({
+        rules: [{
+          id: "complete-checkout",
+          match: { kind: "workType", workType: "checkout" },
+          outcomes: [{ kind: "complete", output: { value } }],
+          exhaustionBehavior: { kind: "repeatLast" },
+        }],
+      }),
+      supportedFactory(),
+    );
+
+    assert.equal(result.success, false, name);
+    assert.deepEqual(result.diagnostics.map(({ code, path }) => ({ code, path })), [{
+      code: "INVALID_SCENARIO_SHAPE",
+      path: "/rules/0/outcomes/0/output/value",
+    }], name);
+  }
+});
+
 test("reports actionable structural diagnostics before Factory support checks", () => {
   const result = parseEmulatorScenario(
     validScenario({ id: "", unexpected: true }),
