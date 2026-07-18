@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   FactoryEmulatorAdvanceInProgressError,
+  FactoryEmulatorClosedError,
+  FactoryEmulatorPendingTransactionError,
   FactoryEventSinkCapacityError,
   FactoryEventSinkClosedError,
   createFactoryEmulator,
@@ -141,6 +143,198 @@ test("emulator commits its calculated state only after the logical-tick batch is
     batch: { events: [event("event-1", 1)] },
   });
   assert.deepEqual(emulator.state(), { count: 1 });
+});
+
+test("emulator retries a rejected tick unchanged before calculating later work", async () => {
+  const attempts = [];
+  let calculations = 0;
+  let rejectNextWrite = true;
+  const emulator = createFactoryEmulator({
+    initialState: { count: 0 },
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write(batch) {
+        attempts.push(structuredClone(batch));
+        if (rejectNextWrite) {
+          rejectNextWrite = false;
+          throw new Error("persistence unavailable");
+        }
+        return { status: "accepted" };
+      },
+    },
+    calculateTick(state) {
+      calculations += 1;
+      return {
+        batch: { events: [event(`event-${state.count + 1}`, state.count + 1)] },
+        state: { count: state.count + 1 },
+      };
+    },
+  });
+
+  await assert.rejects(emulator.advance(), /persistence unavailable/);
+  assert.deepEqual(emulator.state(), { count: 0 });
+  assert.equal(calculations, 1);
+  assert.deepEqual(emulator.status(), {
+    phase: "pending",
+    lastError: { operation: "write", message: "persistence unavailable" },
+  });
+  const inspectedPending = emulator.pending();
+  inspectedPending.events[0].payload.nested.value = "mutated inspected pending";
+  assert.equal(emulator.pending().events[0].payload.nested.value, "event-1");
+
+  await assert.rejects(emulator.close(), FactoryEmulatorPendingTransactionError);
+  const retryReceipt = await emulator.advance();
+  assert.equal(calculations, 1);
+  assert.deepEqual(retryReceipt.batch, attempts[0]);
+  assert.deepEqual(attempts, [retryReceipt.batch, retryReceipt.batch]);
+  assert.deepEqual(emulator.state(), { count: 1 });
+  assert.deepEqual(emulator.status(), { phase: "open", lastError: undefined });
+
+  await emulator.advance();
+  assert.equal(calculations, 2);
+  assert.deepEqual(
+    attempts.map((batch) => batch.events[0].id),
+    ["event-1", "event-1", "event-2"],
+  );
+});
+
+test("reset explicitly discards a rejected batch and repeated recoveries commit once", async () => {
+  let rejectNextWrite = true;
+  let calculations = 0;
+  const emulator = createFactoryEmulator({
+    initialState: { count: 0 },
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write() {
+        if (rejectNextWrite) {
+          rejectNextWrite = false;
+          throw new Error("write rejected");
+        }
+        return { status: "accepted" };
+      },
+    },
+    calculateTick(state) {
+      calculations += 1;
+      return {
+        batch: { events: [event(`event-${calculations}`, state.count + 1)] },
+        state: { count: state.count + 1 },
+      };
+    },
+  });
+
+  await assert.rejects(emulator.advance(), /write rejected/);
+  emulator.reset();
+  assert.equal(emulator.pending(), undefined);
+  assert.deepEqual(emulator.status(), { phase: "open", lastError: undefined });
+  await emulator.advance();
+  assert.equal(calculations, 2);
+
+  for (const expectedCount of [2, 3]) {
+    rejectNextWrite = true;
+    await assert.rejects(emulator.advance(), /write rejected/);
+    assert.deepEqual(emulator.state(), { count: expectedCount - 1 });
+    await emulator.advance();
+    assert.deepEqual(emulator.state(), { count: expectedCount });
+  }
+  assert.equal(calculations, 4);
+});
+
+test("an idle emulator accepts later work, then writes terminal lifecycle events before closing", async () => {
+  const operations = [];
+  const emulator = createFactoryEmulator({
+    initialState: { count: 0 },
+    sink: {
+      async close() {
+        operations.push("close");
+        return { status: "closed" };
+      },
+      async write(batch) {
+        operations.push(structuredClone(batch));
+        return { status: "accepted" };
+      },
+    },
+    calculateClose(state) {
+      return { events: [event("session-closed", state.count + 1)] };
+    },
+    calculateTick(state) {
+      return {
+        batch: { events: [event(`event-${state.count + 1}`, state.count + 1)] },
+        state: { count: state.count + 1 },
+      };
+    },
+  });
+
+  assert.deepEqual(emulator.status(), { phase: "open", lastError: undefined });
+  await emulator.advance();
+  const closeReceipt = await emulator.close();
+  assert.deepEqual(closeReceipt, {
+    status: "closed",
+    batch: { events: [event("session-closed", 2)] },
+  });
+  assert.deepEqual(operations, [
+    { events: [event("event-1", 1)] },
+    { events: [event("session-closed", 2)] },
+    "close",
+  ]);
+  assert.deepEqual(emulator.status(), { phase: "closed", lastError: undefined });
+  await assert.rejects(emulator.advance(), FactoryEmulatorClosedError);
+});
+
+test("emulator retains terminal lifecycle writes across close failures", async () => {
+  const terminalAttempts = [];
+  let closeCalculations = 0;
+  let rejectTerminalWrite = true;
+  let rejectSinkClose = true;
+  const emulator = createFactoryEmulator({
+    initialState: { count: 0 },
+    sink: {
+      async close() {
+        if (rejectSinkClose) {
+          rejectSinkClose = false;
+          throw new Error("sink close unavailable");
+        }
+        return { status: "closed" };
+      },
+      async write(batch) {
+        terminalAttempts.push(structuredClone(batch));
+        if (rejectTerminalWrite) {
+          rejectTerminalWrite = false;
+          throw new Error("terminal write unavailable");
+        }
+        return { status: "accepted" };
+      },
+    },
+    calculateClose(state) {
+      closeCalculations += 1;
+      return { events: [event("session-closed", state.count + 1)] };
+    },
+    calculateTick() {
+      throw new Error("advance is not used by this test");
+    },
+  });
+
+  await assert.rejects(emulator.close(), /terminal write unavailable/);
+  assert.deepEqual(emulator.status(), {
+    phase: "closing",
+    lastError: { operation: "write", message: "terminal write unavailable" },
+  });
+  await assert.rejects(emulator.advance(), FactoryEmulatorPendingTransactionError);
+  await assert.rejects(emulator.close(), /sink close unavailable/);
+  assert.deepEqual(emulator.status(), {
+    phase: "closing",
+    lastError: { operation: "close", message: "sink close unavailable" },
+  });
+  await emulator.close();
+
+  assert.equal(closeCalculations, 1);
+  assert.deepEqual(terminalAttempts, [
+    { events: [event("session-closed", 1)] },
+    { events: [event("session-closed", 1)] },
+  ]);
 });
 
 function deferred() {

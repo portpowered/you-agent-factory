@@ -1,6 +1,8 @@
 import type {
   FactoryEmulator,
   FactoryEmulatorAdvanceReceipt,
+  FactoryEmulatorCloseReceipt,
+  FactoryEmulatorStatus,
   FactoryEmulatorTick,
   FactoryEventBatch,
   FactoryEventSink,
@@ -68,3 +70,10 @@ const emulator: FactoryEmulator<{ readonly count: number }> = createFactoryEmula
 });
 const advanceReceipt: Promise<FactoryEmulatorAdvanceReceipt> = emulator.advance();
 void advanceReceipt;
+
+const emulatorStatus: FactoryEmulatorStatus = emulator.status();
+const pendingBatch: FactoryEventBatch | undefined = emulator.pending();
+const emulatorCloseReceipt: Promise<FactoryEmulatorCloseReceipt> = emulator.close();
+void emulatorStatus;
+void pendingBatch;
+void emulatorCloseReceipt;

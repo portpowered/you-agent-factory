@@ -26,3 +26,14 @@ batch from a detached committed-state snapshot, waits for `sink.write`, and
 only then commits the calculated next state. A concurrent `advance` rejects
 while the write is unresolved, ensuring no later tick is calculated or
 committed ahead of an unaccepted batch.
+
+If a sink rejects a tick, the emulator retains that detached batch and its
+calculated state as the only pending transaction. The next `advance` retries it
+with the same IDs, timestamps, contents, and order; `reset` explicitly
+discards it. `pending` and `status` expose detached recovery state and the last
+write or close error. An idle emulator remains open. When configured with
+`calculateClose`, `close` writes that caller-supplied terminal lifecycle batch,
+waits for it to be accepted, and then closes the sink. A pending rejected tick
+blocks close so canonical history cannot be skipped. A rejected terminal batch
+is likewise retained unchanged for the next close attempt; after its acceptance
+a failed sink close retries only `sink.close`, never the terminal write.
