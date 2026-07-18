@@ -1,0 +1,17 @@
+type: object
+description: Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+additionalProperties: false
+required:
+  - x
+  - y
+properties:
+  x:
+    type: number
+    minimum: -100000
+    maximum: 100000
+    description: Horizontal canvas coordinate between -100,000 and 100,000 inclusive.
+  y:
+    type: number
+    minimum: -100000
+    maximum: 100000
+    description: Vertical canvas coordinate between -100,000 and 100,000 inclusive.

@@ -269,13 +269,24 @@ func factoryLayoutAnnotationsInternalFromAPI(annotations *[]factoryapi.FactoryLa
 		values[i] = interfaces.FactoryLayoutAnnotationConfig{
 			ID:       annotation.Id,
 			Kind:     string(annotation.Kind),
-			Position: factoryLayoutPointInternalFromAPI(annotation.Position),
-			Size:     factoryLayoutSizeInternalFromAPI(annotation.Size),
+			Position: factoryLayoutAnnotationPositionInternalFromAPI(annotation.Position),
+			Size:     factoryLayoutAnnotationSizeInternalFromAPI(annotation.Size),
 			Note:     factoryLayoutNoteInternalFromAPI(annotation.Note),
 			Image:    factoryLayoutImageInternalFromAPI(annotation.Image),
 		}
 	}
 	return values
+}
+
+func factoryLayoutAnnotationPositionInternalFromAPI(position factoryapi.FactoryLayoutAnnotationPosition) interfaces.FactoryLayoutPointConfig {
+	return interfaces.FactoryLayoutPointConfig{X: float64(position.X), Y: float64(position.Y)}
+}
+
+func factoryLayoutAnnotationSizeInternalFromAPI(size *factoryapi.FactoryLayoutAnnotationSize) *interfaces.FactoryLayoutSizeConfig {
+	if size == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutSizeConfig{Width: float64(size.Width), Height: float64(size.Height)}
 }
 
 func factoryLayoutNoteInternalFromAPI(note *factoryapi.FactoryLayoutNote) *interfaces.FactoryLayoutNoteConfig {

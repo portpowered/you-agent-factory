@@ -5104,6 +5104,20 @@ export interface components {
      * @enum {string}
      */
     FactoryLayoutAnnotationKind: FactoryLayoutAnnotationKind;
+    /** @description Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render. */
+    FactoryLayoutAnnotationPosition: {
+      /** @description Horizontal canvas coordinate between -100,000 and 100,000 inclusive. */
+      x: number;
+      /** @description Vertical canvas coordinate between -100,000 and 100,000 inclusive. */
+      y: number;
+    };
+    /** @description Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it. */
+    FactoryLayoutAnnotationSize: {
+      /** @description Positive authored width no greater than 10,000 canvas units. */
+      width: number;
+      /** @description Positive authored height no greater than 10,000 canvas units. */
+      height: number;
+    };
     /**
      * @description Presentation-only tone for a note annotation.
      * @enum {string}
@@ -5141,13 +5155,13 @@ export interface components {
       /** @description Literal alternative text for the embedded image. */
       alternativeText: string;
     };
-    /** @description Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges. */
+    /** @description Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid. */
     FactoryLayoutAnnotation: {
       /** @description Stable annotation identifier unique within this layout. */
       id: string;
       kind: components["schemas"]["FactoryLayoutAnnotationKind"];
-      position: components["schemas"]["FactoryLayoutPoint"];
-      size?: components["schemas"]["FactoryLayoutSize"];
+      position: components["schemas"]["FactoryLayoutAnnotationPosition"];
+      size?: components["schemas"]["FactoryLayoutAnnotationSize"];
       note?: components["schemas"]["FactoryLayoutNote"];
       image?: components["schemas"]["FactoryLayoutImage"];
     };

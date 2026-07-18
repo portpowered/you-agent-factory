@@ -1,5 +1,5 @@
 type: object
-description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.
+description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
 additionalProperties: false
 required:
   - id
@@ -12,9 +12,9 @@ properties:
   kind:
     $ref: './FactoryLayoutAnnotationKind.yaml'
   position:
-    $ref: './FactoryLayoutPoint.yaml'
+    $ref: './FactoryLayoutAnnotationPosition.yaml'
   size:
-    $ref: './FactoryLayoutSize.yaml'
+    $ref: './FactoryLayoutAnnotationSize.yaml'
   note:
     $ref: './FactoryLayoutNote.yaml'
   image:

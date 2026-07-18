@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -48,6 +49,8 @@ const (
 	factoryLayoutEmbeddedImageMaxBytes        = 2 * 1024 * 1024
 	factoryLayoutEmbeddedImageTotalMaxBytes   = 8 * 1024 * 1024
 	factoryLayoutEmbeddedImageMaxBase64Chars  = 4 * ((factoryLayoutEmbeddedImageMaxBytes + 2) / 3)
+	factoryLayoutAnnotationPositionMaxUnits   = 100000
+	factoryLayoutAnnotationSizeMaxUnits       = 10000
 )
 
 // Expand parses and normalizes a user-provided factory payload into the internal
@@ -338,6 +341,9 @@ func validateLayoutAnnotationArray(parent map[string]any, key string, path strin
 	totalImageBytes := 0
 	for index, annotation := range values {
 		annotationPath := fmt.Sprintf("%s.%s[%d]", path, key, index)
+		if err := validateLayoutAnnotationFields(annotation, annotationPath); err != nil {
+			return err
+		}
 		if err := requireString(annotation, "id", annotationPath); err != nil {
 			return err
 		}
@@ -346,35 +352,126 @@ func validateLayoutAnnotationArray(parent map[string]any, key string, path strin
 			return fmt.Errorf("%s.id %q duplicates an earlier layout annotation", annotationPath, annotationID)
 		}
 		seenIDs[annotationID] = struct{}{}
-		if err := validateOptionalPointObject(annotation, "position", annotationPath, true); err != nil {
+		if err := validateLayoutAnnotationPosition(annotation, annotationPath); err != nil {
 			return err
 		}
-		if err := validateOptionalSizeObject(annotation, "size", annotationPath, false); err != nil {
-			return err
-		}
-		kind, err := requiredStringValue(annotation, "kind", annotationPath)
+		imageBytes, err := validateLayoutAnnotationContent(annotation, annotationPath)
 		if err != nil {
 			return err
 		}
-		switch kind {
-		case "NOTE":
-			if err := validateLayoutAnnotationNote(annotation, annotationPath); err != nil {
-				return err
-			}
-		case "IMAGE":
-			imageBytes, err := validateLayoutAnnotationImage(annotation, annotationPath)
-			if err != nil {
-				return err
-			}
-			totalImageBytes += imageBytes
-			if totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
-				return fmt.Errorf("%s.image.source.data exceeds the %d-byte Factory embedded-image budget", annotationPath, factoryLayoutEmbeddedImageTotalMaxBytes)
-			}
-		default:
-			return fmt.Errorf("%s.kind must be one of NOTE, IMAGE", annotationPath)
+		totalImageBytes += imageBytes
+		if totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
+			return fmt.Errorf("%s.image.source.data exceeds the %d-byte Factory embedded-image budget", annotationPath, factoryLayoutEmbeddedImageTotalMaxBytes)
 		}
 	}
 	return nil
+}
+
+func validateLayoutAnnotationContent(annotation map[string]any, path string) (int, error) {
+	kind, err := requiredStringValue(annotation, "kind", path)
+	if err != nil {
+		return 0, err
+	}
+	switch kind {
+	case "NOTE":
+		if err := rejectLayoutAnnotationField(annotation, "image", path); err != nil {
+			return 0, err
+		}
+		if err := validateLayoutAnnotationSize(annotation, path, false); err != nil {
+			return 0, err
+		}
+		return 0, validateLayoutAnnotationNote(annotation, path)
+	case "IMAGE":
+		if err := rejectLayoutAnnotationField(annotation, "note", path); err != nil {
+			return 0, err
+		}
+		if err := validateLayoutAnnotationSize(annotation, path, true); err != nil {
+			return 0, err
+		}
+		return validateLayoutAnnotationImage(annotation, path)
+	default:
+		return 0, fmt.Errorf("%s.kind must be one of NOTE, IMAGE", path)
+	}
+}
+
+func validateLayoutAnnotationFields(annotation map[string]any, path string) error {
+	allowed := map[string]struct{}{
+		"id": {}, "kind": {}, "position": {}, "size": {}, "note": {}, "image": {},
+	}
+	for field := range annotation {
+		if _, ok := allowed[field]; !ok {
+			return fmt.Errorf("%s.%s is not allowed on a layout annotation", path, field)
+		}
+	}
+	return nil
+}
+
+func rejectLayoutAnnotationField(annotation map[string]any, field, path string) error {
+	if value, ok := annotation[field]; ok && value != nil {
+		return fmt.Errorf("%s.%s is not valid for this annotation kind", path, field)
+	}
+	return nil
+}
+
+func validateLayoutAnnotationPosition(annotation map[string]any, path string) error {
+	position, err := requiredObject(annotation, "position", path)
+	if err != nil {
+		return err
+	}
+	return validateLayoutAnnotationNumbers(position, path+".position", "x", "y", false)
+}
+
+func validateLayoutAnnotationSize(annotation map[string]any, path string, required bool) error {
+	value, ok := annotation["size"]
+	if !ok || value == nil {
+		if required {
+			return fmt.Errorf("%s.size is required", path)
+		}
+		return nil
+	}
+	size, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s.size must be an object", path)
+	}
+	return validateLayoutAnnotationNumbers(size, path+".size", "width", "height", true)
+}
+
+func validateLayoutAnnotationNumbers(values map[string]any, path, firstKey, secondKey string, positive bool) error {
+	maximum := float64(factoryLayoutAnnotationPositionMaxUnits)
+	if positive {
+		maximum = float64(factoryLayoutAnnotationSizeMaxUnits)
+	}
+	for _, key := range []string{firstKey, secondKey} {
+		value, err := requiredFiniteNumber(values, key, path)
+		if err != nil {
+			return err
+		}
+		if positive && value <= 0 {
+			return fmt.Errorf("%s.%s must be greater than zero", path, key)
+		}
+		if (!positive && math.Abs(value) > maximum) || (positive && value > maximum) {
+			return fmt.Errorf("%s.%s must be within %s canvas units", path, key, formatLayoutAnnotationMaximum(maximum, positive))
+		}
+	}
+	return nil
+}
+
+func requiredFiniteNumber(parent map[string]any, key, path string) (float64, error) {
+	if err := requireNumber(parent, key, path); err != nil {
+		return 0, err
+	}
+	value := parent[key].(float64)
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, fmt.Errorf("%s.%s must be finite", path, key)
+	}
+	return value, nil
+}
+
+func formatLayoutAnnotationMaximum(maximum float64, positive bool) string {
+	if positive {
+		return fmt.Sprintf("greater than zero and no greater than %.0f", maximum)
+	}
+	return fmt.Sprintf("between -%.0f and %.0f", maximum, maximum)
 }
 
 func validateLayoutAnnotationNote(annotation map[string]any, path string) error {
@@ -800,13 +897,24 @@ func factoryLayoutAnnotationsAPIFromInternal(annotations []interfaces.FactoryLay
 		values[i] = factoryapi.FactoryLayoutAnnotation{
 			Id:       annotation.ID,
 			Kind:     factoryapi.FactoryLayoutAnnotationKind(annotation.Kind),
-			Position: factoryLayoutPointAPIFromInternal(annotation.Position),
-			Size:     factoryLayoutSizeAPIFromInternal(annotation.Size),
+			Position: factoryLayoutAnnotationPositionAPIFromInternal(annotation.Position),
+			Size:     factoryLayoutAnnotationSizeAPIFromInternal(annotation.Size),
 			Note:     factoryLayoutNoteAPIFromInternal(annotation.Note),
 			Image:    factoryLayoutImageAPIFromInternal(annotation.Image),
 		}
 	}
 	return &values
+}
+
+func factoryLayoutAnnotationPositionAPIFromInternal(position interfaces.FactoryLayoutPointConfig) factoryapi.FactoryLayoutAnnotationPosition {
+	return factoryapi.FactoryLayoutAnnotationPosition{X: float32(position.X), Y: float32(position.Y)}
+}
+
+func factoryLayoutAnnotationSizeAPIFromInternal(size *interfaces.FactoryLayoutSizeConfig) *factoryapi.FactoryLayoutAnnotationSize {
+	if size == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayoutAnnotationSize{Width: float32(size.Width), Height: float32(size.Height)}
 }
 
 func factoryLayoutNoteAPIFromInternal(note *interfaces.FactoryLayoutNoteConfig) *factoryapi.FactoryLayoutNote {

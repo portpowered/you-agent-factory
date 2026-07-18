@@ -74,6 +74,35 @@ func TestFactoryConfigFromOpenAPIJSON_PreservesLiteralLayoutAnnotationText(t *te
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_RejectsInvalidLayoutAnnotationGeometryAndTopologyFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations string
+		wantPath    string
+	}{
+		{"missing position", `{"id":"note","kind":"NOTE","note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].position"},
+		{"position exceeds lower bound", `{"id":"note","kind":"NOTE","position":{"x":-100001,"y":20},"note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].position.x"},
+		{"position exceeds upper bound", `{"id":"note","kind":"NOTE","position":{"x":10,"y":100001},"note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].position.y"},
+		{"zero note width", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"size":{"width":0,"height":20},"note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].size.width"},
+		{"oversized note height", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"size":{"width":20,"height":10001},"note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].size.height"},
+		{"image requires size", `{"id":"image","kind":"IMAGE","position":{"x":10,"y":20},"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Example"}}`, "layout.annotations[0].size"},
+		{"connection field", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"source":"workstation:review","note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].source"},
+		{"wrong content for kind", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Example"},"note":{"body":"safe","tone":"INFO"}}`, "layout.annotations[0].image"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := FactoryConfigFromOpenAPIJSON(layoutFactoryJSON(test.annotations))
+			if err == nil {
+				t.Fatal("expected invalid layout annotation to be rejected")
+			}
+			if !strings.Contains(err.Error(), test.wantPath) {
+				t.Fatalf("error = %v, want path %q", err, test.wantPath)
+			}
+		})
+	}
+}
+
 func layoutFactoryJSON(annotations string) []byte {
 	return []byte(`{
 		"name":"layout-factory",
@@ -89,7 +118,7 @@ func layoutNoteAnnotation(id, title, body string) string {
 }
 
 func layoutImageAnnotation(id, alternativeText, kind, mediaType, data string) string {
-	return `{"id":"` + id + `","kind":"IMAGE","position":{"x":10,"y":20},"image":{"source":{"kind":` + marshalLayoutAnnotationString(kind) + `,"mediaType":` + marshalLayoutAnnotationString(mediaType) + `,"data":` + marshalLayoutAnnotationString(data) + `},"alternativeText":` + marshalLayoutAnnotationString(alternativeText) + `}}`
+	return `{"id":"` + id + `","kind":"IMAGE","position":{"x":10,"y":20},"size":{"width":180,"height":120},"image":{"source":{"kind":` + marshalLayoutAnnotationString(kind) + `,"mediaType":` + marshalLayoutAnnotationString(mediaType) + `,"data":` + marshalLayoutAnnotationString(data) + `},"alternativeText":` + marshalLayoutAnnotationString(alternativeText) + `}}`
 }
 
 func marshalLayoutAnnotationString(value string) string {

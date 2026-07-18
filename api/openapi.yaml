@@ -10169,6 +10169,42 @@ components:
       enum:
         - NOTE
         - IMAGE
+    FactoryLayoutAnnotationPosition:
+      type: object
+      description: Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+      additionalProperties: false
+      required:
+        - x
+        - 'y'
+      properties:
+        x:
+          type: number
+          minimum: -100000
+          maximum: 100000
+          description: Horizontal canvas coordinate between -100,000 and 100,000 inclusive.
+        'y':
+          type: number
+          minimum: -100000
+          maximum: 100000
+          description: Vertical canvas coordinate between -100,000 and 100,000 inclusive.
+    FactoryLayoutAnnotationSize:
+      type: object
+      description: Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+      additionalProperties: false
+      required:
+        - width
+        - height
+      properties:
+        width:
+          type: number
+          minimum: 0
+          maximum: 10000
+          description: Positive authored width no greater than 10,000 canvas units.
+        height:
+          type: number
+          minimum: 0
+          maximum: 10000
+          description: Positive authored height no greater than 10,000 canvas units.
     FactoryLayoutNoteTone:
       type: string
       description: Presentation-only tone for a note annotation.
@@ -10242,7 +10278,7 @@ components:
           description: Literal alternative text for the embedded image.
     FactoryLayoutAnnotation:
       type: object
-      description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.
+      description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
       additionalProperties: false
       required:
         - id
@@ -10255,9 +10291,9 @@ components:
         kind:
           $ref: '#/components/schemas/FactoryLayoutAnnotationKind'
         position:
-          $ref: '#/components/schemas/FactoryLayoutPoint'
+          $ref: '#/components/schemas/FactoryLayoutAnnotationPosition'
         size:
-          $ref: '#/components/schemas/FactoryLayoutSize'
+          $ref: '#/components/schemas/FactoryLayoutAnnotationSize'
         note:
           $ref: '#/components/schemas/FactoryLayoutNote'
         image:

@@ -1775,7 +1775,7 @@ type FactoryLayout struct {
 	Viewport *FactoryLayoutViewport `json:"viewport,omitempty"`
 }
 
-// FactoryLayoutAnnotation Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.
+// FactoryLayoutAnnotation Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
 type FactoryLayoutAnnotation struct {
 	// Id Stable annotation identifier unique within this layout.
 	Id string `json:"id"`
@@ -1789,15 +1789,33 @@ type FactoryLayoutAnnotation struct {
 	// Note Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
 	Note *FactoryLayoutNote `json:"note,omitempty"`
 
-	// Position Two-dimensional authored graph layout coordinate.
-	Position FactoryLayoutPoint `json:"position"`
+	// Position Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+	Position FactoryLayoutAnnotationPosition `json:"position"`
 
-	// Size Authored node size in graph canvas units.
-	Size *FactoryLayoutSize `json:"size,omitempty"`
+	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+	Size *FactoryLayoutAnnotationSize `json:"size,omitempty"`
 }
 
 // FactoryLayoutAnnotationKind The inert annotation content variant.
 type FactoryLayoutAnnotationKind string
+
+// FactoryLayoutAnnotationPosition Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+type FactoryLayoutAnnotationPosition struct {
+	// X Horizontal canvas coordinate between -100,000 and 100,000 inclusive.
+	X float32 `json:"x"`
+
+	// Y Vertical canvas coordinate between -100,000 and 100,000 inclusive.
+	Y float32 `json:"y"`
+}
+
+// FactoryLayoutAnnotationSize Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+type FactoryLayoutAnnotationSize struct {
+	// Height Positive authored height no greater than 10,000 canvas units.
+	Height float32 `json:"height"`
+
+	// Width Positive authored width no greater than 10,000 canvas units.
+	Width float32 `json:"width"`
+}
 
 // FactoryLayoutBounds Authored rectangular bounds in graph canvas units.
 type FactoryLayoutBounds struct {
