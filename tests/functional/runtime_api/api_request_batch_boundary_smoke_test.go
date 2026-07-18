@@ -1,6 +1,7 @@
 package runtime_api
 
 import (
+	"context"
 	"reflect"
 	"testing"
 	"time"
@@ -13,10 +14,23 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 	support.SkipLongFunctional(t, "slow batch generated API normalization smoke")
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := support.StartFunctionalAPIServiceModeServer(t, dir, true)
-	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
-	_ = stream.next(5 * time.Second) // RUN_REQUEST
-	_ = stream.next(5 * time.Second) // INITIAL_STRUCTURE_REQUEST
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
 
 	firstWorkID := "work-generated-api-batch-first"
 	secondWorkID := "work-generated-api-batch-second"
@@ -28,7 +42,7 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 		Relations: &[]factoryapi.Relation{{Type: factoryapi.RelationTypeDependsOn, SourceWorkName: "second", TargetWorkName: "first", RequiredState: &requiredState}},
 	}
 
-	response := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request)
+	response := putGeneratedWorkRequest(t, host.Endpoint(), request.RequestId, request)
 	if response.RequestId != request.RequestId || response.TraceId == "" || len(response.Works) != 2 {
 		t.Fatalf("PUT /work-requests response = %#v, want request id, trace id, and two works", response)
 	}
@@ -36,17 +50,17 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 	if !reflect.DeepEqual(response.Works, wantWorks) {
 		t.Fatalf("PUT /work-requests works = %#v, want %#v", response.Works, wantWorks)
 	}
-	if replayed := putGeneratedWorkRequest(t, server.URL(), request.RequestId, request); !reflect.DeepEqual(replayed, response) {
+	if replayed := putGeneratedWorkRequest(t, host.Endpoint(), request.RequestId, request); !reflect.DeepEqual(replayed, response) {
 		t.Fatalf("replayed PUT /work-requests response = %#v, want original %#v", replayed, response)
 	}
 
-	items := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{firstWorkID, secondWorkID}, 10*time.Second)
+	items := waitForGeneratedWorkIDsComplete(t, host.Endpoint(), []string{firstWorkID, secondWorkID}, 10*time.Second)
 	for _, item := range items {
 		if stringPointerValue(item.WorkTypeName) != workTypeName {
 			t.Fatalf("generated batch work %s work type = %q, want %q", stringPointerValue(item.WorkId), stringPointerValue(item.WorkTypeName), workTypeName)
 		}
 	}
-	assertPublicBatchDurableOutcomes(t, server.URL(), firstWorkID, secondWorkID)
+	assertPublicBatchDurableOutcomes(t, host.Endpoint(), firstWorkID, secondWorkID)
 	assertPublicBatchDependencyAndIdempotency(t, stream, request.RequestId, firstWorkID, secondWorkID)
 }
 
