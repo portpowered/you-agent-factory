@@ -10118,6 +10118,7 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+          pattern: \S
           description: Literal alternative text for the embedded image.
     FactoryLayoutEmptyState:
       type: object
@@ -10133,6 +10134,7 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+          pattern: \S
           description: Literal empty-state text. It is not rendered as HTML or Markdown.
         image:
           $ref: '#/components/schemas/FactoryLayoutImage'
@@ -10146,6 +10148,8 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
+          pattern: \S
           description: Canonical graph node id such as workstation:<workstationId>.
         position:
           $ref: '#/components/schemas/FactoryLayoutPoint'
@@ -10297,6 +10301,7 @@ components:
           type: string
           minLength: 1
           maxLength: 4000
+          pattern: \S
           description: Required literal plain-text note body.
         tone:
           $ref: '#/components/schemas/FactoryLayoutNoteTone'
@@ -10311,6 +10316,8 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
+          pattern: \S
           description: Stable annotation identifier unique within this layout.
         kind:
           $ref: '#/components/schemas/FactoryLayoutAnnotationKind'

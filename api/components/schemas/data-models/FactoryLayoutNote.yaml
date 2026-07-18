@@ -13,6 +13,7 @@ properties:
     type: string
     minLength: 1
     maxLength: 4000
+    pattern: '\S'
     description: Required literal plain-text note body.
   tone:
     $ref: './FactoryLayoutNoteTone.yaml'

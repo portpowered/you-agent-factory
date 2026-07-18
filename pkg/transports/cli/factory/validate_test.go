@@ -13,15 +13,56 @@ import (
 func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name          string
-		data          string
-		width         int
-		alt           string
-		positionExtra string
-		sourceExtra   string
-		wantPath      string
-	}{
+	for _, test := range portableLayoutBoundaryCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			factory := test.factory
+			if factory == "" {
+				factory = portableLayoutFactoryJSON(
+					test.data,
+					test.width,
+					test.alt,
+					test.positionExtra,
+					test.sourceExtra,
+				)
+			}
+			path := writeValidateFixture(t, factory)
+
+			var out strings.Builder
+			err := Validate(ValidateConfig{Path: path, Output: &out})
+			if test.wantPath == "" {
+				if err != nil {
+					t.Fatalf("Validate valid annotated factory: %v", err)
+				}
+				if !strings.Contains(out.String(), "Factory validation passed.") {
+					t.Fatalf("output = %q, want validation success", out.String())
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Validate invalid annotated factory error = nil, want path %q", test.wantPath)
+			}
+			if !strings.Contains(err.Error(), test.wantPath) {
+				t.Fatalf("Validate error = %q, want field path %q", err, test.wantPath)
+			}
+		})
+	}
+}
+
+type portableLayoutBoundaryCase struct {
+	name          string
+	factory       string
+	data          string
+	width         int
+	alt           string
+	positionExtra string
+	sourceExtra   string
+	wantPath      string
+}
+
+func portableLayoutBoundaryCases() []portableLayoutBoundaryCase {
+	return []portableLayoutBoundaryCase{
 		{name: "valid annotated factory", data: "AQID", width: 120, alt: "diagram"},
 		{
 			name:     "non-strict base64",
@@ -35,6 +76,33 @@ func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
 			data:     "AQID",
 			width:    120,
 			wantPath: "layout.annotations[0].image.alternativeText",
+		},
+		{
+			name:     "whitespace-only alternative text",
+			data:     "AQID",
+			width:    120,
+			alt:      " \t ",
+			wantPath: "layout.annotations[0].image.alternativeText",
+		},
+		{
+			name:     "whitespace-only note body",
+			factory:  portableLayoutNoteFactoryJSON("note-1", " \n\t "),
+			wantPath: "layout.annotations[0].note.body",
+		},
+		{
+			name:     "whitespace-only empty-state text",
+			factory:  portableLayoutNodeFactoryJSON("workstation:review", " \n\t "),
+			wantPath: "layout.nodes[0].emptyState.text",
+		},
+		{
+			name:     "blank annotation id",
+			factory:  strings.Replace(portableLayoutFactoryJSON("AQID", 120, "diagram", "", ""), `"id":"image-1"`, `"id":""`, 1),
+			wantPath: "layout.annotations[0].id",
+		},
+		{
+			name:     "whitespace-only canonical node id",
+			factory:  portableLayoutNodeFactoryJSON("   ", "Nothing here"),
+			wantPath: "layout.nodes[0].id",
 		},
 		{
 			name:     "zero image width",
@@ -60,38 +128,6 @@ func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
 			wantPath:      "layout.annotations[0].position.connection",
 		},
 	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-			path := writeValidateFixture(t, portableLayoutFactoryJSON(
-				test.data,
-				test.width,
-				test.alt,
-				test.positionExtra,
-				test.sourceExtra,
-			))
-
-			var out strings.Builder
-			err := Validate(ValidateConfig{Path: path, Output: &out})
-			if test.wantPath == "" {
-				if err != nil {
-					t.Fatalf("Validate valid annotated factory: %v", err)
-				}
-				if !strings.Contains(out.String(), "Factory validation passed.") {
-					t.Fatalf("output = %q, want validation success", out.String())
-				}
-				return
-			}
-			if err == nil {
-				t.Fatalf("Validate invalid annotated factory error = nil, want path %q", test.wantPath)
-			}
-			if !strings.Contains(err.Error(), test.wantPath) {
-				t.Fatalf("Validate error = %q, want field path %q", err, test.wantPath)
-			}
-		})
-	}
 }
 
 func portableLayoutFactoryJSON(data string, width int, alternativeText, positionExtra, sourceExtra string) string {
@@ -102,6 +138,25 @@ func portableLayoutFactoryJSON(data string, width int, alternativeText, position
 			"image":{"alternativeText":%q,"source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q%s}}
 		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
 	}`, positionExtra, width, alternativeText, data, sourceExtra)
+}
+
+func portableLayoutNoteFactoryJSON(id, body string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-cli",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":%q,"kind":"NOTE","position":{"x":0,"y":0},
+			"note":{"body":%q,"tone":"NEUTRAL"}
+		}]}
+	}`, id, body)
+}
+
+func portableLayoutNodeFactoryJSON(id, text string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-cli",
+		"layout":{"schemaVersion":1,"nodes":[{
+			"id":%q,"position":{"x":0,"y":0},"emptyState":{"text":%q}
+		}]}
+	}`, id, text)
 }
 
 func TestValidate_HumanOutputShowsNewTaxonomyAndCompatibilityFinding(t *testing.T) {

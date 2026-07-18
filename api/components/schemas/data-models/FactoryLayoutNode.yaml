@@ -7,6 +7,8 @@ required:
 properties:
   id:
     type: string
+    minLength: 1
+    pattern: '\S'
     description: Canonical graph node id such as workstation:<workstationId>.
   position:
     $ref: './FactoryLayoutPoint.yaml'

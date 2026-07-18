@@ -414,7 +414,7 @@ func validateLayoutAnnotationArray(parent map[string]any, key string, path strin
 		if err := validateLayoutAnnotationFields(annotation, annotationPath); err != nil {
 			return err
 		}
-		if err := requireString(annotation, "id", annotationPath); err != nil {
+		if err := requireNonBlankString(annotation, "id", annotationPath); err != nil {
 			return err
 		}
 		annotationID := annotation["id"].(string)
@@ -632,7 +632,7 @@ func validateLayoutImage(image map[string]any, path string) (int, error) {
 
 func validateLayoutLiteralText(value string, path string, minimumCharacters, maximumCharacters int) error {
 	characterCount := utf8.RuneCountInString(value)
-	if characterCount < minimumCharacters {
+	if characterCount < minimumCharacters || (minimumCharacters > 0 && strings.TrimSpace(value) == "") {
 		return fmt.Errorf("%s must contain at least %d character", path, minimumCharacters)
 	}
 	if characterCount > maximumCharacters {
@@ -708,7 +708,7 @@ func validateLayoutNodeArray(parent map[string]any, key string, path string, tot
 	seenEmptyStateNodeIDs := make(map[string]struct{}, len(values))
 	for index, node := range values {
 		nodePath := fmt.Sprintf("%s.%s[%d]", path, key, index)
-		if err := requireString(node, "id", nodePath); err != nil {
+		if err := requireNonBlankString(node, "id", nodePath); err != nil {
 			return err
 		}
 		if err := validateOptionalPointObject(node, "position", nodePath, true); err != nil {
@@ -975,6 +975,16 @@ func requireString(parent map[string]any, key string, path string) error {
 	}
 	if _, ok := value.(string); !ok {
 		return fmt.Errorf("%s.%s must be a string", path, key)
+	}
+	return nil
+}
+
+func requireNonBlankString(parent map[string]any, key string, path string) error {
+	if err := requireString(parent, key, path); err != nil {
+		return err
+	}
+	if strings.TrimSpace(parent[key].(string)) == "" {
+		return fmt.Errorf("%s.%s must contain a non-whitespace character", path, key)
 	}
 	return nil
 }

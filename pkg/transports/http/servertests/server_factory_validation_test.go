@@ -49,6 +49,46 @@ func TestFactoryLayoutBoundary_ReturnsFieldSpecificHTTPValidationTargets(t *test
 			wantPath: "factory.layout.annotations[0].image.alternativeText",
 		},
 		{
+			name:     "validation identifies whitespace-only alternative text",
+			method:   http.MethodPost,
+			path:     "/factory-validations",
+			factory:  strings.Replace(portableImageAnnotationFactoryJSON("AQID", 120), `"alternativeText":"diagram"`, `"alternativeText":"   "`, 1),
+			wantCode: factoryvalidation.CodeLayoutInvalidValue,
+			wantPath: "factory.layout.annotations[0].image.alternativeText",
+		},
+		{
+			name:     "validation identifies whitespace-only note body",
+			method:   http.MethodPost,
+			path:     "/factory-validations",
+			factory:  portableNoteAnnotationFactoryJSON("note-1", " \n\t "),
+			wantCode: factoryvalidation.CodeLayoutInvalidValue,
+			wantPath: "factory.layout.annotations[0].note.body",
+		},
+		{
+			name:     "validation identifies whitespace-only empty-state text",
+			method:   http.MethodPost,
+			path:     "/factory-validations",
+			factory:  portableNodeEmptyStateFactoryJSON("workstation:review", " \n\t "),
+			wantCode: factoryvalidation.CodeLayoutInvalidValue,
+			wantPath: "factory.layout.nodes[0].emptyState.text",
+		},
+		{
+			name:     "validation identifies blank annotation id",
+			method:   http.MethodPost,
+			path:     "/factory-validations",
+			factory:  strings.Replace(portableImageAnnotationFactoryJSON("AQID", 120), `"id":"image-1"`, `"id":""`, 1),
+			wantCode: factoryvalidation.CodeLayoutInvalidValue,
+			wantPath: "factory.layout.annotations[0].id",
+		},
+		{
+			name:     "save identifies whitespace-only canonical node id",
+			method:   http.MethodPut,
+			path:     "/factory-sessions/~default/factory",
+			factory:  portableNodeEmptyStateFactoryJSON("   ", "Nothing here"),
+			wantCode: factoryvalidation.CodeLayoutInvalidValue,
+			wantPath: "factory.layout.nodes[0].id",
+		},
+		{
 			name:     "validation identifies zero width",
 			method:   http.MethodPost,
 			path:     "/factory-validations",
@@ -123,6 +163,25 @@ func portableImageAnnotationFactoryJSON(data string, width int) string {
 			"image":{"alternativeText":"diagram","source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q}}
 		}]}
 	}`, width, data)
+}
+
+func portableNoteAnnotationFactoryJSON(id, body string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-factory",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":%q,"kind":"NOTE","position":{"x":0,"y":0},
+			"note":{"body":%q,"tone":"NEUTRAL"}
+		}]}
+	}`, id, body)
+}
+
+func portableNodeEmptyStateFactoryJSON(id, text string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-factory",
+		"layout":{"schemaVersion":1,"nodes":[{
+			"id":%q,"position":{"x":0,"y":0},"emptyState":{"text":%q}
+		}]}
+	}`, id, text)
 }
 
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPaths(t *testing.T) {

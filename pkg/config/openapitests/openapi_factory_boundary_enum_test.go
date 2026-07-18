@@ -24,8 +24,12 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutAnnotationConte
 		wantPath    string
 	}{
 		{"overlong note title", layoutNoteAnnotation("note", strings.Repeat("t", 161), "safe"), "layout.annotations[0].note.title"},
+		{"whitespace-only note body", layoutNoteAnnotation("note", "", " \n\t "), "layout.annotations[0].note.body"},
 		{"overlong note body", layoutNoteAnnotation("note", "", strings.Repeat("b", 4001)), "layout.annotations[0].note.body"},
 		{"blank alternative text", layoutImageAnnotation("image", "", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].image.alternativeText"},
+		{"whitespace-only alternative text", layoutImageAnnotation("image", "   ", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].image.alternativeText"},
+		{"blank annotation id", layoutImageAnnotation("", "Example", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].id"},
+		{"whitespace-only annotation id", layoutImageAnnotation("   ", "Example", "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].id"},
 		{"overlong alternative text", layoutImageAnnotation("image", strings.Repeat("a", 501), "EMBEDDED", "image/png", "AQID"), "layout.annotations[0].image.alternativeText"},
 		{"invalid base64", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/png", "AQI"), "layout.annotations[0].image.source.data"},
 		{"unsupported svg media type", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/svg+xml", "AQID"), "layout.annotations[0].image.source.mediaType"},
@@ -68,6 +72,9 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutEmptyStates(t *
 		{"missing variant", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{}}`, "layout.nodes[0].emptyState"},
 		{"multiple variants", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here","image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Empty"}}}`, "layout.nodes[0].emptyState"},
 		{"empty text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":""}}`, "layout.nodes[0].emptyState.text"},
+		{"whitespace-only text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"   "}}`, "layout.nodes[0].emptyState.text"},
+		{"blank canonical node id", `{"id":"","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`, "layout.nodes[0].id"},
+		{"whitespace-only canonical node id", `{"id":"   ","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`, "layout.nodes[0].id"},
 		{"overlong text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"` + strings.Repeat("x", 501) + `"}}`, "layout.nodes[0].emptyState.text"},
 		{"empty image alternative text", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":""}}}`, "layout.nodes[0].emptyState.image.alternativeText"},
 		{"unsupported image source", `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/svg+xml","data":"AQID"},"alternativeText":"Empty"}}}`, "layout.nodes[0].emptyState.image.source.mediaType"},
@@ -89,6 +96,37 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsUnsafePortableLayoutEmptyStates(t *
 			}
 			if !strings.Contains(err.Error(), test.path) {
 				t.Fatalf("error = %v, want path %q", err, test.path)
+			}
+		})
+	}
+}
+
+func TestProjectedFactorySchema_RejectsWhitespaceOnlyRequiredLayoutValues(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload []byte
+		path    string
+	}{
+		{"note body", layoutFactoryJSON(layoutNoteAnnotation("note", "", "   ")), "/layout/annotations/0/note/body"},
+		{"image alternative text", layoutFactoryJSON(layoutImageAnnotation("image", "   ", "EMBEDDED", "image/png", "AQID")), "/layout/annotations/0/image/alternativeText"},
+		{"annotation id", layoutFactoryJSON(layoutNoteAnnotation("   ", "", "safe")), "/layout/annotations/0/id"},
+		{"empty-state text", layoutFactoryJSONWithNodes(`{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"   "}}`), "/layout/nodes/0/emptyState/text"},
+		{"canonical node id", layoutFactoryJSONWithNodes(`{"id":"   ","position":{"x":10,"y":20},"emptyState":{"text":"Nothing here"}}`), "/layout/nodes/0/id"},
+	}
+
+	schema := projectedFactorySchema(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var document any
+			if err := json.Unmarshal(test.payload, &document); err != nil {
+				t.Fatalf("decode fixture: %v", err)
+			}
+			err := schema.Validate(document)
+			if err == nil {
+				t.Fatal("projected Factory schema accepted whitespace-only required layout value")
+			}
+			if !strings.Contains(err.Error(), test.path) {
+				t.Fatalf("schema error = %v, want path %q", err, test.path)
 			}
 		})
 	}

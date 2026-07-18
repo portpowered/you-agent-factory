@@ -450,6 +450,8 @@
       "properties": {
         "id": {
           "description": "Stable annotation identifier unique within this layout.",
+          "minLength": 1,
+          "pattern": "\\S",
           "type": "string"
         },
         "image": {
@@ -605,6 +607,7 @@
           "description": "Literal empty-state text. It is not rendered as HTML or Markdown.",
           "maxLength": 500,
           "minLength": 1,
+          "pattern": "\\S",
           "type": "string"
         }
       },
@@ -663,6 +666,7 @@
           "description": "Literal alternative text for the embedded image.",
           "maxLength": 500,
           "minLength": 1,
+          "pattern": "\\S",
           "type": "string"
         },
         "source": {
@@ -719,6 +723,8 @@
         },
         "id": {
           "description": "Canonical graph node id such as workstation:\u003cworkstationId\u003e.",
+          "minLength": 1,
+          "pattern": "\\S",
           "type": "string"
         },
         "locked": {
@@ -746,6 +752,7 @@
           "description": "Required literal plain-text note body.",
           "maxLength": 4000,
           "minLength": 1,
+          "pattern": "\\S",
           "type": "string"
         },
         "title": {

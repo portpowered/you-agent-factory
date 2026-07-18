@@ -8,6 +8,8 @@ required:
 properties:
   id:
     type: string
+    minLength: 1
+    pattern: '\S'
     description: Stable annotation identifier unique within this layout.
   kind:
     $ref: './FactoryLayoutAnnotationKind.yaml'

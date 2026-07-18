@@ -58,6 +58,15 @@ func layoutNodeTargets(layout *interfaces.FactoryLayoutConfig, topology interfac
 	for index, node := range layout.Nodes {
 		path := fmt.Sprintf("factory.layout.nodes[%d]", index)
 		if node.ID == "" {
+			if node.EmptyState != nil {
+				targets = append(targets, layoutReferenceTarget(
+					CodeLayoutEmptyStateUnknownNodeReference,
+					"layout node empty state requires a non-empty canonical graph node id.",
+					node.ID,
+					path+".emptyState",
+					SeverityError,
+				))
+			}
 			continue
 		}
 		if _, ok := topology.NodeIDs[node.ID]; !ok {
@@ -310,6 +319,15 @@ func pruneLayoutNodes(
 	for index, node := range nodes {
 		path := fmt.Sprintf("factory.layout.nodes[%d]", index)
 		if node.ID == "" {
+			if node.EmptyState != nil {
+				targets = append(targets, layoutReferenceTarget(
+					CodeLayoutEmptyStateUnknownNodeReference,
+					"layout node empty state was rejected during save because its canonical graph node id is empty.",
+					node.ID,
+					path+".emptyState",
+					SeverityError,
+				))
+			}
 			continue
 		}
 		if _, ok := topology.NodeIDs[node.ID]; !ok {
