@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -198,24 +199,35 @@ func TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus(t *testing.T) {
 
 func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	var svc *service.FactoryService
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		CaptureService: func(captured *service.FactoryService) {
-			svc = captured
-		},
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-			cfg.Logger = zap.NewNop()
-		},
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
 	})
-	if _, err := svc.PauseLiveFactorySession(context.Background(), factorysessions.DefaultSessionID, factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("PauseLiveFactorySession: %v", err)
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
 	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	pause := postJSON[factoryapi.FactorySessionLifecycleControlResponse](
+		t,
+		host.Endpoint()+"/factory-sessions/~default/pause",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+		"pause session before invocation",
+	)
+	if pause.Operation != factoryapi.FactorySessionLifecycleControlKindPause || pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause response = %#v, want accepted pause", pause)
+	}
+	assertSessionPauseLifecycleEvent(t, stream)
+
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke this", nil))
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("invocation status = %q, want FAILED", response.Status)
 	}
@@ -235,6 +247,27 @@ func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on paused output", response.PrimaryResult)
 	}
+}
+
+func assertSessionPauseLifecycleEvent(t *testing.T, stream *factoryEventHTTPStream) {
+	t.Helper()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		event := stream.next(time.Until(deadline))
+		if event.Type != factoryapi.FactoryEventTypeSessionLifecycleControl {
+			continue
+		}
+		payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
+		if err != nil {
+			t.Fatalf("decode SESSION_LIFECYCLE_CONTROL payload: %v", err)
+		}
+		if payload.Operation != factoryapi.FactorySessionLifecycleControlKindPause || payload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+			t.Fatalf("pause lifecycle event = %#v, want accepted pause", payload)
+		}
+		return
+	}
+	t.Fatal("canonical session event stream did not expose accepted pause lifecycle control")
 }
 
 func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testing.T) {
