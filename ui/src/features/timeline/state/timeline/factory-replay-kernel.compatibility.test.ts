@@ -4,10 +4,9 @@ import { projectFactoryWorldAtTick } from "../../../../../../packages/factory-re
 import type { FactoryEvent } from "../../../../api/events";
 import { projectSnapshot } from "./projectSnapshot";
 import {
-  applyReplayEvent,
-  reconstructWorldState,
-} from "./replayWorldState";
-import { emptyReplayWorldState } from "./replayWorldStateSupport";
+  hostedFactoryReplayReducer,
+  reconstructFactoryReplayState,
+} from "./buildSnapshot";
 
 function factoryStateEvent(
   id: string,
@@ -36,18 +35,11 @@ describe("factory replay kernel compatibility", () => {
 
     const kernel = projectFactoryWorldAtTick({
       events,
-      reducer: {
-        createState: emptyReplayWorldState,
-        applyEvent: (state, event) => {
-          applyReplayEvent(state, event as FactoryEvent);
-          return state;
-        },
-        projectWorld: projectSnapshot,
-      },
+      reducer: hostedFactoryReplayReducer,
       tick: 1,
     });
 
-    expect(kernel.world).toEqual(projectSnapshot(reconstructWorldState(events, 1)));
+    expect(kernel.world).toEqual(projectSnapshot(reconstructFactoryReplayState(events, 1)));
     expect(kernel.world.factory_state).toBe("RUNNING");
     expect(kernel.appliedEvents.map((event) => event.id)).toEqual([
       "event-selected",

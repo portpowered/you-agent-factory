@@ -4,9 +4,9 @@ import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import { projectRuntime } from "./projectRuntime";
 import {
-  advanceWorldStateFromCheckpoint,
-  reconstructWorldState,
-} from "./replayWorldState";
+  advanceFactoryReplayState,
+  reconstructFactoryReplayState,
+} from "./buildSnapshot";
 
 const eventTime = "2026-05-30T12:00:00.000Z";
 
@@ -168,20 +168,22 @@ function workStateChangeEvent(
   );
 }
 
-describe("reconstructWorldState WORK_STATE_CHANGE", () => {
-  it("advances an owned checkpoint in place for incremental current replay", () => {
-    const checkpoint = reconstructWorldState(
+describe("Factory replay WORK_STATE_CHANGE", () => {
+  it("advances a cloned checkpoint for incremental current replay", () => {
+    const checkpoint = reconstructFactoryReplayState(
       [initialStructureRequest, workRequestEvent(1, "work-a")],
       1,
     );
 
-    const advanced = advanceWorldStateFromCheckpoint(
+    const advanced = advanceFactoryReplayState(
       checkpoint,
       [workRequestEvent(2, "work-b")],
       2,
     );
 
-    expect(advanced).toBe(checkpoint);
+    expect(advanced).not.toBe(checkpoint);
+    expect(checkpoint.tick_count).toBe(1);
+    expect(checkpoint.workItemsByID["work-b"]).toBeUndefined();
     expect(advanced.tick_count).toBe(2);
     expect(advanced.workItemsByID["work-a"]).toBeDefined();
     expect(advanced.workItemsByID["work-b"]).toBeDefined();
@@ -204,13 +206,13 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
       ),
     ];
 
-    const failedTick = reconstructWorldState(events, 3);
+    const failedTick = reconstructFactoryReplayState(events, 3);
     expect(failedTick.failedWorkItemsByID[workID]).toBeDefined();
     expect(failedTick.occupancyByID["task:failed"]?.workItemIDs).toEqual([
       workID,
     ]);
 
-    const recoveredTick = reconstructWorldState(events, 4);
+    const recoveredTick = reconstructFactoryReplayState(events, 4);
     expect(recoveredTick.failedWorkItemsByID[workID]).toBeUndefined();
     expect(
       recoveredTick.occupancyByID["task:failed"]?.workItemIDs ?? [],
@@ -270,7 +272,7 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 2);
+    const state = reconstructFactoryReplayState(events, 2);
     expect(state.occupancyByID["task:init"]?.workItemIDs ?? []).toEqual([]);
     expect(state.occupancyByID["task:review"]?.workItemIDs).toEqual([workID]);
     expect(state.workItemsByID[workID]?.place_id).toBe("task:review");

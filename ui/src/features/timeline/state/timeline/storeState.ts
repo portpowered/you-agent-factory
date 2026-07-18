@@ -106,7 +106,7 @@ export interface TimelineStoreStateDeps {
     events: FactoryEvent[],
     selectedTick: number,
   ) => WorldState;
-  orderedEvents: (events: FactoryEvent[]) => FactoryEvent[];
+  canonicalizeEvents: (events: FactoryEvent[]) => FactoryEvent[];
 }
 
 export function emptyDashboardSnapshot(): DashboardSnapshot {
@@ -260,7 +260,7 @@ export function appendTimelineEvents(
 > {
   const receivedEventIDs = new Set(current.receivedEventIDs);
   const unorderedAcceptedEvents: FactoryEvent[] = [];
-  for (const event of deps.orderedEvents(incomingEvents)) {
+  for (const event of deps.canonicalizeEvents(incomingEvents)) {
     if (
       receivedEventIDs.has(event.id) ||
       (current.materializedWorkOutcomeState.cursor &&
@@ -282,7 +282,7 @@ export function appendTimelineEvents(
   const acceptedEventIDs = new Set(
     unorderedAcceptedEvents.map((event) => event.id),
   );
-  const events = deps.orderedEvents([
+  const events = deps.canonicalizeEvents([
     ...current.events,
     ...unorderedAcceptedEvents,
   ]);

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryEvent, FactoryWorkItem } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
-import { reconstructWorldState } from "./replayWorldState";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 import {
   resolveConsumedInputSnapshot,
   resolveInitialSubmittedSnapshot,
@@ -228,7 +228,7 @@ describe("reconstructWorldState payload lineage recording", () => {
       lineageWorkRequestEvent(4, "request/work-1-v3", laterSelected),
     ];
 
-    const state = reconstructWorldState(events, 4);
+    const state = reconstructFactoryReplayState(events, 4);
     const lineage = state.payloadLineage;
 
     expect(Object.keys(lineage.snapshots_by_id)).toHaveLength(4);
@@ -295,7 +295,7 @@ describe("reconstructWorldState payload lineage resolution", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 1);
+    const state = reconstructFactoryReplayState(events, 1);
     const consumed = resolveConsumedInputSnapshot(
       state.payloadLineage,
       "dispatch-missing",
@@ -334,7 +334,7 @@ describe("reconstructWorldState payload lineage resolution", () => {
       lineageWorkRequestEvent(3, "request/child-v2", laterSelected),
     ];
 
-    const state = reconstructWorldState(events, 3);
+    const state = reconstructFactoryReplayState(events, 3);
     const lineage = state.payloadLineage;
 
     const consumed = resolveConsumedInputSnapshot(
