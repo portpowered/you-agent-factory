@@ -3,6 +3,12 @@ import type {
   FactoryEventSink,
   FactoryEventSinkCloseReceipt,
   FactoryEventSinkWriteReceipt,
+  FactoryRecordingSink,
+  MemoryFactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
+import {
+  createFactoryRecordingSink,
+  createMemoryFactoryEventSink,
 } from "@you-agent-factory/factory-emulator";
 import type { FactoryEvent } from "@you-agent-factory/client";
 
@@ -35,3 +41,16 @@ void closedReceipt;
 // @ts-expect-error The contract exposes no partial-success receipt.
 const partialReceipt: FactoryEventSinkWriteReceipt = { status: "partial" };
 void partialReceipt;
+
+const memorySink: MemoryFactoryEventSink = createMemoryFactoryEventSink({
+  maxEvents: 1,
+});
+const memoryHistory: readonly FactoryEventBatch[] = memorySink.batches();
+void memoryHistory;
+
+const recordingSink: FactoryRecordingSink = createFactoryRecordingSink({
+  maxEvents: 1,
+  sessionId: "session-1",
+});
+const recordingEvents: readonly FactoryEvent[] = recordingSink.recording().events;
+void recordingEvents;
