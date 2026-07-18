@@ -18,12 +18,23 @@ export type FactoryEmulatorConfigurationDiagnostic =
       readonly expectation: string;
     };
 
-export declare class FactoryEmulatorConfigurationError extends Error {
+export interface FactoryEmulatorDataError {
+  readonly name: string;
+  readonly message: string;
+  readonly code: string;
+}
+
+export interface FactoryEmulatorConfigurationError extends FactoryEmulatorDataError {
+  readonly name: "FactoryEmulatorConfigurationError";
   readonly code: "INVALID_CONFIGURATION";
   readonly diagnostics: readonly FactoryEmulatorConfigurationDiagnostic[];
 }
+export declare const FactoryEmulatorConfigurationError: {
+  new (diagnostics: readonly FactoryEmulatorConfigurationDiagnostic[]): FactoryEmulatorConfigurationError;
+};
 
-export declare class FactoryEmulatorLifecycleError extends Error {
+export interface FactoryEmulatorLifecycleError extends FactoryEmulatorDataError {
+  readonly name: "FactoryEmulatorLifecycleError";
   readonly code: "INVALID_LIFECYCLE";
   readonly command: "start" | "submit" | "advanceBy" | "advanceToNext" | "close" | "reset";
   readonly phase:
@@ -33,16 +44,30 @@ export declare class FactoryEmulatorLifecycleError extends Error {
     | "advancing"
     | "closing";
 }
+export declare const FactoryEmulatorLifecycleError: {
+  new (
+    command: FactoryEmulatorLifecycleError["command"],
+    phase: FactoryEmulatorLifecycleError["phase"],
+  ): FactoryEmulatorLifecycleError;
+};
 
-export declare class FactoryEmulatorDurationError extends RangeError {
+export interface FactoryEmulatorDurationError extends FactoryEmulatorDataError {
+  readonly name: "FactoryEmulatorDurationError";
   readonly code: "INVALID_DURATION";
   readonly durationMs: number;
 }
+export declare const FactoryEmulatorDurationError: {
+  new (durationMs: number): FactoryEmulatorDurationError;
+};
 
-export declare class FactoryEmulatorSubmissionError extends Error {
+export interface FactoryEmulatorSubmissionError extends FactoryEmulatorDataError {
+  readonly name: "FactoryEmulatorSubmissionError";
   readonly code: "INVALID_SUBMISSION";
   readonly diagnostics: readonly EmulatorScenarioDiagnostic[];
 }
+export declare const FactoryEmulatorSubmissionError: {
+  new (diagnostics: readonly EmulatorScenarioDiagnostic[]): FactoryEmulatorSubmissionError;
+};
 
 export type FactoryEmulatorExecutionDiagnostic =
   | {
@@ -62,10 +87,14 @@ export type FactoryEmulatorExecutionDiagnostic =
       readonly virtualElapsedMs: number;
     };
 
-export declare class FactoryEmulatorExecutionPausedError extends Error {
+export interface FactoryEmulatorExecutionPausedError extends FactoryEmulatorDataError {
+  readonly name: "FactoryEmulatorExecutionPausedError";
   readonly code: "EXECUTION_PAUSED";
   readonly diagnostic: FactoryEmulatorExecutionDiagnostic;
 }
+export declare const FactoryEmulatorExecutionPausedError: {
+  new (diagnostic: FactoryEmulatorExecutionDiagnostic): FactoryEmulatorExecutionPausedError;
+};
 
 export interface FactoryEmulatorLimits {
   readonly maxCompletedDispatches?: number;
@@ -78,7 +107,8 @@ export interface FactoryEmulatorLimits {
 export declare const DEFAULT_FACTORY_EMULATOR_LIMITS: Readonly<Required<FactoryEmulatorLimits>>;
 export declare const FACTORY_EMULATOR_LIMIT_HARD_CAPS: Readonly<Required<FactoryEmulatorLimits>>;
 
-export declare class FactoryEmulatorPendingCommandError extends Error {
+export interface FactoryEmulatorPendingCommandError extends FactoryEmulatorDataError {
+  readonly name: "FactoryEmulatorPendingCommandError";
   readonly code: "PENDING_TRANSACTION";
   readonly attemptedCommand:
     | "start"
@@ -93,6 +123,20 @@ export declare class FactoryEmulatorPendingCommandError extends Error {
     | "advanceToNext"
     | "close";
 }
+export declare const FactoryEmulatorPendingCommandError: {
+  new (
+    attemptedCommand: FactoryEmulatorPendingCommandError["attemptedCommand"],
+    pendingCommand: FactoryEmulatorPendingCommandError["pendingCommand"],
+  ): FactoryEmulatorPendingCommandError;
+};
+
+export type FactoryEmulatorCommandError =
+  | FactoryEmulatorConfigurationError
+  | FactoryEmulatorDurationError
+  | FactoryEmulatorExecutionPausedError
+  | FactoryEmulatorLifecycleError
+  | FactoryEmulatorPendingCommandError
+  | FactoryEmulatorSubmissionError;
 
 export interface FactoryEmulatorSessionOptions {
   readonly factory: EmulatorFactoryDefinition;

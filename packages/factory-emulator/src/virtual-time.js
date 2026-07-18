@@ -1,11 +1,13 @@
-export class FactoryEmulatorDurationError extends RangeError {
-  constructor(durationMs) {
-    super("Factory emulator duration must be a non-negative safe integer");
-    this.name = "FactoryEmulatorDurationError";
-    this.code = "INVALID_DURATION";
-    this.durationMs = durationMs;
-  }
-}
+import { defineDataError } from "./data-error.js";
+
+export const FactoryEmulatorDurationError = defineDataError(
+  "FactoryEmulatorDurationError",
+  "INVALID_DURATION",
+  {
+    message: () => "Factory emulator duration must be a non-negative safe integer",
+    details: (durationMs) => ({ durationMs }),
+  },
+);
 
 export function validateDuration(durationMs) {
   if (!Number.isSafeInteger(durationMs) || durationMs < 0) {

@@ -114,6 +114,31 @@ function assertDataOnly(value) {
   visit(value);
 }
 
+async function rejectedValue(promise) {
+  try {
+    await promise;
+    assert.fail("expected command to reject");
+  } catch (error) {
+    return error;
+  }
+}
+
+function thrownValue(operation) {
+  try {
+    operation();
+    assert.fail("expected command to throw");
+  } catch (error) {
+    return error;
+  }
+}
+
+function assertCommandError(error, ErrorFamily, expected) {
+  assert.ok(error instanceof ErrorFamily);
+  assertDataOnly(error);
+  assert.deepEqual(structuredClone(error), error);
+  assert.deepEqual(error, { ...error, ...expected });
+}
+
 test("start emits deterministic bootstrap and initial submission batches at virtual time zero", async () => {
   const { batches, emulator } = harness();
 
@@ -200,6 +225,85 @@ test("invalid lifecycle commands and unsupported configuration emit no events", 
   );
   assert.deepEqual(invalid.batches, []);
   assert.equal(invalid.emulator.state().lifecycle, "pre-start");
+});
+
+test("every kernel command error family survives the structured-clone boundary", async () => {
+  const invalidConfiguration = harness(scenario({
+    rules: [{
+      id: "unknown-work-type",
+      match: { kind: "workType", workType: "missing" },
+      outcomes: [{ kind: "complete" }],
+      exhaustionBehavior: { kind: "repeatLast" },
+    }],
+  }));
+  const configurationError = await rejectedValue(invalidConfiguration.emulator.start());
+  assertCommandError(configurationError, FactoryEmulatorConfigurationError, {
+    name: "FactoryEmulatorConfigurationError",
+    code: "INVALID_CONFIGURATION",
+  });
+  assert.ok(configurationError.diagnostics.some(
+    (diagnostic) => diagnostic.code === "UNKNOWN_FACTORY_WORK_TYPE",
+  ));
+
+  const lifecycleSession = harness().emulator;
+  const lifecycleError = thrownValue(() => lifecycleSession.reset());
+  assertCommandError(lifecycleError, FactoryEmulatorLifecycleError, {
+    name: "FactoryEmulatorLifecycleError",
+    code: "INVALID_LIFECYCLE",
+    command: "reset",
+    phase: "pre-start",
+  });
+
+  await lifecycleSession.start();
+  const durationError = await rejectedValue(lifecycleSession.advanceBy(-1));
+  assertCommandError(durationError, FactoryEmulatorDurationError, {
+    name: "FactoryEmulatorDurationError",
+    code: "INVALID_DURATION",
+    durationMs: -1,
+  });
+  const submissionError = await rejectedValue(lifecycleSession.submit([]));
+  assertCommandError(submissionError, FactoryEmulatorSubmissionError, {
+    name: "FactoryEmulatorSubmissionError",
+    code: "INVALID_SUBMISSION",
+  });
+  assert.equal(submissionError.diagnostics[0].path, "/submissions");
+
+  const pendingSession = createFactoryEmulatorSession({
+    factory: supportedFactory(),
+    scenario: scenario(),
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write() {
+        throw new Error("retain start transaction");
+      },
+    },
+  });
+  await rejectedValue(pendingSession.start());
+  const pendingError = await rejectedValue(
+    pendingSession.submit({ id: "blocked", workType: "checkout" }),
+  );
+  assertCommandError(pendingError, FactoryEmulatorPendingCommandError, {
+    name: "FactoryEmulatorPendingCommandError",
+    code: "PENDING_TRANSACTION",
+    attemptedCommand: "submit",
+    pendingCommand: "start",
+  });
+
+  const pausedSession = harness(
+    scenario({ initialSubmissions: [] }),
+    { maxEvents: 2 },
+  ).emulator;
+  await pausedSession.start();
+  const pausedError = await rejectedValue(
+    pausedSession.submit({ id: "over-budget", workType: "checkout" }),
+  );
+  assertCommandError(pausedError, FactoryEmulatorExecutionPausedError, {
+    name: "FactoryEmulatorExecutionPausedError",
+    code: "EXECUTION_PAUSED",
+  });
+  assert.equal(pausedError.diagnostic.kind, "budget-exceeded");
 });
 
 test("reset and rerun reproduce event bytes and committed snapshots", async () => {

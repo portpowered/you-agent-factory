@@ -18,6 +18,7 @@ import {
   validateDuration,
   virtualTimeAt,
 } from "./virtual-time.js";
+import { defineDataError } from "./data-error.js";
 
 export { FactoryEmulatorDurationError } from "./virtual-time.js";
 export {
@@ -28,52 +29,52 @@ export {
 const EVENT_SCHEMA_VERSION = "agent-factory.event.v1";
 const WORK_REQUEST_TYPE = "FACTORY_REQUEST_BATCH";
 
-export class FactoryEmulatorConfigurationError extends Error {
-  constructor(diagnostics) {
-    super("Factory emulator configuration is not valid or supported");
-    this.name = "FactoryEmulatorConfigurationError";
-    this.code = "INVALID_CONFIGURATION";
-    this.diagnostics = copy(diagnostics);
-  }
-}
+export const FactoryEmulatorConfigurationError = defineDataError(
+  "FactoryEmulatorConfigurationError",
+  "INVALID_CONFIGURATION",
+  {
+    message: () => "Factory emulator configuration is not valid or supported",
+    details: (diagnostics) => ({ diagnostics: copy(diagnostics) }),
+  },
+);
 
-export class FactoryEmulatorLifecycleError extends Error {
-  constructor(command, phase) {
-    super(`Factory emulator cannot ${command} while lifecycle phase is ${phase}`);
-    this.name = "FactoryEmulatorLifecycleError";
-    this.code = "INVALID_LIFECYCLE";
-    this.command = command;
-    this.phase = phase;
-  }
-}
+export const FactoryEmulatorLifecycleError = defineDataError(
+  "FactoryEmulatorLifecycleError",
+  "INVALID_LIFECYCLE",
+  {
+    message: (command, phase) =>
+      `Factory emulator cannot ${command} while lifecycle phase is ${phase}`,
+    details: (command, phase) => ({ command, phase }),
+  },
+);
 
-export class FactoryEmulatorSubmissionError extends Error {
-  constructor(diagnostics) {
-    super("Factory emulator submission is not valid");
-    this.name = "FactoryEmulatorSubmissionError";
-    this.code = "INVALID_SUBMISSION";
-    this.diagnostics = copy(diagnostics);
-  }
-}
+export const FactoryEmulatorSubmissionError = defineDataError(
+  "FactoryEmulatorSubmissionError",
+  "INVALID_SUBMISSION",
+  {
+    message: () => "Factory emulator submission is not valid",
+    details: (diagnostics) => ({ diagnostics: copy(diagnostics) }),
+  },
+);
 
-export class FactoryEmulatorPendingCommandError extends Error {
-  constructor(attemptedCommand, pendingCommand) {
-    super(`Factory emulator cannot ${attemptedCommand} while ${pendingCommand} has a rejected transaction`);
-    this.name = "FactoryEmulatorPendingCommandError";
-    this.code = "PENDING_TRANSACTION";
-    this.attemptedCommand = attemptedCommand;
-    this.pendingCommand = pendingCommand;
-  }
-}
+export const FactoryEmulatorPendingCommandError = defineDataError(
+  "FactoryEmulatorPendingCommandError",
+  "PENDING_TRANSACTION",
+  {
+    message: (attemptedCommand, pendingCommand) =>
+      `Factory emulator cannot ${attemptedCommand} while ${pendingCommand} has a rejected transaction`,
+    details: (attemptedCommand, pendingCommand) => ({ attemptedCommand, pendingCommand }),
+  },
+);
 
-export class FactoryEmulatorExecutionPausedError extends Error {
-  constructor(diagnostic) {
-    super(`Factory emulator execution paused: ${diagnostic.kind}`);
-    this.name = "FactoryEmulatorExecutionPausedError";
-    this.code = "EXECUTION_PAUSED";
-    this.diagnostic = copy(diagnostic);
-  }
-}
+export const FactoryEmulatorExecutionPausedError = defineDataError(
+  "FactoryEmulatorExecutionPausedError",
+  "EXECUTION_PAUSED",
+  {
+    message: (diagnostic) => `Factory emulator execution paused: ${diagnostic.kind}`,
+    details: (diagnostic) => ({ diagnostic: copy(diagnostic) }),
+  },
+);
 
 /**
  * Creates one caller-owned deterministic Factory emulator session.

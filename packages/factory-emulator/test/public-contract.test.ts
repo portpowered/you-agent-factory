@@ -18,6 +18,7 @@ import {
   createMemoryFactoryEventSink,
 } from "@you-agent-factory/factory-emulator";
 import type {
+  FactoryEmulatorCommandError,
   FactoryEmulatorSession,
   FactoryEmulatorSessionAdvanceReceipt,
   FactoryEmulatorBudgetUsage,
@@ -119,8 +120,10 @@ const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
 });
 const limits: FactoryEmulatorLimits = { maxEvents: 100 };
 declare const pausedError: FactoryEmulatorExecutionPausedError;
+const commandError: FactoryEmulatorCommandError = pausedError;
 const executionDiagnostic: FactoryEmulatorExecutionDiagnostic = pausedError.diagnostic;
 void limits;
+void commandError;
 void executionDiagnostic;
 const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
 const startReceipt: Promise<FactoryEmulatorStartReceipt> = emulatorSession.start();
