@@ -926,6 +926,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
   hermetic `@you/goal` success without a TCP listener with shared input-resolution
   and primary-result equivalence on the real bootstrap path.
+- Real CLI live-session listing proof lives in
+  `tests/functional/cli/session/session_enumeration_test.go`. Start the service
+  through `support.RootRunFunctionalHost`, pass its public endpoint to
+  `you session list`, and assert the human folder identity or generated
+  `ListFactorySessionsResponse` fields. Keep shutdown bounded through the
+  root-process join; session-list functional evidence must not retain a service,
+  runtime, or internal server handle.
 - CLI/API invocation parity for packaged `@you/goal` lives in
   `tests/functional/smoke/cli_named_goal_invocation_parity_smoke_test.go`,
   comparing live session invocation API responses with real CLI `--json` output

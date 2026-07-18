@@ -2,21 +2,21 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/root"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-
-	"go.uber.org/zap"
 )
 
-func BasicCliInputWithArgs(t *testing.T, args []string) root.Input {
+func cliInputWithArgs(t *testing.T, args []string) root.Input {
+	t.Helper()
+
 	return root.Input{
 		Args:    args,
 		Env:     os.Environ(),
@@ -27,35 +27,37 @@ func BasicCliInputWithArgs(t *testing.T, args []string) root.Input {
 	}
 }
 
-func basicServer(t *testing.T, dir string) *support.FunctionalAPIServer {
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		CaptureService: func(captured *service.FactoryService) {
-		},
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-			cfg.Logger = zap.NewNop()
-		},
+func startSessionListHost(t *testing.T, factoryRoot string) *support.RootRunFunctionalHost {
+	t.Helper()
+
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: factoryRoot,
+		SystemRoot:  t.TempDir(),
 	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+	return host
 }
 
 func TestSessionEnumeration(t *testing.T) {
 	// Arrange
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
-	support.SetWorkingDirectory(t, dir)
+	host := startSessionListHost(t, dir)
 
 	// Act
-
-	// Instantiate the server
-	server := basicServer(t, dir)
-
 	// Enumerate the server configs
 	output := bytes.Buffer{}
 	stderr := bytes.Buffer{}
-	fakeEnv := BasicCliInputWithArgs(t, []string{"you", "session", "list", "--server", server.URL()})
+	fakeEnv := cliInputWithArgs(t, []string{"you", "session", "list", "--server", host.Endpoint()})
 	fakeEnv.Stdout = &output
 	fakeEnv.Stderr = &stderr
 	exitCode := root.Run(fakeEnv, root.Dependencies{})
@@ -67,7 +69,7 @@ func TestSessionEnumeration(t *testing.T) {
 	}
 
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", exitCode)
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
 	}
 }
 
@@ -75,22 +77,21 @@ func TestSessionEnumerationJson(t *testing.T) {
 	// Arrange
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 
-	support.SetWorkingDirectory(t, dir)
+	host := startSessionListHost(t, dir)
 
 	// Act
-
-	// Instantiate the server
-	server := basicServer(t, dir)
-
 	// Enumerate the server configs
 	output := bytes.Buffer{}
 	stderr := bytes.Buffer{}
-	fakeEnv := BasicCliInputWithArgs(t, []string{"you", "session", "list", "--json", "--server", server.URL()})
+	fakeEnv := cliInputWithArgs(t, []string{"you", "session", "list", "--json", "--server", host.Endpoint()})
 	fakeEnv.Stdout = &output
 	fakeEnv.Stderr = &stderr
 	exitCode := root.Run(fakeEnv, root.Dependencies{})
 
 	// Assert
+	if exitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d; stderr: %s", exitCode, stderr.String())
+	}
 
 	var session factoryapi.ListFactorySessionsResponse
 	err := json.Unmarshal(output.Bytes(), &session)
@@ -109,7 +110,4 @@ func TestSessionEnumerationJson(t *testing.T) {
 		t.Fatalf("expected session folder path to be %q, got: %q", dir, session.Sessions[0].FolderPath)
 	}
 
-	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d", exitCode)
-	}
 }

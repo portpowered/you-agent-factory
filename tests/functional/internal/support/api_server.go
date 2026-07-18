@@ -19,8 +19,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/wire"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	"go.uber.org/zap"
 )
 
@@ -46,24 +44,6 @@ type FunctionalAPIServer struct {
 	service *service.FactoryService
 	cancel  context.CancelFunc
 	done    chan struct{}
-}
-
-// ConfigureWorkerCommands installs typed functional command edges before the
-// service graph is assembled.
-func ConfigureWorkerCommands(
-	t *testing.T,
-	cfg *service.FactoryServiceConfig,
-	providerRunner, scriptRunner workers.CommandRunner,
-) {
-	t.Helper()
-	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
-	})
-	if err != nil {
-		t.Fatalf("construct functional worker application: %v", err)
-	}
-	cfg.WorkerApplication = components
 }
 
 func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *FunctionalAPIServer {
