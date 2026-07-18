@@ -482,7 +482,7 @@ func validateAllowedLayoutFields(value map[string]any, path string, allowedField
 }
 
 func rejectLayoutAnnotationField(annotation map[string]any, field, path string) error {
-	if value, ok := annotation[field]; ok && value != nil {
+	if _, ok := annotation[field]; ok {
 		return fmt.Errorf("%s.%s is not valid for this annotation kind", path, field)
 	}
 	return nil

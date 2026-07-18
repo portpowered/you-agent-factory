@@ -64,6 +64,17 @@ type portableLayoutBoundaryCase struct {
 func portableLayoutBoundaryCases() []portableLayoutBoundaryCase {
 	return []portableLayoutBoundaryCase{
 		{name: "valid annotated factory", data: "AQID", width: 120, alt: "diagram"},
+		{name: "valid note annotation", factory: portableLayoutNoteFactoryJSON("note-1", "safe")},
+		{
+			name:     "note rejects null image field",
+			factory:  strings.Replace(portableLayoutNoteFactoryJSON("note-1", "safe"), `"note":`, `"image":null,"note":`, 1),
+			wantPath: "layout.annotations[0].image",
+		},
+		{
+			name:     "image rejects null note field",
+			factory:  strings.Replace(portableLayoutFactoryJSON("AQID", 120, "diagram", "", ""), `"image":`, `"note":null,"image":`, 1),
+			wantPath: "layout.annotations[0].note",
+		},
 		{
 			name:     "non-strict base64",
 			data:     "AQI=\n",
@@ -146,7 +157,7 @@ func portableLayoutNoteFactoryJSON(id, body string) string {
 		"layout":{"schemaVersion":1,"annotations":[{
 			"id":%q,"kind":"NOTE","position":{"x":0,"y":0},
 			"note":{"body":%q,"tone":"NEUTRAL"}
-		}]}
+		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
 	}`, id, body)
 }
 

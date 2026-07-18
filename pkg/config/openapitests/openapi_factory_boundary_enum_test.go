@@ -143,6 +143,8 @@ func TestProjectedFactorySchema_EnforcesLayoutAnnotationVariants(t *testing.T) {
 		{"note missing content", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20}}`, false},
 		{"image missing content and size", `{"id":"image","kind":"IMAGE","position":{"x":10,"y":20}}`, false},
 		{"note carrying image without note", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"size":{"width":180,"height":120},"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Example"}}`, false},
+		{"note carrying null image", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"note":{"body":"safe","tone":"INFO"},"image":null}`, false},
+		{"image carrying null note", `{"id":"image","kind":"IMAGE","position":{"x":10,"y":20},"size":{"width":180,"height":120},"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Example"},"note":null}`, false},
 	}
 
 	schema := projectedFactorySchema(t)

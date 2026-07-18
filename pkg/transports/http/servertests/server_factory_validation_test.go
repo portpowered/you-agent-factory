@@ -111,6 +111,58 @@ func TestFactoryLayoutBoundary_ReturnsFieldSpecificHTTPValidationTargets(t *test
 	}
 }
 
+func TestFactoryLayoutBoundary_RejectsOppositeVariantNullFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name, factory, wantPath string
+	}{
+		{
+			name:     "note rejects null image field",
+			factory:  strings.Replace(portableNoteAnnotationFactoryJSON("note-1", "safe"), `"note":`, `"image":null,"note":`, 1),
+			wantPath: "factory.layout.annotations[0].image",
+		},
+		{
+			name:     "image rejects null note field",
+			factory:  strings.Replace(portableImageAnnotationFactoryJSON("AQID", 120), `"image":`, `"note":null,"image":`, 1),
+			wantPath: "factory.layout.annotations[0].note",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			assertLayoutBoundaryHTTPRejection(
+				t, http.MethodPost, "/factory-validations", test.factory,
+				factoryvalidation.CodeLayoutInvalidValue, test.wantPath,
+			)
+		})
+	}
+}
+
+func TestFactoryLayoutBoundary_AcceptsValidAnnotationVariants(t *testing.T) {
+	t.Parallel()
+
+	for _, factory := range []string{
+		portableNoteAnnotationFactoryJSON("note-1", "safe"),
+		portableImageAnnotationFactoryJSON("AQID", 120),
+	} {
+		req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(factory))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		newAPITestServer(&testutil.MockFactory{}).Handler().ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+		}
+		result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
+		if len(result.Targets) != 0 {
+			t.Fatalf("targets = %#v, want valid annotation", result.Targets)
+		}
+	}
+}
+
 func TestValidateFactory_ReturnsFieldSpecificTotalImageBudgetTarget(t *testing.T) {
 	t.Parallel()
 
@@ -161,7 +213,7 @@ func portableImageAnnotationFactoryJSON(data string, width int) string {
 		"layout":{"schemaVersion":1,"annotations":[{
 			"id":"image-1","kind":"IMAGE","position":{"x":0,"y":0},"size":{"width":%d,"height":80},
 			"image":{"alternativeText":"diagram","source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q}}
-		}]}
+		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
 	}`, width, data)
 }
 
@@ -171,7 +223,7 @@ func portableNoteAnnotationFactoryJSON(id, body string) string {
 		"layout":{"schemaVersion":1,"annotations":[{
 			"id":%q,"kind":"NOTE","position":{"x":0,"y":0},
 			"note":{"body":%q,"tone":"NEUTRAL"}
-		}]}
+		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
 	}`, id, body)
 }
 
