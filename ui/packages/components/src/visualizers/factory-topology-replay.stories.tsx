@@ -21,6 +21,7 @@ function ControlledTopologyStory() {
         onSelectNode={setSelectedNodeId}
         projection={factoryTopologyReplayProjection}
         selectedNodeId={selectedNodeId}
+        status="ready"
       />
     </div>
   );
@@ -39,6 +40,7 @@ export const Ready: Story = {
   args: {
     messages: factoryTopologyReplayMessages,
     projection: factoryTopologyReplayProjection,
+    status: "ready",
   },
   render: () => <ControlledTopologyStory />,
   play: async ({ canvasElement }) => {
@@ -47,5 +49,27 @@ export const Ready: Story = {
     await userEvent.click(review);
     await expect(canvas.getByText("Selected")).toBeVisible();
     await expect(canvas.getByText("1.234 Work")).toBeVisible();
+  },
+};
+
+export const Loading: Story = {
+  args: {
+    messages: factoryTopologyReplayMessages,
+    status: "loading",
+  },
+};
+
+export const Empty: Story = {
+  args: {
+    messages: factoryTopologyReplayMessages,
+    status: "empty",
+  },
+};
+
+export const Failed: Story = {
+  args: {
+    messages: factoryTopologyReplayMessages,
+    onRetry: () => undefined,
+    status: "failed",
   },
 };

@@ -21,5 +21,6 @@ export type {
   FactoryTopologyReplayTopology,
   FactoryTopologyReplayWorkStateCount,
   FactoryVisualizerError,
+  FactoryVisualizerErrorCause,
   FactoryVisualizerErrorKind,
 } from "./factory-topology-replay-types";

@@ -35,9 +35,13 @@ that consumes the replay kernel.
   prepared topology and activity without owning event history, replay, ticks,
   playback, storage, or transport. Its structural public input stays compatible
   with the factory-replay projections while keeping the component package
-  independently installable. The adjacent projection adapter is the sole owner
-  of renderer layout and must validate node-handle endpoint roles before React
-  Flow receives disposable nodes and edges.
+  independently installable. Its required controlled status removes stale
+  ready content during loading, empty, and failed states; retry remains a host
+  intent callback. The adjacent projection adapter is the sole owner of renderer
+  layout and must validate node-handle endpoint roles before React Flow receives
+  disposable nodes and edges. The local visualizer error boundary contains
+  React Flow and React rendering failures and reports only fixed messages and
+  safe cause names rather than host payload-bearing exception text.
 - `packages/factory-replay/test/factory-replay.test.mjs` proves observable
   ordering, duplicate-ID acceptance, current selection, fixed historical
   projection, checkpoint-plus-tail equivalence, selected-tick topology,

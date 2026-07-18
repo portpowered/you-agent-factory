@@ -45,53 +45,68 @@ export function projectFactoryTopologyToFlow(input: {
   projection: FactoryTopologyReplayProjection;
   selectedNodeId?: string;
 }): FactoryTopologyFlowProjection | FactoryVisualizerError {
-  const validationError = validateProjection(input.projection);
+  let validationError: FactoryVisualizerError | undefined;
+  try {
+    validationError = validateProjection(input.projection);
+  } catch (cause) {
+    return unexpectedError("projection", cause);
+  }
   if (validationError) return validationError;
 
-  const positions = layoutPositions(input.projection.topology.nodes);
-  const occupancyByNode = new Map(
-    input.projection.activity.resourceOccupancy.map((occupancy) => [
-      occupancy.resourceNodeId,
-      occupancy,
-    ]),
-  );
-  const countsByNode = new Map(
-    input.projection.workStateCounts.map(({ count, nodeId }) => [
-      nodeId,
-      count,
-    ]),
-  );
-  const activeDispatchesByNode = new Map<string, number>();
-  for (const dispatch of input.projection.activity.activeDispatches) {
-    if (!dispatch.workstationNodeId) continue;
-    activeDispatchesByNode.set(
-      dispatch.workstationNodeId,
-      (activeDispatchesByNode.get(dispatch.workstationNodeId) ?? 0) + 1,
-    );
+  let positions: Map<string, XYPosition>;
+  try {
+    positions = layoutPositions(input.projection.topology.nodes);
+  } catch (cause) {
+    return unexpectedError("layout", cause);
   }
 
-  return {
-    edges: input.projection.topology.connections.map((connection) =>
-      flowEdge(connection, input.messages),
-    ),
-    nodes: input.projection.topology.nodes.map((node) => ({
-      data: {
-        activeDispatchCount: activeDispatchesByNode.get(node.id) ?? 0,
-        formatNumber: input.formatNumber,
-        messages: input.messages,
-        node,
-        occupancy: occupancyByNode.get(node.id),
-        onSelect: input.onSelectNode,
-        selected: input.selectedNodeId === node.id,
-        workStateCount: countsByNode.get(node.id),
-      },
-      draggable: false,
-      id: node.id,
-      position: positions.get(node.id) ?? { x: 0, y: 0 },
-      selectable: false,
-      type: "factoryTopology",
-    })),
-  };
+  try {
+    const occupancyByNode = new Map(
+      input.projection.activity.resourceOccupancy.map((occupancy) => [
+        occupancy.resourceNodeId,
+        occupancy,
+      ]),
+    );
+    const countsByNode = new Map(
+      input.projection.workStateCounts.map(({ count, nodeId }) => [
+        nodeId,
+        count,
+      ]),
+    );
+    const activeDispatchesByNode = new Map<string, number>();
+    for (const dispatch of input.projection.activity.activeDispatches) {
+      if (!dispatch.workstationNodeId) continue;
+      activeDispatchesByNode.set(
+        dispatch.workstationNodeId,
+        (activeDispatchesByNode.get(dispatch.workstationNodeId) ?? 0) + 1,
+      );
+    }
+
+    return {
+      edges: input.projection.topology.connections.map((connection) =>
+        flowEdge(connection, input.messages),
+      ),
+      nodes: input.projection.topology.nodes.map((node) => ({
+        data: {
+          activeDispatchCount: activeDispatchesByNode.get(node.id) ?? 0,
+          formatNumber: input.formatNumber,
+          messages: input.messages,
+          node,
+          occupancy: occupancyByNode.get(node.id),
+          onSelect: input.onSelectNode,
+          selected: input.selectedNodeId === node.id,
+          workStateCount: countsByNode.get(node.id),
+        },
+        draggable: false,
+        id: node.id,
+        position: positions.get(node.id) ?? { x: 0, y: 0 },
+        selectable: false,
+        type: "factoryTopology",
+      })),
+    };
+  } catch (cause) {
+    return unexpectedError("projection", cause);
+  }
 }
 
 export function graphHandles(
@@ -207,6 +222,7 @@ function validEndpoint(
 
 function endpointError(): FactoryVisualizerError {
   return {
+    cause: { name: "InvalidEndpoint" },
     kind: "endpoint",
     message: "Factory topology contains an invalid connection endpoint.",
     recoverable: false,
@@ -215,8 +231,28 @@ function endpointError(): FactoryVisualizerError {
 
 function projectionError(): FactoryVisualizerError {
   return {
+    cause: { name: "InvalidProjection" },
     kind: "projection",
     message: "Factory topology projection is inconsistent.",
     recoverable: false,
   };
+}
+
+function unexpectedError(
+  kind: "layout" | "projection",
+  cause: unknown,
+): FactoryVisualizerError {
+  return {
+    cause: safeCause(cause),
+    kind,
+    message:
+      kind === "layout"
+        ? "Factory topology layout could not be prepared."
+        : "Factory topology projection could not be prepared.",
+    recoverable: true,
+  };
+}
+
+function safeCause(cause: unknown): { name: string } {
+  return { name: cause instanceof Error ? cause.name : "UnknownError" };
 }

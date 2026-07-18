@@ -6,11 +6,12 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react";
 import { useEffect, useMemo, useRef } from "react";
-
+import { Skeleton } from "../feedback/skeleton";
 import { GRAPH_EDGE_TYPES } from "../graphs/graph-edge";
 import { GraphNodeButton } from "../graphs/graph-node-button";
 import { GraphNodeShell } from "../graphs/graph-node-shell";
 import { GraphViewportSurface } from "../graphs/graph-viewport-surface";
+import { Button } from "../primitives/button";
 import { cn } from "../utilities/cn";
 import {
   type FactoryTopologyFlowNode,
@@ -22,16 +23,23 @@ import type {
   FactoryTopologyReplayProjection,
   FactoryVisualizerError,
 } from "./factory-topology-replay-types";
+import { FactoryVisualizerErrorBoundary } from "./factory-visualizer-error-boundary";
 
-export interface FactoryTopologyReplayProps {
+interface FactoryTopologyReplayCommonProps {
   className?: string;
   formatNumber?: (value: number) => string;
   messages: FactoryTopologyReplayMessages;
   onError?: (error: FactoryVisualizerError) => void;
+  onRetry?: () => void;
   onSelectNode?: (nodeId: string) => void;
-  projection: FactoryTopologyReplayProjection;
   selectedNodeId?: string;
 }
+
+export type FactoryTopologyReplayProps = FactoryTopologyReplayCommonProps &
+  (
+    | { projection: FactoryTopologyReplayProjection; status: "ready" }
+    | { projection?: never; status: "empty" | "failed" | "loading" }
+  );
 
 function FactoryTopologyNode({ data }: NodeProps<FactoryTopologyFlowNode>) {
   const {
@@ -95,10 +103,63 @@ export function FactoryTopologyReplay({
   formatNumber = String,
   messages,
   onError,
+  onRetry,
   onSelectNode,
   projection,
   selectedNodeId,
+  status,
 }: FactoryTopologyReplayProps) {
+  const resetKey = status === "ready" ? projection : status;
+
+  return (
+    <FactoryVisualizerErrorBoundary
+      fallback={() => (
+        <FactoryTopologyState
+          className={className}
+          messages={messages}
+          onRetry={onRetry}
+          status="failed"
+        />
+      )}
+      onError={onError}
+      resetKey={resetKey}
+    >
+      {status === "ready" ? (
+        <FactoryTopologyReady
+          className={className}
+          formatNumber={formatNumber}
+          messages={messages}
+          onError={onError}
+          onRetry={onRetry}
+          onSelectNode={onSelectNode}
+          projection={projection}
+          selectedNodeId={selectedNodeId}
+        />
+      ) : (
+        <FactoryTopologyState
+          className={className}
+          messages={messages}
+          onRetry={onRetry}
+          status={status}
+        />
+      )}
+    </FactoryVisualizerErrorBoundary>
+  );
+}
+
+function FactoryTopologyReady({
+  className,
+  formatNumber = String,
+  messages,
+  onError,
+  onRetry,
+  onSelectNode,
+  projection,
+  selectedNodeId,
+}: Omit<FactoryTopologyReplayCommonProps, "formatNumber"> & {
+  formatNumber?: (value: number) => string;
+  projection: FactoryTopologyReplayProjection;
+}) {
   const flow = useMemo(
     () =>
       projectFactoryTopologyToFlow({
@@ -126,23 +187,12 @@ export function FactoryTopologyReplay({
 
   if ("kind" in flow) {
     return (
-      <GraphViewportSurface
-        aria-label={messages.regionLabel}
-        className={cn(
-          "flex min-h-72 w-full items-center justify-center p-6",
-          className,
-        )}
-        data-factory-topology-state="failed"
-      >
-        <div className="max-w-lg text-center" role="alert">
-          <h3 className="text-title-medium font-semibold text-on-surface">
-            {messages.failedTitle}
-          </h3>
-          <p className="mt-2 text-body-medium text-on-surface-variant">
-            {messages.failedDescription}
-          </p>
-        </div>
-      </GraphViewportSurface>
+      <FactoryTopologyState
+        className={className}
+        messages={messages}
+        onRetry={onRetry}
+        status="failed"
+      />
     );
   }
 
@@ -179,6 +229,63 @@ export function FactoryTopologyReplay({
         </ReactFlow>
       </GraphViewportSurface>
     </ReactFlowProvider>
+  );
+}
+
+function FactoryTopologyState({
+  className,
+  messages,
+  onRetry,
+  status,
+}: {
+  className?: string;
+  messages: FactoryTopologyReplayMessages;
+  onRetry?: () => void;
+  status: "empty" | "failed" | "loading";
+}) {
+  const title =
+    status === "loading"
+      ? messages.loadingTitle
+      : status === "empty"
+        ? messages.emptyTitle
+        : messages.failedTitle;
+  const description =
+    status === "loading"
+      ? messages.loadingDescription
+      : status === "empty"
+        ? messages.emptyDescription
+        : messages.failedDescription;
+
+  return (
+    <GraphViewportSurface
+      aria-busy={status === "loading" ? true : undefined}
+      aria-label={messages.regionLabel}
+      className={cn(
+        "flex min-h-72 w-full items-center justify-center p-6",
+        className,
+      )}
+      data-factory-topology-state={status}
+    >
+      <div
+        className="flex max-w-lg flex-col items-center text-center"
+        role={status === "failed" ? "alert" : "status"}
+      >
+        {status === "loading" ? (
+          <Skeleton className="mb-4 h-16 w-16 rounded-full" />
+        ) : null}
+        <h3 className="text-title-medium font-semibold text-on-surface">
+          {title}
+        </h3>
+        <p className="mt-2 text-body-medium text-on-surface-variant">
+          {description}
+        </p>
+        {status === "failed" && onRetry ? (
+          <Button className="mt-4" onClick={onRetry} tone="outline">
+            {messages.retryLabel}
+          </Button>
+        ) : null}
+      </div>
+    </GraphViewportSurface>
   );
 }
 

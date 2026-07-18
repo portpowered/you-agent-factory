@@ -34,6 +34,7 @@ describe("FactoryTopologyReplay controlled rendering", () => {
         formatNumber={(value) => new Intl.NumberFormat("de-DE").format(value)}
         messages={factoryTopologyReplayMessages}
         projection={projection}
+        status="ready"
       />,
     );
 
@@ -67,6 +68,7 @@ describe("FactoryTopologyReplay controlled rendering", () => {
         messages={factoryTopologyReplayMessages}
         onSelectNode={onSelectNode}
         projection={factoryTopologyReplayProjection}
+        status="ready"
       />,
     );
     const reviewButton = await screen.findByRole("button", { name: "Review" });
@@ -80,6 +82,7 @@ describe("FactoryTopologyReplay controlled rendering", () => {
         onSelectNode={onSelectNode}
         projection={factoryTopologyReplayProjection}
         selectedNodeId="workstation:review"
+        status="ready"
       />,
     );
     expect(screen.getByText("Selected")).toBeVisible();
@@ -93,6 +96,7 @@ describe("FactoryTopologyReplay controlled rendering", () => {
       <FactoryTopologyReplay
         messages={factoryTopologyReplayMessages}
         projection={factoryTopologyReplayProjection}
+        status="ready"
       />,
     );
     const reviewNode = await waitFor(() => {
@@ -113,6 +117,7 @@ describe("FactoryTopologyReplay controlled rendering", () => {
       <FactoryTopologyReplay
         messages={factoryTopologyReplayMessages}
         projection={nextProjection}
+        status="ready"
       />,
     );
 
@@ -143,6 +148,7 @@ describe("FactoryTopologyReplay endpoint containment", () => {
           messages={factoryTopologyReplayMessages}
           onError={onError}
           projection={invalid}
+          status="ready"
         />
       </>,
     );
@@ -154,6 +160,7 @@ describe("FactoryTopologyReplay endpoint containment", () => {
     expect(screen.queryByText("missing-target")).not.toBeInTheDocument();
     expect(onError).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledWith({
+      cause: { name: "InvalidEndpoint" },
       kind: "endpoint",
       message: "Factory topology contains an invalid connection endpoint.",
       recoverable: false,
@@ -165,6 +172,7 @@ describe("FactoryTopologyReplay endpoint containment", () => {
           messages={factoryTopologyReplayMessages}
           onError={onError}
           projection={invalid}
+          status="ready"
         />
       </>,
     );
@@ -181,10 +189,120 @@ describe("FactoryTopologyReplay endpoint containment", () => {
       <FactoryTopologyReplay
         messages={factoryTopologyReplayMessages}
         projection={invalid}
+        status="ready"
       />,
     );
     expect(screen.getByRole("alert")).toBeVisible();
     expect(document.querySelector(".react-flow")).not.toBeInTheDocument();
+  });
+});
+
+describe("FactoryTopologyReplay controlled presentation states", () => {
+  it("replaces loading, empty, ready, and failed content without leaving stale topology", async () => {
+    const view = renderPackageComponent(
+      <FactoryTopologyReplay
+        messages={factoryTopologyReplayMessages}
+        status="loading"
+      />,
+    );
+
+    const region = screen.getByRole("region", { name: "Factory topology" });
+    expect(region).toHaveAttribute("aria-busy", "true");
+    expect(region).toHaveAttribute("data-factory-topology-state", "loading");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading topology");
+
+    view.rerender(
+      <FactoryTopologyReplay
+        messages={factoryTopologyReplayMessages}
+        status="empty"
+      />,
+    );
+    expect(region).toHaveAttribute("data-factory-topology-state", "empty");
+    expect(region).not.toHaveAttribute("aria-busy");
+    expect(screen.getByText("No topology available")).toBeVisible();
+
+    view.rerender(
+      <FactoryTopologyReplay
+        messages={factoryTopologyReplayMessages}
+        projection={factoryTopologyReplayProjection}
+        status="ready"
+      />,
+    );
+    expect(await screen.findByText("Logical tick 42")).toBeVisible();
+
+    view.rerender(
+      <FactoryTopologyReplay
+        messages={factoryTopologyReplayMessages}
+        status="failed"
+      />,
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Unable to display topology",
+    );
+    expect(screen.queryByText("Logical tick 42")).not.toBeInTheDocument();
+    expect(document.querySelector(".react-flow")).not.toBeInTheDocument();
+  });
+
+  it("emits only the supplied retry intent", () => {
+    const onRetry = vi.fn();
+    renderPackageComponent(
+      <FactoryTopologyReplay
+        messages={factoryTopologyReplayMessages}
+        onRetry={onRetry}
+        status="failed"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("contains rendering failures, reports a safe diagnostic once, and recovers on new input", async () => {
+    const onError = vi.fn();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    const unsafeMessages = {
+      ...factoryTopologyReplayMessages,
+      nodeKind: () => {
+        throw new Error("secret raw event payload");
+      },
+    };
+    const view = renderPackageComponent(
+      <>
+        <p>Sibling remains available</p>
+        <FactoryTopologyReplay
+          messages={unsafeMessages}
+          onError={onError}
+          projection={factoryTopologyReplayProjection}
+          status="ready"
+        />
+      </>,
+    );
+
+    expect(await screen.findByRole("alert")).toBeVisible();
+    expect(screen.getByText("Sibling remains available")).toBeVisible();
+    expect(
+      screen.queryByText("secret raw event payload"),
+    ).not.toBeInTheDocument();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith({
+      cause: { name: "Error" },
+      kind: "rendering",
+      message: "Factory topology rendering failed.",
+      recoverable: true,
+    });
+
+    view.rerender(
+      <FactoryTopologyReplay
+        messages={factoryTopologyReplayMessages}
+        projection={structuredClone(factoryTopologyReplayProjection)}
+        status="ready"
+      />,
+    );
+    expect(await screen.findByText("Logical tick 42")).toBeVisible();
+    expect(onError).toHaveBeenCalledTimes(1);
+    consoleError.mockRestore();
   });
 });
 
@@ -195,10 +313,26 @@ describe("FactoryTopologyReplay accessibility", () => {
         messages={factoryTopologyReplayMessages}
         onSelectNode={() => undefined}
         projection={factoryTopologyReplayProjection}
+        status="ready"
       />,
     );
     await screen.findByRole("button", { name: "Review" });
 
     expect(await axe(view.container)).toHaveNoViolations();
   });
+
+  it.each(["loading", "empty", "failed"] as const)(
+    "has no automated accessibility violations in the %s state",
+    async (status) => {
+      const view = renderPackageComponent(
+        <FactoryTopologyReplay
+          messages={factoryTopologyReplayMessages}
+          onRetry={status === "failed" ? () => undefined : undefined}
+          status={status}
+        />,
+      );
+
+      expect(await axe(view.container)).toHaveNoViolations();
+    },
+  );
 });

@@ -98,23 +98,32 @@ export type FactoryVisualizerErrorKind =
   | "rendering";
 
 export interface FactoryVisualizerError {
-  cause?: unknown;
+  cause: FactoryVisualizerErrorCause;
   kind: FactoryVisualizerErrorKind;
   message: string;
   recoverable: boolean;
 }
 
+export interface FactoryVisualizerErrorCause {
+  name: string;
+}
+
 export interface FactoryTopologyReplayMessages {
   activeDispatchCount: (count: number) => string;
   connectionLabel: (kind: FactoryTopologyConnectionKind) => string;
+  emptyDescription: string;
+  emptyTitle: string;
   failedDescription: string;
   failedTitle: string;
   handleLabel: (handleId: string, role: "source" | "target") => string;
   inactiveDispatch: string;
+  loadingDescription: string;
+  loadingTitle: string;
   nodeKind: (kind: FactoryTopologyNodeKind) => string;
   occupancy: (occupied: string, capacity: string) => string;
   occupancyUnavailable: string;
   regionLabel: string;
+  retryLabel: string;
   selectedNode: string;
   selectedTick: (tick: string) => string;
   workStateCount: (count: string) => string;

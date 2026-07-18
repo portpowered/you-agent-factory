@@ -89,14 +89,19 @@ const categories: [IconsCategory, TokensCategory] = [ICONS_CATEGORY, TOKENS_CATE
 const topologyMessages: FactoryTopologyReplayMessages = {
   activeDispatchCount: (count) => String(count) + " active Dispatches",
   connectionLabel: () => "Work type state",
+  emptyDescription: "No prepared topology is available.",
+  emptyTitle: "No topology available",
   failedDescription: "Prepared topology failed.",
   failedTitle: "Topology unavailable",
   handleLabel: (id, role) => role + " " + id,
   inactiveDispatch: "No active Dispatches",
+  loadingDescription: "Preparing the selected topology.",
+  loadingTitle: "Loading topology",
   nodeKind: (kind) => kind,
   occupancy: (occupied, capacity) => occupied + " of " + capacity + " occupied",
   occupancyUnavailable: "Occupancy unavailable",
   regionLabel: "Installed Factory topology",
+  retryLabel: "Try again",
   selectedNode: "Selected",
   selectedTick: (tick) => "Logical tick " + tick,
   workStateCount: (count) => count + " Work",
@@ -167,7 +172,7 @@ function App() {
         </GraphViewportSurface>
       </section>
 
-      <FactoryTopologyReplay className="consumer-topology" messages={topologyMessages} projection={topologyProjection} />
+      <FactoryTopologyReplay className="consumer-topology" messages={topologyMessages} projection={topologyProjection} status="ready" />
     </main>
   );
 }
