@@ -57,7 +57,8 @@ export function validatePlainDataContainers(
     if (
       typeof key !== "string" ||
       descriptor === undefined ||
-      !("value" in descriptor)
+      !("value" in descriptor) ||
+      !descriptor.enumerable
     ) {
       reportNonPlainData(propertyPath, issues);
       continue;

@@ -85,7 +85,7 @@ function requiredField(
   path: InputPath,
   issues: FactoryVisualizationLayoutIssue[],
 ): boolean {
-  if (key in value) return true;
+  if (Object.hasOwn(value, key)) return true;
   issues.push({
     category: "structure",
     code: "missing_required_field",
@@ -102,7 +102,7 @@ function stringField(
   required = true,
 ): boolean {
   if (!requiredField(value, key, path, required ? issues : [])) return false;
-  if (!(key in value)) return true;
+  if (!Object.hasOwn(value, key)) return true;
   if (typeof value[key] === "string") return true;
   issues.push({
     category: "structure",
