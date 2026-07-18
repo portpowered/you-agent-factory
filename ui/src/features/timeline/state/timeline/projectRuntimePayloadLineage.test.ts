@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { FactoryEvent, FactoryWorkItem } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import { projectRuntime } from "./projectRuntime";
-import { reconstructWorldState } from "./replayWorldState";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 
 const eventTime = "2026-06-01T12:00:00.000Z";
 
@@ -94,7 +94,7 @@ describe("projectRuntime payload lineage place occupancy", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 1);
+    const state = reconstructFactoryReplayState(events, 1);
     const runtime = projectRuntime(state);
     const placeID = state.workItemsByID["work-1"]?.place_id;
     const refs = placeID
@@ -190,7 +190,7 @@ describe("projectRuntime payload lineage active execution", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 2);
+    const state = reconstructFactoryReplayState(events, 2);
     const runtime = projectRuntime(state);
     const execution = runtime.active_executions_by_dispatch_id?.["dispatch-1"];
 

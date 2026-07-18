@@ -57,7 +57,7 @@ const deps: TimelineStoreStateDeps = {
     worldState: snapshotForTick(tick),
   }),
   buildFactoryTimelineSnapshot: (_events, tick) => snapshotForTick(tick),
-  orderedEvents: (events) =>
+  canonicalizeEvents: (events) =>
     [...events].sort((left, right) => left.context.tick - right.context.tick),
 };
 

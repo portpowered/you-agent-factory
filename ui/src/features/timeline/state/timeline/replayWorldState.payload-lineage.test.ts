@@ -6,7 +6,7 @@ import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import dispatchWithoutInputContentFixture from "./fixtures/payload-lineage/dispatch-without-input-content.json";
 import workRequestWithContentFixture from "./fixtures/payload-lineage/work-request-with-content.json";
 import { projectRuntime } from "./projectRuntime";
-import { reconstructWorldState } from "./replayWorldState";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 import {
   consumedWorkItemRefsForDispatch,
   selectedWorkItemRefForID,
@@ -213,14 +213,14 @@ function expectRefMatchesExpected(
 }
 
 function replayGoldenFixture(fixture: PayloadLineageGoldenFixture) {
-  const state = reconstructWorldState(fixture.events, fixture.selectedTick);
+  const state = reconstructFactoryReplayState(fixture.events, fixture.selectedTick);
   const runtime = projectRuntime(state);
   return { runtime, state };
 }
 
 function findPlaceOccupancyRef(
   runtime: ReturnType<typeof projectRuntime>,
-  state: ReturnType<typeof reconstructWorldState>,
+  state: ReturnType<typeof reconstructFactoryReplayState>,
   workID: string,
 ): DashboardWorkItemRef | undefined {
   const placeID = state.workItemsByID[workID]?.place_id;
@@ -309,7 +309,7 @@ describe("replayWorldState payload lineage synthetic replay submit-only", () => 
       lineageWorkRequestEvent(1, "request/submit-only", item),
     ];
 
-    const state = reconstructWorldState(events, 1);
+    const state = reconstructFactoryReplayState(events, 1);
     const runtime = projectRuntime(state);
     const placeRef = findPlaceOccupancyRef(runtime, state, item.id);
 
@@ -344,7 +344,7 @@ describe("replayWorldState payload lineage synthetic replay consumed unavailable
       ),
     ];
 
-    const state = reconstructWorldState(events, 1);
+    const state = reconstructFactoryReplayState(events, 1);
     const dispatch = state.activeDispatches["dispatch-missing"];
     const consumedRefs = consumedWorkItemRefsForDispatch(
       state.payloadLineage,
@@ -389,7 +389,7 @@ describe("replayWorldState payload lineage synthetic replay dispatch output", ()
       ),
     ];
 
-    const state = reconstructWorldState(events, 3);
+    const state = reconstructFactoryReplayState(events, 3);
     const runtime = projectRuntime(state);
     const request = runtime.workstation_requests_by_dispatch_id?.["dispatch-1"];
 
@@ -437,7 +437,7 @@ describe("replayWorldState payload lineage synthetic replay consumed pin", () =>
       lineageWorkRequestEvent(3, "request/child-v2", laterSelected),
     ];
 
-    const state = reconstructWorldState(events, 3);
+    const state = reconstructFactoryReplayState(events, 3);
     const dispatch = state.activeDispatches["dispatch-consume-child"];
     const consumedRefs = consumedWorkItemRefsForDispatch(
       state.payloadLineage,

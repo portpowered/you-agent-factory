@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
-import { reconstructWorldState } from "./replayWorldState";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 
 const eventTime = "2026-05-30T12:00:00.000Z";
 
@@ -141,7 +141,7 @@ describe("reconstructWorldState inference success", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 4);
+    const state = reconstructFactoryReplayState(events, 4);
     const attempt =
       state.inferenceAttemptsByDispatchID[dispatchID]?.[inferenceRequestID];
     expect(attempt).toEqual(
@@ -195,7 +195,7 @@ describe("reconstructWorldState inference guards", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 2);
+    const state = reconstructFactoryReplayState(events, 2);
     expect(state.inferenceAttemptsByDispatchID).toEqual({});
   });
 });
@@ -285,7 +285,7 @@ describe("reconstructWorldState inference failures", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 4);
+    const state = reconstructFactoryReplayState(events, 4);
     expect(
       state.inferenceAttemptsByDispatchID[dispatchID]?.[inferenceRequestID],
     ).toEqual(

@@ -1,0 +1,26 @@
+{
+  "name": "@you-agent-factory/factory-replay",
+  "version": "0.0.0",
+  "description": "Framework-independent deterministic replay primitives for Factory events.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git"
+  },
+  "type": "module",
+  "files": [
+    "README.md",
+    "LICENSE.md",
+    "src"
+  ],
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "dependencies": {
+    "@you-agent-factory/client": "file:../client"
+  }
+}
