@@ -201,3 +201,47 @@ test("canonical ordering compares eventTime and id after tick and sequence", () 
     assert.equal(JSON.stringify(input), before);
   }
 });
+
+test("canonical ordering compares RFC 3339 timestamps as exact instants", () => {
+  const orderedCases = [
+    ["2026-01-01T00:00:00Z", "2025-12-31T19:00:00-05:00"],
+    ["2025-12-31T18:59:59-05:00", "2026-01-01T00:00:00Z"],
+    ["2026-01-01T00:00:00.09Z", "2026-01-01T00:00:00.1Z"],
+    ["2026-01-01T00:00:00.1000Z", "2026-01-01T00:00:00.1Z"],
+  ];
+
+  for (const [firstTime, secondTime] of orderedCases) {
+    const input = recording([
+      event({
+        id: "event-a",
+        context: { ...event().context, eventTime: firstTime },
+      }),
+      event({
+        id: "event-b",
+        context: { ...event().context, eventTime: secondTime },
+      }),
+    ]);
+    assert.equal(safeParseFactoryRecording(input).success, true);
+  }
+
+  for (const [firstTime, secondTime] of [
+    ["2026-01-01T00:00:00Z", "2026-01-01T00:30:00+01:00"],
+    ["2026-01-01T00:00:00.0000000002Z", "2026-01-01T00:00:00.0000000001Z"],
+  ]) {
+    const outOfOrder = recording([
+      event({
+        id: "event-a",
+        context: { ...event().context, eventTime: firstTime },
+      }),
+      event({
+        id: "event-b",
+        context: { ...event().context, eventTime: secondTime },
+      }),
+    ]);
+    const result = safeParseFactoryRecording(outOfOrder);
+    assert.equal(result.success, false);
+    assert.ok(
+      result.issues.some((issue) => issue.code === "NON_CANONICAL_ORDER"),
+    );
+  }
+});

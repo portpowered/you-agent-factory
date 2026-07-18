@@ -153,9 +153,45 @@ function compareEvents(left, right) {
   return (
     compareNumber(left.context.tick, right.context.tick) ||
     compareNumber(left.context.sequence, right.context.sequence) ||
-    left.context.eventTime.localeCompare(right.context.eventTime) ||
+    compareEventTime(left.context.eventTime, right.context.eventTime) ||
     left.id.localeCompare(right.id)
   );
+}
+
+function compareEventTime(left, right) {
+  const leftInstant = parseEventTime(left);
+  const rightInstant = parseEventTime(right);
+  return (
+    compareNumber(leftInstant.wholeSecond, rightInstant.wholeSecond) ||
+    compareFraction(leftInstant.fraction, rightInstant.fraction)
+  );
+}
+
+function parseEventTime(value) {
+  const match =
+    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/i.exec(
+      value,
+    );
+  // Shape validation, including RFC 3339 format validation, runs before this
+  // semantic comparison. Keep this guard explicit if that boundary changes.
+  if (!match) {
+    throw new TypeError(`Validated eventTime is not RFC 3339: ${value}`);
+  }
+  return {
+    wholeSecond: Date.parse(`${match[1]}${match[3]}`),
+    fraction: match[2] ?? "",
+  };
+}
+
+function compareFraction(left, right) {
+  const width = Math.max(left.length, right.length);
+  const normalizedLeft = left.padEnd(width, "0");
+  const normalizedRight = right.padEnd(width, "0");
+  return normalizedLeft === normalizedRight
+    ? 0
+    : normalizedLeft < normalizedRight
+      ? -1
+      : 1;
 }
 
 function compareNumber(left, right) {
