@@ -8,8 +8,8 @@ exports `scenarioSchema` and `SUPPORTED_SCENARIO_VERSION`.
 Every scenario declares a version, id, deterministic seed, UTC `startAt`,
 ordered rules, and explicit unmatched behavior. Rules use finite scripted
 outcomes with explicit exhaustion behavior. Initial submissions and lineage
-cursors are structurally represented here; semantic reference validation is
-provided by the parser surface.
+cursors are structurally represented here; the parser validates the scenario
+shape and supported Factory execution subset before emulation begins.
 
 `activityLabel` is optional, limited to 120 characters, and only represents
 transient emulator activity. It is never canonical Factory event content.
@@ -17,6 +17,18 @@ transient emulator activity. It is never canonical Factory event content.
 The schema under `contracts/factory-emulator/` is authored source. Run
 `npm run generate` from this package to regenerate its committed schema and
 TypeScript artifacts.
+
+## Parsing a scenario for browser emulation
+
+`parseEmulatorScenario(scenario, factory)` is a pure preflight boundary. It
+returns either the typed authored scenario and supported Factory definition, or
+structured diagnostics with a stable JSON Pointer `path`, `code`, `message`,
+and `expectation`. It never starts emulator activity or creates Factory events.
+
+The v1 emulator accepts static Petri Factory topology only. It rejects
+JavaScript orchestration, configured Factory resources or guards, and cron,
+repeater, or poller workstation scheduling before emulation starts. This keeps
+scripted browser behavior deterministic while the runtime support subset grows.
 
 ## Event sink and logical tick runtime
 

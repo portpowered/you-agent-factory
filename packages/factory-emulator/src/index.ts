@@ -47,3 +47,10 @@ export {
   scenarioSchema,
   SUPPORTED_SCENARIO_VERSION,
 } from "./generated/scenario-schema.js";
+export {
+  parseEmulatorScenario,
+  type EmulatorFactoryDefinition,
+  type EmulatorScenarioDiagnostic,
+  type EmulatorScenarioDiagnosticCode,
+  type EmulatorScenarioParseResult,
+} from "./parser.js";

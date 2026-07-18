@@ -79,6 +79,8 @@ void pendingBatch;
 void emulatorCloseReceipt;
 
 import {
+  parseEmulatorScenario,
+  type EmulatorScenarioParseResult,
   type EmulatorScenario,
   type EmulatorScenarioVersion,
   scenarioSchema,
@@ -104,3 +106,9 @@ const scenario: EmulatorScenario = {
 
 void scenario;
 void scenarioSchema;
+
+const parseResult: EmulatorScenarioParseResult = parseEmulatorScenario(
+  scenario,
+  { workstations: [{ behavior: "STANDARD" }] },
+);
+void parseResult;
