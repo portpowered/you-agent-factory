@@ -4,6 +4,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -43,12 +42,23 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	dir := support.ScaffoldFactory(t, realLocalInferenceFactoryConfig(command))
 	writeRealLocalInferenceWorkstationConfig(t, dir)
 
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.ModelCacheDir = cacheDir
-		cfg.SkipBuiltInRunnerPrerequisiteValidation = true
-	}, factory.WithServiceMode())
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         cacheDir,
+		DisableMockWorkers: true,
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	pull := postJSON[factoryapi.ModelPullResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/pull", nil, "asset pull failure")
+	pull := postJSON[factoryapi.ModelPullResponse](t, host.Endpoint()+"/models/OMNIVOICE_Q4_K_M/pull", nil, "asset pull failure")
 	if pull.ModelName != "OMNIVOICE_Q4_K_M" || pull.CachePath == "" || pull.Revision == "" || len(pull.DownloadedFiles) == 0 {
 		t.Fatalf("asset pull failure: response = %#v, want model identity, cache path, revision, and files", pull)
 	}
@@ -59,7 +69,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	}
 	t.Logf("asset pull diagnostics: model=%s revision=%s cachePath=%s files=%d", pull.ModelName, pull.Revision, pull.CachePath, len(pull.DownloadedFiles))
 
-	jsonInvocation := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
+	jsonInvocation := postJSON[factoryapi.ModelInvocationResponse](t, host.Endpoint()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
 		Bindings:  realLocalInferenceDirectBindings(),
 		Content: &factoryapi.WorkContent{
@@ -83,7 +93,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	}
 	assertWAVFile(t, audioPath, "output validation failure")
 
-	streamBytes, streamType := postAudioInvocation(t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
+	streamBytes, streamType := postAudioInvocation(t, host.Endpoint()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
 		Bindings:  realLocalInferenceDirectBindings(),
 		Content: &factoryapi.WorkContent{
@@ -101,16 +111,18 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	}
 	assertWAVBytes(t, streamBytes, "output validation failure")
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	eventStream := openRootRunFactoryEventHTTPStream(t, host)
+	traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
 		Name:         "real-local-model-inference",
 		WorkTypeName: "speech",
 		Content: &factoryapi.WorkContent{
 			mustGeneratedFunctionalTextPart(t, "hello from factory-level model invoke"),
 		},
 	})
-	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "speech:complete", realLocalInferenceFactoryWaitTimeout())
+	work := waitForGeneratedWorkAtPlace(t, host.Endpoint(), traceID, "speech:complete", realLocalInferenceFactoryWaitTimeout())
 	findGeneratedWorkByTraceIDAndPlace(t, work.Results, traceID, "speech:complete")
-	eventAudioPath := assertRecordedRealLocalModelEvents(t, server.GetFactoryEvents(t))
+	events := collectRealLocalModelEvents(t, eventStream, traceID, realLocalInferenceFactoryWaitTimeout())
+	eventAudioPath := assertRecordedRealLocalModelEvents(t, events)
 	assertWAVFile(t, eventAudioPath, "output validation failure")
 }
 
@@ -299,6 +311,38 @@ func assertRecordedRealLocalModelEvents(t *testing.T, events []factoryapi.Factor
 		t.Fatalf("output validation failure: model events missing TTS request/audio response; sawRequest=%v audioPath=%q", sawRequest, responseAudioPath)
 	}
 	return responseAudioPath
+}
+
+func collectRealLocalModelEvents(
+	t *testing.T,
+	stream *factoryEventHTTPStream,
+	traceID string,
+	timeout time.Duration,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	events := make([]factoryapi.FactoryEvent, 0, 2)
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			t.Fatalf("timed out waiting %s for correlated local model events; saw %v", timeout, functionalEventTypes(events))
+		}
+		event := stream.next(remaining)
+		if stringPointerValue(event.Context.CurrentChainingTraceId) != traceID {
+			continue
+		}
+		switch event.Type {
+		case factoryapi.FactoryEventTypeModelRequest:
+			events = append(events, event)
+		case factoryapi.FactoryEventTypeModelResponse:
+			events = append(events, event)
+			payload, err := event.Payload.AsModelResponseEventPayload()
+			if err == nil && payload.Operation == "TTS" && payload.Outcome == factoryapi.InferenceOutcomeSucceeded {
+				return events
+			}
+		}
+	}
 }
 
 func stringsTrimSpaceOrDefault(value string, fallback string) string {
