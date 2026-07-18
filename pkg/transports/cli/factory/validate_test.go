@@ -14,11 +14,13 @@ func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		data     string
-		width    int
-		alt      string
-		wantPath string
+		name          string
+		data          string
+		width         int
+		alt           string
+		positionExtra string
+		sourceExtra   string
+		wantPath      string
 	}{
 		{name: "valid annotated factory", data: "AQID", width: 120, alt: "diagram"},
 		{
@@ -41,13 +43,35 @@ func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
 			alt:      "diagram",
 			wantPath: "layout.annotations[0].size.width",
 		},
+		{
+			name:        "remote URL source field",
+			data:        "AQID",
+			width:       120,
+			alt:         "diagram",
+			sourceExtra: `,"url":"https://example.invalid/image.png"`,
+			wantPath:    "layout.annotations[0].image.source.url",
+		},
+		{
+			name:          "nested connection reference",
+			data:          "AQID",
+			width:         120,
+			alt:           "diagram",
+			positionExtra: `,"connection":{"nodeId":"workstation:review"}`,
+			wantPath:      "layout.annotations[0].position.connection",
+		},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			path := writeValidateFixture(t, portableLayoutFactoryJSON(test.data, test.width, test.alt))
+			path := writeValidateFixture(t, portableLayoutFactoryJSON(
+				test.data,
+				test.width,
+				test.alt,
+				test.positionExtra,
+				test.sourceExtra,
+			))
 
 			var out strings.Builder
 			err := Validate(ValidateConfig{Path: path, Output: &out})
@@ -70,14 +94,14 @@ func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
 	}
 }
 
-func portableLayoutFactoryJSON(data string, width int, alternativeText string) string {
+func portableLayoutFactoryJSON(data string, width int, alternativeText, positionExtra, sourceExtra string) string {
 	return fmt.Sprintf(`{
 		"name":"layout-cli",
 		"layout":{"schemaVersion":1,"annotations":[{
-			"id":"image-1","kind":"IMAGE","position":{"x":0,"y":0},"size":{"width":%d,"height":80},
-			"image":{"alternativeText":%q,"source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q}}
+			"id":"image-1","kind":"IMAGE","position":{"x":0,"y":0%s},"size":{"width":%d,"height":80},
+			"image":{"alternativeText":%q,"source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q%s}}
 		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
-	}`, width, alternativeText, data)
+	}`, positionExtra, width, alternativeText, data, sourceExtra)
 }
 
 func TestValidate_HumanOutputShowsNewTaxonomyAndCompatibilityFinding(t *testing.T) {

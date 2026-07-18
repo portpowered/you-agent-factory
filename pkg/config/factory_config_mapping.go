@@ -465,12 +465,17 @@ func validateLayoutAnnotationContent(annotation map[string]any, path string) (in
 }
 
 func validateLayoutAnnotationFields(annotation map[string]any, path string) error {
-	allowed := map[string]struct{}{
-		"id": {}, "kind": {}, "position": {}, "size": {}, "note": {}, "image": {},
+	return validateAllowedLayoutFields(annotation, path, "id", "kind", "position", "size", "note", "image")
+}
+
+func validateAllowedLayoutFields(value map[string]any, path string, allowedFields ...string) error {
+	allowed := make(map[string]struct{}, len(allowedFields))
+	for _, field := range allowedFields {
+		allowed[field] = struct{}{}
 	}
-	for field := range annotation {
+	for field := range value {
 		if _, ok := allowed[field]; !ok {
-			return fmt.Errorf("%s.%s is not allowed on a layout annotation", path, field)
+			return fmt.Errorf("%s.%s is not allowed", path, field)
 		}
 	}
 	return nil
@@ -488,6 +493,9 @@ func validateLayoutAnnotationPosition(annotation map[string]any, path string) er
 	if err != nil {
 		return err
 	}
+	if err := validateAllowedLayoutFields(position, path+".position", "x", "y"); err != nil {
+		return err
+	}
 	return validateLayoutAnnotationNumbers(position, path+".position", "x", "y", false)
 }
 
@@ -502,6 +510,9 @@ func validateLayoutAnnotationSize(annotation map[string]any, path string, requir
 	size, ok := value.(map[string]any)
 	if !ok {
 		return fmt.Errorf("%s.size must be an object", path)
+	}
+	if err := validateAllowedLayoutFields(size, path+".size", "width", "height"); err != nil {
+		return err
 	}
 	return validateLayoutAnnotationNumbers(size, path+".size", "width", "height", true)
 }
@@ -549,6 +560,9 @@ func validateLayoutAnnotationNote(annotation map[string]any, path string) error 
 	if err != nil {
 		return err
 	}
+	if err := validateAllowedLayoutFields(note, path+".note", "title", "body", "tone"); err != nil {
+		return err
+	}
 	if err := requireString(note, "body", path+".note"); err != nil {
 		return err
 	}
@@ -584,6 +598,9 @@ func validateLayoutAnnotationImage(annotation map[string]any, path string) (int,
 }
 
 func validateLayoutImage(image map[string]any, path string) (int, error) {
+	if err := validateAllowedLayoutFields(image, path, "source", "alternativeText"); err != nil {
+		return 0, err
+	}
 	if err := requireString(image, "alternativeText", path); err != nil {
 		return 0, err
 	}
@@ -592,6 +609,9 @@ func validateLayoutImage(image map[string]any, path string) (int, error) {
 	}
 	source, err := requiredObject(image, "source", path)
 	if err != nil {
+		return 0, err
+	}
+	if err := validateAllowedLayoutFields(source, path+".source", "kind", "mediaType", "data"); err != nil {
 		return 0, err
 	}
 	for _, key := range []string{"kind", "mediaType", "data"} {
