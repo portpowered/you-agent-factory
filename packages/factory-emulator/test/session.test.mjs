@@ -4,10 +4,21 @@ import {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
+  FactoryEmulatorPendingCommandError,
   FactoryEmulatorSubmissionError,
   SUPPORTED_SCENARIO_VERSION,
   createFactoryEmulatorSession,
 } from "@you-agent-factory/factory-emulator";
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
 
 function supportedFactory() {
   return {
@@ -495,4 +506,198 @@ test("exhausted rules defer ignored Work without inventing a dispatch", async ()
     phase: "waiting",
     reason: "work-waiting",
   });
+});
+
+test("session publishes a submission only after acceptance and retries rejection unchanged", async () => {
+  const writes = [];
+  const blockedWrite = deferred();
+  let blockNextWrite = false;
+  const emulator = createFactoryEmulatorSession({
+    factory: supportedFactory(),
+    scenario: scenario({ initialSubmissions: [] }),
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write(batch) {
+        writes.push(structuredClone(batch));
+        if (blockNextWrite) {
+          blockNextWrite = false;
+          await blockedWrite.promise;
+        }
+        return { status: "accepted" };
+      },
+    },
+  });
+  await emulator.start();
+  const before = emulator.state();
+  blockNextWrite = true;
+  const submission = { id: "interactive", workType: "checkout", input: { value: 1 } };
+  const pendingSubmit = emulator.submit(submission);
+  await Promise.resolve();
+
+  assert.deepEqual(emulator.state(), before);
+  assert.deepEqual(emulator.status(), { phase: "active", reason: "submitting" });
+  await assert.rejects(
+    emulator.advanceToNext(),
+    (error) => error instanceof FactoryEmulatorLifecycleError
+      && error.phase === "submitting",
+  );
+  blockedWrite.reject(new Error("recording unavailable"));
+  await assert.rejects(pendingSubmit, /recording unavailable/);
+
+  const rejectedBatch = structuredClone(writes.at(-1));
+  assert.deepEqual(emulator.state(), before);
+  assert.deepEqual(emulator.pending(), rejectedBatch);
+  assert.deepEqual(emulator.status(), {
+    phase: "error",
+    reason: "SINK_WRITE_REJECTED",
+  });
+  await assert.rejects(
+    emulator.advanceToNext(),
+    (error) => error instanceof FactoryEmulatorPendingCommandError
+      && error.code === "PENDING_TRANSACTION"
+      && error.pendingCommand === "submit",
+  );
+
+  const receipt = await emulator.submit(structuredClone(submission));
+  assert.deepEqual(writes.at(-1), rejectedBatch);
+  assert.deepEqual(receipt.batch, rejectedBatch);
+  assert.equal(receipt.state.works.length, 1);
+  assert.equal(emulator.pending(), undefined);
+});
+
+test("advanceBy resumes an original interval after an intermediate batch rejects", async () => {
+  const attempts = [];
+  let rejectAttempt = 5;
+  const emulator = createFactoryEmulatorSession({
+    factory: supportedFactory(),
+    scenario: scenario({
+      rules: [
+        {
+          id: "first",
+          match: { kind: "submissionId", submissionId: "checkout-1" },
+          outcomes: [{ kind: "complete", durationMs: 10 }],
+          exhaustionBehavior: { kind: "repeatLast" },
+        },
+        {
+          id: "second",
+          match: { kind: "submissionId", submissionId: "checkout-2" },
+          outcomes: [{ kind: "complete", durationMs: 20 }],
+          exhaustionBehavior: { kind: "repeatLast" },
+        },
+      ],
+    }),
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write(batch) {
+        attempts.push(structuredClone(batch));
+        if (attempts.length === rejectAttempt) {
+          rejectAttempt = -1;
+          throw new Error("completion write rejected");
+        }
+        return { status: "accepted" };
+      },
+    },
+  });
+  await emulator.start();
+  await assert.rejects(emulator.advanceBy(20), /completion write rejected/);
+  const rejected = structuredClone(attempts.at(-1));
+  assert.equal(emulator.state().virtualElapsedMs, 10);
+
+  const receipt = await emulator.advanceBy(20);
+  assert.deepEqual(attempts[4], rejected);
+  assert.equal(receipt.virtualElapsedMs, 20);
+  assert.equal(receipt.batches.length, 3);
+  assert.ok(receipt.state.works.every((work) => work.phase === "completed"));
+});
+
+test("reset discards a rejected start transaction and preserves deterministic reruns", async () => {
+  const attempts = [];
+  let rejectInitial = true;
+  const emulator = createFactoryEmulatorSession({
+    factory: supportedFactory(),
+    scenario: scenario(),
+    sink: {
+      async close() {
+        return { status: "closed" };
+      },
+      async write(batch) {
+        attempts.push(structuredClone(batch));
+        if (rejectInitial && batch.events[0].type === "WORK_REQUEST") {
+          rejectInitial = false;
+          throw new Error("initial Work rejected");
+        }
+        return { status: "accepted" };
+      },
+    },
+  });
+  await assert.rejects(emulator.start(), /initial Work rejected/);
+  const firstBootstrap = structuredClone(attempts[0]);
+  const rejectedInitial = structuredClone(attempts[1]);
+  assert.equal(emulator.state().works.length, 0);
+
+  emulator.reset();
+  const receipt = await emulator.start();
+  assert.deepEqual(receipt.batches, [firstBootstrap, rejectedInitial]);
+  assert.deepEqual(attempts.slice(2), [firstBootstrap, rejectedInitial]);
+});
+
+test("close retries terminal write and then only sink close without duplicate events", async () => {
+  const writeAttempts = [];
+  let rejectTerminal = true;
+  let closeAttempts = 0;
+  const emulator = createFactoryEmulatorSession({
+    factory: supportedFactory(),
+    scenario: scenario({ initialSubmissions: [] }),
+    sink: {
+      async close() {
+        closeAttempts += 1;
+        if (closeAttempts === 1) {
+          throw new Error("close unavailable");
+        }
+        return { status: "closed" };
+      },
+      async write(batch) {
+        writeAttempts.push(structuredClone(batch));
+        if (batch.events[0].type === "RUN_RESPONSE" && rejectTerminal) {
+          rejectTerminal = false;
+          throw new Error("terminal write unavailable");
+        }
+        return { status: "accepted" };
+      },
+    },
+  });
+  await emulator.start();
+  const beforeClose = emulator.state();
+
+  await assert.rejects(emulator.close(), /terminal write unavailable/);
+  const terminal = structuredClone(writeAttempts.at(-1));
+  assert.deepEqual(emulator.state(), beforeClose);
+  await assert.rejects(emulator.submit({ id: "later", workType: "checkout" }),
+    FactoryEmulatorPendingCommandError);
+
+  await assert.rejects(emulator.close(), /close unavailable/);
+  assert.deepEqual(writeAttempts.at(-1), terminal);
+  assert.equal(emulator.state().lifecycle, "closed");
+  assert.deepEqual(emulator.status(), {
+    phase: "error",
+    reason: "SINK_CLOSE_REJECTED",
+  });
+
+  const writesBeforeCloseOnlyRetry = writeAttempts.length;
+  const receipt = await emulator.close();
+  assert.equal(writeAttempts.length, writesBeforeCloseOnlyRetry);
+  assert.equal(closeAttempts, 2);
+  assert.equal(receipt.status, "closed");
+  assert.equal(receipt.batch.events[0].type, "RUN_RESPONSE");
+  assert.deepEqual(emulator.status(), { phase: "closed", reason: "session-closed" });
+  await assert.rejects(emulator.close(), FactoryEmulatorLifecycleError);
+  await assert.rejects(
+    emulator.submit({ id: "post-close", workType: "checkout" }),
+    FactoryEmulatorLifecycleError,
+  );
+  assert.equal(writeAttempts.length, writesBeforeCloseOnlyRetry);
 });

@@ -14,6 +14,7 @@ export {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
+  FactoryEmulatorPendingCommandError,
   FactoryEmulatorSubmissionError,
   createFactoryEmulatorSession,
 } from "./session.js";

@@ -165,3 +165,19 @@ During an accepted submission write it reports `active`, while `state()`
 continues to expose only the prior committed snapshot. Once the sink accepts
 the batch, the new Work becomes visible and the session reports `ready` or
 `waiting` from its executable scenario facts.
+
+Every session command follows the same calculate/write/commit boundary. If a
+logical batch is rejected, `state()` and virtual time remain at the last
+accepted transition, `status()` reports `error`, and `pending()` returns a
+detached copy of the rejected batch. Only the same command with the same input
+may retry that transaction; the retained event values and calculated next
+state are reused without recalculation. `reset()` is the sole command that may
+discard an open rejected transaction.
+
+`close()` is explicit and terminal. It writes one deterministic `RUN_RESPONSE`
+batch at the current virtual instant, commits the closed lifecycle only after
+that batch is accepted, and then awaits `sink.close()`. A terminal write
+rejection retries the same event. If only `sink.close()` rejects, the next
+`close()` retries that operation without writing the terminal event again.
+Non-close commands cannot bypass either recovery state, and all state-changing
+commands reject after a successful close.

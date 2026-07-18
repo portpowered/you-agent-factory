@@ -26,11 +26,13 @@ export {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
+  FactoryEmulatorPendingCommandError,
   FactoryEmulatorSubmissionError,
   createFactoryEmulatorSession,
 } from "./session.js";
 export type {
   FactoryEmulatorSessionAdvanceReceipt,
+  FactoryEmulatorSessionCloseReceipt,
   FactoryEmulatorResetReceipt,
   FactoryEmulatorSession,
   FactoryEmulatorSessionCounters,

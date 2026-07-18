@@ -20,6 +20,7 @@ import {
 import type {
   FactoryEmulatorSession,
   FactoryEmulatorSessionAdvanceReceipt,
+  FactoryEmulatorSessionCloseReceipt,
   FactoryEmulatorSessionStatus,
   FactoryEmulatorSessionState,
   FactoryEmulatorStartReceipt,
@@ -110,12 +111,17 @@ const sessionAdvanceReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
   emulatorSession.advanceBy(5);
 const sessionNextReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
   emulatorSession.advanceToNext();
+const sessionCloseReceipt: Promise<FactoryEmulatorSessionCloseReceipt> =
+  emulatorSession.close();
+const sessionPendingBatch: FactoryEventBatch | undefined = emulatorSession.pending();
 void sessionState;
 void startReceipt;
 void submitReceipt;
 void sessionStatus;
 void sessionAdvanceReceipt;
 void sessionNextReceipt;
+void sessionCloseReceipt;
+void sessionPendingBatch;
 
 import {
   parseEmulatorScenario,

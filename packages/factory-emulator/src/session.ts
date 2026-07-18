@@ -16,12 +16,13 @@ export declare class FactoryEmulatorConfigurationError extends Error {
 
 export declare class FactoryEmulatorLifecycleError extends Error {
   readonly code: "INVALID_LIFECYCLE";
-  readonly command: "start" | "submit" | "advanceBy" | "advanceToNext" | "reset";
+  readonly command: "start" | "submit" | "advanceBy" | "advanceToNext" | "close" | "reset";
   readonly phase:
     | FactoryEmulatorSessionState["lifecycle"]
     | "starting"
     | "submitting"
-    | "advancing";
+    | "advancing"
+    | "closing";
 }
 
 export declare class FactoryEmulatorDurationError extends RangeError {
@@ -32,6 +33,22 @@ export declare class FactoryEmulatorDurationError extends RangeError {
 export declare class FactoryEmulatorSubmissionError extends Error {
   readonly code: "INVALID_SUBMISSION";
   readonly diagnostics: readonly EmulatorScenarioDiagnostic[];
+}
+
+export declare class FactoryEmulatorPendingCommandError extends Error {
+  readonly code: "PENDING_TRANSACTION";
+  readonly attemptedCommand:
+    | "start"
+    | "submit"
+    | "advanceBy"
+    | "advanceToNext"
+    | "close";
+  readonly pendingCommand:
+    | "start"
+    | "submit"
+    | "advanceBy"
+    | "advanceToNext"
+    | "close";
 }
 
 export interface FactoryEmulatorSessionOptions {
@@ -85,6 +102,15 @@ export type FactoryEmulatorSessionState =
       readonly works: readonly FactoryEmulatorSessionWork[];
       readonly ruleCursors: Readonly<Record<string, number>>;
       readonly counters: FactoryEmulatorSessionCounters;
+    }
+  | {
+      readonly lifecycle: "closed";
+      readonly sessionId: string;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+      readonly works: readonly FactoryEmulatorSessionWork[];
+      readonly ruleCursors: Readonly<Record<string, number>>;
+      readonly counters: FactoryEmulatorSessionCounters;
     };
 
 export interface FactoryEmulatorStartReceipt {
@@ -114,6 +140,12 @@ export interface FactoryEmulatorSessionAdvanceReceipt {
   readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "started" }>;
 }
 
+export interface FactoryEmulatorSessionCloseReceipt {
+  readonly status: "closed";
+  readonly batch: FactoryEventBatch;
+  readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "closed" }>;
+}
+
 export interface FactoryEmulatorSessionStatus {
   readonly phase:
     | "error"
@@ -132,7 +164,9 @@ export interface FactoryEmulatorSession {
   ): Promise<FactoryEmulatorSubmitReceipt>;
   advanceBy(durationMs: number): Promise<FactoryEmulatorSessionAdvanceReceipt>;
   advanceToNext(): Promise<FactoryEmulatorSessionAdvanceReceipt>;
+  close(): Promise<FactoryEmulatorSessionCloseReceipt>;
   reset(): FactoryEmulatorResetReceipt;
+  pending(): FactoryEventBatch | undefined;
   state(): FactoryEmulatorSessionState;
   status(): FactoryEmulatorSessionStatus;
 }

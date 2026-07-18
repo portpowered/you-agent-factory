@@ -45,6 +45,16 @@ export class FactoryEmulatorSubmissionError extends Error {
   }
 }
 
+export class FactoryEmulatorPendingCommandError extends Error {
+  constructor(attemptedCommand, pendingCommand) {
+    super(`Factory emulator cannot ${attemptedCommand} while ${pendingCommand} has a rejected transaction`);
+    this.name = "FactoryEmulatorPendingCommandError";
+    this.code = "PENDING_TRANSACTION";
+    this.attemptedCommand = attemptedCommand;
+    this.pendingCommand = pendingCommand;
+  }
+}
+
 /**
  * Creates one caller-owned deterministic Factory emulator session.
  *
@@ -53,18 +63,104 @@ export class FactoryEmulatorSubmissionError extends Error {
  * local to the returned session.
  */
 export function createFactoryEmulatorSession({ factory, scenario, sink }) {
-  if (!sink || typeof sink.write !== "function") {
-    throw new TypeError("sink must provide a write function");
+  if (!sink || typeof sink.write !== "function" || typeof sink.close !== "function") {
+    throw new TypeError("sink must provide write and close functions");
   }
 
   const configuredFactory = copy(factory);
   const configuredScenario = copy(scenario);
   let committedState = preStartState();
   let commandInProgress;
+  let pendingTransaction;
+  let runtimeError;
 
-  async function runAdvance(command, targetElapsedMs) {
-    const fromVirtualTime = committedState.virtualTime;
-    if (!hasUnfinishedWork(committedState)) {
+  function assertCommandAvailable(command) {
+    if (commandInProgress !== undefined) {
+      throw new FactoryEmulatorLifecycleError(command, commandInProgress);
+    }
+    if (pendingTransaction !== undefined && pendingTransaction.command !== command) {
+      throw new FactoryEmulatorPendingCommandError(command, pendingTransaction.command);
+    }
+    if (
+      pendingTransaction === undefined &&
+      committedState.lifecycle !== (command === "start" ? "pre-start" : "started")
+    ) {
+      throw new FactoryEmulatorLifecycleError(command, committedState.lifecycle);
+    }
+  }
+
+  function beginCommand(command, key, phase) {
+    assertCommandAvailable(command);
+    if (pendingTransaction !== undefined) {
+      if (pendingTransaction.command !== command || pendingTransaction.key !== key) {
+        throw new FactoryEmulatorPendingCommandError(command, pendingTransaction.command);
+      }
+      commandInProgress = phase;
+      return pendingTransaction;
+    }
+    if (committedState.lifecycle !== (command === "start" ? "pre-start" : "started")) {
+      throw new FactoryEmulatorLifecycleError(command, committedState.lifecycle);
+    }
+    commandInProgress = phase;
+    return undefined;
+  }
+
+  async function writeCalculation(command, key, calculation, progress = {}) {
+    try {
+      const receipt = await sink.write(copy(calculation.batch));
+      if (receipt?.status !== "accepted") {
+        throw new TypeError("sink.write must return an accepted receipt");
+      }
+      committedState = copy(calculation.state);
+      pendingTransaction = undefined;
+      runtimeError = undefined;
+    } catch (error) {
+      pendingTransaction = copy({
+        command,
+        key,
+        batch: calculation.batch,
+        state: calculation.state,
+        progress,
+      });
+      runtimeError = sinkError("SINK_WRITE_REJECTED", "write", command, error);
+      throw error;
+    }
+  }
+
+  function finishAdvance(command, fromVirtualTime, batches, madeProgress) {
+    if (madeProgress || committedState.virtualTime !== fromVirtualTime) {
+      committedState = {
+        ...committedState,
+        counters: {
+          ...committedState.counters,
+          commands: committedState.counters.commands + 1,
+        },
+      };
+    }
+    return advanceReceipt(command, fromVirtualTime, batches, madeProgress, committedState);
+  }
+
+  async function runAdvance(command, key, targetElapsedMs, retry) {
+    const progress = retry?.progress ?? {
+      fromVirtualTime: committedState.virtualTime,
+      targetElapsedMs,
+      batches: [],
+    };
+    const fromVirtualTime = progress.fromVirtualTime;
+    targetElapsedMs = progress.targetElapsedMs;
+    const batches = copy(progress.batches);
+    let madeProgress = batches.length > 0;
+
+    if (retry !== undefined) {
+      await writeCalculation(command, retry.key, retry, progress);
+      batches.push(copy(retry.batch));
+      madeProgress = true;
+      if (command === "advanceToNext") {
+        return finishAdvance(command, fromVirtualTime, batches, true);
+      }
+    }
+
+    if (!hasUnfinishedWork(committedState) && batches.length === 0) {
       return copy({
         status: "idle",
         command,
@@ -76,91 +172,86 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       });
     }
 
-    const batches = [];
-    let madeProgress = false;
-    commandInProgress = "advancing";
-    try {
-      while (true) {
-        const calculation = calculateNextSchedulerBatch({
-          createEvent,
-          identityCoordinates: sessionIdentityCoordinates(
-            configuredFactory,
-            configuredScenario,
-            committedState.sessionId,
-          ),
-          scenario: configuredScenario,
-          state: committedState,
-        });
-        if (
-          calculation === undefined ||
-          (targetElapsedMs !== undefined && calculation.elapsedMs > targetElapsedMs)
-        ) {
-          break;
-        }
-        if (calculation.batch !== undefined) {
-          await sink.write(copy(calculation.batch));
-          batches.push(calculation.batch);
-        }
-        committedState = calculation.state;
-        madeProgress = true;
-        if (command === "advanceToNext" && calculation.batch !== undefined) {
-          break;
-        }
-      }
-
-      if (
-        targetElapsedMs !== undefined &&
-        committedState.virtualElapsedMs !== targetElapsedMs
-      ) {
-        committedState = stateAtElapsed(configuredScenario, committedState, targetElapsedMs);
-      }
-      if (madeProgress || committedState.virtualTime !== fromVirtualTime) {
-        committedState = {
-          ...committedState,
-          counters: {
-            ...committedState.counters,
-            commands: committedState.counters.commands + 1,
-          },
-        };
-      }
-      return copy({
-        status: !madeProgress && batches.length === 0 && committedState.virtualTime === fromVirtualTime
-          ? "idle"
-          : "advanced",
-        command,
-        fromVirtualTime,
-        virtualTime: committedState.virtualTime,
-        virtualElapsedMs: committedState.virtualElapsedMs,
-        batches,
+    while (true) {
+      const calculation = calculateNextSchedulerBatch({
+        createEvent,
+        identityCoordinates: sessionIdentityCoordinates(
+          configuredFactory,
+          configuredScenario,
+          committedState.sessionId,
+        ),
+        scenario: configuredScenario,
         state: committedState,
       });
-    } finally {
-      commandInProgress = undefined;
+      if (
+        calculation === undefined ||
+        (targetElapsedMs !== undefined && calculation.elapsedMs > targetElapsedMs)
+      ) {
+        break;
+      }
+      if (calculation.batch !== undefined) {
+        await writeCalculation(command, key, calculation, {
+          fromVirtualTime,
+          targetElapsedMs,
+          batches,
+        });
+        batches.push(copy(calculation.batch));
+      } else {
+        committedState = copy(calculation.state);
+      }
+      madeProgress = true;
+      if (command === "advanceToNext" && calculation.batch !== undefined) {
+        break;
+      }
     }
+
+    if (
+      targetElapsedMs !== undefined &&
+      committedState.virtualElapsedMs !== targetElapsedMs
+    ) {
+      committedState = stateAtElapsed(configuredScenario, committedState, targetElapsedMs);
+    }
+    return finishAdvance(command, fromVirtualTime, batches, madeProgress);
   }
 
   return Object.freeze({
     async start() {
-      const phase = commandInProgress ?? committedState.lifecycle;
-      if (phase !== "pre-start") {
-        throw new FactoryEmulatorLifecycleError("start", phase);
-      }
-
-      const parsed = parseEmulatorScenario(configuredScenario, configuredFactory);
-      if (!parsed.success) {
-        throw new FactoryEmulatorConfigurationError(parsed.diagnostics);
-      }
-
-      const calculation = calculateStart(parsed.factory, parsed.scenario);
-      commandInProgress = "starting";
+      const retry = beginCommand("start", "start", "starting");
       try {
-        for (const batch of calculation.batches) {
-          await sink.write(copy(batch));
+        let batches;
+        if (retry !== undefined) {
+          batches = copy(retry.progress.batches);
+          await writeCalculation("start", "start", retry, retry.progress);
+          batches.push(copy(retry.batch));
+        } else {
+          const parsed = parseEmulatorScenario(configuredScenario, configuredFactory);
+          if (!parsed.success) {
+            throw new FactoryEmulatorConfigurationError(parsed.diagnostics);
+          }
+          const transaction = calculateStart(parsed.factory, parsed.scenario);
+          batches = [];
+          await writeCalculation("start", "start", transaction, {
+            batches,
+            stage: "bootstrap",
+          });
+          batches.push(copy(transaction.batch));
         }
-        committedState = calculation.state;
+
+        if (committedState.counters.commands === 0) {
+          const initial = calculateInitialSubmission(
+            configuredFactory,
+            configuredScenario,
+            committedState,
+          );
+          await writeCalculation("start", "start", initial, {
+            batches,
+            stage: "initial-submission",
+          });
+          batches.push(copy(initial.batch));
+        }
         return copy({
           status: "started",
-          batches: calculation.batches,
+          batches,
           state: committedState,
         });
       } finally {
@@ -168,40 +259,40 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       }
     },
     async submit(submissionOrBatch) {
-      const phase = commandInProgress ?? committedState.lifecycle;
-      if (phase !== "started") {
-        throw new FactoryEmulatorLifecycleError("submit", phase);
-      }
-
+      assertCommandAvailable("submit");
       const submissions = normalizeSubmissions(submissionOrBatch);
-      const parsed = parseEmulatorScenario(
-        {
-          ...configuredScenario,
-          initialSubmissions: submissions,
-          rules: [],
-          unmatchedBehavior: { kind: "ignore" },
-        },
-        configuredFactory,
-      );
-      if (!parsed.success) {
-        throw new FactoryEmulatorSubmissionError(
-          parsed.diagnostics.map((diagnostic) => ({
-            ...diagnostic,
-            path: diagnostic.path.replace(/^\/initialSubmissions/, "/submissions"),
-          })),
-        );
-      }
-
-      const calculation = calculateSubmit(
-        parsed.factory,
-        configuredScenario,
-        committedState,
-        submissions,
-      );
-      commandInProgress = "submitting";
+      const key = commandKey("submit", canonicalStringify(submissions));
+      const retry = beginCommand("submit", key, "submitting");
       try {
-        await sink.write(copy(calculation.batch));
-        committedState = calculation.state;
+        if (retry !== undefined) {
+          await writeCalculation("submit", key, retry);
+          return copy({ status: "submitted", batch: retry.batch, state: committedState });
+        }
+        const parsed = parseEmulatorScenario(
+          {
+            ...configuredScenario,
+            initialSubmissions: submissions,
+            rules: [],
+            unmatchedBehavior: { kind: "ignore" },
+          },
+          configuredFactory,
+        );
+        if (!parsed.success) {
+          throw new FactoryEmulatorSubmissionError(
+            parsed.diagnostics.map((diagnostic) => ({
+              ...diagnostic,
+              path: diagnostic.path.replace(/^\/initialSubmissions/, "/submissions"),
+            })),
+          );
+        }
+
+        const calculation = calculateSubmit(
+          parsed.factory,
+          configuredScenario,
+          committedState,
+          submissions,
+        );
+        await writeCalculation("submit", key, calculation);
         return copy({
           status: "submitted",
           batch: calculation.batch,
@@ -212,38 +303,84 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       }
     },
     async advanceBy(durationMs) {
-      const phase = commandInProgress ?? committedState.lifecycle;
-      if (phase !== "started") {
-        throw new FactoryEmulatorLifecycleError("advanceBy", phase);
-      }
+      assertCommandAvailable("advanceBy");
       validateDuration(durationMs);
-      const targetElapsedMs = committedState.virtualElapsedMs + durationMs;
+      const key = commandKey("advanceBy", durationMs);
+      const retry = beginCommand("advanceBy", key, "advancing");
+      const targetElapsedMs = retry?.progress.targetElapsedMs
+        ?? committedState.virtualElapsedMs + durationMs;
       if (!Number.isSafeInteger(targetElapsedMs)) {
+        commandInProgress = undefined;
         throw new FactoryEmulatorDurationError(durationMs);
       }
-      virtualTimeAt(configuredScenario, targetElapsedMs);
-      return runAdvance("advanceBy", targetElapsedMs);
+      try {
+        virtualTimeAt(configuredScenario, targetElapsedMs);
+        return await runAdvance("advanceBy", key, targetElapsedMs, retry);
+      } finally {
+        commandInProgress = undefined;
+      }
     },
     async advanceToNext() {
-      const phase = commandInProgress ?? committedState.lifecycle;
-      if (phase !== "started") {
-        throw new FactoryEmulatorLifecycleError("advanceToNext", phase);
+      const retry = beginCommand("advanceToNext", "advanceToNext", "advancing");
+      try {
+        return await runAdvance("advanceToNext", "advanceToNext", undefined, retry);
+      } finally {
+        commandInProgress = undefined;
       }
-      return runAdvance("advanceToNext");
+    },
+    async close() {
+      const retry = beginCommand("close", "close", "closing");
+      let terminal;
+      try {
+        terminal = retry ?? calculateClose(committedState, configuredFactory, configuredScenario);
+        if (retry?.progress.terminalAccepted !== true) {
+          await writeCalculation("close", "close", terminal, { terminalAccepted: false });
+        }
+        try {
+          const receipt = await sink.close();
+          if (receipt?.status !== "closed") {
+            throw new TypeError("sink.close must return a closed receipt");
+          }
+          pendingTransaction = undefined;
+          runtimeError = undefined;
+          return copy({ status: "closed", batch: terminal.batch, state: committedState });
+        } catch (error) {
+          pendingTransaction = copy({
+            command: "close",
+            key: "close",
+            batch: terminal.batch,
+            state: committedState,
+            progress: { terminalAccepted: true },
+          });
+          runtimeError = sinkError("SINK_CLOSE_REJECTED", "close", "close", error);
+          throw error;
+        }
+      } finally {
+        commandInProgress = undefined;
+      }
     },
     reset() {
       const phase = commandInProgress ?? committedState.lifecycle;
-      if (phase !== "started") {
+      if (
+        commandInProgress !== undefined ||
+        committedState.lifecycle === "closed" ||
+        (pendingTransaction === undefined && committedState.lifecycle !== "started")
+      ) {
         throw new FactoryEmulatorLifecycleError("reset", phase);
       }
       committedState = preStartState();
+      pendingTransaction = undefined;
+      runtimeError = undefined;
       return copy({ status: "reset", state: committedState });
+    },
+    pending() {
+      return pendingTransaction === undefined ? undefined : copy(pendingTransaction.batch);
     },
     state() {
       return copy(committedState);
     },
     status() {
-      return copy(sessionStatus(committedState, commandInProgress));
+      return copy(sessionStatus(committedState, commandInProgress, runtimeError));
     },
   });
 }
@@ -324,39 +461,51 @@ function calculateStart(factory, scenario) {
   ];
 
   const initialSubmissions = scenario.initialSubmissions ?? [];
-  const initialRequest = initialSubmissions.length === 0 ? undefined : calculateWorkRequest({
+  const bootstrapState = {
+    lifecycle: "started",
+    sessionId,
+    virtualTime: normalizedStartAt,
+    virtualElapsedMs: 0,
+    works: [],
+    ruleCursors: {},
+    counters: {
+      commands: initialSubmissions.length === 0 ? 1 : 0,
+      events: bootstrapEvents.length,
+      requests: 0,
+      works: 0,
+      dispatches: 0,
+      completions: 0,
+    },
+  };
+  return copy({
+    batch: { events: bootstrapEvents },
+    state: bootstrapState,
+  });
+}
+
+function calculateInitialSubmission(factory, scenario, state) {
+  const submissions = scenario.initialSubmissions ?? [];
+  const { event, works } = calculateWorkRequest({
     command: "start",
     commandSequence: 0,
-    eventSequence: bootstrapEvents.length,
-    eventTime: normalizedStartAt,
-    identityCoordinates,
+    eventSequence: state.counters.events,
+    eventTime: state.virtualTime,
+    identityCoordinates: sessionIdentityCoordinates(factory, scenario, state.sessionId),
     scenario,
-    sessionId,
-    submissions: initialSubmissions,
+    sessionId: state.sessionId,
+    submissions,
   });
-  const works = initialRequest?.works ?? [];
-
-  const batches = [{ events: bootstrapEvents }];
-  if (initialRequest) {
-    batches.push({ events: [initialRequest.event] });
-  }
-
   return copy({
-    batches,
+    batch: { events: [event] },
     state: {
-      lifecycle: "started",
-      sessionId,
-      virtualTime: normalizedStartAt,
-      virtualElapsedMs: 0,
+      ...state,
       works,
-      ruleCursors: {},
       counters: {
+        ...state.counters,
         commands: 1,
-        events: bootstrapEvents.length + (works.length > 0 ? 1 : 0),
-        requests: works.length > 0 ? 1 : 0,
+        events: state.counters.events + 1,
+        requests: 1,
         works: works.length,
-        dispatches: 0,
-        completions: 0,
       },
     },
   });
@@ -466,9 +615,9 @@ function normalizeSubmissions(submissionOrBatch) {
   return submissions;
 }
 
-function sessionStatus(state, commandInProgress) {
-  if (state.error !== undefined) {
-    return { phase: "error", reason: state.error.code ?? "runtime-error" };
+function sessionStatus(state, commandInProgress, runtimeError) {
+  if (runtimeError !== undefined) {
+    return { phase: "error", reason: runtimeError.code };
   }
   if (state.lifecycle === "closed") {
     return { phase: "closed", reason: "session-closed" };
@@ -489,6 +638,61 @@ function sessionStatus(state, commandInProgress) {
     return { phase: "waiting", reason: "work-waiting" };
   }
   return { phase: "idle", reason: "no-unfinished-work" };
+}
+
+function calculateClose(state, factory, scenario) {
+  const identityCoordinates = sessionIdentityCoordinates(factory, scenario, state.sessionId);
+  const event = createEvent({
+    identityCoordinates,
+    sequence: state.counters.events,
+    tick: state.counters.events,
+    sessionId: state.sessionId,
+    eventTime: state.virtualTime,
+    type: "RUN_RESPONSE",
+    payload: {
+      state: "COMPLETED",
+      reason: "emulator session closed",
+    },
+  });
+  return copy({
+    batch: { events: [event] },
+    state: {
+      ...state,
+      lifecycle: "closed",
+      counters: {
+        ...state.counters,
+        commands: state.counters.commands + 1,
+        events: state.counters.events + 1,
+      },
+    },
+  });
+}
+
+function advanceReceipt(command, fromVirtualTime, batches, madeProgress, state) {
+  return copy({
+    status: !madeProgress && batches.length === 0 && state.virtualTime === fromVirtualTime
+      ? "idle"
+      : "advanced",
+    command,
+    fromVirtualTime,
+    virtualTime: state.virtualTime,
+    virtualElapsedMs: state.virtualElapsedMs,
+    batches,
+    state,
+  });
+}
+
+function commandKey(command, value) {
+  return value === undefined ? command : `${command}:${canonicalStringify(value)}`;
+}
+
+function sinkError(code, operation, command, error) {
+  return {
+    code,
+    operation,
+    command,
+    message: error instanceof Error ? error.message : String(error),
+  };
 }
 
 function createEvent({
