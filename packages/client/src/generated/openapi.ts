@@ -5131,7 +5131,7 @@ export interface components {
       mediaType: FactoryLayoutImageSourceMediaType;
       /**
        * Format: byte
-       * @description Base64 payload for the embedded raster source.
+       * @description Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
        */
       data: string;
     };

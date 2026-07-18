@@ -1861,7 +1861,7 @@ type FactoryLayoutImage struct {
 
 // FactoryLayoutImageSource Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
 type FactoryLayoutImageSource struct {
-	// Data Base64 payload for the embedded raster source.
+	// Data Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
 	Data []byte `json:"data"`
 
 	// Kind Source variant discriminator. EMBEDDED carries portable base64 raster data.

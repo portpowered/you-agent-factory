@@ -9,4 +9,6 @@ properties:
     $ref: './FactoryLayoutImageSource.yaml'
   alternativeText:
     type: string
+    minLength: 1
+    maxLength: 500
     description: Literal alternative text for the embedded image.

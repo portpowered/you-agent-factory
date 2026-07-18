@@ -587,6 +587,8 @@
       "properties": {
         "alternativeText": {
           "description": "Literal alternative text for the embedded image.",
+          "maxLength": 500,
+          "minLength": 1,
           "type": "string"
         },
         "source": {
@@ -604,8 +606,10 @@
       "description": "Extensible discriminated image-source shape. Version 1 supports only embedded raster data.",
       "properties": {
         "data": {
-          "description": "Base64 payload for the embedded raster source.",
+          "description": "Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.",
           "format": "byte",
+          "maxLength": 2796204,
+          "minLength": 4,
           "type": "string"
         },
         "kind": {

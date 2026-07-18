@@ -10,6 +10,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -39,6 +40,15 @@ type generatedFactoryBoundary struct {
 }
 
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
+
+const (
+	factoryLayoutNoteTitleMaxCharacters       = 160
+	factoryLayoutNoteBodyMaxCharacters        = 4000
+	factoryLayoutImageAlternativeTextMaxRunes = 500
+	factoryLayoutEmbeddedImageMaxBytes        = 2 * 1024 * 1024
+	factoryLayoutEmbeddedImageTotalMaxBytes   = 8 * 1024 * 1024
+	factoryLayoutEmbeddedImageMaxBase64Chars  = 4 * ((factoryLayoutEmbeddedImageMaxBytes + 2) / 3)
+)
 
 // Expand parses and normalizes a user-provided factory payload into the internal
 // canonical configuration representation.
@@ -325,6 +335,7 @@ func validateLayoutAnnotationArray(parent map[string]any, key string, path strin
 		return err
 	}
 	seenIDs := make(map[string]struct{}, len(values))
+	totalImageBytes := 0
 	for index, annotation := range values {
 		annotationPath := fmt.Sprintf("%s.%s[%d]", path, key, index)
 		if err := requireString(annotation, "id", annotationPath); err != nil {
@@ -351,8 +362,13 @@ func validateLayoutAnnotationArray(parent map[string]any, key string, path strin
 				return err
 			}
 		case "IMAGE":
-			if err := validateLayoutAnnotationImage(annotation, annotationPath); err != nil {
+			imageBytes, err := validateLayoutAnnotationImage(annotation, annotationPath)
+			if err != nil {
 				return err
+			}
+			totalImageBytes += imageBytes
+			if totalImageBytes > factoryLayoutEmbeddedImageTotalMaxBytes {
+				return fmt.Errorf("%s.image.source.data exceeds the %d-byte Factory embedded-image budget", annotationPath, factoryLayoutEmbeddedImageTotalMaxBytes)
 			}
 		default:
 			return fmt.Errorf("%s.kind must be one of NOTE, IMAGE", annotationPath)
@@ -369,35 +385,128 @@ func validateLayoutAnnotationNote(annotation map[string]any, path string) error 
 	if err := requireString(note, "body", path+".note"); err != nil {
 		return err
 	}
+	if err := validateLayoutLiteralText(note["body"].(string), path+".note.body", 1, factoryLayoutNoteBodyMaxCharacters); err != nil {
+		return err
+	}
 	if err := requireString(note, "tone", path+".note"); err != nil {
 		return err
 	}
+	switch note["tone"].(string) {
+	case "NEUTRAL", "ACCENT", "INFO", "SUCCESS", "WARNING", "DANGER":
+	default:
+		return fmt.Errorf("%s.note.tone must be one of NEUTRAL, ACCENT, INFO, SUCCESS, WARNING, DANGER", path)
+	}
 	if title, ok := note["title"]; ok && title != nil {
-		if _, ok := title.(string); !ok {
+		titleValue, ok := title.(string)
+		if !ok {
 			return fmt.Errorf("%s.note.title must be a string", path)
+		}
+		if err := validateLayoutLiteralText(titleValue, path+".note.title", 0, factoryLayoutNoteTitleMaxCharacters); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func validateLayoutAnnotationImage(annotation map[string]any, path string) error {
+func validateLayoutAnnotationImage(annotation map[string]any, path string) (int, error) {
 	image, err := requiredObject(annotation, "image", path)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := requireString(image, "alternativeText", path+".image"); err != nil {
-		return err
+		return 0, err
+	}
+	if err := validateLayoutLiteralText(image["alternativeText"].(string), path+".image.alternativeText", 1, factoryLayoutImageAlternativeTextMaxRunes); err != nil {
+		return 0, err
 	}
 	source, err := requiredObject(image, "source", path+".image")
 	if err != nil {
-		return err
+		return 0, err
 	}
 	for _, key := range []string{"kind", "mediaType", "data"} {
 		if err := requireString(source, key, path+".image.source"); err != nil {
-			return err
+			return 0, err
 		}
 	}
+	if source["kind"].(string) != "EMBEDDED" {
+		return 0, fmt.Errorf("%s.image.source.kind must be EMBEDDED", path)
+	}
+	switch source["mediaType"].(string) {
+	case "image/png", "image/jpeg", "image/webp":
+	default:
+		return 0, fmt.Errorf("%s.image.source.mediaType must be image/png, image/jpeg, or image/webp", path)
+	}
+	return decodeStrictFactoryLayoutImageData(source["data"].(string), path+".image.source.data")
+}
+
+func validateLayoutLiteralText(value string, path string, minimumCharacters, maximumCharacters int) error {
+	characterCount := utf8.RuneCountInString(value)
+	if characterCount < minimumCharacters {
+		return fmt.Errorf("%s must contain at least %d character", path, minimumCharacters)
+	}
+	if characterCount > maximumCharacters {
+		return fmt.Errorf("%s must contain no more than %d characters", path, maximumCharacters)
+	}
 	return nil
+}
+
+func decodeStrictFactoryLayoutImageData(data string, path string) (int, error) {
+	if len(data) > factoryLayoutEmbeddedImageMaxBase64Chars {
+		return 0, fmt.Errorf("%s exceeds the %d-byte embedded-image limit", path, factoryLayoutEmbeddedImageMaxBytes)
+	}
+	if !isStrictPaddedBase64(data) {
+		return 0, fmt.Errorf("%s must be non-empty strict padded base64", path)
+	}
+	decoded, err := base64.StdEncoding.Strict().DecodeString(data)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be strict base64: %w", path, err)
+	}
+	if len(decoded) > factoryLayoutEmbeddedImageMaxBytes {
+		return 0, fmt.Errorf("%s exceeds the %d-byte embedded-image limit", path, factoryLayoutEmbeddedImageMaxBytes)
+	}
+	return len(decoded), nil
+}
+
+func isStrictPaddedBase64(value string) bool {
+	if len(value) == 0 || len(value)%4 != 0 {
+		return false
+	}
+	firstPadding := strings.IndexByte(value, '=')
+	if firstPadding < 0 {
+		return onlyBase64Alphabet(value)
+	}
+	if firstPadding < len(value)-2 || !onlyBase64Padding(value[firstPadding:]) {
+		return false
+	}
+	return onlyBase64Alphabet(value[:firstPadding])
+}
+
+func onlyBase64Alphabet(value string) bool {
+	for index := range value {
+		if !isBase64AlphabetCharacter(value[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func isBase64AlphabetCharacter(character byte) bool {
+	return character >= 'A' && character <= 'Z' ||
+		character >= 'a' && character <= 'z' ||
+		character >= '0' && character <= '9' ||
+		character == '+' || character == '/'
+}
+
+func onlyBase64Padding(value string) bool {
+	if len(value) > 2 {
+		return false
+	}
+	for index := range value {
+		if value[index] != '=' {
+			return false
+		}
+	}
+	return true
 }
 
 func validateLayoutNodeArray(parent map[string]any, key string, path string) error {
