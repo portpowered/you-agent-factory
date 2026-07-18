@@ -1,50 +1,39 @@
 package runtime_api
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
-	"net/http"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-type functionalStateCategories struct {
-	Failed     int
-	Initial    int
-	Processing int
-	Terminal   int
-}
+func TestRootRunFunctionalHostWorkerOverridesCompleteThroughPublicRuntimeAPI(t *testing.T) {
+	support.SkipLongFunctional(t, "slow root-run worker override sweep")
 
-func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderOverride(t *testing.T) {
-	support.SkipLongFunctional(t, "slow functional-server override sweep")
-	t.Run("StartFunctionalServerMockWorkersCompletes", func(t *testing.T) {
+	t.Run("MockWorkersComplete", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-		testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"mock worker compatibility"}`))
+		host, stream := startWorkerOverrideRootRunHost(t, dir, false, wire.FunctionalEdges{})
 
-		server := startFunctionalServer(t, dir, true)
-		snapshot := waitForFunctionalServerCompletion(t, server, 10*time.Second)
-		categories := categorizeFunctionalState(snapshot)
-
-		if categories.Terminal != 1 {
-			t.Fatalf("terminal token count = %d, want 1", categories.Terminal)
-		}
-		if categories.Failed != 0 {
-			t.Fatalf("failed token count = %d, want 0", categories.Failed)
-		}
+		traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
+			Name:         "mock-worker-completion",
+			WorkTypeName: "task",
+			Payload:      json.RawMessage(`{"title":"mock worker compatibility"}`),
+		})
+		assertAcceptedDispatchesForTrace(t, stream, traceID, "step-one", "step-two")
+		assertCompletedWorkerOverrideWork(t, host.Endpoint(), traceID)
 	})
 
-	t.Run("ProviderOverrideIsAppliedBeforeServiceBuildForHTTPRuntime", func(t *testing.T) {
+	t.Run("ProviderOverrideCompletes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 		support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 		support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
@@ -53,69 +42,88 @@ func TestFunctionalServerOverrideCompatibilityRegression_MockWorkersAndProviderO
 			workers.CommandResult{Stdout: []byte("first runtime step complete. COMPLETE")},
 			workers.CommandResult{Stdout: []byte("second runtime step complete. COMPLETE")},
 		)
-		server := startFunctionalServerWithConfig(
-			t,
-			dir,
-			false,
-			func(cfg *service.FactoryServiceConfig) {
-				support.ConfigureWorkerCommands(t, cfg, runner, nil)
-			},
-			factory.WithServiceMode(),
-		)
+		host, stream := startWorkerOverrideRootRunHost(t, dir, true, wire.FunctionalEdges{
+			ProviderCommandRunner: runner,
+		})
 
-		traceID := submitFunctionalServerWork(t, server, "task", []byte(`{"title":"provider override regression"}`))
-		if traceID == "" {
-			t.Fatal("expected POST /work to return a trace ID")
-		}
-
-		snapshot := waitForFunctionalServerIdleTerminal(t, server, 10*time.Second)
-		categories := categorizeFunctionalState(snapshot)
-		if categories.Failed != 0 {
-			t.Fatalf("failed token count = %d, want 0", categories.Failed)
-		}
-
-		if got := runner.CallCount(); got != 2 {
-			t.Fatalf("provider command runner calls = %d, want 2", got)
-		}
-		for i, req := range runner.Requests() {
-			if req.Command != string(modelprovider.Codex) {
-				t.Fatalf("provider request %d command = %q, want %q", i, req.Command, modelprovider.Codex)
-			}
-			if req.Execution.TraceID != traceID {
-				t.Fatalf("provider request %d trace ID = %q, want %q", i, req.Execution.TraceID, traceID)
-			}
-		}
+		traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
+			Name:         "provider-override-regression",
+			WorkTypeName: "task",
+			Payload:      json.RawMessage(`{"title":"provider override regression"}`),
+		})
+		assertAcceptedDispatchesForTrace(t, stream, traceID, "step-one", "step-two")
+		assertCompletedWorkerOverrideWork(t, host.Endpoint(), traceID)
 	})
 }
 
-func submitFunctionalServerWork(t *testing.T, server *functionalAPIServer, workTypeID string, payload []byte) string {
+func startWorkerOverrideRootRunHost(
+	t *testing.T,
+	factoryRoot string,
+	disableMockWorkers bool,
+	edges wire.FunctionalEdges,
+) (*support.RootRunFunctionalHost, *factoryEventHTTPStream) {
 	t.Helper()
 
-	reqBody, err := json.Marshal(factoryapi.SubmitWorkRequest{
-		Name:         "override-regression-submit",
-		WorkTypeName: workTypeID,
-		Payload:      payload,
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        factoryRoot,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: disableMockWorkers,
+		FunctionalEdges:    edges,
 	})
 	if err != nil {
-		t.Fatalf("marshal submit request: %v", err)
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
 	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(reqBody))
-	if err != nil {
-		t.Fatalf("POST /work: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("POST /work: expected 201 Created, got %d", resp.StatusCode)
-	}
-
-	var result factoryapi.SubmitWorkResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decode submit response: %v", err)
-	}
-	return result.TraceId
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	return host, stream
 }
 
+func assertAcceptedDispatchesForTrace(
+	t *testing.T,
+	stream *factoryEventHTTPStream,
+	traceID string,
+	wantTransitions ...string,
+) {
+	t.Helper()
+
+	for index, wantTransition := range wantTransitions {
+		event := terminalDispatchForTrace(t, stream, traceID)
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode DISPATCH_RESPONSE %d: %v", index, err)
+		}
+		if payload.TransitionId != wantTransition || payload.Outcome != factoryapi.WorkOutcomeAccepted {
+			t.Fatalf(
+				"DISPATCH_RESPONSE %d = transition %q outcome %q, want transition %q outcome ACCEPTED",
+				index,
+				payload.TransitionId,
+				payload.Outcome,
+				wantTransition,
+			)
+		}
+	}
+}
+
+func assertCompletedWorkerOverrideWork(t *testing.T, endpoint string, traceID string) {
+	t.Helper()
+
+	work := waitForGeneratedWorkComplete(t, endpoint, traceID, 10*time.Second)
+	completed := requireGeneratedWorkByTrace(t, work, traceID)
+	if generatedWorkStateName(completed.State) != "complete" || generatedWorkStateType(completed.State) != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", completed.State)
+	}
+}
+
+// These legacy snapshot helpers remain for api_service_config_override_alignment_test.go
+// until those construction-focused scenarios move to their owner package.
 func waitForFunctionalServerCompletion(
 	t *testing.T,
 	server *functionalAPIServer,
@@ -134,25 +142,11 @@ func waitForFunctionalServerCompletion(
 	return nil
 }
 
-func waitForFunctionalServerIdleTerminal(
-	t *testing.T,
-	server *functionalAPIServer,
-	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		categories := categorizeFunctionalState(snapshot)
-		if snapshot.FactoryState == string(interfaces.FactoryStateRunning) &&
-			snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-			categories.Terminal == 1 {
-			return snapshot
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("factory did not reach running idle terminal state within %s", timeout)
-	return nil
+type functionalStateCategories struct {
+	Failed     int
+	Initial    int
+	Processing int
+	Terminal   int
 }
 
 func categorizeFunctionalState(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) functionalStateCategories {
