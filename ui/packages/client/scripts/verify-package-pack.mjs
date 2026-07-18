@@ -85,15 +85,26 @@ function runtimeImports(source) {
   );
 }
 
-async function verifyRuntimeBoundary(actualFiles) {
+function dependencyName(specifier) {
+  const [first, second] = specifier.split("/");
+  return first.startsWith("@") ? `${first}/${second}` : first;
+}
+
+async function verifyRuntimeBoundary(actualFiles, manifest) {
   const actualSet = new Set(actualFiles);
+  const declaredDependencies = new Set(
+    Object.keys(manifest.dependencies ?? {}),
+  );
   for (const file of actualFiles.filter((file) => file.endsWith(".js"))) {
     const source = await readFile(path.join(packageRoot, file), "utf8");
     for (const specifier of runtimeImports(source)) {
       if (!specifier.startsWith("./") && !specifier.startsWith("../")) {
-        throw new Error(
-          `[client-package-pack] ${file} has external runtime dependency ${specifier}`,
-        );
+        if (!declaredDependencies.has(dependencyName(specifier))) {
+          throw new Error(
+            `[client-package-pack] ${file} has undeclared runtime dependency ${specifier}`,
+          );
+        }
+        continue;
       }
       const resolved = path.posix.normalize(
         path.posix.join(path.posix.dirname(file), specifier),
@@ -130,23 +141,25 @@ export async function packAndVerify(destination) {
   const manifest = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),
   );
-  for (const field of [
-    "dependencies",
-    "optionalDependencies",
-    "peerDependencies",
-  ]) {
+  for (const field of ["optionalDependencies", "peerDependencies"]) {
     if (manifest[field] && Object.keys(manifest[field]).length > 0) {
       throw new Error(
         `[client-package-pack] published package declares ${field}`,
       );
     }
   }
+  const dependencies = Object.keys(manifest.dependencies ?? {}).sort();
+  if (JSON.stringify(dependencies) !== JSON.stringify(["ajv", "ajv-formats"])) {
+    throw new Error(
+      `[client-package-pack] unexpected runtime dependencies: ${dependencies.join(", ")}`,
+    );
+  }
   for (const target of collectExportTargets(manifest.exports)) {
     if (!actualFiles.includes(target)) {
       throw new Error(`[client-package-pack] missing export target ${target}`);
     }
   }
-  await verifyRuntimeBoundary(actualFiles);
+  await verifyRuntimeBoundary(actualFiles, manifest);
 
   const tarballPath = path.join(destination, report.filename);
   await access(tarballPath);

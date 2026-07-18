@@ -110,6 +110,85 @@ describe("Factory recording validation", () => {
   });
 });
 
+describe("Canonical Factory recording schema validation", () => {
+  it("rejects canonical context values and type-specific payloads that violate the event schema", async () => {
+    const input = await exampleRecording();
+    const event = exampleEvents(input)[0] as Record<string, unknown>;
+    event.type = "WORK_REQUEST";
+    event.payload = {};
+    event.context = {
+      sequence: -1.5,
+      tick: -2,
+      eventTime: "not-a-date",
+    };
+
+    const result = safeParseFactoryRecording(input);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["events", 0, "context", "sequence"],
+          }),
+          expect.objectContaining({
+            code: "invalid_value",
+            path: ["events", 0, "context", "tick"],
+          }),
+          expect.objectContaining({
+            code: "invalid_value",
+            path: ["events", 0, "context", "eventTime"],
+          }),
+          expect.objectContaining({
+            code: "missing_required_field",
+            path: ["events", 0, "payload", "type"],
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("rejects unsupported recording, Factory, event, context, and payload fields", async () => {
+    const input = await exampleRecording();
+    input.unexpectedRecordingField = true;
+    (input.factory as Record<string, unknown>).unexpectedFactoryField = true;
+    const event = exampleEvents(input)[0] as Record<string, unknown>;
+    event.unexpectedEventField = true;
+    (event.context as Record<string, unknown>).unexpectedContextField = true;
+    (event.payload as Record<string, unknown>).unexpectedPayloadField = true;
+
+    const result = safeParseFactoryRecording(input);
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["unexpectedRecordingField"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["factory", "unexpectedFactoryField"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["events", 0, "unexpectedEventField"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["events", 0, "context", "unexpectedContextField"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["events", 0, "payload", "unexpectedPayloadField"],
+          }),
+        ]),
+      );
+    }
+  });
+});
+
 describe("Factory recording semantic validation", () => {
   it("accumulates unsupported event versions and every duplicate ID location", async () => {
     const input = await exampleRecording();
@@ -187,7 +266,7 @@ describe("Factory recording semantic validation", () => {
     delete input.factory;
     const event = exampleEvents(input)[0] as Record<string, unknown>;
     event.type = "WORK_REQUEST";
-    event.payload = {};
+    event.payload = { type: "FACTORY_REQUEST_BATCH" };
 
     expect(safeParseFactoryRecording(input)).toEqual({
       success: false,
@@ -210,7 +289,7 @@ describe("Factory recording semantic validation", () => {
       unknown
     >;
     topLevelEvent.type = "WORK_REQUEST";
-    topLevelEvent.payload = {};
+    topLevelEvent.payload = { type: "FACTORY_REQUEST_BATCH" };
 
     const eventTopology = await exampleRecording();
     delete eventTopology.factory;

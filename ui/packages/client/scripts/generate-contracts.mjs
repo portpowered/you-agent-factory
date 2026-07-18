@@ -11,6 +11,11 @@ const sourcePath = path.resolve(
   "../../src/api/generated/openapi.ts",
 );
 const outputPath = path.resolve(packageRoot, "src/generated/openapi.ts");
+const canonicalSchemaDirectory = path.resolve(
+  packageRoot,
+  "../../../packages/api/generated/schemas",
+);
+const schemaFiles = ["factory-event.schema.json", "factory.schema.json"];
 const checkOnly = process.argv.includes("--check");
 
 const generatedHeader = `/**
@@ -28,24 +33,48 @@ function normalizeNewlines(value) {
 const source = normalizeNewlines(await readFile(sourcePath, "utf8"));
 const expected = `${generatedHeader}${source}`;
 
+async function expectedGeneratedFiles() {
+  const files = [[outputPath, expected]];
+  for (const filename of schemaFiles) {
+    files.push([
+      path.resolve(packageRoot, "src/generated", filename),
+      normalizeNewlines(
+        await readFile(
+          path.resolve(canonicalSchemaDirectory, filename),
+          "utf8",
+        ),
+      ),
+    ]);
+  }
+  return files;
+}
+
+const generatedFiles = await expectedGeneratedFiles();
+
 if (checkOnly) {
-  let current;
-  try {
-    current = normalizeNewlines(await readFile(outputPath, "utf8"));
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      throw error;
+  let stale = false;
+  for (const [generatedPath, generatedContent] of generatedFiles) {
+    let current;
+    try {
+      current = normalizeNewlines(await readFile(generatedPath, "utf8"));
+    } catch (error) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
     }
+    stale ||= current !== generatedContent;
   }
 
-  if (current !== expected) {
+  if (stale) {
     console.error(
       "Package-local Factory contracts are stale. Run `bun run generate` in ui/packages/client.",
     );
     process.exitCode = 1;
   }
 } else {
-  await mkdir(path.dirname(outputPath), { recursive: true });
-  await writeFile(outputPath, expected, "utf8");
-  console.log("Generated src/generated/openapi.ts");
+  for (const [generatedPath, generatedContent] of generatedFiles) {
+    await mkdir(path.dirname(generatedPath), { recursive: true });
+    await writeFile(generatedPath, generatedContent, "utf8");
+    console.log(`Generated ${path.relative(packageRoot, generatedPath)}`);
+  }
 }

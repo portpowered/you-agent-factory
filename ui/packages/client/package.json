@@ -37,6 +37,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
     "verify": "bun run check:generated && bun run typecheck && bun run test && bun run build && bun run check:pack && bun run check:installed-consumer"
   },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1"
+  },
   "devDependencies": {
     "typescript": "~5.9.3",
     "vitest": "4.1.3"

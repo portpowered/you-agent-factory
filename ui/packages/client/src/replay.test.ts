@@ -26,7 +26,7 @@ function event(
       eventTime: `2026-07-18T00:00:0${sequence}Z`,
       ...(sessionSequence === undefined ? {} : { sessionSequence }),
     },
-    payload: {},
+    payload: { type: "FACTORY_REQUEST_BATCH" },
   };
 }
 
@@ -170,6 +170,48 @@ describe("Factory event SSE replay text", () => {
           expect.objectContaining({
             code: "unsupported_event_schema_version",
             path: ["frames", 1, "data", "schemaVersion"],
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("rejects canonical numeric, date, payload, and additional-property violations", () => {
+    const invalid = event("invalid-canonical-event", 0, 1) as unknown as Record<
+      string,
+      unknown
+    >;
+    invalid.context = {
+      sequence: -1.5,
+      tick: -2,
+      eventTime: "not-a-date",
+      unexpected: true,
+    };
+    invalid.payload = {};
+    invalid.unexpected = true;
+
+    const result = safeParseFactoryEventReplayText(
+      `data: ${JSON.stringify(invalid)}\n\n`,
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: ["frames", 0, "data", "context", "sequence"],
+          }),
+          expect.objectContaining({
+            code: "invalid_value",
+            path: ["frames", 0, "data", "context", "eventTime"],
+          }),
+          expect.objectContaining({
+            code: "missing_required_field",
+            path: ["frames", 0, "data", "payload", "type"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_field",
+            path: ["frames", 0, "data", "unexpected"],
           }),
         ]),
       );

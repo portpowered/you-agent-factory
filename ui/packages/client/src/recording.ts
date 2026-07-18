@@ -5,6 +5,10 @@ import {
   type FactoryEvent,
 } from "./contracts.js";
 import { orderFactoryEvents } from "./event-ordering.js";
+import {
+  canonicalEventIssues,
+  canonicalFactoryIssues,
+} from "./schema-validation.js";
 
 export const FACTORY_RECORDING_SCHEMA_VERSION = "factory-recording/v1" as const;
 
@@ -19,7 +23,9 @@ export interface FactoryRecording {
 
 export type RecordingValidationIssueCode =
   | "invalid_type"
+  | "invalid_value"
   | "missing_required_field"
+  | "unsupported_field"
   | "unsupported_recording_schema_version"
   | "unsupported_event_type"
   | "unsupported_event_schema_version"
@@ -54,7 +60,6 @@ export class FactoryRecordingValidationError extends Error {
 
 type InputRecord = Record<string, unknown>;
 
-const supportedEventTypes = new Set<string>(Object.values(FACTORY_EVENT_TYPES));
 const supportedEventSchemaVersions = new Set<string>(
   Object.values(FACTORY_EVENT_SCHEMA_VERSIONS),
 );
@@ -62,6 +67,14 @@ const topologyEventTypes = new Set<string>([
   FACTORY_EVENT_TYPES.FactoryEventTypeRunRequest,
   FACTORY_EVENT_TYPES.FactoryEventTypeInitialStructureRequest,
   FACTORY_EVENT_TYPES.FactoryEventTypeFactoryChange,
+]);
+const recordingFields = new Set([
+  "schemaVersion",
+  "id",
+  "title",
+  "summary",
+  "factory",
+  "events",
 ]);
 
 function isRecord(value: unknown): value is InputRecord {
@@ -91,45 +104,12 @@ function addRequiredStringIssue(
   }
 }
 
-function addRequiredNumberIssue(
-  value: InputRecord,
-  key: string,
-  path: readonly (string | number)[],
-  issues: RecordingValidationIssue[],
-): void {
-  if (!(key in value)) {
-    issues.push({
-      category: "structure",
-      code: "missing_required_field",
-      path: [...path, key],
-      message: `Expected required field ${key}.`,
-    });
-  } else if (typeof value[key] !== "number" || !Number.isFinite(value[key])) {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path: [...path, key],
-      message: `Expected ${key} to be a finite number.`,
-    });
-  }
-}
-
 function validateFactoryDefinition(
   input: unknown,
   path: readonly (string | number)[],
   issues: RecordingValidationIssue[],
 ): void {
-  if (!isRecord(input)) {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path,
-      message: "Expected factory to be an object.",
-    });
-    return;
-  }
-
-  addRequiredStringIssue(input, "name", path, issues);
+  issues.push(...canonicalFactoryIssues(input, path));
 }
 
 /** Validate the shared canonical event envelope without applying recording-wide rules. */
@@ -137,87 +117,7 @@ export function validateFactoryEventEnvelope(
   input: unknown,
   path: readonly (string | number)[] = [],
 ): RecordingValidationIssue[] {
-  const issues: RecordingValidationIssue[] = [];
-  if (!isRecord(input)) {
-    return [
-      {
-        category: "structure",
-        code: "invalid_type",
-        path,
-        message: "Expected Factory event to be an object.",
-      },
-    ];
-  }
-
-  addRequiredStringIssue(input, "schemaVersion", path, issues);
-  addRequiredStringIssue(input, "id", path, issues);
-  addRequiredStringIssue(input, "type", path, issues);
-
-  if (typeof input.type === "string" && !supportedEventTypes.has(input.type)) {
-    issues.push({
-      category: "structure",
-      code: "unsupported_event_type",
-      path: [...path, "type"],
-      message: `Unsupported Factory event type: ${input.type}.`,
-    });
-  }
-
-  if (!isRecord(input.context)) {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path: [...path, "context"],
-      message: "Expected event context to be an object.",
-    });
-  } else {
-    addRequiredNumberIssue(
-      input.context,
-      "sequence",
-      [...path, "context"],
-      issues,
-    );
-    addRequiredNumberIssue(input.context, "tick", [...path, "context"], issues);
-    addRequiredStringIssue(
-      input.context,
-      "eventTime",
-      [...path, "context"],
-      issues,
-    );
-    if (
-      input.context.sessionSequence !== undefined &&
-      (typeof input.context.sessionSequence !== "number" ||
-        !Number.isFinite(input.context.sessionSequence))
-    ) {
-      issues.push({
-        category: "structure",
-        code: "invalid_type",
-        path: [...path, "context", "sessionSequence"],
-        message: "Expected sessionSequence to be a finite number when present.",
-      });
-    }
-  }
-
-  if (!isRecord(input.payload)) {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path: [...path, "payload"],
-      message: "Expected event payload to be an object.",
-    });
-  } else if (
-    input.type === FACTORY_EVENT_TYPES.FactoryEventTypeRunRequest ||
-    input.type ===
-      FACTORY_EVENT_TYPES.FactoryEventTypeInitialStructureRequest ||
-    input.type === FACTORY_EVENT_TYPES.FactoryEventTypeFactoryChange
-  ) {
-    validateFactoryDefinition(
-      input.payload.factory,
-      [...path, "payload", "factory"],
-      issues,
-    );
-  }
-
-  return issues;
+  return canonicalEventIssues(input, path);
 }
 
 function hasUsableFactoryDefinition(input: unknown): boolean {
@@ -375,6 +275,16 @@ export function safeParseFactoryRecording(
   }
 
   const issues: RecordingValidationIssue[] = [];
+  for (const key of Object.keys(input)) {
+    if (!recordingFields.has(key)) {
+      issues.push({
+        category: "structure",
+        code: "unsupported_field",
+        path: [key],
+        message: `Unsupported field ${key}.`,
+      });
+    }
+  }
   addRequiredStringIssue(input, "schemaVersion", [], issues);
   addRequiredStringIssue(input, "id", [], issues);
   addRequiredStringIssue(input, "title", [], issues);
@@ -404,7 +314,14 @@ export function safeParseFactoryRecording(
     validateFactoryDefinition(input.factory, ["factory"], issues);
   }
 
-  if (!Array.isArray(input.events)) {
+  if (!("events" in input)) {
+    issues.push({
+      category: "structure",
+      code: "missing_required_field",
+      path: ["events"],
+      message: "Expected required field events.",
+    });
+  } else if (!Array.isArray(input.events)) {
     issues.push({
       category: "structure",
       code: "invalid_type",
