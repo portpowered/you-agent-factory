@@ -481,20 +481,6 @@ func functionalProviderSessionByDispatchID(
 	return interfaces.FactoryWorldProviderSessionRecord{}
 }
 
-func sliceValue[T any](values *[]T) []T {
-	if values == nil {
-		return nil
-	}
-	return *values
-}
-
-func mapValue[K comparable, V any](values *map[K]V) map[K]V {
-	if values == nil {
-		return nil
-	}
-	return *values
-}
-
 func worldViewDispatchHistoryContainsTrace(view interfaces.FactoryWorldView, dispatchID, traceID string) bool {
 	for _, dispatch := range view.Runtime.Session.DispatchHistory {
 		if dispatch.DispatchID != dispatchID {

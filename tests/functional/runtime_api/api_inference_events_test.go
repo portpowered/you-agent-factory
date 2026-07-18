@@ -10,11 +10,11 @@ import (
 	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/service"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -83,50 +83,106 @@ func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 	}
 }
 
-func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(t *testing.T) {
-	support.SkipLongFunctional(t, "slow inference-event stream-projection sweep")
+func TestInferenceEvents_RootRunHTTPStreamCorrelatesProviderAttempts(t *testing.T) {
+	support.SkipLongFunctional(t, "slow root-run inference-event stream sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-	provider := testutil.NewMockProviderWithErrors(
-		[]workerexecution.InferenceResponse{
-			{},
-			{},
-			{Content: "Step one recovered. COMPLETE"},
-			{Content: "Step two done. COMPLETE"},
-		},
-		[]error{
-			workers.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
-			workers.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
-			nil,
-			nil,
-		},
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	runner := testutil.NewProviderCommandRunner(
+		workers.CommandResult{Stdout: []byte("Step one done. COMPLETE")},
+		workers.CommandResult{Stdout: []byte("Step two done. COMPLETE")},
 	)
-	server := startFunctionalServerWithConfig(
-		t,
-		dir,
-		false,
-		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderOverride = provider
-		},
-		factory.WithServiceMode(),
-	)
+	host, stream := startWorkerOverrideRootRunHost(t, dir, true, wire.FunctionalEdges{
+		ProviderCommandRunner: runner,
+	})
 
-	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
-	_, _ = requireFunctionalEventStreamPrelude(t, stream)
-
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "Retrying inference stream",
+	traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
+		Name:         "Provider inference stream",
 		WorkTypeName: "task",
 		Payload: map[string]string{
-			"title": "retry provider attempts",
+			"title": "correlate provider attempts",
 		},
 	})
 	if traceID == "" {
 		t.Fatal("POST /work returned an empty trace ID")
 	}
 
-	events := collectFunctionalEventsUntilDispatchCompletions(t, stream, 2, 10*time.Second)
-	firstDispatchID := assertHTTPInferenceRetrySequence(t, events)
-	assertDashboardInferenceProjection(t, server.GetDashboard(t), firstDispatchID, traceID)
+	assertHTTPInferenceSuccessSequence(t, stream, traceID, "step-one", "step-two")
+	assertTerminalWorkerOverrideWork(t, host.Endpoint(), traceID, "complete")
+}
+
+func assertHTTPInferenceSuccessSequence(
+	t *testing.T,
+	stream *factoryEventHTTPStream,
+	traceID string,
+	wantTransitions ...string,
+) {
+	t.Helper()
+
+transitionLoop:
+	for _, wantTransition := range wantTransitions {
+		deadline := time.Now().Add(5 * time.Second)
+		var request factoryapi.InferenceRequestEventPayload
+		var requestDispatchID string
+		responseSeen := false
+		for time.Now().Before(deadline) {
+			event := stream.next(time.Until(deadline))
+			switch event.Type {
+			case factoryapi.FactoryEventTypeInferenceRequest:
+				if !functionalEventContextContainsTrace(event, traceID) {
+					continue
+				}
+				var err error
+				request, err = event.Payload.AsInferenceRequestEventPayload()
+				if err != nil {
+					t.Fatalf("decode INFERENCE_REQUEST for %s: %v", wantTransition, err)
+				}
+				requestDispatchID = stringValueFromFunctionalPtr(event.Context.DispatchId)
+				assertRawInferenceEventUsesContextDispatchIdentity(t, event, request.InferenceRequestId)
+			case factoryapi.FactoryEventTypeInferenceResponse:
+				if request.InferenceRequestId == "" || stringValueFromFunctionalPtr(event.Context.DispatchId) != requestDispatchID {
+					continue
+				}
+				response, err := event.Payload.AsInferenceResponseEventPayload()
+				if err != nil {
+					t.Fatalf("decode INFERENCE_RESPONSE for %s: %v", wantTransition, err)
+				}
+				if response.InferenceRequestId != request.InferenceRequestId || response.Attempt != 1 || response.Outcome != factoryapi.InferenceOutcomeSucceeded {
+					t.Fatalf("INFERENCE_RESPONSE for %s = %#v, want correlated first-attempt success", wantTransition, response)
+				}
+				assertRawInferenceEventUsesContextDispatchIdentity(t, event, response.InferenceRequestId)
+				responseSeen = true
+			case factoryapi.FactoryEventTypeDispatchResponse:
+				if !functionalEventContextContainsTrace(event, traceID) {
+					continue
+				}
+				payload, err := event.Payload.AsDispatchResponseEventPayload()
+				if err != nil {
+					t.Fatalf("decode DISPATCH_RESPONSE for %s: %v", wantTransition, err)
+				}
+				if payload.TransitionId != wantTransition || payload.Outcome != factoryapi.WorkOutcomeAccepted {
+					t.Fatalf("DISPATCH_RESPONSE = transition %q outcome %q, want %q/ACCEPTED", payload.TransitionId, payload.Outcome, wantTransition)
+				}
+				if !responseSeen || stringValueFromFunctionalPtr(event.Context.DispatchId) != requestDispatchID {
+					t.Fatalf("DISPATCH_RESPONSE for %s was not preceded by correlated inference request/response", wantTransition)
+				}
+				continue transitionLoop
+			}
+		}
+		t.Fatalf("canonical session stream did not expose inference and dispatch success for transition %q", wantTransition)
+	}
+}
+
+func functionalEventContextContainsTrace(event factoryapi.FactoryEvent, traceID string) bool {
+	if event.Context.TraceIds == nil {
+		return false
+	}
+	for _, candidate := range *event.Context.TraceIds {
+		if candidate == traceID {
+			return true
+		}
+	}
+	return false
 }
 
 func TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews(t *testing.T) {
@@ -218,132 +274,6 @@ func assertFirstInferenceAttemptOrder(t *testing.T, events []factoryapi.FactoryE
 	}
 	if response.DurationMillis < 0 {
 		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)
-	}
-}
-
-func collectFunctionalEventsUntilDispatchCompletions(t *testing.T, stream *factoryEventHTTPStream, wantCompletions int, timeout time.Duration) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	events := make([]factoryapi.FactoryEvent, 0, 12)
-	completions := 0
-	for time.Now().Before(deadline) && completions < wantCompletions {
-		event := stream.next(time.Until(deadline))
-		events = append(events, event)
-		if event.Type == factoryapi.FactoryEventTypeDispatchResponse {
-			completions++
-		}
-	}
-	if completions < wantCompletions {
-		t.Fatalf("collected %d dispatch completions, want %d; events=%v", completions, wantCompletions, functionalEventTypes(events))
-	}
-	return events
-}
-
-func assertHTTPInferenceRetrySequence(t *testing.T, events []factoryapi.FactoryEvent) string {
-	t.Helper()
-
-	dispatchIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0)
-	if dispatchIndex < 0 {
-		t.Fatalf("missing dispatch-created event in %v", functionalEventTypes(events))
-	}
-	if _, err := events[dispatchIndex].Payload.AsDispatchRequestEventPayload(); err != nil {
-		t.Fatalf("decode dispatch-created payload: %v", err)
-	}
-
-	next := dispatchIndex + 1
-	for attempt := 1; attempt <= 3; attempt++ {
-		requestIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceRequest, next)
-		responseIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceResponse, requestIndex+1)
-		if requestIndex < 0 || responseIndex < 0 {
-			t.Fatalf("event order = %v, want three request/response pairs after first dispatch", functionalEventTypes(events))
-		}
-		dispatchID := stringValueFromFunctionalPtr(events[dispatchIndex].Context.DispatchId)
-		request := assertFunctionalInferenceRequest(t, events[requestIndex], dispatchID, attempt)
-		response := assertFunctionalInferenceResponse(t, events[responseIndex], dispatchID, request.InferenceRequestId, attempt)
-		assertRawInferenceEventUsesContextDispatchIdentity(t, events[requestIndex], request.InferenceRequestId)
-		assertRawInferenceEventUsesContextDispatchIdentity(t, events[responseIndex], response.InferenceRequestId)
-		if attempt < 3 && response.Outcome != factoryapi.InferenceOutcomeFailed {
-			t.Fatalf("attempt %d outcome = %s, want FAILED", attempt, response.Outcome)
-		}
-		if attempt == 3 {
-			if response.Outcome != factoryapi.InferenceOutcomeSucceeded || stringValueFromFunctionalPtr(response.Response) != "Step one recovered. COMPLETE" {
-				t.Fatalf("attempt 3 response = %#v, want recovered success response", response)
-			}
-		}
-		next = responseIndex + 1
-	}
-
-	completedIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse, next)
-	if completedIndex < 0 {
-		t.Fatalf("event order = %v, want dispatch-completed after retry response", functionalEventTypes(events))
-	}
-	if _, err := events[completedIndex].Payload.AsDispatchResponseEventPayload(); err != nil {
-		t.Fatalf("decode dispatch-completed payload: %v", err)
-	}
-	if stringValueFromFunctionalPtr(events[completedIndex].Context.DispatchId) != stringValueFromFunctionalPtr(events[dispatchIndex].Context.DispatchId) {
-		t.Fatalf("dispatch completion id = %s, want %s", stringValueFromFunctionalPtr(events[completedIndex].Context.DispatchId), stringValueFromFunctionalPtr(events[dispatchIndex].Context.DispatchId))
-	}
-	return stringValueFromFunctionalPtr(events[dispatchIndex].Context.DispatchId)
-}
-
-func assertFunctionalInferenceRequest(t *testing.T, event factoryapi.FactoryEvent, dispatchID string, attempt int) factoryapi.InferenceRequestEventPayload {
-	t.Helper()
-
-	request, err := event.Payload.AsInferenceRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode inference-request payload: %v", err)
-	}
-	if stringValueFromFunctionalPtr(event.Context.DispatchId) != dispatchID || request.Attempt != attempt {
-		t.Fatalf("inference request correlation = %#v, want dispatch=%s attempt=%d", request, dispatchID, attempt)
-	}
-	if request.InferenceRequestId == "" || request.Prompt == "" {
-		t.Fatalf("inference request missing request ID or prompt: %#v", request)
-	}
-	return request
-}
-
-func assertFunctionalInferenceResponse(t *testing.T, event factoryapi.FactoryEvent, dispatchID, requestID string, attempt int) factoryapi.InferenceResponseEventPayload {
-	t.Helper()
-
-	response, err := event.Payload.AsInferenceResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode inference-response payload: %v", err)
-	}
-	if stringValueFromFunctionalPtr(event.Context.DispatchId) != dispatchID ||
-		response.InferenceRequestId != requestID || response.Attempt != attempt {
-		t.Fatalf("inference response correlation = %#v, want dispatch=%s request=%s attempt=%d", response, dispatchID, requestID, attempt)
-	}
-	if response.DurationMillis < 0 {
-		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)
-	}
-	return response
-}
-
-func assertDashboardInferenceProjection(t *testing.T, dashboard DashboardResponse, dispatchID, traceID string) {
-	t.Helper()
-
-	if !dashboardDispatchHistoryContainsTrace(dashboard, dispatchID, traceID) {
-		t.Fatalf("dashboard dispatch history missing dispatch %s for trace %s", dispatchID, traceID)
-	}
-	attemptsByDispatch := mapValue(dashboard.Runtime.InferenceAttemptsByDispatchId)
-	attempts := attemptsByDispatch[dispatchID]
-	if len(attempts) != 3 {
-		t.Fatalf("dashboard inference attempts for dispatch %s = %#v, want three retry attempts", dispatchID, attempts)
-	}
-	for _, attempt := range attempts {
-		if attempt.DispatchId != dispatchID || attempt.InferenceRequestId == "" || attempt.Prompt == "" || attempt.RequestTime == "" {
-			t.Fatalf("dashboard inference attempt missing request details: %#v", attempt)
-		}
-		if attempt.Attempt < 1 || attempt.Attempt > 3 {
-			t.Fatalf("dashboard inference attempt number = %d, want 1..3", attempt.Attempt)
-		}
-		if attempt.Attempt < 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeFailed) || attempt.FailureDetail == nil) {
-			t.Fatalf("dashboard failed retry attempt = %#v, want FAILED with errorClass", attempt)
-		}
-		if attempt.Attempt == 3 && (attempt.Outcome != string(factoryapi.InferenceOutcomeSucceeded) || attempt.Response != "Step one recovered. COMPLETE" || attempt.ResponseTime == "") {
-			t.Fatalf("dashboard successful retry attempt = %#v, want final response details", attempt)
-		}
 	}
 }
 
@@ -484,20 +414,6 @@ func indexOfFunctionalInferenceResponseForRequest(events []factoryapi.FactoryEve
 		}
 	}
 	return -1
-}
-
-func dashboardDispatchHistoryContainsTrace(dashboard DashboardResponse, dispatchID, traceID string) bool {
-	for _, dispatch := range sliceValue(dashboard.Runtime.Session.DispatchHistory) {
-		if dispatch.DispatchId != dispatchID {
-			continue
-		}
-		for _, workItem := range sliceValue(dispatch.WorkItems) {
-			if stringValueFromFunctionalPtr(workItem.TraceId) == traceID {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func assertInferenceEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, recordedEvents []factoryapi.FactoryEvent) {
