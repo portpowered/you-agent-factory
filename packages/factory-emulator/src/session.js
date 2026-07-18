@@ -4,6 +4,13 @@ import {
   deriveFactoryEmulatorIdentity,
 } from "./identity.js";
 import { calculateNextSchedulerBatch } from "./scheduler.js";
+import {
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
+  budgetExceededDiagnostic,
+  normalizeFactoryEmulatorLimits,
+  zeroDurationCycleDiagnostic,
+} from "./limits.js";
 import { selectEmulatorRule } from "./semantics.js";
 import {
   FactoryEmulatorDurationError,
@@ -13,6 +20,10 @@ import {
 } from "./virtual-time.js";
 
 export { FactoryEmulatorDurationError } from "./virtual-time.js";
+export {
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
+} from "./limits.js";
 
 const EVENT_SCHEMA_VERSION = "agent-factory.event.v1";
 const WORK_REQUEST_TYPE = "FACTORY_REQUEST_BATCH";
@@ -55,6 +66,15 @@ export class FactoryEmulatorPendingCommandError extends Error {
   }
 }
 
+export class FactoryEmulatorExecutionPausedError extends Error {
+  constructor(diagnostic) {
+    super(`Factory emulator execution paused: ${diagnostic.kind}`);
+    this.name = "FactoryEmulatorExecutionPausedError";
+    this.code = "EXECUTION_PAUSED";
+    this.diagnostic = copy(diagnostic);
+  }
+}
+
 /**
  * Creates one caller-owned deterministic Factory emulator session.
  *
@@ -62,13 +82,18 @@ export class FactoryEmulatorPendingCommandError extends Error {
  * immutable inputs are detached at construction, and all runtime state is
  * local to the returned session.
  */
-export function createFactoryEmulatorSession({ factory, scenario, sink }) {
+export function createFactoryEmulatorSession({ factory, scenario, sink, limits }) {
   if (!sink || typeof sink.write !== "function" || typeof sink.close !== "function") {
     throw new TypeError("sink must provide write and close functions");
   }
 
   const configuredFactory = copy(factory);
   const configuredScenario = copy(scenario);
+  const normalizedLimits = normalizeFactoryEmulatorLimits(limits);
+  if (!normalizedLimits.success) {
+    throw new FactoryEmulatorConfigurationError(normalizedLimits.diagnostics);
+  }
+  const configuredLimits = normalizedLimits.limits;
   let committedState = preStartState();
   let commandInProgress;
   let pendingTransaction;
@@ -80,6 +105,9 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
     }
     if (pendingTransaction !== undefined && pendingTransaction.command !== command) {
       throw new FactoryEmulatorPendingCommandError(command, pendingTransaction.command);
+    }
+    if (runtimeError?.code === "EXECUTION_PAUSED" && command !== "close") {
+      throw new FactoryEmulatorExecutionPausedError(runtimeError.diagnostic);
     }
     if (
       pendingTransaction === undefined &&
@@ -106,6 +134,7 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
   }
 
   async function writeCalculation(command, key, calculation, progress = {}) {
+    assertCalculationWithinBudgets(command, calculation);
     try {
       const receipt = await sink.write(copy(calculation.batch));
       if (receipt?.status !== "accepted") {
@@ -125,6 +154,47 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       runtimeError = sinkError("SINK_WRITE_REJECTED", "write", command, error);
       throw error;
     }
+  }
+
+  function assertCalculationWithinBudgets(command, calculation) {
+    // The terminal lifecycle event is always available so a paused session can
+    // release its sink. All preceding canonical events still count as usage.
+    if (command === "close") {
+      return;
+    }
+    const checks = [
+      {
+        configured: configuredLimits.maxCompletedDispatches,
+        limit: "completedDispatches",
+        observed: calculation.state.counters.completions,
+      },
+      {
+        configured: configuredLimits.maxEvents,
+        limit: "events",
+        observed: calculation.state.counters.events,
+      },
+      {
+        configured: configuredLimits.maxVirtualElapsedMs,
+        limit: "virtualElapsedMs",
+        observed: calculation.state.virtualElapsedMs,
+      },
+    ];
+    const exceeded = checks.find((check) => check.observed > check.configured);
+    if (exceeded !== undefined) {
+      pauseExecution(budgetExceededDiagnostic({
+        ...exceeded,
+        virtualTime: committedState.virtualTime,
+        virtualElapsedMs: committedState.virtualElapsedMs,
+      }));
+    }
+  }
+
+  function pauseExecution(diagnostic) {
+    runtimeError = {
+      code: "EXECUTION_PAUSED",
+      diagnostic: copy(diagnostic),
+    };
+    throw new FactoryEmulatorExecutionPausedError(diagnostic);
   }
 
   function finishAdvance(command, fromVirtualTime, batches, madeProgress) {
@@ -149,11 +219,17 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
     const fromVirtualTime = progress.fromVirtualTime;
     targetElapsedMs = progress.targetElapsedMs;
     const batches = copy(progress.batches);
+    let zeroDurationBatches = progress.zeroDurationBatches ?? 0;
+    let synchronousBatches = 0;
     let madeProgress = batches.length > 0;
 
     if (retry !== undefined) {
+      const beforeRetryElapsedMs = committedState.virtualElapsedMs;
       await writeCalculation(command, retry.key, retry, progress);
       batches.push(copy(retry.batch));
+      zeroDurationBatches = committedState.virtualElapsedMs === beforeRetryElapsedMs
+        ? zeroDurationBatches + 1
+        : 0;
       madeProgress = true;
       if (command === "advanceToNext") {
         return finishAdvance(command, fromVirtualTime, batches, true);
@@ -189,19 +265,37 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       ) {
         break;
       }
+      const nextZeroDurationBatches = calculation.elapsedMs === committedState.virtualElapsedMs
+        ? zeroDurationBatches + 1
+        : 0;
+      if (nextZeroDurationBatches > configuredLimits.maxZeroDurationBatches) {
+        pauseExecution(zeroDurationCycleDiagnostic({
+          configured: configuredLimits.maxZeroDurationBatches,
+          observed: nextZeroDurationBatches,
+          virtualTime: committedState.virtualTime,
+          virtualElapsedMs: committedState.virtualElapsedMs,
+        }));
+      }
       if (calculation.batch !== undefined) {
         await writeCalculation(command, key, calculation, {
           fromVirtualTime,
           targetElapsedMs,
           batches,
+          zeroDurationBatches,
         });
         batches.push(copy(calculation.batch));
       } else {
         committedState = copy(calculation.state);
       }
+      zeroDurationBatches = nextZeroDurationBatches;
       madeProgress = true;
       if (command === "advanceToNext" && calculation.batch !== undefined) {
         break;
+      }
+      synchronousBatches += 1;
+      if (synchronousBatches >= configuredLimits.maxSynchronousBatches) {
+        synchronousBatches = 0;
+        await cooperativeYield();
       }
     }
 
@@ -209,7 +303,9 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       targetElapsedMs !== undefined &&
       committedState.virtualElapsedMs !== targetElapsedMs
     ) {
-      committedState = stateAtElapsed(configuredScenario, committedState, targetElapsedMs);
+      const targetState = stateAtElapsed(configuredScenario, committedState, targetElapsedMs);
+      assertCalculationWithinBudgets(command, { state: targetState });
+      committedState = targetState;
     }
     return finishAdvance(command, fromVirtualTime, batches, madeProgress);
   }
@@ -364,7 +460,9 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       if (
         commandInProgress !== undefined ||
         committedState.lifecycle === "closed" ||
-        (pendingTransaction === undefined && committedState.lifecycle !== "started")
+        (pendingTransaction === undefined &&
+          committedState.lifecycle !== "started" &&
+          runtimeError?.code !== "EXECUTION_PAUSED")
       ) {
         throw new FactoryEmulatorLifecycleError("reset", phase);
       }
@@ -617,7 +715,13 @@ function normalizeSubmissions(submissionOrBatch) {
 
 function sessionStatus(state, commandInProgress, runtimeError) {
   if (runtimeError !== undefined) {
-    return { phase: "error", reason: runtimeError.code };
+    return runtimeError.code === "EXECUTION_PAUSED"
+      ? {
+          phase: "error",
+          reason: runtimeError.diagnostic.kind,
+          diagnostic: runtimeError.diagnostic,
+        }
+      : { phase: "error", reason: runtimeError.code };
   }
   if (state.lifecycle === "closed") {
     return { phase: "closed", reason: "session-closed" };
@@ -753,4 +857,8 @@ function normalizeStartAt(startAt) {
 
 function copy(value) {
   return structuredClone(value);
+}
+
+async function cooperativeYield() {
+  await Promise.resolve();
 }

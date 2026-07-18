@@ -9,9 +9,18 @@ import type {
   EmulatorScenarioDiagnostic,
 } from "./parser.js";
 
+export type FactoryEmulatorConfigurationDiagnostic =
+  | EmulatorScenarioDiagnostic
+  | {
+      readonly code: "INVALID_LIMIT_CONFIGURATION";
+      readonly path: string;
+      readonly message: string;
+      readonly expectation: string;
+    };
+
 export declare class FactoryEmulatorConfigurationError extends Error {
   readonly code: "INVALID_CONFIGURATION";
-  readonly diagnostics: readonly EmulatorScenarioDiagnostic[];
+  readonly diagnostics: readonly FactoryEmulatorConfigurationDiagnostic[];
 }
 
 export declare class FactoryEmulatorLifecycleError extends Error {
@@ -35,6 +44,40 @@ export declare class FactoryEmulatorSubmissionError extends Error {
   readonly diagnostics: readonly EmulatorScenarioDiagnostic[];
 }
 
+export type FactoryEmulatorExecutionDiagnostic =
+  | {
+      readonly kind: "budget-exceeded";
+      readonly limit: "completedDispatches" | "events" | "virtualElapsedMs";
+      readonly configured: number;
+      readonly observed: number;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+    }
+  | {
+      readonly kind: "zero-duration-cycle";
+      readonly limit: "zeroDurationBatches";
+      readonly configured: number;
+      readonly observed: number;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+    };
+
+export declare class FactoryEmulatorExecutionPausedError extends Error {
+  readonly code: "EXECUTION_PAUSED";
+  readonly diagnostic: FactoryEmulatorExecutionDiagnostic;
+}
+
+export interface FactoryEmulatorLimits {
+  readonly maxCompletedDispatches?: number;
+  readonly maxEvents?: number;
+  readonly maxVirtualElapsedMs?: number;
+  readonly maxZeroDurationBatches?: number;
+  readonly maxSynchronousBatches?: number;
+}
+
+export declare const DEFAULT_FACTORY_EMULATOR_LIMITS: Readonly<Required<FactoryEmulatorLimits>>;
+export declare const FACTORY_EMULATOR_LIMIT_HARD_CAPS: Readonly<Required<FactoryEmulatorLimits>>;
+
 export declare class FactoryEmulatorPendingCommandError extends Error {
   readonly code: "PENDING_TRANSACTION";
   readonly attemptedCommand:
@@ -55,6 +98,7 @@ export interface FactoryEmulatorSessionOptions {
   readonly factory: EmulatorFactoryDefinition;
   readonly scenario: EmulatorScenario;
   readonly sink: FactoryEventSink;
+  readonly limits?: FactoryEmulatorLimits;
 }
 
 export interface FactoryEmulatorSessionWork {
@@ -155,6 +199,7 @@ export interface FactoryEmulatorSessionStatus {
     | "waiting"
     | "idle";
   readonly reason: string;
+  readonly diagnostic?: FactoryEmulatorExecutionDiagnostic;
 }
 
 export interface FactoryEmulatorSession {

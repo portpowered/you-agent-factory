@@ -23,8 +23,15 @@ import type {
   FactoryEmulatorSessionCloseReceipt,
   FactoryEmulatorSessionStatus,
   FactoryEmulatorSessionState,
+  FactoryEmulatorExecutionDiagnostic,
+  FactoryEmulatorLimits,
   FactoryEmulatorStartReceipt,
   FactoryEmulatorSubmitReceipt,
+} from "@you-agent-factory/factory-emulator";
+import {
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
+  FactoryEmulatorExecutionPausedError,
 } from "@you-agent-factory/factory-emulator";
 import type { FactoryEvent } from "@you-agent-factory/client";
 
@@ -99,7 +106,19 @@ const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
     unmatchedBehavior: { kind: "ignore" },
   },
   sink,
+  limits: {
+    maxCompletedDispatches: DEFAULT_FACTORY_EMULATOR_LIMITS.maxCompletedDispatches,
+    maxEvents: FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents,
+    maxVirtualElapsedMs: 1_000,
+    maxZeroDurationBatches: 10,
+    maxSynchronousBatches: 5,
+  },
 });
+const limits: FactoryEmulatorLimits = { maxEvents: 100 };
+declare const pausedError: FactoryEmulatorExecutionPausedError;
+const executionDiagnostic: FactoryEmulatorExecutionDiagnostic = pausedError.diagnostic;
+void limits;
+void executionDiagnostic;
 const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
 const startReceipt: Promise<FactoryEmulatorStartReceipt> = emulatorSession.start();
 const submitReceipt: Promise<FactoryEmulatorSubmitReceipt> = emulatorSession.submit({

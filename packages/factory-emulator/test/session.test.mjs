@@ -3,9 +3,12 @@ import test from "node:test";
 import {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
+  FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorPendingCommandError,
   FactoryEmulatorSubmissionError,
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   SUPPORTED_SCENARIO_VERSION,
   createFactoryEmulatorSession,
 } from "@you-agent-factory/factory-emulator";
@@ -49,11 +52,12 @@ function scenario(overrides = {}) {
   };
 }
 
-function harness(scenarioDocument = scenario()) {
+function harness(scenarioDocument = scenario(), limits) {
   const batches = [];
   const emulator = createFactoryEmulatorSession({
     factory: supportedFactory(),
     scenario: scenarioDocument,
+    limits,
     sink: {
       async close() {
         return { status: "closed" };
@@ -65,6 +69,20 @@ function harness(scenarioDocument = scenario()) {
     },
   });
   return { batches, emulator };
+}
+
+function assertPaused(error, kind, limit, configured, observed) {
+  assert.ok(error instanceof FactoryEmulatorExecutionPausedError);
+  assert.equal(error.code, "EXECUTION_PAUSED");
+  assert.deepEqual(error.diagnostic, {
+    kind,
+    limit,
+    configured,
+    observed,
+    virtualTime: "2026-07-18T07:30:00.000Z",
+    virtualElapsedMs: 0,
+  });
+  return true;
 }
 
 test("start emits deterministic bootstrap and initial submission batches at virtual time zero", async () => {
@@ -700,4 +718,197 @@ test("close retries terminal write and then only sink close without duplicate ev
     FactoryEmulatorLifecycleError,
   );
   assert.equal(writeAttempts.length, writesBeforeCloseOnlyRetry);
+});
+
+test("limits publish stable defaults and reject invalid policy before bootstrap", () => {
+  assert.deepEqual(DEFAULT_FACTORY_EMULATOR_LIMITS, {
+    maxCompletedDispatches: 1_000,
+    maxEvents: 10_000,
+    maxVirtualElapsedMs: 3_600_000,
+    maxZeroDurationBatches: 1_000,
+    maxSynchronousBatches: 100,
+  });
+  assert.ok(FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents > 10_000);
+
+  for (const limits of [
+    { maxEvents: 0 },
+    { maxCompletedDispatches: 0.5 },
+    { maxVirtualElapsedMs: Number.POSITIVE_INFINITY },
+    { maxEvents: FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents + 1 },
+    { unsupported: 1 },
+  ]) {
+    assert.throws(
+      () => harness(scenario(), limits),
+      (error) => error instanceof FactoryEmulatorConfigurationError
+        && error.diagnostics[0].code === "INVALID_LIMIT_CONFIGURATION",
+    );
+  }
+});
+
+test("event budget accepts the exact limit and pauses before the next batch", async () => {
+  const { batches, emulator } = harness(
+    scenario({ initialSubmissions: [] }),
+    { maxEvents: 3 },
+  );
+  await emulator.start();
+  await emulator.submit({ id: "within-limit", workType: "checkout" });
+  const before = emulator.state();
+  assert.equal(before.counters.events, 3);
+
+  await assert.rejects(
+    emulator.submit({ id: "over-limit", workType: "checkout" }),
+    (error) => assertPaused(error, "budget-exceeded", "events", 3, 4),
+  );
+  assert.deepEqual(emulator.state(), before);
+  assert.equal(batches.flatMap((batch) => batch.events).length, 3);
+  assert.deepEqual(emulator.status(), {
+    phase: "error",
+    reason: "budget-exceeded",
+    diagnostic: {
+      kind: "budget-exceeded",
+      limit: "events",
+      configured: 3,
+      observed: 4,
+      virtualTime: "2026-07-18T07:30:00.000Z",
+      virtualElapsedMs: 0,
+    },
+  });
+});
+
+test("completed-dispatch budget preserves the exact boundary and rejects a whole completion batch", async () => {
+  const { batches, emulator } = harness(
+    scenario({ initialSubmissions: [{ id: "first", workType: "checkout" }] }),
+    { maxCompletedDispatches: 1 },
+  );
+  await emulator.start();
+  await emulator.advanceBy(0);
+  assert.equal(emulator.state().counters.completions, 1);
+
+  await emulator.submit({ id: "second", workType: "checkout" });
+  await emulator.advanceToNext();
+  const before = emulator.state();
+  const acceptedEvents = batches.flatMap((batch) => batch.events).length;
+  await assert.rejects(
+    emulator.advanceToNext(),
+    (error) => assertPaused(
+      error,
+      "budget-exceeded",
+      "completedDispatches",
+      1,
+      2,
+    ),
+  );
+  assert.deepEqual(emulator.state(), before);
+  assert.equal(batches.flatMap((batch) => batch.events).length, acceptedEvents);
+  assert.equal(before.works.at(-1).phase, "active");
+  assert.ok(batches.flatMap((batch) => batch.events).every(
+    (event) => event.type !== "WORK_FAILED",
+  ));
+});
+
+test("virtual-time budget succeeds exactly at its limit and pauses before a later deadline", async () => {
+  const timedScenario = scenario({
+    initialSubmissions: [{ id: "first", workType: "checkout" }],
+    rules: [{
+      id: "complete-checkout",
+      match: { kind: "workType", workType: "checkout" },
+      outcomes: [{ kind: "complete", durationMs: 10 }],
+      exhaustionBehavior: { kind: "repeatLast" },
+    }],
+  });
+  const { emulator } = harness(timedScenario, { maxVirtualElapsedMs: 10 });
+  await emulator.start();
+  await emulator.advanceBy(10);
+  assert.equal(emulator.state().virtualElapsedMs, 10);
+  await emulator.submit({ id: "second", workType: "checkout" });
+  await emulator.advanceToNext();
+  const before = emulator.state();
+
+  await assert.rejects(
+    emulator.advanceToNext(),
+    (error) => {
+      assert.ok(error instanceof FactoryEmulatorExecutionPausedError);
+      assert.deepEqual(error.diagnostic, {
+        kind: "budget-exceeded",
+        limit: "virtualElapsedMs",
+        configured: 10,
+        observed: 20,
+        virtualTime: "2026-07-18T07:30:00.010Z",
+        virtualElapsedMs: 10,
+      });
+      return true;
+    },
+  );
+  assert.deepEqual(emulator.state(), before);
+});
+
+test("zero-duration chains complete at the configured boundary and pause reproducibly beyond it", async () => {
+  const finite = harness(scenario(), { maxZeroDurationBatches: 2 });
+  await finite.emulator.start();
+  await finite.emulator.advanceBy(0);
+  assert.ok(finite.emulator.state().works.every((work) => work.phase === "completed"));
+
+  const paused = harness(scenario(), { maxZeroDurationBatches: 1 });
+  await paused.emulator.start();
+  const before = paused.emulator.state();
+  let firstDiagnostic;
+  await assert.rejects(paused.emulator.advanceBy(0), (error) => {
+    assert.ok(error instanceof FactoryEmulatorExecutionPausedError);
+    firstDiagnostic = structuredClone(error.diagnostic);
+    assert.deepEqual(firstDiagnostic, {
+      kind: "zero-duration-cycle",
+      limit: "zeroDurationBatches",
+      configured: 1,
+      observed: 2,
+      virtualTime: "2026-07-18T07:30:00.000Z",
+      virtualElapsedMs: 0,
+    });
+    return true;
+  });
+  const firstPausedState = paused.emulator.state();
+  assert.equal(paused.emulator.state().counters.completions, 0);
+  assert.ok(paused.emulator.state().works.every((work) => work.phase === "active"));
+
+  paused.emulator.reset();
+  await paused.emulator.start();
+  await assert.rejects(paused.emulator.advanceBy(0), (error) => {
+    assert.deepEqual(error.diagnostic, firstDiagnostic);
+    return true;
+  });
+  assert.notDeepEqual(firstPausedState, before);
+  assert.deepEqual(paused.emulator.state(), firstPausedState);
+  const closed = await paused.emulator.close();
+  assert.equal(closed.status, "closed");
+});
+
+test("cooperative scheduler yielding keeps the active command serialized", async () => {
+  const { emulator } = harness(scenario({
+    initialSubmissions: [{ id: "timed", workType: "checkout" }],
+    rules: [{
+      id: "timed",
+      match: { kind: "all" },
+      outcomes: [{ kind: "complete", durationMs: 1 }],
+      exhaustionBehavior: { kind: "repeatLast" },
+    }],
+  }), { maxSynchronousBatches: 1 });
+  await emulator.start();
+
+  let statusAtBoundary;
+  let overlappingError;
+  const advance = emulator.advanceBy(1);
+  queueMicrotask(async () => {
+    statusAtBoundary = emulator.status();
+    try {
+      await emulator.submit({ id: "overlap", workType: "checkout" });
+    } catch (error) {
+      overlappingError = error;
+    }
+  });
+  await advance;
+  await Promise.resolve();
+
+  assert.deepEqual(statusAtBoundary, { phase: "active", reason: "advancing" });
+  assert.ok(overlappingError instanceof FactoryEmulatorLifecycleError);
+  assert.equal(overlappingError.phase, "advancing");
+  assert.equal(emulator.state().virtualElapsedMs, 1);
 });

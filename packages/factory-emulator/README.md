@@ -181,3 +181,41 @@ rejection retries the same event. If only `sink.close()` rejects, the next
 `close()` retries that operation without writing the terminal event again.
 Non-close commands cannot bypass either recovery state, and all state-changing
 commands reject after a successful close.
+
+## Deterministic execution limits
+
+Sessions enforce cumulative execution limits before a calculated batch reaches
+the sink. Defaults are 1,000 completed dispatches, 10,000 canonical events, and
+3,600,000 virtual milliseconds (one virtual hour). At one virtual instant, at
+most 1,000 scheduler batches may run without virtual-time progress; crossing
+that deterministic threshold is reported as a zero-duration cycle. Finite
+zero-duration chains at or below the threshold still complete normally.
+
+Callers may pass `limits` to `createFactoryEmulatorSession`. Every supplied
+value must be a positive safe integer and no greater than the exported
+`FACTORY_EMULATOR_LIMIT_HARD_CAPS`. The defaults and hard caps are exported as
+`DEFAULT_FACTORY_EMULATOR_LIMITS` and `FACTORY_EMULATOR_LIMIT_HARD_CAPS`:
+
+| Limit | Default | Hard cap |
+| --- | ---: | ---: |
+| `maxCompletedDispatches` | 1,000 | 100,000 |
+| `maxEvents` | 10,000 | 1,000,000 |
+| `maxVirtualElapsedMs` | 3,600,000 | 31,536,000,000 |
+| `maxZeroDurationBatches` | 1,000 | 100,000 |
+| `maxSynchronousBatches` | 100 | 10,000 |
+
+Invalid policy fails at session construction, before bootstrap activity. A
+batch that would exceed a cumulative limit is not written or committed.
+Instead, the command rejects with `FactoryEmulatorExecutionPausedError`, and
+`status()` reports `error` with a detached `budget-exceeded` or
+`zero-duration-cycle` diagnostic containing the limit name, configured and
+observed values, and current virtual instant. Existing Work remains in its last
+valid phase; the kernel never fabricates failed Work to represent a pause.
+
+After each `maxSynchronousBatches` scheduler calculations, a long command awaits
+a Promise microtask boundary. This uses no timer or wall clock, preserves event
+order, and keeps the original command serialized until it finishes or pauses.
+`reset()` clears the pause and all usage counters, reproducing the same boundary
+for the same inputs. `close()` remains available after a safety pause and may
+write its single terminal lifecycle event even when the execution event budget
+is exhausted, ensuring the caller-owned sink can always be released.

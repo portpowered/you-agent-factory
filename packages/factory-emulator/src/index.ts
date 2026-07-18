@@ -25,9 +25,12 @@ export {
 export {
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
+  FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorPendingCommandError,
   FactoryEmulatorSubmissionError,
+  DEFAULT_FACTORY_EMULATOR_LIMITS,
+  FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   createFactoryEmulatorSession,
 } from "./session.js";
 export type {
@@ -36,6 +39,9 @@ export type {
   FactoryEmulatorResetReceipt,
   FactoryEmulatorSession,
   FactoryEmulatorSessionCounters,
+  FactoryEmulatorConfigurationDiagnostic,
+  FactoryEmulatorExecutionDiagnostic,
+  FactoryEmulatorLimits,
   FactoryEmulatorSessionOptions,
   FactoryEmulatorSessionState,
   FactoryEmulatorSessionStatus,
