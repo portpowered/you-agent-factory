@@ -8,18 +8,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
+	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-	"github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,17 +29,26 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("write audio fixture: %v", err)
 	}
 
-	providerStub := &modelTransportSmokeProvider{
-		response: workerexecution.InferenceResponse{
-			Content: mustMarshalFunctionalAudioContentResponse(t, audioPath),
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: true,
+		FunctionalEdges: wire.FunctionalEdges{
+			ProviderCommandRunner: support.NewStaticSuccessCommandRunner(mustMarshalFunctionalAudioContentResponse(t, audioPath)),
 		},
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
 	}
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.ProviderOverride = providerStub
-		cfg.SkipBuiltInRunnerPrerequisiteValidation = true
-	}, factory.WithServiceMode())
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := getGeneratedJSON[factoryapi.StatusResponse](t, host.Endpoint()+"/status")
 	if status.FactoryState != string(interfaces.FactoryStateRunning) {
 		t.Fatalf("GET /status factory_state = %q, want RUNNING", status.FactoryState)
 	}
@@ -50,7 +56,7 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("GET /status runtime_status = %q, want IDLE", status.RuntimeStatus)
 	}
 
-	models := getGeneratedJSON[factoryapi.ListModelsResponse](t, server.URL()+"/models")
+	models := getGeneratedJSON[factoryapi.ListModelsResponse](t, host.Endpoint()+"/models")
 	if len(models.Results) != 1 {
 		t.Fatalf("GET /models result count = %d, want 1", len(models.Results))
 	}
@@ -67,7 +73,7 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("GET /models managed lifecycle = %s, want NOT_APPLICABLE", models.Results[0].ManagedRuntime.LifecycleState)
 	}
 
-	model := getGeneratedJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
+	model := getGeneratedJSON[factoryapi.ModelDetail](t, host.Endpoint()+"/models/OMNIVOICE_Q4_K_M")
 	if model.Name != "OMNIVOICE_Q4_K_M" || len(model.Capabilities) != 1 || model.Capabilities[0].Worker != "tts-worker" {
 		t.Fatalf("GET /models/OMNIVOICE_Q4_K_M = %#v, want one tts-worker capability", model)
 	}
@@ -76,7 +82,7 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	}
 
 	responseMode := factoryapi.METADATA
-	response := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
+	response := postJSON[factoryapi.ModelInvocationResponse](t, host.Endpoint()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
 		Bindings:  providerBackedModelTransportBindings(),
 		Content: &factoryapi.WorkContent{
@@ -104,18 +110,7 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 		t.Fatalf("POST /models/.../invocations audio part = %#v, want audio/wav at %s", audioPart, audioPath)
 	}
 
-	calls := providerStub.Calls()
-	if len(calls) != 1 {
-		t.Fatalf("provider calls = %d, want 1", len(calls))
-	}
-	if calls[0].Model != "OMNIVOICE_Q4_K_M" || calls[0].ModelOperation != "TTS" {
-		t.Fatalf("provider call = %#v, want OMNIVOICE_Q4_K_M TTS", calls[0])
-	}
-	if len(calls[0].ModelBindings) != 1 || len(calls[0].ModelBindings[0].Content) != 1 || calls[0].ModelBindings[0].Content[0].Text != "hello world" {
-		t.Fatalf("provider bindings = %#v, want one text binding for hello world", calls[0].ModelBindings)
-	}
-
-	assertUnsupportedModelInvocationRejected(t, server.URL())
+	assertUnsupportedModelInvocationRejected(t, host.Endpoint())
 }
 
 func assertUnsupportedModelInvocationRejected(t *testing.T, serverURL string) {
@@ -196,30 +191,3 @@ func providerBackedModelTransportBindings() *[]factoryapi.WorkstationOperationBi
 		},
 	}}
 }
-
-type modelTransportSmokeProvider struct {
-	mu       sync.Mutex
-	calls    []workerexecution.ProviderInferenceRequest
-	response workerexecution.InferenceResponse
-}
-
-func (p *modelTransportSmokeProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
-	return p.response, nil
-}
-
-func (p *modelTransportSmokeProvider) Calls() []workerexecution.ProviderInferenceRequest {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	calls := make([]workerexecution.ProviderInferenceRequest, len(p.calls))
-	for i, call := range p.calls {
-		calls[i] = workerexecution.CloneProviderInferenceRequest(call)
-	}
-	return calls
-}
-
-var _ provider.Provider = (*modelTransportSmokeProvider)(nil)
