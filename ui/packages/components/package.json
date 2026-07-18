@@ -71,11 +71,13 @@
     }
   },
   "scripts": {
+    "build": "node scripts/build-package.mjs",
     "build-storybook": "storybook build --loglevel warn",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "check:package-dependency-direction": "node scripts/check-package-dependency-direction.mjs",
     "storybook": "storybook dev -p 6017",
     "test": "bun run test:unit && bun run check:package-boundary && bun run check:package-dependency-direction",
+    "test:build": "bun run build && vitest run --config vitest.build.config.ts",
     "test:unit": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -b --noEmit --pretty false",
     "verify": "bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction",
