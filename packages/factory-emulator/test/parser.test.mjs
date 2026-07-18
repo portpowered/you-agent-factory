@@ -383,4 +383,44 @@ test("resolves finite outcomes, explicit exhaustion, and unmatched behavior", ()
       ),
     /zero-based safe integer/,
   );
+
+  const unmatchedAfterExhaustion = {
+    ...scenario,
+    rules: [
+      {
+        ...scenario.rules[0],
+        exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+      },
+    ],
+  };
+  assert.deepEqual(
+    resolveEmulatorScenarioResult(
+      unmatchedAfterExhaustion,
+      { id: "checkout-1", workType: "checkout" },
+      2,
+    ),
+    { kind: "unmatched", behavior: unmatchedAfterExhaustion.unmatchedBehavior },
+  );
+
+  const rejectedAfterExhaustion = {
+    ...scenario,
+    rules: [
+      {
+        ...scenario.rules[0],
+        exhaustionBehavior: { kind: "reject", reason: "script exhausted" },
+      },
+    ],
+  };
+  assert.deepEqual(
+    resolveEmulatorScenarioResult(
+      rejectedAfterExhaustion,
+      { id: "checkout-1", workType: "checkout" },
+      2,
+    ),
+    {
+      kind: "exhausted",
+      rule: rejectedAfterExhaustion.rules[0],
+      behavior: { kind: "reject", reason: "script exhausted" },
+    },
+  );
 });
