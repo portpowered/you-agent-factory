@@ -29,7 +29,9 @@
   production build, registry-pack inventory, and clean installed-consumer
   phases as separately rerunnable Make targets so failures identify the broken
   distribution boundary without replacing the existing typecheck, unit,
-  Storybook, package-boundary, or dependency-direction checks.
+  Storybook, package-boundary, or dependency-direction checks. Run the package
+  build before typecheck because clean-checkout Storybook sources resolve the
+  package's public self-reference through the compiled manifest targets.
   Backend Unit Coverage and Backend Functional Coverage are an independent,
   fail-fast-disabled matrix gated only by Classify PR Impact. Preserve the
   explicit run/intentional-skip summary, per-suite coverage thresholds,

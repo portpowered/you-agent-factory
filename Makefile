@@ -579,12 +579,12 @@ ui-components-installed-consumer:
 	cd ui/packages/components && $(UI_SCRIPT) check:installed-consumer
 
 ui-components-verify:
+	$(MAKE) ui-components-build
 	$(MAKE) ui-components-typecheck
 	$(MAKE) ui-components-test
 	$(MAKE) ui-components-storybook
 	$(MAKE) ui-components-boundary
 	$(MAKE) ui-components-dependency-direction
-	$(MAKE) ui-components-build
 	$(MAKE) ui-components-pack
 	$(MAKE) ui-components-installed-consumer
 

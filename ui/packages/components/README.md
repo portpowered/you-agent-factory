@@ -233,8 +233,9 @@ make ui-lint
 ```
 
 `make ui-components-verify` runs the full component package harness with labeled
-failure output for typecheck, tests, Storybook build, boundary checks,
-dependency-direction checks, production build, registry-pack inventory, and the
+failure output. It creates the production build first so package self-imports
+resolve on a clean checkout, then runs typecheck, tests, Storybook build,
+boundary checks, dependency-direction checks, registry-pack inventory, and the
 clean installed-consumer smoke. CI installs Chromium and runs the same harness
 in the Lint workflow after dashboard lint.
 

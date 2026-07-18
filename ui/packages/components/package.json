@@ -111,7 +111,7 @@
     "test:build": "bun run build && vitest run --config vitest.build.config.ts",
     "test:unit": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -b --noEmit --pretty false",
-    "verify": "bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction && bun run build && bun run check:pack && bun run check:installed-consumer",
+    "verify": "bun run build && bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction && bun run check:pack && bun run check:installed-consumer",
     "verify:form-field-storybook-browser": "node scripts/verify-package-form-field-storybook-browser.mjs",
     "verify:graph-storybook-viewport-browser": "node scripts/verify-graph-storybook-viewport-browser.mjs",
     "verify:storybook-browser": "node scripts/verify-package-storybook-browser.mjs",
