@@ -16,7 +16,8 @@ transient emulator activity. It is never canonical Factory event content.
 
 The schema under `contracts/factory-emulator/` is authored source. Run
 `npm run generate` from this package to regenerate its committed schema and
-TypeScript artifacts.
+TypeScript artifacts. Run `make generate-emulator` to verify they are current;
+when it reports drift, regenerate them and commit the resulting artifacts.
 
 ## Parsing a scenario for browser emulation
 
