@@ -24,11 +24,6 @@ type factoryEventHTTPStream struct {
 	errs   chan error
 }
 
-func openDefaultSessionFactoryEventHTTPStream(t *testing.T, baseURL string) *factoryEventHTTPStream {
-	t.Helper()
-	return openFactoryEventHTTPStream(t, support.DefaultSessionEventsURL(baseURL))
-}
-
 // openRootRunFactoryEventHTTPStream opens the canonical session event stream
 // through the production-shaped root.Run host's generated client seam.
 func openRootRunFactoryEventHTTPStream(t *testing.T, host *support.RootRunFunctionalHost) *factoryEventHTTPStream {
@@ -49,46 +44,6 @@ func openRootRunFactoryEventHTTPStream(t *testing.T, host *support.RootRunFuncti
 		defer resp.Body.Close()
 		cancel()
 		t.Fatalf("generated GET factory session events content type = %q, want text/event-stream", resp.Header.Get("Content-Type"))
-	}
-
-	stream := &factoryEventHTTPStream{
-		t:      t,
-		cancel: cancel,
-		done:   make(chan struct{}),
-		events: make(chan factoryapi.FactoryEvent, 4096),
-		errs:   make(chan error, 1),
-	}
-	go stream.read(resp)
-	t.Cleanup(stream.close)
-	return stream
-}
-
-// openFactoryEventHTTPStream opens one explicit factory event SSE endpoint. Runtime
-// API smokes that represent dashboard, Factory Session, or replay behavior should
-// call openDefaultSessionFactoryEventHTTPStream instead of process-global /events.
-func openFactoryEventHTTPStream(t *testing.T, endpoint string) *factoryEventHTTPStream {
-	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
-	if err != nil {
-		cancel()
-		t.Fatalf("build event stream request: %v", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		cancel()
-		t.Fatalf("GET event stream: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		cancel()
-		t.Fatalf("GET event stream status = %d, want 200", resp.StatusCode)
-	}
-	if !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-		defer resp.Body.Close()
-		cancel()
-		t.Fatalf("GET event stream content type = %q, want text/event-stream", resp.Header.Get("Content-Type"))
 	}
 
 	stream := &factoryEventHTTPStream{
