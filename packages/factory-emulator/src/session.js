@@ -106,13 +106,20 @@ export function createFactoryEmulatorSession({
   const configurationDiagnostics = [
     ...dataOnlyDiagnostics(scenario, { code: "INVALID_SCENARIO_SHAPE" }),
     ...dataOnlyDiagnostics(factory, { code: "INVALID_FACTORY_DEFINITION" }),
+    ...(limits === undefined
+      ? []
+      : dataOnlyDiagnostics(limits, {
+          code: "INVALID_LIMIT_CONFIGURATION",
+          rootPath: "/limits",
+        })),
   ];
   if (configurationDiagnostics.length > 0) {
     throw new FactoryEmulatorConfigurationError(configurationDiagnostics);
   }
   const configuredFactory = copy(factory);
   const configuredScenario = copy(scenario);
-  const normalizedLimits = normalizeFactoryEmulatorLimits(limits);
+  const configuredLimitInput = limits === undefined ? undefined : copy(limits);
+  const normalizedLimits = normalizeFactoryEmulatorLimits(configuredLimitInput);
   if (!normalizedLimits.success) {
     throw new FactoryEmulatorConfigurationError(normalizedLimits.diagnostics);
   }

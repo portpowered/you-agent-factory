@@ -983,6 +983,55 @@ test("limits publish stable defaults and reject invalid policy before bootstrap"
   }
 });
 
+test("limits enforce the plain-data ownership boundary without invoking caller code", () => {
+  let accessorReads = 0;
+  const accessorLimits = {};
+  Object.defineProperty(accessorLimits, "maxEvents", {
+    enumerable: true,
+    get() {
+      accessorReads += 1;
+      return 10;
+    },
+  });
+  const circularLimits = {};
+  circularLimits.self = circularLimits;
+
+  const cases = [
+    ["Date", new Date("2026-01-01T00:00:00Z"), "/limits"],
+    ["Map", new Map([["maxEvents", 10]]), "/limits"],
+    ["null prototype", Object.create(null), "/limits"],
+    ["accessor", accessorLimits, "/limits/maxEvents"],
+    ["circular reference", circularLimits, "/limits/self"],
+  ];
+
+  for (const [name, limits, expectedPath] of cases) {
+    const error = thrownValue(() => harness(scenario(), limits));
+    assertCommandError(error, FactoryEmulatorConfigurationError, {
+      name: "FactoryEmulatorConfigurationError",
+      code: "INVALID_CONFIGURATION",
+    });
+    assert.equal(error.diagnostics.length, 1, name);
+    assert.equal(error.diagnostics[0].code, "INVALID_LIMIT_CONFIGURATION", name);
+    assert.equal(error.diagnostics[0].path, expectedPath, name);
+  }
+
+  assert.equal(accessorReads, 0);
+});
+
+test("limits are detached from caller mutation at construction", () => {
+  const limits = { maxEvents: 3 };
+  const { emulator } = harness(scenario(), limits);
+
+  limits.maxEvents = 100;
+  limits.maxCompletedDispatches = 50;
+
+  assert.equal(emulator.status().budgetUsage.events.limit, 3);
+  assert.equal(
+    emulator.status().budgetUsage.completedDispatches.limit,
+    DEFAULT_FACTORY_EMULATOR_LIMITS.maxCompletedDispatches,
+  );
+});
+
 test("the smallest event budget pauses after bootstrap with a closeable session", async () => {
   const { batches, emulator } = harness(scenario(), { maxEvents: 2 });
 

@@ -211,8 +211,13 @@ most 1,000 scheduler batches may run without virtual-time progress; crossing
 that deterministic threshold is reported as a zero-duration cycle. Finite
 zero-duration chains at or below the threshold still complete normally.
 
-Callers may pass `limits` to `createFactoryEmulatorSession`. Every supplied
-value must be a positive safe integer and no greater than the exported
+Callers may pass `limits` to `createFactoryEmulatorSession`. The limits object
+must satisfy the same plain-data ownership boundary as Factory and scenario
+configuration: class instances, custom or null prototypes, accessors, and
+cycles are rejected before any property is read or sink activity occurs. The
+accepted input is detached at construction, so later caller mutation cannot
+change execution policy. Every supplied value must be a positive safe integer
+and no greater than the exported
 `FACTORY_EMULATOR_LIMIT_HARD_CAPS`. `maxEvents` has a minimum of 2 because the
 mandatory bootstrap atomically emits `INITIAL_STRUCTURE_REQUEST` and
 `RUN_REQUEST`; smaller configurations fail before sink activity. The defaults
