@@ -27,6 +27,11 @@ Use `projectFactoryWorkProgressAtTick` when canonical event history is the
 source for Work progress, or `projectFactoryWorkProgress` when the consumer
 already has explicit selected-tick evidence.
 
+Use `projectFactoryTopologyAtTick` to reconstruct the last canonical Factory
+topology effective at a selected tick. Use `projectFactoryTopology` when the
+consumer already has the selected-tick Factory definition. Both return stable,
+sorted public node and connection identities without mutating caller data.
+
 ## Distribution verification
 
 Run `bun run verify` from this directory to typecheck and test the package,

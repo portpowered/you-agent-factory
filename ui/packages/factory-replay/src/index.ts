@@ -24,3 +24,22 @@ export {
   initializeFactoryReplay,
   projectFactoryStateAtTick,
 } from "./replay.js";
+export {
+  type FactoryResourceTopologyNode,
+  type FactoryTopologyAtTickInput,
+  type FactoryTopologyConnection,
+  type FactoryTopologyConnectionEndpoint,
+  type FactoryTopologyConnectionKind,
+  type FactoryTopologyHandle,
+  type FactoryTopologyNode,
+  type FactoryTopologyNodeKind,
+  type FactoryTopologyProjection,
+  type FactoryTopologyProjectionInput,
+  type FactoryTopologyProjectionIssue,
+  type FactoryWorkerTopologyNode,
+  type FactoryWorkStateTopologyNode,
+  type FactoryWorkstationTopologyNode,
+  type FactoryWorkTypeTopologyNode,
+  projectFactoryTopology,
+  projectFactoryTopologyAtTick,
+} from "./topology.js";
