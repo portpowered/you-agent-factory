@@ -1,5 +1,7 @@
 # CI Relevant Files
 
+- `make verify-api` includes `make generate-emulator`, which is the freshness gate for the public Factory Emulator generated contract. Keep it non-mutating so CI rejects stale committed artifacts with a maintainer-actionable regeneration command.
+
 ## Pull-request verification workflow
 
 - Public standalone package checks belong in explicit root Make targets and in
