@@ -6,34 +6,25 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	core, observedLogs := observer.New(zap.InfoLevel)
-	recorder := &capturingInvocationMetricsRecorder{}
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-		cfg.Logger = zap.New(core)
-		cfg.InvocationMetricsRecorder = recorder
-	})
+	host := startRootRunInvocationHost(t, dir, support.NewStaticSuccessCommandRunner("primary result COMPLETE"))
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
 
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke this", nil))
 	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("invocation status = %q, want COMPLETED", response.Status)
 	}
@@ -47,72 +38,34 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	if part.Text != "primary result COMPLETE" {
 		t.Fatalf("primaryResult text = %q, want %q", part.Text, "primary result COMPLETE")
 	}
-
-	submitted := observedLogs.FilterMessage("factory session invocation submitted").All()
-	if len(submitted) != 1 {
-		t.Fatalf("submitted invocation log count = %d, want 1", len(submitted))
-	}
-	submittedFields := submitted[0].ContextMap()
-	if got := submittedFields["input_source"]; got != "COMPATIBILITY_CONTENT" {
-		t.Fatalf("submitted input_source = %#v, want COMPATIBILITY_CONTENT", got)
-	}
-	if got := submittedFields["invocation_return_policy_mode"]; got != "fallback" {
-		t.Fatalf("submitted invocation_return_policy_mode = %#v, want fallback", got)
-	}
-	if got := submittedFields["policy_resolution_path"]; got != "submitted_work_terminal" {
-		t.Fatalf("submitted policy_resolution_path = %#v, want submitted_work_terminal", got)
-	}
-
-	completed := observedLogs.FilterMessage("factory session invocation completed").All()
-	if len(completed) != 1 {
-		t.Fatalf("completed invocation log count = %d, want 1", len(completed))
-	}
-	completedFields := completed[0].ContextMap()
-	if got := completedFields["status"]; got != "COMPLETED" {
-		t.Fatalf("completed status = %#v, want COMPLETED", got)
-	}
-	if got := completedFields["result_type"]; got != "text" {
-		t.Fatalf("completed result_type = %#v, want text", got)
-	}
-	if _, ok := completedFields["resolved_work_id"]; !ok {
-		t.Fatal("expected resolved_work_id field in completed invocation log")
-	}
-
-	recorder.assertContainsMetric(t, "invocation.attempts", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
-	recorder.assertContainsMetric(t, "invocation.fallback_policy_used", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
-	recorder.assertContainsMetric(t, "invocation.success", map[string]string{"input_source": "COMPATIBILITY_CONTENT"})
-	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "COMPATIBILITY_CONTENT", "result_type": "text"})
+	assertTerminalDispatchForTrace(t, stream, response.TraceId)
+	assertInvocationTraceWorkState(t, host.Endpoint(), response.TraceId, "complete", factoryapi.WorkStateTypeTERMINAL)
 	functionalevidence.Covers(t, "rest/invokeFactorySessionBySessionId")
 }
 
 func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-	})
+	host := startRootRunInvocationHost(t, dir, support.NewStaticSuccessCommandRunner("primary result COMPLETE"))
 
 	response := postInvocationExpectStatus(
 		t,
-		server.URL(),
+		host.Endpoint(),
 		textInvocationRequest(t, "   ", nil),
 		http.StatusBadRequest,
 	)
 	if string(response.Code) != "INVOCATION_INPUT_EMPTY" {
 		t.Fatalf("invocation error code = %q, want INVOCATION_INPUT_EMPTY", response.Code)
 	}
+	assertInvocationWorkListEmpty(t, host.Endpoint())
 }
 
 func TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-	})
+	host := startRootRunInvocationHost(t, dir, support.NewStaticSuccessCommandRunner("primary result COMPLETE"))
 
 	response := postInvocationExpectStatus(
 		t,
-		server.URL(),
+		host.Endpoint(),
 		factoryapi.InvocationRequest{
 			Args: &map[string]any{"input": "hello"},
 		},
@@ -121,18 +74,16 @@ func TestSessionInvocationAPI_RejectsArgsWithoutActiveSignature(t *testing.T) {
 	if string(response.Code) != "INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE" {
 		t.Fatalf("invocation error code = %q, want INVOCATION_ARGUMENT_INVALID_ACTIVE_SIGNATURE", response.Code)
 	}
+	assertInvocationWorkListEmpty(t, host.Endpoint())
 }
 
 func TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("primary result COMPLETE"), nil)
-	})
+	host := startRootRunInvocationHost(t, dir, support.NewStaticSuccessCommandRunner("primary result COMPLETE"))
 
 	response := postInvocationExpectStatus(
 		t,
-		server.URL(),
+		host.Endpoint(),
 		factoryapi.InvocationRequest{
 			Args: &map[string]any{"input": 7},
 		},
@@ -141,6 +92,7 @@ func TestSessionInvocationAPI_RejectsInvalidStructuredArgValueShape(t *testing.T
 	if string(response.Code) != "BAD_REQUEST" {
 		t.Fatalf("invocation error code = %q, want BAD_REQUEST", response.Code)
 	}
+	assertInvocationWorkListEmpty(t, host.Endpoint())
 }
 
 func TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus(t *testing.T) {
@@ -159,12 +111,11 @@ func TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus(t *test
 			},
 		}),
 	})
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("task output COMPLETE"), nil)
-	})
+	host := startRootRunInvocationHost(t, dir, support.NewStaticSuccessCommandRunner("task output COMPLETE"))
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
 
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke this", nil))
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("invocation status = %q, want FAILED", response.Status)
 	}
@@ -174,18 +125,17 @@ func TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus(t *test
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on unresolved output", response.PrimaryResult)
 	}
+	assertTerminalDispatchForTrace(t, stream, response.TraceId)
+	assertInvocationTraceWorkState(t, host.Endpoint(), response.TraceId, "complete", factoryapi.WorkStateTypeTERMINAL)
 }
 
 func TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	blocking := newBlockingInvocationRunner()
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, blocking, nil)
-	})
+	host := startRootRunInvocationHost(t, dir, blocking)
 
 	timeoutMillis := int64(10)
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", &timeoutMillis))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke this", &timeoutMillis))
 	if response.Status != factoryapi.InvocationTerminalStatusTimedOut {
 		t.Fatalf("invocation status = %q, want TIMED_OUT", response.Status)
 	}
@@ -194,6 +144,55 @@ func TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus(t *testing.T) {
 	}
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on timeout", response.PrimaryResult)
+	}
+}
+
+func startRootRunInvocationHost(t *testing.T, dir string, runner workers.CommandRunner) *support.RootRunFunctionalHost {
+	t.Helper()
+
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: true,
+		FunctionalEdges: wire.FunctionalEdges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+	return host
+}
+
+func assertInvocationWorkListEmpty(t *testing.T, endpoint string) {
+	t.Helper()
+
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(endpoint, "/work"))
+	if len(work.Results) != 0 {
+		t.Fatalf("rejected invocation exposed %d work results, want none: %#v", len(work.Results), work.Results)
+	}
+}
+
+func assertInvocationTraceWorkState(
+	t *testing.T,
+	endpoint string,
+	traceID string,
+	wantState string,
+	wantType factoryapi.WorkStateType,
+) {
+	t.Helper()
+
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(endpoint, "/work"))
+	matched := requireGeneratedWorkByTrace(t, work, traceID)
+	if generatedWorkStateName(matched.State) != wantState || generatedWorkStateType(matched.State) != wantType {
+		t.Fatalf("invocation GET /work state = %#v, want %s/%s", matched.State, wantState, wantType)
 	}
 }
 
@@ -384,39 +383,3 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 }
 
 var _ workers.CommandRunner = (*blockingInvocationRunner)(nil)
-
-type capturingInvocationMetricsRecorder struct {
-	mu      sync.Mutex
-	metrics []service.InvocationMetric
-}
-
-func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric service.InvocationMetric) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.metrics = append(r.metrics, metric)
-}
-
-func (r *capturingInvocationMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
-	t.Helper()
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, metric := range r.metrics {
-		if metric.Name != name {
-			continue
-		}
-		if metricLabelsContain(metric.Labels, labels) {
-			return
-		}
-	}
-	t.Fatalf("metric %q with labels %#v not found in %#v", name, labels, r.metrics)
-}
-
-func metricLabelsContain(got, want map[string]string) bool {
-	for key, value := range want {
-		if got[key] != value {
-			return false
-		}
-	}
-	return true
-}
