@@ -3,12 +3,16 @@ import {
   canonicalStringify,
   deriveFactoryEmulatorIdentity,
 } from "./identity.js";
-import { calculateNextSchedulerBatch } from "./scheduler.js";
+import {
+  calculateNextSchedulerBatch,
+  inspectNextSchedulerBatch,
+} from "./scheduler.js";
 import {
   DEFAULT_FACTORY_EMULATOR_LIMITS,
   FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   budgetExceededDiagnostic,
   normalizeFactoryEmulatorLimits,
+  synchronousWorkLimitDiagnostic,
   zeroDurationCycleDiagnostic,
 } from "./limits.js";
 import { selectEmulatorRule } from "./semantics.js";
@@ -85,9 +89,18 @@ export const FactoryEmulatorExecutionPausedError = defineDataError(
  * immutable inputs are detached at construction, and all runtime state is
  * local to the returned session.
  */
-export function createFactoryEmulatorSession({ factory, scenario, sink, limits }) {
+export function createFactoryEmulatorSession({
+  factory,
+  scenario,
+  sink,
+  limits,
+  yieldControl = defaultYieldControl,
+}) {
   if (!sink || typeof sink.write !== "function" || typeof sink.close !== "function") {
     throw new TypeError("sink must provide write and close functions");
+  }
+  if (typeof yieldControl !== "function") {
+    throw new TypeError("yieldControl must be a function");
   }
 
   const configurationDiagnostics = [
@@ -207,6 +220,36 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
     throw new FactoryEmulatorExecutionPausedError(diagnostic);
   }
 
+  function assertSynchronousWorkWithinLimit(observed) {
+    if (observed > configuredLimits.maxSynchronousWorkItems) {
+      pauseExecution(synchronousWorkLimitDiagnostic({
+        configured: configuredLimits.maxSynchronousWorkItems,
+        observed,
+        virtualTime: committedState.virtualTime,
+        virtualElapsedMs: committedState.virtualElapsedMs,
+      }));
+    }
+  }
+
+  async function inspectSchedulerBatchWithinLimit() {
+    let continuation;
+    while (true) {
+      const inspection = inspectNextSchedulerBatch({
+        continuation,
+        maximumWorkItems: configuredLimits.maxSynchronousWorkItems,
+        state: committedState,
+      });
+      if (inspection.done) {
+        if (inspection.batch !== undefined) {
+          assertSynchronousWorkWithinLimit(inspection.batch.workItems);
+        }
+        return;
+      }
+      continuation = inspection.continuation;
+      await yieldControl();
+    }
+  }
+
   function finishAdvance(command, fromVirtualTime, batches, madeProgress) {
     if (madeProgress || committedState.virtualTime !== fromVirtualTime) {
       committedState = {
@@ -259,6 +302,7 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
     }
 
     while (true) {
+      await inspectSchedulerBatchWithinLimit();
       const calculation = calculateNextSchedulerBatch({
         createEvent,
         identityCoordinates: sessionIdentityCoordinates(
@@ -305,7 +349,7 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
       synchronousBatches += 1;
       if (synchronousBatches >= configuredLimits.maxSynchronousBatches) {
         synchronousBatches = 0;
-        await cooperativeYield();
+        await yieldControl();
       }
     }
 
@@ -344,6 +388,9 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
         }
 
         if (committedState.counters.commands === 0) {
+          assertSynchronousWorkWithinLimit(
+            configuredScenario.initialSubmissions?.length ?? 0,
+          );
           const initial = calculateInitialSubmission(
             configuredFactory,
             configuredScenario,
@@ -367,6 +414,7 @@ export function createFactoryEmulatorSession({ factory, scenario, sink, limits }
     async submit(submissionOrBatch) {
       assertCommandAvailable("submit");
       const submissions = normalizeSubmissions(submissionOrBatch);
+      assertSynchronousWorkWithinLimit(submissions.length);
       const key = commandKey("submit", canonicalStringify(submissions));
       const retry = beginCommand("submit", key, "submitting");
       try {
@@ -947,6 +995,20 @@ function copy(value) {
   return structuredClone(value);
 }
 
-async function cooperativeYield() {
-  await Promise.resolve();
+function defaultYieldControl() {
+  if (typeof MessageChannel === "function") {
+    return new Promise((resolve) => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => {
+        channel.port1.close();
+        channel.port2.close();
+        resolve();
+      };
+      channel.port2.postMessage(undefined);
+    });
+  }
+  if (typeof setImmediate === "function") {
+    return new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new TypeError("yieldControl is required when the host has no task scheduler");
 }

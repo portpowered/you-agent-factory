@@ -52,12 +52,13 @@ function scenario(overrides = {}) {
   };
 }
 
-function harness(scenarioDocument = scenario(), limits) {
+function harness(scenarioDocument = scenario(), limits, options = {}) {
   const batches = [];
   const emulator = createFactoryEmulatorSession({
     factory: supportedFactory(),
     scenario: scenarioDocument,
     limits,
+    ...options,
     sink: {
       async close() {
         return { status: "closed" };
@@ -961,6 +962,7 @@ test("limits publish stable defaults and reject invalid policy before bootstrap"
     maxVirtualElapsedMs: 3_600_000,
     maxZeroDurationBatches: 1_000,
     maxSynchronousBatches: 100,
+    maxSynchronousWorkItems: 100,
   });
   assert.ok(FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents > 10_000);
 
@@ -969,6 +971,7 @@ test("limits publish stable defaults and reject invalid policy before bootstrap"
     { maxEvents: 1 },
     { maxCompletedDispatches: 0.5 },
     { maxVirtualElapsedMs: Number.POSITIVE_INFINITY },
+    { maxSynchronousWorkItems: 0 },
     { maxEvents: FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents + 1 },
     { unsupported: 1 },
   ]) {
@@ -1150,7 +1153,8 @@ test("zero-duration chains complete at the configured boundary and pause reprodu
   assert.equal(closed.status, "closed");
 });
 
-test("cooperative scheduler yielding keeps the active command serialized", async () => {
+test("cooperative scheduler yielding gives a host task a turn and keeps the command serialized", async () => {
+  let yieldCount = 0;
   const { emulator } = harness(scenario({
     initialSubmissions: [{ id: "timed", workType: "checkout" }],
     rules: [{
@@ -1159,27 +1163,113 @@ test("cooperative scheduler yielding keeps the active command serialized", async
       outcomes: [{ kind: "complete", durationMs: 1 }],
       exhaustionBehavior: { kind: "repeatLast" },
     }],
-  }), { maxSynchronousBatches: 1 });
+  }), { maxSynchronousBatches: 1 }, {
+    yieldControl: () => new Promise((resolve) => {
+      setImmediate(() => {
+        yieldCount += 1;
+        resolve();
+      });
+    }),
+  });
   await emulator.start();
 
   let statusAtBoundary;
   let overlappingError;
   const advance = emulator.advanceBy(1);
-  queueMicrotask(async () => {
+  const hostTask = new Promise((resolve) => setImmediate(async () => {
     statusAtBoundary = emulator.status();
     try {
       await emulator.submit({ id: "overlap", workType: "checkout" });
     } catch (error) {
       overlappingError = error;
     }
-  });
+    resolve();
+  }));
+  await hostTask;
   await advance;
-  await Promise.resolve();
 
+  assert.ok(yieldCount >= 1);
   assertStatus(statusAtBoundary, { phase: "active", reason: "advancing" });
   assert.ok(overlappingError instanceof FactoryEmulatorLifecycleError);
   assert.equal(overlappingError.phase, "advancing");
   assert.equal(emulator.state().virtualElapsedMs, 1);
+});
+
+test("synchronous Work limits pause before oversized submissions and scheduler batches materialize", async () => {
+  const submission = harness(
+    scenario({ initialSubmissions: [] }),
+    { maxSynchronousWorkItems: 1 },
+  );
+  await submission.emulator.start();
+  const submissionBefore = submission.emulator.state();
+  const submissionBatchCount = submission.batches.length;
+  await assert.rejects(
+    submission.emulator.submit([
+      { id: "first", workType: "checkout" },
+      { id: "second", workType: "checkout" },
+    ]),
+    (error) => assertPaused(
+      error,
+      "synchronous-work-limit",
+      "schedulerWorkItems",
+      1,
+      2,
+    ),
+  );
+  assert.deepEqual(submission.emulator.state(), submissionBefore);
+  assert.equal(submission.batches.length, submissionBatchCount);
+
+  const ready = harness(
+    scenario({ initialSubmissions: [] }),
+    { maxSynchronousWorkItems: 1 },
+  );
+  await ready.emulator.start();
+  await ready.emulator.submit({ id: "first", workType: "checkout" });
+  await ready.emulator.submit({ id: "second", workType: "checkout" });
+  const readyBefore = ready.emulator.state();
+  const readyBatchCount = ready.batches.length;
+  await assert.rejects(
+    ready.emulator.advanceToNext(),
+    (error) => assertPaused(
+      error,
+      "synchronous-work-limit",
+      "schedulerWorkItems",
+      1,
+      2,
+    ),
+  );
+  assert.deepEqual(ready.emulator.state(), readyBefore);
+  assert.equal(ready.batches.length, readyBatchCount);
+  assert.equal(ready.emulator.state().counters.dispatches, 0);
+
+  const due = harness(scenario({
+    initialSubmissions: [{ id: "first", workType: "checkout" }],
+    rules: [{
+      id: "timed",
+      match: { kind: "all" },
+      outcomes: [{ kind: "complete", durationMs: 1 }],
+      exhaustionBehavior: { kind: "repeatLast" },
+    }],
+  }), { maxSynchronousWorkItems: 1 });
+  await due.emulator.start();
+  await due.emulator.advanceToNext();
+  await due.emulator.submit({ id: "second", workType: "checkout" });
+  await due.emulator.advanceToNext();
+  const dueBefore = due.emulator.state();
+  const dueBatchCount = due.batches.length;
+  await assert.rejects(
+    due.emulator.advanceBy(1),
+    (error) => assertPaused(
+      error,
+      "synchronous-work-limit",
+      "schedulerWorkItems",
+      1,
+      2,
+    ),
+  );
+  assert.deepEqual(due.emulator.state(), dueBefore);
+  assert.equal(due.batches.length, dueBatchCount);
+  assert.equal(due.emulator.state().counters.completions, 0);
 });
 
 test("public observations are detached data and status summarizes bounded recovery state", async () => {

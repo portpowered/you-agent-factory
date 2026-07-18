@@ -226,6 +226,7 @@ and hard caps are exported as
 | `maxVirtualElapsedMs` | 1 | 3,600,000 | 31,536,000,000 |
 | `maxZeroDurationBatches` | 1 | 1,000 | 100,000 |
 | `maxSynchronousBatches` | 1 | 100 | 10,000 |
+| `maxSynchronousWorkItems` | 1 | 100 | 10,000 |
 
 Invalid policy fails at session construction, before bootstrap activity. All
 kernel-produced command errors are detached plain-data values with `name`,
@@ -241,9 +242,20 @@ Instead, the command rejects with `FactoryEmulatorExecutionPausedError`, and
 observed values, and current virtual instant. Existing Work remains in its last
 valid phase; the kernel never fabricates failed Work to represent a pause.
 
+Before an atomic scheduler batch is materialized, the session examines at most
+`maxSynchronousWorkItems` retained Work values and then yields with an explicit
+plain-data inspection continuation. It counts at most one eligible Work beyond
+the limit. An oversized ready or due set pauses with a
+`synchronous-work-limit` diagnostic before dispatch/completion events or
+calculated next state are built. Initial and interactive submission batches use
+the same ceiling, so a single command cannot introduce an unbounded calculation
+batch.
+
 After each `maxSynchronousBatches` scheduler calculations, a long command awaits
-a Promise microtask boundary. This uses no timer or wall clock, preserves event
-order, and keeps the original command serialized until it finishes or pauses.
+a host task boundary. The default uses the runtime task queue without a wall
+timer; hosts may inject `yieldControl` to own worker/process scheduling. Event
+order is unchanged, and the original command stays serialized until it finishes
+or pauses.
 `reset()` clears the pause and all usage counters, reproducing the same boundary
 for the same inputs. `close()` remains available after a safety pause and may
 write its single terminal lifecycle event even when the execution event budget

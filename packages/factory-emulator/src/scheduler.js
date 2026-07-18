@@ -51,6 +51,93 @@ export function calculateNextSchedulerBatch({
       });
 }
 
+/**
+ * Inspects a bounded slice of retained Work before an atomic scheduler batch is
+ * materialized. The returned continuation is explicit plain state and can be
+ * resumed after the host receives a task turn.
+ */
+export function inspectNextSchedulerBatch({
+  continuation,
+  maximumWorkItems,
+  state,
+}) {
+  const inspection = continuation === undefined
+    ? {
+        phase: "active",
+        index: 0,
+        earliestElapsedMs: undefined,
+        earliestWorkItems: 0,
+        eligibleWorkItems: 0,
+      }
+    : { ...continuation };
+  let examined = 0;
+
+  while (examined < maximumWorkItems) {
+    if (inspection.phase === "active") {
+      if (inspection.index === state.works.length) {
+        if (inspection.earliestElapsedMs <= state.virtualElapsedMs) {
+          return completedInspection("completion", inspection.earliestWorkItems);
+        }
+        inspection.phase = "ready";
+        inspection.index = 0;
+        inspection.eligibleWorkItems = 0;
+        continue;
+      }
+      const work = state.works[inspection.index];
+      inspection.index += 1;
+      examined += 1;
+      if (work.phase !== "active") {
+        continue;
+      }
+      const deadline = work.dispatch.dueElapsedMs;
+      if (
+        inspection.earliestElapsedMs === undefined
+        || deadline < inspection.earliestElapsedMs
+      ) {
+        inspection.earliestElapsedMs = deadline;
+        inspection.earliestWorkItems = 1;
+      } else if (deadline === inspection.earliestElapsedMs) {
+        inspection.earliestWorkItems = boundedIncrement(
+          inspection.earliestWorkItems,
+          maximumWorkItems,
+        );
+      }
+      continue;
+    }
+
+    if (inspection.index === state.works.length) {
+      if (inspection.eligibleWorkItems > 0) {
+        return completedInspection("dispatch", inspection.eligibleWorkItems);
+      }
+      return inspection.earliestElapsedMs === undefined
+        ? { done: true, batch: undefined }
+        : completedInspection("completion", inspection.earliestWorkItems);
+    }
+    const work = state.works[inspection.index];
+    inspection.index += 1;
+    examined += 1;
+    if (work.phase === "ready") {
+      inspection.eligibleWorkItems = boundedIncrement(
+        inspection.eligibleWorkItems,
+        maximumWorkItems,
+      );
+      if (inspection.eligibleWorkItems > maximumWorkItems) {
+        return completedInspection("dispatch", inspection.eligibleWorkItems);
+      }
+    }
+  }
+
+  return { done: false, continuation: inspection };
+}
+
+function boundedIncrement(value, maximum) {
+  return value > maximum ? value : value + 1;
+}
+
+function completedInspection(kind, workItems) {
+  return { done: true, batch: { kind, workItems } };
+}
+
 function calculateDispatchStarts({
   createEvent,
   identityCoordinates,

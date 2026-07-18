@@ -116,7 +116,9 @@ const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
     maxVirtualElapsedMs: 1_000,
     maxZeroDurationBatches: 10,
     maxSynchronousBatches: 5,
+    maxSynchronousWorkItems: 25,
   },
+  yieldControl: async () => {},
 });
 const limits: FactoryEmulatorLimits = { maxEvents: 100 };
 declare const pausedError: FactoryEmulatorExecutionPausedError;

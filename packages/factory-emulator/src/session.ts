@@ -85,6 +85,14 @@ export type FactoryEmulatorExecutionDiagnostic =
       readonly observed: number;
       readonly virtualTime: string;
       readonly virtualElapsedMs: number;
+    }
+  | {
+      readonly kind: "synchronous-work-limit";
+      readonly limit: "schedulerWorkItems";
+      readonly configured: number;
+      readonly observed: number;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
     };
 
 export interface FactoryEmulatorExecutionPausedError extends FactoryEmulatorDataError {
@@ -102,6 +110,7 @@ export interface FactoryEmulatorLimits {
   readonly maxVirtualElapsedMs?: number;
   readonly maxZeroDurationBatches?: number;
   readonly maxSynchronousBatches?: number;
+  readonly maxSynchronousWorkItems?: number;
 }
 
 export declare const DEFAULT_FACTORY_EMULATOR_LIMITS: Readonly<Required<FactoryEmulatorLimits>>;
@@ -143,6 +152,8 @@ export interface FactoryEmulatorSessionOptions {
   readonly scenario: EmulatorScenario;
   readonly sink: FactoryEventSink;
   readonly limits?: FactoryEmulatorLimits;
+  /** Host-owned task boundary used after the configured synchronous cadence. */
+  readonly yieldControl?: () => void | PromiseLike<void>;
 }
 
 export interface FactoryEmulatorSessionWork {

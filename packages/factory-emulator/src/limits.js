@@ -4,6 +4,7 @@ export const DEFAULT_FACTORY_EMULATOR_LIMITS = Object.freeze({
   maxVirtualElapsedMs: 60 * 60 * 1_000,
   maxZeroDurationBatches: 1_000,
   maxSynchronousBatches: 100,
+  maxSynchronousWorkItems: 100,
 });
 
 export const FACTORY_EMULATOR_LIMIT_HARD_CAPS = Object.freeze({
@@ -12,6 +13,7 @@ export const FACTORY_EMULATOR_LIMIT_HARD_CAPS = Object.freeze({
   maxVirtualElapsedMs: 365 * 24 * 60 * 60 * 1_000,
   maxZeroDurationBatches: 100_000,
   maxSynchronousBatches: 10_000,
+  maxSynchronousWorkItems: 10_000,
 });
 
 const limitNames = Object.freeze(Object.keys(DEFAULT_FACTORY_EMULATOR_LIMITS));
@@ -22,6 +24,7 @@ const minimumLimitValues = Object.freeze({
   maxVirtualElapsedMs: 1,
   maxZeroDurationBatches: 1,
   maxSynchronousBatches: 1,
+  maxSynchronousWorkItems: 1,
 });
 
 /** Normalizes caller policy without reading environment or process-global state. */
@@ -86,6 +89,22 @@ export function zeroDurationCycleDiagnostic({
   return {
     kind: "zero-duration-cycle",
     limit: "zeroDurationBatches",
+    configured,
+    observed,
+    virtualTime,
+    virtualElapsedMs,
+  };
+}
+
+export function synchronousWorkLimitDiagnostic({
+  configured,
+  observed,
+  virtualTime,
+  virtualElapsedMs,
+}) {
+  return {
+    kind: "synchronous-work-limit",
+    limit: "schedulerWorkItems",
     configured,
     observed,
     virtualTime,
