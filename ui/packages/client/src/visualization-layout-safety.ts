@@ -14,6 +14,20 @@ type UnsafeTextMatch = {
   message: string;
 };
 
+const MARKDOWN_PATTERNS = [
+  /(?:^|\n)\s{0,3}(?:#{1,6}(?:\s|$)|>|[-+*]\s|\d+[.)]\s|```|~~~)/u,
+  /(?:^|\n)\s{0,3}(?:=+|-+)\s*(?:\n|$)/u,
+  /!?\[[^\]\n]*\]\([^\n)]*\)/u,
+  /!?\[[^\]\n]*\]\[[^\]\n]*\]/u,
+  /(?:^|\n)\s{0,3}\[[^\]\n]+\]:\s*\S+/u,
+  /(?:\*\*|__|~~|`)[^\n]+(?:\*\*|__|~~|`)/u,
+  /(?:^|[\s([{>])(?:\*[^*\n]+\*|_[^_\n]+_)(?=$|[\s)\]}.!,?:;])/u,
+] as const;
+
+function containsMarkdown(value: string): boolean {
+  return MARKDOWN_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 function unsafeTextMatch(value: string): UnsafeTextMatch | undefined {
   if (/<!--|<!doctype\b|<\/?[a-z][^>]*>/iu.test(value)) {
     return {
@@ -21,10 +35,7 @@ function unsafeTextMatch(value: string): UnsafeTextMatch | undefined {
       message: "Expected inert plain text without HTML or media markup.",
     };
   }
-  if (
-    /(?:^|\n)\s{0,3}(?:#{1,6}\s|>|[-+*]\s|\d+[.)]\s|```|~~~)/u.test(value) ||
-    /!?\[[^\]]*\]\([^)]*\)|(?:\*\*|__|~~|`)[^\n]+(?:\*\*|__|~~|`)/u.test(value)
-  ) {
+  if (containsMarkdown(value)) {
     return {
       code: "unsafe_markdown",
       message: "Expected inert plain text without Markdown or links.",

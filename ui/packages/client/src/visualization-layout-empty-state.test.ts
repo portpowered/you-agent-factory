@@ -65,7 +65,7 @@ describe("valid Factory visualization node empty states", () => {
   });
 });
 
-describe("invalid Factory visualization node empty states", () => {
+describe("Factory visualization node empty-state content diagnostics", () => {
   it.each([
     ["blank text", "   ", "empty_text"],
     ["overlong text", "a".repeat(501), "text_too_long"],
@@ -94,6 +94,35 @@ describe("invalid Factory visualization node empty states", () => {
     }
   });
 
+  it.each([
+    ["asterisk emphasis", "Use *priority* handling"],
+    ["underscore emphasis", "Use _priority_ handling"],
+    ["Setext headings", "Heading\n---"],
+    ["reference-style links", "[runbook][ops]"],
+  ])("rejects %s in empty-state text as Markdown", (_, text) => {
+    const input = exampleLayout();
+    input.nodeEmptyStates = [
+      {
+        nodeId: "workstation:triage",
+        content: { kind: "text", text },
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "unsafe_markdown",
+          path: ["nodeEmptyStates", 0, "content", "text"],
+        }),
+      );
+    }
+  });
+});
+
+describe("invalid Factory visualization node references", () => {
   it("rejects blank, unknown, and every duplicate canonical node reference without changing the Factory", () => {
     const factory = exampleFactory();
     const originalFactory = structuredClone(factory);

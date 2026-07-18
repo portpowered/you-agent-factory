@@ -249,6 +249,35 @@ describe("Factory visualization note content diagnostics", () => {
     }
   });
 
+  it.each([
+    ["asterisk emphasis", "Use *priority* handling"],
+    ["underscore emphasis", "Use _priority_ handling"],
+    ["Setext headings", "Heading\n---"],
+    ["reference-style links", "[runbook][ops]"],
+  ])("rejects %s in note bodies as Markdown", (_, body) => {
+    const input = exampleLayout();
+    input.annotations = [
+      {
+        id: "markdown-note",
+        kind: "note",
+        position: { x: 0, y: 0 },
+        body,
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "unsafe_markdown",
+          path: ["annotations", 0, "body"],
+        }),
+      );
+    }
+  });
+
   it("rejects overlong and unsafe titles plus unsupported tones", () => {
     const input = exampleLayout();
     input.annotations = [
