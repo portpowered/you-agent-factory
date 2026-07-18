@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -150,6 +151,86 @@ func TestRootRunFunctionalHostShutdownIsBoundedAndIdempotent(t *testing.T) {
 	}
 	if first.ExitCode != root.ExitSuccess || first.Outcome != support.RootRunProcessStopped {
 		t.Fatalf("Shutdown() result = %#v, want clean stopped outcome", first)
+	}
+}
+
+func TestRootRunFunctionalHostReportsOccupiedAddressAndAllowsReuse(t *testing.T) {
+	t.Parallel()
+
+	blocker, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("listen on occupied-address fixture: %v", err)
+	}
+	t.Cleanup(func() { _ = blocker.Close() })
+	port := blocker.Addr().(*net.TCPAddr).Port
+	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	factoryRoot := writeRootRunHostFactory(t)
+	systemRoot := t.TempDir()
+
+	_, err = support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:    factoryRoot,
+		SystemRoot:     systemRoot,
+		ListenAddress:  address,
+		StartupTimeout: 3 * time.Second,
+	})
+	if err == nil {
+		_ = blocker.Close()
+		t.Fatal("StartRootRunFunctionalHost(occupied address) error = nil")
+	}
+	for _, diagnostic := range []string{
+		"http://" + address,
+		"generated REST readiness",
+		"last generated-client outcome=",
+		"terminal process=outcome=failed",
+		"requested listener address " + address + " remains unavailable",
+		"bind:",
+	} {
+		if !strings.Contains(err.Error(), diagnostic) {
+			_ = blocker.Close()
+			t.Fatalf("occupied-address error = %q, want %q", err, diagnostic)
+		}
+	}
+	if closeErr := blocker.Close(); closeErr != nil {
+		t.Fatalf("close occupied-address fixture: %v", closeErr)
+	}
+
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:    factoryRoot,
+		SystemRoot:     systemRoot,
+		ListenAddress:  address,
+		StartupTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("reuse released address with identical roots: %v", err)
+	}
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelShutdown()
+	if _, err := host.Shutdown(shutdownCtx); err != nil {
+		t.Fatalf("Shutdown() reused host: %v", err)
+	}
+}
+
+func TestRootRunFunctionalHostReportsReadinessDeadlineAtCustomerBoundary(t *testing.T) {
+	t.Parallel()
+
+	_, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:    writeRootRunHostFactory(t),
+		SystemRoot:     t.TempDir(),
+		StartupTimeout: time.Nanosecond,
+	})
+	if err == nil {
+		t.Fatal("StartRootRunFunctionalHost(readiness deadline) error = nil")
+	}
+	for _, diagnostic := range []string{
+		"http://127.0.0.1:",
+		"failed during generated REST readiness after",
+		"context deadline exceeded",
+		"last generated-client outcome=",
+		"terminal process=outcome=",
+	} {
+		if !strings.Contains(err.Error(), diagnostic) {
+			t.Fatalf("readiness-deadline error = %q, want %q", err, diagnostic)
+		}
 	}
 }
 

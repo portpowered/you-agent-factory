@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 )
 
 const rootRunFunctionalHostStartupTimeout = 10 * time.Second
+const rootRunFunctionalHostCleanupTimeout = 5 * time.Second
 const rootRunFunctionalHostReadinessAttemptTimeout = 250 * time.Millisecond
 
 // RootRunFunctionalHostConfig contains only explicit process inputs and the
@@ -27,6 +29,9 @@ type RootRunFunctionalHostConfig struct {
 	SystemRoot      string
 	FunctionalEdges wire.FunctionalEdges
 	StartupTimeout  time.Duration
+	// ListenAddress requests a specific loopback host and port. Empty reserves
+	// an ephemeral listener before root.Run starts.
+	ListenAddress string
 }
 
 // RootRunProcessOutcome classifies why the customer-boundary process returned.
@@ -71,12 +76,10 @@ func StartRootRunFunctionalHost(
 	if cfg.FactoryRoot == "" || cfg.SystemRoot == "" {
 		return nil, fmt.Errorf("start root.Run functional host: factory and system roots are required")
 	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	endpoint, listener, err := prepareRootRunHostListener(cfg.ListenAddress)
 	if err != nil {
-		return nil, fmt.Errorf("start root.Run functional host listener: %w", err)
+		return nil, err
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	endpoint := "http://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 
 	hostCtx, cancel := context.WithCancel(ctx)
 	httpClient := &http.Client{}
@@ -104,18 +107,42 @@ func StartRootRunFunctionalHost(
 	}
 	readyCtx, readyCancel := context.WithTimeout(ctx, timeout)
 	defer readyCancel()
+	readinessStarted := time.Now()
 	if err := host.waitUntilReady(readyCtx); err != nil {
 		cancel()
-		_ = listener.Close()
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), timeout)
-		defer cleanupCancel()
-		result, cleanupErr := host.waitForResult(cleanupCtx)
-		if cleanupErr != nil {
-			return nil, fmt.Errorf("start root.Run functional host at %s: %w; cleanup: %v", endpoint, err, cleanupErr)
+		if listener != nil {
+			_ = listener.Close()
 		}
-		return nil, fmt.Errorf("start root.Run functional host at %s: %w; process exit=%d diagnostics=%q", endpoint, err, result.ExitCode, result.Diagnostics)
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), rootRunFunctionalHostCleanupTimeout)
+		defer cleanupCancel()
+		return nil, host.startupFailure(err, time.Since(readinessStarted), cleanupCtx)
 	}
 	return host, nil
+}
+
+func prepareRootRunHostListener(requestedAddress string) (string, net.Listener, error) {
+	address := strings.TrimSpace(requestedAddress)
+	if address != "" {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return "", nil, fmt.Errorf("start root.Run functional host listener address %q: %w", address, err)
+		}
+		if host != "127.0.0.1" && host != "localhost" && host != "::1" {
+			return "", nil, fmt.Errorf("start root.Run functional host listener address %q: loopback host is required", address)
+		}
+		portNumber, err := strconv.Atoi(port)
+		if err != nil || portNumber <= 0 || portNumber > 65535 {
+			return "", nil, fmt.Errorf("start root.Run functional host listener address %q: valid non-zero TCP port is required", address)
+		}
+		return "http://" + net.JoinHostPort(host, port), nil, nil
+	}
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, fmt.Errorf("start root.Run functional host listener: %w", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	return "http://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), listener, nil
 }
 
 func (host *RootRunFunctionalHost) run(
@@ -133,6 +160,9 @@ func (host *RootRunFunctionalHost) run(
 		Stderr:  diagnostics,
 		Context: ctx,
 	}, root.Dependencies{FunctionalEdges: edges})
+	if exitCode != root.ExitSuccess {
+		captureRequestedListenerFailure(diagnostics, cfg.ListenAddress)
+	}
 	host.resultMu.Lock()
 	host.result = RootRunProcessResult{
 		ExitCode:    exitCode,
@@ -142,6 +172,23 @@ func (host *RootRunFunctionalHost) run(
 	host.finished = true
 	host.resultMu.Unlock()
 	close(host.done)
+}
+
+func captureRequestedListenerFailure(diagnostics *bytes.Buffer, requestedAddress string) {
+	address := strings.TrimSpace(requestedAddress)
+	if address == "" {
+		return
+	}
+	_, port, splitErr := net.SplitHostPort(address)
+	if splitErr != nil {
+		return
+	}
+	listener, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		_, _ = fmt.Fprintf(diagnostics, "requested listener address %s remains unavailable: %v", address, err)
+		return
+	}
+	_ = listener.Close()
 }
 
 func rootRunProcessOutcome(exitCode int, processErr error) RootRunProcessOutcome {
@@ -233,6 +280,42 @@ func (host *RootRunFunctionalHost) waitForResult(ctx context.Context) (RootRunPr
 	case <-ctx.Done():
 		return RootRunProcessResult{}, ctx.Err()
 	}
+}
+
+func (host *RootRunFunctionalHost) startupFailure(
+	readinessErr error,
+	elapsed time.Duration,
+	cleanupCtx context.Context,
+) error {
+	result, cleanupErr := host.waitForResult(cleanupCtx)
+	host.resultMu.RLock()
+	lastReadiness := host.lastReadiness
+	finished := host.finished
+	if finished {
+		result = host.result
+	}
+	host.resultMu.RUnlock()
+
+	processOutcome := "pending"
+	if finished {
+		processOutcome = fmt.Sprintf(
+			"outcome=%s exit=%d diagnostics=%q",
+			result.Outcome,
+			result.ExitCode,
+			result.Diagnostics,
+		)
+	}
+	if cleanupErr != nil {
+		processOutcome += fmt.Sprintf(" cleanup join=%v", cleanupErr)
+	}
+	return fmt.Errorf(
+		"start root.Run functional host at %s failed during generated REST readiness after %s: %w (last generated-client outcome=%q; terminal process=%s)",
+		host.endpoint,
+		elapsed.Round(time.Millisecond),
+		readinessErr,
+		lastReadiness,
+		processOutcome,
+	)
 }
 
 func (host *RootRunFunctionalHost) shutdownDiagnostic(cause error) (RootRunProcessResult, error) {

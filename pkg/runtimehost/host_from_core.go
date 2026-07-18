@@ -222,6 +222,11 @@ func (r *ApplicationRuntime) waitForRuntime(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case apiErr := <-r.host.apiServerExit:
+			if apiErr == nil {
+				return errors.New("API server stopped unexpectedly")
+			}
+			return fmt.Errorf("API server failed: %w", apiErr)
 		case <-current.RunDone:
 		}
 		if r.host.currentLiveRuntime() != current {

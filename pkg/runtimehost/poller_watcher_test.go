@@ -2,6 +2,8 @@ package runtimehost
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -127,4 +129,37 @@ func (*sidecarRuntimeConfig) RuntimeBaseDir() string                     { retur
 func (*sidecarRuntimeConfig) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 func (*sidecarRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
 	return nil, false
+}
+
+func TestApplicationRuntimeWaitForRuntimeReportsAPIServerExit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		apiErr    error
+		wantError string
+	}{
+		{name: "failure", apiErr: errors.New("bind: address already in use"), wantError: "API server failed: bind: address already in use"},
+		{name: "unexpected clean exit", wantError: "API server stopped unexpectedly"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			apiExit := make(chan error, 1)
+			apiExit <- test.apiErr
+			close(apiExit)
+			host := &Host{apiServerExit: apiExit}
+			host.setRunState(context.Background(), "test-session", &liveRuntimeHandle{RunDone: make(chan struct{})})
+			runtime := &ApplicationRuntime{host: host}
+
+			err := runtime.waitForRuntime(context.Background())
+			if err == nil || !strings.Contains(err.Error(), test.wantError) {
+				t.Fatalf("waitForRuntime() error = %v, want %q", err, test.wantError)
+			}
+			if test.apiErr != nil && !errors.Is(err, test.apiErr) {
+				t.Fatalf("waitForRuntime() error = %v, want wrapped API error", err)
+			}
+		})
+	}
 }
