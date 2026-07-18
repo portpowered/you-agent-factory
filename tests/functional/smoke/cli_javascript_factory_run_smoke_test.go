@@ -56,6 +56,7 @@ func TestJavaScriptFactoryRun_RealCLIParallelFanoutCorrelatesChildren(t *testing
 	runErr := cmd.Run()
 	assertParallelFanoutProcessResult(t, ctx, runErr, stdout.String(), stderr.String())
 	assertParallelFanoutResult(t, decodeSingleJavaScriptFactoryRunResult(t, stdout.String()))
+	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func assertParallelFanoutProcessResult(t *testing.T, ctx context.Context, runErr error, stdout, stderr string) {
@@ -169,7 +170,6 @@ func TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline(t *testing.T)
 	assertJavaScriptPipelineProcessResult(t, ctx, runErr, stdout.String(), stderr.String())
 	result := decodeSingleJavaScriptFactoryRunResult(t, stdout.String())
 	assertOrderedJavaScriptPipelineResult(t, result)
-	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func assertJavaScriptPipelineProcessResult(t *testing.T, ctx context.Context, runErr error, stdout, stderr string) {

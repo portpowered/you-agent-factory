@@ -246,7 +246,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go::TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline",
+          "test": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go::TestJavaScriptFactoryRun_RealCLIParallelFanoutCorrelatesChildren",
           "boundary": "cli"
         }
       ]
