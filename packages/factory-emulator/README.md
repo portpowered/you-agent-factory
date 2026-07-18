@@ -232,7 +232,8 @@ kernel-produced command errors are detached plain-data values with `name`,
 `message`, `code`, and family-specific diagnostic fields, so their complete
 contract survives `structuredClone` across worker and process boundaries.
 Caller-owned sink failures are propagated unchanged and are also projected as
-plain data through `status()`. A batch that would exceed a cumulative limit is
+plain data through `status()`, with non-string or unprintable rejection messages
+normalized to safe strings. A batch that would exceed a cumulative limit is
 not written or committed.
 Instead, the command rejects with `FactoryEmulatorExecutionPausedError`, and
 `status()` reports `error` with a detached `budget-exceeded` or

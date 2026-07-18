@@ -1273,6 +1273,65 @@ test("public observations are detached data and status summarizes bounded recove
   assert.equal(attempts.length, 3);
 });
 
+test("sink failures normalize hostile rejection messages in data-only status", async () => {
+  const dateMessage = new Date("2026-07-18T08:00:00.000Z");
+  const dateMessageError = new Error("replaced");
+  dateMessageError.message = dateMessage;
+  const unprintableRejection = Object.create(null);
+  const cases = [
+    {
+      name: "non-string Error message",
+      rejection: dateMessageError,
+      expectedMessage: String(dateMessage),
+    },
+    {
+      name: "non-Error primitive",
+      rejection: Symbol("sink-rejection"),
+      expectedMessage: "Symbol(sink-rejection)",
+    },
+    {
+      name: "unprintable non-Error value",
+      rejection: unprintableRejection,
+      expectedMessage: "Sink rejected with an unprintable value",
+    },
+  ];
+
+  for (const { name, rejection, expectedMessage } of cases) {
+    let rejectNextWrite = false;
+    const emulator = createFactoryEmulatorSession({
+      factory: supportedFactory(),
+      scenario: scenario({ initialSubmissions: [] }),
+      sink: {
+        async close() {
+          return { status: "closed" };
+        },
+        async write() {
+          if (rejectNextWrite) {
+            throw rejection;
+          }
+          return { status: "accepted" };
+        },
+      },
+    });
+    await emulator.start();
+    rejectNextWrite = true;
+
+    const thrown = await rejectedValue(emulator.submit({
+      id: `hostile-${name}`,
+      workType: "checkout",
+    }));
+    assert.strictEqual(thrown, rejection);
+    const status = emulator.status();
+    assertDataOnly(status);
+    assert.deepEqual(status.error, {
+      code: "SINK_WRITE_REJECTED",
+      operation: "write",
+      command: "submit",
+      message: expectedMessage,
+    });
+  }
+});
+
 test("scripted outputs reject structured-cloneable class instances before sink activity", () => {
   const cases = [
     ["Date", new Date("2026-01-01T00:00:00Z")],

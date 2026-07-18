@@ -29,6 +29,7 @@ export {
 
 const EVENT_SCHEMA_VERSION = "agent-factory.event.v1";
 const WORK_REQUEST_TYPE = "FACTORY_REQUEST_BATCH";
+const UNPRINTABLE_SINK_ERROR_MESSAGE = "Sink rejected with an unprintable value";
 
 export const FactoryEmulatorConfigurationError = defineDataError(
   "FactoryEmulatorConfigurationError",
@@ -869,8 +870,20 @@ function sinkError(code, operation, command, error) {
     code,
     operation,
     command,
-    message: error instanceof Error ? error.message : String(error),
+    message: sinkErrorMessage(error),
   };
+}
+
+function sinkErrorMessage(error) {
+  let message = error;
+  try {
+    if (error instanceof Error) {
+      message = error.message;
+    }
+    return typeof message === "string" ? message : String(message);
+  } catch {
+    return UNPRINTABLE_SINK_ERROR_MESSAGE;
+  }
 }
 
 function createEvent({
