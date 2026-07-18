@@ -1,6 +1,7 @@
 package runtime_api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -19,6 +20,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waiters int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := fakeClock.BlockUntilContext(ctx, waiters); err != nil {
+		t.Fatalf("timed out waiting for %d fake-clock waiter(s): %v", waiters, err)
+	}
+}
 
 // portos:func-length-exception owner=agent-factory reason=cron-end-to-end-smoke review=2026-07-18 removal=split-smoke-helpers-before-next-cron-e2e-expansion
 func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetriesDispatchesAndFiltersViews(t *testing.T) {
