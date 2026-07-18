@@ -13,6 +13,10 @@ that consumes the replay kernel.
   IDs aligned with `pkg/factory/contracts/factory_graph_ids.go` and the graph
   editor connection-anchor vocabulary. Unknown references must become sorted
   projection issues instead of synthesized nodes or dangling connections.
+- `packages/factory-replay/src/activity.js` owns pure selected-tick active
+  Dispatch, affected-workstation, Work-reference, and resource-occupancy
+  projection. Missing optional relationships retain identifiable Dispatches
+  and use structured issues or unavailable occupancy evidence.
 - `packages/factory-replay/src/index.d.ts` is the public typed boundary. It
   uses `FactoryEvent` from `@you-agent-factory/client`; do not substitute a
   dashboard-local event type at this boundary.
@@ -21,6 +25,9 @@ that consumes the replay kernel.
   projection, checkpoint-plus-tail equivalence, selected-tick topology,
   stable graph identity, handle parity, and partial-topology behavior without
   mutation. `public-api.test.ts` validates the public TypeScript boundary.
+- `packages/factory-replay/test/activity.test.mjs` proves Dispatch
+  start/completion, concurrency, historical and same-tick selection, stable
+  topology references, occupancy certainty, partial input, and immutability.
 - `ui/src/features/timeline/state/timeline/buildSnapshot.ts` supplies the
   hosted reducer/projection adapter to the public kernel. It owns no replay
   ordering or accepted-tail logic; keep its cloning and tick-setting adapters

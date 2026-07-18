@@ -462,7 +462,7 @@ factory-replay-lint: ui-deps
 	cd ui && $(UI_EXEC) biome lint ../packages/factory-replay
 
 factory-replay-test: factory-replay-typecheck
-	node --test packages/factory-replay/test/factory-replay.test.mjs
+	node --test packages/factory-replay/test/factory-replay.test.mjs packages/factory-replay/test/activity.test.mjs
 
 ci: ci-typecheck ci-verify-build-contracts ci-verify-tests
 

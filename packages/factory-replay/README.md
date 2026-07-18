@@ -24,3 +24,11 @@ contract, and connection endpoints include renderer-compatible handle IDs.
 References that cannot be resolved are omitted from the connection collection
 and returned as structured projection issues, so consumers never receive a
 dangling edge.
+
+`projectFactoryActivityAtTick` reconstructs active customer Dispatches,
+affected workstations, consumed Work IDs, workers, and resource occupancy from
+canonical event history. Consumers that already hold selected replay evidence
+can call `projectFactoryActivity` directly. Occupancy reports known occupied
+and available quantities, or explicitly reports unavailable evidence when an
+active Dispatch lacks resource facts; it never turns missing evidence into a
+fabricated zero occupancy.

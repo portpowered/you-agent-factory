@@ -1,6 +1,8 @@
 import { projectFactoryTopology } from "./topology.js";
+import { projectFactoryActivity } from "./activity.js";
 
 export { projectFactoryTopology } from "./topology.js";
+export { projectFactoryActivity } from "./activity.js";
 
 /**
  * Compare Factory events using the established dashboard replay order.
@@ -195,4 +197,84 @@ export function projectFactoryTopologyAtTick(input) {
     }
   }
   return projectFactoryTopology({ factory, selectedTick: input.tick });
+}
+
+/**
+ * Reconstruct active customer Dispatches and resource occupancy at one tick.
+ * A response removes its matching request in canonical sequence order, even
+ * when both events share a logical tick.
+ *
+ * @param {import("./index.d.ts").FactoryActivityAtTickInput} input
+ * @returns {import("./index.d.ts").FactoryActivityProjection}
+ */
+export function projectFactoryActivityAtTick(input) {
+  const events = canonicalizeFactoryEvents(input.events).filter(
+    (event) => event.context.tick <= input.tick,
+  );
+  let factory;
+  const activeDispatches = new Map();
+  for (const event of events) {
+    if (
+      event.type === "INITIAL_STRUCTURE_REQUEST" ||
+      event.type === "FACTORY_CHANGE"
+    ) {
+      const payload = event.payload;
+      if (
+        payload &&
+        typeof payload === "object" &&
+        "factory" in payload &&
+        payload.factory &&
+        typeof payload.factory === "object"
+      ) {
+        factory = payload.factory;
+      }
+      continue;
+    }
+    if (event.type === "DISPATCH_RESPONSE") {
+      if (event.context.dispatchId) {
+        activeDispatches.delete(event.context.dispatchId);
+      }
+      continue;
+    }
+    if (event.type !== "DISPATCH_REQUEST" || !event.context.dispatchId) {
+      continue;
+    }
+    const payload = event.payload;
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      !("transitionId" in payload) ||
+      typeof payload.transitionId !== "string" ||
+      payload.transitionId.startsWith("__system_time:")
+    ) {
+      continue;
+    }
+    const resources =
+      "resources" in payload && Array.isArray(payload.resources)
+        ? payload.resources
+        : undefined;
+    activeDispatches.set(event.context.dispatchId, {
+      id: event.context.dispatchId,
+      ...(resources
+        ? {
+            resourceNames: resources.flatMap((resource) =>
+              resource &&
+              typeof resource === "object" &&
+              "name" in resource &&
+              typeof resource.name === "string"
+                ? [resource.name]
+                : [],
+            ),
+          }
+        : {}),
+      startedTick: event.context.tick,
+      transitionId: payload.transitionId,
+      workIds: [...(event.context.workIds ?? [])],
+    });
+  }
+  return projectFactoryActivity({
+    activeDispatches: [...activeDispatches.values()],
+    factory,
+    selectedTick: input.tick,
+  });
 }

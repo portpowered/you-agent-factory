@@ -4,9 +4,12 @@ import {
   createFactoryReplayCheckpoint,
   initializeFactoryReplay,
   type FactoryReplayReducer,
+  type FactoryActiveDispatchProjection,
   type FactoryTopologyNode,
   projectFactoryTopology,
   projectFactoryTopologyAtTick,
+  projectFactoryActivity,
+  projectFactoryActivityAtTick,
 } from "../src/index.js";
 
 interface ReplayState {
@@ -63,3 +66,14 @@ const typedNode: FactoryTopologyNode | undefined = topology.nodes[0];
 void typedNode;
 
 void projectFactoryTopologyAtTick({ events: [event], tick: 1 }).issues;
+
+const activity = projectFactoryActivity({
+  activeDispatches: [],
+  factory: { name: "typed-factory" },
+  selectedTick: 1,
+});
+const typedDispatch: FactoryActiveDispatchProjection | undefined =
+  activity.activeDispatches[0];
+void typedDispatch;
+void projectFactoryActivityAtTick({ events: [event], tick: 1 })
+  .resourceOccupancy;

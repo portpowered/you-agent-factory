@@ -102,6 +102,66 @@ export interface FactoryTopologyAtTickInput {
   tick: number;
 }
 
+export interface FactoryActiveDispatchEvidence {
+  id: string;
+  resourceNames?: readonly string[];
+  startedTick: number;
+  transitionId: string;
+  workIds: readonly string[];
+}
+
+export interface FactoryActiveDispatchProjection {
+  id: string;
+  resourceIds: string[];
+  startedTick: number;
+  transitionId: string;
+  workIds: string[];
+  workerId?: string;
+  workstationId?: string;
+  workstationNodeId?: string;
+}
+
+export interface FactoryResourceOccupancyProjection {
+  availableQuantity?: number;
+  capacity: number;
+  evidence: "known" | "unavailable";
+  occupiedQuantity?: number;
+  occupiedTokenIds?: string[];
+  resourceId: string;
+  resourceNodeId: string;
+}
+
+export interface FactoryActivityProjectionIssue {
+  code:
+    | "RESOURCE_CAPACITY_EXCEEDED"
+    | "UNRESOLVED_RESOURCE"
+    | "UNRESOLVED_WORKER"
+    | "UNRESOLVED_WORKSTATION";
+  dispatchId?: string;
+  id: string;
+  message: string;
+  reference?: string;
+}
+
+export interface FactoryActivityProjection {
+  activeDispatches: FactoryActiveDispatchProjection[];
+  activeWorkstationIds: string[];
+  issues: FactoryActivityProjectionIssue[];
+  resourceOccupancy: FactoryResourceOccupancyProjection[];
+  selectedTick: number;
+}
+
+export interface FactoryActivityProjectionInput {
+  activeDispatches: readonly FactoryActiveDispatchEvidence[];
+  factory?: FactoryDefinition | undefined;
+  selectedTick: number;
+}
+
+export interface FactoryActivityAtTickInput {
+  events: readonly FactoryEvent[];
+  tick: number;
+}
+
 export type FactoryReplaySelection =
   | { mode: "current" }
   | { mode: "fixed"; tick: number };
@@ -189,3 +249,11 @@ export function projectFactoryTopology(
 export function projectFactoryTopologyAtTick(
   input: FactoryTopologyAtTickInput,
 ): FactoryTopologyProjection;
+
+export function projectFactoryActivity(
+  input: FactoryActivityProjectionInput,
+): FactoryActivityProjection;
+
+export function projectFactoryActivityAtTick(
+  input: FactoryActivityAtTickInput,
+): FactoryActivityProjection;
