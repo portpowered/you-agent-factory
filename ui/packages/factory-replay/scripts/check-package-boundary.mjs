@@ -7,9 +7,17 @@ const packageRoot = path.resolve(
   "..",
 );
 const distRoot = path.join(packageRoot, "dist");
-const forbiddenDependencies = new Set(["react", "react-dom", "zustand"]);
+const forbiddenDependencies = new Set([
+  "@xyflow/react",
+  "react",
+  "react-dom",
+  "reactflow",
+  "zustand",
+]);
 const forbiddenRuntimeNames = [
   "EventSource",
+  "WebSocket",
+  "XMLHttpRequest",
   "fetch",
   "indexedDB",
   "localStorage",

@@ -230,6 +230,47 @@ describe("projectFactoryWorkProgressAtTick", () => {
 });
 
 describe("projectFactoryWorkProgressAtTick edge evidence", () => {
+  it("ends active classification for interrupted and terminally reconciled Dispatches", () => {
+    const start = event(
+      "start",
+      "DISPATCH_REQUEST",
+      2,
+      0,
+      { inputs: [{ workId: "work-1" }] },
+      { dispatchId: "dispatch-1", workIds: ["work-1"] },
+    );
+    const interrupted = event(
+      "interrupted",
+      "DISPATCH_INTERRUPTED",
+      3,
+      0,
+      { reason: "cancelled" },
+      { dispatchId: "dispatch-1", workIds: ["work-1"] },
+    );
+    const restarted = event(
+      "restarted",
+      "DISPATCH_REQUEST",
+      4,
+      0,
+      { inputs: [{ workId: "work-1" }], transitionId: "edit" },
+      { dispatchId: "dispatch-2", workIds: ["work-1"] },
+    );
+    const reconciled = event(
+      "reconciled",
+      "DISPATCH_RECONCILED",
+      5,
+      0,
+      { reconciledStatus: "FAILED", reconciliationSource: "RECOVERY" },
+      { dispatchId: "dispatch-2", workIds: ["work-1"] },
+    );
+    const events = [start, interrupted, restarted, reconciled];
+
+    expect(categoryIds(events, 2, "active")).toEqual(["work-1"]);
+    expect(categoryIds(events, 3, "unclassified")).toEqual(["work-1"]);
+    expect(categoryIds(events, 4, "active")).toEqual(["work-1"]);
+    expect(categoryIds(events, 5, "unclassified")).toEqual(["work-1"]);
+  });
+
   it("retains terminal and failed output Work without Dispatch correlation", () => {
     const result = projectFactoryWorkProgressAtTick({
       events: [

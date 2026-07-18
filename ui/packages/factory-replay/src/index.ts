@@ -1,4 +1,33 @@
 export {
+  factoryDispatchOverlayId,
+  factoryWorkProjectionId,
+  projectFactoryActivity,
+} from "./activity.js";
+export type {
+  FactoryActiveDispatchEvidence,
+  FactoryActivityAtTickInput,
+  FactoryActivityProjection,
+  FactoryActivityProjectionInput,
+  FactoryActivityProjectionIssue,
+  FactoryDispatchOverlayEvidenceStatus,
+  FactoryDispatchOverlayProjection,
+  FactoryDispatchRouteEvidence,
+} from "./activity-contract.js";
+export { projectFactoryActivityAtTick } from "./activity-replay.js";
+export { projectFactoryLoad } from "./load.js";
+export type {
+  FactoryActiveResourceClaimsEvidence,
+  FactoryLoadAtTickInput,
+  FactoryLoadProjection,
+  FactoryLoadProjectionInput,
+  FactoryLoadProjectionIssue,
+  FactoryResourceClaimEvidence,
+  FactoryResourceOccupancyProjection,
+  FactoryWorkStateCountProjection,
+  FactoryWorkStateOccupancyEvidence,
+} from "./load-contract.js";
+export { projectFactoryLoadAtTick } from "./load-replay.js";
+export {
   type FactoryWorkProgressAtTickInput,
   type FactoryWorkProgressCategory,
   type FactoryWorkProgressCounts,
@@ -24,3 +53,29 @@ export {
   initializeFactoryReplay,
   projectFactoryStateAtTick,
 } from "./replay.js";
+export {
+  FACTORY_TOPOLOGY_RELATIONSHIPS,
+  type FactoryResourceTopologyNode,
+  type FactoryTopologyAtTickInput,
+  type FactoryTopologyConnection,
+  type FactoryTopologyConnectionCandidate,
+  type FactoryTopologyConnectionEndpoint,
+  type FactoryTopologyConnectionKind,
+  type FactoryTopologyConnectionResult,
+  type FactoryTopologyHandle,
+  type FactoryTopologyHandleId,
+  type FactoryTopologyNode,
+  type FactoryTopologyNodeKind,
+  type FactoryTopologyProjection,
+  type FactoryTopologyProjectionInput,
+  type FactoryTopologyProjectionIssue,
+  type FactoryWorkerTopologyNode,
+  type FactoryWorkStateTopologyNode,
+  type FactoryWorkstationTopologyNode,
+  type FactoryWorkTypeTopologyNode,
+  factoryTopologyEntityId,
+  factoryTopologyNodeId,
+  projectFactoryTopology,
+  projectFactoryTopologyAtTick,
+  projectFactoryTopologyConnection,
+} from "./topology.js";
