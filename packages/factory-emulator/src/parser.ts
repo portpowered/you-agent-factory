@@ -23,11 +23,19 @@ export interface EmulatorScenarioDiagnostic {
 
 /** The executable Factory subset accepted by the v1 browser emulator. */
 export interface EmulatorFactoryDefinition {
-  orchestrator?: { kind?: string };
+  [property: string]: unknown;
+  orchestrator?: { kind?: string; [property: string]: unknown };
   resources?: unknown[];
   guards?: unknown[];
-  workTypes?: Array<{ name?: string }>;
-  workstations?: Array<{ behavior?: string; cron?: unknown }>;
+  workTypes?: Array<{ name?: string; [property: string]: unknown }>;
+  workstations?: Array<{
+    [property: string]: unknown;
+    behavior?: string;
+    cron?: unknown;
+    resources?: unknown[];
+    guards?: unknown[];
+    inputs?: Array<{ guards?: unknown[]; [property: string]: unknown }>;
+  }>;
 }
 
 export type EmulatorScenarioParseResult =

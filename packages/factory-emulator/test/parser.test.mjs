@@ -80,7 +80,14 @@ test("rejects unsupported executable Factory definitions before emulator activit
       resources: [{ name: "provider-quota", capacity: 1 }],
       guards: [{ type: "VISIT_COUNT" }],
       workstations: [
-        { name: "clock", behavior: "CRON", cron: { schedule: "* * * * *" } },
+        {
+          name: "clock",
+          behavior: "CRON",
+          cron: { schedule: "* * * * *" },
+          resources: [{ name: "quota" }],
+          guards: [{ type: "VISIT_COUNT" }],
+          inputs: [{ guards: [{ type: "SAME_NAME" }] }],
+        },
       ],
     }),
   );
@@ -92,10 +99,106 @@ test("rejects unsupported executable Factory definitions before emulator activit
       { code: "UNSUPPORTED_FACTORY_CAPABILITY", path: "/orchestrator/kind" },
       { code: "UNSUPPORTED_FACTORY_CAPABILITY", path: "/resources" },
       { code: "UNSUPPORTED_FACTORY_CAPABILITY", path: "/guards" },
-      { code: "UNSUPPORTED_FACTORY_CAPABILITY", path: "/workstations/0/behavior" },
+      {
+        code: "UNSUPPORTED_FACTORY_CAPABILITY",
+        path: "/workstations/0/behavior",
+      },
       { code: "UNSUPPORTED_FACTORY_CAPABILITY", path: "/workstations/0/cron" },
+      {
+        code: "UNSUPPORTED_FACTORY_CAPABILITY",
+        path: "/workstations/0/resources",
+      },
+      {
+        code: "UNSUPPORTED_FACTORY_CAPABILITY",
+        path: "/workstations/0/guards",
+      },
+      {
+        code: "UNSUPPORTED_FACTORY_CAPABILITY",
+        path: "/workstations/0/inputs/0/guards",
+      },
     ],
   );
+});
+
+test("rejects malformed relevant Factory fields before emulator activity", () => {
+  const malformedDefinitions = [
+    ["workTypes", "not-an-array"],
+    ["resources", "not-an-array"],
+    ["guards", "not-an-array"],
+    ["workstations", "not-an-array"],
+  ];
+
+  for (const [property, value] of malformedDefinitions) {
+    const result = parseEmulatorScenario(
+      validScenario({
+        rules: [
+          {
+            id: "match-all",
+            match: { kind: "all" },
+            outcomes: [{ kind: "complete" }],
+            exhaustionBehavior: { kind: "repeatLast" },
+          },
+        ],
+      }),
+      supportedFactory({ [property]: value }),
+    );
+
+    assert.equal(result.success, false, property);
+    assert.deepEqual(
+      result.diagnostics.map(({ code, path }) => ({ code, path })),
+      [{ code: "INVALID_FACTORY_DEFINITION", path: `/${property}` }],
+      property,
+    );
+  }
+});
+
+test("rejects malformed and unsupported workstation capability fields", () => {
+  const scenario = validScenario({
+    rules: [
+      {
+        id: "match-all",
+        match: { kind: "all" },
+        outcomes: [{ kind: "complete" }],
+        exhaustionBehavior: { kind: "repeatLast" },
+      },
+    ],
+  });
+  const cases = [
+    {
+      workstation: { behavior: "STANDARD", resources: [{ name: "quota" }] },
+      code: "UNSUPPORTED_FACTORY_CAPABILITY",
+      path: "/workstations/0/resources",
+    },
+    {
+      workstation: { behavior: "STANDARD", guards: [{ type: "VISIT_COUNT" }] },
+      code: "UNSUPPORTED_FACTORY_CAPABILITY",
+      path: "/workstations/0/guards",
+    },
+    {
+      workstation: { behavior: "STANDARD", resources: "not-an-array" },
+      code: "INVALID_FACTORY_DEFINITION",
+      path: "/workstations/0/resources",
+    },
+    {
+      workstation: { behavior: "STANDARD", guards: "not-an-array" },
+      code: "INVALID_FACTORY_DEFINITION",
+      path: "/workstations/0/guards",
+    },
+  ];
+
+  for (const testCase of cases) {
+    const result = parseEmulatorScenario(scenario, {
+      name: "checkout",
+      workTypes: [{ name: "checkout" }],
+      workstations: [testCase.workstation],
+    });
+    assert.equal(result.success, false, testCase.path);
+    assert.deepEqual(
+      result.diagnostics.map(({ code, path }) => ({ code, path })),
+      [{ code: testCase.code, path: testCase.path }],
+      testCase.path,
+    );
+  }
 });
 
 test("accepts activityLabel only through the bounded scenario contract", () => {
@@ -177,7 +280,10 @@ for (const invalidCase of [
           outcomes: [
             {
               kind: "complete",
-              lineageCursor: { kind: "initialSubmission", submissionId: "missing" },
+              lineageCursor: {
+                kind: "initialSubmission",
+                submissionId: "missing",
+              },
             },
           ],
         },

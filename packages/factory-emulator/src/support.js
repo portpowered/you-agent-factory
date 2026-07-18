@@ -56,8 +56,15 @@ export function factorySupportDiagnostics(factory) {
 
   const diagnostics = [];
   validateOrchestrator(factory, diagnostics);
-  rejectConfiguredCapability(factory, diagnostics, "resources", "resource capacity");
-  rejectConfiguredCapability(factory, diagnostics, "guards", "Factory guards");
+  validateWorkTypes(factory, diagnostics);
+  rejectConfiguredArray(
+    factory,
+    diagnostics,
+    "/",
+    "resources",
+    "resource capacity",
+  );
+  rejectConfiguredArray(factory, diagnostics, "/", "guards", "Factory guards");
   validateWorkstations(factory, diagnostics);
   return diagnostics;
 }
@@ -79,7 +86,8 @@ function validateOrchestrator(factory, diagnostics) {
   }
   if (
     factory.orchestrator.kind !== undefined &&
-    factory.orchestrator.kind !== emulatorSupport.factory.supported.orchestrator.kind
+    factory.orchestrator.kind !==
+      emulatorSupport.factory.supported.orchestrator.kind
   ) {
     diagnostics.push(
       diagnostic(
@@ -92,17 +100,89 @@ function validateOrchestrator(factory, diagnostics) {
   }
 }
 
-function rejectConfiguredCapability(factory, diagnostics, property, capability) {
-  if (Array.isArray(factory[property]) && factory[property].length > 0) {
+function validateWorkTypes(factory, diagnostics) {
+  if (
+    !validateOptionalArray(
+      factory,
+      diagnostics,
+      "/",
+      "workTypes",
+      "Factory work types",
+    )
+  ) {
+    return;
+  }
+  for (const [index, workType] of (factory.workTypes ?? []).entries()) {
+    const path = `/workTypes/${index}`;
+    if (!isRecord(workType)) {
+      diagnostics.push(
+        diagnostic(
+          "INVALID_FACTORY_DEFINITION",
+          path,
+          "Factory work type must be an object.",
+          "a work type object with a non-empty name",
+        ),
+      );
+    } else if (
+      typeof workType.name !== "string" ||
+      workType.name.length === 0
+    ) {
+      diagnostics.push(
+        diagnostic(
+          "INVALID_FACTORY_DEFINITION",
+          `${path}/name`,
+          "Factory work type name must be a non-empty string.",
+          "a non-empty work type name",
+        ),
+      );
+    }
+  }
+}
+
+function rejectConfiguredArray(
+  owner,
+  diagnostics,
+  ownerPath,
+  property,
+  capability,
+) {
+  if (
+    !validateOptionalArray(owner, diagnostics, ownerPath, property, capability)
+  ) {
+    return;
+  }
+  if (owner[property]?.length > 0) {
+    const path = childPath(ownerPath, property);
     diagnostics.push(
       diagnostic(
         "UNSUPPORTED_FACTORY_CAPABILITY",
-        `/${property}`,
-        `Factory ${capability} are not supported by the emulator.`,
+        path,
+        `${capability} are not supported by the emulator.`,
         `no configured ${capability}`,
       ),
     );
   }
+}
+
+function validateOptionalArray(
+  owner,
+  diagnostics,
+  ownerPath,
+  property,
+  description,
+) {
+  if (owner[property] === undefined || Array.isArray(owner[property])) {
+    return true;
+  }
+  diagnostics.push(
+    diagnostic(
+      "INVALID_FACTORY_DEFINITION",
+      childPath(ownerPath, property),
+      `${description} must be an array when supplied.`,
+      `an array of ${description}`,
+    ),
+  );
+  return false;
 }
 
 function validateWorkstations(factory, diagnostics) {
@@ -135,7 +215,20 @@ function validateWorkstations(factory, diagnostics) {
     }
     if (
       workstation.behavior !== undefined &&
-      workstation.behavior !== emulatorSupport.factory.supported.workstations.behavior
+      typeof workstation.behavior !== "string"
+    ) {
+      diagnostics.push(
+        diagnostic(
+          "INVALID_FACTORY_DEFINITION",
+          `${path}/behavior`,
+          "Factory workstation behavior must be a string when supplied.",
+          "STANDARD workstation behavior",
+        ),
+      );
+    } else if (
+      workstation.behavior !== undefined &&
+      workstation.behavior !==
+        emulatorSupport.factory.supported.workstations.behavior
     ) {
       diagnostics.push(
         diagnostic(
@@ -156,7 +249,61 @@ function validateWorkstations(factory, diagnostics) {
         ),
       );
     }
+    rejectConfiguredArray(
+      workstation,
+      diagnostics,
+      path,
+      "resources",
+      "Workstation resource requirements",
+    );
+    rejectConfiguredArray(
+      workstation,
+      diagnostics,
+      path,
+      "guards",
+      "Workstation guards",
+    );
+    validateWorkstationInputs(workstation, diagnostics, path);
   }
+}
+
+function validateWorkstationInputs(workstation, diagnostics, workstationPath) {
+  if (
+    !validateOptionalArray(
+      workstation,
+      diagnostics,
+      workstationPath,
+      "inputs",
+      "Factory workstation inputs",
+    )
+  ) {
+    return;
+  }
+  for (const [index, input] of (workstation.inputs ?? []).entries()) {
+    const path = `${workstationPath}/inputs/${index}`;
+    if (!isRecord(input)) {
+      diagnostics.push(
+        diagnostic(
+          "INVALID_FACTORY_DEFINITION",
+          path,
+          "Factory workstation input must be an object.",
+          "a workstation input object",
+        ),
+      );
+      continue;
+    }
+    rejectConfiguredArray(
+      input,
+      diagnostics,
+      path,
+      "guards",
+      "Workstation input guards",
+    );
+  }
+}
+
+function childPath(ownerPath, property) {
+  return ownerPath === "/" ? `/${property}` : `${ownerPath}/${property}`;
 }
 
 function diagnostic(code, path, message, expectation) {
@@ -170,7 +317,11 @@ function isRecord(value) {
 function deepFreeze(value) {
   Object.freeze(value);
   for (const child of Object.values(value)) {
-    if (typeof child === "object" && child !== null && !Object.isFrozen(child)) {
+    if (
+      typeof child === "object" &&
+      child !== null &&
+      !Object.isFrozen(child)
+    ) {
       deepFreeze(child);
     }
   }

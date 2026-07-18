@@ -25,39 +25,68 @@ test("inspection reports the parser-supported v1 scenario and Factory subset", (
   assert.equal(support.activityLabel.transient, true);
   assert.equal(support.activityLabel.canonicalFactoryEventField, false);
 
-  const rejected = parseEmulatorScenario(
-    emulatorScenarioExamples[0].scenario,
-    { ...emulatorScenarioExamples[0].factory, resources: [{ name: "quota" }] },
-  );
-  assert.equal(rejected.success, false);
-  assert.ok(
-    rejected.diagnostics.some(
-      ({ code, path }) => code === "UNSUPPORTED_FACTORY_CAPABILITY" && path === "/resources",
-    ),
-  );
+  const unsupportedFactories = [
+    {
+      ...emulatorScenarioExamples[0].factory,
+      resources: [{ name: "quota" }],
+    },
+    {
+      ...emulatorScenarioExamples[0].factory,
+      workstations: [
+        {
+          ...emulatorScenarioExamples[0].factory.workstations[0],
+          guards: [{ type: "VISIT_COUNT" }],
+        },
+      ],
+    },
+  ];
+  for (const factory of unsupportedFactories) {
+    const rejected = parseEmulatorScenario(
+      emulatorScenarioExamples[0].scenario,
+      factory,
+    );
+    assert.equal(rejected.success, false);
+    assert.ok(
+      rejected.diagnostics.some(
+        ({ code }) => code === "UNSUPPORTED_FACTORY_CAPABILITY",
+      ),
+    );
+  }
 });
 
 test("every published example parses through the public API", () => {
   for (const example of emulatorScenarioExamples) {
     const result = parseEmulatorScenario(example.scenario, example.factory);
-    assert.deepEqual(result, {
-      success: true,
-      scenario: example.scenario,
-      factory: example.factory,
-    }, example.name);
+    assert.deepEqual(
+      result,
+      {
+        success: true,
+        scenario: example.scenario,
+        factory: example.factory,
+      },
+      example.name,
+    );
   }
 });
 
 test("the multi-rule example demonstrates ordered matching and deterministic exhaustion", () => {
-  const example = emulatorScenarioExamples.find(({ name }) => name === "multi-rule-lineage");
+  const example = emulatorScenarioExamples.find(
+    ({ name }) => name === "multi-rule-lineage",
+  );
   assert.ok(example);
 
   assert.equal(
-    selectEmulatorRule(example.scenario, { id: "checkout-1", workType: "checkout" }).id,
+    selectEmulatorRule(example.scenario, {
+      id: "checkout-1",
+      workType: "checkout",
+    }).id,
     "priority-checkout",
   );
   assert.equal(
-    selectEmulatorRule(example.scenario, { id: "checkout-2", workType: "checkout" }).id,
+    selectEmulatorRule(example.scenario, {
+      id: "checkout-2",
+      workType: "checkout",
+    }).id,
     "remaining-checkout",
   );
   assert.deepEqual(
