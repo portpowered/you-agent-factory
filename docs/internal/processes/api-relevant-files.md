@@ -185,10 +185,12 @@ Use this map when changing the public REST contract.
   `api/components/schemas/data-models/FactoryLayoutNode.yaml` and its referenced
   fragments, then must cross the generated boundary, `pkg/config` internal/API
   mappers, and `CloneFactoryConfig`. Validate strict embedded-raster data before
-  generated `format: byte` decoding, and carry node empty-state image bytes in
-  the same Factory-wide budget as annotations. Canonical-node membership remains
-  a `pkg/factory/validation` concern, where an empty state on an unknown node is
-  a blocking layout target rather than a runtime/topology mutation.
+  generated `format: byte` decoding at every authored Factory entrypoint,
+  including `LoadAuthoredFactoryAPIFromPath` for CLI validate-only and invocation
+  inspection paths, and carry node empty-state image bytes in the same
+  Factory-wide budget as annotations. Canonical-node membership remains a
+  `pkg/factory/validation` concern, where an empty state on an unknown node is a
+  blocking layout target rather than a runtime/topology mutation.
 - Publication manifest generation lives in `internal/contractstaging/manifest.go`
   (`generateManifest`, `resolveSourceCommit`, `SourceIdentityPaths`). The emitted
   `packages/api/generated/manifest.json` validates against the joined manifest

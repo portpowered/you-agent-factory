@@ -3,11 +3,82 @@ package factory
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		data     string
+		width    int
+		alt      string
+		wantPath string
+	}{
+		{name: "valid annotated factory", data: "AQID", width: 120, alt: "diagram"},
+		{
+			name:     "non-strict base64",
+			data:     "AQI=\n",
+			width:    120,
+			alt:      "diagram",
+			wantPath: "layout.annotations[0].image.source.data",
+		},
+		{
+			name:     "empty alternative text",
+			data:     "AQID",
+			width:    120,
+			wantPath: "layout.annotations[0].image.alternativeText",
+		},
+		{
+			name:     "zero image width",
+			data:     "AQID",
+			width:    0,
+			alt:      "diagram",
+			wantPath: "layout.annotations[0].size.width",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			path := writeValidateFixture(t, portableLayoutFactoryJSON(test.data, test.width, test.alt))
+
+			var out strings.Builder
+			err := Validate(ValidateConfig{Path: path, Output: &out})
+			if test.wantPath == "" {
+				if err != nil {
+					t.Fatalf("Validate valid annotated factory: %v", err)
+				}
+				if !strings.Contains(out.String(), "Factory validation passed.") {
+					t.Fatalf("output = %q, want validation success", out.String())
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Validate invalid annotated factory error = nil, want path %q", test.wantPath)
+			}
+			if !strings.Contains(err.Error(), test.wantPath) {
+				t.Fatalf("Validate error = %q, want field path %q", err, test.wantPath)
+			}
+		})
+	}
+}
+
+func portableLayoutFactoryJSON(data string, width int, alternativeText string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-cli",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":"image-1","kind":"IMAGE","position":{"x":0,"y":0},"size":{"width":%d,"height":80},
+			"image":{"alternativeText":%q,"source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q}}
+		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
+	}`, width, alternativeText, data)
+}
 
 func TestValidate_HumanOutputShowsNewTaxonomyAndCompatibilityFinding(t *testing.T) {
 	path := writeValidateFixture(t, newTaxonomyFactoryJSON())

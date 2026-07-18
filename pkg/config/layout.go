@@ -288,9 +288,12 @@ func formatCanonicalFactoryJSON(data []byte, sourcePath string) ([]byte, error) 
 // flattening or usage-aware taxonomy projection so validate-only inspection
 // preserves legacy aliases and explicit incompatible pairings.
 func LoadAuthoredFactoryAPIFromPath(path string) (factoryapi.Factory, error) {
-	data, _, err := readFactoryConfigSource(path)
+	data, sourcePath, err := readFactoryConfigSource(path)
 	if err != nil {
 		return factoryapi.Factory{}, err
+	}
+	if err := ValidatePortableLayoutBoundaryJSON(data); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("validate authored factory config %s: %w", sourcePath, err)
 	}
 	var factory factoryapi.Factory
 	if err := json.Unmarshal(data, &factory); err != nil {
