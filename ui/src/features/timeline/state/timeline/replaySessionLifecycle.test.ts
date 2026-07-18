@@ -1,8 +1,8 @@
-// biome-ignore lint/style/noExcessiveLinesPerFile: session lifecycle replay cases share lifecycleEvent helper and reconstructWorldState harness.
+// biome-ignore lint/style/noExcessiveLinesPerFile: session lifecycle replay cases share lifecycleEvent helper and replay harness.
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
 import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
-import { reconstructWorldState } from "./replayWorldState";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 import { emptyReplayWorldState } from "./replayWorldStateSupport";
 
 function lifecycleEvent(
@@ -11,7 +11,7 @@ function lifecycleEvent(
   sequence: number,
   tick: number,
   payload: Record<string, unknown>,
-): Parameters<typeof reconstructWorldState>[0][number] {
+): Parameters<typeof reconstructFactoryReplayState>[0][number] {
   return {
     context: {
       eventTime: "2026-06-09T12:00:00Z",
@@ -49,7 +49,7 @@ describe("reconstructWorldState session lifecycle replay", () => {
       }),
     ];
 
-    const state = reconstructWorldState(events, 3);
+    const state = reconstructFactoryReplayState(events, 3);
     expect(state.sessionBracket).toMatchObject({
       factory_id: "factory-alpha",
       result_status: "FINAL",
@@ -77,14 +77,14 @@ describe("reconstructWorldState session lifecycle replay", () => {
       }),
     ];
 
-    const pausedState = reconstructWorldState(events, 2);
+    const pausedState = reconstructFactoryReplayState(events, 2);
     expect(pausedState.sessionBracket).toMatchObject({
       lifecycle_control_status: "PAUSED",
       paused_at: "2026-06-09T12:00:02Z",
       session_id: "session-alpha",
     });
 
-    const runningState = reconstructWorldState(events, 3);
+    const runningState = reconstructFactoryReplayState(events, 3);
     expect(runningState.sessionBracket).toMatchObject({
       lifecycle_control_status: "RUNNING",
       resumed_at: "2026-06-09T12:00:04Z",
@@ -129,14 +129,14 @@ describe("reconstructWorldState SESSION_LIFECYCLE_CONTROL replay", () => {
       ),
     ];
 
-    const pausedState = reconstructWorldState(events, 2);
+    const pausedState = reconstructFactoryReplayState(events, 2);
     expect(pausedState.sessionBracket).toMatchObject({
       lifecycle_control_status: "PAUSED",
       paused_at: "2026-06-09T12:00:02Z",
       session_id: "session-alpha",
     });
 
-    const runningState = reconstructWorldState(events, 3);
+    const runningState = reconstructFactoryReplayState(events, 3);
     expect(runningState.sessionBracket).toMatchObject({
       lifecycle_control_status: "RUNNING",
       resumed_at: "2026-06-09T12:00:04Z",
@@ -165,7 +165,7 @@ describe("reconstructWorldState SESSION_LIFECYCLE_CONTROL replay", () => {
       ),
     ];
 
-    const state = reconstructWorldState(events, 2);
+    const state = reconstructFactoryReplayState(events, 2);
     expect(state.sessionBracket).toMatchObject({
       session_id: "session-alpha",
     });
@@ -247,7 +247,7 @@ describe("reconstructWorldState dispatch and artifact replay", () => {
       },
     ];
 
-    const state = reconstructWorldState(events, 4);
+    const state = reconstructFactoryReplayState(events, 4);
     expect(state.javascriptRuntime?.phase).toBe("review");
     expect(state.javascriptRuntime?.dispatches[0]).toMatchObject({
       id: "dispatch-1",
@@ -287,7 +287,7 @@ describe("reconstructWorldState dispatch and artifact replay", () => {
       },
     ];
 
-    const state = reconstructWorldState(events, 5);
+    const state = reconstructFactoryReplayState(events, 5);
     expect(state.sessionArtifacts).toEqual([
       expect.objectContaining({
         content_type: "text/plain",
@@ -321,7 +321,7 @@ describe("reconstructWorldState dispatch lifecycle bootstrap", () => {
       },
     ];
 
-    const state = reconstructWorldState(events, 1);
+    const state = reconstructFactoryReplayState(events, 1);
     expect(state.javascriptRuntime?.dispatches).toEqual([
       expect.objectContaining({
         dispatch_kind: "JAVASCRIPT_AGENT",
@@ -420,7 +420,7 @@ describe("reconstructWorldState dispatch interruption replay", () => {
       },
     ];
 
-    const state = reconstructWorldState(events, 5);
+    const state = reconstructFactoryReplayState(events, 5);
     expect(state.javascriptRuntime?.checkpoints).toEqual([
       expect.objectContaining({
         id: "checkpoint-1",
@@ -488,7 +488,7 @@ describe("lifecycle replay edge cases", () => {
       },
     ];
 
-    const state = reconstructWorldState(events, 2);
+    const state = reconstructFactoryReplayState(events, 2);
     expect(state.javascriptRuntime?.phases).toEqual(["review"]);
   });
 
@@ -546,7 +546,7 @@ describe("reconstructWorldState failed session replay", () => {
       }),
     ];
 
-    const state = reconstructWorldState(events, 3);
+    const state = reconstructFactoryReplayState(events, 3);
     expect(state.sessionBracket).toMatchObject({
       failure_message: "child dispatch failed",
       failure_reason: "DISPATCH_FAILED",
