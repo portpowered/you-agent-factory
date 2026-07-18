@@ -31,6 +31,34 @@ func TestGeneratedFactoryContractsCompileAndRoundTrip(t *testing.T) {
 	assertGeneratedCurrentFactoryNotFoundJSON(t)
 }
 
+func TestGeneratedFactoryLayoutEmptyStateVariantsCompileAndRoundTrip(t *testing.T) {
+	textState := factoryapi.FactoryLayoutEmptyState{}
+	if err := textState.FromFactoryLayoutEmptyState0(factoryapi.FactoryLayoutEmptyState0{Text: "No work is waiting."}); err != nil {
+		t.Fatalf("encode generated text empty-state variant: %v", err)
+	}
+	decodedText, err := textState.AsFactoryLayoutEmptyState0()
+	if err != nil || decodedText.Text != "No work is waiting." {
+		t.Fatalf("generated text empty-state variant = %#v, %v", decodedText, err)
+	}
+
+	imageState := factoryapi.FactoryLayoutEmptyState{}
+	wantImage := factoryapi.FactoryLayoutImage{
+		AlternativeText: "No active review",
+		Source: factoryapi.FactoryLayoutImageSource{
+			Data:      []byte{1, 2, 3},
+			Kind:      factoryapi.EMBEDDED,
+			MediaType: factoryapi.Imagepng,
+		},
+	}
+	if err := imageState.FromFactoryLayoutEmptyState1(factoryapi.FactoryLayoutEmptyState1{Image: wantImage}); err != nil {
+		t.Fatalf("encode generated image empty-state variant: %v", err)
+	}
+	decodedImage, err := imageState.AsFactoryLayoutEmptyState1()
+	if err != nil || decodedImage.Image.AlternativeText != wantImage.AlternativeText {
+		t.Fatalf("generated image empty-state variant = %#v, %v", decodedImage, err)
+	}
+}
+
 func TestGeneratedFactoryContractsSupportClassifierRoutes(t *testing.T) {
 	classifierType := factoryapi.WorkstationTypeClassifierWorkstation
 	namedFactory := factoryapi.Factory{

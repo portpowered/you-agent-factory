@@ -5086,7 +5086,15 @@ export interface components {
       /** @description Literal empty-state text. It is not rendered as HTML or Markdown. */
       text?: string;
       image?: components["schemas"]["FactoryLayoutImage"];
-    } & (unknown | unknown);
+    } & (
+      | {
+          /** @description Literal empty-state text. It is not rendered as HTML or Markdown. */
+          text: string;
+        }
+      | {
+          image: components["schemas"]["FactoryLayoutImage"];
+        }
+    );
     /** @description Portable graph node layout keyed by canonical graph node id. */
     FactoryLayoutNode: {
       /** @description Canonical graph node id such as workstation:<workstationId>. */

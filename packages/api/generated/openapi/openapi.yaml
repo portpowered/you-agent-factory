@@ -10125,10 +10125,24 @@ components:
       description: Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
       additionalProperties: false
       oneOf:
-        - required:
+        - type: object
+          additionalProperties: false
+          required:
             - text
-        - required:
+          properties:
+            text:
+              type: string
+              minLength: 1
+              maxLength: 500
+              pattern: \S
+              description: Literal empty-state text. It is not rendered as HTML or Markdown.
+        - type: object
+          additionalProperties: false
+          required:
             - image
+          properties:
+            image:
+              $ref: '#/components/schemas/FactoryLayoutImage'
       properties:
         text:
           type: string

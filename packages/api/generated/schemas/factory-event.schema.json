@@ -1579,14 +1579,32 @@
       "description": "Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.",
       "oneOf": [
         {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "description": "Literal empty-state text. It is not rendered as HTML or Markdown.",
+              "maxLength": 500,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
           "required": [
             "text"
-          ]
+          ],
+          "type": "object"
         },
         {
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "$ref": "#/$defs/FactoryLayoutImage"
+            }
+          },
           "required": [
             "image"
-          ]
+          ],
+          "type": "object"
         }
       ],
       "properties": {

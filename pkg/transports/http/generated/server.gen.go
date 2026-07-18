@@ -1902,10 +1902,16 @@ type FactoryLayoutEmptyState struct {
 }
 
 // FactoryLayoutEmptyState0 defines model for .
-type FactoryLayoutEmptyState0 = interface{}
+type FactoryLayoutEmptyState0 struct {
+	// Text Literal empty-state text. It is not rendered as HTML or Markdown.
+	Text string `json:"text"`
+}
 
 // FactoryLayoutEmptyState1 defines model for .
-type FactoryLayoutEmptyState1 = interface{}
+type FactoryLayoutEmptyState1 struct {
+	// Image Inert embedded-raster image content with required alternative text.
+	Image FactoryLayoutImage `json:"image"`
+}
 
 // FactoryLayoutGroup Portable background grouping metadata for graph canvas presentation.
 type FactoryLayoutGroup struct {
