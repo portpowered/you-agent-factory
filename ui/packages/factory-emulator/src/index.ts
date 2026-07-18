@@ -2,10 +2,16 @@ export {
   type FactoryEmulatorCompatibilityIssue,
   type FactoryEmulatorCompatibilityIssueCode,
   type FactoryEmulatorCompatibilityResult,
-  type FactoryEventSink,
   inspectFactoryEmulatorCompatibility,
   writeFactoryEventsIfCompatible,
 } from "./compatibility.js";
+export {
+  type FactoryEventSink,
+  FactoryEventSinkError,
+  type FactoryEventSinkErrorCode,
+  MemoryFactoryEventSink,
+  type MemoryFactoryEventSinkOptions,
+} from "./event-sink.js";
 export {
   FACTORY_EMULATOR_SCENARIO_SCHEMA_VERSION,
   type FactoryEmulatorInitialSubmission,

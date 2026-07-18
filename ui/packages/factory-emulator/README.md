@@ -38,3 +38,26 @@ await writeFactoryEventsIfCompatible(factory, eventBatch, sink);
 The inspector treats an omitted orchestrator as the documented Petri default,
 does not mutate or retain the Factory, and reports stable codes with paths into
 the caller-supplied UI client `FactoryDefinition`.
+
+## Caller-owned event history
+
+`MemoryFactoryEventSink` retains ordered Factory Events up to a required
+caller-selected bound. Each non-empty batch is atomic: history changes only
+after the asynchronous write resolves, and rejection or capacity overflow
+preserves the prior snapshot. Concurrent calls are serialized in call order.
+
+```ts
+import { MemoryFactoryEventSink } from "@you-agent-factory/factory-emulator";
+
+const sink = new MemoryFactoryEventSink({ maxEvents: 1_000 });
+await sink.write(eventBatch);
+const detachedHistory = sink.snapshot();
+await sink.close();
+```
+
+Input batches and returned snapshots are mutation-isolated. `close()` is
+idempotent, waits for writes accepted before close, and rejects later writes
+with a `FactoryEventSinkError` whose code is `closed`. Empty batches and
+all-or-nothing capacity failures use the `empty_batch` and `capacity_exceeded`
+codes. The optional `beforeWrite` hook provides caller-controlled backpressure
+and failure injection without transferring ownership of retained history.

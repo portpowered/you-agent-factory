@@ -2,6 +2,7 @@ import type {
   FactoryDefinition,
   FactoryEvent,
 } from "@you-agent-factory/client";
+import type { FactoryEventSink } from "./event-sink.js";
 
 export type FactoryEmulatorCompatibilityIssueCode =
   | "invalid_logical_move"
@@ -28,11 +29,6 @@ export type FactoryEmulatorCompatibilityResult =
       readonly supported: false;
       readonly diagnostics: readonly FactoryEmulatorCompatibilityIssue[];
     };
-
-/** The smallest sink boundary needed to prove compatibility before emission. */
-export interface FactoryEventSink {
-  write(events: readonly FactoryEvent[]): Promise<void>;
-}
 
 type IssuePath = readonly (string | number)[];
 
