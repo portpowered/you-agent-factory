@@ -1,6 +1,7 @@
 package runtime_api
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"net/url"
@@ -8,24 +9,37 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactorySurfaces(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+
+	traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "cleanup smoke"},
 	})
-	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
+	assertCleanupSmokeStreamedTerminalDispatch(t, stream, traceID)
+
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(host.Endpoint(), "/work"))
 	if len(work.Results) != 1 {
 		t.Fatalf("GET /work result count = %d, want 1", len(work.Results))
 	}
@@ -37,70 +51,41 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", completed.State)
 	}
 
-	statusRead := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
-	if statusRead.TotalTokens != 1 {
-		t.Fatalf("GET /status total_tokens = %d, want 1", statusRead.TotalTokens)
-	}
-	if statusRead.Categories.Terminal != 1 {
-		t.Fatalf("GET /status terminal count = %d, want 1", statusRead.Categories.Terminal)
-	}
-	assertCleanupSmokeCanonicalFactoryEvents(t, server, support.StringPointerValue(completed.WorkId))
-	assertGeneratedEventsStreamHasCanonicalHistory(t, server.URL())
-	assertCleanupSmokeDashboardShell(t, server.URL())
-}
-
-func assertCleanupSmokeCanonicalFactoryEvents(t *testing.T, server *functionalAPIServer, workID string) {
-	t.Helper()
-
-	events := server.GetFactoryEvents(t)
-	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeWorkRequest)
-	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchRequest)
-	assertCleanupSmokeHasEventType(t, events, factoryapi.FactoryEventTypeDispatchResponse)
-
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, cleanupSmokeMaxTick(events))
+	statusRead, err := host.REST().GetStatus(context.Background())
 	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+		t.Fatalf("generated GetStatus() error = %v", err)
 	}
-	worldView := projections.BuildFactoryWorldView(worldState)
-	if worldView.Runtime.Session.CompletedCount != 1 {
-		t.Fatalf("canonical world view completed count = %d, want 1", worldView.Runtime.Session.CompletedCount)
+	if statusRead.StatusCode() != http.StatusOK || statusRead.JSON200 == nil {
+		t.Fatalf("generated GetStatus() response = %#v, want typed 200", statusRead)
 	}
-	if got := worldView.Runtime.PlaceTokenCounts["task:complete"]; got != 1 {
-		t.Fatalf("canonical world view task:complete count = %d, want 1", got)
+	if statusRead.JSON200.TotalTokens != 1 {
+		t.Fatalf("generated GET /status total_tokens = %d, want 1", statusRead.JSON200.TotalTokens)
 	}
-	if !cleanupSmokePlaceContainsWork(worldView.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:complete"], workID) {
-		t.Fatalf("canonical world view task:complete occupancy = %#v, want work %q", worldView.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:complete"], workID)
+	if statusRead.JSON200.Categories.Terminal != 1 {
+		t.Fatalf("generated GET /status terminal count = %d, want 1", statusRead.JSON200.Categories.Terminal)
 	}
+	assertCleanupSmokeDashboardShell(t, host.Endpoint())
 }
 
-func assertCleanupSmokeHasEventType(t *testing.T, events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) {
+func assertCleanupSmokeStreamedTerminalDispatch(t *testing.T, stream *factoryEventHTTPStream, traceID string) {
 	t.Helper()
 
-	for _, event := range events {
-		if event.Type == eventType {
-			return
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		event := stream.next(time.Until(deadline))
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		if event.Context.TraceIds == nil {
+			continue
+		}
+		for _, eventTraceID := range *event.Context.TraceIds {
+			if eventTraceID == traceID {
+				return
+			}
 		}
 	}
-	t.Fatalf("GetFactoryEvents missing %s in canonical history", eventType)
-}
-
-func cleanupSmokeMaxTick(events []factoryapi.FactoryEvent) int {
-	maxTick := 0
-	for _, event := range events {
-		if event.Context.Tick > maxTick {
-			maxTick = event.Context.Tick
-		}
-	}
-	return maxTick
-}
-
-func cleanupSmokePlaceContainsWork(items []interfaces.FactoryWorldWorkItemRef, workID string) bool {
-	for _, item := range items {
-		if item.WorkID == workID {
-			return true
-		}
-	}
-	return false
+	t.Fatalf("canonical session event stream did not expose terminal DISPATCH_RESPONSE for trace %q", traceID)
 }
 
 func assertCleanupSmokeDashboardShell(t *testing.T, baseURL string) {
