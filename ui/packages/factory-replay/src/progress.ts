@@ -243,9 +243,23 @@ function applyDispatchResponse(
   payload: Record<string, unknown> | undefined,
 ): void {
   const dispatchId = event.context.dispatchId;
-  if (!dispatchId) return;
-  const consumedIds = state.activeDispatches.get(dispatchId) ?? [];
-  state.activeDispatches.delete(dispatchId);
+  const consumedIds = dispatchId
+    ? (state.activeDispatches.get(dispatchId) ?? [])
+    : [];
+  if (dispatchId) state.activeDispatches.delete(dispatchId);
+
+  const transitionId = payload?.transitionId;
+  if (
+    typeof transitionId !== "string" ||
+    !transitionId.startsWith("__system_time:")
+  ) {
+    for (const workId of event.context.workIds ?? []) {
+      if (workId && !state.works.has(workId)) {
+        state.works.set(workId, { id: workId });
+      }
+    }
+  }
+
   const outputWorks = arrayValue(payload?.outputWork);
   const outputIds = new Set(
     outputWorks.flatMap((work) => {

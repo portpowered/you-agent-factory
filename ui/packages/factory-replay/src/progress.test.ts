@@ -230,6 +230,66 @@ describe("projectFactoryWorkProgressAtTick", () => {
 });
 
 describe("projectFactoryWorkProgressAtTick edge evidence", () => {
+  it("retains terminal and failed output Work without Dispatch correlation", () => {
+    const result = projectFactoryWorkProgressAtTick({
+      events: [
+        event(
+          "response",
+          "DISPATCH_RESPONSE",
+          2,
+          0,
+          {
+            outcome: "CONTINUE",
+            outputWork: [
+              {
+                state: { name: "done", type: "TERMINAL" },
+                workId: "completed-output",
+                workTypeName: "story",
+              },
+              {
+                state: { name: "failed", type: "FAILED" },
+                workId: "failed-output",
+                workTypeName: "story",
+              },
+            ],
+            transitionId: "edit",
+          },
+          { workIds: [] },
+        ),
+      ],
+      tick: 2,
+    });
+
+    expect(result.total).toBe(2);
+    expect(result.completed.map(({ id }) => id)).toEqual(["completed-output"]);
+    expect(result.failed.map(({ id }) => id)).toEqual(["failed-output"]);
+    expect(
+      Object.values(result.counts).reduce((sum, count) => sum + count, 0),
+    ).toBe(result.total);
+  });
+
+  it("retains response-only context Work without Dispatch correlation", () => {
+    const result = projectFactoryWorkProgressAtTick({
+      events: [
+        event(
+          "response",
+          "DISPATCH_RESPONSE",
+          2,
+          0,
+          { outcome: "CONTINUE", transitionId: "edit" },
+          { workIds: ["context-only", "context-only"] },
+        ),
+      ],
+      tick: 2,
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.unclassified).toEqual([{ id: "context-only" }]);
+    expect(
+      Object.values(result.counts).reduce((sum, count) => sum + count, 0),
+    ).toBe(result.total);
+  });
+
   it("keeps Dispatch-only Work identifiable during and after active evidence", () => {
     const events = [
       dispatch("start", "DISPATCH_REQUEST", 2, 0, ["dispatch-only"]),
