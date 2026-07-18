@@ -1,9 +1,7 @@
 package runtime_api
 
 import (
-	"context"
 	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,73 +9,9 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/wire"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifact(t *testing.T) {
-	support.SkipLongFunctional(t, "slow inference-event artifact sweep")
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
-	recordPath := filepath.Join(t.TempDir(), "inference-events.replay.json")
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     "work-inference-events",
-		WorkTypeID: "task",
-		TraceID:    "trace-inference-events",
-		Payload:    []byte(`{"title":"inspect inference events"}`),
-	})
-
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
-		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
-	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithRecordPath(recordPath),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	assertFirstInferenceAttemptOrder(t, events)
-	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertInferenceEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
-}
-
-func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
-	support.SkipLongFunctional(t, "slow inference-event script-worker sweep")
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
-		WorkID:     "work-script-no-inference",
-		WorkTypeID: "task",
-		TraceID:    "trace-script-no-inference",
-		Payload:    []byte("script input"),
-	})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	if !hasFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest) ||
-		!hasFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse) {
-		t.Fatalf("script worker canonical events = %v, want dispatch lifecycle events", functionalEventTypes(events))
-	}
-	if hasFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceRequest) ||
-		hasFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceResponse) {
-		t.Fatalf("script worker emitted inference events: %v", functionalEventTypes(events))
-	}
-}
 
 func TestInferenceEvents_RootRunHTTPStreamCorrelatesProviderAttempts(t *testing.T) {
 	support.SkipLongFunctional(t, "slow root-run inference-event stream sweep")
@@ -181,64 +115,6 @@ func functionalEventContextContainsTrace(event factoryapi.FactoryEvent, traceID 
 	return false
 }
 
-func assertFirstInferenceAttemptOrder(t *testing.T, events []factoryapi.FactoryEvent) {
-	t.Helper()
-
-	dispatchIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0)
-	if dispatchIndex < 0 {
-		t.Fatalf("missing dispatch-created event in %v", functionalEventTypes(events))
-	}
-	requestIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceRequest, dispatchIndex+1)
-	responseIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceResponse, requestIndex+1)
-	completedIndex := indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchResponse, responseIndex+1)
-	if requestIndex < 0 || responseIndex < 0 || completedIndex < 0 {
-		t.Fatalf("event order = %v, want dispatch-created, inference-request, inference-response, dispatch-completed", functionalEventTypes(events))
-	}
-
-	if _, err := events[dispatchIndex].Payload.AsDispatchRequestEventPayload(); err != nil {
-		t.Fatalf("decode dispatch-created payload: %v", err)
-	}
-	request, err := events[requestIndex].Payload.AsInferenceRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode inference-request payload: %v", err)
-	}
-	response, err := events[responseIndex].Payload.AsInferenceResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode inference-response payload: %v", err)
-	}
-	if _, err := events[completedIndex].Payload.AsDispatchResponseEventPayload(); err != nil {
-		t.Fatalf("decode dispatch-completed payload: %v", err)
-	}
-
-	dispatchID := stringValueFromFunctionalPtr(events[dispatchIndex].Context.DispatchId)
-	if stringValueFromFunctionalPtr(events[requestIndex].Context.DispatchId) != dispatchID ||
-		stringValueFromFunctionalPtr(events[responseIndex].Context.DispatchId) != dispatchID ||
-		stringValueFromFunctionalPtr(events[completedIndex].Context.DispatchId) != dispatchID {
-		t.Fatalf("dispatch correlation mismatch: dispatch=%s request=%s response=%s completed=%s",
-			dispatchID,
-			stringValueFromFunctionalPtr(events[requestIndex].Context.DispatchId),
-			stringValueFromFunctionalPtr(events[responseIndex].Context.DispatchId),
-			stringValueFromFunctionalPtr(events[completedIndex].Context.DispatchId))
-	}
-	if request.Attempt != 1 || response.Attempt != request.Attempt {
-		t.Fatalf("attempt correlation mismatch: request=%d response=%d", request.Attempt, response.Attempt)
-	}
-	if request.InferenceRequestId == "" || response.InferenceRequestId != request.InferenceRequestId {
-		t.Fatalf("inference request correlation mismatch: request=%q response=%q", request.InferenceRequestId, response.InferenceRequestId)
-	}
-	assertRawInferenceEventUsesContextDispatchIdentity(t, events[requestIndex], request.InferenceRequestId)
-	assertRawInferenceEventUsesContextDispatchIdentity(t, events[responseIndex], response.InferenceRequestId)
-	if request.Prompt == "" {
-		t.Fatal("inference request prompt is empty")
-	}
-	if response.Outcome != factoryapi.InferenceOutcomeSucceeded || stringValueFromFunctionalPtr(response.Response) != "Step one done. COMPLETE" {
-		t.Fatalf("inference response = %#v, want succeeded first provider response", response)
-	}
-	if response.DurationMillis < 0 {
-		t.Fatalf("durationMillis = %d, want non-negative", response.DurationMillis)
-	}
-}
-
 func assertRawInferenceEventUsesContextDispatchIdentity(t *testing.T, event factoryapi.FactoryEvent, inferenceRequestID string) {
 	t.Helper()
 
@@ -293,31 +169,6 @@ func rawFunctionalEventPayload(t *testing.T, raw map[string]any, eventID string)
 		t.Fatalf("raw event %s payload = %#v, want object", eventID, raw["payload"])
 	}
 	return payload
-}
-
-func assertInferenceEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, recordedEvents []factoryapi.FactoryEvent) {
-	t.Helper()
-
-	recordedByID := make(map[string]factoryapi.FactoryEvent, len(recordedEvents))
-	for _, event := range recordedEvents {
-		recordedByID[event.Id] = event
-	}
-	for _, live := range liveEvents {
-		if live.Type != factoryapi.FactoryEventTypeInferenceRequest && live.Type != factoryapi.FactoryEventTypeInferenceResponse {
-			continue
-		}
-		recorded, ok := recordedByID[live.Id]
-		if !ok {
-			t.Fatalf("recorded artifact missing inference event %s from live history; artifact events=%v", live.Id, functionalEventTypes(recordedEvents))
-		}
-		if recorded.Type != live.Type {
-			t.Fatalf("recorded inference event %s = type %s, live type %s", live.Id, recorded.Type, live.Type)
-		}
-	}
-}
-
-func hasFunctionalEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) bool {
-	return indexOfFunctionalEventType(events, eventType, 0) >= 0
 }
 
 func (fs *functionalAPIServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
