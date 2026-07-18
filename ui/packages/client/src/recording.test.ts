@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
-
 import { describe, expect, expectTypeOf, it } from "vitest";
+
+import customerSupportRecording from "../examples/customer-support.factory-recording.v1.json";
 
 import {
   type FactoryRecording,
@@ -10,14 +10,7 @@ import {
 } from "./index.js";
 
 async function readExample(): Promise<unknown> {
-  const source = await readFile(
-    new URL(
-      "../examples/customer-support.factory-recording.v1.json",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  return JSON.parse(source);
+  return structuredClone(customerSupportRecording);
 }
 
 async function exampleRecording(): Promise<Record<string, unknown>> {
