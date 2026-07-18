@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "factory-visualization-layout/v1",
+  "annotations": [
+    {
+      "id": "triage-guidance",
+      "kind": "note",
+      "position": { "x": 120, "y": 80 },
+      "size": { "width": 320, "height": 180 },
+      "title": "Triage guidance",
+      "body": "Review urgency before assigning a specialist.",
+      "tone": "info"
+    },
+    {
+      "id": "support-mark",
+      "kind": "image",
+      "position": { "x": 520, "y": 80 },
+      "size": { "width": 64, "height": 64 },
+      "altText": "Customer support marker",
+      "source": {
+        "kind": "embedded",
+        "mediaType": "image/png",
+        "base64": "iVBORw0KGgo="
+      }
+    }
+  ],
+  "nodeEmptyStates": [
+    {
+      "nodeId": "workstation:triage",
+      "content": {
+        "kind": "text",
+        "text": "No support requests are waiting."
+      }
+    },
+    {
+      "nodeId": "work-state:resolved",
+      "content": {
+        "kind": "image",
+        "altText": "Resolved queue is empty",
+        "source": {
+          "kind": "embedded",
+          "mediaType": "image/png",
+          "base64": "iVBORw0KGgo="
+        }
+      }
+    }
+  ]
+}

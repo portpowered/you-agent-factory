@@ -18,7 +18,10 @@ const packageRoot = path.resolve(
   "..",
 );
 const METADATA_FILES = ["LICENSE.md", "README.md", "package.json"];
-const EXAMPLE_FILES = ["examples/customer-support.factory-recording.v1.json"];
+const EXAMPLE_FILES = [
+  "examples/customer-support.factory-recording.v1.json",
+  "examples/customer-support.factory-visualization-layout.v1.json",
+];
 
 async function listFiles(directory, relativeRoot) {
   const entries = await readdir(directory, { withFileTypes: true });

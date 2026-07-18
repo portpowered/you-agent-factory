@@ -25,7 +25,8 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./examples/customer-support.factory-recording.v1.json": "./examples/customer-support.factory-recording.v1.json"
+    "./examples/customer-support.factory-recording.v1.json": "./examples/customer-support.factory-recording.v1.json",
+    "./examples/customer-support.factory-visualization-layout.v1.json": "./examples/customer-support.factory-visualization-layout.v1.json"
   },
   "scripts": {
     "build": "node scripts/build-package.mjs",

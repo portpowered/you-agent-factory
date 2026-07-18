@@ -33,22 +33,28 @@ const TYPE_CONSUMER = `import {
   type components,
   type FactoryDefinition,
   type FactoryEvent,
+  type FactoryVisualizationLayoutV1,
   type operations,
   type paths,
   createFactoryEventCursor,
   orderFactoryEvents,
   parseFactoryEventReplayText,
   parseFactoryRecording,
+  parseFactoryVisualizationLayout,
 } from "@you-agent-factory/client";
 
 declare const input: unknown;
 const recording = parseFactoryRecording(input);
 const events: FactoryEvent[] = orderFactoryEvents(recording.events);
 const factory: FactoryDefinition | undefined = recording.factory;
+const layout: FactoryVisualizationLayoutV1 | undefined = factory
+  ? parseFactoryVisualizationLayout(input, factory)
+  : undefined;
 const cursor = events[0] ? createFactoryEventCursor(events[0]) : undefined;
 const replay = parseFactoryEventReplayText("");
 type ApiNamespaces = [components, paths, operations];
 void factory;
+void layout;
 void cursor;
 void replay;
 void (null as unknown as ApiNamespaces);
@@ -60,6 +66,7 @@ import {
   orderFactoryEvents,
   parseFactoryEventReplayText,
   parseFactoryRecording,
+  parseFactoryVisualizationLayout,
 } from "@you-agent-factory/client";
 
 const exampleUrl = import.meta.resolve(
@@ -67,6 +74,13 @@ const exampleUrl = import.meta.resolve(
 );
 const recording = parseFactoryRecording(
   JSON.parse(await readFile(new URL(exampleUrl), "utf8")),
+);
+const layoutExampleUrl = import.meta.resolve(
+  "@you-agent-factory/client/examples/customer-support.factory-visualization-layout.v1.json",
+);
+const layout = parseFactoryVisualizationLayout(
+  JSON.parse(await readFile(new URL(layoutExampleUrl), "utf8")),
+  recording.factory,
 );
 const ordered = orderFactoryEvents([...recording.events].reverse());
 const replayed = parseFactoryEventReplayText(
@@ -78,6 +92,9 @@ if (replayed.length !== ordered.length || replayed[0]?.id !== ordered[0]?.id) {
 const cursor = createFactoryEventCursor(ordered.at(-1));
 if (!cursor.afterEventId || cursor.tick < 0) {
   throw new Error("installed cursor helper returned an invalid position");
+}
+if (layout.annotations?.length !== 2 || layout.nodeEmptyStates?.length !== 2) {
+  throw new Error("installed visualization layout parser returned invalid data");
 }
 process.stdout.write(\`verified \${recording.id} with \${ordered.length} events\\n\`);
 `;

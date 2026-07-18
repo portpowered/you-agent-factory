@@ -33,3 +33,23 @@ export {
   type SafeParseFactoryEventReplayTextResult,
   safeParseFactoryEventReplayText,
 } from "./replay.js";
+export {
+  FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,
+  type FactoryVisualizationAnnotation,
+  type FactoryVisualizationEmbeddedImageSource,
+  type FactoryVisualizationImageAnnotation,
+  type FactoryVisualizationImageContent,
+  type FactoryVisualizationLayoutIssue,
+  type FactoryVisualizationLayoutIssueCode,
+  type FactoryVisualizationLayoutV1,
+  FactoryVisualizationLayoutValidationError,
+  type FactoryVisualizationNodeEmptyState,
+  type FactoryVisualizationNoteAnnotation,
+  type FactoryVisualizationNoteTone,
+  type FactoryVisualizationPosition,
+  type FactoryVisualizationSize,
+  type FactoryVisualizationTextEmptyState,
+  parseFactoryVisualizationLayout,
+  type SafeParseFactoryVisualizationLayoutResult,
+  safeParseFactoryVisualizationLayout,
+} from "./visualization-layout.js";
