@@ -132,6 +132,37 @@ func TestProjectedFactorySchema_RejectsWhitespaceOnlyRequiredLayoutValues(t *tes
 	}
 }
 
+func TestProjectedFactorySchema_EnforcesLayoutAnnotationVariants(t *testing.T) {
+	tests := []struct {
+		name       string
+		annotation string
+		wantValid  bool
+	}{
+		{"valid note", layoutNoteAnnotation("note", "", "safe"), true},
+		{"valid image", layoutImageAnnotation("image", "Example", "EMBEDDED", "image/png", "AQID"), true},
+		{"note missing content", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20}}`, false},
+		{"image missing content and size", `{"id":"image","kind":"IMAGE","position":{"x":10,"y":20}}`, false},
+		{"note carrying image without note", `{"id":"note","kind":"NOTE","position":{"x":10,"y":20},"size":{"width":180,"height":120},"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Example"}}`, false},
+	}
+
+	schema := projectedFactorySchema(t)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var document any
+			if err := json.Unmarshal(layoutFactoryJSON(test.annotation), &document); err != nil {
+				t.Fatalf("decode fixture: %v", err)
+			}
+			err := schema.Validate(document)
+			if test.wantValid && err != nil {
+				t.Fatalf("projected Factory schema rejected valid annotation: %v", err)
+			}
+			if !test.wantValid && err == nil {
+				t.Fatal("projected Factory schema accepted malformed annotation variant")
+			}
+		})
+	}
+}
+
 func TestFactoryConfigFromOpenAPIJSON_PreservesLiteralLayoutEmptyStateTextAndImage(t *testing.T) {
 	nodes := `{"id":"workstation:review","position":{"x":10,"y":20},"emptyState":{"text":"# Nothing\n[not a link](javascript:alert(1))"}},{"id":"workstation:approve","position":{"x":20,"y":30},"emptyState":{"image":{"source":{"kind":"EMBEDDED","mediaType":"image/webp","data":"AQID"},"alternativeText":"<img alt=literal>"}}}`
 	cfg, err := FactoryConfigFromOpenAPIJSON(layoutFactoryJSONWithNodes(nodes))

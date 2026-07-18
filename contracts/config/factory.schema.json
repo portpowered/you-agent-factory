@@ -447,6 +447,69 @@
     "FactoryLayoutAnnotation": {
       "additionalProperties": false,
       "description": "Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "NOTE"
+              ],
+              "type": "string"
+            },
+            "note": {
+              "$ref": "#/$defs/FactoryLayoutNote"
+            },
+            "position": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationPosition"
+            },
+            "size": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationSize"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "position",
+            "note"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "image": {
+              "$ref": "#/$defs/FactoryLayoutImage"
+            },
+            "kind": {
+              "enum": [
+                "IMAGE"
+              ],
+              "type": "string"
+            },
+            "position": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationPosition"
+            },
+            "size": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationSize"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "position",
+            "size",
+            "image"
+          ],
+          "type": "object"
+        }
+      ],
       "properties": {
         "id": {
           "description": "Stable annotation identifier unique within this layout.",

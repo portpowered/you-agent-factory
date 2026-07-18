@@ -228,10 +228,20 @@ const (
 	FactoryInvocationUnknownNamedArgumentPolicyReject  FactoryInvocationUnknownNamedArgumentPolicy = "REJECT"
 )
 
+// Defines values for FactoryLayoutAnnotation0Kind.
+const (
+	FactoryLayoutAnnotation0KindNOTE FactoryLayoutAnnotation0Kind = "NOTE"
+)
+
+// Defines values for FactoryLayoutAnnotation1Kind.
+const (
+	IMAGE FactoryLayoutAnnotation1Kind = "IMAGE"
+)
+
 // Defines values for FactoryLayoutAnnotationKind.
 const (
-	IMAGE FactoryLayoutAnnotationKind = "IMAGE"
-	NOTE  FactoryLayoutAnnotationKind = "NOTE"
+	FactoryLayoutAnnotationKindIMAGE FactoryLayoutAnnotationKind = "IMAGE"
+	FactoryLayoutAnnotationKindNOTE  FactoryLayoutAnnotationKind = "NOTE"
 )
 
 // Defines values for FactoryLayoutImageSourceKind.
@@ -1793,8 +1803,45 @@ type FactoryLayoutAnnotation struct {
 	Position FactoryLayoutAnnotationPosition `json:"position"`
 
 	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+	Size  *FactoryLayoutAnnotationSize `json:"size,omitempty"`
+	union json.RawMessage
+}
+
+// FactoryLayoutAnnotation0 defines model for .
+type FactoryLayoutAnnotation0 struct {
+	Id   string                       `json:"id"`
+	Kind FactoryLayoutAnnotation0Kind `json:"kind"`
+
+	// Note Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+	Note FactoryLayoutNote `json:"note"`
+
+	// Position Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+	Position FactoryLayoutAnnotationPosition `json:"position"`
+
+	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
 	Size *FactoryLayoutAnnotationSize `json:"size,omitempty"`
 }
+
+// FactoryLayoutAnnotation0Kind defines model for FactoryLayoutAnnotation.0.Kind.
+type FactoryLayoutAnnotation0Kind string
+
+// FactoryLayoutAnnotation1 defines model for .
+type FactoryLayoutAnnotation1 struct {
+	Id string `json:"id"`
+
+	// Image Inert embedded-raster image content with required alternative text.
+	Image FactoryLayoutImage           `json:"image"`
+	Kind  FactoryLayoutAnnotation1Kind `json:"kind"`
+
+	// Position Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+	Position FactoryLayoutAnnotationPosition `json:"position"`
+
+	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+	Size FactoryLayoutAnnotationSize `json:"size"`
+}
+
+// FactoryLayoutAnnotation1Kind defines model for FactoryLayoutAnnotation.1.Kind.
+type FactoryLayoutAnnotation1Kind string
 
 // FactoryLayoutAnnotationKind The inert annotation content variant.
 type FactoryLayoutAnnotationKind string
@@ -7677,6 +7724,166 @@ func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 
 func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactoryLayoutAnnotation0 returns the union data inside the FactoryLayoutAnnotation as a FactoryLayoutAnnotation0
+func (t FactoryLayoutAnnotation) AsFactoryLayoutAnnotation0() (FactoryLayoutAnnotation0, error) {
+	var body FactoryLayoutAnnotation0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutAnnotation0 overwrites any union data inside the FactoryLayoutAnnotation as the provided FactoryLayoutAnnotation0
+func (t *FactoryLayoutAnnotation) FromFactoryLayoutAnnotation0(v FactoryLayoutAnnotation0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutAnnotation0 performs a merge with any union data inside the FactoryLayoutAnnotation, using the provided FactoryLayoutAnnotation0
+func (t *FactoryLayoutAnnotation) MergeFactoryLayoutAnnotation0(v FactoryLayoutAnnotation0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryLayoutAnnotation1 returns the union data inside the FactoryLayoutAnnotation as a FactoryLayoutAnnotation1
+func (t FactoryLayoutAnnotation) AsFactoryLayoutAnnotation1() (FactoryLayoutAnnotation1, error) {
+	var body FactoryLayoutAnnotation1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutAnnotation1 overwrites any union data inside the FactoryLayoutAnnotation as the provided FactoryLayoutAnnotation1
+func (t *FactoryLayoutAnnotation) FromFactoryLayoutAnnotation1(v FactoryLayoutAnnotation1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutAnnotation1 performs a merge with any union data inside the FactoryLayoutAnnotation, using the provided FactoryLayoutAnnotation1
+func (t *FactoryLayoutAnnotation) MergeFactoryLayoutAnnotation1(v FactoryLayoutAnnotation1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryLayoutAnnotation) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["id"], err = json.Marshal(t.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	if t.Image != nil {
+		object["image"], err = json.Marshal(t.Image)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'image': %w", err)
+		}
+	}
+
+	object["kind"], err = json.Marshal(t.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
+	}
+
+	if t.Note != nil {
+		object["note"], err = json.Marshal(t.Note)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'note': %w", err)
+		}
+	}
+
+	object["position"], err = json.Marshal(t.Position)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'position': %w", err)
+	}
+
+	if t.Size != nil {
+		object["size"], err = json.Marshal(t.Size)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'size': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *FactoryLayoutAnnotation) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &t.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+	}
+
+	if raw, found := object["image"]; found {
+		err = json.Unmarshal(raw, &t.Image)
+		if err != nil {
+			return fmt.Errorf("error reading 'image': %w", err)
+		}
+	}
+
+	if raw, found := object["kind"]; found {
+		err = json.Unmarshal(raw, &t.Kind)
+		if err != nil {
+			return fmt.Errorf("error reading 'kind': %w", err)
+		}
+	}
+
+	if raw, found := object["note"]; found {
+		err = json.Unmarshal(raw, &t.Note)
+		if err != nil {
+			return fmt.Errorf("error reading 'note': %w", err)
+		}
+	}
+
+	if raw, found := object["position"]; found {
+		err = json.Unmarshal(raw, &t.Position)
+		if err != nil {
+			return fmt.Errorf("error reading 'position': %w", err)
+		}
+	}
+
+	if raw, found := object["size"]; found {
+		err = json.Unmarshal(raw, &t.Size)
+		if err != nil {
+			return fmt.Errorf("error reading 'size': %w", err)
+		}
+	}
+
 	return err
 }
 

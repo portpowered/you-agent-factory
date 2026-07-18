@@ -10231,12 +10231,6 @@ components:
         locked:
           type: boolean
           description: Optional authored group lock flag for future editor affordances.
-    FactoryLayoutAnnotationKind:
-      type: string
-      description: The inert annotation content variant.
-      enum:
-        - NOTE
-        - IMAGE
     FactoryLayoutAnnotationPosition:
       type: object
       description: Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
@@ -10305,6 +10299,12 @@ components:
           description: Required literal plain-text note body.
         tone:
           $ref: '#/components/schemas/FactoryLayoutNoteTone'
+    FactoryLayoutAnnotationKind:
+      type: string
+      description: The inert annotation content variant.
+      enum:
+        - NOTE
+        - IMAGE
     FactoryLayoutAnnotation:
       type: object
       description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
@@ -10313,6 +10313,48 @@ components:
         - id
         - kind
         - position
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - kind
+            - position
+            - note
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - NOTE
+            position:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationPosition'
+            size:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationSize'
+            note:
+              $ref: '#/components/schemas/FactoryLayoutNote'
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - kind
+            - position
+            - size
+            - image
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - IMAGE
+            position:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationPosition'
+            size:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationSize'
+            image:
+              $ref: '#/components/schemas/FactoryLayoutImage'
       properties:
         id:
           type: string

@@ -5132,11 +5132,6 @@ export interface components {
       /** @description Optional authored group lock flag for future editor affordances. */
       locked?: boolean;
     };
-    /**
-     * @description The inert annotation content variant.
-     * @enum {string}
-     */
-    FactoryLayoutAnnotationKind: FactoryLayoutAnnotationKind;
     /** @description Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render. */
     FactoryLayoutAnnotationPosition: {
       /** @description Horizontal canvas coordinate between -100,000 and 100,000 inclusive. */
@@ -5164,6 +5159,11 @@ export interface components {
       body: string;
       tone: components["schemas"]["FactoryLayoutNoteTone"];
     };
+    /**
+     * @description The inert annotation content variant.
+     * @enum {string}
+     */
+    FactoryLayoutAnnotationKind: FactoryLayoutAnnotationKind;
     /** @description Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid. */
     FactoryLayoutAnnotation: {
       /** @description Stable annotation identifier unique within this layout. */
@@ -5173,7 +5173,24 @@ export interface components {
       size?: components["schemas"]["FactoryLayoutAnnotationSize"];
       note?: components["schemas"]["FactoryLayoutNote"];
       image?: components["schemas"]["FactoryLayoutImage"];
-    };
+    } & (
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: FactoryLayoutAnnotationOneOf0Kind;
+          position: components["schemas"]["FactoryLayoutAnnotationPosition"];
+          size?: components["schemas"]["FactoryLayoutAnnotationSize"];
+          note: components["schemas"]["FactoryLayoutNote"];
+        }
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: FactoryLayoutAnnotationOneOf1Kind;
+          position: components["schemas"]["FactoryLayoutAnnotationPosition"];
+          size: components["schemas"]["FactoryLayoutAnnotationSize"];
+          image: components["schemas"]["FactoryLayoutImage"];
+        }
+    );
     /** @description Shared authored graph camera position. */
     FactoryLayoutViewport: {
       /** @description Authored viewport horizontal offset. */
@@ -8048,12 +8065,6 @@ export const FactoryLayoutImageSourceMediaType = {
 } as const;
 export type FactoryLayoutImageSourceMediaType =
   (typeof FactoryLayoutImageSourceMediaType)[keyof typeof FactoryLayoutImageSourceMediaType];
-export const FactoryLayoutAnnotationKind = {
-  NOTE: "NOTE",
-  IMAGE: "IMAGE",
-} as const;
-export type FactoryLayoutAnnotationKind =
-  (typeof FactoryLayoutAnnotationKind)[keyof typeof FactoryLayoutAnnotationKind];
 export const FactoryLayoutNoteTone = {
   NEUTRAL: "NEUTRAL",
   ACCENT: "ACCENT",
@@ -8064,6 +8075,22 @@ export const FactoryLayoutNoteTone = {
 } as const;
 export type FactoryLayoutNoteTone =
   (typeof FactoryLayoutNoteTone)[keyof typeof FactoryLayoutNoteTone];
+export const FactoryLayoutAnnotationKind = {
+  NOTE: "NOTE",
+  IMAGE: "IMAGE",
+} as const;
+export type FactoryLayoutAnnotationKind =
+  (typeof FactoryLayoutAnnotationKind)[keyof typeof FactoryLayoutAnnotationKind];
+export const FactoryLayoutAnnotationOneOf0Kind = {
+  NOTE: "NOTE",
+} as const;
+export type FactoryLayoutAnnotationOneOf0Kind =
+  (typeof FactoryLayoutAnnotationOneOf0Kind)[keyof typeof FactoryLayoutAnnotationOneOf0Kind];
+export const FactoryLayoutAnnotationOneOf1Kind = {
+  IMAGE: "IMAGE",
+} as const;
+export type FactoryLayoutAnnotationOneOf1Kind =
+  (typeof FactoryLayoutAnnotationOneOf1Kind)[keyof typeof FactoryLayoutAnnotationOneOf1Kind];
 export const FactoryLayoutPreferencesDirection = {
   UP: "UP",
   DOWN: "DOWN",

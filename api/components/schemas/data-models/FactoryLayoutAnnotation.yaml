@@ -5,6 +5,48 @@ required:
   - id
   - kind
   - position
+oneOf:
+  - type: object
+    additionalProperties: false
+    required:
+      - id
+      - kind
+      - position
+      - note
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+        enum:
+          - NOTE
+      position:
+        $ref: './FactoryLayoutAnnotationPosition.yaml'
+      size:
+        $ref: './FactoryLayoutAnnotationSize.yaml'
+      note:
+        $ref: './FactoryLayoutNote.yaml'
+  - type: object
+    additionalProperties: false
+    required:
+      - id
+      - kind
+      - position
+      - size
+      - image
+    properties:
+      id:
+        type: string
+      kind:
+        type: string
+        enum:
+          - IMAGE
+      position:
+        $ref: './FactoryLayoutAnnotationPosition.yaml'
+      size:
+        $ref: './FactoryLayoutAnnotationSize.yaml'
+      image:
+        $ref: './FactoryLayoutImage.yaml'
 properties:
   id:
     type: string
