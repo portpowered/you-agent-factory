@@ -1,0 +1,34 @@
+{
+  "name": "@you-agent-factory/client",
+  "version": "0.0.0",
+  "description": "Transport-neutral Factory contracts and recording utilities.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git",
+    "directory": "ui/packages/client"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "check:generated": "node scripts/generate-contracts.mjs --check",
+    "generate": "node scripts/generate-contracts.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
+    "verify": "bun run check:generated && bun run typecheck && bun run test"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "4.1.3"
+  }
+}
