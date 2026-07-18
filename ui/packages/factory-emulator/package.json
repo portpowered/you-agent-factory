@@ -31,16 +31,32 @@
   },
   "scripts": {
     "build": "node scripts/build-package.mjs",
+    "check:changed-paths": "node scripts/check-changed-paths.mjs",
+    "check:generated": "node scripts/generate-scenario-schema.mjs --check",
+    "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
+    "check:pack": "node scripts/verify-package-pack.mjs",
+    "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "generate": "node scripts/generate-scenario-schema.mjs",
+    "lint": "biome check src scripts vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
-    "verify": "bun run typecheck && bun run test && bun run build"
+    "verify": "bun run check:generated && bun run typecheck && bun run lint && bun run test && bun run build && bun run check:package-boundary && bun run check:changed-paths && bun run check:pack && bun run check:installed-consumer"
   },
   "dependencies": {
-    "@you-agent-factory/client": "file:../client",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1"
   },
+  "peerDependencies": {
+    "@you-agent-factory/client": "0.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@you-agent-factory/client": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.4",
+    "@you-agent-factory/client": "file:../client",
     "typescript": "~5.9.3",
     "vitest": "4.1.3"
   }

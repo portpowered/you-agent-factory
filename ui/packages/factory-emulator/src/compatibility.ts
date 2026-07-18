@@ -290,9 +290,7 @@ export function inspectFactoryEmulatorCompatibility(
       "Factory-level guards are not supported by emulator v1.",
     );
   }
-  for (const [resourceIndex, resource] of (
-    factory.resources ?? []
-  ).entries()) {
+  for (const [resourceIndex, resource] of (factory.resources ?? []).entries()) {
     if (resource.type === "PROVIDER_QUOTA" || resource.provider !== undefined) {
       addIssue(
         diagnostics,

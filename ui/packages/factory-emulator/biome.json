@@ -1,0 +1,30 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "extends": ["../../biome.jsonc"],
+  "files": {
+    "includes": ["!src/generated"]
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/compatibility.ts",
+        "src/compatibility.test.ts",
+        "src/event-sink.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 150,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

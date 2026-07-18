@@ -2,7 +2,7 @@ import type { FactoryEvent } from "@you-agent-factory/client";
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  FactoryEventSinkError,
+  type FactoryEventSinkError,
   MemoryFactoryEventSink,
 } from "./event-sink.js";
 
@@ -59,10 +59,7 @@ describe("MemoryFactoryEventSink", () => {
     expect(sink.snapshot()).toEqual([]);
     gate.resolve();
     await write;
-    expect(sink.snapshot().map(({ id }) => id)).toEqual([
-      "event-1",
-      "event-2",
-    ]);
+    expect(sink.snapshot().map(({ id }) => id)).toEqual(["event-1", "event-2"]);
   });
 
   it("preserves caller state and prior history when a write rejects", async () => {
@@ -103,7 +100,10 @@ describe("MemoryFactoryEventSink", () => {
         if (attempt === 1) throw new Error("transient failure");
       },
     });
-    const pendingBatch = [event("stable-event-1", 1), event("stable-event-2", 2)];
+    const pendingBatch = [
+      event("stable-event-1", 1),
+      event("stable-event-2", 2),
+    ];
     let committedSteps = 0;
 
     await expect(sink.write(pendingBatch)).rejects.toThrow("transient failure");
@@ -120,11 +120,15 @@ describe("MemoryFactoryEventSink", () => {
     const input = [event("event-1", 1)];
     const sink = new MemoryFactoryEventSink({ maxEvents: 1 });
     const write = sink.write(input);
-    input[0]!.id = "mutated-input";
+    const [inputEvent] = input;
+    if (inputEvent === undefined) throw new Error("expected input event");
+    inputEvent.id = "mutated-input";
     await write;
 
     const snapshot = sink.snapshot() as FactoryEvent[];
-    snapshot[0]!.id = "mutated-snapshot";
+    const [snapshotEvent] = snapshot;
+    if (snapshotEvent === undefined) throw new Error("expected snapshot event");
+    snapshotEvent.id = "mutated-snapshot";
     expect(sink.snapshot()[0]?.id).toBe("event-1");
   });
 
@@ -150,8 +154,10 @@ describe("MemoryFactoryEventSink", () => {
     const sink = new MemoryFactoryEventSink({
       maxEvents: 2,
       beforeWrite: async ([candidate]) => {
-        observed.push(candidate!.id);
-        if (candidate!.id === "first") await firstGate.promise;
+        if (candidate === undefined)
+          throw new Error("expected candidate event");
+        observed.push(candidate.id);
+        if (candidate.id === "first") await firstGate.promise;
       },
     });
 
@@ -189,9 +195,7 @@ describe("MemoryFactoryEventSink", () => {
   });
 
   it("rejects empty batches and invalid capacity with structured errors", async () => {
-    expect(
-      () => new MemoryFactoryEventSink({ maxEvents: 0 }),
-    ).toThrowError(
+    expect(() => new MemoryFactoryEventSink({ maxEvents: 0 })).toThrowError(
       expect.objectContaining({
         name: "FactoryEventSinkError",
         code: "invalid_capacity",

@@ -1,10 +1,7 @@
 import type { FactoryDefinition } from "@you-agent-factory/client";
 import Ajv2020, { type ErrorObject } from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
-
-import scenarioSchemaJson from "../schema/scenario.schema.json" with {
-  type: "json",
-};
+import { generatedScenarioSchema } from "./generated/scenario-schema.js";
 import {
   type FactoryEmulatorInitialSubmission,
   type FactoryEmulatorOutcome,
@@ -18,7 +15,7 @@ import {
 
 export * from "./scenario-contracts.js";
 
-export const scenarioSchema = scenarioSchemaJson;
+export const scenarioSchema = generatedScenarioSchema;
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -28,7 +25,7 @@ const ajv = new Ajv2020({
   useDefaults: false,
 });
 addFormats(ajv);
-const validateScenarioShape = ajv.compile(scenarioSchemaJson);
+const validateScenarioShape = ajv.compile(generatedScenarioSchema);
 
 function pointerSegments(pointer: string): (string | number)[] {
   if (pointer.length === 0) return [];

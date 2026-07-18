@@ -49,9 +49,7 @@ const supportedFactory = {
       worker: "",
       inputs: [{ workType: "story", state: "ready" }],
       outputs: [{ workType: "story", state: "failed" }],
-      guards: [
-        { type: "VISIT_COUNT", workstation: "execute", maxVisits: 3 },
-      ],
+      guards: [{ type: "VISIT_COUNT", workstation: "execute", maxVisits: 3 }],
       workPropagation: { mode: "OUTPUT_AS_PAYLOAD" },
     },
   ],
@@ -100,22 +98,19 @@ describe("Factory emulator compatibility", () => {
     ["POLLER", "POLLER_RUN"],
     ["STANDARD", "INFERENCE_RUN"],
     ["STANDARD", "SCRIPT_RUN"],
-  ] as const)(
-    "rejects %s behavior with %s execution",
-    (behavior, type) => {
-      expectCodes(
-        factoryWith((factory) => {
-          const workstation = factory.workstations?.[0];
-          if (workstation === undefined) return;
-          workstation.behavior = behavior;
-          workstation.type = type;
-        }),
-        behavior === "STANDARD"
-          ? "unsupported_execution"
-          : "unsupported_workstation_behavior",
-      );
-    },
-  );
+  ] as const)("rejects %s behavior with %s execution", (behavior, type) => {
+    expectCodes(
+      factoryWith((factory) => {
+        const workstation = factory.workstations?.[0];
+        if (workstation === undefined) return;
+        workstation.behavior = behavior;
+        workstation.type = type;
+      }),
+      behavior === "STANDARD"
+        ? "unsupported_execution"
+        : "unsupported_workstation_behavior",
+    );
+  });
 
   it("rejects classifiers, unsupported guards, and relationship-aware behavior", () => {
     const factory = factoryWith((candidate) => {

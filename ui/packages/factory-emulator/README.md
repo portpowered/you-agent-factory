@@ -83,3 +83,16 @@ const recordingSink = new RecordingFactoryEventSink({
 await recordingSink.write(eventBatch);
 const detachedRecording = recordingSink.snapshot();
 ```
+
+## Package verification
+
+The package is built and verified independently from the dashboard. Run
+`bun run verify` from this directory to check the generated schema module,
+types, formatting and lint rules, focused tests, compiled output, dependency
+boundary, packed inventory, and a clean installed consumer. `bun run generate`
+refreshes the committed runtime schema module after editing
+`schema/scenario.schema.json`.
+
+`@you-agent-factory/client` is an explicit peer contract because the emulator
+uses its canonical Factory, Factory Event, and recording APIs without bundling
+or duplicating them. Consumers install both packages at the same version.
