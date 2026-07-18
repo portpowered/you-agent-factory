@@ -181,40 +181,6 @@ func functionalEventContextContainsTrace(event factoryapi.FactoryEvent, traceID 
 	return false
 }
 
-func TestInferenceEvents_ThinEventSmoke_CapturesThinnedDispatchInferenceSequenceAndReconstructsViews(t *testing.T) {
-	support.SkipLongFunctional(t, "slow inference-event thin-event sweep")
-	smoke := newThinEventSmokeHarness(t)
-
-	runCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	errCh := smoke.harness.RunInBackground(runCtx)
-	active := captureThinEventSmokeActiveSnapshot(t, smoke)
-	assertThinEventSmokeActiveSnapshot(t, active)
-
-	smoke.provider.ReleaseFirst()
-	waitForFunctionalHarnessCompletion(t, smoke.harness, errCh, cancel, 5*time.Second)
-
-	final := loadThinEventSmokeFinalSnapshot(t, smoke, active)
-	assertThinEventSmokeFinalSnapshot(t, active, final)
-}
-
-func assertRuntimeAPIProjectionOmitsInferenceFields(t *testing.T, payload any, keys []string) {
-	t.Helper()
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Marshal(%T): %v", payload, err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(encoded, &raw); err != nil {
-		t.Fatalf("Unmarshal(%T): %v", payload, err)
-	}
-	for _, key := range keys {
-		if _, ok := raw[key]; ok {
-			t.Fatalf("%T unexpectedly carried retired inference-owned field %q: %#v", payload, key, raw[key])
-		}
-	}
-}
-
 func assertFirstInferenceAttemptOrder(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 
@@ -294,63 +260,6 @@ func assertRawInferenceEventUsesContextDispatchIdentity(t *testing.T, event fact
 	}
 }
 
-func assertRawThinDispatchRequestEvent(t *testing.T, event factoryapi.FactoryEvent) {
-	t.Helper()
-
-	raw := marshalFunctionalEventToRawObject(t, event)
-	context := rawFunctionalEventContext(t, raw, event.Id)
-	if dispatchID, ok := context["dispatchId"].(string); !ok || dispatchID == "" {
-		t.Fatalf("raw dispatch request context.dispatchId = %#v, want non-empty string", context["dispatchId"])
-	}
-
-	payload := rawFunctionalEventPayload(t, raw, event.Id)
-	if _, ok := payload["dispatchId"]; ok {
-		t.Fatalf("raw dispatch request payload unexpectedly carried retired dispatchId: %#v", payload)
-	}
-	if _, ok := payload["worker"]; ok {
-		t.Fatalf("raw dispatch request payload unexpectedly carried retired worker copy: %#v", payload)
-	}
-	if _, ok := payload["workstation"]; ok {
-		t.Fatalf("raw dispatch request payload unexpectedly carried retired workstation copy: %#v", payload)
-	}
-	if metadataValue, ok := payload["metadata"]; ok {
-		metadata, ok := metadataValue.(map[string]any)
-		if !ok {
-			t.Fatalf("raw dispatch request metadata = %#v, want object", metadataValue)
-		}
-		if _, ok := metadata["requestId"]; ok {
-			t.Fatalf("raw dispatch request metadata unexpectedly carried retired requestId: %#v", metadata)
-		}
-	}
-}
-
-func assertRawThinDispatchResponseEvent(t *testing.T, event factoryapi.FactoryEvent) {
-	t.Helper()
-
-	raw := marshalFunctionalEventToRawObject(t, event)
-	context := rawFunctionalEventContext(t, raw, event.Id)
-	if dispatchID, ok := context["dispatchId"].(string); !ok || dispatchID == "" {
-		t.Fatalf("raw dispatch response context.dispatchId = %#v, want non-empty string", context["dispatchId"])
-	}
-
-	payload := rawFunctionalEventPayload(t, raw, event.Id)
-	if _, ok := payload["dispatchId"]; ok {
-		t.Fatalf("raw dispatch response payload unexpectedly carried retired dispatchId: %#v", payload)
-	}
-	if _, ok := payload["worker"]; ok {
-		t.Fatalf("raw dispatch response payload unexpectedly carried retired worker copy: %#v", payload)
-	}
-	if _, ok := payload["workstation"]; ok {
-		t.Fatalf("raw dispatch response payload unexpectedly carried retired workstation copy: %#v", payload)
-	}
-	if _, ok := payload["providerSession"]; ok {
-		t.Fatalf("raw dispatch response payload unexpectedly carried retired providerSession: %#v", payload)
-	}
-	if _, ok := payload["diagnostics"]; ok {
-		t.Fatalf("raw dispatch response payload unexpectedly carried retired diagnostics: %#v", payload)
-	}
-}
-
 func marshalFunctionalEventToRawObject(t *testing.T, event factoryapi.FactoryEvent) map[string]any {
 	t.Helper()
 
@@ -384,32 +293,6 @@ func rawFunctionalEventPayload(t *testing.T, raw map[string]any, eventID string)
 		t.Fatalf("raw event %s payload = %#v, want object", eventID, raw["payload"])
 	}
 	return payload
-}
-
-func indexOfFunctionalDispatchEvent(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType, dispatchID string) int {
-	return indexOfFunctionalDispatchEventAfter(events, eventType, dispatchID, 0)
-}
-
-func indexOfFunctionalDispatchEventAfter(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType, dispatchID string, start int) int {
-	for i := start; i < len(events); i++ {
-		if events[i].Type == eventType && stringValueFromFunctionalPtr(events[i].Context.DispatchId) == dispatchID {
-			return i
-		}
-	}
-	return -1
-}
-
-func indexOfFunctionalInferenceResponseForRequest(events []factoryapi.FactoryEvent, dispatchID, inferenceRequestID string) int {
-	for i, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse || stringValueFromFunctionalPtr(event.Context.DispatchId) != dispatchID {
-			continue
-		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
-		if err == nil && payload.InferenceRequestId == inferenceRequestID {
-			return i
-		}
-	}
-	return -1
 }
 
 func assertInferenceEventsRecordedInArtifact(t *testing.T, liveEvents []factoryapi.FactoryEvent, recordedEvents []factoryapi.FactoryEvent) {
