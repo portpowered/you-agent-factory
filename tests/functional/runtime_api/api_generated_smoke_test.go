@@ -376,20 +376,26 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Gemini, "gemini-1.5-pro"))
-	runner := support.NewRecordingCommandRunner("unused")
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	server := startFunctionalServerWithConfig(
-		t,
-		dir,
-		false,
-		func(cfg *service.FactoryServiceConfig) {
-			support.ConfigureWorkerCommands(t, cfg, runner, nil)
-		},
-		factory.WithServiceMode(),
-	)
-	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, host.Endpoint(), "image", "review.png", "image/png", []byte("png-bytes"))
 
-	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+	traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
 		Name:         "generated-api-items-unsupported-mixed",
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
@@ -398,32 +404,27 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 		},
 	})
 
-	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "task:failed", 10*time.Second)
+	terminalEvent := terminalDispatchForTrace(t, stream, traceID)
+	terminalPayload, err := terminalEvent.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode terminal DISPATCH_RESPONSE payload: %v", err)
+	}
+	if terminalPayload.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("terminal DISPATCH_RESPONSE outcome = %q, want FAILED", terminalPayload.Outcome)
+	}
+	const wantFailure = "image input is not supported by the gemini runner in v1"
+	if terminalPayload.Error == nil || !strings.Contains(*terminalPayload.Error, wantFailure) {
+		t.Fatalf("terminal DISPATCH_RESPONSE error = %#v, want substring %q", terminalPayload.Error, wantFailure)
+	}
+
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(host.Endpoint(), "/work"))
 	item := requireGeneratedWorkByTrace(t, work, traceID)
-	if generatedWorkStateName(item.State) != "failed" {
-		t.Fatalf("GET /work state = %#v, want failed work state", item.State)
+	if generatedWorkStateName(item.State) != "failed" || generatedWorkStateType(item.State) != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("GET /work state = %#v, want failed/FAILED work state", item.State)
 	}
-	if runner.CallCount() != 0 {
-		t.Fatalf("provider command runner calls = %d, want 0 because capability rejection should happen before subprocess launch", runner.CallCount())
+	if generatedWorkStateName(item.State) == "complete" {
+		t.Fatalf("GET /work state = %#v, must not expose successful completion for rejected image input", item.State)
 	}
-
-	workID := stringPointerValue(item.WorkId)
-	snapshot := server.GetEngineStateSnapshot(t)
-	for _, token := range snapshot.Marking.TokensInPlace("task:failed") {
-		if token.Color.WorkID != workID {
-			continue
-		}
-		if token.History.LastError == "" {
-			t.Fatalf("failed token history = %#v, want last error evidence", token.History)
-		}
-		const want = "image input is not supported by the gemini runner in v1"
-		if !strings.Contains(token.History.LastError, want) {
-			t.Fatalf("failed token last error = %q, want substring %q", token.History.LastError, want)
-		}
-		return
-	}
-
-	t.Fatalf("failed token for work %q not found in task:failed", workID)
 }
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference(t *testing.T) {

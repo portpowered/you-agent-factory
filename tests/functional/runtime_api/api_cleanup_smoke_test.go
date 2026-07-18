@@ -67,7 +67,7 @@ func TestCleanupSmoke_BackendDashboardAndCanonicalEventsExposeOnlyCleanedFactory
 	assertCleanupSmokeDashboardShell(t, host.Endpoint())
 }
 
-func assertTerminalDispatchForTrace(t *testing.T, stream *factoryEventHTTPStream, traceID string) {
+func terminalDispatchForTrace(t *testing.T, stream *factoryEventHTTPStream, traceID string) factoryapi.FactoryEvent {
 	t.Helper()
 
 	deadline := time.Now().Add(5 * time.Second)
@@ -81,11 +81,17 @@ func assertTerminalDispatchForTrace(t *testing.T, stream *factoryEventHTTPStream
 		}
 		for _, eventTraceID := range *event.Context.TraceIds {
 			if eventTraceID == traceID {
-				return
+				return event
 			}
 		}
 	}
 	t.Fatalf("canonical session event stream did not expose terminal DISPATCH_RESPONSE for trace %q", traceID)
+	return factoryapi.FactoryEvent{}
+}
+
+func assertTerminalDispatchForTrace(t *testing.T, stream *factoryEventHTTPStream, traceID string) {
+	t.Helper()
+	_ = terminalDispatchForTrace(t, stream, traceID)
 }
 
 func assertCleanupSmokeDashboardShell(t *testing.T, baseURL string) {
