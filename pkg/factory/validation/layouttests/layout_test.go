@@ -281,6 +281,32 @@ func TestPruneLayout_RemovesStaleNodeEdgeAndGroupMemberReferences(t *testing.T) 
 	}
 }
 
+func TestPruneLayout_RejectsEmptyStateForUnknownCanonicalNode(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "workstation:missing",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+			Text: "No activity yet.",
+		},
+	})
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.PruneLayout(cfg, topology)
+
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
+	if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != "workstation:plan-task" {
+		t.Fatalf("nodes after empty-state rejection = %#v, want only plan-task", cfg.Layout.Nodes)
+	}
+	for _, target := range result.Targets {
+		if target.Code == factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference && target.Path != "factory.layout.nodes[1].emptyState" {
+			t.Fatalf("empty-state target path = %q", target.Path)
+		}
+	}
+}
+
 func TestPruneLayout_PreservesLegacyBundledScriptDocLayoutNode(t *testing.T) {
 	t.Parallel()
 
