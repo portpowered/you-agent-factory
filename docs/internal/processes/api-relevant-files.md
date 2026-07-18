@@ -2,6 +2,11 @@
 
 Use this map when changing the public REST contract.
 
+- OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
+  boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in
+  `internal/contractopenapiconverter` must translate those pairs to numeric
+  Draft 2020-12 exclusive bounds so packaged Factory schemas preserve the same
+  acceptance behavior.
 - Public TypeScript consumer contracts live in `packages/client`: generated
   OpenAPI namespaces stay in `src/generated/openapi.ts`, while stable aliases
   stay handwritten in `src/contracts.ts`. Recording shape validation consumes a

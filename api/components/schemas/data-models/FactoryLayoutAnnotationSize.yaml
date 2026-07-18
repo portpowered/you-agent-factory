@@ -8,10 +8,12 @@ properties:
   width:
     type: number
     minimum: 0
+    exclusiveMinimum: true
     maximum: 10000
     description: Positive authored width no greater than 10,000 canvas units.
   height:
     type: number
     minimum: 0
+    exclusiveMinimum: true
     maximum: 10000
     description: Positive authored height no greater than 10,000 canvas units.

@@ -53,6 +53,43 @@ const (
 	factoryLayoutAnnotationSizeMaxUnits       = 10000
 )
 
+// PortableLayoutValidationError preserves the authored layout field that
+// failed raw Factory boundary validation before generated format: byte fields
+// can normalize their input representation.
+type PortableLayoutValidationError struct {
+	Path    string
+	Message string
+}
+
+func (e *PortableLayoutValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
+// ValidatePortableLayoutBoundaryJSON validates inert layout metadata directly
+// from its authored JSON representation.
+func ValidatePortableLayoutBoundaryJSON(data []byte) error {
+	err := validatePortableLayoutBoundaryJSON(data)
+	if err == nil {
+		return nil
+	}
+	message := err.Error()
+	return &PortableLayoutValidationError{
+		Path:    portableLayoutValidationPath(message),
+		Message: message,
+	}
+}
+
+func portableLayoutValidationPath(message string) string {
+	fields := strings.Fields(message)
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], "layout") {
+		return "layout"
+	}
+	return strings.TrimRight(fields[0], ":")
+}
+
 // Expand parses and normalizes a user-provided factory payload into the internal
 // canonical configuration representation.
 func (m *FactoryConfigMapper) Expand(data []byte) (*interfaces.FactoryConfig, error) {
@@ -85,7 +122,7 @@ func decodeGeneratedFactoryBoundaryJSON(data []byte) (generatedFactoryBoundary, 
 	if err := retiredboundary.RejectCronIntervalField(normalizedData); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := validatePortableLayoutBoundaryJSON(normalizedData); err != nil {
+	if err := ValidatePortableLayoutBoundaryJSON(normalizedData); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
 

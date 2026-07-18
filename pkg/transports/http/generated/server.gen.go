@@ -3713,6 +3713,9 @@ type FactoryValidationTarget struct {
 	// Message Human-readable explanation suitable for dialogs and summaries.
 	Message string `json:"message"`
 
+	// Path Canonical Factory definition path for the affected value when one is available.
+	Path *string `json:"path,omitempty"`
+
 	// Severity Validation severity for one factory validation target.
 	Severity FactoryValidationSeverity `json:"severity"`
 	Subject  FactoryValidationSubject  `json:"subject"`

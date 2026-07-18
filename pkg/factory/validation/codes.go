@@ -64,6 +64,8 @@ const (
 	CodeLayoutUnknownGroupMemberReference                        = "factory.layout.unknownGroupMemberReference"
 	CodeLayoutUnsupportedSchemaVersion                           = "factory.layout.unsupportedSchemaVersion"
 	CodeLayoutInvalidGeometry                                    = "factory.layout.invalidGeometry"
+	CodeLayoutInvalidValue                                       = "factory.layout.invalidValue"
+	CodeLayoutImageBudgetExceeded                                = "factory.layout.imageBudgetExceeded"
 	CodeLayoutEmptyStateUnknownNodeReference                     = "factory.layout.emptyState.unknownNodeReference"
 	CodeOrchestratorUnsupportedKind                              = "factory.orchestrator.unsupportedKind"
 	CodeOrchestratorIncompatiblePetriConfig                      = "factory.orchestrator.incompatiblePetriConfig"

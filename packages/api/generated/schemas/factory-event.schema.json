@@ -1439,14 +1439,14 @@
       "properties": {
         "height": {
           "description": "Positive authored height no greater than 10,000 canvas units.",
+          "exclusiveMinimum": 0,
           "maximum": 10000,
-          "minimum": 0,
           "type": "number"
         },
         "width": {
           "description": "Positive authored width no greater than 10,000 canvas units.",
+          "exclusiveMinimum": 0,
           "maximum": 10000,
-          "minimum": 0,
           "type": "number"
         }
       },

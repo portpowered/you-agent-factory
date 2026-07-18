@@ -5,7 +5,9 @@ package validationentry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
@@ -21,6 +23,9 @@ func ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot, works
 	if snapshot == nil {
 		return fmt.Errorf("%w: Factory snapshot is required", apisurface.ErrInvalidNamedFactory)
 	}
+	if err := factoryconfig.ValidatePortableLayoutBoundaryJSON([]byte(*snapshot)); err != nil {
+		return portableLayoutTopologyError(err)
+	}
 	var submitted factoryapi.Factory
 	if err := snapshot.Decode(&submitted); err != nil {
 		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
@@ -30,6 +35,9 @@ func ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot, works
 		WorkstationLoader: workstationLoader,
 	})
 	if err != nil {
+		if _, ok := PortableLayoutValidationTarget(err); ok {
+			return portableLayoutTopologyError(err)
+		}
 		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
 	}
 	if !result.HasBlockingTargets() {
@@ -38,6 +46,48 @@ func ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot, works
 	return apisurface.NewTopologyValidationError(
 		"Factory topology contains invalid graph references.",
 		apisurface.FactoryValidationTargetsToAPI(result.BlockingTargets()),
+	)
+}
+
+// PortableLayoutValidationTarget converts a path-bearing raw layout boundary
+// failure into the canonical Factory validation vocabulary.
+func PortableLayoutValidationTarget(err error) (factoryvalidation.Target, bool) {
+	var layoutErr *factoryconfig.PortableLayoutValidationError
+	if !errors.As(err, &layoutErr) {
+		return factoryvalidation.Target{}, false
+	}
+	path := "factory." + strings.TrimPrefix(layoutErr.Path, "factory.")
+	code := factoryvalidation.CodeLayoutInvalidValue
+	if strings.Contains(path, ".position") || strings.Contains(path, ".size") {
+		code = factoryvalidation.CodeLayoutInvalidGeometry
+	} else if strings.Contains(layoutErr.Message, "Factory embedded-image budget") {
+		code = factoryvalidation.CodeLayoutImageBudgetExceeded
+	}
+	subjectID := strings.TrimPrefix(path, "factory.layout.")
+	if subjectID == path || subjectID == "" {
+		subjectID = "layout"
+	}
+	return factoryvalidation.Target{
+		Code:     code,
+		Severity: factoryvalidation.SeverityError,
+		Message:  layoutErr.Message,
+		Subject: factoryvalidation.Subject{
+			Type:     factoryvalidation.SubjectTypeFactory,
+			ID:       subjectID,
+			Location: factoryvalidation.SubjectLocationDefinition,
+		},
+		Path: path,
+	}, true
+}
+
+func portableLayoutTopologyError(err error) error {
+	target, ok := PortableLayoutValidationTarget(err)
+	if !ok {
+		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
+	}
+	return apisurface.NewTopologyValidationError(
+		"Factory layout contains an invalid authored value.",
+		apisurface.FactoryValidationTargetsToAPI([]factoryvalidation.Target{target}),
 	)
 }
 

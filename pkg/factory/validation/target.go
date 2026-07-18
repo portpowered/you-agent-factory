@@ -97,5 +97,8 @@ const DefaultTopologyValidationMessage = "Factory topology contains invalid grap
 
 func isBlockingLayoutTarget(target Target) bool {
 	return target.Code == CodeLayoutEmptyStateUnknownNodeReference ||
+		target.Code == CodeLayoutInvalidValue ||
+		target.Code == CodeLayoutInvalidGeometry ||
+		target.Code == CodeLayoutImageBudgetExceeded ||
 		(target.Code == CodeLayoutUnknownNodeReference && interfaces.IsBundledFileGraphNodeID(target.Subject.ID))
 }

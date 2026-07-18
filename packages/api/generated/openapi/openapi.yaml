@@ -9686,6 +9686,9 @@ components:
           description: Human-readable explanation suitable for dialogs and summaries.
         subject:
           $ref: '#/components/schemas/FactoryValidationSubject'
+        path:
+          type: string
+          description: Canonical Factory definition path for the affected value when one is available.
     FactoryValidationResult:
       type: object
       additionalProperties: false
@@ -10259,11 +10262,13 @@ components:
         width:
           type: number
           minimum: 0
+          exclusiveMinimum: true
           maximum: 10000
           description: Positive authored width no greater than 10,000 canvas units.
         height:
           type: number
           minimum: 0
+          exclusiveMinimum: true
           maximum: 10000
           description: Positive authored height no greater than 10,000 canvas units.
     FactoryLayoutNoteTone:

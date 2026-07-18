@@ -4840,6 +4840,8 @@ export interface components {
       /** @description Human-readable explanation suitable for dialogs and summaries. */
       message: string;
       subject: components["schemas"]["FactoryValidationSubject"];
+      /** @description Canonical Factory definition path for the affected value when one is available. */
+      path?: string;
     };
     /**
      * @example {
