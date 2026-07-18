@@ -33,6 +33,28 @@ ordering, `createFactoryEventCursor` for reconnect positions, and
 validate and order canonical JSON `data` frames from captured SSE text. These
 helpers are pure and do not open or retain a live transport.
 
+## Factory visualization layout sidecars
+
+`parseFactoryVisualizationLayout` validates optional, presentation-only
+metadata beside a read-only `FactoryDefinition`; the sidecar is never added to
+the canonical Factory. Version 1 carries positioned note and embedded-raster
+image annotations plus text or image empty states keyed by canonical topology
+node ID. Empty-state references are checked against the canonical topology
+projected from the supplied Factory, and blank, unknown, or duplicate node IDs
+are rejected. `safeParseFactoryVisualizationLayout` returns stable issue codes
+and input paths instead of throwing. The contract contains data only: no
+callback, URL, link, HTML, Markdown, topology connection, route, event,
+persistence, or runtime-effect field is supported.
+
+Embedded sources accept only PNG, JPEG, or WebP signatures encoded as strict
+canonical padded base64. Alternative text is required, each decoded image is
+limited to 2 MiB, and all image occurrences in one sidecar share an 8 MiB
+decoded-byte budget.
+
+The packaged
+[`customer-support.factory-visualization-layout.v1.json`](examples/customer-support.factory-visualization-layout.v1.json)
+demonstrates each version-1 variant independently from the canonical Factory.
+
 ## Contract generation
 
 Run `bun run generate` from this directory after the checked-in dashboard

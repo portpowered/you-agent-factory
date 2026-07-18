@@ -4,7 +4,24 @@
   "title": "Customer support triage topology",
   "summary": "A minimal recording that establishes the Factory topology before work begins.",
   "factory": {
-    "name": "customer-support-triage"
+    "name": "customer-support-triage",
+    "workTypes": [
+      {
+        "name": "support-request",
+        "states": [
+          { "name": "queued", "type": "INITIAL" },
+          { "name": "resolved", "type": "TERMINAL" }
+        ]
+      }
+    ],
+    "workstations": [
+      {
+        "name": "triage",
+        "worker": "",
+        "inputs": [{ "workType": "support-request", "state": "queued" }],
+        "outputs": [{ "workType": "support-request", "state": "resolved" }]
+      }
+    ]
   },
   "events": [
     {
@@ -20,7 +37,26 @@
       },
       "payload": {
         "factory": {
-          "name": "customer-support-triage"
+          "name": "customer-support-triage",
+          "workTypes": [
+            {
+              "name": "support-request",
+              "states": [
+                { "name": "queued", "type": "INITIAL" },
+                { "name": "resolved", "type": "TERMINAL" }
+              ]
+            }
+          ],
+          "workstations": [
+            {
+              "name": "triage",
+              "worker": "",
+              "inputs": [{ "workType": "support-request", "state": "queued" }],
+              "outputs": [
+                { "workType": "support-request", "state": "resolved" }
+              ]
+            }
+          ]
         }
       }
     }

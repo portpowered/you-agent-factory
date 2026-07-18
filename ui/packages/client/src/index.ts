@@ -33,3 +33,30 @@ export {
   type SafeParseFactoryEventReplayTextResult,
   safeParseFactoryEventReplayText,
 } from "./replay.js";
+export {
+  parseFactoryVisualizationLayout,
+  safeParseFactoryVisualizationLayout,
+} from "./visualization-layout.js";
+export {
+  FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,
+  type FactoryVisualizationAnnotation,
+  type FactoryVisualizationEmbeddedImageSource,
+  type FactoryVisualizationImageAnnotation,
+  type FactoryVisualizationImageContent,
+  type FactoryVisualizationLayoutIssue,
+  type FactoryVisualizationLayoutIssueCode,
+  type FactoryVisualizationLayoutV1,
+  type FactoryVisualizationNodeEmptyState,
+  type FactoryVisualizationNoteAnnotation,
+  type FactoryVisualizationNoteTone,
+  type FactoryVisualizationPosition,
+  type FactoryVisualizationSize,
+  type FactoryVisualizationTextEmptyState,
+  type SafeParseFactoryVisualizationLayoutResult,
+} from "./visualization-layout-contracts.js";
+export { FactoryVisualizationLayoutValidationError } from "./visualization-layout-error.js";
+export {
+  MAX_EMBEDDED_IMAGE_BYTES,
+  MAX_IMAGE_ALT_TEXT_LENGTH,
+  MAX_LAYOUT_IMAGE_BYTES,
+} from "./visualization-layout-media.js";
