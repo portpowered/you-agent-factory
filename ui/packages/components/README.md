@@ -225,14 +225,18 @@ make ui-components-test
 make ui-components-storybook
 make ui-components-boundary
 make ui-components-dependency-direction
+make ui-components-build
+make ui-components-pack
+make ui-components-installed-consumer
 make ui-components-verify
 make ui-lint
 ```
 
 `make ui-components-verify` runs the full component package harness with labeled
-failure output for typecheck, tests, Storybook build, boundary checks, and
-dependency-direction checks. CI runs the same harness in the Lint
-workflow after dashboard lint.
+failure output for typecheck, tests, Storybook build, boundary checks,
+dependency-direction checks, production build, registry-pack inventory, and the
+clean installed-consumer smoke. CI installs Chromium and runs the same harness
+in the Lint workflow after dashboard lint.
 
 From the `ui` workspace root:
 
