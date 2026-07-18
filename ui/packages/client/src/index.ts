@@ -55,3 +55,8 @@ export {
   type SafeParseFactoryVisualizationLayoutResult,
 } from "./visualization-layout-contracts.js";
 export { FactoryVisualizationLayoutValidationError } from "./visualization-layout-error.js";
+export {
+  MAX_EMBEDDED_IMAGE_BYTES,
+  MAX_IMAGE_ALT_TEXT_LENGTH,
+  MAX_LAYOUT_IMAGE_BYTES,
+} from "./visualization-layout-media.js";

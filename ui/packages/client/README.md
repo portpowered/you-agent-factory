@@ -44,6 +44,11 @@ input paths instead of throwing. The contract contains data only: no callback,
 URL, link, HTML, Markdown, topology connection, route, event, persistence, or
 runtime-effect field is supported.
 
+Embedded sources accept only PNG, JPEG, or WebP signatures encoded as strict
+canonical padded base64. Alternative text is required, each decoded image is
+limited to 2 MiB, and all image occurrences in one sidecar share an 8 MiB
+decoded-byte budget.
+
 The packaged
 [`customer-support.factory-visualization-layout.v1.json`](examples/customer-support.factory-visualization-layout.v1.json)
 demonstrates each version-1 variant independently from the canonical Factory.

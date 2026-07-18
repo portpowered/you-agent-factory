@@ -7,14 +7,18 @@ import {
 } from "./visualization-layout-contracts.js";
 import { FactoryVisualizationLayoutValidationError } from "./visualization-layout-error.js";
 import {
-  isInvalidCoordinate,
-  isInvalidDimension,
+  validatePosition,
+  validateSize,
+} from "./visualization-layout-geometry.js";
+import {
+  type ImageByteBudget,
+  MAX_IMAGE_ALT_TEXT_LENGTH,
+  validateEmbeddedImageData,
+} from "./visualization-layout-media.js";
+import {
   isUnsafeContentField,
-  MAX_ANNOTATION_COORDINATE,
-  MAX_ANNOTATION_DIMENSION,
   MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_TITLE_LENGTH,
-  MIN_ANNOTATION_COORDINATE,
   validateDuplicateAnnotationIds,
   validatePlainText,
 } from "./visualization-layout-safety.js";
@@ -44,8 +48,6 @@ const imageAnnotationFields = new Set([
   "altText",
   "source",
 ]);
-const positionFields = new Set(["x", "y"]);
-const sizeFields = new Set(["width", "height"]);
 const emptyStateFields = new Set(["nodeId", "content"]);
 const textContentFields = new Set(["kind", "text"]);
 const imageContentFields = new Set(["kind", "altText", "source"]);
@@ -124,87 +126,11 @@ function stringField(
   return false;
 }
 
-function numberField(
-  value: InputRecord,
-  key: string,
-  path: InputPath,
-  issues: FactoryVisualizationLayoutIssue[],
-): void {
-  if (!requiredField(value, key, path, issues)) return;
-  if (typeof value[key] !== "number") {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path: [...path, key],
-      message: `Expected ${key} to be a number.`,
-    });
-  }
-}
-
-function validatePosition(
-  input: unknown,
-  path: InputPath,
-  issues: FactoryVisualizationLayoutIssue[],
-): void {
-  if (!isRecord(input)) {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path,
-      message: "Expected position to be an object.",
-    });
-    return;
-  }
-  unsupportedFields(input, positionFields, path, issues);
-  numberField(input, "x", path, issues);
-  numberField(input, "y", path, issues);
-  for (const coordinate of ["x", "y"] as const) {
-    const value = input[coordinate];
-    if (typeof value === "number" && isInvalidCoordinate(value)) {
-      issues.push({
-        category: "semantic",
-        code: "invalid_coordinate",
-        path: [...path, coordinate],
-        message: `Expected ${coordinate} to be finite and between ${MIN_ANNOTATION_COORDINATE} and ${MAX_ANNOTATION_COORDINATE}.`,
-      });
-    }
-  }
-}
-
-function validateSize(
-  input: unknown,
-  path: InputPath,
-  issues: FactoryVisualizationLayoutIssue[],
-): void {
-  if (!isRecord(input)) {
-    issues.push({
-      category: "structure",
-      code: "invalid_type",
-      path,
-      message: "Expected size to be an object.",
-    });
-    return;
-  }
-  unsupportedFields(input, sizeFields, path, issues);
-  numberField(input, "width", path, issues);
-  numberField(input, "height", path, issues);
-  for (const dimension of ["width", "height"] as const) {
-    const value = input[dimension];
-    if (typeof value === "number" && isInvalidDimension(value)) {
-      issues.push({
-        category: "semantic",
-        code: "invalid_dimension",
-        path: [...path, dimension],
-        message: `Expected ${dimension} to be finite, greater than zero, and at most ${MAX_ANNOTATION_DIMENSION}.`,
-      });
-    }
-  }
-}
-
 function validateImageSource(
   input: unknown,
   path: InputPath,
   issues: FactoryVisualizationLayoutIssue[],
+  imageBudget: ImageByteBudget,
 ): void {
   if (!isRecord(input)) {
     issues.push({
@@ -229,13 +155,27 @@ function validateImageSource(
     !imageMediaTypes.has(input.mediaType as string)
   ) {
     issues.push({
-      category: "structure",
-      code: "invalid_value",
+      category: "semantic",
+      code: "unsupported_image_media_type",
       path: [...path, "mediaType"],
       message: "Expected a supported embedded raster media type.",
     });
   }
-  stringField(input, "base64", path, issues);
+  const validBase64Type = stringField(input, "base64", path, issues);
+  if (
+    validBase64Type &&
+    typeof input.base64 === "string" &&
+    typeof input.mediaType === "string" &&
+    imageMediaTypes.has(input.mediaType)
+  ) {
+    validateEmbeddedImageData(
+      input.base64,
+      input.mediaType,
+      [...path, "base64"],
+      issues,
+      imageBudget,
+    );
+  }
 }
 
 function validateImageContent(
@@ -243,11 +183,21 @@ function validateImageContent(
   path: InputPath,
   fields: ReadonlySet<string>,
   issues: FactoryVisualizationLayoutIssue[],
+  imageBudget: ImageByteBudget,
 ): void {
   unsupportedFields(input, fields, path, issues);
-  stringField(input, "altText", path, issues);
+  if (stringField(input, "altText", path, issues)) {
+    validatePlainText(
+      input.altText as string,
+      [...path, "altText"],
+      MAX_IMAGE_ALT_TEXT_LENGTH,
+      "image alternative text",
+      issues,
+      true,
+    );
+  }
   if (requiredField(input, "source", path, issues)) {
-    validateImageSource(input.source, [...path, "source"], issues);
+    validateImageSource(input.source, [...path, "source"], issues, imageBudget);
   }
 }
 
@@ -255,6 +205,7 @@ function validateAnnotation(
   input: unknown,
   index: number,
   issues: FactoryVisualizationLayoutIssue[],
+  imageBudget: ImageByteBudget,
 ): void {
   const path: InputPath = ["annotations", index];
   if (!isRecord(input)) {
@@ -319,7 +270,13 @@ function validateAnnotation(
       validateSize(input.size, [...path, "size"], issues);
     }
   } else {
-    validateImageContent(input, path, imageAnnotationFields, issues);
+    validateImageContent(
+      input,
+      path,
+      imageAnnotationFields,
+      issues,
+      imageBudget,
+    );
     if (requiredField(input, "size", path, issues)) {
       validateSize(input.size, [...path, "size"], issues);
     }
@@ -334,6 +291,7 @@ function validateEmptyStateContent(
   input: unknown,
   path: InputPath,
   issues: FactoryVisualizationLayoutIssue[],
+  imageBudget: ImageByteBudget,
 ): void {
   if (!isRecord(input)) {
     issues.push({
@@ -351,7 +309,7 @@ function validateEmptyStateContent(
     return;
   }
   if (input.kind === "image") {
-    validateImageContent(input, path, imageContentFields, issues);
+    validateImageContent(input, path, imageContentFields, issues, imageBudget);
     return;
   }
   issues.push({
@@ -366,6 +324,7 @@ function validateNodeEmptyState(
   input: unknown,
   index: number,
   issues: FactoryVisualizationLayoutIssue[],
+  imageBudget: ImageByteBudget,
 ): void {
   const path: InputPath = ["nodeEmptyStates", index];
   if (!isRecord(input)) {
@@ -380,7 +339,12 @@ function validateNodeEmptyState(
   unsupportedFields(input, emptyStateFields, path, issues);
   stringField(input, "nodeId", path, issues);
   if (requiredField(input, "content", path, issues)) {
-    validateEmptyStateContent(input.content, [...path, "content"], issues);
+    validateEmptyStateContent(
+      input.content,
+      [...path, "content"],
+      issues,
+      imageBudget,
+    );
   }
 }
 
@@ -407,6 +371,10 @@ export function safeParseFactoryVisualizationLayout(
   }
 
   const issues: FactoryVisualizationLayoutIssue[] = [];
+  const imageBudget: ImageByteBudget = {
+    total: 0,
+    aggregateLimitReported: false,
+  };
   unsupportedFields(input, layoutFields, [], issues);
   if (
     stringField(input, "schemaVersion", [], issues) &&
@@ -430,7 +398,7 @@ export function safeParseFactoryVisualizationLayout(
       });
     } else {
       for (const [index, annotation] of input.annotations.entries()) {
-        validateAnnotation(annotation, index, issues);
+        validateAnnotation(annotation, index, issues, imageBudget);
       }
       validateDuplicateAnnotationIds(input.annotations, issues);
     }
@@ -446,7 +414,7 @@ export function safeParseFactoryVisualizationLayout(
       });
     } else {
       for (const [index, emptyState] of input.nodeEmptyStates.entries()) {
-        validateNodeEmptyState(emptyState, index, issues);
+        validateNodeEmptyState(emptyState, index, issues, imageBudget);
       }
     }
   }

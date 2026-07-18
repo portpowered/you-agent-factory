@@ -88,7 +88,13 @@ export type FactoryVisualizationLayoutIssueCode =
   | "unsafe_content_field"
   | "unsupported_note_tone"
   | "invalid_coordinate"
-  | "invalid_dimension";
+  | "invalid_dimension"
+  | "invalid_base64"
+  | "empty_image_payload"
+  | "unsupported_image_media_type"
+  | "image_media_type_mismatch"
+  | "image_too_large"
+  | "aggregate_image_bytes_exceeded";
 
 export interface FactoryVisualizationLayoutIssue {
   category: "structure" | "semantic";
