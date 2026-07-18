@@ -13,3 +13,7 @@ recording on success. It throws `FactoryRecordingValidationError` with
 structured issues on failure. `safeParseFactoryRecording` performs the same
 validation without throwing and returns a discriminated success or failure
 result.
+
+The chapter-free example recording is published as raw JSON at
+`@you-agent-factory/client/recordings/example`. It contains one Factory Session,
+the required topology bootstrap, and canonically ordered Factory Events.

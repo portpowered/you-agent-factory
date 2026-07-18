@@ -10,7 +10,10 @@ Use this map when changing the public REST contract.
   `recording-parser.d.ts`. Regenerate the bundled API, staged contracts, client
   projection, and client schema copy with `make generate-client`; use `make
   client-test` for byte-freshness, typechecking, parser behavior, and
-  framework/host boundary evidence.
+  framework/host boundary evidence. Keep install-level contract evidence in
+  `scripts/client-packed-consumer.test.mjs`: pack both public packages, enforce
+  exact tarball inventories, install into a temporary directory outside the
+  repository, and consume only declared package exports.
 - Canonical backend `Work`, `WorkRequest`, ordered content, relations, dispatch
   identity, state-change, and payload-lineage contracts live in `pkg/work`.
   Generated OpenAPI conversion remains at transport boundaries such as

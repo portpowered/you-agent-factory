@@ -148,7 +148,7 @@ client-typecheck: client-deps
 	cd packages/client && node ../../ui/node_modules/typescript/bin/tsc --project tsconfig.json
 
 client-test: client-typecheck client-generated-check
-	node --test scripts/client-package-boundary.test.mjs packages/client/test/recording-parser.test.mjs
+	node --test scripts/client-package-boundary.test.mjs scripts/client-packed-consumer.test.mjs packages/client/test/recording-parser.test.mjs
 
 generate-wire:
 	$(GO) generate ./pkg/...

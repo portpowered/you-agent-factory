@@ -11,6 +11,7 @@
   "files": [
     "README.md",
     "LICENSE.md",
+    "recordings",
     "src"
   ],
   "types": "./src/index.ts",
@@ -25,6 +26,7 @@
     },
     "./generated/openapi": {
       "types": "./src/generated/openapi.ts"
-    }
+    },
+    "./recordings/example": "./recordings/factory-recording.json"
   }
 }
