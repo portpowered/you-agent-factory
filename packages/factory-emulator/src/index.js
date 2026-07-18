@@ -11,6 +11,11 @@ export {
   createFactoryEmulator,
 } from "./emulator.js";
 export {
+  FactoryEmulatorConfigurationError,
+  FactoryEmulatorLifecycleError,
+  createFactoryEmulatorSession,
+} from "./session.js";
+export {
   scenarioSchema,
   SUPPORTED_SCENARIO_VERSION,
 } from "./generated/scenario-schema.js";

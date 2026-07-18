@@ -9,6 +9,11 @@ Use this map when changing the public REST contract.
   Keep semantic diagnostics as stable JSON-Pointer records, validate semantic
   references before any emulator activity, and exercise authored rule ordering,
   lineage, exhaustion, and unmatched behavior through the package's public API.
+  Deterministic lifecycle start/reset lives in `src/session.js`, while pure,
+  domain-separated runtime identity derivation lives in `src/identity.js`.
+  Startup must revalidate before sink activity, normalize event time from the
+  scenario's UTC `startAt`, and keep reset event-free so reruns reproduce event
+  bytes and snapshots from the same immutable inputs.
 
 - Public TypeScript consumer contracts live in `packages/client`: generated
   OpenAPI namespaces stay in `src/generated/openapi.ts`, while stable aliases

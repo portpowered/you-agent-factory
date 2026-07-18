@@ -22,6 +22,20 @@ export {
   FactoryEmulatorPendingTransactionError,
   createFactoryEmulator,
 } from "./emulator.js";
+export {
+  FactoryEmulatorConfigurationError,
+  FactoryEmulatorLifecycleError,
+  createFactoryEmulatorSession,
+} from "./session.js";
+export type {
+  FactoryEmulatorResetReceipt,
+  FactoryEmulatorSession,
+  FactoryEmulatorSessionCounters,
+  FactoryEmulatorSessionOptions,
+  FactoryEmulatorSessionState,
+  FactoryEmulatorSessionWork,
+  FactoryEmulatorStartReceipt,
+} from "./session.js";
 export type {
   FactoryEmulator,
   FactoryEmulatorAdvanceReceipt,

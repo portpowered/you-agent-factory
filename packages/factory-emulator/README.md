@@ -113,3 +113,24 @@ waits for it to be accepted, and then closes the sink. A pending rejected tick
 blocks close so canonical history cannot be skipped. A rejected terminal batch
 is likewise retained unchanged for the next close attempt; after its acceptance
 a failed sink close retries only `sink.close`, never the terminal write.
+
+## Deterministic session start and reset
+
+`createFactoryEmulatorSession({ factory, scenario, sink })` owns one long-lived
+emulator lifecycle. `start()` revalidates the supported Factory and scenario
+before activity, normalizes `startAt` to a UTC instant, then writes an ordered
+topology/run bootstrap batch followed by one normalized initial-submission
+batch. The returned state becomes visible only after those writes are accepted.
+
+Session, request, trace, Work, and event identities are derived from canonical
+Factory/scenario inputs, the scenario seed, authored submission coordinates,
+and logical sequence. The same domain-separated derivation is reserved for
+internal token, dispatch, and completion identities. It reads no ambient time,
+randomness, locale, or process-global counter. Every startup event is stamped at
+virtual elapsed time zero (`startAt` after UTC normalization).
+
+`reset()` is available after a successful start. It clears runtime Work,
+virtual elapsed time, counters, and rule cursors and returns the session to
+`pre-start` without writing an event. Starting again with the same immutable
+configuration reproduces the original event bytes and committed snapshot;
+changing the seed creates a different deterministic identity stream.

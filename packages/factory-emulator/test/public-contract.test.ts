@@ -13,8 +13,14 @@ import type {
 } from "@you-agent-factory/factory-emulator";
 import {
   createFactoryEmulator,
+  createFactoryEmulatorSession,
   createFactoryRecordingSink,
   createMemoryFactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
+import type {
+  FactoryEmulatorSession,
+  FactoryEmulatorSessionState,
+  FactoryEmulatorStartReceipt,
 } from "@you-agent-factory/factory-emulator";
 import type { FactoryEvent } from "@you-agent-factory/client";
 
@@ -77,6 +83,23 @@ const emulatorCloseReceipt: Promise<FactoryEmulatorCloseReceipt> = emulator.clos
 void emulatorStatus;
 void pendingBatch;
 void emulatorCloseReceipt;
+
+const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
+  factory: { name: "public-contract" },
+  scenario: {
+    version: "you-agent-factory.emulator.scenario.v1",
+    id: "public-contract",
+    seed: "public-seed",
+    startAt: "2026-07-18T07:30:00Z",
+    rules: [],
+    unmatchedBehavior: { kind: "ignore" },
+  },
+  sink,
+});
+const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
+const startReceipt: Promise<FactoryEmulatorStartReceipt> = emulatorSession.start();
+void sessionState;
+void startReceipt;
 
 import {
   parseEmulatorScenario,
