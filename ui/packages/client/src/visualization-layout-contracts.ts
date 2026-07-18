@@ -73,6 +73,7 @@ export interface FactoryVisualizationLayoutV1 {
 
 export type FactoryVisualizationLayoutIssueCode =
   | "invalid_type"
+  | "non_plain_data"
   | "invalid_value"
   | "missing_required_field"
   | "unsupported_field"

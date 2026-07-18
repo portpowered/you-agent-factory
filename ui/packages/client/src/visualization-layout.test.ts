@@ -254,6 +254,9 @@ describe("Factory visualization note content diagnostics", () => {
     ["underscore emphasis", "Use _priority_ handling"],
     ["Setext headings", "Heading\n---"],
     ["reference-style links", "[runbook][ops]"],
+    ["indented code blocks", "    const x = run()"],
+    ["thematic breaks", "***"],
+    ["GFM pipe tables", "a | b\n--- | ---\nx | y"],
   ])("rejects %s in note bodies as Markdown", (_, body) => {
     const input = exampleLayout();
     input.annotations = [
@@ -338,6 +341,74 @@ describe("Factory visualization note content diagnostics", () => {
         expect.objectContaining({ path: ["annotations", 0, "connection"] }),
       ]);
     }
+  });
+});
+
+describe("Factory visualization plain-data boundary", () => {
+  it("rejects inherited executable data and returns a fresh plain result", () => {
+    const inheritedInput = Object.create({
+      schemaVersion: "factory-visualization-layout/v1",
+      callback: () => "ran",
+    }) as Record<string, unknown>;
+    inheritedInput.annotations = [];
+
+    expect(
+      safeParseFactoryVisualizationLayout(inheritedInput, exampleFactory()),
+    ).toEqual({
+      success: false,
+      issues: [
+        {
+          category: "structure",
+          code: "non_plain_data",
+          path: [],
+          message:
+            "Expected plain data with standard containers and own data properties.",
+        },
+      ],
+    });
+
+    const input = exampleLayout();
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+    expect(result).toMatchObject({ success: true });
+    if (result.success) {
+      expect(result.data).not.toBe(input);
+      expect(Object.getPrototypeOf(result.data)).toBe(Object.prototype);
+    }
+  });
+
+  it("rejects behavior-bearing nested records before reading accessors", () => {
+    const input = exampleLayout();
+    const annotations = input.annotations as Record<string, unknown>[];
+    const note = annotations[0];
+    if (!note) throw new Error("Expected example note annotation.");
+
+    let getterCalled = false;
+    const position = Object.create({ callback: () => "ran" }) as Record<
+      string,
+      unknown
+    >;
+    Object.defineProperty(position, "x", {
+      enumerable: true,
+      get: () => {
+        getterCalled = true;
+        return 0;
+      },
+    });
+    position.y = 0;
+    note.position = position;
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toEqual({
+      success: false,
+      issues: [
+        expect.objectContaining({
+          code: "non_plain_data",
+          path: ["annotations", 0, "position"],
+        }),
+      ],
+    });
+    expect(getterCalled).toBe(false);
   });
 });
 

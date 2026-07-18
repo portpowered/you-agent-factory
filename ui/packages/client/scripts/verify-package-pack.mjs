@@ -152,7 +152,10 @@ export async function packAndVerify(destination) {
     }
   }
   const dependencies = Object.keys(manifest.dependencies ?? {}).sort();
-  if (JSON.stringify(dependencies) !== JSON.stringify(["ajv", "ajv-formats"])) {
+  if (
+    JSON.stringify(dependencies) !==
+    JSON.stringify(["ajv", "ajv-formats", "marked"])
+  ) {
     throw new Error(
       `[client-package-pack] unexpected runtime dependencies: ${dependencies.join(", ")}`,
     );

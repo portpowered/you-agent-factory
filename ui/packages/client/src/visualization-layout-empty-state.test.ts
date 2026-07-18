@@ -99,6 +99,9 @@ describe("Factory visualization node empty-state content diagnostics", () => {
     ["underscore emphasis", "Use _priority_ handling"],
     ["Setext headings", "Heading\n---"],
     ["reference-style links", "[runbook][ops]"],
+    ["indented code blocks", "    const x = run()"],
+    ["thematic breaks", "***"],
+    ["GFM pipe tables", "a | b\n--- | ---\nx | y"],
   ])("rejects %s in empty-state text as Markdown", (_, text) => {
     const input = exampleLayout();
     input.nodeEmptyStates = [

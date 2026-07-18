@@ -5,7 +5,22 @@ import {
   type FactoryVisualizationLayoutV1,
   type SafeParseFactoryVisualizationLayoutResult,
 } from "./visualization-layout-contracts.js";
+import {
+  clonePlainData,
+  type InputRecord,
+  isInputRecord,
+  validatePlainDataContainers,
+} from "./visualization-layout-data.js";
 import { FactoryVisualizationLayoutValidationError } from "./visualization-layout-error.js";
+import {
+  emptyStateFields,
+  imageAnnotationFields,
+  imageContentFields,
+  imageSourceFields,
+  layoutFields,
+  noteFields,
+  textContentFields,
+} from "./visualization-layout-fields.js";
 import {
   validatePosition,
   validateSize,
@@ -29,35 +44,7 @@ import {
   validateCanonicalNodeId,
 } from "./visualization-layout-topology.js";
 
-type InputRecord = Record<string, unknown>;
 type InputPath = readonly (string | number)[];
-
-const layoutFields = new Set([
-  "schemaVersion",
-  "annotations",
-  "nodeEmptyStates",
-]);
-const noteFields = new Set([
-  "id",
-  "kind",
-  "position",
-  "size",
-  "title",
-  "body",
-  "tone",
-]);
-const imageAnnotationFields = new Set([
-  "id",
-  "kind",
-  "position",
-  "size",
-  "altText",
-  "source",
-]);
-const emptyStateFields = new Set(["nodeId", "content"]);
-const textContentFields = new Set(["kind", "text"]);
-const imageContentFields = new Set(["kind", "altText", "source"]);
-const imageSourceFields = new Set(["kind", "mediaType", "base64"]);
 const imageMediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 const noteTones = new Set([
   "neutral",
@@ -67,10 +54,6 @@ const noteTones = new Set([
   "warning",
   "danger",
 ]);
-function isRecord(value: unknown): value is InputRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function unsupportedFields(
   value: InputRecord,
   fields: ReadonlySet<string>,
@@ -96,7 +79,6 @@ function unsupportedFields(
     }
   }
 }
-
 function requiredField(
   value: InputRecord,
   key: string,
@@ -112,7 +94,6 @@ function requiredField(
   });
   return false;
 }
-
 function stringField(
   value: InputRecord,
   key: string,
@@ -138,7 +119,7 @@ function validateImageSource(
   issues: FactoryVisualizationLayoutIssue[],
   imageBudget: ImageByteBudget,
 ): void {
-  if (!isRecord(input)) {
+  if (!isInputRecord(input)) {
     issues.push({
       category: "structure",
       code: "invalid_type",
@@ -214,7 +195,7 @@ function validateAnnotation(
   imageBudget: ImageByteBudget,
 ): void {
   const path: InputPath = ["annotations", index];
-  if (!isRecord(input)) {
+  if (!isInputRecord(input)) {
     issues.push({
       category: "structure",
       code: "invalid_type",
@@ -299,7 +280,7 @@ function validateEmptyStateContent(
   issues: FactoryVisualizationLayoutIssue[],
   imageBudget: ImageByteBudget,
 ): void {
-  if (!isRecord(input)) {
+  if (!isInputRecord(input)) {
     issues.push({
       category: "structure",
       code: "invalid_type",
@@ -343,7 +324,7 @@ function validateNodeEmptyState(
   canonicalNodeIds: ReadonlySet<string>,
 ): void {
   const path: InputPath = ["nodeEmptyStates", index];
-  if (!isRecord(input)) {
+  if (!isInputRecord(input)) {
     issues.push({
       category: "structure",
       code: "invalid_type",
@@ -379,7 +360,7 @@ export function safeParseFactoryVisualizationLayout(
   input: unknown,
   factory: Readonly<FactoryDefinition>,
 ): SafeParseFactoryVisualizationLayoutResult {
-  if (!isRecord(input)) {
+  if (!isInputRecord(input)) {
     return {
       success: false,
       issues: [
@@ -394,6 +375,8 @@ export function safeParseFactoryVisualizationLayout(
   }
 
   const issues: FactoryVisualizationLayoutIssue[] = [];
+  validatePlainDataContainers(input, [], issues);
+  if (issues.length > 0) return { success: false, issues };
   const imageBudget: ImageByteBudget = {
     total: 0,
     aggregateLimitReported: false,
@@ -454,7 +437,7 @@ export function safeParseFactoryVisualizationLayout(
     ? { success: false, issues }
     : {
         success: true,
-        data: input as unknown as FactoryVisualizationLayoutV1,
+        data: clonePlainData(input) as FactoryVisualizationLayoutV1,
       };
 }
 

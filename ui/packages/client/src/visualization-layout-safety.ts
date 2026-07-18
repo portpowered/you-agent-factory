@@ -1,3 +1,4 @@
+import { marked, type Token } from "marked";
 import type { FactoryVisualizationLayoutIssue } from "./visualization-layout-contracts.js";
 
 type InputPath = readonly (string | number)[];
@@ -14,18 +15,33 @@ type UnsafeTextMatch = {
   message: string;
 };
 
-const MARKDOWN_PATTERNS = [
-  /(?:^|\n)\s{0,3}(?:#{1,6}(?:\s|$)|>|[-+*]\s|\d+[.)]\s|```|~~~)/u,
-  /(?:^|\n)\s{0,3}(?:=+|-+)\s*(?:\n|$)/u,
-  /!?\[[^\]\n]*\]\([^\n)]*\)/u,
-  /!?\[[^\]\n]*\]\[[^\]\n]*\]/u,
-  /(?:^|\n)\s{0,3}\[[^\]\n]+\]:\s*\S+/u,
-  /(?:\*\*|__|~~|`)[^\n]+(?:\*\*|__|~~|`)/u,
-  /(?:^|[\s([{>])(?:\*[^*\n]+\*|_[^_\n]+_)(?=$|[\s)\]}.!,?:;])/u,
-] as const;
+function containsFormattedToken(tokens: readonly Token[]): boolean {
+  for (const token of tokens) {
+    if (
+      token.type !== "paragraph" &&
+      token.type !== "text" &&
+      token.type !== "space"
+    ) {
+      return true;
+    }
+    if (
+      "tokens" in token &&
+      token.tokens &&
+      containsFormattedToken(token.tokens)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
 
 function containsMarkdown(value: string): boolean {
-  return MARKDOWN_PATTERNS.some((pattern) => pattern.test(value));
+  // Undefined reference labels are plain text to a renderer, but still carry
+  // Markdown syntax that could become active when combined with a definition.
+  return (
+    containsFormattedToken(marked.lexer(value, { gfm: true })) ||
+    /!?\[[^\]\n]*\]\[[^\]\n]*\]/u.test(value)
+  );
 }
 
 function unsafeTextMatch(value: string): UnsafeTextMatch | undefined {
@@ -35,18 +51,18 @@ function unsafeTextMatch(value: string): UnsafeTextMatch | undefined {
       message: "Expected inert plain text without HTML or media markup.",
     };
   }
-  if (containsMarkdown(value)) {
-    return {
-      code: "unsafe_markdown",
-      message: "Expected inert plain text without Markdown or links.",
-    };
-  }
   if (
     /(?:\b(?:https?|ftp|file|data|javascript|mailto):|\bwww\.)\S*/iu.test(value)
   ) {
     return {
       code: "unsafe_uri",
       message: "Expected inert plain text without URI-bearing content.",
+    };
+  }
+  if (containsMarkdown(value)) {
+    return {
+      code: "unsafe_markdown",
+      message: "Expected inert plain text without Markdown or links.",
     };
   }
   return undefined;
