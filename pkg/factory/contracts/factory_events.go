@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -727,12 +728,13 @@ type FactoryConstraint struct {
 
 // FactoryWorker describes an executable worker type.
 type FactoryWorker struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name,omitempty"`
-	Provider      string            `json:"provider,omitempty"`
-	ModelProvider string            `json:"model_provider,omitempty"`
-	Model         string            `json:"model,omitempty"`
-	Config        map[string]string `json:"config,omitempty"`
+	ID            string                   `json:"id"`
+	Name          string                   `json:"name,omitempty"`
+	Provider      string                   `json:"provider,omitempty"`
+	ModelProvider string                   `json:"model_provider,omitempty"`
+	Model         string                   `json:"model,omitempty"`
+	Config        map[string]string        `json:"config,omitempty"`
+	Resources     []factoryresource.Config `json:"resources,omitempty"`
 }
 
 // FactoryWorkType describes a work type and its possible states.
@@ -744,22 +746,24 @@ type FactoryWorkType struct {
 
 // FactoryStateDefinition describes a named state in a work type lifecycle.
 type FactoryStateDefinition struct {
+	ID       string `json:"id,omitempty"`
 	Value    string `json:"value"`
 	Category string `json:"category"`
 }
 
 // FactoryWorkstation describes a transition that can execute work.
 type FactoryWorkstation struct {
-	ID                string            `json:"id"`
-	Name              string            `json:"name"`
-	WorkerID          string            `json:"worker_id,omitempty"`
-	Kind              string            `json:"kind,omitempty"`
-	Config            map[string]string `json:"config,omitempty"`
-	InputPlaceIDs     []string          `json:"input_place_ids,omitempty"`
-	OutputPlaceIDs    []string          `json:"output_place_ids,omitempty"`
-	ContinuePlaceIDs  []string          `json:"continue_place_ids,omitempty"`
-	RejectionPlaceIDs []string          `json:"rejection_place_ids,omitempty"`
-	FailurePlaceIDs   []string          `json:"failure_place_ids,omitempty"`
+	ID                string                   `json:"id"`
+	Name              string                   `json:"name"`
+	WorkerID          string                   `json:"worker_id,omitempty"`
+	Kind              string                   `json:"kind,omitempty"`
+	Config            map[string]string        `json:"config,omitempty"`
+	Resources         []factoryresource.Config `json:"resources,omitempty"`
+	InputPlaceIDs     []string                 `json:"input_place_ids,omitempty"`
+	OutputPlaceIDs    []string                 `json:"output_place_ids,omitempty"`
+	ContinuePlaceIDs  []string                 `json:"continue_place_ids,omitempty"`
+	RejectionPlaceIDs []string                 `json:"rejection_place_ids,omitempty"`
+	FailurePlaceIDs   []string                 `json:"failure_place_ids,omitempty"`
 }
 
 // FactoryWorkstationRef identifies a workstation in a runtime event.

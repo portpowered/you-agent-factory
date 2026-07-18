@@ -317,7 +317,7 @@ func assertReplayInitialTopologyProjection(t *testing.T, replayProjection interf
 	if !reflect.DeepEqual(replayProjection, liveProjection) {
 		t.Fatalf("replay projection mismatch\n got: %#v\nwant: %#v", replayProjection, liveProjection)
 	}
-	assertProjectedWorkstationRoutes(t, replayProjection, "execute-story", []string{"story-retry:init", "story-followup:init"}, []string{"story-triage:init", "story-backlog:init"}, []string{"story-failed:failed", "story-abandoned:failed"})
+	assertProjectedWorkstationRoutes(t, replayProjection, "execute-story-id", []string{"story-retry:init", "story-followup:init"}, []string{"story-triage:init", "story-backlog:init"}, []string{"story-failed:failed", "story-abandoned:failed"})
 	assertProjectedWorker(t, replayProjection, interfaces.FactoryWorker{
 		ID:            "executor",
 		Name:          "executor",

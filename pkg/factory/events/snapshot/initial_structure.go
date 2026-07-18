@@ -10,6 +10,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 )
 
@@ -34,39 +35,50 @@ type initialStructureVersion struct {
 }
 
 type initialStructureResource struct {
-	Capacity int    `json:"capacity"`
-	Name     string `json:"name"`
+	ID       *string `json:"id,omitempty"`
+	Capacity int     `json:"capacity"`
+	Name     string  `json:"name"`
 }
 
 type initialStructureWorkType struct {
+	ID     *string                     `json:"id,omitempty"`
 	Name   string                      `json:"name"`
 	States []initialStructureWorkState `json:"states"`
 }
 
 type initialStructureWorkState struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID   *string `json:"id,omitempty"`
+	Name string  `json:"name"`
+	Type string  `json:"type"`
 }
 
 type initialStructureWorker struct {
-	ExecutorProvider *string `json:"executorProvider,omitempty"`
-	Model            *string `json:"model,omitempty"`
-	ModelProvider    *string `json:"modelProvider,omitempty"`
-	Name             string  `json:"name"`
-	Type             *string `json:"type,omitempty"`
+	ID               *string                               `json:"id,omitempty"`
+	ExecutorProvider *string                               `json:"executorProvider,omitempty"`
+	Model            *string                               `json:"model,omitempty"`
+	ModelProvider    *string                               `json:"modelProvider,omitempty"`
+	Name             string                                `json:"name"`
+	Resources        []initialStructureResourceRequirement `json:"resources,omitempty"`
+	Type             *string                               `json:"type,omitempty"`
 }
 
 type initialStructureWorkstation struct {
-	Behavior    *string                          `json:"behavior,omitempty"`
-	ID          *string                          `json:"id,omitempty"`
-	Inputs      []initialStructureWorkstationIO  `json:"inputs"`
-	Name        string                           `json:"name"`
-	OnContinue  *[]initialStructureWorkstationIO `json:"onContinue,omitempty"`
-	OnFailure   *[]initialStructureWorkstationIO `json:"onFailure,omitempty"`
-	OnRejection *[]initialStructureWorkstationIO `json:"onRejection,omitempty"`
-	Outputs     *[]initialStructureWorkstationIO `json:"outputs,omitempty"`
-	Type        *string                          `json:"type,omitempty"`
-	Worker      string                           `json:"worker"`
+	Behavior    *string                               `json:"behavior,omitempty"`
+	ID          *string                               `json:"id,omitempty"`
+	Inputs      []initialStructureWorkstationIO       `json:"inputs"`
+	Name        string                                `json:"name"`
+	OnContinue  *[]initialStructureWorkstationIO      `json:"onContinue,omitempty"`
+	OnFailure   *[]initialStructureWorkstationIO      `json:"onFailure,omitempty"`
+	OnRejection *[]initialStructureWorkstationIO      `json:"onRejection,omitempty"`
+	Outputs     *[]initialStructureWorkstationIO      `json:"outputs,omitempty"`
+	Resources   []initialStructureResourceRequirement `json:"resources,omitempty"`
+	Type        *string                               `json:"type,omitempty"`
+	Worker      string                                `json:"worker"`
+}
+
+type initialStructureResourceRequirement struct {
+	Capacity int    `json:"capacity"`
+	Name     string `json:"name"`
 }
 
 type initialStructureWorkstationIO struct {
@@ -201,7 +213,7 @@ func initialStructureResources(resources []interfaces.FactoryResource) []initial
 		if name == "" {
 			name = resource.ID
 		}
-		out = append(out, initialStructureResource{Name: name, Capacity: resource.Capacity})
+		out = append(out, initialStructureResource{ID: snapshotEntityIDPtr(resource.ID, name), Name: name, Capacity: resource.Capacity})
 	}
 	return out
 }
@@ -215,9 +227,9 @@ func initialStructureWorkTypes(workTypes []interfaces.FactoryWorkType) []initial
 		}
 		states := make([]initialStructureWorkState, 0, len(workType.States))
 		for _, stateDef := range workType.States {
-			states = append(states, initialStructureWorkState{Name: stateDef.Value, Type: initialStructureWorkStateType(stateDef.Category)})
+			states = append(states, initialStructureWorkState{ID: snapshotEntityIDPtr(stateDef.ID, stateDef.Value), Name: stateDef.Value, Type: initialStructureWorkStateType(stateDef.Category)})
 		}
-		out = append(out, initialStructureWorkType{Name: name, States: states})
+		out = append(out, initialStructureWorkType{ID: snapshotEntityIDPtr(workType.ID, name), Name: name, States: states})
 	}
 	return out
 }
@@ -243,11 +255,13 @@ func initialStructureWorkers(workers []interfaces.FactoryWorker) []initialStruct
 			name = worker.ID
 		}
 		out = append(out, initialStructureWorker{
+			ID:               snapshotEntityIDPtr(worker.ID, name),
 			Name:             name,
 			ExecutorProvider: snapshotStringPtr(interfaces.PublicWorkerProviderFromInternalRuntime(worker.Provider)),
 			ModelProvider:    snapshotStringPtr(interfaces.PublicWorkerModelProviderFromInternalRuntime(worker.ModelProvider)),
 			Model:            snapshotStringPtr(worker.Model),
 			Type:             snapshotStringPtr(interfaces.PublicWorkerTypeFromInternalRuntime(worker.Config["type"])),
+			Resources:        initialStructureResourceRequirements(worker.Resources),
 		})
 	}
 	return out
@@ -273,7 +287,16 @@ func initialStructureWorkstations(workstations []interfaces.FactoryWorkstation, 
 			OnContinue:  initialStructureWorkstationIOsPtr(workstation.ContinuePlaceIDs, placesByID),
 			OnRejection: initialStructureWorkstationIOsPtr(workstation.RejectionPlaceIDs, placesByID),
 			OnFailure:   initialStructureWorkstationIOsPtr(workstation.FailurePlaceIDs, placesByID),
+			Resources:   initialStructureResourceRequirements(workstation.Resources),
 		})
+	}
+	return out
+}
+
+func initialStructureResourceRequirements(resources []factoryresource.Config) []initialStructureResourceRequirement {
+	out := make([]initialStructureResourceRequirement, len(resources))
+	for i, resource := range resources {
+		out[i] = initialStructureResourceRequirement{Name: resource.Name, Capacity: resource.Capacity}
 	}
 	return out
 }
@@ -417,6 +440,13 @@ func snapshotStringPtr(value string) *string {
 		return nil
 	}
 	return &value
+}
+
+func snapshotEntityIDPtr(id, fallbackName string) *string {
+	if strings.TrimSpace(id) == "" || id == fallbackName {
+		return nil
+	}
+	return &id
 }
 
 func snapshotStringSlicePtr(values []string) *[]string {

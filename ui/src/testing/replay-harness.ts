@@ -4,6 +4,7 @@ import type { DashboardSnapshot } from "../api/dashboard";
 import type { FactoryEvent } from "../api/events";
 import type { EventSourceLike } from "../api/events/api";
 import {
+  emptyHostedFactoryReplayProjection,
   useFactoryTimelineStore,
   type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
@@ -89,6 +90,7 @@ function timelineSnapshotFromDashboardSnapshot(
 ): WorldState {
   return {
     ...snapshot,
+    factoryReplay: emptyHostedFactoryReplayProjection(snapshot.tick_count),
     relationsByWorkID: overrides.relationsByWorkID ?? {},
     tracesByWorkID: overrides.tracesByWorkID ?? {},
     workstationRequestsByDispatchID:

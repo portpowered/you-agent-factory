@@ -8,6 +8,7 @@ import {
 } from "../../../work-outcome/public/materializer";
 import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
 import type { FactoryTimelineProjection } from "./buildSnapshot";
+import { emptyHostedFactoryReplayProjection } from "./projections/projectFactoryReplay";
 import { projectSnapshot } from "./projectSnapshot";
 import {
   emptyWorldRuntime,
@@ -127,6 +128,7 @@ export function emptyDashboardSnapshot(): DashboardSnapshot {
 function emptyTimelineSnapshot(): WorldState {
   return {
     ...emptyDashboardSnapshot(),
+    factoryReplay: emptyHostedFactoryReplayProjection(0),
     relationsByWorkID: {},
     tracesByWorkID: {},
     workstationRequestsByDispatchID: {},
