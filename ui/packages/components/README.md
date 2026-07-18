@@ -25,9 +25,9 @@ Peer dependencies:
 - `react` ^19.0.0
 - `react-dom` ^19.0.0
 
-Some category entrypoints (for example charts and graphs) also require the
-package's direct dependencies (`recharts`, `@xyflow/react`). Install those in
-the host app when you import those categories.
+Runtime libraries used by category entrypoints (for example `recharts`,
+`@xyflow/react`, and Radix UI) are installed as direct package dependencies.
+Hosts only need to provide compatible React and React DOM peers.
 
 ## Import package styles
 
@@ -171,6 +171,9 @@ From `ui/packages/components`:
 ```bash
 bun run typecheck
 bun run test
+bun run test:build
+bun run check:pack
+bun run check:installed-consumer
 bun run check:package-boundary
 bun run check:package-dependency-direction
 bun run build-storybook
@@ -181,6 +184,22 @@ Package tests use `src/testing/vitest.setup.ts` and `src/testing/render.tsx`
 for DOM cleanup, accessible assertions, and user interactions. They do not
 require dashboard routes, providers, generated clients, API mocks, React
 Query, Zustand, Monaco, or Sonner.
+
+`check:pack` performs a clean production build, creates the registry-format
+tarball in a temporary directory, and validates npm's reported file inventory.
+It checks every manifest export and transitive local stylesheet or asset
+reference, rejects development-only files, and removes the temporary artifact
+after verification. `test:build` covers both the compiled output and this real
+pack flow, including actionable failure diagnostics.
+
+`check:installed-consumer` installs that registry-format tarball and compatible
+React peers into a new temporary npm application, then typechecks and creates a
+Vite production bundle without workspace links, source aliases, or package
+source files. Chromium loads only the built consumer output at mobile and
+desktop viewports and verifies package styles, representative primitive,
+feedback, chart, and graph rendering, keyboard activation and focus, accessible
+state semantics, the shared React runtime, and page-level overflow. The check
+removes its temporary install and closes its verification server on exit.
 
 Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
 files. Preview decorators import the package token fixture stylesheet and
@@ -206,14 +225,19 @@ make ui-components-test
 make ui-components-storybook
 make ui-components-boundary
 make ui-components-dependency-direction
+make ui-components-build
+make ui-components-pack
+make ui-components-installed-consumer
 make ui-components-verify
 make ui-lint
 ```
 
 `make ui-components-verify` runs the full component package harness with labeled
-failure output for typecheck, tests, Storybook build, boundary checks, and
-dependency-direction checks. CI runs the same harness in the Lint
-workflow after dashboard lint.
+failure output. It creates the production build first so package self-imports
+resolve on a clean checkout, then runs typecheck, tests, Storybook build,
+boundary checks, dependency-direction checks, registry-pack inventory, and the
+clean installed-consumer smoke. CI installs Chromium and runs the same harness
+in the Lint workflow after dashboard lint.
 
 From the `ui` workspace root:
 

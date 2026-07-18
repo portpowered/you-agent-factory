@@ -24,6 +24,14 @@
   steps so an unrelated verification failure cannot suppress either result.
   Focused lint reruns must stay Windows-compatible: do not add standalone
   `printf` recipe lines to targets used by `make verify-lint`.
+  The Lint job also owns the public components distribution gate through
+  `make ui-components-verify`. Install Chromium before that gate and keep its
+  production build, registry-pack inventory, and clean installed-consumer
+  phases as separately rerunnable Make targets so failures identify the broken
+  distribution boundary without replacing the existing typecheck, unit,
+  Storybook, package-boundary, or dependency-direction checks. Run the package
+  build before typecheck because clean-checkout Storybook sources resolve the
+  package's public self-reference through the compiled manifest targets.
   Backend Unit Coverage and Backend Functional Coverage are an independent,
   fail-fast-disabled matrix gated only by Classify PR Impact. Preserve the
   explicit run/intentional-skip summary, per-suite coverage thresholds,

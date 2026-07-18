@@ -1,0 +1,40 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "tsBuildInfoFile": null
+  },
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/*.harness.test.ts",
+    "src/**/*.harness.test.tsx",
+    "src/**/*.stories.ts",
+    "src/**/*.stories.tsx",
+    "src/testing/vitest.setup.ts"
+  ],
+  "files": [
+    "src/index.ts",
+    "src/primitives/index.ts",
+    "src/forms/index.ts",
+    "src/layout/index.ts",
+    "src/feedback/index.ts",
+    "src/data-display/index.ts",
+    "src/navigation/index.ts",
+    "src/overlays/index.ts",
+    "src/charts/index.ts",
+    "src/graphs/index.ts",
+    "src/recipes/index.ts",
+    "src/icons/index.ts",
+    "src/utilities/index.ts",
+    "src/testing/index.ts",
+    "src/tokens/index.ts"
+  ],
+  "include": []
+}

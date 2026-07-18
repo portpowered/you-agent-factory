@@ -1,7 +1,21 @@
 {
   "name": "@you-agent-factory/components",
   "version": "0.0.0",
-  "private": true,
+  "description": "Domain-free React components, design tokens, and utilities for public visualizers.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git",
+    "directory": "ui/packages/components"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md"
+  ],
   "type": "module",
   "sideEffects": [
     "*.css",
@@ -9,76 +23,95 @@
   ],
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
-    "./styles.css": "./src/styles.css",
+    "./styles.css": "./dist/styles.css",
     "./primitives": {
-      "types": "./src/primitives/index.ts",
-      "default": "./src/primitives/index.ts"
+      "types": "./dist/primitives/index.d.ts",
+      "import": "./dist/primitives/index.js",
+      "default": "./dist/primitives/index.js"
     },
     "./forms": {
-      "types": "./src/forms/index.ts",
-      "default": "./src/forms/index.ts"
+      "types": "./dist/forms/index.d.ts",
+      "import": "./dist/forms/index.js",
+      "default": "./dist/forms/index.js"
     },
     "./layout": {
-      "types": "./src/layout/index.ts",
-      "default": "./src/layout/index.ts"
+      "types": "./dist/layout/index.d.ts",
+      "import": "./dist/layout/index.js",
+      "default": "./dist/layout/index.js"
     },
     "./feedback": {
-      "types": "./src/feedback/index.ts",
-      "default": "./src/feedback/index.ts"
+      "types": "./dist/feedback/index.d.ts",
+      "import": "./dist/feedback/index.js",
+      "default": "./dist/feedback/index.js"
     },
     "./data-display": {
-      "types": "./src/data-display/index.ts",
-      "default": "./src/data-display/index.ts"
+      "types": "./dist/data-display/index.d.ts",
+      "import": "./dist/data-display/index.js",
+      "default": "./dist/data-display/index.js"
     },
     "./navigation": {
-      "types": "./src/navigation/index.ts",
-      "default": "./src/navigation/index.ts"
+      "types": "./dist/navigation/index.d.ts",
+      "import": "./dist/navigation/index.js",
+      "default": "./dist/navigation/index.js"
     },
     "./overlays": {
-      "types": "./src/overlays/index.ts",
-      "default": "./src/overlays/index.ts"
+      "types": "./dist/overlays/index.d.ts",
+      "import": "./dist/overlays/index.js",
+      "default": "./dist/overlays/index.js"
     },
     "./charts": {
-      "types": "./src/charts/index.ts",
-      "default": "./src/charts/index.ts"
+      "types": "./dist/charts/index.d.ts",
+      "import": "./dist/charts/index.js",
+      "default": "./dist/charts/index.js"
     },
     "./graphs": {
-      "types": "./src/graphs/index.ts",
-      "default": "./src/graphs/index.ts"
+      "types": "./dist/graphs/index.d.ts",
+      "import": "./dist/graphs/index.js",
+      "default": "./dist/graphs/index.js"
     },
     "./recipes": {
-      "types": "./src/recipes/index.ts",
-      "default": "./src/recipes/index.ts"
+      "types": "./dist/recipes/index.d.ts",
+      "import": "./dist/recipes/index.js",
+      "default": "./dist/recipes/index.js"
     },
     "./icons": {
-      "types": "./src/icons/index.ts",
-      "default": "./src/icons/index.ts"
+      "types": "./dist/icons/index.d.ts",
+      "import": "./dist/icons/index.js",
+      "default": "./dist/icons/index.js"
     },
     "./utilities": {
-      "types": "./src/utilities/index.ts",
-      "default": "./src/utilities/index.ts"
+      "types": "./dist/utilities/index.d.ts",
+      "import": "./dist/utilities/index.js",
+      "default": "./dist/utilities/index.js"
     },
     "./testing": {
-      "types": "./src/testing/index.ts",
-      "default": "./src/testing/index.ts"
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "default": "./dist/testing/index.js"
     },
     "./tokens": {
-      "types": "./src/tokens/index.ts",
-      "default": "./src/tokens/index.ts"
+      "types": "./dist/tokens/index.d.ts",
+      "import": "./dist/tokens/index.js",
+      "default": "./dist/tokens/index.js"
     }
   },
   "scripts": {
+    "build": "node scripts/build-package.mjs",
     "build-storybook": "storybook build --loglevel warn",
+    "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
+    "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "check:package-dependency-direction": "node scripts/check-package-dependency-direction.mjs",
     "storybook": "storybook dev -p 6017",
     "test": "bun run test:unit && bun run check:package-boundary && bun run check:package-dependency-direction",
+    "test:build": "bun run build && vitest run --config vitest.build.config.ts",
     "test:unit": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -b --noEmit --pretty false",
-    "verify": "bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction",
+    "verify": "bun run build && bun run typecheck && bun run test:unit && bun run build-storybook && bun run check:package-boundary && bun run check:package-dependency-direction && bun run check:pack && bun run check:installed-consumer",
     "verify:form-field-storybook-browser": "node scripts/verify-package-form-field-storybook-browser.mjs",
     "verify:graph-storybook-viewport-browser": "node scripts/verify-graph-storybook-viewport-browser.mjs",
     "verify:storybook-browser": "node scripts/verify-package-storybook-browser.mjs",
@@ -93,6 +126,8 @@
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-select": "^2.3.0",
     "@radix-ui/react-slot": "^1.2.3",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@xyflow/react": "^12.10.2",
     "recharts": "^3.8.1"
   },
@@ -106,8 +141,6 @@
     "@tailwindcss/vite": "^4.2.2",
     "@vitejs/plugin-react-swc": "^4.1.0",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "happy-dom": "^20.9.0",

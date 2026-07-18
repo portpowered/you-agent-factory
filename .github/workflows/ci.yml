@@ -264,6 +264,10 @@ jobs:
       - name: Install dashboard dependencies
         run: make ui-deps
 
+      - name: Install Playwright browser for component distribution verification
+        timeout-minutes: 10
+        run: make ui-install-playwright
+
       - name: Run lint verification
         timeout-minutes: 30
         run: make verify-lint
