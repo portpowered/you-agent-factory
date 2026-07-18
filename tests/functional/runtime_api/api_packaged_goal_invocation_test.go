@@ -13,42 +13,24 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult(t *testing.T) {
-	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	core, observedLogs := observer.New(zap.InfoLevel)
-	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.Logger = zap.New(core)
-	})
+	host, stream := startPackagedGoalInvocationHost(t, nil)
 
 	submitted := "customer goal request text"
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, submitted, nil))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, submitted, nil))
 	assertPackagedGoalCompletedWithText(t, response, "mock worker accepted")
 	if primaryResultText(t, response) == submitted {
 		t.Fatal("primaryResult echoed submitted goal text")
 	}
-
-	submittedLogs := observedLogs.FilterMessage("factory session invocation submitted").All()
-	if len(submittedLogs) != 1 {
-		t.Fatalf("submitted invocation log count = %d, want 1", len(submittedLogs))
-	}
-	submittedFields := submittedLogs[0].ContextMap()
-	if got := submittedFields["invocation_return_policy_mode"]; got != "authored" {
-		t.Fatalf("submitted invocation_return_policy_mode = %#v, want authored", got)
-	}
-	if got := submittedFields["policy_resolution_path"]; got != "explicit_scoped_terminal_match" {
-		t.Fatalf("submitted policy_resolution_path = %#v, want explicit_scoped_terminal_match", got)
-	}
+	assertPackagedGoalDispatches(t, stream, response.TraceId, []factoryapi.WorkOutcome{factoryapi.WorkOutcomeAccepted})
+	assertInvocationTraceWorkState(t, host.Endpoint(), response.TraceId, "complete", factoryapi.WorkStateTypeTERMINAL)
 }
 
 func TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion(t *testing.T) {
@@ -56,13 +38,15 @@ func TestSessionInvocationAPI_PackagedGoalContinueRepeatsBeforeCompletion(t *tes
 		workers.CommandResult{Stdout: []byte("ordinary partial progress\n<CONTINUE>")},
 		workers.CommandResult{Stdout: []byte("finished after continue\n<COMPLETE>")},
 	)
-	server := startPackagedGoalInvocationServer(t, runner)
+	host, stream := startPackagedGoalInvocationHost(t, runner)
 
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke packaged goal", nil))
 	assertPackagedGoalCompletedWithText(t, response, "finished after continue")
-	if got := runner.CallCount(); got != 2 {
-		t.Fatalf("provider invocation count = %d, want 2 after continue", got)
-	}
+	assertPackagedGoalDispatches(t, stream, response.TraceId, []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeContinue,
+		factoryapi.WorkOutcomeAccepted,
+	})
+	assertInvocationTraceWorkState(t, host.Endpoint(), response.TraceId, "complete", factoryapi.WorkStateTypeTERMINAL)
 }
 
 func TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion(t *testing.T) {
@@ -70,20 +54,22 @@ func TestSessionInvocationAPI_PackagedGoalRejectRepeatsBeforeCompletion(t *testi
 		workers.CommandResult{Stdout: []byte("goal is not complete yet")},
 		workers.CommandResult{Stdout: []byte("finished after rejection\n<COMPLETE>")},
 	)
-	server := startPackagedGoalInvocationServer(t, runner)
+	host, stream := startPackagedGoalInvocationHost(t, runner)
 
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke packaged goal", nil))
 	assertPackagedGoalCompletedWithText(t, response, "finished after rejection")
-	if got := runner.CallCount(); got != 2 {
-		t.Fatalf("provider invocation count = %d, want 2 after rejection", got)
-	}
+	assertPackagedGoalDispatches(t, stream, response.TraceId, []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeRejected,
+		factoryapi.WorkOutcomeAccepted,
+	})
+	assertInvocationTraceWorkState(t, host.Endpoint(), response.TraceId, "complete", factoryapi.WorkStateTypeTERMINAL)
 }
 
 func TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetails(t *testing.T) {
 	runner := &packagedGoalFailingCommandRunner{}
-	server := startPackagedGoalInvocationServer(t, runner)
+	host, stream := startPackagedGoalInvocationHost(t, runner)
 
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "invoke packaged goal", nil))
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("invocation status = %q, want FAILED", response.Status)
 	}
@@ -99,6 +85,8 @@ func TestSessionInvocationAPI_PackagedGoalWorkerFailureReturnsFailedStatusDetail
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on failed output", response.PrimaryResult)
 	}
+	assertPackagedGoalDispatches(t, stream, response.TraceId, []factoryapi.WorkOutcome{factoryapi.WorkOutcomeFailed})
+	assertInvocationWorkFailedPublicly(t, host.Endpoint(), response)
 }
 
 type packagedGoalFailingCommandRunner struct{}
@@ -182,14 +170,67 @@ func scaffoldPackagedGoalBuiltInFactory(t *testing.T) string {
 	return dir
 }
 
-func startPackagedGoalInvocationServer(t *testing.T, runner workers.CommandRunner) *functionalAPIServer {
+func startPackagedGoalInvocationHost(t *testing.T, runner workers.CommandRunner) (*support.RootRunFunctionalHost, *factoryEventHTTPStream) {
 	t.Helper()
 
 	dir := scaffoldPackagedGoalBuiltInFactory(t)
-	return startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
+	edges := wire.FunctionalEdges{}
+	if runner != nil {
+		edges.ProviderCommandRunner = runner
+	}
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: runner != nil,
+		FunctionalEdges:    edges,
 	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	return host, stream
+}
+
+func assertPackagedGoalDispatches(t *testing.T, stream *factoryEventHTTPStream, traceID string, want []factoryapi.WorkOutcome) {
+	t.Helper()
+
+	for index, expectedOutcome := range want {
+		for {
+			event := stream.next(10 * time.Second)
+			if event.Type != factoryapi.FactoryEventTypeDispatchResponse || !packagedGoalEventHasTrace(event, traceID) {
+				continue
+			}
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatalf("decode packaged goal DISPATCH_RESPONSE %d: %v", index, err)
+			}
+			if payload.TransitionId != goal.PackagedExecuteWorkstationName || payload.Outcome != expectedOutcome {
+				t.Fatalf("packaged goal DISPATCH_RESPONSE %d = transition %q outcome %q, want transition %q outcome %q", index, payload.TransitionId, payload.Outcome, goal.PackagedExecuteWorkstationName, expectedOutcome)
+			}
+			break
+		}
+	}
+}
+
+func packagedGoalEventHasTrace(event factoryapi.FactoryEvent, traceID string) bool {
+	if event.Context.TraceIds == nil {
+		return false
+	}
+	for _, candidate := range *event.Context.TraceIds {
+		if candidate == traceID {
+			return true
+		}
+	}
+	return false
 }
 
 func assertPackagedGoalCompletedWithText(t *testing.T, response factoryapi.InvocationResponse, want string) {
