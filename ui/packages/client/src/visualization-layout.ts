@@ -17,11 +17,17 @@ import {
 } from "./visualization-layout-media.js";
 import {
   isUnsafeContentField,
+  MAX_EMPTY_STATE_TEXT_LENGTH,
   MAX_NOTE_BODY_LENGTH,
   MAX_NOTE_TITLE_LENGTH,
   validateDuplicateAnnotationIds,
+  validateDuplicateNodeIds,
   validatePlainText,
 } from "./visualization-layout-safety.js";
+import {
+  factoryVisualizationCanonicalNodeIds,
+  validateCanonicalNodeId,
+} from "./visualization-layout-topology.js";
 
 type InputRecord = Record<string, unknown>;
 type InputPath = readonly (string | number)[];
@@ -305,7 +311,16 @@ function validateEmptyStateContent(
   if (!stringField(input, "kind", path, issues)) return;
   if (input.kind === "text") {
     unsupportedFields(input, textContentFields, path, issues);
-    stringField(input, "text", path, issues);
+    if (stringField(input, "text", path, issues)) {
+      validatePlainText(
+        input.text as string,
+        [...path, "text"],
+        MAX_EMPTY_STATE_TEXT_LENGTH,
+        "node empty-state text",
+        issues,
+        true,
+      );
+    }
     return;
   }
   if (input.kind === "image") {
@@ -325,6 +340,7 @@ function validateNodeEmptyState(
   index: number,
   issues: FactoryVisualizationLayoutIssue[],
   imageBudget: ImageByteBudget,
+  canonicalNodeIds: ReadonlySet<string>,
 ): void {
   const path: InputPath = ["nodeEmptyStates", index];
   if (!isRecord(input)) {
@@ -337,7 +353,14 @@ function validateNodeEmptyState(
     return;
   }
   unsupportedFields(input, emptyStateFields, path, issues);
-  stringField(input, "nodeId", path, issues);
+  if (stringField(input, "nodeId", path, issues)) {
+    validateCanonicalNodeId(
+      input.nodeId as string,
+      [...path, "nodeId"],
+      canonicalNodeIds,
+      issues,
+    );
+  }
   if (requiredField(input, "content", path, issues)) {
     validateEmptyStateContent(
       input.content,
@@ -354,7 +377,7 @@ function validateNodeEmptyState(
  */
 export function safeParseFactoryVisualizationLayout(
   input: unknown,
-  _factory: Readonly<FactoryDefinition>,
+  factory: Readonly<FactoryDefinition>,
 ): SafeParseFactoryVisualizationLayoutResult {
   if (!isRecord(input)) {
     return {
@@ -375,6 +398,7 @@ export function safeParseFactoryVisualizationLayout(
     total: 0,
     aggregateLimitReported: false,
   };
+  const canonicalNodeIds = factoryVisualizationCanonicalNodeIds(factory);
   unsupportedFields(input, layoutFields, [], issues);
   if (
     stringField(input, "schemaVersion", [], issues) &&
@@ -414,8 +438,15 @@ export function safeParseFactoryVisualizationLayout(
       });
     } else {
       for (const [index, emptyState] of input.nodeEmptyStates.entries()) {
-        validateNodeEmptyState(emptyState, index, issues, imageBudget);
+        validateNodeEmptyState(
+          emptyState,
+          index,
+          issues,
+          imageBudget,
+          canonicalNodeIds,
+        );
       }
+      validateDuplicateNodeIds(input.nodeEmptyStates, issues);
     }
   }
 

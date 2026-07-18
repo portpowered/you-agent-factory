@@ -32,7 +32,7 @@
       }
     },
     {
-      "nodeId": "work-state:resolved",
+      "nodeId": "work-state:support-request:resolved",
       "content": {
         "kind": "image",
         "altText": "Resolved queue is empty",

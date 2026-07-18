@@ -7,6 +7,7 @@ export const MAX_ANNOTATION_COORDINATE = 100_000;
 export const MAX_ANNOTATION_DIMENSION = 10_000;
 export const MAX_NOTE_TITLE_LENGTH = 160;
 export const MAX_NOTE_BODY_LENGTH = 4_000;
+export const MAX_EMPTY_STATE_TEXT_LENGTH = 500;
 
 type UnsafeTextMatch = {
   code: "unsafe_html" | "unsafe_markdown" | "unsafe_uri";
@@ -121,6 +122,38 @@ export function validateDuplicateAnnotationIds(
         code: "duplicate_annotation_id",
         path: ["annotations", index, "id"],
         message: `Annotation ID ${id} is duplicated at annotation indexes ${indexes.join(", ")}.`,
+      });
+    }
+  }
+}
+
+export function validateDuplicateNodeIds(
+  emptyStates: readonly unknown[],
+  issues: FactoryVisualizationLayoutIssue[],
+): void {
+  const indexesById = new Map<string, number[]>();
+  for (const [index, emptyState] of emptyStates.entries()) {
+    if (
+      typeof emptyState !== "object" ||
+      emptyState === null ||
+      !("nodeId" in emptyState) ||
+      typeof emptyState.nodeId !== "string" ||
+      emptyState.nodeId.trim().length === 0
+    ) {
+      continue;
+    }
+    const indexes = indexesById.get(emptyState.nodeId) ?? [];
+    indexes.push(index);
+    indexesById.set(emptyState.nodeId, indexes);
+  }
+  for (const [nodeId, indexes] of indexesById) {
+    if (indexes.length < 2) continue;
+    for (const index of indexes) {
+      issues.push({
+        category: "semantic",
+        code: "duplicate_node_id",
+        path: ["nodeEmptyStates", index, "nodeId"],
+        message: `Canonical node ID ${nodeId} is duplicated at empty-state indexes ${indexes.join(", ")}.`,
       });
     }
   }

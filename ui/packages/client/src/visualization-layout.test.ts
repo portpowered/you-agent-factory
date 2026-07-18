@@ -37,7 +37,10 @@ describe("Factory visualization layout validation", () => {
       ],
       nodeEmptyStates: [
         { nodeId: "workstation:triage", content: { kind: "text" } },
-        { nodeId: "work-state:resolved", content: { kind: "image" } },
+        {
+          nodeId: "work-state:support-request:resolved",
+          content: { kind: "image" },
+        },
       ],
     });
     expect(factory).toEqual(originalFactory);
