@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -20,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
@@ -66,6 +68,37 @@ func (e *PortableLayoutValidationError) Error() string {
 		return ""
 	}
 	return e.Message
+}
+
+// PortableLayoutValidationTarget maps one raw layout failure into the
+// canonical Factory validation vocabulary shared by public entrypoints.
+func PortableLayoutValidationTarget(err error) (factoryvalidation.Target, bool) {
+	var layoutErr *PortableLayoutValidationError
+	if !errors.As(err, &layoutErr) {
+		return factoryvalidation.Target{}, false
+	}
+	path := "factory." + strings.TrimPrefix(layoutErr.Path, "factory.")
+	code := factoryvalidation.CodeLayoutInvalidValue
+	if strings.Contains(path, ".position") || strings.Contains(path, ".size") {
+		code = factoryvalidation.CodeLayoutInvalidGeometry
+	} else if strings.Contains(layoutErr.Message, "Factory embedded-image budget") {
+		code = factoryvalidation.CodeLayoutImageBudgetExceeded
+	}
+	subjectID := strings.TrimPrefix(path, "factory.layout.")
+	if subjectID == path || subjectID == "" {
+		subjectID = "layout"
+	}
+	return factoryvalidation.Target{
+		Code:     code,
+		Severity: factoryvalidation.SeverityError,
+		Message:  layoutErr.Message,
+		Subject: factoryvalidation.Subject{
+			Type:     factoryvalidation.SubjectTypeFactory,
+			ID:       subjectID,
+			Location: factoryvalidation.SubjectLocationDefinition,
+		},
+		Path: path,
+	}, true
 }
 
 // ValidatePortableLayoutBoundaryJSON validates inert layout metadata directly

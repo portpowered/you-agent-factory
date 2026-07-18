@@ -82,6 +82,16 @@ func TestValidateEditableFactorySnapshot_ValidAndMissing(t *testing.T) {
 	}
 }
 
+func TestValidateEditableFactorySnapshot_RejectsUndecodableSnapshot(t *testing.T) {
+	t.Parallel()
+
+	snapshot := interfaces.FactorySnapshot(`{"name":`)
+	err := validationentry.ValidateEditableFactorySnapshot(&snapshot, nil)
+	if !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
+	}
+}
+
 func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T) {
 	t.Parallel()
 

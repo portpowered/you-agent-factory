@@ -11,7 +11,6 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -172,7 +171,7 @@ func layoutRequestValidationTarget(err error) (factoryapi.FactoryValidationTarge
 	if !errors.As(err, &requestErr) {
 		return factoryapi.FactoryValidationTarget{}, false
 	}
-	target, ok := validationentry.PortableLayoutValidationTarget(requestErr.err)
+	target, ok := factoryconfig.PortableLayoutValidationTarget(requestErr.err)
 	if !ok {
 		return factoryapi.FactoryValidationTarget{}, false
 	}
