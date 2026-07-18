@@ -103,9 +103,17 @@ test("packed emulator resolves its canonical contract from a clean consumer", as
       2,
     )}\n`,
   );
-  await run(npmCommand, ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
-    cwd: consumerDirectory,
-  });
+  await run(
+    npmCommand,
+    [
+      "install",
+      "--install-strategy=nested",
+      "--ignore-scripts",
+      "--no-audit",
+      "--no-fund",
+    ],
+    { cwd: consumerDirectory },
+  );
 
   await writeFile(
     join(consumerDirectory, "consumer.ts"),
@@ -145,6 +153,39 @@ void createMemoryFactoryEventSink({ maxEvents: 1 });
     cwd: consumerDirectory,
   });
 
+  await writeFile(
+    join(consumerDirectory, "consumer.mjs"),
+    `import assert from "node:assert/strict";
+import { parseEmulatorScenario } from "@you-agent-factory/factory-emulator";
+
+const scenario = {
+  version: "you-agent-factory.emulator.scenario.v1",
+  id: "isolated-consumer",
+  seed: "seed-0001",
+  startAt: "2026-07-18T09:00:00Z",
+  rules: [{
+    id: "complete-checkout",
+    match: { kind: "workType", workType: "checkout" },
+    outcomes: [{ kind: "complete" }],
+    exhaustionBehavior: { kind: "repeatLast" },
+  }],
+  unmatchedBehavior: { kind: "ignore" },
+};
+const factory = {
+  name: "checkout",
+  workTypes: [{ name: "checkout", states: [] }],
+  workstations: [{ name: "complete", worker: "emulator", inputs: [] }],
+};
+
+assert.deepEqual(parseEmulatorScenario(scenario, factory), {
+  success: true,
+  scenario,
+  factory,
+});
+`,
+  );
+  await run(process.execPath, ["consumer.mjs"], { cwd: consumerDirectory });
+
   const installedManifest = JSON.parse(
     await readFile(
       join(
@@ -157,7 +198,10 @@ void createMemoryFactoryEventSink({ maxEvents: 1 });
       "utf8",
     ),
   );
-  assert.equal(installedManifest.dependencies, undefined);
+  assert.deepEqual(installedManifest.dependencies, {
+    ajv: "^8.20.0",
+    "ajv-formats": "^3.0.1",
+  });
   assert.equal(installedManifest.peerDependencies["@you-agent-factory/client"], "*");
   const installedClientManifest = JSON.parse(
     await readFile(
