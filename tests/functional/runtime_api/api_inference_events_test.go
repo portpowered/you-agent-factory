@@ -170,8 +170,3 @@ func rawFunctionalEventPayload(t *testing.T, raw map[string]any, eventID string)
 	}
 	return payload
 }
-
-func (fs *functionalAPIServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
-	t.Helper()
-	return getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(fs.URL(), "/work"))
-}

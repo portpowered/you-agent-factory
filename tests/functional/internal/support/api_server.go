@@ -144,19 +144,6 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	return server
 }
 
-// StartFunctionalAPIServiceModeServer starts the standard functional HTTP seam
-// with a service-mode runtime. Customer-boundary scenarios should use this
-// helper instead of assembling runtime options themselves.
-func StartFunctionalAPIServiceModeServer(t *testing.T, factoryDir string, useMockWorkers bool) *FunctionalAPIServer {
-	t.Helper()
-	return StartFunctionalAPIServer(t, FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            useMockWorkers,
-		WaitForServiceModeRuntime: true,
-		ExtraOptions:              []factory.FactoryOption{factory.WithServiceMode()},
-	})
-}
-
 func waitForHandlerReadiness(t *testing.T, cancel context.CancelFunc, readyCh <-chan struct{}) {
 	t.Helper()
 

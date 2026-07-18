@@ -2,26 +2,14 @@ package runtime_api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-type functionalAPIServer struct {
-	factory apisurface.APISurface
-	*support.FunctionalAPIServer
-}
 
 func generatedWorkStateName(state *factoryapi.WorkState) string {
 	if state == nil {
@@ -56,43 +44,6 @@ func simplePipelineConfig() map[string]any {
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 		}},
 	}
-}
-
-func startFunctionalServerWithConfig(
-	t *testing.T,
-	factoryDir string,
-	useMockWorkers bool,
-	configure func(*service.FactoryServiceConfig),
-	extraOpts ...factory.FactoryOption,
-) *functionalAPIServer {
-	t.Helper()
-
-	server := &functionalAPIServer{}
-	var runtimeFactory apisurface.APISurface
-	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                factoryDir,
-		UseMockWorkers:            useMockWorkers,
-		WaitForServiceModeRuntime: true,
-		Configure:                 configure,
-		ExtraOptions:              extraOpts,
-		CaptureAPISurface: func(surface apisurface.APISurface) {
-			runtimeFactory = surface
-		},
-	})
-	server.factory = runtimeFactory
-	server.FunctionalAPIServer = base
-	return server
-}
-
-func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work.SubmitRequest) []work.SubmitRequest {
-	t.Helper()
-
-	normalized := normalizeSubmitRequestsForFunctionalTest(submitted)
-	workRequest := requests.WorkRequestFromSubmitRequests(normalized)
-	if _, err := fs.factory.SubmitWorkRequest(context.Background(), workRequest); err != nil {
-		t.Fatalf("factory.SubmitWorkRequest: %v", err)
-	}
-	return normalized
 }
 
 func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
@@ -144,6 +95,13 @@ func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
 }
 
 func stringValueFromFunctionalPtr[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
+}
+
+func stringPointerValue[T ~string](value *T) string {
 	if value == nil {
 		return ""
 	}
