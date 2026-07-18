@@ -307,6 +307,60 @@ func TestApplicationStartFailureUnwindsActivatedEdges(t *testing.T) {
 	}
 }
 
+func TestAPIApplicationStartFailureUnwindsListenerAndActivatedEdges(t *testing.T) {
+	t.Parallel()
+
+	recorder := &lifecycleRecorder{}
+	startErr := errors.New("API listener unavailable")
+	component := func(name string) *transactionLifecycle {
+		return &transactionLifecycle{name: name, recorder: recorder}
+	}
+	runtimeLifecycle := component("runtime")
+	workersLifecycle := component("workers")
+	dashboardLifecycle := component("dashboard")
+	apiLifecycle := component("api")
+	apiLifecycle.startErr = startErr
+	graph := &transactionGraph{
+		recorder: recorder,
+		lifecycles: initializer.ApplicationLifecycles{
+			Runtime: runtimeLifecycle, Workers: workersLifecycle,
+			Dashboard: dashboardLifecycle, API: apiLifecycle,
+		},
+	}
+
+	application, err := initializer.Start(context.Background(), initializer.ModeAPI, graph)
+	if application != nil || !errors.Is(err, startErr) {
+		t.Fatalf("Start(API) = (%v, %v), want listener startup failure", application, err)
+	}
+	events := recorder.snapshot()
+	filter := func(prefix string) []string {
+		var filtered []string
+		for _, event := range events {
+			if strings.HasPrefix(event, prefix) {
+				filtered = append(filtered, event)
+			}
+		}
+		return filtered
+	}
+	if got, want := filter("start "), []string{"start runtime", "start workers", "start dashboard", "start api"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("API startup events = %v, want %v", got, want)
+	}
+	if got, want := filter("stop "), []string{"stop dashboard", "stop workers", "stop runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("API unwind stop events = %v, want %v", got, want)
+	}
+	if got, want := filter("cancel "), []string{"cancel dashboard", "cancel workers", "cancel runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("API unwind cancel events = %v, want %v", got, want)
+	}
+	for _, role := range []string{"dashboard", "workers", "runtime"} {
+		if count := strings.Count(strings.Join(events, "\n"), "join "+role); count != 1 {
+			t.Fatalf("API unwind join %s count = %d, want 1; events = %v", role, count, events)
+		}
+	}
+	if len(events) == 0 || events[len(events)-1] != "close graph" {
+		t.Fatalf("API unwind final event = %v, want close graph", events)
+	}
+}
+
 func assertMiddleStartUnwind(t *testing.T, events []string) {
 	t.Helper()
 	withoutJoin := make([]string, 0, len(events)-1)

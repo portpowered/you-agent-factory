@@ -31,6 +31,32 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func TestAPIServerStarterWithListenerOwnsOneListenerInvocation(t *testing.T) {
+	t.Run("missing listener", func(t *testing.T) {
+		starter := APIServerStarterWithListener(nil)
+		if err := starter(context.Background(), nil, 0, zap.NewNop()); err == nil || !strings.Contains(err.Error(), "listener is required") {
+			t.Fatalf("first starter call error = %v, want missing listener diagnostic", err)
+		}
+		if err := starter(context.Background(), nil, 0, zap.NewNop()); err == nil || !strings.Contains(err.Error(), "already used") {
+			t.Fatalf("repeated starter call error = %v, want single-use diagnostic", err)
+		}
+	})
+
+	t.Run("canceled production server", func(t *testing.T) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		defer func() { _ = listener.Close() }()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		starter := APIServerStarterWithListener(listener)
+		if err := starter(ctx, nil, listener.Addr().(*net.TCPAddr).Port, zap.NewNop()); err != nil {
+			t.Fatalf("starter with canceled production server error = %v", err)
+		}
+	})
+}
+
 func TestRun_StartupOutputFallsBackWhenDashboardOpenFails(t *testing.T) {
 	var out bytes.Buffer
 	dashboardReady := make(chan struct{})
