@@ -31,6 +31,27 @@ func TestApplicationParentCancellationCancelsAndJoinsEveryWaitableLifecycle(t *t
 	assertOwnedLifecyclesStopped(t, lifecycles)
 }
 
+func TestAPIApplicationParentCancellationJoinsListenerLifecycle(t *testing.T) {
+	t.Parallel()
+
+	graph, lifecycles := newOwnedLifecycleGraph(nil)
+	graph.lifecycles.API = graph.lifecycles.CLI
+	graph.lifecycles.CLI = nil
+	application, err := initializer.NewApplication(initializer.ModeAPI, graph)
+	if err != nil {
+		t.Fatalf("NewApplication(API) error = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- application.Run(ctx) }()
+	waitForOwnedStarts(t, lifecycles)
+	cancel()
+	if err := receiveRunResult(t, done); err != nil {
+		t.Fatalf("Run(API) cancellation error = %v", err)
+	}
+	assertOwnedLifecyclesStopped(t, lifecycles)
+}
+
 func TestApplicationPeerFailureCancelsPeersAndReturnsAfterEveryJoin(t *testing.T) {
 	t.Parallel()
 

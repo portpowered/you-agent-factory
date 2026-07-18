@@ -155,6 +155,11 @@ Production-shaped functional runs replace process side effects through the typed
 copy before calling the shared application builders; do not add CLI flags,
 package globals, untyped dependency bags, or test-side service-config mutation.
 The zero-value edge input must retain production defaults.
+Functional process hosts should cancel and join `root.Run` within a caller-owned
+bound, then report an immutable process outcome plus the last customer-boundary
+readiness result. They must not close graph resources directly: listener and
+sidecar cleanup remains owned by the initializer, and tests should prove release
+through the public endpoint and process-completion surface.
 Map default/service run policies to initializer's API lifecycle plan and explicit
 local batch policies to its CLI lifecycle plan before constructing the run
 application; runtime mode alone must not silently select the foreground edge.

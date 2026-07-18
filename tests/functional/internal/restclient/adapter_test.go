@@ -49,7 +49,7 @@ func TestAdapterUsesCallerBaseURLAndHTTPClient(t *testing.T) {
 	if response.StatusCode() != http.StatusNotFound || response.JSON404 == nil {
 		t.Fatalf("response = %#v, want generated typed 404 response", response)
 	}
-	if response.JSON404.Family != generatedclient.ErrorFamilyNotFound || response.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
+	if response.JSON404.Family != generatedclient.ErrorFamilyNotFound || response.JSON404.Code != generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
 		t.Fatalf("typed error = %#v, want NOT_FOUND/RESPONSE_EVENT_SESSION_NOT_FOUND", response.JSON404)
 	}
 }

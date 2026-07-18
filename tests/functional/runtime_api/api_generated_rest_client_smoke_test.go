@@ -53,8 +53,8 @@ func TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies(t *testing.T
 	if response.StatusCode() != http.StatusNotFound || response.JSON404 == nil {
 		t.Fatalf("generated response = %#v, want typed 404 from functional HTTP host", response)
 	}
-	if response.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
-		t.Fatalf("generated error code = %q, want %q", response.JSON404.Code, generatedclient.RESPONSEEVENTSESSIONNOTFOUND)
+	if response.JSON404.Code != generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
+		t.Fatalf("generated error code = %q, want %q", response.JSON404.Code, generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND)
 	}
 }
 
@@ -130,7 +130,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	if failure.StatusCode() != http.StatusNotFound || failure.JSON404 == nil {
 		t.Fatalf("generated failure response = %#v, want typed 404", failure)
 	}
-	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound || failure.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
+	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound || failure.JSON404.Code != generatedclient.ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND {
 		t.Fatalf("generated API error = %#v, want NOT_FOUND/RESPONSE_EVENT_SESSION_NOT_FOUND", failure.JSON404)
 	}
 }

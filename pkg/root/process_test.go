@@ -108,6 +108,37 @@ func TestRunPreservesConstructionInitializerAndCancellationFailures(t *testing.T
 	}
 }
 
+func TestRunHostShapedInputSelectsAPIServiceAndReturnsOperationalFailure(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	systemRoot := t.TempDir()
+	startupErr := errors.New("API listener unavailable")
+	builder := &recordingGraphBuilder{graph: &ApplicationGraph{}}
+	initializer := &recordingInitializer{err: startupErr}
+
+	code := Run(Input{
+		Args: []string{"you", "run", "--dir", factoryRoot, "--continuously", "--no-record"},
+		Env:  homeEnvironment(systemRoot), Context: context.Background(),
+	}, Dependencies{GraphBuilder: builder, Initializer: initializer})
+
+	if code != ExitFailure {
+		t.Fatalf("host-shaped startup exit code = %d, want %d", code, ExitFailure)
+	}
+	if builder.calls != 1 || initializer.calls != 1 {
+		t.Fatalf("builder/initializer calls = %d/%d, want 1/1", builder.calls, initializer.calls)
+	}
+	if builder.request.Policy.Mode != ModeAPIService || !builder.request.Policy.Sidecars.API {
+		t.Fatalf("selected process policy = %+v, want API service with API sidecar", builder.request.Policy)
+	}
+	if builder.request.Startup.RunConfig == nil || builder.request.Startup.RunConfig.Dir != factoryRoot {
+		t.Fatalf("startup factory root = %+v, want %q", builder.request.Startup.RunConfig, factoryRoot)
+	}
+	if !errors.Is(initializer.err, startupErr) {
+		t.Fatalf("initializer error = %v, want operational startup failure", initializer.err)
+	}
+}
+
 func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

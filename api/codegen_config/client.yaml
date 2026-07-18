@@ -8,6 +8,8 @@ output-options:
     path: ../../../api/codegen_config/factory-codegen-overlay.yaml
     strict: false
   include-operation-ids:
+    - getStatus
+    - getEventsBySessionId
     - getEditableCurrentFactoryDefinition
     - getCurrentFactory
     - saveEditableCurrentFactoryDefinition

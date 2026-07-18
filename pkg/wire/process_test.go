@@ -127,6 +127,70 @@ func TestBuildProcessGraphWithFunctionalEdgesConstructsSharedRunGraph(t *testing
 	}
 }
 
+func TestBuildProcessGraphWithFunctionalHostInputsRemainsInertUntilInitialization(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
+	systemRoot := t.TempDir()
+	executionRoot := t.TempDir()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve functional API listener: %v", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	providerRunner := &processCommandRunner{}
+	runCalls := 0
+	var built *service.FactoryServiceConfig
+
+	graph, err := buildProcessGraph(context.Background(), startupcli.Request{
+		Kind: startupcli.KindRun,
+		RunConfig: &runcli.RunConfig{
+			Dir: factoryRoot, HomeDir: systemRoot, ExecutionBaseDir: executionRoot,
+			Port: port, DisableDefaultRecording: true, MockWorkersEnabled: true,
+			SuppressDashboardRendering: true,
+		},
+	}, initializer.ProcessPolicy{
+		Mode:     initializer.ProcessModeAPIService,
+		Sidecars: initializer.SidecarPolicy{API: true, WorkerScheduler: true, Watchers: true},
+	}, FunctionalEdges{
+		APIServerListener: listener, ProviderCommandRunner: providerRunner,
+	}, func(_ context.Context, cfg *service.FactoryServiceConfig, mode initializer.Mode) (runcli.RuntimeRunner, error) {
+		built = cfg
+		if mode != initializer.ModeAPI {
+			t.Fatalf("application mode = %q, want %q", mode, initializer.ModeAPI)
+		}
+		return processRunnerFunc(func(context.Context) error {
+			runCalls++
+			return nil
+		}), nil
+	}, BuildMCPExecutionService, false)
+	if err != nil {
+		_ = listener.Close()
+		t.Fatalf("buildProcessGraph() error = %v", err)
+	}
+	if built == nil || built.Dir != factoryRoot || built.SystemConfigHomeDir != systemRoot || built.ExecutionBaseDir != executionRoot {
+		_ = listener.Close()
+		t.Fatalf("constructed roots = %+v, want factory %q system %q execution %q", built, factoryRoot, systemRoot, executionRoot)
+	}
+	if built.APIServerStarter == nil || !built.WorkerApplication.ProviderCommandInjected {
+		_ = listener.Close()
+		t.Fatal("functional listener and deterministic provider edge did not reach the normal service config")
+	}
+	if runCalls != 0 {
+		_ = listener.Close()
+		t.Fatalf("runtime calls during graph construction = %d, want 0", runCalls)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := initializer.RunProcess(runCtx, graph); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("initialize canceled functional graph: %v", err)
+	}
+	if runCalls != 1 {
+		t.Fatalf("runtime calls after initializer execution = %d, want 1", runCalls)
+	}
+}
+
 func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 	t.Parallel()
 	factoryDir := testutil.MustRepoPath(t, "tests/release/testdata/cli_smoke_factory")
