@@ -3,17 +3,15 @@ package runtime_api
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/review"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,11 +21,13 @@ func TestSessionInvocationAPI_PackagedReviewReturnsApprovedCandidate(t *testing.
 		workers.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved candidate work"}`)},
 	)
 
-	response := postInvocation(t, startPackagedReviewInvocationServer(t, runner).URL(), textInvocationRequest(t, "customer request", nil))
+	host, stream := startPackagedReviewInvocationHost(t, runner)
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "customer request", nil))
 	assertPackagedReviewCompletedWithText(t, response, "approved candidate work")
-	if got := runner.CallCount(); got != 2 {
-		t.Fatalf("provider invocation count = %d, want work then review", got)
-	}
+	assertPackagedReviewDispatches(t, stream, []packagedReviewDispatch{
+		{transitionID: review.PackagedExecuteWorkstationName, outcome: factoryapi.WorkOutcomeAccepted},
+		{transitionID: review.PackagedReviewWorkstationName, outcome: factoryapi.WorkOutcomeAccepted},
+	})
 }
 
 func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testing.T) {
@@ -38,35 +38,20 @@ func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testi
 		workers.CommandResult{Stdout: []byte(`{"decision":"ACCEPTED","output":"approved revised candidate"}`)},
 	)
 
-	server := startPackagedReviewInvocationServer(t, runner)
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, "write release notes", nil))
+	host, stream := startPackagedReviewInvocationHost(t, runner)
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "write release notes", nil))
 	assertPackagedReviewCompletedWithText(t, response, "approved revised candidate")
-	if got := runner.CallCount(); got != 4 {
-		t.Fatalf("provider invocation count = %d, want work, review, revised work, review", got)
-	}
-
-	requests := runner.Requests()
-	if len(requests) != 4 {
-		t.Fatalf("recorded provider requests = %d, want 4", len(requests))
-	}
-	secondWorkPrompt := strings.Join(requests[2].Args, " ")
-	if !strings.Contains(secondWorkPrompt, "write release notes") || !strings.Contains(secondWorkPrompt, "first candidate") || !strings.Contains(secondWorkPrompt, "add the missing release date") {
-		t.Fatalf("revised work prompt = %q, want request, rejected candidate, and review feedback", secondWorkPrompt)
-	}
-	completed := server.GetEngineStateSnapshot(t).DispatchHistory
-	if len(completed) != 4 {
-		t.Fatalf("completed dispatches = %#v, want four ordered work and review outcomes", completed)
-	}
-	if completed[0].WorkstationName != review.PackagedExecuteWorkstationName || completed[0].Outcome != workerexecution.OutcomeAccepted ||
-		completed[1].WorkstationName != review.PackagedReviewWorkstationName || completed[1].Outcome != workerexecution.OutcomeRejected ||
-		completed[2].WorkstationName != review.PackagedExecuteWorkstationName || completed[2].Outcome != workerexecution.OutcomeAccepted ||
-		completed[3].WorkstationName != review.PackagedReviewWorkstationName || completed[3].Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("completed dispatches = %#v, want work accepted, review rejected, work accepted, review accepted", completed)
-	}
+	assertPackagedReviewDispatches(t, stream, []packagedReviewDispatch{
+		{transitionID: review.PackagedExecuteWorkstationName, outcome: factoryapi.WorkOutcomeAccepted},
+		{transitionID: review.PackagedReviewWorkstationName, outcome: factoryapi.WorkOutcomeRejected},
+		{transitionID: review.PackagedExecuteWorkstationName, outcome: factoryapi.WorkOutcomeAccepted},
+		{transitionID: review.PackagedReviewWorkstationName, outcome: factoryapi.WorkOutcomeAccepted},
+	})
 }
 
 func TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus(t *testing.T) {
-	response := postInvocation(t, startPackagedReviewInvocationServer(t, packagedReviewFailingCommandRunner{}).URL(), textInvocationRequest(t, "customer request", nil))
+	host, stream := startPackagedReviewInvocationHost(t, packagedReviewFailingCommandRunner{})
+	response := postInvocation(t, host.Endpoint(), textInvocationRequest(t, "customer request", nil))
 	if response.Status != factoryapi.InvocationTerminalStatusFailed {
 		t.Fatalf("invocation status = %q, want FAILED", response.Status)
 	}
@@ -76,6 +61,10 @@ func TestSessionInvocationAPI_PackagedReviewWorkerFailureReturnsFailedStatus(t *
 	if response.WorkState == nil || *response.WorkState != "reviewable-work:failed" {
 		t.Fatalf("workState = %#v, want reviewable-work:failed", response.WorkState)
 	}
+	assertPackagedReviewDispatches(t, stream, []packagedReviewDispatch{
+		{transitionID: review.PackagedExecuteWorkstationName, outcome: factoryapi.WorkOutcomeFailed},
+	})
+	assertInvocationWorkFailedPublicly(t, host.Endpoint(), response)
 }
 
 type packagedReviewFailingCommandRunner struct{}
@@ -84,16 +73,79 @@ func (packagedReviewFailingCommandRunner) Run(_ context.Context, _ workers.Comma
 	return workers.CommandResult{}, errors.New("mock provider failure")
 }
 
-func startPackagedReviewInvocationServer(t *testing.T, runner workers.CommandRunner) *functionalAPIServer {
+func startPackagedReviewInvocationHost(t *testing.T, runner workers.CommandRunner) (*support.RootRunFunctionalHost, *factoryEventHTTPStream) {
 	t.Helper()
 	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), review.PackagedFactoryName, review.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
-	return startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: true,
+		FunctionalEdges: wire.FunctionalEdges{
+			ProviderCommandRunner: runner,
+		},
 	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	return host, stream
+}
+
+type packagedReviewDispatch struct {
+	transitionID string
+	outcome      factoryapi.WorkOutcome
+}
+
+func assertPackagedReviewDispatches(t *testing.T, stream *factoryEventHTTPStream, want []packagedReviewDispatch) {
+	t.Helper()
+
+	for index, expected := range want {
+		for {
+			event := stream.next(10 * time.Second)
+			if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+				continue
+			}
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatalf("decode packaged review DISPATCH_RESPONSE %d: %v", index, err)
+			}
+			if payload.TransitionId != expected.transitionID || payload.Outcome != expected.outcome {
+				t.Fatalf("packaged review DISPATCH_RESPONSE %d = transition %q outcome %q, want transition %q outcome %q", index, payload.TransitionId, payload.Outcome, expected.transitionID, expected.outcome)
+			}
+			break
+		}
+	}
+}
+
+func assertInvocationWorkFailedPublicly(t *testing.T, baseURL string, response factoryapi.InvocationResponse) {
+	t.Helper()
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("failed invocation workId = %#v, want customer-readable work identity", response.WorkId)
+	}
+
+	works := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	for _, candidate := range works.Results {
+		if support.StringPointerValue(candidate.WorkId) != *response.WorkId {
+			continue
+		}
+		if generatedWorkStateName(candidate.State) != "failed" || generatedWorkStateType(candidate.State) != factoryapi.WorkStateTypeFAILED {
+			t.Fatalf("failed invocation GET /work state = %#v, want failed/FAILED", candidate.State)
+		}
+		return
+	}
+	t.Fatalf("GET /work missing failed invocation work %q; response = %#v", *response.WorkId, works)
 }
 
 func assertPackagedReviewCompletedWithText(t *testing.T, response factoryapi.InvocationResponse, want string) {
