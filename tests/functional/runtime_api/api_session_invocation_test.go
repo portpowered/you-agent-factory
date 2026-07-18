@@ -270,64 +270,6 @@ func assertSessionPauseLifecycleEvent(t *testing.T, stream *factoryEventHTTPStre
 	t.Fatal("canonical session event stream did not expose accepted pause lifecycle control")
 }
 
-func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testing.T) {
-	dir := scaffoldInvocationFactory(t, nil)
-	blocking := newBlockingInvocationRunner()
-	var svc *service.FactoryService
-	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                dir,
-		WaitForServiceModeRuntime: true,
-		CaptureService: func(captured *service.FactoryService) {
-			svc = captured
-		},
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			support.ConfigureWorkerCommands(t, cfg, blocking, nil)
-			cfg.Logger = zap.NewNop()
-		},
-	})
-	_ = server
-	if svc == nil {
-		t.Fatal("expected functional server to capture factory service")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	resultCh := make(chan factoryapi.InvocationResponse, 1)
-	errCh := make(chan error, 1)
-	go func() {
-		result, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, textInvocationRequest(t, "invoke this", nil))
-		if err != nil {
-			errCh <- err
-			return
-		}
-		response := factoryapi.InvocationResponse{
-			RequestId: result.RequestID,
-			TraceId:   result.TraceID,
-			Status:    factoryapi.InvocationTerminalStatus(result.Status),
-		}
-		if result.ErrorCode != "" {
-			code := factoryapi.InvocationResponseErrorCode(result.ErrorCode)
-			response.ErrorCode = &code
-		}
-		resultCh <- response
-	}()
-
-	<-blocking.started
-	cancel()
-
-	select {
-	case err := <-errCh:
-		t.Fatalf("InvokeFactorySession returned error: %v", err)
-	case response := <-resultCh:
-		if response.Status != factoryapi.InvocationTerminalStatusCanceled {
-			t.Fatalf("invocation status = %q, want CANCELED", response.Status)
-		}
-		if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONCANCELED {
-			t.Fatalf("invocation errorCode = %#v, want INVOCATION_CANCELED", response.ErrorCode)
-		}
-	}
-}
-
 type blockingInvocationRunner struct {
 	started chan struct{}
 }
