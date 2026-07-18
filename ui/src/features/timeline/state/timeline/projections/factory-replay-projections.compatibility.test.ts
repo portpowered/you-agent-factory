@@ -41,6 +41,14 @@ const factory = {
       resources: [{ capacity: 1, name: "gpu" }],
       worker: "writer",
     },
+    {
+      behavior: "STANDARD" as const,
+      id: "publish-stable",
+      inputs: [{ state: "done", workType: "story" }],
+      name: "publish",
+      outputs: [],
+      worker: "writer",
+    },
   ],
 };
 
@@ -70,7 +78,10 @@ function hostedReplayEvents(): FactoryEvent[] {
     event("topology", "INITIAL_STRUCTURE_REQUEST", 1, 0, { factory }),
     event("work", "WORK_REQUEST", 2, 0, {
       type: "FACTORY_REQUEST_BATCH",
-      works: [{ name: "Draft", workId: "work-1", workTypeName: "story" }],
+      works: [
+        { name: "Draft one", workId: "work-1", workTypeName: "story" },
+        { name: "Draft two", workId: "work-2", workTypeName: "story" },
+      ],
     }),
     event(
       "start",
@@ -85,11 +96,17 @@ function hostedReplayEvents(): FactoryEvent[] {
             workId: "work-1",
             workTypeName: "story",
           },
+          {
+            name: "Draft two",
+            state: { name: "ready", type: "INITIAL" },
+            workId: "work-2",
+            workTypeName: "story",
+          },
         ],
         resources: [{ capacity: 2, name: "gpu" }],
         transitionId: "review",
       },
-      { dispatchId: "dispatch-1", workIds: ["work-1"] },
+      { dispatchId: "dispatch-1", workIds: ["work-1", "work-2"] },
     ),
     event(
       "finish",
@@ -107,10 +124,16 @@ function hostedReplayEvents(): FactoryEvent[] {
             workId: "work-1",
             workTypeName: "story",
           },
+          {
+            name: "Draft two",
+            state: { name: "done", type: "TERMINAL" },
+            workId: "work-2",
+            workTypeName: "story",
+          },
         ],
         transitionId: "review",
       },
-      { dispatchId: "dispatch-1", workIds: ["work-1"] },
+      { dispatchId: "dispatch-1", workIds: ["work-1", "work-2"] },
     ),
   ];
 }
@@ -130,7 +153,8 @@ function progressPartition(projection: FactoryWorkProgressProjection) {
 describe("hosted shared Factory replay projections", () => {
   it("uses the shared topology, activity, occupancy, and Work progress meanings", () => {
     const events = hostedReplayEvents().slice(0, 3);
-    const hosted = buildFactoryTimelineSnapshot(events, 3).factoryReplay;
+    const snapshot = buildFactoryTimelineSnapshot(events, 3);
+    const hosted = snapshot.factoryReplay;
 
     expect(hosted.topology).toEqual(
       projectFactoryTopologyAtTick({ events, tick: 3 }),
@@ -150,7 +174,27 @@ describe("hosted shared Factory replay projections", () => {
     ]);
     expect(hosted.workProgress.active.map((work) => work.id)).toEqual([
       "work-1",
+      "work-2",
     ]);
+    expect(snapshot.topology.workstation_node_ids).toEqual([
+      "publish-stable",
+      "review-stable",
+    ]);
+    expect(snapshot.topology.edges).toEqual([
+      expect.objectContaining({
+        from_node_id: "review-stable",
+        to_node_id: "publish-stable",
+      }),
+    ]);
+    expect(snapshot.runtime.active_dispatch_ids).toEqual(["dispatch-1"]);
+    expect(snapshot.runtime.active_workstation_node_ids).toEqual([
+      "review-stable",
+    ]);
+    expect(
+      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-1"]
+        ?.workstation_node_id,
+    ).toBe("review-stable");
+    expect(snapshot.runtime.place_token_counts?.["gpu:available"]).toBe(1);
 
     const handlesByNode = new Map(
       hosted.topology.nodes.map((node) => [
@@ -174,7 +218,7 @@ describe("hosted shared Factory replay projections", () => {
     const completed = buildFactoryTimelineSnapshot(events, 3);
 
     expect(active.factoryReplay.activity.activeDispatches).toHaveLength(1);
-    expect(active.factoryReplay.workProgress.counts.active).toBe(1);
+    expect(active.factoryReplay.workProgress.counts.active).toBe(2);
     expect(completed.factoryReplay.activity).toEqual(
       projectFactoryActivityAtTick({ events, tick: 3 }),
     );
@@ -190,7 +234,11 @@ describe("hosted shared Factory replay projections", () => {
     ]);
     expect(
       completed.factoryReplay.workProgress.completed.map((work) => work.id),
-    ).toEqual(["work-1"]);
-    expect(completed.factoryReplay.workProgress.total).toBe(1);
+    ).toEqual(["work-1", "work-2"]);
+    expect(completed.factoryReplay.workProgress.total).toBe(2);
+    expect(completed.runtime.active_dispatch_ids).toEqual([]);
+    expect(completed.runtime.active_workstation_node_ids).toEqual([]);
+    expect(completed.runtime.place_token_counts?.["gpu:available"]).toBe(2);
+    expect(completed.runtime.session.completed_count).toBe(2);
   });
 });

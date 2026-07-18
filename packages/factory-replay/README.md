@@ -43,6 +43,8 @@ pure partition for consumers that already hold selected replay evidence.
 
 The hosted dashboard projects these three public read models from its selected
 checkpoint-safe replay state and exposes them together on the timeline world as
-`factoryReplay`. Its Petri-shaped topology and occupancy structures remain
-reducer state for the legacy dashboard snapshot contract; they are not a
-second public topology or progress classifier.
+`factoryReplay`. The production timeline projector also derives the legacy
+dashboard topology/runtime compatibility fields from the shared topology,
+activity, occupancy, and Work-progress decisions. Petri-shaped structures
+remain reducer evidence and supplemental dashboard diagnostics, not a second
+public topology or progress classifier.

@@ -3,15 +3,14 @@ import {
   cloneTracesByWorkID,
   cloneWorkRequestsByID,
 } from "./cloneTimelineSnapshot";
-import { projectHostedFactoryReplay } from "./projections/projectFactoryReplay";
-import { projectRuntime } from "./projectRuntime";
-import { projectTopology } from "./projectTopology";
+import { projectHostedDashboard } from "./projections/projectFactoryReplay";
 import { projectWorkstationDispatchRequestsByID } from "./projectWorkstationRequests";
 import { isSystemTimeWorkType } from "./systemTime";
 import type { ReplayWorldState, WorldState } from "./types";
 
 export function projectSnapshot(state: ReplayWorldState): WorldState {
-  const runtime = projectRuntime(state);
+  const hostedDashboard = projectHostedDashboard(state);
+  const { runtime } = hostedDashboard;
 
   const tracesByWorkID = Object.fromEntries(
     Object.values(state.tracesByID).flatMap((trace) =>
@@ -37,12 +36,12 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
   );
 
   return {
-    factoryReplay: projectHostedFactoryReplay(state),
+    factoryReplay: hostedDashboard.factoryReplay,
     factory_state: state.factory_state,
     factory: state.factory ? structuredClone(state.factory) : undefined,
     runtime,
     tick_count: state.tick_count,
-    topology: projectTopology(state.topology),
+    topology: hostedDashboard.topology,
     uptime_seconds: state.uptime_seconds,
     relationsByWorkID: cloneRelationsByWorkID(state.relationsByWorkID),
     tracesByWorkID: cloneTracesByWorkID(tracesByWorkID),

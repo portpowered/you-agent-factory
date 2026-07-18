@@ -42,9 +42,10 @@ that consumes the replay kernel.
   explicit because dashboard replay state remains domain-owned.
 - `ui/src/features/timeline/state/timeline/projections/projectFactoryReplay.ts`
   maps the hosted selected replay state into the package's direct-state topology,
-  activity, occupancy, and Work-progress operations. Keep this adapter free of
-  renderer types and derive it from checkpoint-safe replay state rather than a
-  hidden copy of event history.
+  activity, occupancy, and Work-progress operations, then derives the
+  legacy-shaped dashboard topology/runtime compatibility view from those shared
+  decisions. Keep this adapter free of renderer types and derive it from
+  checkpoint-safe replay state rather than a hidden copy of event history.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.
