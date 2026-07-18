@@ -7,7 +7,10 @@ Use this map when changing the public REST contract.
   stay handwritten in `src/contracts.ts`. Recording shape validation consumes a
   byte-identical generated copy of the standalone API schema, while handwritten
   cross-event validation stays in `src/recording-parser.js` with declarations in
-  `recording-parser.d.ts`. Regenerate the bundled API, staged contracts, client
+  `recording-parser.d.ts`. Compare validated RFC 3339 event times across the full
+  schema domain with civil-date and offset arithmetic plus an explicit leap-second
+  phase; JavaScript `Date` parsing does not support leap seconds and loses
+  precision beyond milliseconds. Regenerate the bundled API, staged contracts, client
   projection, and client schema copy with `make generate-client`; use `make
   client-test` for behavioral generated-drift rejection, typechecking, parser
   behavior, and framework/host boundary evidence. Keep install-level contract evidence in

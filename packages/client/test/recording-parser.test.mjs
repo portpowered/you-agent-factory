@@ -245,3 +245,52 @@ test("canonical ordering compares RFC 3339 timestamps as exact instants", () => 
     );
   }
 });
+
+test("both parsers order RFC 3339 leap-second boundaries", () => {
+  const orderedCases = [
+    ["1990-12-31T23:59:59Z", "1990-12-31T23:59:60Z"],
+    ["1990-12-31T23:59:60Z", "1991-01-01T00:00:00Z"],
+    ["1990-12-31T18:59:60-05:00", "1991-01-01T00:00:00Z"],
+  ];
+
+  for (const [firstTime, secondTime] of orderedCases) {
+    const input = recording([
+      event({
+        id: "event-a",
+        context: { ...event().context, eventTime: firstTime },
+      }),
+      event({
+        id: "event-b",
+        context: { ...event().context, eventTime: secondTime },
+      }),
+    ]);
+    const safeResult = safeParseFactoryRecording(input);
+    assert.equal(safeResult.success, true);
+    assert.equal(safeResult.data, input);
+    assert.equal(parseFactoryRecording(input), input);
+  }
+
+  for (const [firstTime, secondTime] of orderedCases) {
+    const input = recording([
+      event({
+        id: "event-a",
+        context: { ...event().context, eventTime: secondTime },
+      }),
+      event({
+        id: "event-b",
+        context: { ...event().context, eventTime: firstTime },
+      }),
+    ]);
+    const safeResult = safeParseFactoryRecording(input);
+    assert.equal(safeResult.success, false);
+    assert.ok(
+      safeResult.issues.some((issue) => issue.code === "NON_CANONICAL_ORDER"),
+    );
+    assert.throws(
+      () => parseFactoryRecording(input),
+      (error) =>
+        error instanceof FactoryRecordingValidationError &&
+        error.issues.some((issue) => issue.code === "NON_CANONICAL_ORDER"),
+    );
+  }
+});

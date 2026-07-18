@@ -163,13 +163,14 @@ function compareEventTime(left, right) {
   const rightInstant = parseEventTime(right);
   return (
     compareNumber(leftInstant.wholeSecond, rightInstant.wholeSecond) ||
+    compareNumber(leftInstant.phase, rightInstant.phase) ||
     compareFraction(leftInstant.fraction, rightInstant.fraction)
   );
 }
 
 function parseEventTime(value) {
   const match =
-    /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/i.exec(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/i.exec(
       value,
     );
   // Shape validation, including RFC 3339 format validation, runs before this
@@ -177,10 +178,40 @@ function parseEventTime(value) {
   if (!match) {
     throw new TypeError(`Validated eventTime is not RFC 3339: ${value}`);
   }
+  const [, year, month, day, hour, minute, second, fraction, zone] = match;
+  const offsetSeconds =
+    zone.toUpperCase() === "Z"
+      ? 0
+      : (zone[0] === "+" ? 1 : -1) *
+        (Number(zone.slice(1, 3)) * 60 + Number(zone.slice(4, 6))) *
+        60;
+  const secondNumber = Number(second);
   return {
-    wholeSecond: Date.parse(`${match[1]}${match[3]}`),
-    fraction: match[2] ?? "",
+    wholeSecond:
+      daysFromCivil(Number(year), Number(month), Number(day)) * 86_400 +
+      Number(hour) * 3_600 +
+      Number(minute) * 60 +
+      secondNumber -
+      offsetSeconds,
+    // A leap second shares the next ordinary second's arithmetic boundary,
+    // but occurs immediately before it.
+    phase: secondNumber === 60 ? -1 : 0,
+    fraction: fraction ?? "",
   };
+}
+
+function daysFromCivil(year, month, day) {
+  const adjustedYear = year - (month <= 2 ? 1 : 0);
+  const era = Math.floor(adjustedYear / 400);
+  const yearOfEra = adjustedYear - era * 400;
+  const adjustedMonth = month + (month > 2 ? -3 : 9);
+  const dayOfYear = Math.floor((153 * adjustedMonth + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 +
+    Math.floor(yearOfEra / 4) -
+    Math.floor(yearOfEra / 100) +
+    dayOfYear;
+  return era * 146_097 + dayOfEra;
 }
 
 function compareFraction(left, right) {
