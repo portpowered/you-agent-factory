@@ -79,14 +79,28 @@ function calculateDispatchStarts({
       return [];
     }
     const transitionId = rule?.id ?? "emulator-unmatched";
+    const lineageTokenId = resolveLineageTokenId({
+      identityCoordinates,
+      outcome,
+      scenario,
+      state,
+      work,
+    });
     const dispatchCoordinates = {
       ...identityCoordinates,
       workId: work.workId,
+      tokenId: work.tokenId,
+      lineageTokenId,
       transitionId,
       invocationIndex,
     };
     const dispatchId = deriveFactoryEmulatorIdentity("dispatch", dispatchCoordinates);
     const completionId = deriveFactoryEmulatorIdentity("completion", dispatchCoordinates);
+    const outputTokenId = deriveFactoryEmulatorIdentity("token", {
+      ...dispatchCoordinates,
+      dispatchId,
+      completionId,
+    });
     const durationMs = outcome.durationMs ?? 0;
     const dueElapsedMs = state.virtualElapsedMs + durationMs;
     if (!Number.isSafeInteger(dueElapsedMs)) {
@@ -99,6 +113,8 @@ function calculateDispatchStarts({
       dispatch: {
         dispatchId,
         completionId,
+        lineageTokenId,
+        outputTokenId,
         transitionId,
         startedElapsedMs: state.virtualElapsedMs,
         dueElapsedMs,
@@ -153,6 +169,7 @@ function calculateCompletions({
     replacements.set(work.workId, {
       ...work,
       phase: "completed",
+      tokenId: dispatch.outputTokenId,
       ...(accepted && dispatch.outcome.output !== undefined
         ? { output: dispatch.outcome.output }
         : {}),
@@ -172,6 +189,10 @@ function calculateCompletions({
         outcome: accepted ? "ACCEPTED" : "REJECTED",
         ...(!accepted ? { feedback: dispatch.outcome.reason } : {}),
         durationMillis: dispatch.dueElapsedMs - dispatch.startedElapsedMs,
+        metadata: {
+          emulatorLineageTokenId: dispatch.lineageTokenId,
+          emulatorTokenId: dispatch.outputTokenId,
+        },
       },
     });
   });
@@ -198,6 +219,34 @@ function resolutionOutcome(resolution) {
     return { kind: "reject", reason: resolution.behavior.reason };
   }
   return undefined;
+}
+
+function resolveLineageTokenId({
+  identityCoordinates,
+  outcome,
+  scenario,
+  state,
+  work,
+}) {
+  const cursor = outcome?.kind === "complete" ? outcome.lineageCursor : undefined;
+  if (cursor?.kind === "initialSubmission") {
+    return state.works.find(
+      (candidate) => candidate.submissionId === cursor.submissionId,
+    )?.tokenId;
+  }
+  if (cursor?.kind === "scriptedOutcome") {
+    const ruleIndex = scenario.rules.findIndex((rule) => rule.id === cursor.ruleId);
+    return deriveFactoryEmulatorIdentity("token", {
+      ...identityCoordinates,
+      lineage: {
+        kind: "scriptedOutcome",
+        ruleIndex,
+        ruleId: cursor.ruleId,
+        outcomeIndex: cursor.outcomeIndex,
+      },
+    });
+  }
+  return work.tokenId;
 }
 
 function activeWorksAtEarliestDeadline(state) {

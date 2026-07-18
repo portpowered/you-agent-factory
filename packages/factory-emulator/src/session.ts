@@ -150,6 +150,7 @@ export interface FactoryEmulatorSessionWork {
   readonly requestId: string;
   readonly traceId: string;
   readonly workId: string;
+  readonly tokenId: string;
   readonly workType: string;
   readonly phase: "active" | "ready" | "waiting" | "completed";
   readonly input?: Readonly<Record<string, unknown>>;
@@ -158,6 +159,8 @@ export interface FactoryEmulatorSessionWork {
   readonly dispatch?: {
     readonly dispatchId: string;
     readonly completionId: string;
+    readonly lineageTokenId: string;
+    readonly outputTokenId: string;
     readonly transitionId: string;
     readonly startedElapsedMs: number;
     readonly dueElapsedMs: number;

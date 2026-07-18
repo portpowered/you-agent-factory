@@ -649,11 +649,16 @@ function calculateWorkRequest({
       workType: submission.workType,
     };
     const traceId = deriveFactoryEmulatorIdentity("trace", workCoordinates);
+    const tokenId = deriveFactoryEmulatorIdentity("token", {
+      ...workCoordinates,
+      lineage: { kind: "submission", submissionId: submission.id },
+    });
     return {
       submissionId: submission.id,
       requestId,
       traceId,
       workId: deriveFactoryEmulatorIdentity("work", workCoordinates),
+      tokenId,
       workType: submission.workType,
       phase: submissionPhase(scenario, submission),
       ...(submission.input === undefined ? {} : { input: submission.input }),
@@ -682,6 +687,7 @@ function calculateWorkRequest({
           workTypeName: work.workType,
           currentChainingTraceId: work.traceId,
           traceId: work.traceId,
+          tags: { emulatorTokenId: work.tokenId },
           ...(work.input === undefined ? {} : { payload: work.input }),
         })),
       },
@@ -883,6 +889,7 @@ function createEvent({
       ...identityCoordinates,
       sequence,
       type,
+      context,
     }),
     type,
     context: {

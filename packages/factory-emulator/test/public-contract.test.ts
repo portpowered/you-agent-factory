@@ -126,6 +126,16 @@ void limits;
 void commandError;
 void executionDiagnostic;
 const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
+if (sessionState.lifecycle !== "pre-start") {
+  const currentTokenId: string | undefined = sessionState.works[0]?.tokenId;
+  const lineageTokenId: string | undefined =
+    sessionState.works[0]?.dispatch?.lineageTokenId;
+  const outputTokenId: string | undefined =
+    sessionState.works[0]?.dispatch?.outputTokenId;
+  void currentTokenId;
+  void lineageTokenId;
+  void outputTokenId;
+}
 const startReceipt: Promise<FactoryEmulatorStartReceipt> = emulatorSession.start();
 const submitReceipt: Promise<FactoryEmulatorSubmitReceipt> = emulatorSession.submit({
   id: "public-work",

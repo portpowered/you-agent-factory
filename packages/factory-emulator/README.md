@@ -122,12 +122,14 @@ before activity, normalizes `startAt` to a UTC instant, then writes an ordered
 topology/run bootstrap batch followed by one normalized initial-submission
 batch. The returned state becomes visible only after those writes are accepted.
 
-Session, request, trace, Work, and event identities are derived from canonical
+Session, request, trace, Work, token, dispatch, completion, and event identities are derived from canonical
 Factory/scenario inputs, the scenario seed, authored submission coordinates,
-and logical sequence. The same domain-separated derivation is reserved for
-internal token, dispatch, and completion identities. It reads no ambient time,
-randomness, locale, or process-global counter. Every startup event is stamped at
-virtual elapsed time zero (`startAt` after UTC normalization).
+authored lineage cursors, and logical sequence. Submitted token identities are
+recorded in `WORK_REQUEST` Work tags. Dispatch completion metadata records both
+the resolved lineage-token anchor and the resulting token identity, while the
+bounded Work snapshot retains the current token identity. The derivation reads
+no ambient time, randomness, locale, or process-global counter. Every startup
+event is stamped at virtual elapsed time zero (`startAt` after UTC normalization).
 
 `reset()` is available after a successful start. It clears runtime Work,
 virtual elapsed time, counters, and rule cursors and returns the session to

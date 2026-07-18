@@ -184,6 +184,107 @@ test("start emits deterministic bootstrap and initial submission batches at virt
   assert.equal(new Set(events.map((event) => event.id)).size, events.length);
   assert.equal(new Set(receipt.state.works.map((work) => work.workId)).size, 2);
   assert.equal(new Set(receipt.state.works.map((work) => work.traceId)).size, 2);
+  assert.equal(new Set(receipt.state.works.map((work) => work.tokenId)).size, 2);
+  assert.deepEqual(
+    batches[1].events[0].payload.works.map((work) => work.tags.emulatorTokenId),
+    receipt.state.works.map((work) => work.tokenId),
+  );
+});
+
+test("authored lineage cursors determine observable token and canonical event identities", async () => {
+  const lineageScenario = scenario({
+    rules: [
+      {
+        id: "first-checkout",
+        match: { kind: "submissionId", submissionId: "checkout-1" },
+        outcomes: [{
+          kind: "complete",
+          lineageCursor: {
+            kind: "initialSubmission",
+            submissionId: "checkout-1",
+          },
+        }],
+        exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+      },
+      {
+        id: "second-checkout",
+        match: { kind: "submissionId", submissionId: "checkout-2" },
+        outcomes: [{
+          kind: "complete",
+          lineageCursor: {
+            kind: "scriptedOutcome",
+            ruleId: "first-checkout",
+            outcomeIndex: 0,
+          },
+        }],
+        exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+      },
+    ],
+  });
+  const first = harness(lineageScenario);
+  const rerun = harness(structuredClone(lineageScenario));
+  await first.emulator.start();
+  await rerun.emulator.start();
+  const firstDispatch = await first.emulator.advanceToNext();
+  const rerunDispatch = await rerun.emulator.advanceToNext();
+  const firstCompletion = await first.emulator.advanceToNext();
+  const rerunCompletion = await rerun.emulator.advanceToNext();
+
+  assert.equal(
+    firstDispatch.state.works[0].dispatch.lineageTokenId,
+    firstDispatch.state.works[0].tokenId,
+  );
+  assert.notEqual(
+    firstDispatch.state.works[1].dispatch.lineageTokenId,
+    firstDispatch.state.works[1].tokenId,
+  );
+  assert.deepEqual(firstDispatch, rerunDispatch);
+  assert.deepEqual(firstCompletion, rerunCompletion);
+  assert.deepEqual(first.batches, rerun.batches);
+  assert.deepEqual(
+    firstCompletion.batches[0].events.map((event) => event.payload.metadata),
+    firstCompletion.state.works.map((work) => ({
+      emulatorLineageTokenId: work.dispatch.lineageTokenId,
+      emulatorTokenId: work.tokenId,
+    })),
+  );
+
+  const changedCursor = harness(scenario({
+    ...lineageScenario,
+    rules: [
+      lineageScenario.rules[0],
+      {
+        ...lineageScenario.rules[1],
+        outcomes: [{
+          kind: "complete",
+          lineageCursor: {
+            kind: "initialSubmission",
+            submissionId: "checkout-2",
+          },
+        }],
+      },
+    ],
+  }));
+  await changedCursor.emulator.start();
+  const changedDispatch = await changedCursor.emulator.advanceToNext();
+  const changedCompletion = await changedCursor.emulator.advanceToNext();
+
+  assert.equal(
+    changedDispatch.state.works[1].dispatch.lineageTokenId,
+    changedDispatch.state.works[1].tokenId,
+  );
+  assert.notEqual(
+    changedDispatch.batches[0].events[1].context.dispatchId,
+    firstDispatch.batches[0].events[1].context.dispatchId,
+  );
+  assert.notEqual(
+    changedDispatch.batches[0].events[1].id,
+    firstDispatch.batches[0].events[1].id,
+  );
+  assert.notEqual(
+    changedCompletion.state.works[1].tokenId,
+    firstCompletion.state.works[1].tokenId,
+  );
 });
 
 test("invalid lifecycle commands and unsupported configuration emit no events", async () => {
