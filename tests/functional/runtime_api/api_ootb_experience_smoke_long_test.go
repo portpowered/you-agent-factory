@@ -3,11 +3,11 @@
 package runtime_api
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -23,14 +23,19 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 		Payload:    []byte(`{"title":"Hello World"}`),
 	})
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	host, stream := startOOTBExperienceHost(t, dir)
 
-	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, host.Endpoint()+"/status")
 	if initialStatus.FactoryState == "" {
 		t.Fatal("GET /status returned an empty factory_state during first-run smoke")
 	}
 
-	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	assertTerminalDispatchForTrace(t, stream, "trace-ootb-001")
+	token := requireGeneratedWorkByTrace(
+		t,
+		getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(host.Endpoint(), "/work")),
+		"trace-ootb-001",
+	)
 	if stringPointerValue(token.WorkTypeName) != "task" {
 		t.Fatalf("GET /work completed work type = %q, want task", stringPointerValue(token.WorkTypeName))
 	}
@@ -38,7 +43,7 @@ func TestOOTBExperience_APIPreseededSimplePipelineCompletes(t *testing.T) {
 		t.Fatalf("GET /work completed state = %#v, want complete", token.State)
 	}
 
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := getGeneratedJSON[factoryapi.StatusResponse](t, host.Endpoint()+"/status")
 	if status.TotalTokens != 1 {
 		t.Fatalf("GET /status total_tokens = %d, want 1", status.TotalTokens)
 	}
@@ -60,9 +65,14 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 		Payload:    []byte(`{"title":"Multi-stage test"}`),
 	})
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	host, stream := startOOTBExperienceHost(t, dir)
 
-	token := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	assertTerminalDispatchForTrace(t, stream, "trace-ootb-multistage-001")
+	token := requireGeneratedWorkByTrace(
+		t,
+		getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(host.Endpoint(), "/work")),
+		"trace-ootb-multistage-001",
+	)
 	if stringPointerValue(token.WorkTypeName) != "task" {
 		t.Fatalf("GET /work completed work type = %q, want task", stringPointerValue(token.WorkTypeName))
 	}
@@ -70,7 +80,7 @@ func TestOOTBExperience_APIPreseededTwoStagePipelineCompletes(t *testing.T) {
 		t.Fatalf("GET /work completed state = %#v, want complete", token.State)
 	}
 
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := getGeneratedJSON[factoryapi.StatusResponse](t, host.Endpoint()+"/status")
 	if status.TotalTokens != 1 {
 		t.Fatalf("GET /status total_tokens = %d, want 1", status.TotalTokens)
 	}
@@ -89,16 +99,16 @@ func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
 		Payload:    []byte(`{"title":"Status check"}`),
 	})
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	host, stream := startOOTBExperienceHost(t, dir)
 
-	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	initialStatus := getGeneratedJSON[factoryapi.StatusResponse](t, host.Endpoint()+"/status")
 	if initialStatus.FactoryState == "" {
 		t.Fatal("GET /status returned an empty factory_state before completion")
 	}
 
-	waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)
+	assertTerminalDispatchForTrace(t, stream, "trace-ootb-status-001")
 
-	status := getGeneratedJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	status := getGeneratedJSON[factoryapi.StatusResponse](t, host.Endpoint()+"/status")
 	if status.FactoryState != "RUNNING" && status.FactoryState != "COMPLETED" {
 		t.Fatalf("GET /status factory_state = %q, want RUNNING or COMPLETED", status.FactoryState)
 	}
@@ -108,6 +118,29 @@ func TestOOTBExperience_APIStatusStaysQueryableAcrossCompletion(t *testing.T) {
 	if status.Categories.Terminal != 1 {
 		t.Fatalf("GET /status terminal count = %d, want 1", status.Categories.Terminal)
 	}
+}
+
+func startOOTBExperienceHost(t *testing.T, dir string) (*support.RootRunFunctionalHost, *factoryEventHTTPStream) {
+	t.Helper()
+
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	return host, stream
 }
 
 func ootbTwoStagePipelineConfig() map[string]any {
