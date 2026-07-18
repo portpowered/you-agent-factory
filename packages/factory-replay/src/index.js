@@ -97,9 +97,11 @@ export function createFactoryReplayCheckpoint(result, cloneState) {
 
 /**
  * Advance an immutable replay checkpoint with an accepted event tail.
- * Only previously unseen events after the checkpoint tick and at or before
- * the target tick are applied. The returned checkpoint is independently
- * cloned so callers can retain it for another historical reconstruction.
+ * Only previously unseen events at or before the target tick are applied.
+ * Event IDs, rather than the checkpoint tick, define what has already been
+ * applied so later canonical events at the checkpoint's tick are retained.
+ * The returned checkpoint is independently cloned so callers can retain it
+ * for another historical reconstruction.
  *
  * @template State, World
  * @param {import("./index.d.ts").FactoryReplayAdvanceInput<State, World>} input
@@ -111,7 +113,6 @@ export function advanceFactoryReplay(input) {
     (event) => {
       if (
         acceptedEventIDs.has(event.id) ||
-        event.context.tick <= input.checkpoint.selectedTick ||
         event.context.tick > input.tick
       ) {
         return false;

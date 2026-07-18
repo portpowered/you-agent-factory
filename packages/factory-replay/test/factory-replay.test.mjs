@@ -148,3 +148,30 @@ test("accepted tails advance a cloned checkpoint in canonical order", () => {
   assert.deepEqual(checkpoint, checkpointBeforeAdvance);
   assert.deepEqual(advanced.checkpoint.state, full.state);
 });
+
+test("accepted tails retain later canonical events at the checkpoint tick", () => {
+  const checkpoint = createFactoryReplayCheckpoint(
+    initializeFactoryReplay({
+      events: [event("initial", 2, 1)],
+      reducer,
+      selection: { mode: "current" },
+    }),
+    structuredClone,
+  );
+  const acceptedTail = [event("same-tick-tail", 2, 2)];
+
+  const advanced = advanceFactoryReplay({
+    checkpoint,
+    cloneState: structuredClone,
+    events: acceptedTail,
+    reducer,
+    setSelectedTick: setMutableStateTick,
+    tick: 2,
+  });
+
+  assert.deepEqual(
+    advanced.appliedEvents.map((factoryEvent) => factoryEvent.id),
+    ["same-tick-tail"],
+  );
+  assert.deepEqual(advanced.world.eventIDs, ["initial", "same-tick-tail"]);
+});
