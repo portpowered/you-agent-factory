@@ -47,7 +47,7 @@ writeFileSync(outputPath, transformedSource);
 
 execFileSync(
   process.execPath,
-  ["./node_modules/@biomejs/biome/bin/biome", "check", "--write", outputPath],
+  ["./node_modules/@biomejs/biome/bin/biome", "format", "--write", outputPath],
   {
     cwd: projectRoot,
     stdio: "inherit",

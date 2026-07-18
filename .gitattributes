@@ -7,6 +7,7 @@ contracts/javascript/** text eol=lf
 contracts/manifest.schema.json text eol=lf
 api/openapi.yaml text eol=lf
 packages/api/generated/** text eol=lf
+packages/client/src/generated/** text eol=lf
 pkg/config/globalconfiginventory/testdata/** text eol=lf
 pkg/config/operatorconfig/testdata/** text eol=lf
 pkg/config/systemconfig/testdata/** text eol=lf

@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "74932a7018dd449663cb9f858be203d4ec3d8de9d3b44f18e944259db0eec568",
+      "artifactHash": "7c7066ccd8efbe2fe4a0f8bd34747ce7496d81de2fff90fa3543b06d82fe48c2",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "74932a7018dd449663cb9f858be203d4ec3d8de9d3b44f18e944259db0eec568",
+        "sourceHash": "7c7066ccd8efbe2fe4a0f8bd34747ce7496d81de2fff90fa3543b06d82fe48c2",
         "visibility": "public"
       },
       "family": "openapi",
@@ -239,6 +239,66 @@
         "state": "active"
       },
       "path": "generated/schemas/factory.schema.json"
+    },
+    "generated.schemas.factory-event": {
+      "artifactHash": "6444632f9b1635c4324c5556dc8fa37c4350e183fb9ff43caf80e8b287119b7a",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.schemas.factory-event contract as raw JSON or YAML data.",
+            "id": "generated.schemas.factory-event.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.schemas.factory-event contract",
+            "id": "generated.schemas.factory-event.title"
+          }
+        },
+        "examples": [
+          "generated/schemas/factory-event.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.factory-event",
+        "sourceHash": "6444632f9b1635c4324c5556dc8fa37c4350e183fb9ff43caf80e8b287119b7a",
+        "visibility": "public"
+      },
+      "family": "config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.factory-event",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/schemas/factory-event.schema.json"
+    },
+    "generated.schemas.factory-recording": {
+      "artifactHash": "91a019ce96e82ab8e397eec8ec880b6c6b9a610ea91fcd1f15b25ec6708f27e7",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.schemas.factory-recording contract as raw JSON or YAML data.",
+            "id": "generated.schemas.factory-recording.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.schemas.factory-recording contract",
+            "id": "generated.schemas.factory-recording.title"
+          }
+        },
+        "examples": [
+          "generated/schemas/factory-recording.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.factory-recording",
+        "sourceHash": "91a019ce96e82ab8e397eec8ec880b6c6b9a610ea91fcd1f15b25ec6708f27e7",
+        "visibility": "public"
+      },
+      "family": "config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.factory-recording",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/schemas/factory-recording.schema.json"
     },
     "generated.schemas.mock-workers": {
       "artifactHash": "1aad74057b85a8c0d5c195e945832b373a0d37bbc7fc7efece5aa88085efd7d3",
@@ -312,5 +372,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "82f299f2c915c751dfb8a32eb309de5668c9314b"
+  "sourceCommit": "693faee8a5cc3cbbd7493711ce72af9951d272c2"
 }

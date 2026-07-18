@@ -11,6 +11,8 @@ export const REVIEWED_PACK_FILES = Object.freeze([
 	"generated/mcp/tools.json",
 	"generated/schemas/you-config.schema.json",
 	"generated/schemas/factory.schema.json",
+	"generated/schemas/factory-event.schema.json",
+	"generated/schemas/factory-recording.schema.json",
 	"generated/schemas/mock-workers.schema.json",
 	"generated/javascript/runtime-api.json",
 	"generated/joined/contracts/common/deprecations.schema.json",

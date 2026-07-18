@@ -101,7 +101,7 @@ func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 		return nil, fmt.Errorf("join canonical contracts: %s", payload)
 	}
 
-	expected := make(map[string][]byte, len(documents)+len(rawArtifacts)+2)
+	expected := make(map[string][]byte, len(documents)+len(rawArtifacts)+4)
 	for _, document := range documents {
 		payload, err := contractjoiner.MarshalCanonicalJSON(document.Value)
 		if err != nil {
@@ -130,6 +130,13 @@ func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 	}
 	expected[FactorySchemaAuthoredPath] = factorySchema
 	expected[factorySchemaTarget] = factorySchema
+	standaloneSchemas, err := generateStandaloneFactorySchemas(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	for path, payload := range standaloneSchemas {
+		expected[path] = payload
+	}
 	manifest, err := generateManifest(repositoryRoot, expected)
 	if err != nil {
 		return nil, err
