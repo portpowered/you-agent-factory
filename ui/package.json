@@ -80,6 +80,8 @@
     "zustand": "^4.5.7"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "@biomejs/biome": "^2.5.4",
     "@storybook/addon-vitest": "^10.3.5",
     "@storybook/react-vite": "^10.3.5",
