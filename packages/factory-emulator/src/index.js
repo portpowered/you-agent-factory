@@ -10,3 +10,7 @@ export {
   FactoryEmulatorPendingTransactionError,
   createFactoryEmulator,
 } from "./emulator.js";
+export {
+  scenarioSchema,
+  SUPPORTED_SCENARIO_VERSION,
+} from "./generated/scenario-schema.js";

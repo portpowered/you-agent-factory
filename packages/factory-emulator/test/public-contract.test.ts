@@ -77,3 +77,30 @@ const emulatorCloseReceipt: Promise<FactoryEmulatorCloseReceipt> = emulator.clos
 void emulatorStatus;
 void pendingBatch;
 void emulatorCloseReceipt;
+
+import {
+  type EmulatorScenario,
+  type EmulatorScenarioVersion,
+  scenarioSchema,
+  SUPPORTED_SCENARIO_VERSION,
+} from "@you-agent-factory/factory-emulator";
+
+const version: EmulatorScenarioVersion = SUPPORTED_SCENARIO_VERSION;
+const scenario: EmulatorScenario = {
+  version,
+  id: "public-contract",
+  seed: "seed-public",
+  startAt: "2026-07-18T07:30:00Z",
+  rules: [
+    {
+      id: "match-all",
+      match: { kind: "all" },
+      outcomes: [{ kind: "complete" }],
+      exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+    },
+  ],
+  unmatchedBehavior: { kind: "ignore" },
+};
+
+void scenario;
+void scenarioSchema;

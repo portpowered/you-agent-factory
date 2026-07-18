@@ -1,4 +1,24 @@
-# Factory emulator event sink
+# `@you-agent-factory/factory-emulator`
+
+This package publishes the stable v1 JSON Schema and generated TypeScript
+contract for deterministic Factory-emulator scenarios. The schema is available
+as raw JSON from `@you-agent-factory/factory-emulator/schema`; the root module
+exports `scenarioSchema` and `SUPPORTED_SCENARIO_VERSION`.
+
+Every scenario declares a version, id, deterministic seed, UTC `startAt`,
+ordered rules, and explicit unmatched behavior. Rules use finite scripted
+outcomes with explicit exhaustion behavior. Initial submissions and lineage
+cursors are structurally represented here; semantic reference validation is
+provided by the parser surface.
+
+`activityLabel` is optional, limited to 120 characters, and only represents
+transient emulator activity. It is never canonical Factory event content.
+
+The schema under `contracts/factory-emulator/` is authored source. Run
+`npm run generate` from this package to regenerate its committed schema and
+TypeScript artifacts.
+
+## Event sink and logical tick runtime
 
 `@you-agent-factory/factory-emulator` provides the transport-neutral,
 caller-owned `FactoryEventSink` contract used by Factory emulator hosts.
