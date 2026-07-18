@@ -29,10 +29,20 @@ type RootRunFunctionalHostConfig struct {
 	StartupTimeout  time.Duration
 }
 
+// RootRunProcessOutcome classifies why the customer-boundary process returned.
+type RootRunProcessOutcome string
+
+const (
+	RootRunProcessStopped   RootRunProcessOutcome = "stopped"
+	RootRunProcessCompleted RootRunProcessOutcome = "completed"
+	RootRunProcessFailed    RootRunProcessOutcome = "failed"
+)
+
 // RootRunProcessResult is the immutable customer-boundary outcome of root.Run.
 type RootRunProcessResult struct {
 	ExitCode    int
 	Diagnostics string
+	Outcome     RootRunProcessOutcome
 }
 
 // RootRunFunctionalHost is a customer-boundary driver around root.Run. It does
@@ -43,9 +53,10 @@ type RootRunFunctionalHost struct {
 	cancel   context.CancelFunc
 	done     chan struct{}
 
-	resultMu sync.RWMutex
-	result   RootRunProcessResult
-	finished bool
+	resultMu      sync.RWMutex
+	result        RootRunProcessResult
+	lastReadiness string
+	finished      bool
 }
 
 // StartRootRunFunctionalHost starts the production root on an isolated local
@@ -123,10 +134,24 @@ func (host *RootRunFunctionalHost) run(
 		Context: ctx,
 	}, root.Dependencies{FunctionalEdges: edges})
 	host.resultMu.Lock()
-	host.result = RootRunProcessResult{ExitCode: exitCode, Diagnostics: diagnostics.String()}
+	host.result = RootRunProcessResult{
+		ExitCode:    exitCode,
+		Diagnostics: diagnostics.String(),
+		Outcome:     rootRunProcessOutcome(exitCode, ctx.Err()),
+	}
 	host.finished = true
 	host.resultMu.Unlock()
 	close(host.done)
+}
+
+func rootRunProcessOutcome(exitCode int, processErr error) RootRunProcessOutcome {
+	if exitCode != root.ExitSuccess {
+		return RootRunProcessFailed
+	}
+	if processErr != nil {
+		return RootRunProcessStopped
+	}
+	return RootRunProcessCompleted
 }
 
 func (host *RootRunFunctionalHost) waitUntilReady(ctx context.Context) error {
@@ -138,6 +163,7 @@ func (host *RootRunFunctionalHost) waitUntilReady(ctx context.Context) error {
 		response, err := host.rest.GetStatus(attemptCtx)
 		cancelAttempt()
 		if err == nil && response.StatusCode() == http.StatusOK && response.JSON200 != nil {
+			host.recordReadiness("generated GET /status succeeded with HTTP 200")
 			return nil
 		}
 		if err != nil {
@@ -145,6 +171,7 @@ func (host *RootRunFunctionalHost) waitUntilReady(ctx context.Context) error {
 		} else {
 			lastOutcome = fmt.Errorf("GET /status returned HTTP %d", response.StatusCode())
 		}
+		host.recordReadiness(lastOutcome.Error())
 		select {
 		case <-host.done:
 			return fmt.Errorf("process completed before generated REST readiness (last outcome: %v)", lastOutcome)
@@ -153,6 +180,12 @@ func (host *RootRunFunctionalHost) waitUntilReady(ctx context.Context) error {
 		case <-retry.C:
 		}
 	}
+}
+
+func (host *RootRunFunctionalHost) recordReadiness(outcome string) {
+	host.resultMu.Lock()
+	host.lastReadiness = outcome
+	host.resultMu.Unlock()
 }
 
 func rootRunHostEnvironment(systemRoot string) []string {
@@ -202,15 +235,39 @@ func (host *RootRunFunctionalHost) waitForResult(ctx context.Context) (RootRunPr
 	}
 }
 
+func (host *RootRunFunctionalHost) shutdownDiagnostic(cause error) (RootRunProcessResult, error) {
+	host.resultMu.RLock()
+	defer host.resultMu.RUnlock()
+	processOutcome := "pending"
+	if host.finished {
+		processOutcome = fmt.Sprintf(
+			"outcome=%s exit=%d diagnostics=%q",
+			host.result.Outcome,
+			host.result.ExitCode,
+			host.result.Diagnostics,
+		)
+	}
+	return host.result, fmt.Errorf(
+		"shut down root.Run functional host at %s: %w (last readiness=%q; process=%s)",
+		host.endpoint,
+		cause,
+		host.lastReadiness,
+		processOutcome,
+	)
+}
+
 // Shutdown requests process cancellation and joins it within ctx's bound.
 func (host *RootRunFunctionalHost) Shutdown(ctx context.Context) (RootRunProcessResult, error) {
 	if ctx == nil {
 		return RootRunProcessResult{}, fmt.Errorf("shut down root.Run functional host at %s: context is required", host.endpoint)
 	}
 	host.cancel()
+	if err := ctx.Err(); err != nil {
+		return host.shutdownDiagnostic(err)
+	}
 	result, err := host.waitForResult(ctx)
 	if err != nil {
-		return RootRunProcessResult{}, fmt.Errorf("shut down root.Run functional host at %s: %w", host.endpoint, err)
+		return host.shutdownDiagnostic(err)
 	}
 	return result, nil
 }
