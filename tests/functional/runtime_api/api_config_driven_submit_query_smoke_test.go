@@ -1,93 +1,89 @@
 package runtime_api
 
 import (
-	"bytes"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"context"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
 	support.SkipLongFunctional(t, "slow config-driven runtime API submit/query smoke")
 
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
-
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "API test"}`))
-
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
-	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-	h.Assert().HasTokenInPlace("task:complete").TokenCount(1)
-
-	snapshot, err := h.GetEngineStateSnapshot()
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: dir,
+		SystemRoot:  t.TempDir(),
+	})
 	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
 	}
-	mockFactory := &testutil.MockFactory{EngineState: snapshot}
-	srv := api.NewServer(mockFactory, 0, zap.NewNop())
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
 
-	postWorkViaAPI(t, srv)
-	assertListWorkResponse(t, srv)
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+
+	const requestID = "request-config-driven-rest-submit"
+	const workID = "work-config-driven-rest-submit"
+	const workTypeName = "task"
+	response := putGeneratedWorkRequest(t, host.Endpoint(), requestID, factoryapi.WorkRequest{
+		RequestId: requestID,
+		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
+		Works: &[]factoryapi.Work{{
+			Name:         "rest-submit",
+			WorkId:       stringPointer(workID),
+			WorkTypeName: stringPointer(workTypeName),
+			Payload:      map[string]string{"title": "REST submit"},
+		}},
+	})
+	if response.RequestId != requestID || response.TraceId == "" {
+		t.Fatalf("PUT /work-requests response = %#v, want request ID %q and trace ID", response, requestID)
+	}
+
+	event := waitForRuntimeAPIWorkRequestEvent(t, stream, requestID, 5*time.Second)
+	payload, err := event.Payload.AsWorkRequestEventPayload()
+	if err != nil {
+		t.Fatalf("decode public WORK_REQUEST payload: %v", err)
+	}
+	works := support.FactoryWorksValue(payload.Works)
+	if payload.Type != factoryapi.WorkRequestTypeFactoryRequestBatch || len(works) != 1 {
+		t.Fatalf("public WORK_REQUEST payload = %#v, want one-work FACTORY_REQUEST_BATCH", payload)
+	}
+	if got := support.StringPointerValue(works[0].WorkId); got != workID {
+		t.Fatalf("public WORK_REQUEST work ID = %q, want %q", got, workID)
+	}
+
+	completed := waitForGeneratedWorkIDsComplete(t, host.Endpoint(), []string{workID}, 10*time.Second)
+	assertConfigDrivenSubmittedWork(t, completed[0], workID, workTypeName, response.TraceId)
 }
 
-func postWorkViaAPI(t *testing.T, srv *api.Server) {
+func assertConfigDrivenSubmittedWork(
+	t *testing.T,
+	work factoryapi.Work,
+	workID string,
+	workTypeName string,
+	traceID string,
+) {
 	t.Helper()
 
-	req := httptest.NewRequest("POST", support.DefaultSessionWorkPath("/work"), bytes.NewBufferString(`{"name":"rest-submit","workTypeName": "task", "payload": {"title": "REST submit"}}`))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Errorf("POST /work: expected status 201, got %d (body: %s)", rec.Code, rec.Body.String())
+	if got := support.StringPointerValue(work.WorkId); got != workID {
+		t.Fatalf("GET /work ID = %q, want %q", got, workID)
 	}
-
-	var submitResp factoryapi.SubmitWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&submitResp); err != nil {
-		t.Fatalf("POST /work: failed to decode response: %v", err)
+	if got := support.StringPointerValue(work.WorkTypeName); got != workTypeName {
+		t.Fatalf("GET /work work type = %q, want %q", got, workTypeName)
 	}
-	if submitResp.TraceId == "" {
-		t.Error("POST /work: expected non-empty trace_id")
-	}
-}
-
-func assertListWorkResponse(t *testing.T, srv *api.Server) {
-	t.Helper()
-
-	req := httptest.NewRequest("GET", support.DefaultSessionWorkPath("/work"), nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /work: expected status 200, got %d", rec.Code)
-	}
-
-	var listResp factoryapi.ListWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&listResp); err != nil {
-		t.Fatalf("GET /work: failed to decode response: %v", err)
-	}
-	if len(listResp.Results) != 1 {
-		t.Fatalf("GET /work: expected 1 result, got %d", len(listResp.Results))
-	}
-
-	work := listResp.Results[0]
-	if stringPointerValue(work.WorkTypeName) != "task" {
-		t.Errorf("GET /work: expected work type 'task', got %q", stringPointerValue(work.WorkTypeName))
+	if got := support.StringPointerValue(work.TraceId); got != traceID {
+		t.Fatalf("GET /work trace ID = %q, want %q", got, traceID)
 	}
 	if generatedWorkStateName(work.State) != "complete" || generatedWorkStateType(work.State) != factoryapi.WorkStateTypeTERMINAL {
-		t.Errorf("GET /work: expected state complete/TERMINAL, got %#v", work.State)
+		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", work.State)
 	}
 }
