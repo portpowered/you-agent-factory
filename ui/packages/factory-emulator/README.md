@@ -61,3 +61,25 @@ with a `FactoryEventSinkError` whose code is `closed`. Empty batches and
 all-or-nothing capacity failures use the `empty_batch` and `capacity_exceeded`
 codes. The optional `beforeWrite` hook provides caller-controlled backpressure
 and failure injection without transferring ownership of retained history.
+
+`RecordingFactoryEventSink` applies the same asynchronous, bounded, atomic
+lifecycle to a canonical UI-client `FactoryRecording`. It rejects duplicate
+event IDs, non-canonical ordering, mixed Factory or session identities, and any
+batch that would make the full recording invalid, without changing the prior
+snapshot.
+
+```ts
+import { RecordingFactoryEventSink } from "@you-agent-factory/factory-emulator";
+
+const recordingSink = new RecordingFactoryEventSink({
+  maxEvents: 1_000,
+  recording: {
+    schemaVersion: "factory-recording/v1",
+    id: "customer-support-example",
+    title: "Customer support example",
+    factory,
+  },
+});
+await recordingSink.write(eventBatch);
+const detachedRecording = recordingSink.snapshot();
+```

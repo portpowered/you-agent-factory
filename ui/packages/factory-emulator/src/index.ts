@@ -13,6 +13,10 @@ export {
   type MemoryFactoryEventSinkOptions,
 } from "./event-sink.js";
 export {
+  RecordingFactoryEventSink,
+  type RecordingFactoryEventSinkOptions,
+} from "./recording-sink.js";
+export {
   FACTORY_EMULATOR_SCENARIO_SCHEMA_VERSION,
   type FactoryEmulatorInitialSubmission,
   type FactoryEmulatorOutcome,

@@ -3,8 +3,13 @@ import type { FactoryEvent } from "@you-agent-factory/client";
 export type FactoryEventSinkErrorCode =
   | "capacity_exceeded"
   | "closed"
+  | "duplicate_event_id"
   | "empty_batch"
-  | "invalid_capacity";
+  | "invalid_capacity"
+  | "invalid_event_order"
+  | "invalid_recording"
+  | "mixed_factory_identity"
+  | "mixed_session_identity";
 
 export class FactoryEventSinkError extends Error {
   readonly code: FactoryEventSinkErrorCode;
