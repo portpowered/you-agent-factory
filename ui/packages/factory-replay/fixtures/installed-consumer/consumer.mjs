@@ -24,10 +24,6 @@ const replay = projectFactoryStateAtTick({
   tick: 1,
   reducer: {
     createState: (selectedTick) => ({ ids: [], selectedTick }),
-    cloneState: (state, selectedTick) => ({
-      ...structuredClone(state),
-      selectedTick,
-    }),
     applyEvent: (state, event) => ({ ...state, ids: [...state.ids, event.id] }),
   },
 });

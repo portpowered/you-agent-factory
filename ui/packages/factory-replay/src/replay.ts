@@ -12,7 +12,6 @@ export type FactoryReplaySelection =
 /** Domain interpretation stays with the consumer; the kernel owns replay semantics. */
 export interface FactoryReplayReducer<State> {
   applyEvent(state: State, event: FactoryEvent): State;
-  cloneState(state: State, selectedTick: number): State;
   createState(selectedTick: number): State;
 }
 

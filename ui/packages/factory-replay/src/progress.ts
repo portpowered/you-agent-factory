@@ -224,11 +224,17 @@ function applyDispatchRequest(
   }
   const inputIds = arrayValue(payload.inputs).flatMap((input) => {
     const record = objectRecord(input);
-    return typeof record?.workId === "string" ? [record.workId] : [];
+    return typeof record?.workId === "string" && record.workId
+      ? [record.workId]
+      : [];
   });
-  state.activeDispatches.set(dispatchId, [
-    ...new Set([...(event.context.workIds ?? []), ...inputIds]),
-  ]);
+  const workIds = [
+    ...new Set([...(event.context.workIds ?? []), ...inputIds].filter(Boolean)),
+  ];
+  for (const workId of workIds) {
+    if (!state.works.has(workId)) state.works.set(workId, { id: workId });
+  }
+  state.activeDispatches.set(dispatchId, workIds);
 }
 
 function applyDispatchResponse(

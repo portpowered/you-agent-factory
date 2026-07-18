@@ -16,10 +16,6 @@ interface EvidenceState {
 }
 
 const reducer: FactoryReplayReducer<EvidenceState> = {
-  cloneState: (state, selectedTick) => ({
-    ...structuredClone(state),
-    selectedTick,
-  }),
   createState: (selectedTick) => ({
     appliedIds: [],
     selectedTick,

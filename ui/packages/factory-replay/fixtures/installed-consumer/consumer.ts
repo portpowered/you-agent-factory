@@ -13,10 +13,6 @@ interface State {
 }
 const reducer: FactoryReplayReducer<State> = {
   createState: (selectedTick) => ({ ids: [], selectedTick }),
-  cloneState: (state, selectedTick) => ({
-    ...structuredClone(state),
-    selectedTick,
-  }),
   applyEvent: (state, event) => ({ ...state, ids: [...state.ids, event.id] }),
 };
 declare const events: readonly ReplayEvent[];

@@ -230,6 +230,28 @@ describe("projectFactoryWorkProgressAtTick", () => {
 });
 
 describe("projectFactoryWorkProgressAtTick edge evidence", () => {
+  it("keeps Dispatch-only Work identifiable during and after active evidence", () => {
+    const events = [
+      dispatch("start", "DISPATCH_REQUEST", 2, 0, ["dispatch-only"]),
+      dispatch("finish", "DISPATCH_RESPONSE", 3, 0, ["dispatch-only"]),
+    ];
+
+    const active = projectFactoryWorkProgressAtTick({ events, tick: 2 });
+    expect(active.total).toBe(1);
+    expect(active.active).toEqual([{ id: "dispatch-only" }]);
+    expect(
+      Object.values(active.counts).reduce((sum, count) => sum + count, 0),
+    ).toBe(active.total);
+
+    const completed = projectFactoryWorkProgressAtTick({ events, tick: 3 });
+    expect(completed.total).toBe(1);
+    expect(completed.active).toEqual([]);
+    expect(completed.unclassified).toEqual([{ id: "dispatch-only" }]);
+    expect(
+      Object.values(completed.counts).reduce((sum, count) => sum + count, 0),
+    ).toBe(completed.total);
+  });
+
   it("uses same-tick Work-state order and failed precedence over active evidence", () => {
     const events = [
       event("fail", "WORK_STATE_CHANGE", 2, 4, {
