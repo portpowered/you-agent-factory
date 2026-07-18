@@ -13,7 +13,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -98,6 +100,20 @@ func newMidExecutionBlockingExecutor() (*blockingExecutor, chan struct{}) {
 	calls := 0
 	blockExec := &blockingExecutor{releaseCh: releaseCh, mu: &mu, calls: &calls}
 	return blockExec, releaseCh
+}
+
+type blockingExecutor struct {
+	releaseCh <-chan struct{}
+	mu        *sync.Mutex
+	calls     *int
+}
+
+func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+	e.mu.Lock()
+	*e.calls++
+	e.mu.Unlock()
+	<-e.releaseCh
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 func midExecutionConsistencyConfig() *interfaces.FactoryConfig {

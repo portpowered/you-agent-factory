@@ -1,16 +1,13 @@
 package runtime_api
 
 import (
-	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func normalizeSubmitRequestsForFunctionalTest(requests []work.SubmitRequest) []work.SubmitRequest {
@@ -35,20 +32,6 @@ func normalizeSubmitRequestsForFunctionalTest(requests []work.SubmitRequest) []w
 		}
 	}
 	return normalized
-}
-
-type blockingExecutor struct {
-	releaseCh <-chan struct{}
-	mu        *sync.Mutex
-	calls     *int
-}
-
-func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
-	e.mu.Lock()
-	*e.calls++
-	e.mu.Unlock()
-	<-e.releaseCh
-	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {
