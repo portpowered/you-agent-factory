@@ -3,7 +3,16 @@ import {
   canonicalStringify,
   deriveFactoryEmulatorIdentity,
 } from "./identity.js";
+import { calculateNextSchedulerBatch } from "./scheduler.js";
 import { selectEmulatorRule } from "./semantics.js";
+import {
+  FactoryEmulatorDurationError,
+  stateAtElapsed,
+  validateDuration,
+  virtualTimeAt,
+} from "./virtual-time.js";
+
+export { FactoryEmulatorDurationError } from "./virtual-time.js";
 
 const EVENT_SCHEMA_VERSION = "agent-factory.event.v1";
 const WORK_REQUEST_TYPE = "FACTORY_REQUEST_BATCH";
@@ -52,6 +61,83 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
   const configuredScenario = copy(scenario);
   let committedState = preStartState();
   let commandInProgress;
+
+  async function runAdvance(command, targetElapsedMs) {
+    const fromVirtualTime = committedState.virtualTime;
+    if (!hasUnfinishedWork(committedState)) {
+      return copy({
+        status: "idle",
+        command,
+        fromVirtualTime,
+        virtualTime: committedState.virtualTime,
+        virtualElapsedMs: committedState.virtualElapsedMs,
+        batches: [],
+        state: committedState,
+      });
+    }
+
+    const batches = [];
+    let madeProgress = false;
+    commandInProgress = "advancing";
+    try {
+      while (true) {
+        const calculation = calculateNextSchedulerBatch({
+          createEvent,
+          identityCoordinates: sessionIdentityCoordinates(
+            configuredFactory,
+            configuredScenario,
+            committedState.sessionId,
+          ),
+          scenario: configuredScenario,
+          state: committedState,
+        });
+        if (
+          calculation === undefined ||
+          (targetElapsedMs !== undefined && calculation.elapsedMs > targetElapsedMs)
+        ) {
+          break;
+        }
+        if (calculation.batch !== undefined) {
+          await sink.write(copy(calculation.batch));
+          batches.push(calculation.batch);
+        }
+        committedState = calculation.state;
+        madeProgress = true;
+        if (command === "advanceToNext" && calculation.batch !== undefined) {
+          break;
+        }
+      }
+
+      if (
+        targetElapsedMs !== undefined &&
+        committedState.virtualElapsedMs !== targetElapsedMs
+      ) {
+        committedState = stateAtElapsed(configuredScenario, committedState, targetElapsedMs);
+      }
+      if (madeProgress || committedState.virtualTime !== fromVirtualTime) {
+        committedState = {
+          ...committedState,
+          counters: {
+            ...committedState.counters,
+            commands: committedState.counters.commands + 1,
+          },
+        };
+      }
+      return copy({
+        status: !madeProgress && batches.length === 0 && committedState.virtualTime === fromVirtualTime
+          ? "idle"
+          : "advanced",
+        command,
+        fromVirtualTime,
+        virtualTime: committedState.virtualTime,
+        virtualElapsedMs: committedState.virtualElapsedMs,
+        batches,
+        state: committedState,
+      });
+    } finally {
+      commandInProgress = undefined;
+    }
+  }
 
   return Object.freeze({
     async start() {
@@ -125,6 +211,26 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
         commandInProgress = undefined;
       }
     },
+    async advanceBy(durationMs) {
+      const phase = commandInProgress ?? committedState.lifecycle;
+      if (phase !== "started") {
+        throw new FactoryEmulatorLifecycleError("advanceBy", phase);
+      }
+      validateDuration(durationMs);
+      const targetElapsedMs = committedState.virtualElapsedMs + durationMs;
+      if (!Number.isSafeInteger(targetElapsedMs)) {
+        throw new FactoryEmulatorDurationError(durationMs);
+      }
+      virtualTimeAt(configuredScenario, targetElapsedMs);
+      return runAdvance("advanceBy", targetElapsedMs);
+    },
+    async advanceToNext() {
+      const phase = commandInProgress ?? committedState.lifecycle;
+      if (phase !== "started") {
+        throw new FactoryEmulatorLifecycleError("advanceToNext", phase);
+      }
+      return runAdvance("advanceToNext");
+    },
     reset() {
       const phase = commandInProgress ?? committedState.lifecycle;
       if (phase !== "started") {
@@ -140,6 +246,10 @@ export function createFactoryEmulatorSession({ factory, scenario, sink }) {
       return copy(sessionStatus(committedState, commandInProgress));
     },
   });
+}
+
+function hasUnfinishedWork(state) {
+  return state.works.some((work) => work.phase !== "completed");
 }
 
 function calculateSubmit(factory, scenario, state, submissions) {
@@ -384,6 +494,7 @@ function sessionStatus(state, commandInProgress) {
 function createEvent({
   identityCoordinates,
   sequence,
+  tick = 0,
   sessionId,
   eventTime,
   type,
@@ -400,7 +511,7 @@ function createEvent({
     type,
     context: {
       sequence,
-      tick: 0,
+      tick,
       eventTime,
       sessionId,
       sessionSequence: sequence,

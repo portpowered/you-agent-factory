@@ -93,6 +93,12 @@
           "required": ["kind"],
           "properties": {
             "kind": { "const": "complete" },
+            "durationMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Deterministic virtual execution duration in milliseconds. Defaults to zero."
+            },
             "output": { "type": "object", "additionalProperties": true },
             "lineageCursor": { "$ref": "#/$defs/lineageCursor" }
           }
@@ -103,6 +109,12 @@
           "required": ["kind", "reason"],
           "properties": {
             "kind": { "const": "reject" },
+            "durationMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991,
+              "description": "Deterministic virtual execution duration in milliseconds. Defaults to zero."
+            },
             "reason": { "type": "string", "minLength": 1, "maxLength": 512 }
           }
         }

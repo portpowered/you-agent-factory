@@ -28,6 +28,7 @@ function validScenario(overrides = {}) {
         outcomes: [
           {
             kind: "complete",
+            durationMs: 25,
             lineageCursor: {
               kind: "initialSubmission",
               submissionId: "submission-1",
@@ -87,6 +88,24 @@ for (const invalidCase of [
   {
     name: "unknown contract fields",
     document: validScenario({ unexpected: true }),
+  },
+  {
+    name: "a negative virtual outcome duration",
+    document: validScenario({
+      rules: [{
+        ...validScenario().rules[0],
+        outcomes: [{ kind: "complete", durationMs: -1 }],
+      }],
+    }),
+  },
+  {
+    name: "a fractional virtual outcome duration",
+    document: validScenario({
+      rules: [{
+        ...validScenario().rules[0],
+        outcomes: [{ kind: "complete", durationMs: 0.5 }],
+      }],
+    }),
   },
 ]) {
   test(`published schema rejects ${invalidCase.name}`, () => {

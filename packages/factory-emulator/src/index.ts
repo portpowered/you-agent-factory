@@ -24,11 +24,13 @@ export {
 } from "./emulator.js";
 export {
   FactoryEmulatorConfigurationError,
+  FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorSubmissionError,
   createFactoryEmulatorSession,
 } from "./session.js";
 export type {
+  FactoryEmulatorSessionAdvanceReceipt,
   FactoryEmulatorResetReceipt,
   FactoryEmulatorSession,
   FactoryEmulatorSessionCounters,

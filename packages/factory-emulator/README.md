@@ -144,6 +144,20 @@ Request, trace, Work, and event identities include stable command coordinates,
 so repeated sessions reproduce the same submission stream without relying on
 ambient counters.
 
+Scripted `complete` and `reject` outcomes may set a non-negative integer
+`durationMs`; omission means zero virtual milliseconds. `advanceToNext()`
+commits exactly one scheduler batch: ready Work starts at the current virtual
+instant, while the next step jumps to the earliest deadline and completes all
+dispatches due there in stable Work order. `advanceBy(durationMs)` processes
+each eligible batch through its inclusive target and, when Work remains open,
+ends exactly at that virtual instant. Waiting intervals move the virtual clock
+without synthetic events, while a fully idle session returns an event-free
+no-op receipt and stays open.
+
+All advancement timestamps are derived from normalized scenario `startAt` plus
+integer virtual elapsed milliseconds. The session creates no timers and owns no
+playback speed, pause, visibility, or replay-selection state.
+
 `status()` derives execution state from session facts. A started session with
 ready Work reports `ready`; one with no unfinished Work remains open and reports
 `idle`; unmatched unfinished Work configured to be ignored reports `waiting`.

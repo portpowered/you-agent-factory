@@ -19,6 +19,7 @@ import {
 } from "@you-agent-factory/factory-emulator";
 import type {
   FactoryEmulatorSession,
+  FactoryEmulatorSessionAdvanceReceipt,
   FactoryEmulatorSessionStatus,
   FactoryEmulatorSessionState,
   FactoryEmulatorStartReceipt,
@@ -105,10 +106,16 @@ const submitReceipt: Promise<FactoryEmulatorSubmitReceipt> = emulatorSession.sub
   workType: "task",
 });
 const sessionStatus: FactoryEmulatorSessionStatus = emulatorSession.status();
+const sessionAdvanceReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
+  emulatorSession.advanceBy(5);
+const sessionNextReceipt: Promise<FactoryEmulatorSessionAdvanceReceipt> =
+  emulatorSession.advanceToNext();
 void sessionState;
 void startReceipt;
 void submitReceipt;
 void sessionStatus;
+void sessionAdvanceReceipt;
+void sessionNextReceipt;
 
 import {
   parseEmulatorScenario,

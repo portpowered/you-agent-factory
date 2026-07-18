@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   FactoryEmulatorConfigurationError,
+  FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorSubmissionError,
   SUPPORTED_SCENARIO_VERSION,
@@ -315,6 +316,181 @@ test("status distinguishes blocked unfinished Work from an idle session", async 
   await emulator.start();
 
   assert.ok(emulator.state().works.every((work) => work.phase === "waiting"));
+  assert.deepEqual(emulator.status(), {
+    phase: "waiting",
+    reason: "work-waiting",
+  });
+});
+
+test("advanceToNext starts ready Work then completes simultaneous deadlines", async () => {
+  const { batches, emulator } = harness(scenario({
+    rules: [{
+      id: "complete-checkout",
+      match: { kind: "workType", workType: "checkout" },
+      outcomes: [{ kind: "complete", durationMs: 25 }],
+      exhaustionBehavior: { kind: "repeatLast" },
+    }],
+  }));
+  await emulator.start();
+
+  const started = await emulator.advanceToNext();
+  assert.equal(started.status, "advanced");
+  assert.deepEqual(
+    started.batches[0].events.map((event) => event.type),
+    ["DISPATCH_REQUEST", "DISPATCH_REQUEST"],
+  );
+  assert.equal(started.virtualTime, "2026-07-18T07:30:00.000Z");
+  assert.ok(started.state.works.every((work) => work.phase === "active"));
+
+  const completed = await emulator.advanceToNext();
+  assert.deepEqual(
+    completed.batches[0].events.map((event) => event.type),
+    ["DISPATCH_RESPONSE", "DISPATCH_RESPONSE"],
+  );
+  assert.deepEqual(
+    completed.batches[0].events.map((event) => event.context.workIds[0]),
+    started.state.works.map((work) => work.workId),
+  );
+  assert.ok(completed.batches[0].events.every(
+    (event) => event.context.eventTime === "2026-07-18T07:30:00.025Z",
+  ));
+  assert.equal(completed.virtualElapsedMs, 25);
+  assert.deepEqual(emulator.status(), {
+    phase: "idle",
+    reason: "no-unfinished-work",
+  });
+
+  const idle = await emulator.advanceToNext();
+  assert.equal(idle.status, "idle");
+  assert.deepEqual(idle.batches, []);
+  assert.equal(batches.length, 4);
+});
+
+test("advanceBy processes deadlines through an exact virtual target", async () => {
+  const { emulator } = harness(scenario({
+    rules: [
+      {
+        id: "slow-checkout",
+        match: { kind: "submissionId", submissionId: "checkout-1" },
+        outcomes: [{ kind: "complete", durationMs: 20 }],
+        exhaustionBehavior: { kind: "repeatLast" },
+      },
+      {
+        id: "fast-checkout",
+        match: { kind: "submissionId", submissionId: "checkout-2" },
+        outcomes: [{ kind: "reject", reason: "scripted", durationMs: 10 }],
+        exhaustionBehavior: { kind: "repeatLast" },
+      },
+    ],
+  }));
+  await emulator.start();
+
+  const first = await emulator.advanceBy(10);
+  assert.deepEqual(
+    first.batches.map((batch) => batch.events.map((event) => event.type)),
+    [
+      ["DISPATCH_REQUEST", "DISPATCH_REQUEST"],
+      ["DISPATCH_RESPONSE"],
+    ],
+  );
+  assert.equal(first.virtualTime, "2026-07-18T07:30:00.010Z");
+  assert.deepEqual(
+    first.state.works.map((work) => work.phase),
+    ["active", "completed"],
+  );
+  assert.equal(first.state.works[1].rejectionReason, "scripted");
+
+  const second = await emulator.advanceBy(10);
+  assert.equal(second.batches.length, 1);
+  assert.equal(
+    second.batches[0].events[0].context.eventTime,
+    "2026-07-18T07:30:00.020Z",
+  );
+  assert.equal(second.virtualElapsedMs, 20);
+  assert.ok(second.state.works.every((work) => work.phase === "completed"));
+});
+
+test("advancement changes only virtual time when waiting and is a no-op when idle", async () => {
+  const waiting = harness(scenario({ rules: [] }));
+  await waiting.emulator.start();
+  const waited = await waiting.emulator.advanceBy(50);
+  assert.equal(waited.status, "advanced");
+  assert.deepEqual(waited.batches, []);
+  assert.equal(waited.virtualTime, "2026-07-18T07:30:00.050Z");
+  assert.deepEqual(waiting.emulator.status(), {
+    phase: "waiting",
+    reason: "work-waiting",
+  });
+
+  const idle = harness(scenario({ initialSubmissions: [] }));
+  await idle.emulator.start();
+  const before = idle.emulator.state();
+  const receipt = await idle.emulator.advanceBy(50);
+  assert.equal(receipt.status, "idle");
+  assert.deepEqual(receipt.batches, []);
+  assert.deepEqual(receipt.state, before);
+});
+
+test("advanceBy rejects invalid and unrepresentable durations without changing state", async () => {
+  const { emulator } = harness();
+  await emulator.start();
+  const before = emulator.state();
+
+  for (const duration of [-1, Number.POSITIVE_INFINITY, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await assert.rejects(
+      emulator.advanceBy(duration),
+      (error) => error instanceof FactoryEmulatorDurationError
+        && error.code === "INVALID_DURATION",
+    );
+  }
+  await assert.rejects(
+    emulator.advanceBy(Number.MAX_SAFE_INTEGER),
+    FactoryEmulatorDurationError,
+  );
+  assert.deepEqual(emulator.state(), before);
+});
+
+test("host pacing does not affect virtual-time batches or state", async () => {
+  const pacedScenario = scenario({
+    rules: [{
+      id: "complete-checkout",
+      match: { kind: "workType", workType: "checkout" },
+      outcomes: [{ kind: "complete", durationMs: 5 }],
+      exhaustionBehavior: { kind: "repeatLast" },
+    }],
+  });
+  const immediate = harness(pacedScenario);
+  const paced = harness(pacedScenario);
+  await immediate.emulator.start();
+  await paced.emulator.start();
+  const immediateReceipt = await immediate.emulator.advanceBy(5);
+  await Promise.resolve();
+  await Promise.resolve();
+  const pacedReceipt = await paced.emulator.advanceBy(5);
+
+  assert.equal(JSON.stringify(pacedReceipt), JSON.stringify(immediateReceipt));
+  assert.equal(JSON.stringify(paced.batches), JSON.stringify(immediate.batches));
+});
+
+test("exhausted rules defer ignored Work without inventing a dispatch", async () => {
+  const { emulator } = harness(scenario({
+    rules: [{
+      id: "complete-once",
+      match: { kind: "workType", workType: "checkout" },
+      outcomes: [{ kind: "complete" }],
+      exhaustionBehavior: { kind: "useUnmatchedBehavior" },
+    }],
+  }));
+  await emulator.start();
+
+  const started = await emulator.advanceToNext();
+  assert.equal(started.batches.length, 1);
+  assert.equal(started.batches[0].events.length, 1);
+  assert.deepEqual(
+    started.state.works.map((work) => work.phase),
+    ["active", "waiting"],
+  );
+  await emulator.advanceToNext();
   assert.deepEqual(emulator.status(), {
     phase: "waiting",
     reason: "work-waiting",

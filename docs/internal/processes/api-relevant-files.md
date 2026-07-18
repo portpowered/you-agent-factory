@@ -11,6 +11,10 @@ Use this map when changing the public REST contract.
   lineage, exhaustion, and unmatched behavior through the package's public API.
   Deterministic lifecycle start/reset lives in `src/session.js`, while pure,
   domain-separated runtime identity derivation lives in `src/identity.js`.
+  Pure logical scheduler selection and batch calculation live in
+  `src/scheduler.js`, and normalized virtual-clock arithmetic lives in
+  `src/virtual-time.js`; keep sink IO and committed-state publication in the
+  session boundary so scheduler parity can evolve without owning lifecycle.
   Startup must revalidate before sink activity, normalize event time from the
   scenario's UTC `startAt`, and keep reset event-free so reruns reproduce event
   bytes and snapshots from the same immutable inputs.

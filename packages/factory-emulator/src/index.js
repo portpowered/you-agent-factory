@@ -12,6 +12,7 @@ export {
 } from "./emulator.js";
 export {
   FactoryEmulatorConfigurationError,
+  FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorSubmissionError,
   createFactoryEmulatorSession,

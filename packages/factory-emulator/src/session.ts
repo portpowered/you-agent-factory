@@ -1,6 +1,7 @@
 import type { FactoryEventBatch, FactoryEventSink } from "./contracts.js";
 import type {
   EmulatorInitialSubmission,
+  EmulatorOutcome,
   EmulatorScenario,
 } from "./generated/scenario.js";
 import type {
@@ -15,11 +16,17 @@ export declare class FactoryEmulatorConfigurationError extends Error {
 
 export declare class FactoryEmulatorLifecycleError extends Error {
   readonly code: "INVALID_LIFECYCLE";
-  readonly command: "start" | "submit" | "reset";
+  readonly command: "start" | "submit" | "advanceBy" | "advanceToNext" | "reset";
   readonly phase:
     | FactoryEmulatorSessionState["lifecycle"]
     | "starting"
-    | "submitting";
+    | "submitting"
+    | "advancing";
+}
+
+export declare class FactoryEmulatorDurationError extends RangeError {
+  readonly code: "INVALID_DURATION";
+  readonly durationMs: number;
 }
 
 export declare class FactoryEmulatorSubmissionError extends Error {
@@ -41,6 +48,16 @@ export interface FactoryEmulatorSessionWork {
   readonly workType: string;
   readonly phase: "active" | "ready" | "waiting" | "completed";
   readonly input?: Readonly<Record<string, unknown>>;
+  readonly output?: Readonly<Record<string, unknown>>;
+  readonly rejectionReason?: string;
+  readonly dispatch?: {
+    readonly dispatchId: string;
+    readonly completionId: string;
+    readonly transitionId: string;
+    readonly startedElapsedMs: number;
+    readonly dueElapsedMs: number;
+    readonly outcome: EmulatorOutcome;
+  };
 }
 
 export interface FactoryEmulatorSessionCounters {
@@ -64,7 +81,7 @@ export type FactoryEmulatorSessionState =
       readonly lifecycle: "started";
       readonly sessionId: string;
       readonly virtualTime: string;
-      readonly virtualElapsedMs: 0;
+      readonly virtualElapsedMs: number;
       readonly works: readonly FactoryEmulatorSessionWork[];
       readonly ruleCursors: Readonly<Record<string, number>>;
       readonly counters: FactoryEmulatorSessionCounters;
@@ -87,6 +104,16 @@ export interface FactoryEmulatorSubmitReceipt {
   readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "started" }>;
 }
 
+export interface FactoryEmulatorSessionAdvanceReceipt {
+  readonly status: "advanced" | "idle";
+  readonly command: "advanceBy" | "advanceToNext";
+  readonly fromVirtualTime: string;
+  readonly virtualTime: string;
+  readonly virtualElapsedMs: number;
+  readonly batches: readonly FactoryEventBatch[];
+  readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "started" }>;
+}
+
 export interface FactoryEmulatorSessionStatus {
   readonly phase:
     | "error"
@@ -103,6 +130,8 @@ export interface FactoryEmulatorSession {
   submit(
     submissionOrBatch: EmulatorInitialSubmission | readonly EmulatorInitialSubmission[],
   ): Promise<FactoryEmulatorSubmitReceipt>;
+  advanceBy(durationMs: number): Promise<FactoryEmulatorSessionAdvanceReceipt>;
+  advanceToNext(): Promise<FactoryEmulatorSessionAdvanceReceipt>;
   reset(): FactoryEmulatorResetReceipt;
   state(): FactoryEmulatorSessionState;
   status(): FactoryEmulatorSessionStatus;
