@@ -84,11 +84,6 @@ func startFunctionalServerWithConfig(
 	return server
 }
 
-func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, extraOpts ...factory.FactoryOption) *functionalAPIServer {
-	t.Helper()
-	return startFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
-}
-
 func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work.SubmitRequest) []work.SubmitRequest {
 	t.Helper()
 
@@ -146,4 +141,11 @@ func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
 		return strings.TrimPrefix(string(audio.Url), "file://")
 	}
 	return ""
+}
+
+func stringValueFromFunctionalPtr[T ~string](value *T) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
