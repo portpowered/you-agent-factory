@@ -2,48 +2,98 @@
 
 export type EmulatorScenarioVersion = "you-agent-factory.emulator.scenario.v1";
 
-export type EmulatorMatcher =
-  | { kind: "all" }
-  | { kind: "workType"; workType: string }
-  | { kind: "submissionId"; submissionId: string };
-
-export type EmulatorLineageCursor =
-  | { kind: "initialSubmission"; submissionId: string }
-  | { kind: "scriptedOutcome"; ruleId: string; outcomeIndex: number };
-
-export type EmulatorOutcome =
-  | { kind: "complete"; output?: Record<string, unknown>; lineageCursor?: EmulatorLineageCursor }
-  | { kind: "reject"; reason: string };
-
-export type EmulatorExhaustionBehavior =
-  | { kind: "repeatLast" }
-  | { kind: "useUnmatchedBehavior" }
-  | { kind: "reject"; reason: string };
-
-export type EmulatorUnmatchedBehavior =
-  | { kind: "ignore" }
-  | { kind: "reject"; reason: string };
-
 export interface EmulatorInitialSubmission {
+  /** Minimum length: 1. Maximum length: 128. */
   id: string;
+  /** Minimum length: 1. Maximum length: 128. */
   workType: string;
   input?: Record<string, unknown>;
 }
 
 export interface EmulatorRule {
+  /** Minimum length: 1. Maximum length: 128. */
   id: string;
   match: EmulatorMatcher;
+  /** Minimum items: 1. */
   outcomes: readonly EmulatorOutcome[];
   exhaustionBehavior: EmulatorExhaustionBehavior;
 }
 
+export type EmulatorMatcher =
+  | {
+      kind: "all";
+    }
+  | {
+      kind: "workType";
+      /** Minimum length: 1. Maximum length: 128. */
+      workType: string;
+    }
+  | {
+      kind: "submissionId";
+      /** Minimum length: 1. Maximum length: 128. */
+      submissionId: string;
+    };
+
+export type EmulatorOutcome =
+  | {
+      kind: "complete";
+      output?: Record<string, unknown>;
+      lineageCursor?: EmulatorLineageCursor;
+    }
+  | {
+      kind: "reject";
+      /** Minimum length: 1. Maximum length: 512. */
+      reason: string;
+    };
+
+export type EmulatorLineageCursor =
+  | {
+      kind: "initialSubmission";
+      /** Minimum length: 1. Maximum length: 128. */
+      submissionId: string;
+    }
+  | {
+      kind: "scriptedOutcome";
+      /** Minimum length: 1. Maximum length: 128. */
+      ruleId: string;
+      /** Minimum: 0. */
+      outcomeIndex: number;
+    };
+
+export type EmulatorExhaustionBehavior =
+  | {
+      kind: "repeatLast";
+    }
+  | {
+      kind: "useUnmatchedBehavior";
+    }
+  | {
+      kind: "reject";
+      /** Minimum length: 1. Maximum length: 512. */
+      reason: string;
+    };
+
+export type EmulatorUnmatchedBehavior =
+  | {
+      kind: "ignore";
+    }
+  | {
+      kind: "reject";
+      /** Minimum length: 1. Maximum length: 512. */
+      reason: string;
+    };
+
 export interface EmulatorScenario {
   version: EmulatorScenarioVersion;
+  /** Minimum length: 1. Maximum length: 128. */
   id: string;
+  /** Minimum length: 1. Maximum length: 256. */
   seed: string;
+  /** Format: date-time. Pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?Z$. */
   startAt: string;
   initialSubmissions?: readonly EmulatorInitialSubmission[];
   rules: readonly EmulatorRule[];
   unmatchedBehavior: EmulatorUnmatchedBehavior;
+  /** Bounded transient emulator activity metadata. It is never a canonical Factory event field. Minimum length: 1. Maximum length: 120. */
   activityLabel?: string;
 }
