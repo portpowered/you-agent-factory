@@ -1,0 +1,26 @@
+type: object
+description: Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+additionalProperties: false
+required:
+  - kind
+  - mediaType
+  - data
+properties:
+  kind:
+    type: string
+    enum:
+      - EMBEDDED
+    description: Source variant discriminator. EMBEDDED carries portable base64 raster data.
+  mediaType:
+    type: string
+    enum:
+      - image/png
+      - image/jpeg
+      - image/webp
+    description: Declared media type for the embedded raster.
+  data:
+    type: string
+    format: byte
+    minLength: 4
+    maxLength: 2796204
+    description: Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.

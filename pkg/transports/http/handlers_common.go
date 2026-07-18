@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
@@ -102,7 +103,11 @@ func decodeStrictJSON[T any](body io.Reader) (T, error) {
 	if err != nil {
 		return zero, err
 	}
+	return decodeStrictJSONData[T](data)
+}
 
+func decodeStrictJSONData[T any](data []byte) (T, error) {
+	var zero T
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
@@ -114,6 +119,63 @@ func decodeStrictJSON[T any](body io.Reader) (T, error) {
 		return zero, err
 	}
 	return req, nil
+}
+
+func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if json.Valid(data) {
+		if err := factoryconfig.ValidatePortableLayoutBoundaryJSON(data); err != nil {
+			return factoryapi.Factory{}, layoutRequestValidationError{err: err}
+		}
+	}
+	return decodeStrictJSONData[factoryapi.Factory](data)
+}
+
+func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
+	return decodeStrictJSON[factoryapi.OpenFactorySessionJSONRequestBody](body)
+}
+
+func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+	var envelope map[string]json.RawMessage
+	if json.Unmarshal(data, &envelope) == nil {
+		if factoryJSON, ok := envelope["factory"]; ok {
+			if err := factoryconfig.ValidatePortableLayoutBoundaryJSON(factoryJSON); err != nil {
+				return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, layoutRequestValidationError{err: err}
+			}
+		}
+	}
+	return decodeStrictJSONData[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](data)
+}
+
+func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
+	return decodeStrictJSON[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](body)
+}
+
+type layoutRequestValidationError struct {
+	err error
+}
+
+func (e layoutRequestValidationError) Error() string {
+	return e.err.Error()
+}
+
+func layoutRequestValidationTarget(err error) (factoryapi.FactoryValidationTarget, bool) {
+	var requestErr layoutRequestValidationError
+	if !errors.As(err, &requestErr) {
+		return factoryapi.FactoryValidationTarget{}, false
+	}
+	target, ok := factoryconfig.PortableLayoutValidationTarget(requestErr.err)
+	if !ok {
+		return factoryapi.FactoryValidationTarget{}, false
+	}
+	return apisurface.FactoryValidationTargetToAPI(target), true
 }
 
 func validateCanonicalWorkRequestJSONForAPI(data []byte) error {

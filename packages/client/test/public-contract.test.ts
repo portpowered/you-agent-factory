@@ -18,6 +18,8 @@ type Equal<Left, Right> =
     ? true
     : false;
 type Assert<Value extends true> = Value;
+type FactoryLayoutEmptyState =
+  components["schemas"]["FactoryLayoutEmptyState"];
 
 type _FactoryEventAlias = Assert<
   Equal<FactoryEvent, components["schemas"]["FactoryEvent"]>
@@ -30,6 +32,28 @@ type _FactoryDefinitionAlias = Assert<
 >;
 type _FactoryRecordingAlias = Assert<
   Equal<FactoryRecording, components["schemas"]["FactoryRecording"]>
+>;
+type _FactoryLayoutEmptyStateRequiresVariant = Assert<
+  Equal<{} extends FactoryLayoutEmptyState ? true : false, false>
+>;
+type _FactoryLayoutEmptyStateHasTextVariant = Assert<
+  Equal<
+    Extract<FactoryLayoutEmptyState, { text: string }> extends never
+      ? false
+      : true,
+    true
+  >
+>;
+type _FactoryLayoutEmptyStateHasImageVariant = Assert<
+  Equal<
+    Extract<
+      FactoryLayoutEmptyState,
+      { image: components["schemas"]["FactoryLayoutImage"] }
+    > extends never
+      ? false
+      : true,
+    true
+  >
 >;
 
 declare const apiPaths: paths;

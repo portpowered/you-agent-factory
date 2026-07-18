@@ -2,7 +2,29 @@ import { describe, expect, it } from "vitest";
 
 import type { components, operations, paths } from "./openapi";
 
+type FactoryLayoutEmptyState =
+  components["schemas"]["FactoryLayoutEmptyState"];
+
 describe("generated session factory OpenAPI types", () => {
+  it("exposes concrete text and image empty-state variants", () => {
+    const textState: FactoryLayoutEmptyState = {
+      text: "No work is waiting.",
+    };
+    const imageState: FactoryLayoutEmptyState = {
+      image: {
+        alternativeText: "No active review",
+        source: {
+          data: "AQID",
+          kind: "EMBEDDED",
+          mediaType: "image/png",
+        },
+      },
+    };
+
+    expect(textState.text).toBe("No work is waiting.");
+    expect(imageState.image.alternativeText).toBe("No active review");
+  });
+
   it("supports a typed response-event stream consumer", () => {
     type ResponseEventOperation =
       operations["getFactoryResponseEventsBySessionId"];

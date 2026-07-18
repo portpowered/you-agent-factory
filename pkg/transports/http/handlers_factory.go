@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -25,6 +24,10 @@ import (
 func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeNamedFactoryBody(r.Body)
 	if err != nil {
+		if target, ok := layoutRequestValidationTarget(err); ok {
+			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST", []factoryapi.FactoryValidationTarget{target})
+			return
+		}
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
@@ -87,10 +90,6 @@ func (s *Server) writeFactoryPreview(w http.ResponseWriter, r *http.Request, com
 
 	result := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(previewInput))
 	s.writeJSON(w, http.StatusOK, result)
-}
-
-func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	return decodeStrictJSON[factoryapi.Factory](body)
 }
 
 func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.SessionAPISurface, bool) {
@@ -532,6 +531,10 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	}
 	req, err := decodeSaveCurrentFactoryBody(r.Body)
 	if err != nil {
+		if target, ok := layoutRequestValidationTarget(err); ok {
+			s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{target})
+			return
+		}
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.FormFactoryPayloadTarget())})
 			return
@@ -599,18 +602,6 @@ func (s *Server) writeCurrentFactoryError(
 		s.writeError(w, http.StatusInternalServerError, "failed to save current factory", "INTERNAL_ERROR")
 		return
 	}
-}
-
-func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.OpenFactorySessionJSONRequestBody](body)
-}
-
-func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
-}
-
-func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](body)
 }
 
 func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {

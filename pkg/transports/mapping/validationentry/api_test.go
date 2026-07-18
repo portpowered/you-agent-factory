@@ -37,6 +37,32 @@ func TestValidateEditableFactorySnapshot_PreservesPublicValidationError(t *testi
 	}
 }
 
+func TestValidateEditableFactorySnapshot_PreservesLayoutBoundaryPath(t *testing.T) {
+	t.Parallel()
+
+	var snapshot interfaces.FactorySnapshot
+	err := snapshot.UnmarshalJSON([]byte(`{
+		"name":"layout-invalid",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":"note-1","kind":"NOTE","position":{"x":0,"y":0},"size":{"width":0,"height":80},
+			"note":{"body":"literal","tone":"NEUTRAL"}
+		}]}
+	}`))
+	if err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+
+	err = validationentry.ValidateEditableFactorySnapshot(&snapshot, nil)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(err, &topologyErr) || len(topologyErr.Targets) != 1 {
+		t.Fatalf("error = %#v, want one structured layout target", err)
+	}
+	target := topologyErr.Targets[0]
+	if target.Code != factoryvalidation.CodeLayoutInvalidGeometry || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
+		t.Fatalf("target = %#v, want field-specific invalid geometry", target)
+	}
+}
+
 func TestValidateEditableFactorySnapshot_ValidAndMissing(t *testing.T) {
 	t.Parallel()
 
@@ -53,6 +79,16 @@ func TestValidateEditableFactorySnapshot_ValidAndMissing(t *testing.T) {
 	}
 	if err := validationentry.ValidateEditableFactorySnapshot(nil, nil); !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
 		t.Fatalf("ValidateEditableFactorySnapshot(nil) error = %v, want ErrInvalidNamedFactory", err)
+	}
+}
+
+func TestValidateEditableFactorySnapshot_RejectsUndecodableSnapshot(t *testing.T) {
+	t.Parallel()
+
+	snapshot := interfaces.FactorySnapshot(`{"name":`)
+	err := validationentry.ValidateEditableFactorySnapshot(&snapshot, nil)
+	if !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
 	}
 }
 

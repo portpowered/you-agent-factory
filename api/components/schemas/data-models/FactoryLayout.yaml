@@ -24,6 +24,11 @@ properties:
     description: Optional flat background groups keyed independently from topology.
     items:
       $ref: './FactoryLayoutGroup.yaml'
+  annotations:
+    type: array
+    description: Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.
+    items:
+      $ref: './FactoryLayoutAnnotation.yaml'
   viewport:
     $ref: './FactoryLayoutViewport.yaml'
   preferences:

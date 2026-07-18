@@ -182,6 +182,47 @@ func TestValidate_UnknownBundledDocLayoutNodeBlocksTopologyValidation(t *testing
 	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutUnknownNodeReference)
 }
 
+func TestValidate_EmptyStateRequiresCanonicalTopologyNode(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "workstation:missing",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+			Text: "No activity yet.",
+		},
+	})
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
+	for _, target := range result.BlockingTargets() {
+		if target.Code == factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference && target.Path != "factory.layout.nodes[1].emptyState" {
+			t.Fatalf("empty-state target path = %q", target.Path)
+		}
+	}
+}
+
+func TestValidate_EmptyStateRequiresNonEmptyCanonicalTopologyNodeID(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+			Text: "No activity yet.",
+		},
+	})
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
+	for _, target := range result.BlockingTargets() {
+		if target.Code == factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference && target.Path != "factory.layout.nodes[1].emptyState" {
+			t.Fatalf("empty-state target path = %q", target.Path)
+		}
+	}
+}
+
 func TestValidate_LegacyBundledScriptDocLayoutNodeMatchesPendingTopology(t *testing.T) {
 	t.Parallel()
 
@@ -257,6 +298,57 @@ func TestPruneLayout_RemovesStaleNodeEdgeAndGroupMemberReferences(t *testing.T) 
 	}
 	if len(cfg.Layout.Groups[0].NodeIDs) != 1 || cfg.Layout.Groups[0].NodeIDs[0] != "workstation:plan-task" {
 		t.Fatalf("group nodeIds = %#v, want only plan-task", cfg.Layout.Groups[0].NodeIDs)
+	}
+}
+
+func TestPruneLayout_RejectsEmptyStateForUnknownCanonicalNode(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "workstation:missing",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+			Text: "No activity yet.",
+		},
+	})
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.PruneLayout(cfg, topology)
+
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
+	if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != "workstation:plan-task" {
+		t.Fatalf("nodes after empty-state rejection = %#v, want only plan-task", cfg.Layout.Nodes)
+	}
+	for _, target := range result.Targets {
+		if target.Code == factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference && target.Path != "factory.layout.nodes[1].emptyState" {
+			t.Fatalf("empty-state target path = %q", target.Path)
+		}
+	}
+}
+
+func TestPruneLayout_RejectsEmptyStateForEmptyCanonicalNodeID(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+		EmptyState: &interfaces.FactoryLayoutEmptyStateConfig{
+			Text: "No activity yet.",
+		},
+	})
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.PruneLayout(cfg, topology)
+
+	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference)
+	if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != "workstation:plan-task" {
+		t.Fatalf("nodes after empty-state rejection = %#v, want only plan-task", cfg.Layout.Nodes)
+	}
+	for _, target := range result.BlockingTargets() {
+		if target.Code == factoryvalidation.CodeLayoutEmptyStateUnknownNodeReference && target.Path != "factory.layout.nodes[1].emptyState" {
+			t.Fatalf("empty-state target path = %q", target.Path)
+		}
 	}
 }
 

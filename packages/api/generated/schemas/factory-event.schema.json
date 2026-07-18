@@ -1325,6 +1325,13 @@
       "additionalProperties": false,
       "description": "Non-executable portable graph editor layout metadata keyed by canonical graph ids.",
       "properties": {
+        "annotations": {
+          "description": "Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.",
+          "items": {
+            "$ref": "#/$defs/FactoryLayoutAnnotation"
+          },
+          "type": "array"
+        },
         "edges": {
           "description": "Optional authored graph edge geometry keyed by canonical graph edge id.",
           "items": {
@@ -1361,6 +1368,156 @@
       },
       "required": [
         "schemaVersion"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutAnnotation": {
+      "additionalProperties": false,
+      "description": "Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "NOTE"
+              ],
+              "type": "string"
+            },
+            "note": {
+              "$ref": "#/$defs/FactoryLayoutNote"
+            },
+            "position": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationPosition"
+            },
+            "size": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationSize"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "position",
+            "note"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "image": {
+              "$ref": "#/$defs/FactoryLayoutImage"
+            },
+            "kind": {
+              "enum": [
+                "IMAGE"
+              ],
+              "type": "string"
+            },
+            "position": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationPosition"
+            },
+            "size": {
+              "$ref": "#/$defs/FactoryLayoutAnnotationSize"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "position",
+            "size",
+            "image"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable annotation identifier unique within this layout.",
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "image": {
+          "$ref": "#/$defs/FactoryLayoutImage"
+        },
+        "kind": {
+          "$ref": "#/$defs/FactoryLayoutAnnotationKind"
+        },
+        "note": {
+          "$ref": "#/$defs/FactoryLayoutNote"
+        },
+        "position": {
+          "$ref": "#/$defs/FactoryLayoutAnnotationPosition"
+        },
+        "size": {
+          "$ref": "#/$defs/FactoryLayoutAnnotationSize"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "position"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutAnnotationKind": {
+      "description": "The inert annotation content variant.",
+      "enum": [
+        "NOTE",
+        "IMAGE"
+      ],
+      "type": "string"
+    },
+    "FactoryLayoutAnnotationPosition": {
+      "additionalProperties": false,
+      "description": "Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.",
+      "properties": {
+        "x": {
+          "description": "Horizontal canvas coordinate between -100,000 and 100,000 inclusive.",
+          "maximum": 100000,
+          "minimum": -100000,
+          "type": "number"
+        },
+        "y": {
+          "description": "Vertical canvas coordinate between -100,000 and 100,000 inclusive.",
+          "maximum": 100000,
+          "minimum": -100000,
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutAnnotationSize": {
+      "additionalProperties": false,
+      "description": "Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.",
+      "properties": {
+        "height": {
+          "description": "Positive authored height no greater than 10,000 canvas units.",
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "type": "number"
+        },
+        "width": {
+          "description": "Positive authored width no greater than 10,000 canvas units.",
+          "exclusiveMinimum": 0,
+          "maximum": 10000,
+          "type": "number"
+        }
+      },
+      "required": [
+        "width",
+        "height"
       ],
       "type": "object"
     },
@@ -1417,6 +1574,53 @@
       ],
       "type": "object"
     },
+    "FactoryLayoutEmptyState": {
+      "additionalProperties": false,
+      "description": "Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "description": "Literal empty-state text. It is not rendered as HTML or Markdown.",
+              "maxLength": 500,
+              "minLength": 1,
+              "pattern": "\\S",
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "image": {
+              "$ref": "#/$defs/FactoryLayoutImage"
+            }
+          },
+          "required": [
+            "image"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "image": {
+          "$ref": "#/$defs/FactoryLayoutImage"
+        },
+        "text": {
+          "description": "Literal empty-state text. It is not rendered as HTML or Markdown.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "FactoryLayoutGroup": {
       "additionalProperties": false,
       "description": "Portable background grouping metadata for graph canvas presentation.",
@@ -1462,12 +1666,73 @@
       ],
       "type": "object"
     },
+    "FactoryLayoutImage": {
+      "additionalProperties": false,
+      "description": "Inert embedded-raster image content with required alternative text.",
+      "properties": {
+        "alternativeText": {
+          "description": "Literal alternative text for the embedded image.",
+          "maxLength": 500,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/FactoryLayoutImageSource"
+        }
+      },
+      "required": [
+        "source",
+        "alternativeText"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutImageSource": {
+      "additionalProperties": false,
+      "description": "Extensible discriminated image-source shape. Version 1 supports only embedded raster data.",
+      "properties": {
+        "data": {
+          "description": "Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.",
+          "format": "byte",
+          "maxLength": 2796204,
+          "minLength": 4,
+          "type": "string"
+        },
+        "kind": {
+          "description": "Source variant discriminator. EMBEDDED carries portable base64 raster data.",
+          "enum": [
+            "EMBEDDED"
+          ],
+          "type": "string"
+        },
+        "mediaType": {
+          "description": "Declared media type for the embedded raster.",
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "mediaType",
+        "data"
+      ],
+      "type": "object"
+    },
     "FactoryLayoutNode": {
       "additionalProperties": false,
       "description": "Portable graph node layout keyed by canonical graph node id.",
       "properties": {
+        "emptyState": {
+          "$ref": "#/$defs/FactoryLayoutEmptyState"
+        },
         "id": {
           "description": "Canonical graph node id such as workstation:\u003cworkstationId\u003e.",
+          "minLength": 1,
+          "pattern": "\\S",
           "type": "string"
         },
         "locked": {
@@ -1486,6 +1751,44 @@
         "position"
       ],
       "type": "object"
+    },
+    "FactoryLayoutNote": {
+      "additionalProperties": false,
+      "description": "Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.",
+      "properties": {
+        "body": {
+          "description": "Required literal plain-text note body.",
+          "maxLength": 4000,
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "title": {
+          "description": "Optional literal plain-text note title.",
+          "maxLength": 160,
+          "type": "string"
+        },
+        "tone": {
+          "$ref": "#/$defs/FactoryLayoutNoteTone"
+        }
+      },
+      "required": [
+        "body",
+        "tone"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutNoteTone": {
+      "description": "Presentation-only tone for a note annotation.",
+      "enum": [
+        "NEUTRAL",
+        "ACCENT",
+        "INFO",
+        "SUCCESS",
+        "WARNING",
+        "DANGER"
+      ],
+      "type": "string"
     },
     "FactoryLayoutPoint": {
       "additionalProperties": false,

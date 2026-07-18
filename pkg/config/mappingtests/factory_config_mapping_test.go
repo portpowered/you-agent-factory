@@ -2,6 +2,7 @@ package mappingtests
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -11,9 +12,61 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
+
+func TestPortableLayoutValidationTarget_ClassifiesAuthoredFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		err      error
+		wantOK   bool
+		wantCode string
+		wantPath string
+	}{
+		{name: "unrelated", err: errors.New("unrelated")},
+		{
+			name:     "invalid value",
+			err:      &PortableLayoutValidationError{Path: "layout.annotations[0].note.alt", Message: "alt is required"},
+			wantOK:   true,
+			wantCode: factoryvalidation.CodeLayoutInvalidValue,
+			wantPath: "factory.layout.annotations[0].note.alt",
+		},
+		{
+			name:     "invalid geometry",
+			err:      &PortableLayoutValidationError{Path: "factory.layout.annotations[1].size.width", Message: "width must be positive"},
+			wantOK:   true,
+			wantCode: factoryvalidation.CodeLayoutInvalidGeometry,
+			wantPath: "factory.layout.annotations[1].size.width",
+		},
+		{
+			name:     "image budget",
+			err:      &PortableLayoutValidationError{Path: "layout.annotations[2].image.data", Message: "Factory embedded-image budget exceeded"},
+			wantOK:   true,
+			wantCode: factoryvalidation.CodeLayoutImageBudgetExceeded,
+			wantPath: "factory.layout.annotations[2].image.data",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			target, ok := PortableLayoutValidationTarget(tt.err)
+			if ok != tt.wantOK {
+				t.Fatalf("PortableLayoutValidationTarget() ok = %t, want %t", ok, tt.wantOK)
+			}
+			if !tt.wantOK {
+				return
+			}
+			if target.Code != tt.wantCode || target.Path != tt.wantPath {
+				t.Fatalf("target = %#v, want code %q and path %q", target, tt.wantCode, tt.wantPath)
+			}
+		})
+	}
+}
 
 // portos:func-length-exception owner=agent-factory reason=legacy-config-roundtrip-fixture review=2026-07-18 removal=split-roundtrip-assertions-before-next-config-schema-change
 func TestFactoryConfigMapper_FlattenAndExpandPreservesConfigContent(t *testing.T) {

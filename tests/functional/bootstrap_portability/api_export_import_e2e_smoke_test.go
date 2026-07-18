@@ -31,8 +31,21 @@ func assertExportImportPortableLayoutResponse(t *testing.T, layout *factoryapi.F
 	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != "workstation:step-one" {
 		t.Fatalf("%s layout nodes = %#v, want workstation:step-one", contextLabel, layout.Nodes)
 	}
+	if (*layout.Nodes)[0].EmptyState == nil || (*layout.Nodes)[0].EmptyState.Text == nil || *(*layout.Nodes)[0].EmptyState.Text != "No work is waiting." {
+		t.Fatalf("%s node empty state = %#v, want literal text", contextLabel, (*layout.Nodes)[0].EmptyState)
+	}
 	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != "workstation-output:workstation:step-one->work-state:task:processing" {
 		t.Fatalf("%s layout edges = %#v, want step-one output edge", contextLabel, layout.Edges)
+	}
+	if layout.Annotations == nil || len(*layout.Annotations) != 2 {
+		t.Fatalf("%s layout annotations = %#v, want note and image", contextLabel, layout.Annotations)
+	}
+	annotations := *layout.Annotations
+	if annotations[0].Note == nil || annotations[0].Note.Body != "Portable guidance\nremains literal." {
+		t.Fatalf("%s note annotation = %#v, want literal note", contextLabel, annotations[0])
+	}
+	if annotations[1].Image == nil || annotations[1].Image.Source.MediaType != factoryapi.FactoryLayoutImageSourceMediaType("image/png") || annotations[1].Image.AlternativeText != "Portable workflow illustration" {
+		t.Fatalf("%s image annotation = %#v, want embedded PNG", contextLabel, annotations[1])
 	}
 	if layout.Viewport == nil || math.Abs(float64(layout.Viewport.Zoom)-0.9) > 1e-6 {
 		t.Fatalf("%s layout viewport = %#v, want zoom 0.9", contextLabel, layout.Viewport)
@@ -56,6 +69,18 @@ func assertExportImportPortableLayoutPayload(t *testing.T, value any, contextLab
 	node, ok := nodes[0].(map[string]any)
 	if !ok || node["id"] != "workstation:step-one" {
 		t.Fatalf("%s layout node = %#v, want workstation:step-one", contextLabel, nodes[0])
+	}
+	emptyState, ok := node["emptyState"].(map[string]any)
+	if !ok || emptyState["text"] != "No work is waiting." {
+		t.Fatalf("%s node empty state = %#v, want literal text", contextLabel, node["emptyState"])
+	}
+	annotations, ok := layout["annotations"].([]any)
+	if !ok || len(annotations) != 2 {
+		t.Fatalf("%s annotations = %#v, want note and image", contextLabel, layout["annotations"])
+	}
+	image, ok := annotations[1].(map[string]any)["image"].(map[string]any)
+	if !ok || image["alternativeText"] != "Portable workflow illustration" {
+		t.Fatalf("%s image annotation = %#v, want portable alternative text", contextLabel, annotations[1])
 	}
 }
 

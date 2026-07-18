@@ -228,6 +228,44 @@ const (
 	FactoryInvocationUnknownNamedArgumentPolicyReject  FactoryInvocationUnknownNamedArgumentPolicy = "REJECT"
 )
 
+// Defines values for FactoryLayoutAnnotation0Kind.
+const (
+	FactoryLayoutAnnotation0KindNOTE FactoryLayoutAnnotation0Kind = "NOTE"
+)
+
+// Defines values for FactoryLayoutAnnotation1Kind.
+const (
+	IMAGE FactoryLayoutAnnotation1Kind = "IMAGE"
+)
+
+// Defines values for FactoryLayoutAnnotationKind.
+const (
+	FactoryLayoutAnnotationKindIMAGE FactoryLayoutAnnotationKind = "IMAGE"
+	FactoryLayoutAnnotationKindNOTE  FactoryLayoutAnnotationKind = "NOTE"
+)
+
+// Defines values for FactoryLayoutImageSourceKind.
+const (
+	EMBEDDED FactoryLayoutImageSourceKind = "EMBEDDED"
+)
+
+// Defines values for FactoryLayoutImageSourceMediaType.
+const (
+	Imagejpeg FactoryLayoutImageSourceMediaType = "image/jpeg"
+	Imagepng  FactoryLayoutImageSourceMediaType = "image/png"
+	Imagewebp FactoryLayoutImageSourceMediaType = "image/webp"
+)
+
+// Defines values for FactoryLayoutNoteTone.
+const (
+	ACCENT  FactoryLayoutNoteTone = "ACCENT"
+	DANGER  FactoryLayoutNoteTone = "DANGER"
+	INFO    FactoryLayoutNoteTone = "INFO"
+	NEUTRAL FactoryLayoutNoteTone = "NEUTRAL"
+	SUCCESS FactoryLayoutNoteTone = "SUCCESS"
+	WARNING FactoryLayoutNoteTone = "WARNING"
+)
+
 // Defines values for FactoryLayoutPreferencesDirection.
 const (
 	DOWN  FactoryLayoutPreferencesDirection = "DOWN"
@@ -1725,6 +1763,9 @@ type FactoryInvocationUnknownNamedArgumentPolicy string
 
 // FactoryLayout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 type FactoryLayout struct {
+	// Annotations Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.
+	Annotations *[]FactoryLayoutAnnotation `json:"annotations,omitempty"`
+
 	// Edges Optional authored graph edge geometry keyed by canonical graph edge id.
 	Edges *[]FactoryLayoutEdge `json:"edges,omitempty"`
 
@@ -1742,6 +1783,85 @@ type FactoryLayout struct {
 
 	// Viewport Shared authored graph camera position.
 	Viewport *FactoryLayoutViewport `json:"viewport,omitempty"`
+}
+
+// FactoryLayoutAnnotation Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
+type FactoryLayoutAnnotation struct {
+	// Id Stable annotation identifier unique within this layout.
+	Id string `json:"id"`
+
+	// Image Inert embedded-raster image content with required alternative text.
+	Image *FactoryLayoutImage `json:"image,omitempty"`
+
+	// Kind The inert annotation content variant.
+	Kind FactoryLayoutAnnotationKind `json:"kind"`
+
+	// Note Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+	Note *FactoryLayoutNote `json:"note,omitempty"`
+
+	// Position Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+	Position FactoryLayoutAnnotationPosition `json:"position"`
+
+	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+	Size  *FactoryLayoutAnnotationSize `json:"size,omitempty"`
+	union json.RawMessage
+}
+
+// FactoryLayoutAnnotation0 defines model for .
+type FactoryLayoutAnnotation0 struct {
+	Id   string                       `json:"id"`
+	Kind FactoryLayoutAnnotation0Kind `json:"kind"`
+
+	// Note Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+	Note FactoryLayoutNote `json:"note"`
+
+	// Position Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+	Position FactoryLayoutAnnotationPosition `json:"position"`
+
+	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+	Size *FactoryLayoutAnnotationSize `json:"size,omitempty"`
+}
+
+// FactoryLayoutAnnotation0Kind defines model for FactoryLayoutAnnotation.0.Kind.
+type FactoryLayoutAnnotation0Kind string
+
+// FactoryLayoutAnnotation1 defines model for .
+type FactoryLayoutAnnotation1 struct {
+	Id string `json:"id"`
+
+	// Image Inert embedded-raster image content with required alternative text.
+	Image FactoryLayoutImage           `json:"image"`
+	Kind  FactoryLayoutAnnotation1Kind `json:"kind"`
+
+	// Position Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+	Position FactoryLayoutAnnotationPosition `json:"position"`
+
+	// Size Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+	Size FactoryLayoutAnnotationSize `json:"size"`
+}
+
+// FactoryLayoutAnnotation1Kind defines model for FactoryLayoutAnnotation.1.Kind.
+type FactoryLayoutAnnotation1Kind string
+
+// FactoryLayoutAnnotationKind The inert annotation content variant.
+type FactoryLayoutAnnotationKind string
+
+// FactoryLayoutAnnotationPosition Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+type FactoryLayoutAnnotationPosition struct {
+	// X Horizontal canvas coordinate between -100,000 and 100,000 inclusive.
+	X float32 `json:"x"`
+
+	// Y Vertical canvas coordinate between -100,000 and 100,000 inclusive.
+	Y float32 `json:"y"`
+}
+
+// FactoryLayoutAnnotationSize Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+type FactoryLayoutAnnotationSize struct {
+	// Height Positive authored height no greater than 10,000 canvas units.
+	Height float32 `json:"height"`
+
+	// Width Positive authored width no greater than 10,000 canvas units.
+	Width float32 `json:"width"`
 }
 
 // FactoryLayoutBounds Authored rectangular bounds in graph canvas units.
@@ -1771,6 +1891,28 @@ type FactoryLayoutEdge struct {
 	Waypoints *[]FactoryLayoutPoint `json:"waypoints,omitempty"`
 }
 
+// FactoryLayoutEmptyState Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
+type FactoryLayoutEmptyState struct {
+	// Image Inert embedded-raster image content with required alternative text.
+	Image *FactoryLayoutImage `json:"image,omitempty"`
+
+	// Text Literal empty-state text. It is not rendered as HTML or Markdown.
+	Text  *string `json:"text,omitempty"`
+	union json.RawMessage
+}
+
+// FactoryLayoutEmptyState0 defines model for .
+type FactoryLayoutEmptyState0 struct {
+	// Text Literal empty-state text. It is not rendered as HTML or Markdown.
+	Text string `json:"text"`
+}
+
+// FactoryLayoutEmptyState1 defines model for .
+type FactoryLayoutEmptyState1 struct {
+	// Image Inert embedded-raster image content with required alternative text.
+	Image FactoryLayoutImage `json:"image"`
+}
+
 // FactoryLayoutGroup Portable background grouping metadata for graph canvas presentation.
 type FactoryLayoutGroup struct {
 	// Bounds Authored rectangular bounds in graph canvas units.
@@ -1795,8 +1937,38 @@ type FactoryLayoutGroup struct {
 	ParentGroupId *string `json:"parentGroupId"`
 }
 
+// FactoryLayoutImage Inert embedded-raster image content with required alternative text.
+type FactoryLayoutImage struct {
+	// AlternativeText Literal alternative text for the embedded image.
+	AlternativeText string `json:"alternativeText"`
+
+	// Source Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+	Source FactoryLayoutImageSource `json:"source"`
+}
+
+// FactoryLayoutImageSource Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+type FactoryLayoutImageSource struct {
+	// Data Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
+	Data []byte `json:"data"`
+
+	// Kind Source variant discriminator. EMBEDDED carries portable base64 raster data.
+	Kind FactoryLayoutImageSourceKind `json:"kind"`
+
+	// MediaType Declared media type for the embedded raster.
+	MediaType FactoryLayoutImageSourceMediaType `json:"mediaType"`
+}
+
+// FactoryLayoutImageSourceKind Source variant discriminator. EMBEDDED carries portable base64 raster data.
+type FactoryLayoutImageSourceKind string
+
+// FactoryLayoutImageSourceMediaType Declared media type for the embedded raster.
+type FactoryLayoutImageSourceMediaType string
+
 // FactoryLayoutNode Portable graph node layout keyed by canonical graph node id.
 type FactoryLayoutNode struct {
+	// EmptyState Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
+	EmptyState *FactoryLayoutEmptyState `json:"emptyState,omitempty"`
+
 	// Id Canonical graph node id such as workstation:<workstationId>.
 	Id string `json:"id"`
 
@@ -1809,6 +1981,21 @@ type FactoryLayoutNode struct {
 	// Size Authored node size in graph canvas units.
 	Size *FactoryLayoutSize `json:"size,omitempty"`
 }
+
+// FactoryLayoutNote Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+type FactoryLayoutNote struct {
+	// Body Required literal plain-text note body.
+	Body string `json:"body"`
+
+	// Title Optional literal plain-text note title.
+	Title *string `json:"title,omitempty"`
+
+	// Tone Presentation-only tone for a note annotation.
+	Tone FactoryLayoutNoteTone `json:"tone"`
+}
+
+// FactoryLayoutNoteTone Presentation-only tone for a note annotation.
+type FactoryLayoutNoteTone string
 
 // FactoryLayoutPoint Two-dimensional authored graph layout coordinate.
 type FactoryLayoutPoint struct {
@@ -3578,6 +3765,9 @@ type FactoryValidationTarget struct {
 
 	// Message Human-readable explanation suitable for dialogs and summaries.
 	Message string `json:"message"`
+
+	// Path Canonical Factory definition path for the affected value when one is available.
+	Path *string `json:"path,omitempty"`
 
 	// Severity Validation severity for one factory validation target.
 	Severity FactoryValidationSeverity `json:"severity"`
@@ -7540,6 +7730,276 @@ func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 
 func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactoryLayoutAnnotation0 returns the union data inside the FactoryLayoutAnnotation as a FactoryLayoutAnnotation0
+func (t FactoryLayoutAnnotation) AsFactoryLayoutAnnotation0() (FactoryLayoutAnnotation0, error) {
+	var body FactoryLayoutAnnotation0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutAnnotation0 overwrites any union data inside the FactoryLayoutAnnotation as the provided FactoryLayoutAnnotation0
+func (t *FactoryLayoutAnnotation) FromFactoryLayoutAnnotation0(v FactoryLayoutAnnotation0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutAnnotation0 performs a merge with any union data inside the FactoryLayoutAnnotation, using the provided FactoryLayoutAnnotation0
+func (t *FactoryLayoutAnnotation) MergeFactoryLayoutAnnotation0(v FactoryLayoutAnnotation0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryLayoutAnnotation1 returns the union data inside the FactoryLayoutAnnotation as a FactoryLayoutAnnotation1
+func (t FactoryLayoutAnnotation) AsFactoryLayoutAnnotation1() (FactoryLayoutAnnotation1, error) {
+	var body FactoryLayoutAnnotation1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutAnnotation1 overwrites any union data inside the FactoryLayoutAnnotation as the provided FactoryLayoutAnnotation1
+func (t *FactoryLayoutAnnotation) FromFactoryLayoutAnnotation1(v FactoryLayoutAnnotation1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutAnnotation1 performs a merge with any union data inside the FactoryLayoutAnnotation, using the provided FactoryLayoutAnnotation1
+func (t *FactoryLayoutAnnotation) MergeFactoryLayoutAnnotation1(v FactoryLayoutAnnotation1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryLayoutAnnotation) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	object["id"], err = json.Marshal(t.Id)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'id': %w", err)
+	}
+
+	if t.Image != nil {
+		object["image"], err = json.Marshal(t.Image)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'image': %w", err)
+		}
+	}
+
+	object["kind"], err = json.Marshal(t.Kind)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'kind': %w", err)
+	}
+
+	if t.Note != nil {
+		object["note"], err = json.Marshal(t.Note)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'note': %w", err)
+		}
+	}
+
+	object["position"], err = json.Marshal(t.Position)
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling 'position': %w", err)
+	}
+
+	if t.Size != nil {
+		object["size"], err = json.Marshal(t.Size)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'size': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *FactoryLayoutAnnotation) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["id"]; found {
+		err = json.Unmarshal(raw, &t.Id)
+		if err != nil {
+			return fmt.Errorf("error reading 'id': %w", err)
+		}
+	}
+
+	if raw, found := object["image"]; found {
+		err = json.Unmarshal(raw, &t.Image)
+		if err != nil {
+			return fmt.Errorf("error reading 'image': %w", err)
+		}
+	}
+
+	if raw, found := object["kind"]; found {
+		err = json.Unmarshal(raw, &t.Kind)
+		if err != nil {
+			return fmt.Errorf("error reading 'kind': %w", err)
+		}
+	}
+
+	if raw, found := object["note"]; found {
+		err = json.Unmarshal(raw, &t.Note)
+		if err != nil {
+			return fmt.Errorf("error reading 'note': %w", err)
+		}
+	}
+
+	if raw, found := object["position"]; found {
+		err = json.Unmarshal(raw, &t.Position)
+		if err != nil {
+			return fmt.Errorf("error reading 'position': %w", err)
+		}
+	}
+
+	if raw, found := object["size"]; found {
+		err = json.Unmarshal(raw, &t.Size)
+		if err != nil {
+			return fmt.Errorf("error reading 'size': %w", err)
+		}
+	}
+
+	return err
+}
+
+// AsFactoryLayoutEmptyState0 returns the union data inside the FactoryLayoutEmptyState as a FactoryLayoutEmptyState0
+func (t FactoryLayoutEmptyState) AsFactoryLayoutEmptyState0() (FactoryLayoutEmptyState0, error) {
+	var body FactoryLayoutEmptyState0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutEmptyState0 overwrites any union data inside the FactoryLayoutEmptyState as the provided FactoryLayoutEmptyState0
+func (t *FactoryLayoutEmptyState) FromFactoryLayoutEmptyState0(v FactoryLayoutEmptyState0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutEmptyState0 performs a merge with any union data inside the FactoryLayoutEmptyState, using the provided FactoryLayoutEmptyState0
+func (t *FactoryLayoutEmptyState) MergeFactoryLayoutEmptyState0(v FactoryLayoutEmptyState0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryLayoutEmptyState1 returns the union data inside the FactoryLayoutEmptyState as a FactoryLayoutEmptyState1
+func (t FactoryLayoutEmptyState) AsFactoryLayoutEmptyState1() (FactoryLayoutEmptyState1, error) {
+	var body FactoryLayoutEmptyState1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryLayoutEmptyState1 overwrites any union data inside the FactoryLayoutEmptyState as the provided FactoryLayoutEmptyState1
+func (t *FactoryLayoutEmptyState) FromFactoryLayoutEmptyState1(v FactoryLayoutEmptyState1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryLayoutEmptyState1 performs a merge with any union data inside the FactoryLayoutEmptyState, using the provided FactoryLayoutEmptyState1
+func (t *FactoryLayoutEmptyState) MergeFactoryLayoutEmptyState1(v FactoryLayoutEmptyState1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryLayoutEmptyState) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = json.Unmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.Image != nil {
+		object["image"], err = json.Marshal(t.Image)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'image': %w", err)
+		}
+	}
+
+	if t.Text != nil {
+		object["text"], err = json.Marshal(t.Text)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'text': %w", err)
+		}
+	}
+	b, err = json.Marshal(object)
+	return b, err
+}
+
+func (t *FactoryLayoutEmptyState) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["image"]; found {
+		err = json.Unmarshal(raw, &t.Image)
+		if err != nil {
+			return fmt.Errorf("error reading 'image': %w", err)
+		}
+	}
+
+	if raw, found := object["text"]; found {
+		err = json.Unmarshal(raw, &t.Text)
+		if err != nil {
+			return fmt.Errorf("error reading 'text': %w", err)
+		}
+	}
+
 	return err
 }
 
