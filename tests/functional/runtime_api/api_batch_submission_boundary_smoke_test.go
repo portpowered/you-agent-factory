@@ -4,6 +4,7 @@ package runtime_api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -44,23 +44,27 @@ func runBoundaryBatchSmokeThroughWatchedFile(t *testing.T, batchJSON []byte, req
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	testutil.WriteSeedFile(t, dir, "task", batchJSON)
 
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
-	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{
+	host := startRootRunBatchBoundaryHost(t, dir)
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	waitForGeneratedWorkIDsComplete(t, host.Endpoint(), []string{
 		"work-boundary-parent",
 		"work-boundary-prerequisite",
 		"work-boundary-child",
 	}, 10*time.Second)
 
-	return loadBatchBoundarySummary(t, server, requestID)
+	return loadBatchBoundarySummary(t, stream, requestID)
 }
 
 func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID string) batchBoundarySummary {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	host := startRootRunBatchBoundaryHost(t, dir)
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
 
-	req, err := http.NewRequest(http.MethodPut, support.DefaultSessionWorkURL(server.URL(), "/work-requests/"+requestID), bytes.NewReader(batchJSON))
+	req, err := http.NewRequest(http.MethodPut, support.DefaultSessionWorkURL(host.Endpoint(), "/work-requests/"+requestID), bytes.NewReader(batchJSON))
 	if err != nil {
 		t.Fatalf("build PUT /work-requests: %v", err)
 	}
@@ -88,21 +92,41 @@ func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID 
 		t.Fatalf("PUT /work-requests request_id = %q, want %q", out.RequestId, requestID)
 	}
 
-	waitForGeneratedWorkIDsComplete(t, server.URL(), []string{
+	waitForGeneratedWorkIDsComplete(t, host.Endpoint(), []string{
 		"work-boundary-parent",
 		"work-boundary-prerequisite",
 		"work-boundary-child",
 	}, 10*time.Second)
 
-	return loadBatchBoundarySummary(t, server, requestID)
+	return loadBatchBoundarySummary(t, stream, requestID)
 }
 
-func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, requestID string) batchBoundarySummary {
+func startRootRunBatchBoundaryHost(t *testing.T, factoryRoot string) *support.RootRunFunctionalHost {
 	t.Helper()
 
-	events := server.GetFactoryEvents(t)
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: factoryRoot,
+		SystemRoot:  t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+	return host
+}
 
-	for _, event := range events {
+func loadBatchBoundarySummary(t *testing.T, stream *factoryEventHTTPStream, requestID string) batchBoundarySummary {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		event := stream.next(time.Until(deadline))
 		if event.Type != factoryapi.FactoryEventTypeWorkRequest || support.StringPointerValue(event.Context.RequestId) != requestID {
 			continue
 		}
@@ -151,6 +175,6 @@ func loadBatchBoundarySummary(t *testing.T, server *functionalAPIServer, request
 		return summary
 	}
 
-	t.Fatalf("missing WORK_REQUEST event for %q", requestID)
+	t.Fatalf("canonical Factory Session SSE missing WORK_REQUEST event for %q", requestID)
 	return batchBoundarySummary{}
 }
