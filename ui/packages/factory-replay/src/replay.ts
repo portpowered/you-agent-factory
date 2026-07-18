@@ -66,7 +66,10 @@ function canonicalValue(value: unknown): string {
   return JSON.stringify(value) ?? "undefined";
 }
 
-function compareAcceptedEvents(left: FactoryEvent, right: FactoryEvent): number {
+function compareAcceptedEvents(
+  left: FactoryEvent,
+  right: FactoryEvent,
+): number {
   const tickDifference = left.context.tick - right.context.tick;
   if (tickDifference !== 0) return tickDifference;
 

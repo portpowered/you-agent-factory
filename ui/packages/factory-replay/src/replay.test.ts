@@ -1,16 +1,12 @@
+import type { FactoryEvent, FactoryEventType } from "@you-agent-factory/client";
 import { describe, expect, it } from "vitest";
-
-import type {
-  FactoryEvent,
-  FactoryEventType,
-} from "@you-agent-factory/client";
 
 import {
   advanceFactoryReplayCheckpoint,
   canonicalizeFactoryEvents,
+  type FactoryReplayReducer,
   initializeFactoryReplay,
   projectFactoryStateAtTick,
-  type FactoryReplayReducer,
 } from "./index.js";
 
 interface EvidenceState {
@@ -64,7 +60,8 @@ function event(
       sequence,
       tick,
       eventTime:
-        options.eventTime ?? `2026-07-18T00:00:${String(sequence).padStart(2, "0")}Z`,
+        options.eventTime ??
+        `2026-07-18T00:00:${String(sequence).padStart(2, "0")}Z`,
       ...(options.sessionSequence === undefined
         ? {}
         : { sessionSequence: options.sessionSequence }),
@@ -116,11 +113,7 @@ describe("canonicalizeFactoryEvents", () => {
       beta,
     ]);
 
-    expect(forward.map(({ id }) => id)).toEqual([
-      "alpha",
-      "beta",
-      "duplicate",
-    ]);
+    expect(forward.map(({ id }) => id)).toEqual(["alpha", "beta", "duplicate"]);
     expect(reverse).toEqual(forward);
     expect(forward[2]?.context.tick).toBe(2);
 
@@ -237,9 +230,7 @@ describe("Factory replay checkpoint advancement", () => {
 
     expect(advanced.state.appliedIds).toEqual(["accepted", "tail"]);
     expect(advanced.events.map(({ id }) => id)).toEqual(["accepted", "tail"]);
-    expect(advanced.acceptedEventIds).toEqual(
-      new Set(["accepted", "tail"]),
-    );
+    expect(advanced.acceptedEventIds).toEqual(new Set(["accepted", "tail"]));
   });
 
   it("accepts a later same-tick sequence not represented by the checkpoint", () => {
@@ -305,7 +296,11 @@ describe("Factory replay checkpoint advancement", () => {
       tail: [dispatchCompleted, dispatchStarted],
       tick: 4,
     });
-    const full = projectFactoryStateAtTick({ events: history, reducer, tick: 4 });
+    const full = projectFactoryStateAtTick({
+      events: history,
+      reducer,
+      tick: 4,
+    });
 
     expect(advanced.state).toEqual(full.state);
     expect(advanced.events).toEqual(full.appliedEvents);
