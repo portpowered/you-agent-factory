@@ -4,4 +4,5 @@ return (async function () {
     prompt: "step-one",
     label: "step-one",
   });
+  return "<SUCCESS>";
 })();
