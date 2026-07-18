@@ -1,0 +1,26 @@
+export {
+  type FactoryWorkProgressAtTickInput,
+  type FactoryWorkProgressCategory,
+  type FactoryWorkProgressCounts,
+  type FactoryWorkProgressEvidence,
+  type FactoryWorkProgressItem,
+  type FactoryWorkProgressProjection,
+  type FactoryWorkProgressProjectionInput,
+  type FactoryWorkProgressStateEvidence,
+  type FactoryWorkStateCategory,
+  projectFactoryWorkProgress,
+  projectFactoryWorkProgressAtTick,
+} from "./progress.js";
+export {
+  advanceFactoryReplayCheckpoint,
+  canonicalizeFactoryEvents,
+  type FactoryReplayCheckpoint,
+  type FactoryReplayCheckpointAdvancement,
+  type FactoryReplayFixedSelection,
+  type FactoryReplayInitialization,
+  type FactoryReplayReducer,
+  type FactoryReplayResult,
+  type FactoryReplaySelection,
+  initializeFactoryReplay,
+  projectFactoryStateAtTick,
+} from "./replay.js";

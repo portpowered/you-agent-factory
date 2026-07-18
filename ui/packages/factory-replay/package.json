@@ -1,0 +1,50 @@
+{
+  "name": "@you-agent-factory/factory-replay",
+  "version": "0.0.0",
+  "description": "Deterministic, framework-independent Factory event replay.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git",
+    "directory": "ui/packages/factory-replay"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "bun run prepare:client && node scripts/build-package.mjs",
+    "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
+    "check:pack": "node scripts/verify-package-pack.mjs",
+    "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "prepare:client": "bun run --cwd ../client build",
+    "test": "bun run prepare:client && vitest run --config vitest.config.ts",
+    "typecheck": "bun run prepare:client && tsc -p tsconfig.json --noEmit --pretty false",
+    "verify": "bun run typecheck && bun run test && bun run build && bun run check:package-boundary && bun run check:pack && bun run check:installed-consumer"
+  },
+  "peerDependencies": {
+    "@you-agent-factory/client": "0.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@you-agent-factory/client": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "4.1.3"
+  }
+}
