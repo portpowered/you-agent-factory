@@ -41,8 +41,8 @@ Use this map when changing the public REST contract.
   converter stays outside API/config/service/CLI/worker/runtime dependency paths in
   `contracts/converter_boundary_test.go`.
 - `internal/contractstaging` owns joined generation, the reviewed raw
-  source-to-package projection map, the Factory JSON Schema projection from the
-  canonical bundled OpenAPI `Factory` component graph, and the package contract
+  source-to-package projection map, standalone JSON Schema projections from
+  canonical bundled OpenAPI component graphs, and the package contract
   manifest with artifact hashes. Factory schema staging calls
   `ConvertFailClosedSchema` first; when the canonical Factory graph converts
   without blocking diagnostics, staging emits
@@ -64,11 +64,21 @@ Use this map when changing the public REST contract.
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.
+- Standalone Factory Event and Factory Recording generation lives in
+  `internal/contractstaging/factory_recording_schema.go`. It removes OpenAPI-only
+  annotations before fail-closed conversion, restores the event discriminator
+  with local `$defs` references, and projects the discriminator mapping into an
+  event-level `oneOf` so event kinds that share a payload shape remain valid.
+  Keep schema compilation, valid/malformed event and recording behavior, complete
+  discriminator coverage, and repeated byte stability in
+  `factory_recording_schema_test.go`; `make generate-client` and
+  `client-generated-check` also generate/check contract staging.
 - Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
   from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
-  authored JavaScript runtime catalog). Factory schema is the only reviewed raw
-  export derived from OpenAPI rather than copied; generation writes the
-  converter-backed authored root at `contracts/config/factory.schema.json` and
+  authored JavaScript runtime catalog). OpenAPI-derived standalone schemas are
+  explicit generated projections rather than raw copies; Factory config
+  generation writes the converter-backed authored root at
+  `contracts/config/factory.schema.json` and
   the staged package projection at
   `packages/api/generated/schemas/factory.schema.json` with identical bytes.
   Prove repository parity in `internal/contractstaging/raw_artifacts_test.go`;

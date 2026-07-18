@@ -6310,6 +6310,29 @@ components:
           JAVASCRIPT_CHECKPOINT_REF: '#/components/schemas/JavaScriptCheckpointRefEventPayload'
           JAVASCRIPT_PHASE_CHANGE: '#/components/schemas/JavaScriptPhaseChangeEventPayload'
           ARTIFACT_CREATED: '#/components/schemas/ArtifactCreatedEventPayload'
+    FactoryRecording:
+      type: object
+      additionalProperties: false
+      description: Chapter-free recording of canonical Factory Events for exactly one Factory Session. Events remain in their recorded canonical order.
+      required:
+        - schemaVersion
+        - sessionId
+        - events
+      properties:
+        schemaVersion:
+          type: string
+          description: Version of the Factory Recording envelope schema.
+          enum:
+            - agent-factory.recording.v1
+        sessionId:
+          type: string
+          minLength: 1
+          description: Canonical identity of the Factory Session represented by every event.
+        events:
+          type: array
+          description: Canonical Factory Events in their original recorded order.
+          items:
+            $ref: '#/components/schemas/FactoryEvent'
     FactoryEventType:
       type: string
       description: Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.

@@ -1,0 +1,5218 @@
+{
+  "$defs": {
+    "AgentRunResponseEventPayload": {
+      "additionalProperties": false,
+      "description": "Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.",
+      "properties": {
+        "agentRunId": {
+          "description": "Stable identifier for this agent-run boundary event.",
+          "type": "string"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/SafeWorkDiagnostics"
+        },
+        "durationMillis": {
+          "description": "Agent-loop execution duration in milliseconds.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outcome": {
+          "$ref": "#/$defs/WorkOutcome"
+        }
+      },
+      "required": [
+        "agentRunId",
+        "outcome",
+        "durationMillis"
+      ],
+      "type": "object"
+    },
+    "AgentRunToolDiagnosticEntry": {
+      "additionalProperties": false,
+      "description": "Bounded summary for one agent tool lifecycle event.",
+      "properties": {
+        "detail": {
+          "description": "Safe diagnostic detail without raw process output or secrets.",
+          "type": "string"
+        },
+        "phase": {
+          "description": "Tool lifecycle phase such as start, success, failure, or denied.",
+          "type": "string"
+        },
+        "toolName": {
+          "description": "Tool name invoked by the agent loop.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "AgentRunTranscriptEntry": {
+      "additionalProperties": false,
+      "description": "Bounded transcript metadata for one agent-loop message without exposing full prompt bodies.",
+      "properties": {
+        "role": {
+          "description": "Message role such as system, user, assistant, or tool.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Bounded summary of the message content for inspection.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "AgentWorkerToolPolicy": {
+      "description": "Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.",
+      "enum": [
+        "DISABLED",
+        "READ_ONLY",
+        "ENABLED"
+      ],
+      "type": "string"
+    },
+    "AgentWorkerToolsConfig": {
+      "additionalProperties": false,
+      "description": "Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.",
+      "properties": {
+        "policy": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AgentWorkerToolPolicy"
+            }
+          ],
+          "description": "Required executor policy for agent-loop tool use on this worker."
+        }
+      },
+      "required": [
+        "policy"
+      ],
+      "type": "object"
+    },
+    "ArtifactCreatedEventPayload": {
+      "additionalProperties": false,
+      "description": "Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload.",
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/FactoryArtifact"
+        },
+        "capturedAt": {
+          "description": "When the artifact payload was captured.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact"
+      ],
+      "type": "object"
+    },
+    "BundledFile": {
+      "additionalProperties": false,
+      "description": "One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/\u003cwork-type\u003e/\u003cchannel\u003e/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/BundledFileContent"
+        },
+        "id": {
+          "description": "Durable bundled-file identifier used by portable layout and graph editor references. When omitted on input, the canonical targetPath is materialized as the stable identifier.",
+          "type": "string"
+        },
+        "targetPath": {
+          "description": "Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.",
+          "type": "string"
+        },
+        "type": {
+          "description": "Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/\u003cwork-type\u003e/\u003cchannel\u003e/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.",
+          "enum": [
+            "SCRIPT",
+            "DOC",
+            "INPUT",
+            "ROOT_HELPER"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "targetPath",
+        "content"
+      ],
+      "type": "object"
+    },
+    "BundledFileContent": {
+      "additionalProperties": false,
+      "description": "Inline content payload for a portable bundled file.",
+      "properties": {
+        "encoding": {
+          "description": "Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.",
+          "enum": [
+            "utf-8"
+          ],
+          "type": "string"
+        },
+        "inline": {
+          "description": "Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "encoding",
+        "inline"
+      ],
+      "type": "object"
+    },
+    "CheckpointResumabilityStatus": {
+      "description": "Whether a recorded checkpoint can be used to resume session execution.",
+      "enum": [
+        "RESUMABLE",
+        "NOT_RESUMABLE",
+        "UNKNOWN"
+      ],
+      "type": "string"
+    },
+    "ClassificationRoute": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Case-sensitive classifier label that must match the trimmed classifier output exactly.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "One or more authored destinations emitted when this classifier label is selected.",
+          "items": {
+            "$ref": "#/$defs/WorkstationIO"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "outputs"
+      ],
+      "type": "object"
+    },
+    "Diagnostics": {
+      "additionalProperties": false,
+      "properties": {
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workers": {
+          "additionalProperties": {
+            "$ref": "#/$defs/SafeWorkDiagnostics"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "DispatchConsumedWorkRef": {
+      "additionalProperties": false,
+      "description": "Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context.",
+      "properties": {
+        "workId": {
+          "description": "Canonical work identity for one consumed dispatch input.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workId"
+      ],
+      "type": "object"
+    },
+    "DispatchInterruptedEventPayload": {
+      "additionalProperties": false,
+      "description": "Dispatch interruption recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.",
+      "properties": {
+        "checkpointRef": {
+          "$ref": "#/$defs/FactorySessionJavaScriptCheckpointRef"
+        },
+        "interruptedAt": {
+          "description": "When the interruption was observed.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "observedStatus": {
+          "$ref": "#/$defs/FactoryDispatchStatus"
+        },
+        "providerSessionRef": {
+          "$ref": "#/$defs/LoadableProviderSessionRef"
+        },
+        "reason": {
+          "description": "Customer-visible interruption reason.",
+          "type": "string"
+        },
+        "retryPlanned": {
+          "description": "Whether a retry dispatch is planned.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "reason",
+        "observedStatus",
+        "interruptedAt",
+        "retryPlanned"
+      ],
+      "type": "object"
+    },
+    "DispatchQueuedEventPayload": {
+      "additionalProperties": false,
+      "description": "Dispatch queued for execution on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context and Petri transition fields are not required for JavaScript workflow dispatches.",
+      "properties": {
+        "coordinationRef": {
+          "description": "Optional coordination reference for grouped child work.",
+          "type": "string"
+        },
+        "dispatchKind": {
+          "$ref": "#/$defs/FactoryDispatchKind"
+        },
+        "inputArtifactIds": {
+          "description": "Input artifact identifiers consumed by the dispatch.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "inputWorkIds": {
+          "description": "Input work identifiers consumed by the dispatch.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "label": {
+          "description": "Customer-visible dispatch label.",
+          "type": "string"
+        },
+        "model": {
+          "description": "Selected model identifier when applicable.",
+          "type": "string"
+        },
+        "modelProvider": {
+          "description": "Resolved canonical model-provider identifier when applicable.",
+          "type": "string"
+        },
+        "parentDispatchId": {
+          "description": "Parent dispatch identifier when this dispatch was spawned from another dispatch.",
+          "type": "string"
+        },
+        "presetId": {
+          "description": "Resolved operator worker preset identifier when one was selected.",
+          "type": "string"
+        },
+        "promptDigest": {
+          "description": "Stable digest of rendered prompt material.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Selected provider identifier when applicable.",
+          "type": "string"
+        },
+        "queuePosition": {
+          "description": "Queue position when known.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasoningEffort": {
+          "description": "Resolved canonical reasoning effort when applicable.",
+          "type": "string"
+        },
+        "retryOfDispatchId": {
+          "description": "Prior dispatch identifier when this dispatch is a retry.",
+          "type": "string"
+        },
+        "runnerId": {
+          "description": "Selected runner identifier when applicable.",
+          "type": "string"
+        },
+        "schemaDigest": {
+          "description": "Stable digest of the output schema when applicable.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatchKind"
+      ],
+      "type": "object"
+    },
+    "DispatchReconciledEventPayload": {
+      "additionalProperties": false,
+      "description": "Dispatch reconciliation recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.",
+      "properties": {
+        "artifactIds": {
+          "description": "Artifact identifiers produced or updated by reconciliation.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
+        "reconciledStatus": {
+          "$ref": "#/$defs/FactoryDispatchStatus"
+        },
+        "reconciliationSource": {
+          "$ref": "#/$defs/DispatchReconciliationSource"
+        },
+        "replayed": {
+          "description": "Whether reconciliation facts were emitted during stream replay.",
+          "type": "boolean"
+        },
+        "resultArtifactRef": {
+          "$ref": "#/$defs/FactoryArtifactRef"
+        },
+        "usage": {
+          "$ref": "#/$defs/FactoryDispatchUsage"
+        }
+      },
+      "required": [
+        "reconciledStatus",
+        "reconciliationSource",
+        "replayed"
+      ],
+      "type": "object"
+    },
+    "DispatchReconciliationSource": {
+      "description": "Source that produced a dispatch reconciliation fact.",
+      "enum": [
+        "STREAM_REPLAY",
+        "PROVIDER_SESSION",
+        "DURABLE_STATE",
+        "RUNTIME_RECONCILER"
+      ],
+      "type": "string"
+    },
+    "DispatchRequestEventMetadata": {
+      "additionalProperties": false,
+      "description": "Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.",
+      "properties": {
+        "replayKey": {
+          "description": "Stable replay correlation key for recorded dispatch reconstruction.",
+          "type": "string"
+        },
+        "runnerId": {
+          "$ref": "#/$defs/RunnerID"
+        },
+        "runnerSelectionSource": {
+          "$ref": "#/$defs/RunnerSelectionSource"
+        }
+      },
+      "type": "object"
+    },
+    "DispatchRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history.",
+      "properties": {
+        "currentChainingTraceId": {
+          "description": "Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.",
+          "type": "string"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/DispatchConsumedWorkRef"
+          },
+          "type": "array"
+        },
+        "metadata": {
+          "$ref": "#/$defs/DispatchRequestEventMetadata"
+        },
+        "previousChainingTraceIds": {
+          "description": "Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/Resource"
+          },
+          "type": "array"
+        },
+        "transitionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "transitionId",
+        "inputs"
+      ],
+      "type": "object"
+    },
+    "DispatchResponseEventPayload": {
+      "additionalProperties": false,
+      "description": "Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads.",
+      "properties": {
+        "completionId": {
+          "type": "string"
+        },
+        "currentChainingTraceId": {
+          "description": "Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.",
+          "type": "string"
+        },
+        "durationMillis": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
+        "feedback": {
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/StringMap"
+        },
+        "metrics": {
+          "$ref": "#/$defs/WorkMetrics"
+        },
+        "outcome": {
+          "$ref": "#/$defs/WorkOutcome"
+        },
+        "output": {
+          "type": "string"
+        },
+        "outputResources": {
+          "items": {
+            "$ref": "#/$defs/Resource"
+          },
+          "type": "array"
+        },
+        "outputWork": {
+          "items": {
+            "$ref": "#/$defs/Work"
+          },
+          "type": "array"
+        },
+        "previousChainingTraceIds": {
+          "description": "Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "providerFailure": {
+          "$ref": "#/$defs/ProviderFailureMetadata"
+        },
+        "selectedClassificationLabel": {
+          "type": "string"
+        },
+        "transitionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "transitionId",
+        "outcome"
+      ],
+      "type": "object"
+    },
+    "Factory": {
+      "additionalProperties": false,
+      "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
+      "properties": {
+        "factoryDirectory": {
+          "description": "Directory that contained the factory.json used for this serialized runtime config.",
+          "type": "string"
+        },
+        "guards": {
+          "description": "Root-level guards that apply across the factory instead of one specific workstation or input.",
+          "items": {
+            "$ref": "#/$defs/FactoryGuard"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Factory identifier used as the factory-level template context fallback.",
+          "type": "string"
+        },
+        "inputTypes": {
+          "description": "Named input kinds accepted by the factory. The default input type is implicit and must not be declared.",
+          "items": {
+            "$ref": "#/$defs/InputType"
+          },
+          "type": "array"
+        },
+        "invocationReturn": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InvocationReturn"
+            }
+          ],
+          "description": "Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation."
+        },
+        "invocationSignature": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationSignature"
+            }
+          ],
+          "description": "Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior."
+        },
+        "layout": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryLayout"
+            }
+          ],
+          "description": "Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids."
+        },
+        "metadata": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/StringMap"
+            }
+          ],
+          "description": "Free-form factory-level metadata carried through runtime serialization and replay diagnostics."
+        },
+        "name": {
+          "$ref": "#/$defs/FactoryName"
+        },
+        "orchestrator": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestrator"
+            }
+          ],
+          "description": "Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI."
+        },
+        "resources": {
+          "description": "Shared capacity pools that workers or workstations can consume while work is executing.",
+          "items": {
+            "$ref": "#/$defs/Resource"
+          },
+          "type": "array"
+        },
+        "runner": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RunnerID"
+            }
+          ],
+          "description": "Default runner selection for the factory when a workstation does not declare its own runner override."
+        },
+        "sourceDirectory": {
+          "description": "Original source directory for record/replay and drift diagnostics.",
+          "type": "string"
+        },
+        "supportingFiles": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ResourceManifest"
+            }
+          ],
+          "description": "Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources."
+        },
+        "version": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/HybridLogicalTimestamp"
+            }
+          ],
+          "description": "Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology."
+        },
+        "workTypes": {
+          "description": "Customer-authored work item categories and the lifecycle states each one can occupy.",
+          "items": {
+            "$ref": "#/$defs/WorkType"
+          },
+          "type": "array"
+        },
+        "workers": {
+          "description": "Reusable worker definitions that workstations reference by name when dispatching work.",
+          "items": {
+            "$ref": "#/$defs/Worker"
+          },
+          "type": "array"
+        },
+        "workstations": {
+          "description": "Processing steps that consume work, invoke workers, and emit the next work states.",
+          "items": {
+            "$ref": "#/$defs/Workstation"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "FactoryArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "auditMode": {
+          "$ref": "#/$defs/FactoryArtifactAuditMode"
+        },
+        "captureMetadata": {
+          "$ref": "#/$defs/FactoryArtifactCaptureMetadata"
+        },
+        "contentHash": {
+          "description": "Stable hash of the stored artifact payload.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable artifact identifier referenced by session projections.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FactoryArtifactKind"
+        },
+        "label": {
+          "description": "Customer-visible artifact label.",
+          "type": "string"
+        },
+        "redactionCounts": {
+          "$ref": "#/$defs/FactoryArtifactRedactionCounts"
+        },
+        "sizeBytes": {
+          "description": "Stored artifact payload size in bytes.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "summary": {
+          "description": "Customer-visible artifact summary.",
+          "type": "string"
+        },
+        "visibility": {
+          "$ref": "#/$defs/FactoryArtifactVisibility"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "visibility"
+      ],
+      "type": "object"
+    },
+    "FactoryArtifactAuditMode": {
+      "description": "Audit mode applied when one factory artifact was captured.",
+      "enum": [
+        "NONE",
+        "REDACTED",
+        "FULL"
+      ],
+      "type": "string"
+    },
+    "FactoryArtifactCaptureMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "capturedAt": {
+          "description": "Timestamp when the artifact payload was captured.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "mimeType": {
+          "description": "MIME type of the stored artifact payload when known.",
+          "type": "string"
+        },
+        "sourceDispatchId": {
+          "description": "Dispatch identifier that produced the artifact when applicable.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryArtifactKind": {
+      "description": "Canonical factory artifact kind for session-owned outputs.",
+      "enum": [
+        "FINAL_RESULT",
+        "CHILD_RESULT",
+        "FINDING",
+        "PATCH",
+        "LOG",
+        "DATASET",
+        "CHECKPOINT",
+        "WORKTREE_SUMMARY"
+      ],
+      "type": "string"
+    },
+    "FactoryArtifactRedactionCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "secrets": {
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tokens": {
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "contentHash": {
+          "description": "Stable hash of the stored artifact payload.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable artifact identifier referenced by session projections.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/FactoryArtifactKind"
+        },
+        "sizeBytes": {
+          "description": "Stored artifact payload size in bytes.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "visibility": {
+          "$ref": "#/$defs/FactoryArtifactVisibility"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "visibility"
+      ],
+      "type": "object"
+    },
+    "FactoryArtifactVisibility": {
+      "description": "Visibility boundary for one factory artifact projection.",
+      "enum": [
+        "PUBLIC",
+        "INTERNAL_CHECKPOINT"
+      ],
+      "type": "string"
+    },
+    "FactoryChangeEventPayload": {
+      "additionalProperties": false,
+      "description": "Runtime topology snapshot after a live factory definition change replaces the running factory.",
+      "properties": {
+        "factory": {
+          "$ref": "#/$defs/Factory"
+        },
+        "metadata": {
+          "$ref": "#/$defs/StringMap"
+        },
+        "sourceDirectory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "factory"
+      ],
+      "type": "object"
+    },
+    "FactoryDispatchKind": {
+      "description": "Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.",
+      "enum": [
+        "PETRI_TRANSITION",
+        "JAVASCRIPT_AGENT",
+        "JAVASCRIPT_VERIFY",
+        "JAVASCRIPT_SYNTHESIZE",
+        "JAVASCRIPT_TOOL",
+        "JAVASCRIPT_SCRIPT",
+        "JAVASCRIPT_SYSTEM"
+      ],
+      "type": "string"
+    },
+    "FactoryDispatchStatus": {
+      "description": "Canonical dispatch lifecycle status shared across orchestrators.",
+      "enum": [
+        "QUEUED",
+        "RUNNING",
+        "COMPLETED",
+        "FAILED",
+        "INTERRUPTED"
+      ],
+      "type": "string"
+    },
+    "FactoryDispatchUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "costUsd": {
+          "format": "double",
+          "minimum": 0,
+          "type": "number"
+        },
+        "durationMillis": {
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inputTokens": {
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outputTokens": {
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retryCount": {
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "totalTokens": {
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryDispatchWarning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "description": "Stable warning code for the dispatch projection.",
+          "type": "string"
+        },
+        "message": {
+          "description": "Customer-visible warning message.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "FactoryEvent": {
+      "additionalProperties": false,
+      "description": "Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.",
+      "discriminator": {
+        "mapping": {
+          "AGENT_RUN_RESPONSE": "#/$defs/AgentRunResponseEventPayload",
+          "ARTIFACT_CREATED": "#/$defs/ArtifactCreatedEventPayload",
+          "DISPATCH_INTERRUPTED": "#/$defs/DispatchInterruptedEventPayload",
+          "DISPATCH_QUEUED": "#/$defs/DispatchQueuedEventPayload",
+          "DISPATCH_RECONCILED": "#/$defs/DispatchReconciledEventPayload",
+          "DISPATCH_REQUEST": "#/$defs/DispatchRequestEventPayload",
+          "DISPATCH_RESPONSE": "#/$defs/DispatchResponseEventPayload",
+          "FACTORY_CHANGE": "#/$defs/FactoryChangeEventPayload",
+          "FACTORY_STATE_RESPONSE": "#/$defs/FactoryStateResponseEventPayload",
+          "INFERENCE_REQUEST": "#/$defs/InferenceRequestEventPayload",
+          "INFERENCE_RESPONSE": "#/$defs/InferenceResponseEventPayload",
+          "INITIAL_STRUCTURE_REQUEST": "#/$defs/InitialStructureRequestEventPayload",
+          "JAVASCRIPT_CHECKPOINT_REF": "#/$defs/JavaScriptCheckpointRefEventPayload",
+          "JAVASCRIPT_PHASE_CHANGE": "#/$defs/JavaScriptPhaseChangeEventPayload",
+          "MODEL_REQUEST": "#/$defs/ModelRequestEventPayload",
+          "MODEL_RESPONSE": "#/$defs/ModelResponseEventPayload",
+          "ORCHESTRATOR_CHECKPOINT_WRITTEN": "#/$defs/OrchestratorCheckpointWrittenEventPayload",
+          "ORCHESTRATOR_PHASE_CHANGED": "#/$defs/OrchestratorPhaseChangedEventPayload",
+          "RELATIONSHIP_CHANGE_REQUEST": "#/$defs/RelationshipChangeRequestEventPayload",
+          "RUN_REQUEST": "#/$defs/RunRequestEventPayload",
+          "RUN_RESPONSE": "#/$defs/RunResponseEventPayload",
+          "SCRIPT_REQUEST": "#/$defs/ScriptRequestEventPayload",
+          "SCRIPT_RESPONSE": "#/$defs/ScriptResponseEventPayload",
+          "SESSION_COMPLETED": "#/$defs/SessionCompletedEventPayload",
+          "SESSION_LIFECYCLE_CONTROL": "#/$defs/SessionLifecycleControlEventPayload",
+          "SESSION_PAUSED": "#/$defs/SessionPausedEventPayload",
+          "SESSION_RESULT_UPDATED": "#/$defs/SessionResultUpdatedEventPayload",
+          "SESSION_RESUMED": "#/$defs/SessionResumedEventPayload",
+          "SESSION_STARTED": "#/$defs/SessionStartedEventPayload",
+          "WORK_REQUEST": "#/$defs/WorkRequestEventPayload",
+          "WORK_STATE_CHANGE": "#/$defs/WorkStateChangeEventPayload"
+        },
+        "propertyName": "type"
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/RunRequestEventPayload"
+            },
+            "type": {
+              "const": "RUN_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/InitialStructureRequestEventPayload"
+            },
+            "type": {
+              "const": "INITIAL_STRUCTURE_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/FactoryChangeEventPayload"
+            },
+            "type": {
+              "const": "FACTORY_CHANGE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/WorkRequestEventPayload"
+            },
+            "type": {
+              "const": "WORK_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/RelationshipChangeRequestEventPayload"
+            },
+            "type": {
+              "const": "RELATIONSHIP_CHANGE_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/DispatchRequestEventPayload"
+            },
+            "type": {
+              "const": "DISPATCH_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/ModelRequestEventPayload"
+            },
+            "type": {
+              "const": "MODEL_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/ModelResponseEventPayload"
+            },
+            "type": {
+              "const": "MODEL_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/InferenceRequestEventPayload"
+            },
+            "type": {
+              "const": "INFERENCE_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/InferenceResponseEventPayload"
+            },
+            "type": {
+              "const": "INFERENCE_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/ScriptRequestEventPayload"
+            },
+            "type": {
+              "const": "SCRIPT_REQUEST"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/ScriptResponseEventPayload"
+            },
+            "type": {
+              "const": "SCRIPT_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/AgentRunResponseEventPayload"
+            },
+            "type": {
+              "const": "AGENT_RUN_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/DispatchResponseEventPayload"
+            },
+            "type": {
+              "const": "DISPATCH_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/WorkStateChangeEventPayload"
+            },
+            "type": {
+              "const": "WORK_STATE_CHANGE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/FactoryStateResponseEventPayload"
+            },
+            "type": {
+              "const": "FACTORY_STATE_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/RunResponseEventPayload"
+            },
+            "type": {
+              "const": "RUN_RESPONSE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/SessionStartedEventPayload"
+            },
+            "type": {
+              "const": "SESSION_STARTED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/SessionPausedEventPayload"
+            },
+            "type": {
+              "const": "SESSION_PAUSED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/SessionResumedEventPayload"
+            },
+            "type": {
+              "const": "SESSION_RESUMED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/SessionResultUpdatedEventPayload"
+            },
+            "type": {
+              "const": "SESSION_RESULT_UPDATED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/SessionCompletedEventPayload"
+            },
+            "type": {
+              "const": "SESSION_COMPLETED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/SessionLifecycleControlEventPayload"
+            },
+            "type": {
+              "const": "SESSION_LIFECYCLE_CONTROL"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/OrchestratorPhaseChangedEventPayload"
+            },
+            "type": {
+              "const": "ORCHESTRATOR_PHASE_CHANGED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/OrchestratorCheckpointWrittenEventPayload"
+            },
+            "type": {
+              "const": "ORCHESTRATOR_CHECKPOINT_WRITTEN"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/DispatchQueuedEventPayload"
+            },
+            "type": {
+              "const": "DISPATCH_QUEUED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/DispatchInterruptedEventPayload"
+            },
+            "type": {
+              "const": "DISPATCH_INTERRUPTED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/DispatchReconciledEventPayload"
+            },
+            "type": {
+              "const": "DISPATCH_RECONCILED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/JavaScriptCheckpointRefEventPayload"
+            },
+            "type": {
+              "const": "JAVASCRIPT_CHECKPOINT_REF"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/JavaScriptPhaseChangeEventPayload"
+            },
+            "type": {
+              "const": "JAVASCRIPT_PHASE_CHANGE"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "payload": {
+              "$ref": "#/$defs/ArtifactCreatedEventPayload"
+            },
+            "type": {
+              "const": "ARTIFACT_CREATED"
+            }
+          },
+          "required": [
+            "type",
+            "payload"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/FactoryEventContext"
+        },
+        "id": {
+          "description": "Stable event identifier. Record/replay artifacts must preserve this value.",
+          "type": "string"
+        },
+        "payload": {},
+        "schemaVersion": {
+          "description": "Version of the factory event envelope schema.",
+          "enum": [
+            "agent-factory.event.v1"
+          ],
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/FactoryEventType"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "type",
+        "context",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "FactoryEventContext": {
+      "additionalProperties": false,
+      "properties": {
+        "checkpointId": {
+          "description": "Canonical checkpoint identifier for checkpoint-scoped events; payloads must not restate it.",
+          "type": "string"
+        },
+        "currentChainingTraceId": {
+          "description": "Canonical chaining-trace identifier for the dispatch currently represented by this event context.",
+          "type": "string"
+        },
+        "dispatchId": {
+          "description": "Canonical dispatch identity for dispatch and inference events; payloads must not restate it.",
+          "type": "string"
+        },
+        "eventTime": {
+          "description": "Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "orchestratorDialect": {
+          "description": "Optional JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.",
+          "type": "string"
+        },
+        "orchestratorKind": {
+          "$ref": "#/$defs/FactoryOrchestratorKind"
+        },
+        "phaseId": {
+          "description": "Canonical workflow phase identifier; payloads must not restate it.",
+          "type": "string"
+        },
+        "phaseName": {
+          "description": "Canonical workflow phase name for customer-visible diagnostics.",
+          "type": "string"
+        },
+        "previousChainingTraceIds": {
+          "description": "Canonical predecessor chaining traces consumed by the dispatch in deterministic order.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "requestId": {
+          "description": "Canonical request identity for all request-scoped events; payload metadata must not restate it.",
+          "type": "string"
+        },
+        "sequence": {
+          "description": "Append-only event-log sequence number.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sessionId": {
+          "description": "Canonical factory session identity for session-scoped events; payloads must not restate it.",
+          "type": "string"
+        },
+        "sessionSequence": {
+          "description": "Monotonic per-session ordering used for replay deduplication within one session.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source": {
+          "description": "Human-readable source such as api, filewatcher, replay, cron, or worker.",
+          "type": "string"
+        },
+        "tick": {
+          "description": "Logical engine tick observed by the runtime.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "traceIds": {
+          "description": "Canonical trace identifiers that contributed to this event; payloads must not restate them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "workIds": {
+          "description": "Canonical work identities correlated to this event; payloads must not restate them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sequence",
+        "tick",
+        "eventTime"
+      ],
+      "type": "object"
+    },
+    "FactoryEventSessionResultStatus": {
+      "description": "Customer-visible session result availability for result update events.",
+      "enum": [
+        "NOT_READY",
+        "PARTIAL",
+        "FINAL",
+        "FAILED_WITH_PARTIAL",
+        "UNAVAILABLE"
+      ],
+      "type": "string"
+    },
+    "FactoryEventType": {
+      "description": "Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.",
+      "enum": [
+        "RUN_REQUEST",
+        "INITIAL_STRUCTURE_REQUEST",
+        "FACTORY_CHANGE",
+        "WORK_REQUEST",
+        "RELATIONSHIP_CHANGE_REQUEST",
+        "DISPATCH_REQUEST",
+        "MODEL_REQUEST",
+        "MODEL_RESPONSE",
+        "INFERENCE_REQUEST",
+        "INFERENCE_RESPONSE",
+        "SCRIPT_REQUEST",
+        "SCRIPT_RESPONSE",
+        "AGENT_RUN_RESPONSE",
+        "DISPATCH_RESPONSE",
+        "WORK_STATE_CHANGE",
+        "FACTORY_STATE_RESPONSE",
+        "RUN_RESPONSE",
+        "SESSION_STARTED",
+        "SESSION_PAUSED",
+        "SESSION_RESUMED",
+        "SESSION_RESULT_UPDATED",
+        "SESSION_COMPLETED",
+        "SESSION_LIFECYCLE_CONTROL",
+        "ORCHESTRATOR_PHASE_CHANGED",
+        "ORCHESTRATOR_CHECKPOINT_WRITTEN",
+        "DISPATCH_QUEUED",
+        "DISPATCH_INTERRUPTED",
+        "DISPATCH_RECONCILED",
+        "JAVASCRIPT_CHECKPOINT_REF",
+        "JAVASCRIPT_PHASE_CHANGE",
+        "ARTIFACT_CREATED"
+      ],
+      "type": "string"
+    },
+    "FactoryGuard": {
+      "additionalProperties": false,
+      "description": "Factory-level guard attached at the root factory definition.",
+      "properties": {
+        "model": {
+          "description": "Optional model name to scope throttling more narrowly than the provider-level window.",
+          "type": "string"
+        },
+        "modelProvider": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerModelProvider"
+            }
+          ],
+          "description": "Provider whose inference-throttle history controls this factory-level guard."
+        },
+        "refreshWindow": {
+          "description": "Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryGuardType"
+            }
+          ],
+          "description": "Factory-level guard condition to evaluate before dispatch-ready transitions can proceed."
+        }
+      },
+      "required": [
+        "type",
+        "modelProvider",
+        "refreshWindow"
+      ],
+      "type": "object"
+    },
+    "FactoryGuardType": {
+      "description": "Factory-level guard condition attached at the root factory definition.",
+      "enum": [
+        "INFERENCE_THROTTLE_GUARD"
+      ],
+      "type": "string"
+    },
+    "FactoryInvocationExample": {
+      "additionalProperties": false,
+      "description": "One example invocation for docs, help, and packaged-factory inspection.",
+      "properties": {
+        "argv": {
+          "description": "CLI-style argument vector rendered after factory selection.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": {
+          "description": "Customer-facing explanation of what the example does.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Stable example name.",
+          "type": "string"
+        },
+        "stdin": {
+          "description": "Example stdin payload when the signature routes stdin into one parameter.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "FactoryInvocationOutputContract": {
+      "additionalProperties": false,
+      "description": "Customer-facing output hint for a factory invocation signature.",
+      "properties": {
+        "contentType": {
+          "description": "Output media type hint for docs, API consumers, and dashboard affordances.",
+          "type": "string"
+        },
+        "description": {
+          "description": "Human-readable summary of the primary output contract.",
+          "type": "string"
+        },
+        "fileExtension": {
+          "description": "Suggested file extension when the output mode writes a file.",
+          "type": "string"
+        },
+        "mode": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationOutputContractMode"
+            }
+          ],
+          "description": "High-level output contract mode exposed to callers."
+        },
+        "pathParameter": {
+          "description": "Parameter name that controls the destination path when the factory writes output to disk.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryInvocationOutputContractMode": {
+      "description": "High-level output shape hint exposed by a factory invocation signature.",
+      "enum": [
+        "INLINE",
+        "FILE",
+        "JSON"
+      ],
+      "type": "string"
+    },
+    "FactoryInvocationParameter": {
+      "additionalProperties": false,
+      "description": "One canonical invocation parameter declared on a factory.",
+      "properties": {
+        "aliases": {
+          "description": "Additional accepted named-argument keys that normalize to this parameter.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "bindings": {
+          "description": "Accepted invocation bindings for this parameter across positional, named, and stdin sources.",
+          "items": {
+            "$ref": "#/$defs/FactoryInvocationParameterBinding"
+          },
+          "type": "array"
+        },
+        "choices": {
+          "description": "Optional allowed string values for this parameter.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defaultValue": {
+          "description": "Default string value used when an omitted parameter resolves to one effective value.",
+          "type": "string"
+        },
+        "defaultValues": {
+          "description": "Default string values used when an omitted parameter resolves to multiple effective values.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": {
+          "description": "Customer-facing description rendered in help, docs, and form controls.",
+          "type": "string"
+        },
+        "externalName": {
+          "description": "Preferred named-argument key shown to callers, such as `output`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Internal canonical parameter name used for normalized argument maps and interpolation.",
+          "type": "string"
+        },
+        "required": {
+          "description": "When true, invocation normalization must reject requests that omit this parameter.",
+          "type": "boolean"
+        },
+        "sensitive": {
+          "description": "When true, diagnostics must preserve names and source metadata but redact concrete values.",
+          "type": "boolean"
+        },
+        "typeHint": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationParameterTypeHint"
+            }
+          ],
+          "description": "String-first hint that guides parsing, docs, and dashboard form selection."
+        },
+        "valueMode": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationParameterValueMode"
+            }
+          ],
+          "description": "Declares whether the parameter consumes one value, repeated values, variadic values, or file contents."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "FactoryInvocationParameterBinding": {
+      "additionalProperties": false,
+      "description": "One public binding that exposes a parameter to callers.",
+      "properties": {
+        "kind": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationParameterBindingKind"
+            }
+          ],
+          "description": "Binding kind used to route invocation input into the parameter."
+        },
+        "position": {
+          "description": "1-based positional slot used when kind is POSITIONAL.",
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "FactoryInvocationParameterBindingKind": {
+      "description": "Public invocation binding kinds supported by factory signatures.",
+      "enum": [
+        "POSITIONAL",
+        "NAMED",
+        "STDIN",
+        "NAMED_REST"
+      ],
+      "type": "string"
+    },
+    "FactoryInvocationParameterTypeHint": {
+      "description": "String-first parsing and UI hint for one factory invocation parameter.",
+      "enum": [
+        "STRING",
+        "PATH",
+        "FILE_PATH",
+        "DIRECTORY_PATH",
+        "NUMBER_STRING",
+        "BOOLEAN_STRING"
+      ],
+      "type": "string"
+    },
+    "FactoryInvocationParameterValueMode": {
+      "description": "Declares how one invocation parameter consumes one or more string values.",
+      "enum": [
+        "EXACT",
+        "REPEATED",
+        "VARIADIC",
+        "FILE_CONTENTS"
+      ],
+      "type": "string"
+    },
+    "FactoryInvocationSignature": {
+      "additionalProperties": false,
+      "description": "Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.",
+      "properties": {
+        "examples": {
+          "description": "Example invocations rendered in docs, help, and inspection surfaces.",
+          "items": {
+            "$ref": "#/$defs/FactoryInvocationExample"
+          },
+          "type": "array"
+        },
+        "outputContract": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationOutputContract"
+            }
+          ],
+          "description": "Optional customer-facing hint for the factory's primary output shape."
+        },
+        "parameters": {
+          "description": "Declared invocation parameters keyed by canonical parameter name.",
+          "items": {
+            "$ref": "#/$defs/FactoryInvocationParameter"
+          },
+          "type": "array"
+        },
+        "unknownNamedArgumentPolicy": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationUnknownNamedArgumentPolicy"
+            }
+          ],
+          "description": "Policy for named inputs that do not match any declared parameter binding."
+        }
+      },
+      "type": "object"
+    },
+    "FactoryInvocationUnknownNamedArgumentPolicy": {
+      "description": "Policy for named inputs that do not match any declared parameter binding.",
+      "enum": [
+        "REJECT",
+        "ALLOW",
+        "COLLECT"
+      ],
+      "type": "string"
+    },
+    "FactoryLayout": {
+      "additionalProperties": false,
+      "description": "Non-executable portable graph editor layout metadata keyed by canonical graph ids.",
+      "properties": {
+        "edges": {
+          "description": "Optional authored graph edge geometry keyed by canonical graph edge id.",
+          "items": {
+            "$ref": "#/$defs/FactoryLayoutEdge"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "description": "Optional flat background groups keyed independently from topology.",
+          "items": {
+            "$ref": "#/$defs/FactoryLayoutGroup"
+          },
+          "type": "array"
+        },
+        "nodes": {
+          "description": "Optional authored graph node geometry keyed by canonical graph node id.",
+          "items": {
+            "$ref": "#/$defs/FactoryLayoutNode"
+          },
+          "type": "array"
+        },
+        "preferences": {
+          "$ref": "#/$defs/FactoryLayoutPreferences"
+        },
+        "schemaVersion": {
+          "description": "Portable layout contract schema version. Version 1 is the initial public layout contract.",
+          "format": "int32",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "viewport": {
+          "$ref": "#/$defs/FactoryLayoutViewport"
+        }
+      },
+      "required": [
+        "schemaVersion"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutBounds": {
+      "additionalProperties": false,
+      "description": "Authored rectangular bounds in graph canvas units.",
+      "properties": {
+        "height": {
+          "description": "Authored group height.",
+          "type": "number"
+        },
+        "width": {
+          "description": "Authored group width.",
+          "type": "number"
+        },
+        "x": {
+          "description": "Left graph layout coordinate.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Top graph layout coordinate.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutEdge": {
+      "additionalProperties": false,
+      "description": "Portable graph edge layout keyed by canonical graph edge id.",
+      "properties": {
+        "id": {
+          "description": "Canonical graph edge id such as workstation-output:workstation:review-\u003ework-state:task:done.",
+          "type": "string"
+        },
+        "labelPosition": {
+          "$ref": "#/$defs/FactoryLayoutPoint"
+        },
+        "waypoints": {
+          "description": "Optional authored intermediate edge points in graph canvas space.",
+          "items": {
+            "$ref": "#/$defs/FactoryLayoutPoint"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutGroup": {
+      "additionalProperties": false,
+      "description": "Portable background grouping metadata for graph canvas presentation.",
+      "properties": {
+        "bounds": {
+          "$ref": "#/$defs/FactoryLayoutBounds"
+        },
+        "color": {
+          "description": "Optional authored group accent or fill color.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Stable authored group id for future layout editing.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Optional visible group label.",
+          "type": "string"
+        },
+        "locked": {
+          "description": "Optional authored group lock flag for future editor affordances.",
+          "type": "boolean"
+        },
+        "nodeIds": {
+          "description": "Canonical graph node ids visually contained by this group.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "parentGroupId": {
+          "description": "Reserved for future nested groups. Omit or set null for flat groups.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "bounds",
+        "nodeIds"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutNode": {
+      "additionalProperties": false,
+      "description": "Portable graph node layout keyed by canonical graph node id.",
+      "properties": {
+        "id": {
+          "description": "Canonical graph node id such as workstation:\u003cworkstationId\u003e.",
+          "type": "string"
+        },
+        "locked": {
+          "description": "Optional authored node lock flag for future editor affordances.",
+          "type": "boolean"
+        },
+        "position": {
+          "$ref": "#/$defs/FactoryLayoutPoint"
+        },
+        "size": {
+          "$ref": "#/$defs/FactoryLayoutSize"
+        }
+      },
+      "required": [
+        "id",
+        "position"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutPoint": {
+      "additionalProperties": false,
+      "description": "Two-dimensional authored graph layout coordinate.",
+      "properties": {
+        "x": {
+          "description": "Horizontal graph layout coordinate in authored canvas space.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Vertical graph layout coordinate in authored canvas space.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutPreferences": {
+      "additionalProperties": false,
+      "description": "Portable graph display defaults that do not alter factory topology.",
+      "properties": {
+        "direction": {
+          "description": "Preferred authored graph direction for portable layout rendering.",
+          "enum": [
+            "UP",
+            "DOWN",
+            "LEFT",
+            "RIGHT"
+          ],
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryLayoutSize": {
+      "additionalProperties": false,
+      "description": "Authored node size in graph canvas units.",
+      "properties": {
+        "height": {
+          "description": "Authored node height.",
+          "type": "number"
+        },
+        "width": {
+          "description": "Authored node width.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutViewport": {
+      "additionalProperties": false,
+      "description": "Shared authored graph camera position.",
+      "properties": {
+        "x": {
+          "description": "Authored viewport horizontal offset.",
+          "type": "number"
+        },
+        "y": {
+          "description": "Authored viewport vertical offset.",
+          "type": "number"
+        },
+        "zoom": {
+          "description": "Authored viewport zoom factor.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "zoom"
+      ],
+      "type": "object"
+    },
+    "FactoryName": {
+      "description": "Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.",
+      "minLength": 1,
+      "pattern": "^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$",
+      "type": "string"
+    },
+    "FactoryOrchestrator": {
+      "additionalProperties": false,
+      "description": "Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.",
+      "properties": {
+        "javascript": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestratorJavaScriptConfig"
+            }
+          ],
+          "description": "JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT."
+        },
+        "kind": {
+          "$ref": "#/$defs/FactoryOrchestratorKind"
+        },
+        "petri": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestratorPetriConfig"
+            }
+          ],
+          "description": "Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored."
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "FactoryOrchestratorJavaScriptAgent": {
+      "additionalProperties": false,
+      "description": "Default worker selection for one named JavaScript child-agent role.",
+      "properties": {
+        "preset": {
+          "description": "Operator worker preset inherited by child calls using this agent id.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "preset"
+      ],
+      "type": "object"
+    },
+    "FactoryOrchestratorJavaScriptConfig": {
+      "additionalProperties": false,
+      "description": "JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.",
+      "properties": {
+        "agents": {
+          "additionalProperties": {
+            "$ref": "#/$defs/FactoryOrchestratorJavaScriptAgent"
+          },
+          "description": "Named child-agent roles and their operator worker preset defaults.",
+          "type": "object"
+        },
+        "argsSchema": {
+          "additionalProperties": true,
+          "description": "JSON Schema object describing workflow invocation arguments.",
+          "type": "object"
+        },
+        "defaultPolicy": {
+          "additionalProperties": true,
+          "description": "Default JavaScript workflow policy object applied when no runtime override exists.",
+          "type": "object"
+        },
+        "dialect": {
+          "description": "Optional JavaScript dialect label for the authored workflow source.",
+          "type": "string"
+        },
+        "entrypoint": {
+          "description": "Optional exported entrypoint or phase name used to start the workflow.",
+          "type": "string"
+        },
+        "inlineSource": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestratorJavaScriptInlineSource"
+            }
+          ],
+          "description": "Inline workflow source when the factory carries source text directly."
+        },
+        "metadata": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/StringMap"
+            }
+          ],
+          "description": "Free-form JavaScript orchestrator metadata for authoring and diagnostics."
+        },
+        "sourceHash": {
+          "description": "Optional content hash for the resolved workflow source.",
+          "type": "string"
+        },
+        "sourceRef": {
+          "description": "Factory-relative or authored reference to the workflow source file.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "FactoryOrchestratorJavaScriptInlineSource": {
+      "additionalProperties": false,
+      "description": "Inline JavaScript workflow source carried directly in the factory definition.",
+      "properties": {
+        "encoding": {
+          "description": "Declared content encoding for the inline workflow source.",
+          "enum": [
+            "utf-8"
+          ],
+          "type": "string"
+        },
+        "inline": {
+          "description": "Inline JavaScript workflow source text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "encoding",
+        "inline"
+      ],
+      "type": "object"
+    },
+    "FactoryOrchestratorKind": {
+      "description": "Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.",
+      "enum": [
+        "PETRI",
+        "JAVASCRIPT"
+      ],
+      "type": "string"
+    },
+    "FactoryOrchestratorPetriConfig": {
+      "additionalProperties": false,
+      "description": "Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.",
+      "type": "object"
+    },
+    "FactorySessionDurableLifecycleStatus": {
+      "description": "Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.",
+      "enum": [
+        "QUEUED",
+        "AWAITING_APPROVAL",
+        "RUNNING",
+        "PAUSED",
+        "RESUMING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELING",
+        "CANCELED",
+        "TIMED_OUT",
+        "INTERRUPTED",
+        "TERMINATED"
+      ],
+      "type": "string"
+    },
+    "FactorySessionJavaScriptCheckpointRef": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/$defs/FactoryArtifactRef"
+        },
+        "id": {
+          "description": "Stable checkpoint identifier referenced by the session runtime.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Customer-visible checkpoint label.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Short customer-visible checkpoint summary without raw VM state.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "When the checkpoint was recorded.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "FactorySessionJavaScriptChildDispatchCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "completed": {
+          "description": "Child dispatches that have completed.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "queued": {
+          "description": "Child dispatches waiting to start.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "running": {
+          "description": "Child dispatches currently executing.",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "queued",
+        "running",
+        "completed"
+      ],
+      "type": "object"
+    },
+    "FactorySessionJavaScriptScriptStatus": {
+      "description": "JavaScript workflow script runtime status for one factory session.",
+      "enum": [
+        "IDLE",
+        "RUNNING",
+        "PAUSED",
+        "FINISHED",
+        "FAILED"
+      ],
+      "type": "string"
+    },
+    "FactorySessionLifecycleControlKind": {
+      "description": "Durable factory-session lifecycle control operation requested by the client.",
+      "enum": [
+        "APPROVE",
+        "PAUSE",
+        "RESUME",
+        "CANCEL",
+        "TERMINATE",
+        "RETRY_DISPATCH",
+        "INTERRUPT_DISPATCH"
+      ],
+      "type": "string"
+    },
+    "FactorySessionLifecycleControlOutcome": {
+      "description": "Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.",
+      "enum": [
+        "ACCEPTED",
+        "NO_OP",
+        "INVALID_STATE",
+        "TERMINAL_SESSION",
+        "CONFLICT"
+      ],
+      "type": "string"
+    },
+    "FactoryState": {
+      "description": "Lifecycle state of the running factory.",
+      "enum": [
+        "IDLE",
+        "RUNNING",
+        "PAUSED",
+        "COMPLETED",
+        "FAILED"
+      ],
+      "type": "string"
+    },
+    "FactoryStateResponseEventPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "previousState": {
+          "$ref": "#/$defs/FactoryState"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/FactoryState"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "FactoryStopDispatchSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "dispatchId": {
+          "description": "Stable dispatch identifier that most directly explains the stopped state.",
+          "type": "string"
+        },
+        "dispatchKind": {
+          "$ref": "#/$defs/FactoryDispatchKind"
+        },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
+        "status": {
+          "$ref": "#/$defs/FactoryDispatchStatus"
+        },
+        "workstationName": {
+          "description": "Customer-authored workstation name when one existing workstation run explains the stop.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dispatchId",
+        "status",
+        "dispatchKind"
+      ],
+      "type": "object"
+    },
+    "FactoryStopKind": {
+      "description": "Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.",
+      "enum": [
+        "PAUSED",
+        "BLOCKED",
+        "NEEDS_HUMAN",
+        "INTERRUPTED"
+      ],
+      "type": "string"
+    },
+    "FactoryStopSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "latestDispatch": {
+          "$ref": "#/$defs/FactoryStopDispatchSummary"
+        },
+        "latestResultSummary": {
+          "description": "Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.",
+          "type": "string"
+        },
+        "sessionId": {
+          "description": "Stable Factory Session identifier that owns the stopped work.",
+          "type": "string"
+        },
+        "sessionLifecycleStatus": {
+          "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
+        },
+        "stopKind": {
+          "$ref": "#/$defs/FactoryStopKind"
+        },
+        "suggestedRecoveryAction": {
+          "description": "Human-readable next step that names the existing work or session action the operator should take to recover or continue automation.",
+          "type": "string"
+        },
+        "suggestedRecoverySurface": {
+          "description": "Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route.",
+          "type": "string"
+        },
+        "workId": {
+          "description": "Relevant work identifier when one work item best explains the stop.",
+          "type": "string"
+        },
+        "workName": {
+          "description": "Relevant work name when one work item best explains the stop.",
+          "type": "string"
+        },
+        "workState": {
+          "description": "Current authored work state label such as `goal:blocked` when one work item best explains the stop.",
+          "type": "string"
+        },
+        "workTypeName": {
+          "description": "Relevant work type name when one work item best explains the stop.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stopKind",
+        "sessionId"
+      ],
+      "type": "object"
+    },
+    "FailureDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "description": "Customer-safe, actionable explanation of the failure.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/WorkFailureType"
+        }
+      },
+      "required": [
+        "reason",
+        "message"
+      ],
+      "type": "object"
+    },
+    "GuardMatchConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "inputKey": {
+          "description": "Field selector resolved against each candidate input, such as `.Name` or `.Tags[\"_last_output\"]`.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "inputKey"
+      ],
+      "type": "object"
+    },
+    "HostedLinearWorkerClaim": {
+      "additionalProperties": false,
+      "description": "Optional claim-related configuration that v1 hosted Linear workers explicitly allow.",
+      "properties": {
+        "assigneeField": {
+          "description": "Linear issue field name to use when deriving optional assignee claim metadata.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "HostedLinearWorkerConfig": {
+      "additionalProperties": false,
+      "description": "Provider-specific poller configuration for the built-in hosted Linear worker.",
+      "properties": {
+        "claim": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedLinearWorkerClaim"
+            }
+          ],
+          "description": "Optional claim-related configuration that v1 hosted Linear polling allows."
+        },
+        "mapping": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedLinearWorkerMapping"
+            }
+          ],
+          "description": "Deterministic mapping fields for canonical work submission generation."
+        },
+        "pollInterval": {
+          "description": "Optional Go duration that controls how often the hosted Linear worker polls for updates.",
+          "type": "string"
+        },
+        "stateIds": {
+          "description": "Optional Linear issue-state identifiers that bound the poll source.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "teamIds": {
+          "description": "Optional Linear team identifiers that bound the poll source.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "HostedLinearWorkerMapping": {
+      "additionalProperties": false,
+      "description": "Deterministic issue-to-work mapping fields owned by a hosted Linear worker.",
+      "properties": {
+        "state": {
+          "description": "Canonical submitted work state emitted for matched Linear issues.",
+          "type": "string"
+        },
+        "workType": {
+          "description": "Canonical submitted work type emitted for matched Linear issues.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "HostedWorkerAuth": {
+      "additionalProperties": false,
+      "description": "Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.",
+      "properties": {
+        "secretRef": {
+          "description": "Referenced secret name that resolves the hosted provider API key at runtime.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "HostedWorkerProvider": {
+      "description": "Built-in repository-owned hosted worker providers supported by the public factory-config contract.",
+      "enum": [
+        "LINEAR"
+      ],
+      "type": "string"
+    },
+    "HybridLogicalTimestamp": {
+      "additionalProperties": false,
+      "properties": {
+        "logical": {
+          "description": "Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.",
+          "format": "int64",
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        },
+        "physical": {
+          "description": "UTC physical timestamp component for the persisted factory definition version.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "logical",
+        "physical"
+      ],
+      "type": "object"
+    },
+    "InferenceOutcome": {
+      "description": "Result category returned by a provider inference attempt.",
+      "enum": [
+        "SUCCEEDED",
+        "FAILED"
+      ],
+      "type": "string"
+    },
+    "InferenceRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics.",
+      "properties": {
+        "attempt": {
+          "description": "One-based provider attempt number for this dispatch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "inferenceRequestId": {
+          "description": "Stable identifier correlating this provider request with its response.",
+          "type": "string"
+        },
+        "prompt": {
+          "description": "Rendered prompt sent to the provider.",
+          "type": "string"
+        },
+        "workingDirectory": {
+          "description": "Working directory resolved for the provider attempt.",
+          "type": "string"
+        },
+        "worktree": {
+          "description": "Worktree path resolved for the provider attempt.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "inferenceRequestId",
+        "attempt",
+        "workingDirectory",
+        "worktree",
+        "prompt"
+      ],
+      "type": "object"
+    },
+    "InferenceResponseEventPayload": {
+      "additionalProperties": false,
+      "description": "Response details captured after a model-worker provider attempt returns, including success and failure outcomes correlated to the request event. FactoryEvent.context owns dispatch identity, and the matching dispatch request owns the transition identifier for this provider attempt. Safe provider diagnostics and provider-session identifiers stay on this provider-boundary event instead of being copied onto DispatchResponse.",
+      "properties": {
+        "attempt": {
+          "description": "One-based provider attempt number for this dispatch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/SafeWorkDiagnostics"
+        },
+        "durationMillis": {
+          "description": "Provider call duration in milliseconds.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exitCode": {
+          "description": "Process exit code when the provider failure exposes one.",
+          "type": "integer"
+        },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
+        "inferenceRequestId": {
+          "description": "Identifier from the matching inference request event.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/InferenceOutcome"
+        },
+        "providerSession": {
+          "$ref": "#/$defs/ProviderSessionMetadata"
+        },
+        "response": {
+          "description": "Provider response text when present.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "inferenceRequestId",
+        "attempt",
+        "outcome",
+        "durationMillis"
+      ],
+      "type": "object"
+    },
+    "InitialStructureRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Runtime topology snapshot before work moves.",
+      "properties": {
+        "factory": {
+          "$ref": "#/$defs/Factory"
+        },
+        "metadata": {
+          "$ref": "#/$defs/StringMap"
+        },
+        "sourceDirectory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "factory"
+      ],
+      "type": "object"
+    },
+    "InputGuard": {
+      "additionalProperties": false,
+      "description": "Guard attached to one specific workstation input.",
+      "properties": {
+        "matchConfig": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GuardMatchConfig"
+            }
+          ],
+          "description": "For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs."
+        },
+        "matchInput": {
+          "description": "For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "maxVisits": {
+          "description": "For `VISIT_COUNT` guards, the visit threshold.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "parentInput": {
+          "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "spawnedBy": {
+          "description": "For dynamic fanout input guards, the workstation that spawns the children for count tracking.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InputGuardType"
+            }
+          ],
+          "description": "Guard condition to evaluate for this input-level attachment."
+        },
+        "workstation": {
+          "description": "For `VISIT_COUNT` guards, the workstation whose visits are counted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "InputGuardType": {
+      "description": "Guard condition attached to one specific workstation input.",
+      "enum": [
+        "VISIT_COUNT",
+        "ALL_CHILDREN_COMPLETE",
+        "ANY_CHILD_FAILED",
+        "SAME_NAME",
+        "SAME_TRACE_ID"
+      ],
+      "type": "string"
+    },
+    "InputKind": {
+      "description": "Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.",
+      "enum": [
+        "DEFAULT"
+      ],
+      "type": "string"
+    },
+    "InputType": {
+      "additionalProperties": false,
+      "description": "Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure.",
+      "properties": {
+        "name": {
+          "description": "Input type name. The reserved name \"default\" is implicit.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/InputKind"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "InvocationDiagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "parameters": {
+          "items": {
+            "$ref": "#/$defs/InvocationParameterDiagnostic"
+          },
+          "type": "array"
+        },
+        "signatureHash": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "InvocationParameterDiagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "redacted": {
+          "type": "boolean"
+        },
+        "sourceKinds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "valueCount": {
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "InvocationReturn": {
+      "additionalProperties": false,
+      "description": "Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.",
+      "properties": {
+        "policy": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InvocationReturnPolicy"
+            }
+          ],
+          "description": "Return selection policy for this factory."
+        },
+        "terminalState": {
+          "description": "Authored terminal state name used by EXPLICIT policy selection.",
+          "type": "string"
+        },
+        "workName": {
+          "description": "Optional authored work name filter used by EXPLICIT policy selection.",
+          "type": "string"
+        },
+        "workTypeName": {
+          "description": "Work type name used by EXPLICIT policy selection.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy"
+      ],
+      "type": "object"
+    },
+    "InvocationReturnPolicy": {
+      "description": "Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.",
+      "enum": [
+        "SUBMITTED_WORK_TERMINAL",
+        "EXPLICIT"
+      ],
+      "type": "string"
+    },
+    "JavaScriptCheckpointRefEventPayload": {
+      "additionalProperties": false,
+      "description": "Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload.",
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/$defs/FactoryArtifactRef"
+        },
+        "checkpointId": {
+          "description": "Stable checkpoint identifier referenced by the session runtime.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Customer-visible checkpoint label.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "Short customer-visible checkpoint summary without raw VM state.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "When the checkpoint was recorded.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checkpointId",
+        "artifactRef"
+      ],
+      "type": "object"
+    },
+    "JavaScriptPhaseChangeEventPayload": {
+      "additionalProperties": false,
+      "description": "JavaScript workflow phase transition recorded on the canonical factory event stream. JavaScript workflow progress is represented through phase changes, not Petri WORK_STATE_CHANGE marking events.",
+      "properties": {
+        "argsDigest": {
+          "description": "Stable digest of the effective workflow arguments.",
+          "type": "string"
+        },
+        "childDispatchCounts": {
+          "$ref": "#/$defs/FactorySessionJavaScriptChildDispatchCounts"
+        },
+        "phase": {
+          "description": "Current JavaScript workflow phase name after this event.",
+          "type": "string"
+        },
+        "phases": {
+          "description": "Ordered phase names visible in the session runtime.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "scriptStatus": {
+          "$ref": "#/$defs/FactorySessionJavaScriptScriptStatus"
+        }
+      },
+      "required": [
+        "phase",
+        "phases",
+        "scriptStatus",
+        "childDispatchCounts"
+      ],
+      "type": "object"
+    },
+    "LoadableProviderSessionKind": {
+      "description": "Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.",
+      "enum": [
+        "session_id"
+      ],
+      "type": "string"
+    },
+    "LoadableProviderSessionProvider": {
+      "description": "Canonical provider value for provider-session detail requests that can be loaded by the API.",
+      "enum": [
+        "codex",
+        "cursor"
+      ],
+      "type": "string"
+    },
+    "LoadableProviderSessionRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Provider-session identifier to resolve. This is an identifier, not a filesystem path.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/LoadableProviderSessionKind"
+        },
+        "provider": {
+          "$ref": "#/$defs/LoadableProviderSessionProvider"
+        }
+      },
+      "required": [
+        "provider",
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "ModelOperation": {
+      "additionalProperties": false,
+      "description": "One provider-agnostic operation exposed by a model worker, such as `TTS`.",
+      "properties": {
+        "inputs": {
+          "description": "Named operation input slots this worker can consume.",
+          "items": {
+            "$ref": "#/$defs/ModelOperationSlot"
+          },
+          "type": "array"
+        },
+        "name": {
+          "$ref": "#/$defs/ModelOperationName"
+        },
+        "outputs": {
+          "description": "Named operation output slots this worker can produce.",
+          "items": {
+            "$ref": "#/$defs/ModelOperationSlot"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ModelOperationContentType": {
+      "description": "Uppercase content-part categories supported by worker model-operation capability slots.",
+      "enum": [
+        "TEXT",
+        "IMAGE",
+        "AUDIO",
+        "JSON",
+        "BINARY"
+      ],
+      "type": "string"
+    },
+    "ModelOperationName": {
+      "description": "Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "type": "string"
+    },
+    "ModelOperationSlot": {
+      "additionalProperties": false,
+      "description": "One named capability slot declared by a model operation.",
+      "properties": {
+        "contentTypes": {
+          "description": "Uppercase content types accepted or produced by this slot.",
+          "items": {
+            "$ref": "#/$defs/ModelOperationContentType"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "name": {
+          "description": "Stable slot name used by workstation-side bindings and diagnostics.",
+          "type": "string"
+        },
+        "required": {
+          "description": "Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "contentTypes"
+      ],
+      "type": "object"
+    },
+    "ModelRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier.",
+      "properties": {
+        "attempt": {
+          "description": "One-based model execution attempt number for this dispatch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bindings": {
+          "description": "Deterministically resolved operation-slot bindings used for invocation.",
+          "items": {
+            "$ref": "#/$defs/ResolvedModelOperationBinding"
+          },
+          "type": "array"
+        },
+        "model": {
+          "description": "Concrete model identity resolved for this invocation.",
+          "type": "string"
+        },
+        "modelRequestId": {
+          "description": "Stable identifier correlating this model execution request with its response.",
+          "type": "string"
+        },
+        "operation": {
+          "description": "Uppercase model operation requested by the workstation, such as TTS.",
+          "type": "string"
+        },
+        "providerLocality": {
+          "description": "Worker-declared model locality, such as LOCAL or CLOUD.",
+          "type": "string"
+        },
+        "resources": {
+          "description": "Concrete resources attached to the model worker execution path.",
+          "items": {
+            "$ref": "#/$defs/ModelResourceSummary"
+          },
+          "type": "array"
+        },
+        "worker": {
+          "description": "Runtime worker name selected for the invocation.",
+          "type": "string"
+        },
+        "workingDirectory": {
+          "description": "Working directory resolved for the model execution when present.",
+          "type": "string"
+        },
+        "worktree": {
+          "description": "Worktree path resolved for the model execution when present.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelRequestId",
+        "attempt",
+        "operation",
+        "worker",
+        "model",
+        "providerLocality"
+      ],
+      "type": "object"
+    },
+    "ModelResourceSummary": {
+      "properties": {
+        "backend": {
+          "description": "Local runtime backend identifier for model resources.",
+          "type": "string"
+        },
+        "capacity": {
+          "description": "Declared factory capacity for this resource.",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "loadPolicy": {
+          "description": "Local load-policy metadata for model resources.",
+          "type": "string"
+        },
+        "model": {
+          "description": "Concrete model identifier when the resource is model-specific.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Factory-authored resource name.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Cloud provider identity when the resource models quota or routing.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/ResourceType"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "capacity"
+      ],
+      "type": "object"
+    },
+    "ModelResponseEventPayload": {
+      "additionalProperties": false,
+      "description": "Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads.",
+      "properties": {
+        "attempt": {
+          "description": "One-based model execution attempt number for this dispatch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bindings": {
+          "description": "Deterministically resolved operation-slot bindings used for invocation.",
+          "items": {
+            "$ref": "#/$defs/ResolvedModelOperationBinding"
+          },
+          "type": "array"
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/SafeWorkDiagnostics"
+        },
+        "durationMillis": {
+          "description": "End-to-end model invocation duration in milliseconds.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
+        "loadDurationMillis": {
+          "description": "Duration of the managed local-model load call when one occurred.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "loadRequested": {
+          "description": "Whether this invocation asked the managed local-model runtime to load a handle.",
+          "type": "boolean"
+        },
+        "loadReused": {
+          "description": "Whether an already-loaded local model handle was reused instead of loading again.",
+          "type": "boolean"
+        },
+        "model": {
+          "description": "Concrete model identity resolved for this invocation.",
+          "type": "string"
+        },
+        "modelRequestId": {
+          "description": "Identifier from the matching model request event.",
+          "type": "string"
+        },
+        "operation": {
+          "description": "Uppercase model operation requested by the workstation, such as TTS.",
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/InferenceOutcome"
+        },
+        "outputContent": {
+          "$ref": "#/$defs/WorkContent"
+        },
+        "outputPreview": {
+          "description": "Bounded output preview for non-binary model responses when present.",
+          "type": "string"
+        },
+        "providerLocality": {
+          "description": "Worker-declared model locality, such as LOCAL or CLOUD.",
+          "type": "string"
+        },
+        "resourceAcquired": {
+          "description": "Whether the invocation acquired the required local model resources.",
+          "type": "boolean"
+        },
+        "resourceWaitMillis": {
+          "description": "Time spent waiting for local model resources before acquisition.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resources": {
+          "description": "Concrete resources attached to the model worker execution path.",
+          "items": {
+            "$ref": "#/$defs/ModelResourceSummary"
+          },
+          "type": "array"
+        },
+        "worker": {
+          "description": "Runtime worker name selected for the invocation.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelRequestId",
+        "attempt",
+        "operation",
+        "worker",
+        "model",
+        "providerLocality",
+        "outcome",
+        "durationMillis"
+      ],
+      "type": "object"
+    },
+    "OrchestratorCheckpointWrittenEventPayload": {
+      "additionalProperties": false,
+      "description": "Orchestrator checkpoint reference recorded on the canonical factory event stream. Checkpoint identity lives in FactoryEvent.context and raw VM bodies remain orchestrator-owned.",
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/$defs/FactoryArtifactRef"
+        },
+        "label": {
+          "description": "Customer-visible checkpoint label.",
+          "type": "string"
+        },
+        "resumabilityStatus": {
+          "$ref": "#/$defs/CheckpointResumabilityStatus"
+        },
+        "runtimeSnapshotDigest": {
+          "description": "Stable digest of replay-safe runtime snapshot metadata.",
+          "type": "string"
+        },
+        "sourceHash": {
+          "description": "Stable hash of the authored workflow source at checkpoint time.",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "When the checkpoint was recorded.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "warnings": {
+          "description": "Customer-visible checkpoint warnings.",
+          "items": {
+            "$ref": "#/$defs/FactoryDispatchWarning"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "label",
+        "resumabilityStatus"
+      ],
+      "type": "object"
+    },
+    "OrchestratorPhaseChangedEventPayload": {
+      "additionalProperties": false,
+      "description": "Orchestrator workflow phase transition recorded on the canonical factory event stream. Current phase identity lives in FactoryEvent.context.",
+      "properties": {
+        "completedAt": {
+          "description": "When the previous phase completed, when applicable.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "phaseStatus": {
+          "$ref": "#/$defs/OrchestratorPhaseStatus"
+        },
+        "previousPhaseId": {
+          "description": "Previous workflow phase identifier when available.",
+          "type": "string"
+        },
+        "previousPhaseName": {
+          "description": "Previous workflow phase name when available.",
+          "type": "string"
+        },
+        "progressSummary": {
+          "description": "Bounded customer-visible phase progress summary.",
+          "type": "string"
+        },
+        "startedAt": {
+          "description": "When the current phase started, when applicable.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phaseStatus"
+      ],
+      "type": "object"
+    },
+    "OrchestratorPhaseStatus": {
+      "description": "Canonical workflow phase lifecycle status for orchestrator phase events.",
+      "enum": [
+        "ACTIVE",
+        "COMPLETED",
+        "SKIPPED"
+      ],
+      "type": "string"
+    },
+    "ProviderDiagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "requestMetadata": {
+          "$ref": "#/$defs/StringMap"
+        },
+        "responseMetadata": {
+          "$ref": "#/$defs/StringMap"
+        }
+      },
+      "type": "object"
+    },
+    "ProviderFailureMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "$ref": "#/$defs/WorkFailureFamily"
+        },
+        "type": {
+          "$ref": "#/$defs/WorkFailureType"
+        }
+      },
+      "type": "object"
+    },
+    "ProviderSessionMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Relation": {
+      "additionalProperties": false,
+      "properties": {
+        "requiredState": {
+          "type": "string"
+        },
+        "sourceWorkName": {
+          "type": "string"
+        },
+        "targetWorkId": {
+          "type": "string"
+        },
+        "targetWorkName": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/RelationType"
+        }
+      },
+      "required": [
+        "type",
+        "sourceWorkName",
+        "targetWorkName"
+      ],
+      "type": "object"
+    },
+    "RelationType": {
+      "description": "Relationship category between two pieces of work.",
+      "enum": [
+        "DEPENDS_ON",
+        "PARENT_CHILD",
+        "SPAWNED_BY"
+      ],
+      "type": "string"
+    },
+    "RelationshipChangeRequestEventPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "relation": {
+          "$ref": "#/$defs/Relation"
+        }
+      },
+      "required": [
+        "relation"
+      ],
+      "type": "object"
+    },
+    "RenderedPromptDiagnostic": {
+      "additionalProperties": false,
+      "properties": {
+        "systemPromptHash": {
+          "type": "string"
+        },
+        "userMessageHash": {
+          "type": "string"
+        },
+        "variables": {
+          "$ref": "#/$defs/StringMap"
+        }
+      },
+      "type": "object"
+    },
+    "RequiredTool": {
+      "additionalProperties": false,
+      "description": "One declarative external tool dependency for a portable factory.",
+      "properties": {
+        "command": {
+          "description": "Executable lookup token that must resolve on PATH.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Human-readable tool name used in manifests and validation output.",
+          "type": "string"
+        },
+        "purpose": {
+          "description": "Optional explanation of why the portable factory requires this tool.",
+          "type": "string"
+        },
+        "versionArgs": {
+          "description": "Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "command"
+      ],
+      "type": "object"
+    },
+    "ResolvedModelOperationBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/WorkContent"
+        },
+        "slot": {
+          "description": "Stable input slot name declared by the worker capability.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ResolvedModelOperationBindingSource"
+        }
+      },
+      "required": [
+        "slot",
+        "source",
+        "content"
+      ],
+      "type": "object"
+    },
+    "ResolvedModelOperationBindingSource": {
+      "description": "Source used to resolve one invocation slot binding.",
+      "enum": [
+        "INPUT",
+        "CONFIG",
+        "DEFAULT",
+        "OMITTED"
+      ],
+      "type": "string"
+    },
+    "Resource": {
+      "additionalProperties": false,
+      "description": "Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.",
+      "properties": {
+        "backend": {
+          "description": "Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`. Backend selection stays provider-agnostic in customer-facing factory config.",
+          "type": "string"
+        },
+        "capacity": {
+          "description": "Total units of this resource available to the factory at one time.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "id": {
+          "description": "Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name.",
+          "type": "string"
+        },
+        "loadPolicy": {
+          "description": "Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`.",
+          "type": "string"
+        },
+        "model": {
+          "description": "Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`. Packaged and authored factories declare the same managed-runtime dependency through this field plus matching `MODEL_WORKER.model` values.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Resource name referenced from worker requirements and workstation resourceUsage entries.",
+          "type": "string"
+        },
+        "provider": {
+          "description": "Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ResourceType"
+            }
+          ],
+          "description": "Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`."
+        }
+      },
+      "required": [
+        "name",
+        "capacity"
+      ],
+      "type": "object"
+    },
+    "ResourceManifest": {
+      "additionalProperties": false,
+      "description": "Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.",
+      "properties": {
+        "bundledFiles": {
+          "description": "Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. Export, share, flatten, and materialize flows auto-discover SCRIPT and DOC files under the documented factory subtrees, but ROOT_HELPER entries such as Makefile are opt-in manifest entries that travel only when explicitly declared here. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.",
+          "items": {
+            "$ref": "#/$defs/BundledFile"
+          },
+          "type": "array"
+        },
+        "requiredTools": {
+          "description": "Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.",
+          "items": {
+            "$ref": "#/$defs/RequiredTool"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "ResourceRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "capacity": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "capacity"
+      ],
+      "type": "object"
+    },
+    "ResourceType": {
+      "description": "Uppercase resource families supported by the public factory-config contract.",
+      "enum": [
+        "MODEL",
+        "PROVIDER_QUOTA",
+        "INVOCATION_SLOT"
+      ],
+      "type": "string"
+    },
+    "RunRequestEventPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "diagnostics": {
+          "$ref": "#/$defs/Diagnostics"
+        },
+        "factory": {
+          "$ref": "#/$defs/Factory"
+        },
+        "recordedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "wallClock": {
+          "$ref": "#/$defs/WallClock"
+        }
+      },
+      "required": [
+        "recordedAt",
+        "factory"
+      ],
+      "type": "object"
+    },
+    "RunResponseEventPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "diagnostics": {
+          "$ref": "#/$defs/Diagnostics"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/FactoryState"
+        },
+        "wallClock": {
+          "$ref": "#/$defs/WallClock"
+        }
+      },
+      "type": "object"
+    },
+    "RunnerID": {
+      "description": "Stable built-in runner identifiers supported by factory and workstation runner selection.",
+      "enum": [
+        "codex",
+        "gemini",
+        "kiro",
+        "cursor-cli",
+        "opencode",
+        "pi"
+      ],
+      "type": "string"
+    },
+    "RunnerSelectionSource": {
+      "description": "Configuration layer that supplied the resolved built-in runner selection for a dispatch.",
+      "enum": [
+        "workstation",
+        "factory",
+        "legacy_provider",
+        "default"
+      ],
+      "type": "string"
+    },
+    "SafeAgentRunDiagnostic": {
+      "additionalProperties": false,
+      "description": "Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.",
+      "properties": {
+        "executionBehavior": {
+          "description": "Stable execution behavior marker for agent-loop runs.",
+          "enum": [
+            "agent_run"
+          ],
+          "type": "string"
+        },
+        "failureClass": {
+          "description": "Stable agent-run failure class when execution failed.",
+          "type": "string"
+        },
+        "recoveryAction": {
+          "description": "Customer-visible recovery guidance for actionable agent-run failures.",
+          "type": "string"
+        },
+        "toolCallCount": {
+          "description": "Number of recorded tool lifecycle events for the run.",
+          "format": "int32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "toolDiagnostics": {
+          "description": "Bounded tool diagnostics separate from final agent output.",
+          "items": {
+            "$ref": "#/$defs/AgentRunToolDiagnosticEntry"
+          },
+          "type": "array"
+        },
+        "toolPolicy": {
+          "description": "Effective agent tool policy for the run.",
+          "type": "string"
+        },
+        "transcript": {
+          "description": "Bounded transcript metadata separate from tool diagnostics and final output.",
+          "items": {
+            "$ref": "#/$defs/AgentRunTranscriptEntry"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "SafeWorkDiagnostics": {
+      "additionalProperties": false,
+      "description": "Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.",
+      "properties": {
+        "agentRun": {
+          "$ref": "#/$defs/SafeAgentRunDiagnostic"
+        },
+        "invocation": {
+          "$ref": "#/$defs/InvocationDiagnostic"
+        },
+        "provider": {
+          "$ref": "#/$defs/ProviderDiagnostic"
+        },
+        "renderedPrompt": {
+          "$ref": "#/$defs/RenderedPromptDiagnostic"
+        }
+      },
+      "type": "object"
+    },
+    "ScriptExecutionOutcome": {
+      "description": "Result category returned by one public script execution boundary.",
+      "enum": [
+        "SUCCEEDED",
+        "FAILED_EXIT_CODE",
+        "TIMED_OUT",
+        "PROCESS_ERROR"
+      ],
+      "type": "string"
+    },
+    "ScriptFailureType": {
+      "description": "Stable failure classification for script responses without a normal process exit code.",
+      "enum": [
+        "TIMEOUT",
+        "PROCESS_ERROR"
+      ],
+      "type": "string"
+    },
+    "ScriptRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Request details captured immediately before a script-backed worker invokes a concrete command. Raw environment values and raw stdin content are intentionally excluded from the public script event contract.",
+      "properties": {
+        "args": {
+          "description": "Fully resolved command arguments passed to the script command runner.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "attempt": {
+          "description": "One-based script attempt number for this dispatch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "command": {
+          "description": "Concrete command name executed for this script attempt.",
+          "type": "string"
+        },
+        "dispatchId": {
+          "type": "string"
+        },
+        "scriptRequestId": {
+          "description": "Stable identifier correlating this script request with its response.",
+          "type": "string"
+        },
+        "transitionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scriptRequestId",
+        "dispatchId",
+        "transitionId",
+        "attempt",
+        "command",
+        "args"
+      ],
+      "type": "object"
+    },
+    "ScriptResponseEventPayload": {
+      "additionalProperties": false,
+      "description": "Response details captured after a script-backed worker command returns or fails before a normal exit code. Raw environment values and raw stdin content are intentionally excluded from the public script event contract.",
+      "properties": {
+        "attempt": {
+          "description": "One-based script attempt number for this dispatch.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "dispatchId": {
+          "type": "string"
+        },
+        "durationMillis": {
+          "description": "Script execution duration in milliseconds.",
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exitCode": {
+          "description": "Process exit code when the command returned one.",
+          "type": "integer"
+        },
+        "failureType": {
+          "$ref": "#/$defs/ScriptFailureType"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ScriptExecutionOutcome"
+        },
+        "scriptRequestId": {
+          "description": "Identifier from the matching script request event.",
+          "type": "string"
+        },
+        "stderr": {
+          "description": "Captured stderr text from the script execution boundary.",
+          "type": "string"
+        },
+        "stdout": {
+          "description": "Captured stdout text from the script execution boundary.",
+          "type": "string"
+        },
+        "transitionId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scriptRequestId",
+        "dispatchId",
+        "transitionId",
+        "attempt",
+        "outcome",
+        "stdout",
+        "stderr",
+        "durationMillis"
+      ],
+      "type": "object"
+    },
+    "SessionCompletedEventPayload": {
+      "additionalProperties": false,
+      "description": "Authoritative terminal session lifecycle marker on the canonical factory event stream. Session identity lives in FactoryEvent.context.",
+      "properties": {
+        "artifactIds": {
+          "description": "Artifact identifiers associated with the terminal session outcome.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "completedAt": {
+          "description": "When durable session execution reached a terminal state.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "dispatchCounts": {
+          "$ref": "#/$defs/FactorySessionJavaScriptChildDispatchCounts"
+        },
+        "durationMillis": {
+          "description": "Total session execution duration in milliseconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "failureDetail": {
+          "$ref": "#/$defs/FailureDetail"
+        },
+        "finalStatus": {
+          "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
+        },
+        "resultStatus": {
+          "$ref": "#/$defs/FactoryEventSessionResultStatus"
+        }
+      },
+      "required": [
+        "finalStatus",
+        "completedAt"
+      ],
+      "type": "object"
+    },
+    "SessionLifecycleControlEventPayload": {
+      "additionalProperties": false,
+      "description": "Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.",
+      "properties": {
+        "newStatus": {
+          "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
+        },
+        "occurredAt": {
+          "description": "When the lifecycle control took effect.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "operation": {
+          "$ref": "#/$defs/FactorySessionLifecycleControlKind"
+        },
+        "outcome": {
+          "$ref": "#/$defs/FactorySessionLifecycleControlOutcome"
+        },
+        "previousStatus": {
+          "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
+        },
+        "reason": {
+          "description": "Optional operator-provided reason for the control request.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "outcome",
+        "previousStatus",
+        "newStatus",
+        "occurredAt"
+      ],
+      "type": "object"
+    },
+    "SessionPausedEventPayload": {
+      "additionalProperties": false,
+      "description": "Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.",
+      "properties": {
+        "pausedAt": {
+          "description": "When the Factory Session entered PAUSED.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
+        }
+      },
+      "required": [
+        "status",
+        "pausedAt"
+      ],
+      "type": "object"
+    },
+    "SessionResultUpdatedEventPayload": {
+      "additionalProperties": false,
+      "description": "Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context.",
+      "properties": {
+        "artifactIds": {
+          "description": "Artifact identifiers associated with this result update.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resultStatus": {
+          "$ref": "#/$defs/FactoryEventSessionResultStatus"
+        },
+        "resultSummary": {
+          "$ref": "#/$defs/WorkContent"
+        }
+      },
+      "required": [
+        "resultStatus"
+      ],
+      "type": "object"
+    },
+    "SessionResumedEventPayload": {
+      "additionalProperties": false,
+      "description": "Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.",
+      "properties": {
+        "resumedAt": {
+          "description": "When the Factory Session returned to RUNNING.",
+          "format": "date-time",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/FactorySessionDurableLifecycleStatus"
+        }
+      },
+      "required": [
+        "status",
+        "resumedAt"
+      ],
+      "type": "object"
+    },
+    "SessionStartedEventPayload": {
+      "additionalProperties": false,
+      "description": "Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.",
+      "properties": {
+        "argsDigest": {
+          "description": "Stable digest of effective session arguments.",
+          "type": "string"
+        },
+        "factoryId": {
+          "description": "Stable factory identifier for the session runtime.",
+          "type": "string"
+        },
+        "policyHash": {
+          "description": "Stable hash of the effective orchestrator policy.",
+          "type": "string"
+        },
+        "sourceHash": {
+          "description": "Stable hash of the authored source material.",
+          "type": "string"
+        },
+        "sourceRef": {
+          "description": "Authored workflow or factory source reference when applicable.",
+          "type": "string"
+        },
+        "startedAt": {
+          "description": "When durable session execution started.",
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "required": [
+        "startedAt"
+      ],
+      "type": "object"
+    },
+    "StringMap": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "WallClock": {
+      "additionalProperties": false,
+      "properties": {
+        "finishedAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "startedAt": {
+          "format": "date-time",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Work": {
+      "additionalProperties": false,
+      "description": "A piece of work.",
+      "properties": {
+        "chainingTraceDepth": {
+          "description": "Current chaining depth for this work item when the runtime already knows its upstream lineage.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "content": {
+          "$ref": "#/$defs/WorkContent"
+        },
+        "currentChainingTraceId": {
+          "description": "Explicit chaining-trace identifier for this submitted work item.",
+          "type": "string"
+        },
+        "name": {
+          "description": "A human readable name for the work, not unique",
+          "type": "string"
+        },
+        "payload": {
+          "description": "Opaque work payload forwarded as raw JSON, or a binary data, or whatever else."
+        },
+        "previousChainingTraceIds": {
+          "description": "Explicit predecessor chaining traces that directly caused this work item.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "relations": {
+          "description": "Current outbound relationships attached to this listed source work item when returned by read APIs.",
+          "items": {
+            "$ref": "#/$defs/Relation"
+          },
+          "type": "array"
+        },
+        "requestId": {
+          "description": "Identifier for the original request that created this work, if applicable",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/WorkState"
+        },
+        "stopSummary": {
+          "$ref": "#/$defs/FactoryStopSummary"
+        },
+        "tags": {
+          "$ref": "#/$defs/StringMap"
+        },
+        "traceId": {
+          "description": "Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.",
+          "type": "string"
+        },
+        "workId": {
+          "description": "Unique identifier for the work",
+          "type": "string"
+        },
+        "workTypeName": {
+          "description": "Configured work type name from factory.json for this submitted work item.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "WorkAudioContentPart": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkContentCommonFields"
+        },
+        {
+          "properties": {
+            "file": {
+              "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
+            },
+            "type": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkContentPartType"
+                }
+              ],
+              "enum": [
+                "AUDIO"
+              ]
+            },
+            "url": {
+              "$ref": "#/$defs/WorkContentURLProperty"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered audio content for one work item."
+    },
+    "WorkBinaryContentPart": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkContentCommonFields"
+        },
+        {
+          "properties": {
+            "file": {
+              "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
+            },
+            "type": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkContentPartType"
+                }
+              ],
+              "enum": [
+                "BINARY"
+              ]
+            },
+            "url": {
+              "$ref": "#/$defs/WorkContentURLProperty"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered binary content for one work item."
+    },
+    "WorkContent": {
+      "description": "Ordered canonical content parts for one work item.",
+      "items": {
+        "$ref": "#/$defs/WorkContentPart"
+      },
+      "type": "array"
+    },
+    "WorkContentCommonFields": {
+      "properties": {
+        "artifactId": {
+          "description": "Optional artifact identifier for externally materialized content.",
+          "type": "string"
+        },
+        "contentType": {
+          "description": "Optional MIME content type for file-backed or structured parts.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Optional caller-defined label for slot binding or diagnostics.",
+          "type": "string"
+        },
+        "metadata": {
+          "$ref": "#/$defs/WorkContentMetadata"
+        },
+        "role": {
+          "description": "Optional semantic role for model-operation authoring.",
+          "type": "string"
+        },
+        "slot": {
+          "description": "Optional slot name used by model-operation binding selectors and diagnostics.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "WorkContentDeprecatedFileProperty": {
+      "description": "Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.",
+      "type": "string"
+    },
+    "WorkContentMetadata": {
+      "additionalProperties": true,
+      "description": "Optional metadata attached to one work content part.",
+      "type": "object"
+    },
+    "WorkContentPart": {
+      "description": "One ordered canonical content part on a work item.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/WorkTextContentPart"
+        },
+        {
+          "$ref": "#/$defs/WorkImageContentPart"
+        },
+        {
+          "$ref": "#/$defs/WorkAudioContentPart"
+        },
+        {
+          "$ref": "#/$defs/WorkJsonContentPart"
+        },
+        {
+          "$ref": "#/$defs/WorkBinaryContentPart"
+        }
+      ]
+    },
+    "WorkContentPartType": {
+      "description": "Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.",
+      "enum": [
+        "text",
+        "image",
+        "TEXT",
+        "IMAGE",
+        "AUDIO",
+        "JSON",
+        "BINARY"
+      ],
+      "type": "string"
+    },
+    "WorkContentURLProperty": {
+      "description": "Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "WorkFailureFamily": {
+      "description": "Stable machine-readable failure family used to decide retry and routing behavior for failed work.",
+      "enum": [
+        "terminal",
+        "retryable",
+        "throttle"
+      ],
+      "type": "string"
+    },
+    "WorkFailureType": {
+      "description": "Stable machine-readable failure type used to classify failed work across providers and runtimes.",
+      "enum": [
+        "auth_failure",
+        "permanent_bad_request",
+        "throttled",
+        "internal_server_error",
+        "timeout",
+        "unknown",
+        "misconfigured",
+        "missing_executable",
+        "command_line_too_long"
+      ],
+      "type": "string"
+    },
+    "WorkImageContentPart": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkContentCommonFields"
+        },
+        {
+          "properties": {
+            "file": {
+              "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
+            },
+            "type": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkContentPartType"
+                }
+              ],
+              "enum": [
+                "image",
+                "IMAGE"
+              ]
+            },
+            "url": {
+              "$ref": "#/$defs/WorkContentURLProperty"
+            }
+          },
+          "required": [
+            "type",
+            "url"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered image content for one work item."
+    },
+    "WorkJsonContentPart": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkContentCommonFields"
+        },
+        {
+          "properties": {
+            "json": {
+              "description": "Arbitrary JSON value preserved in canonical part order."
+            },
+            "type": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkContentPartType"
+                }
+              ],
+              "enum": [
+                "JSON"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "json"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered JSON content for one work item."
+    },
+    "WorkMetrics": {
+      "additionalProperties": false,
+      "properties": {
+        "cost": {
+          "format": "double",
+          "type": "number"
+        },
+        "durationMillis": {
+          "format": "int64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "retryCount": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "WorkOutcome": {
+      "description": "Result category returned by a workstation execution.",
+      "enum": [
+        "ACCEPTED",
+        "CONTINUE",
+        "REJECTED",
+        "FAILED"
+      ],
+      "type": "string"
+    },
+    "WorkPropagation": {
+      "additionalProperties": false,
+      "description": "Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.",
+      "properties": {
+        "mode": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkPropagationMode"
+            }
+          ],
+          "description": "Propagation mode for downstream work payload selection after this workstation succeeds."
+        }
+      },
+      "required": [
+        "mode"
+      ],
+      "type": "object"
+    },
+    "WorkPropagationMode": {
+      "description": "Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.",
+      "enum": [
+        "OUTPUT_AS_PAYLOAD",
+        "PRESERVE_INPUT"
+      ],
+      "type": "string"
+    },
+    "WorkRequestEventPayload": {
+      "additionalProperties": false,
+      "description": "Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted.",
+      "properties": {
+        "parentLineage": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "relations": {
+          "items": {
+            "$ref": "#/$defs/Relation"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/WorkRequestType"
+        },
+        "works": {
+          "items": {
+            "$ref": "#/$defs/Work"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "WorkRequestType": {
+      "description": "Kind of work request accepted by the factory.",
+      "enum": [
+        "FACTORY_REQUEST_BATCH"
+      ],
+      "type": "string"
+    },
+    "WorkState": {
+      "additionalProperties": false,
+      "description": "A lifecycle state that a work item can occupy inside one work type.",
+      "properties": {
+        "id": {
+          "description": "Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Customer-authored state name referenced by workstation inputs and outputs.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkStateType"
+            }
+          ],
+          "description": "Lifecycle category for this state, such as initial, processing, terminal, or failed."
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "type": "object"
+    },
+    "WorkStateChangeEventPayload": {
+      "additionalProperties": false,
+      "description": "Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.",
+      "properties": {
+        "fromPlaceId": {
+          "description": "Marking place identifier before the move.",
+          "type": "string"
+        },
+        "fromState": {
+          "description": "Authored state name before the move.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Optional human-readable reason for the move.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/WorkStateChangeSource"
+        },
+        "toPlaceId": {
+          "description": "Marking place identifier after the move.",
+          "type": "string"
+        },
+        "toState": {
+          "description": "Authored state name after the move.",
+          "type": "string"
+        },
+        "triggerWorkId": {
+          "description": "Optional work identifier that triggered a cascade move.",
+          "type": "string"
+        },
+        "workId": {
+          "type": "string"
+        },
+        "workTypeName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workId",
+        "workTypeName",
+        "fromState",
+        "toState",
+        "fromPlaceId",
+        "toPlaceId",
+        "source"
+      ],
+      "type": "object"
+    },
+    "WorkStateChangeSource": {
+      "description": "Origin of a WORK_STATE_CHANGE event.",
+      "enum": [
+        "api",
+        "cli",
+        "cascading-failure"
+      ],
+      "type": "string"
+    },
+    "WorkStateType": {
+      "description": "Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.",
+      "enum": [
+        "INITIAL",
+        "PROCESSING",
+        "TERMINAL",
+        "FAILED"
+      ],
+      "type": "string"
+    },
+    "WorkTextContentPart": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkContentCommonFields"
+        },
+        {
+          "properties": {
+            "text": {
+              "description": "Inline text content preserved in canonical part order.",
+              "type": "string"
+            },
+            "type": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/WorkContentPartType"
+                }
+              ],
+              "enum": [
+                "text",
+                "TEXT"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered inline text content for one work item."
+    },
+    "WorkType": {
+      "additionalProperties": false,
+      "description": "A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.",
+      "properties": {
+        "handlingBehavior": {
+          "description": "Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.",
+          "items": {
+            "$ref": "#/$defs/WorkTypeHandlingBehavior"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.",
+          "type": "string"
+        },
+        "states": {
+          "description": "Lifecycle states available for work items of this type.",
+          "items": {
+            "$ref": "#/$defs/WorkState"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "states"
+      ],
+      "type": "object"
+    },
+    "WorkTypeHandlingBehavior": {
+      "description": "Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.",
+      "enum": [
+        "DEFAULT"
+      ],
+      "type": "string"
+    },
+    "Worker": {
+      "additionalProperties": false,
+      "description": "A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.",
+      "properties": {
+        "agentTools": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/AgentWorkerToolsConfig"
+            }
+          ],
+          "description": "Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools."
+        },
+        "args": {
+          "description": "Additional command arguments passed to the configured command.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "auth": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedWorkerAuth"
+            }
+          ],
+          "description": "Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef."
+        },
+        "body": {
+          "description": "Inline worker instructions or script body when the worker is authored directly in factory config.",
+          "type": "string"
+        },
+        "command": {
+          "description": "Command to execute when this worker runs through a command or script provider.",
+          "type": "string"
+        },
+        "executorProvider": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerProvider"
+            }
+          ],
+          "description": "Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`."
+        },
+        "id": {
+          "description": "Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.",
+          "type": "string"
+        },
+        "linear": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedLinearWorkerConfig"
+            }
+          ],
+          "description": "Provider-specific configuration for the built-in hosted LINEAR worker."
+        },
+        "model": {
+          "description": "Model identifier to request from the configured model provider when this worker uses model execution.",
+          "type": "string"
+        },
+        "modelLocality": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerModelLocality"
+            }
+          ],
+          "description": "Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution."
+        },
+        "modelProvider": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerModelProvider"
+            }
+          ],
+          "description": "Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs."
+        },
+        "name": {
+          "description": "Worker name referenced by Workstation.worker.",
+          "type": "string"
+        },
+        "openCodeAgent": {
+          "description": "Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
+          "type": "string"
+        },
+        "operations": {
+          "description": "Provider-agnostic model operations that this worker can execute, including named input and output slots.",
+          "items": {
+            "$ref": "#/$defs/ModelOperation"
+          },
+          "type": "array"
+        },
+        "provider": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedWorkerProvider"
+            }
+          ],
+          "description": "Built-in hosted provider identity when this worker uses repository-owned hosted execution."
+        },
+        "resources": {
+          "description": "Resource capacity this worker requires before it can be dispatched.",
+          "items": {
+            "$ref": "#/$defs/ResourceRequirement"
+          },
+          "type": "array"
+        },
+        "skipPermissions": {
+          "description": "When true, bypasses permission checks for providers that support permission gating.",
+          "type": "boolean"
+        },
+        "stopToken": {
+          "description": "Marker that tells model-oriented workers where to stop generated output when the provider supports it.",
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Optional Go duration that caps one worker execution attempt.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerType"
+            }
+          ],
+          "description": "Worker implementation family to instantiate for this definition."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "WorkerModelLocality": {
+      "description": "Provider locality for a model worker capability declaration.",
+      "enum": [
+        "LOCAL",
+        "CLOUD"
+      ],
+      "type": "string"
+    },
+    "WorkerModelProvider": {
+      "description": "Canonical model-provider identifiers supported by model workers in factory config.",
+      "enum": [
+        "CLAUDE",
+        "CODEX",
+        "CURSOR",
+        "GEMINI",
+        "KIRO",
+        "OPENCODE",
+        "PI",
+        "AGY"
+      ],
+      "type": "string"
+    },
+    "WorkerProvider": {
+      "description": "Concrete worker-provider wrappers supported by the public factory-config contract.",
+      "enum": [
+        "SCRIPT_WRAP"
+      ],
+      "type": "string"
+    },
+    "WorkerType": {
+      "description": "Worker implementation families supported by the public factory-config contract.",
+      "enum": [
+        "INFERENCE_WORKER",
+        "AGENT_WORKER",
+        "SCRIPT_WORKER",
+        "POLLER_WORKER",
+        "MODEL_WORKER",
+        "HOSTED_WORKER"
+      ],
+      "type": "string"
+    },
+    "Workstation": {
+      "additionalProperties": false,
+      "description": "A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.",
+      "properties": {
+        "behavior": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationKind"
+            }
+          ],
+          "description": "Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution."
+        },
+        "body": {
+          "description": "Inline workstation instructions or script body when authored directly in factory config.",
+          "type": "string"
+        },
+        "classificationRoutes": {
+          "description": "Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs.",
+          "items": {
+            "$ref": "#/$defs/ClassificationRoute"
+          },
+          "type": "array"
+        },
+        "copyReferencedScripts": {
+          "description": "Copy supported referenced script files into the expanded workstation layout when config expand runs.",
+          "type": "boolean"
+        },
+        "cron": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationCron"
+            }
+          ],
+          "description": "Cron trigger configuration for workstations whose behavior is CRON."
+        },
+        "env": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/StringMap"
+            }
+          ],
+          "description": "Environment variables added to the workstation execution context."
+        },
+        "guards": {
+          "description": "Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.",
+          "items": {
+            "$ref": "#/$defs/WorkstationGuard"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.",
+          "type": "string"
+        },
+        "inputs": {
+          "description": "Work states this workstation can consume before it dispatches.",
+          "items": {
+            "$ref": "#/$defs/WorkstationIO"
+          },
+          "type": "array"
+        },
+        "limits": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationLimits"
+            }
+          ],
+          "description": "Retry and execution ceilings applied to this workstation."
+        },
+        "name": {
+          "description": "Customer-authored workstation name used by guards, diagnostics, and authored references.",
+          "type": "string"
+        },
+        "onContinue": {
+          "description": "Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue.",
+          "items": {
+            "$ref": "#/$defs/WorkstationIO"
+          },
+          "type": "array"
+        },
+        "onFailure": {
+          "description": "Optional destination emitted when the workstation fails permanently.",
+          "items": {
+            "$ref": "#/$defs/WorkstationIO"
+          },
+          "type": "array"
+        },
+        "onRejection": {
+          "description": "Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection.",
+          "items": {
+            "$ref": "#/$defs/WorkstationIO"
+          },
+          "type": "array"
+        },
+        "openCodeAgent": {
+          "description": "Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent \u003cname\u003e`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).",
+          "type": "string"
+        },
+        "operation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ModelOperationName"
+            }
+          ],
+          "description": "Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`."
+        },
+        "operationBindings": {
+          "description": "Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.",
+          "items": {
+            "$ref": "#/$defs/WorkstationOperationBinding"
+          },
+          "type": "array"
+        },
+        "outcomeFormat": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationOutcomeFormat"
+            }
+          ],
+          "description": "Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing."
+        },
+        "outputSchema": {
+          "description": "JSON schema string used to validate or parse structured model output when configured.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs.",
+          "items": {
+            "$ref": "#/$defs/WorkstationIO"
+          },
+          "type": "array"
+        },
+        "promptFile": {
+          "description": "Path to a prompt template file loaded for model-oriented workstation execution.",
+          "type": "string"
+        },
+        "resources": {
+          "description": "Resource capacity this workstation consumes while one dispatch is in flight.",
+          "items": {
+            "$ref": "#/$defs/ResourceRequirement"
+          },
+          "type": "array"
+        },
+        "runner": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RunnerID"
+            }
+          ],
+          "description": "Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner."
+        },
+        "stopWords": {
+          "description": "Stop words authored on the topology entry for model-oriented dispatches.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationType"
+            }
+          ],
+          "description": "Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type."
+        },
+        "workPropagation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkPropagation"
+            }
+          ],
+          "description": "Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload."
+        },
+        "worker": {
+          "description": "Name of a worker declared in the workers list.",
+          "type": "string"
+        },
+        "workingDirectory": {
+          "description": "Go template resolved from token tags at dispatch time.",
+          "type": "string"
+        },
+        "worktree": {
+          "description": "Go template resolved and passed as the worktree path to CLI dispatchers.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "worker",
+        "inputs"
+      ],
+      "type": "object"
+    },
+    "WorkstationCron": {
+      "additionalProperties": false,
+      "description": "Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.",
+      "properties": {
+        "expiryWindow": {
+          "description": "Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.",
+          "type": "string"
+        },
+        "jitter": {
+          "description": "Non-negative Go duration used as the maximum deterministic delay added to scheduled time tokens. Defaults to \"0s\".",
+          "type": "string"
+        },
+        "schedule": {
+          "description": "Standard five-field cron expression used to produce internal time work while the factory service is running.",
+          "type": "string"
+        },
+        "triggerAtStart": {
+          "default": false,
+          "description": "When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "schedule"
+      ],
+      "type": "object"
+    },
+    "WorkstationGuard": {
+      "additionalProperties": false,
+      "description": "Guard attached to a workstation as a whole.",
+      "properties": {
+        "matchConfig": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GuardMatchConfig"
+            }
+          ],
+          "description": "For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs."
+        },
+        "matchInput": {
+          "description": "For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "maxVisits": {
+          "description": "For `VISIT_COUNT` guards, the visit threshold.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "parentInput": {
+          "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "spawnedBy": {
+          "description": "For dynamic fanout input guards, the workstation that spawns the children for count tracking.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationGuardType"
+            }
+          ],
+          "description": "Guard condition to evaluate for this workstation-level attachment."
+        },
+        "workstation": {
+          "description": "For `VISIT_COUNT` guards, the workstation whose visits are counted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "WorkstationGuardType": {
+      "description": "Guard condition attached to a workstation as a whole.",
+      "enum": [
+        "VISIT_COUNT",
+        "MATCHES_FIELDS"
+      ],
+      "type": "string"
+    },
+    "WorkstationIO": {
+      "additionalProperties": false,
+      "description": "One authored work-state reference consumed or emitted by a workstation.",
+      "properties": {
+        "guards": {
+          "description": "Per-input guards that must pass before this specific input can be used.",
+          "items": {
+            "$ref": "#/$defs/InputGuard"
+          },
+          "type": "array"
+        },
+        "state": {
+          "description": "Name of the work state consumed or emitted for the referenced work type.",
+          "type": "string"
+        },
+        "workType": {
+          "description": "Name of the work type consumed or emitted at this edge of the workstation.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "workType",
+        "state"
+      ],
+      "type": "object"
+    },
+    "WorkstationKind": {
+      "default": "STANDARD",
+      "description": "Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.",
+      "enum": [
+        "STANDARD",
+        "REPEATER",
+        "CRON",
+        "POLLER"
+      ],
+      "type": "string"
+    },
+    "WorkstationLimits": {
+      "additionalProperties": false,
+      "description": "Retry and execution ceilings applied to one workstation definition.",
+      "properties": {
+        "maxExecutionTime": {
+          "description": "Go duration limit for one dispatch attempt before it times out.",
+          "type": "string"
+        },
+        "maxRetries": {
+          "description": "Maximum number of retry attempts after a failed dispatch before the workstation gives up.",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "WorkstationOperationBinding": {
+      "additionalProperties": false,
+      "description": "One workstation-authored binding for a provider-agnostic model-operation input slot.",
+      "properties": {
+        "config": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkContent"
+            }
+          ],
+          "description": "Static authored content bound directly or used as the first fallback when runtime input does not match."
+        },
+        "defaultContent": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkContent"
+            }
+          ],
+          "description": "Optional final fallback content when neither runtime input nor config content resolves the slot."
+        },
+        "selector": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationOperationBindingSelector"
+            }
+          ],
+          "description": "Ordered runtime-input selector used before falling back to config or default content."
+        },
+        "slot": {
+          "description": "Stable input slot name declared by the worker operation.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slot"
+      ],
+      "type": "object"
+    },
+    "WorkstationOperationBindingSelector": {
+      "additionalProperties": false,
+      "description": "Selector fields used to resolve one content part from ordered runtime input.",
+      "properties": {
+        "label": {
+          "description": "Match a content part by its label field.",
+          "type": "string"
+        },
+        "role": {
+          "description": "Match a content part by its role field.",
+          "type": "string"
+        },
+        "slot": {
+          "description": "Match a content part by its authored slot field.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/ModelOperationContentType"
+            }
+          ],
+          "description": "Match a content part by its uppercase public type."
+        }
+      },
+      "type": "object"
+    },
+    "WorkstationOutcomeFormat": {
+      "description": "Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.",
+      "enum": [
+        "decision-envelope"
+      ],
+      "type": "string"
+    },
+    "WorkstationType": {
+      "description": "Runtime workstation implementation types supported by the public factory-config contract.",
+      "enum": [
+        "INFERENCE_RUN",
+        "AGENT_RUN",
+        "SCRIPT_RUN",
+        "POLLER_RUN",
+        "MODEL_WORKSTATION",
+        "MODEL_INVOKE",
+        "LOGICAL_MOVE",
+        "CLASSIFIER_WORKSTATION"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "https://schemas.portpowered.com/you/factory/factory-recording.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Chapter-free recording of canonical Factory Events for exactly one Factory Session. Events remain in their recorded canonical order.",
+  "properties": {
+    "events": {
+      "description": "Canonical Factory Events in their original recorded order.",
+      "items": {
+        "$ref": "#/$defs/FactoryEvent"
+      },
+      "type": "array"
+    },
+    "schemaVersion": {
+      "description": "Version of the Factory Recording envelope schema.",
+      "enum": [
+        "agent-factory.recording.v1"
+      ],
+      "type": "string"
+    },
+    "sessionId": {
+      "description": "Canonical identity of the Factory Session represented by every event.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "sessionId",
+    "events"
+  ],
+  "title": "Factory Recording",
+  "type": "object"
+}

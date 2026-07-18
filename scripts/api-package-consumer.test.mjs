@@ -34,6 +34,8 @@ const protectedFiles = [
 	"packages/api/generated/mcp/tools.json",
 	"packages/api/generated/schemas/you-config.schema.json",
 	"packages/api/generated/schemas/factory.schema.json",
+	"packages/api/generated/schemas/factory-event.schema.json",
+	"packages/api/generated/schemas/factory-recording.schema.json",
 	"packages/api/generated/schemas/mock-workers.schema.json",
 	"packages/api/generated/javascript/runtime-api.json",
 	"pkg/config/globalconfiginventory/testdata/baseline/global-config-topology.json",
@@ -94,6 +96,8 @@ test("real tarball resolves every currently staged export from an isolated insta
 			"@you-agent-factory/api/mcp",
 			"@you-agent-factory/api/openapi",
 			"@you-agent-factory/api/schemas/factory",
+			"@you-agent-factory/api/schemas/factory-event",
+			"@you-agent-factory/api/schemas/factory-recording",
 			"@you-agent-factory/api/schemas/mock-workers",
 			"@you-agent-factory/api/schemas/you-config",
 		],
@@ -209,7 +213,11 @@ test("consumer verification rejects semantically substituted manifest and schema
 		["schemas/mock-workers", { formatVersion: "mock-workers-topology/v1" }],
 	];
 	for (const [specifierSuffix, document] of substitutions) {
-		const target = join(packageRoot, ...specifierSuffix.split("/"), "artifact.json");
+		const target = join(
+			packageRoot,
+			...specifierSuffix.split("/"),
+			"artifact.json",
+		);
 		await mkdir(dirname(target), { recursive: true });
 		await writeFile(target, `${JSON.stringify(document)}\n`);
 		await assert.rejects(

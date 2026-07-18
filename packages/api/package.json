@@ -16,6 +16,8 @@
     "generated/mcp/tools.json",
     "generated/schemas/you-config.schema.json",
     "generated/schemas/factory.schema.json",
+    "generated/schemas/factory-event.schema.json",
+    "generated/schemas/factory-recording.schema.json",
     "generated/schemas/mock-workers.schema.json",
     "generated/javascript/runtime-api.json",
     "generated/joined/contracts/common/deprecations.schema.json",
@@ -29,6 +31,8 @@
     "./mcp": "./generated/mcp/tools.json",
     "./schemas/you-config": "./generated/schemas/you-config.schema.json",
     "./schemas/factory": "./generated/schemas/factory.schema.json",
+    "./schemas/factory-event": "./generated/schemas/factory-event.schema.json",
+    "./schemas/factory-recording": "./generated/schemas/factory-recording.schema.json",
     "./schemas/mock-workers": "./generated/schemas/mock-workers.schema.json",
     "./javascript/runtime": "./generated/javascript/runtime-api.json",
     "./joined/*": "./generated/joined/*"

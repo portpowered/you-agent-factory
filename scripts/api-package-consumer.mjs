@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { lstat, readFile, realpath } from "node:fs/promises";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createRequire } from "node:module";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 function normalizedPath(path) {
 	return path.replaceAll("\\", "/").replace(/^\.\//, "");
@@ -196,7 +196,12 @@ async function requireManifest(document, packageRoot, specifier) {
 		typeof manifest.packageId !== "string" ||
 		typeof manifest.packageVersion !== "string" ||
 		!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(manifest.sourceCommit) ||
-		Object.keys(requireObject(manifest.familyFormatVersions, "invalid familyFormatVersions")).length === 0 ||
+		Object.keys(
+			requireObject(
+				manifest.familyFormatVersions,
+				"invalid familyFormatVersions",
+			),
+		).length === 0 ||
 		Object.keys(requireObject(manifest.exports, "invalid exports")).length === 0
 	) {
 		throw new Error(
@@ -217,20 +222,30 @@ async function requireManifest(document, packageRoot, specifier) {
 				`[api-package-consumer] manifest export metadata is invalid: ${id}`,
 			);
 		}
-		const artifactPath = await realpath(join(packageRoot, ...entry.path.split("/")));
+		const artifactPath = await realpath(
+			join(packageRoot, ...entry.path.split("/")),
+		);
 		if (!isWithin(packageRoot, artifactPath)) {
-			throw new Error(`[api-package-consumer] manifest artifact escapes package: ${id}`);
+			throw new Error(
+				`[api-package-consumer] manifest artifact escapes package: ${id}`,
+			);
 		}
 		const digest = createHash("sha256")
 			.update(await readFile(artifactPath))
 			.digest("hex");
 		if (digest !== entry.artifactHash) {
-			throw new Error(`[api-package-consumer] manifest artifact hash mismatch: ${id}`);
+			throw new Error(
+				`[api-package-consumer] manifest artifact hash mismatch: ${id}`,
+			);
 		}
 	}
 }
 
-async function verifyJSONArtifactSemantics({ document, packageRoot, specifier }) {
+async function verifyJSONArtifactSemantics({
+	document,
+	packageRoot,
+	specifier,
+}) {
 	if (specifier.endsWith("/manifest")) {
 		await requireManifest(document, packageRoot, specifier);
 		return;
@@ -242,7 +257,9 @@ async function verifyJSONArtifactSemantics({ document, packageRoot, specifier })
 			"https://schemas.portpowered.com/you/config/you-config.schema.json",
 		);
 		if (!schema.properties.defaults || !schema.properties.workerPresets) {
-			throw new Error(`[api-package-consumer] you-config schema is incomplete: ${specifier}`);
+			throw new Error(
+				`[api-package-consumer] you-config schema is incomplete: ${specifier}`,
+			);
 		}
 		return;
 	}
@@ -252,12 +269,44 @@ async function verifyJSONArtifactSemantics({ document, packageRoot, specifier })
 			specifier,
 			"https://schemas.portpowered.com/you/config/factory.schema.json",
 		);
-		if (!schema.required?.includes("name") || Object.keys(schema.$defs ?? {}).length === 0) {
-			throw new Error(`[api-package-consumer] Factory schema is incomplete: ${specifier}`);
+		if (
+			!schema.required?.includes("name") ||
+			Object.keys(schema.$defs ?? {}).length === 0
+		) {
+			throw new Error(
+				`[api-package-consumer] Factory schema is incomplete: ${specifier}`,
+			);
 		}
 		if (JSON.stringify(schema).includes("#/components/schemas/")) {
-			throw new Error(`[api-package-consumer] Factory schema retains OpenAPI-only references: ${specifier}`);
+			throw new Error(
+				`[api-package-consumer] Factory schema retains OpenAPI-only references: ${specifier}`,
+			);
 		}
+		return;
+	}
+	if (specifier.endsWith("/schemas/factory-event")) {
+		requireFactoryEventSchema(document, specifier);
+		return;
+	}
+	if (specifier.endsWith("/schemas/factory-recording")) {
+		const schema = requireObject(
+			document,
+			`[api-package-consumer] export is not a JSON Schema object: ${specifier}`,
+		);
+		if (
+			schema.$schema !== "https://json-schema.org/draft/2020-12/schema" ||
+			schema.$id !==
+				"https://schemas.portpowered.com/you/factory/factory-recording.schema.json" ||
+			!schema.required?.includes("schemaVersion") ||
+			!schema.required?.includes("sessionId") ||
+			!schema.required?.includes("events") ||
+			schema.properties?.events?.items?.$ref !== "#/$defs/FactoryEvent"
+		) {
+			throw new Error(
+				`[api-package-consumer] Factory Recording schema is incomplete: ${specifier}`,
+			);
+		}
+		requireFactoryEventSchema(schema.$defs?.FactoryEvent, specifier);
 		return;
 	}
 	if (specifier.endsWith("/schemas/mock-workers")) {
@@ -272,12 +321,40 @@ async function verifyJSONArtifactSemantics({ document, packageRoot, specifier })
 			!mockWorker?.properties?.runType?.enum?.includes("script") ||
 			!Array.isArray(mockWorker.allOf)
 		) {
-			throw new Error(`[api-package-consumer] mock-workers schema is incomplete: ${specifier}`);
+			throw new Error(
+				`[api-package-consumer] mock-workers schema is incomplete: ${specifier}`,
+			);
 		}
 	}
 }
 
-function runNpmInstall(consumerDirectory, packageTarget, { offline = false } = {}) {
+function requireFactoryEventSchema(document, specifier) {
+	const schema = requireObject(
+		document,
+		`[api-package-consumer] export is not a Factory Event schema object: ${specifier}`,
+	);
+	if (
+		!schema.required?.includes("schemaVersion") ||
+		!schema.required?.includes("id") ||
+		!schema.required?.includes("type") ||
+		!schema.required?.includes("context") ||
+		!schema.required?.includes("payload") ||
+		schema.oneOf?.length !== 31 ||
+		schema.discriminator?.propertyName !== "type" ||
+		Object.keys(schema.discriminator?.mapping ?? {}).length !== 31
+	) {
+		throw new Error(
+			`[api-package-consumer] Factory Event schema is incomplete: ${specifier}`,
+		);
+	}
+	return schema;
+}
+
+function runNpmInstall(
+	consumerDirectory,
+	packageTarget,
+	{ offline = false } = {},
+) {
 	const arguments_ = [
 		"install",
 		"--ignore-scripts",

@@ -135,9 +135,11 @@ generate-ui-api:
 
 generate-client: bundle-api
 	node scripts/generate-client.mjs
+	$(MAKE) contracts-generate
 
 client-generated-check: bundle-api
 	node scripts/generate-client.mjs --check
+	$(MAKE) contracts-check
 
 client-typecheck:
 	cd packages/client && node ../../ui/node_modules/typescript/bin/tsc --project tsconfig.json

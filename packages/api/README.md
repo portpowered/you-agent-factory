@@ -14,6 +14,8 @@ are not JavaScript module APIs.
 | `@you-agent-factory/api/mcp` | MCP tool inventory JSON |
 | `@you-agent-factory/api/schemas/you-config` | `you` configuration JSON Schema |
 | `@you-agent-factory/api/schemas/factory` | Factory configuration JSON Schema |
+| `@you-agent-factory/api/schemas/factory-event` | Standalone canonical Factory Event JSON Schema |
+| `@you-agent-factory/api/schemas/factory-recording` | Standalone chapter-free Factory Recording JSON Schema |
 | `@you-agent-factory/api/schemas/mock-workers` | Mock-worker configuration JSON Schema |
 | `@you-agent-factory/api/javascript/runtime` | JavaScript runtime contract JSON |
 | `@you-agent-factory/api/joined/*` | Raw joined JSON contract artifacts |
@@ -53,6 +55,7 @@ depend on npm.
 Authored contract files in the repository and `api/openapi.yaml` remain the
 canonical sources. Content under `packages/api/generated/` is a generated
 publication projection and must not be edited or used as an authoring source.
-The configuration schemas are JSON Schema Draft 2020-12 documents; the Factory
-schema is derived from the canonical bundled OpenAPI Factory component graph
-during contract staging.
+The schemas are JSON Schema Draft 2020-12 documents derived from canonical
+bundled OpenAPI component graphs during contract staging. The standalone
+Factory Event and Factory Recording schemas preserve the event discriminator
+as data and enforce each event type against its corresponding payload schema.
