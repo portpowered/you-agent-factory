@@ -61,6 +61,7 @@ func TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline(t *testing.T)
 	assertJavaScriptPipelineProcessResult(t, ctx, runErr, stdout.String(), stderr.String())
 	result := decodeSingleJavaScriptFactoryRunResult(t, stdout.String())
 	assertOrderedJavaScriptPipelineResult(t, result)
+	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func assertJavaScriptPipelineProcessResult(t *testing.T, ctx context.Context, runErr error, stdout, stderr string) {
@@ -209,8 +210,6 @@ func TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult(t *t
 	if result.EffectivePolicy == nil || result.EffectivePolicy.AdditionalProperties["allowNetwork"] != false {
 		t.Fatalf("effective policy = %#v, want public network disabled", result.EffectivePolicy)
 	}
-
-	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func decodeSingleJavaScriptFactoryRunResult(t *testing.T, stdout string) factoryapi.FactorySessionSyncExecutionResponse {
