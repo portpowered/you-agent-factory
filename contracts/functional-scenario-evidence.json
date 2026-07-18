@@ -29,13 +29,7 @@
       ]
     },
     {
-      "test": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
-      "stableIds": [
-        "cli/you.run"
-      ]
-    },
-    {
-      "test": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go::TestJavaScriptFactoryRun_RealCLIUsesMockWorkersAndReturnsPrimaryResult",
+      "test": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go::TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline",
       "stableIds": [
         "cli/you.run"
       ]

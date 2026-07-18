@@ -22,7 +22,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult(t *testing.T) {
@@ -154,7 +153,6 @@ func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText(t *testin
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty stderr on successful invocation", stderr.String())
 	}
-	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin(t *testing.T) {
