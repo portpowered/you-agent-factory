@@ -2007,6 +2007,8 @@ components:
     # ==== Unified Agent Factory event log schemas =======
     FactoryEvent:
       $ref: './components/schemas/events/FactoryEvent.yaml'
+    FactoryRecording:
+      $ref: './components/schemas/events/FactoryRecording.yaml'
     FactoryEventType:
       $ref: './components/schemas/events/FactoryEventType.yaml'
     FactoryEventContext:

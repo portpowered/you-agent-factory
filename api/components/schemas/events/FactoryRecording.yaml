@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+description: >-
+  Chapter-free recording of canonical Factory Events for exactly one Factory
+  Session. Events remain in their recorded canonical order.
+required:
+  - schemaVersion
+  - sessionId
+  - events
+properties:
+  schemaVersion:
+    type: string
+    description: Version of the Factory Recording envelope schema.
+    enum:
+      - agent-factory.recording.v1
+  sessionId:
+    type: string
+    minLength: 1
+    description: Canonical identity of the Factory Session represented by every event.
+  events:
+    type: array
+    description: Canonical Factory Events in their original recorded order.
+    items:
+      $ref: ./FactoryEvent.yaml

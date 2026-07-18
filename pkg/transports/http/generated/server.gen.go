@@ -256,6 +256,11 @@ const (
 	WORKFLOWNAME   FactoryPreviewRequestSourceKind = "WORKFLOW_NAME"
 )
 
+// Defines values for FactoryRecordingSchemaVersion.
+const (
+	AgentFactoryRecordingV1 FactoryRecordingSchemaVersion = "agent-factory.recording.v1"
+)
+
 // Defines values for FactoryResponseEventSchemaVersion.
 const (
 	AgentFactoryResponseEventV1 FactoryResponseEventSchemaVersion = "agent-factory.response-event.v1"
@@ -1973,6 +1978,21 @@ type FactoryPreviewResult struct {
 	// Valid True when source resolution, validation, policy, and artifact-root checks pass for Factory preview.
 	Valid bool `json:"valid"`
 }
+
+// FactoryRecording Chapter-free recording of canonical Factory Events for exactly one Factory Session. Events remain in their recorded canonical order.
+type FactoryRecording struct {
+	// Events Canonical Factory Events in their original recorded order.
+	Events []FactoryEvent `json:"events"`
+
+	// SchemaVersion Version of the Factory Recording envelope schema.
+	SchemaVersion FactoryRecordingSchemaVersion `json:"schemaVersion"`
+
+	// SessionId Canonical identity of the Factory Session represented by every event.
+	SessionId string `json:"sessionId"`
+}
+
+// FactoryRecordingSchemaVersion Version of the Factory Recording envelope schema.
+type FactoryRecordingSchemaVersion string
 
 // FactoryResponseEvent Provider-neutral envelope for transient agent activity observed during one Factory Session run. Unlike canonical factory events, these records are ephemeral observation records and must not derive canonical work state after replay.
 type FactoryResponseEvent struct {

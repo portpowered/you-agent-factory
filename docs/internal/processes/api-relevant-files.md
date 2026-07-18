@@ -2,6 +2,11 @@
 
 Use this map when changing the public REST contract.
 
+- Public TypeScript consumer contracts live in `packages/client`: generated
+  OpenAPI namespaces stay in `src/generated/openapi.ts`, while stable aliases
+  stay handwritten in `src/contracts.ts`. Regenerate both the bundled API and
+  client projection with `make generate-client`; use `make client-test` for
+  byte-freshness, alias typechecking, and framework/host boundary evidence.
 - Canonical backend `Work`, `WorkRequest`, ordered content, relations, dispatch
   identity, state-change, and payload-lineage contracts live in `pkg/work`.
   Generated OpenAPI conversion remains at transport boundaries such as

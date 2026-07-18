@@ -1,0 +1,25 @@
+{
+  "name": "@you-agent-factory/client",
+  "version": "0.0.0",
+  "description": "Framework-neutral Factory contracts and recording validation for you-agent-factory consumers.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git"
+  },
+  "type": "module",
+  "files": [
+    "README.md",
+    "LICENSE.md",
+    "src"
+  ],
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts"
+    },
+    "./generated/openapi": {
+      "types": "./src/generated/openapi.ts"
+    }
+  }
+}
