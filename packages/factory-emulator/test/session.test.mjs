@@ -1321,6 +1321,99 @@ test("synchronous Work limits pause before oversized submissions and scheduler b
   assert.equal(due.emulator.state().counters.completions, 0);
 });
 
+test("oversized initial and interactive batches stop before input traversal or cloning", async () => {
+  let inspectedItems = 0;
+  const unvisitedItem = new Proxy(
+    { id: "unvisited", workType: "checkout" },
+    {
+      getOwnPropertyDescriptor(target, property) {
+        inspectedItems += 1;
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+      getPrototypeOf(target) {
+        inspectedItems += 1;
+        return Reflect.getPrototypeOf(target);
+      },
+      ownKeys(target) {
+        inspectedItems += 1;
+        return Reflect.ownKeys(target);
+      },
+    },
+  );
+
+  const initialError = thrownValue(() => harness(scenario({
+    initialSubmissions: [
+      { id: "first", workType: "checkout" },
+      unvisitedItem,
+    ],
+  }), { maxSynchronousWorkItems: 1 }));
+  assertCommandError(initialError, FactoryEmulatorConfigurationError, {
+    name: "FactoryEmulatorConfigurationError",
+    code: "INVALID_CONFIGURATION",
+  });
+  assert.deepEqual(initialError.diagnostics, [{
+    code: "SYNCHRONOUS_WORK_LIMIT_EXCEEDED",
+    path: "/initialSubmissions",
+    message: "/initialSubmissions contains 2 Work requests; the configured maximum is 1.",
+    expectation: "at most 1 initial Work requests",
+  }]);
+  assert.equal(inspectedItems, 0);
+
+  const interactive = harness(
+    scenario({ initialSubmissions: [] }),
+    { maxSynchronousWorkItems: 1 },
+  );
+  await interactive.emulator.start();
+  const before = interactive.emulator.state();
+  const batchCount = interactive.batches.length;
+  await assert.rejects(
+    interactive.emulator.submit([
+      { id: "first", workType: "checkout" },
+      unvisitedItem,
+    ]),
+    (error) => assertPaused(
+      error,
+      "synchronous-work-limit",
+      "schedulerWorkItems",
+      1,
+      2,
+    ),
+  );
+  assert.equal(inspectedItems, 0);
+  assert.deepEqual(interactive.emulator.state(), before);
+  assert.equal(interactive.batches.length, batchCount);
+  assert.equal(interactive.emulator.pending(), undefined);
+});
+
+test("deep plain submission data rejects deterministically without a host stack overflow", async () => {
+  const { batches, emulator } = harness(scenario({ initialSubmissions: [] }));
+  await emulator.start();
+  const before = emulator.state();
+  const batchCount = batches.length;
+  let input = { value: "leaf" };
+  for (let depth = 0; depth < 20_000; depth += 1) {
+    input = { next: input };
+  }
+
+  const error = await rejectedValue(emulator.submit({
+    id: "deep-input",
+    workType: "checkout",
+    input,
+  }));
+  assertCommandError(error, FactoryEmulatorSubmissionError, {
+    name: "FactoryEmulatorSubmissionError",
+    code: "INVALID_SUBMISSION",
+  });
+  assert.equal(error.diagnostics.length, 1);
+  assert.equal(error.diagnostics[0].code, "INVALID_SCENARIO_SHAPE");
+  assert.match(error.diagnostics[0].message, /bounded data-only inspection/);
+  assert.match(error.diagnostics[0].expectation, /10000 nodes and 100 levels/);
+  assert.deepEqual(emulator.state(), before);
+  assert.equal(batches.length, batchCount);
+  assert.equal(emulator.pending(), undefined);
+  assertStatus(emulator, { phase: "idle", reason: "no-unfinished-work" });
+});
+
 test("public observations are detached data and status summarizes bounded recovery state", async () => {
   const configuredFactory = supportedFactory();
   const configuredScenario = scenario({ initialSubmissions: [] });

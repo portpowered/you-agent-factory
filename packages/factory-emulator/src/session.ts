@@ -16,6 +16,12 @@ export type FactoryEmulatorConfigurationDiagnostic =
       readonly path: string;
       readonly message: string;
       readonly expectation: string;
+    }
+  | {
+      readonly code: "SYNCHRONOUS_WORK_LIMIT_EXCEEDED";
+      readonly path: "/initialSubmissions";
+      readonly message: string;
+      readonly expectation: string;
     };
 
 export interface FactoryEmulatorDataError {

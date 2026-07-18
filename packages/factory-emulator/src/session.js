@@ -104,8 +104,6 @@ export function createFactoryEmulatorSession({
   }
 
   const configurationDiagnostics = [
-    ...dataOnlyDiagnostics(scenario, { code: "INVALID_SCENARIO_SHAPE" }),
-    ...dataOnlyDiagnostics(factory, { code: "INVALID_FACTORY_DEFINITION" }),
     ...(limits === undefined
       ? []
       : dataOnlyDiagnostics(limits, {
@@ -116,14 +114,30 @@ export function createFactoryEmulatorSession({
   if (configurationDiagnostics.length > 0) {
     throw new FactoryEmulatorConfigurationError(configurationDiagnostics);
   }
-  const configuredFactory = copy(factory);
-  const configuredScenario = copy(scenario);
   const configuredLimitInput = limits === undefined ? undefined : copy(limits);
   const normalizedLimits = normalizeFactoryEmulatorLimits(configuredLimitInput);
   if (!normalizedLimits.success) {
     throw new FactoryEmulatorConfigurationError(normalizedLimits.diagnostics);
   }
   const configuredLimits = normalizedLimits.limits;
+  const initialSubmissionCount = submissionBatchLengthFromScenario(scenario);
+  if (initialSubmissionCount > configuredLimits.maxSynchronousWorkItems) {
+    throw new FactoryEmulatorConfigurationError([
+      synchronousInputConfigurationDiagnostic(
+        configuredLimits.maxSynchronousWorkItems,
+        initialSubmissionCount,
+      ),
+    ]);
+  }
+  configurationDiagnostics.push(
+    ...dataOnlyDiagnostics(scenario, { code: "INVALID_SCENARIO_SHAPE" }),
+    ...dataOnlyDiagnostics(factory, { code: "INVALID_FACTORY_DEFINITION" }),
+  );
+  if (configurationDiagnostics.length > 0) {
+    throw new FactoryEmulatorConfigurationError(configurationDiagnostics);
+  }
+  const configuredFactory = copy(factory);
+  const configuredScenario = copy(scenario);
   let committedState = preStartState();
   let commandInProgress;
   let pendingTransaction;
@@ -420,8 +434,8 @@ export function createFactoryEmulatorSession({
     },
     async submit(submissionOrBatch) {
       assertCommandAvailable("submit");
+      assertSynchronousWorkWithinLimit(submissionBatchLength(submissionOrBatch));
       const submissions = normalizeSubmissions(submissionOrBatch);
-      assertSynchronousWorkWithinLimit(submissions.length);
       const key = commandKey("submit", canonicalStringify(submissions));
       const retry = beginCommand("submit", key, "submitting");
       try {
@@ -798,6 +812,35 @@ function normalizeSubmissions(submissionOrBatch) {
     }]);
   }
   return submissions;
+}
+
+function submissionBatchLength(submissionOrBatch) {
+  return Array.isArray(submissionOrBatch) ? submissionOrBatch.length : 1;
+}
+
+function submissionBatchLengthFromScenario(scenario) {
+  if (scenario === null || typeof scenario !== "object") {
+    return 0;
+  }
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(scenario, "initialSubmissions");
+    if (descriptor === undefined || !("value" in descriptor)) {
+      return 0;
+    }
+    return submissionBatchLength(descriptor.value);
+  } catch {
+    return 0;
+  }
+}
+
+function synchronousInputConfigurationDiagnostic(configured, observed) {
+  return {
+    code: "SYNCHRONOUS_WORK_LIMIT_EXCEEDED",
+    path: "/initialSubmissions",
+    message:
+      `/initialSubmissions contains ${observed} Work requests; the configured maximum is ${configured}.`,
+    expectation: `at most ${configured} initial Work requests`,
+  };
 }
 
 function sessionStatus({

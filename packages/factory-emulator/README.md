@@ -253,8 +253,12 @@ plain-data inspection continuation. It counts at most one eligible Work beyond
 the limit. An oversized ready or due set pauses with a
 `synchronous-work-limit` diagnostic before dispatch/completion events or
 calculated next state are built. Initial and interactive submission batches use
-the same ceiling, so a single command cannot introduce an unbounded calculation
-batch.
+the same ceiling. Their array cardinality is checked before any member is
+validated or copied; oversized initial input fails session construction and an
+oversized interactive command pauses without sink, state, or pending-transaction
+residue. The shared data-only validator uses an iterative traversal capped at
+10,000 nodes and 100 levels before cloning, so a single deeply nested Work input
+cannot overflow the host stack or introduce an unbounded calculation batch.
 
 After each `maxSynchronousBatches` scheduler calculations, a long command awaits
 a host task boundary. The default uses the runtime task queue without a wall

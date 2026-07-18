@@ -19,6 +19,7 @@ import {
 } from "@you-agent-factory/factory-emulator";
 import type {
   FactoryEmulatorCommandError,
+  FactoryEmulatorConfigurationDiagnostic,
   FactoryEmulatorSession,
   FactoryEmulatorSessionAdvanceReceipt,
   FactoryEmulatorBudgetUsage,
@@ -121,10 +122,17 @@ const emulatorSession: FactoryEmulatorSession = createFactoryEmulatorSession({
   yieldControl: async () => {},
 });
 const limits: FactoryEmulatorLimits = { maxEvents: 100 };
+const initialInputLimitDiagnostic: FactoryEmulatorConfigurationDiagnostic = {
+  code: "SYNCHRONOUS_WORK_LIMIT_EXCEEDED",
+  path: "/initialSubmissions",
+  message: "initial input exceeds the synchronous Work limit",
+  expectation: "a bounded initial Work batch",
+};
 declare const pausedError: FactoryEmulatorExecutionPausedError;
 const commandError: FactoryEmulatorCommandError = pausedError;
 const executionDiagnostic: FactoryEmulatorExecutionDiagnostic = pausedError.diagnostic;
 void limits;
+void initialInputLimitDiagnostic;
 void commandError;
 void executionDiagnostic;
 const sessionState: FactoryEmulatorSessionState = emulatorSession.state();
