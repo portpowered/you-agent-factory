@@ -7,3 +7,13 @@ export {
   type operations,
   type paths,
 } from "./contracts.js";
+export {
+  FACTORY_RECORDING_SCHEMA_VERSION,
+  type FactoryRecording,
+  FactoryRecordingValidationError,
+  parseFactoryRecording,
+  type RecordingValidationIssue,
+  type RecordingValidationIssueCode,
+  type SafeParseFactoryRecordingResult,
+  safeParseFactoryRecording,
+} from "./recording.js";

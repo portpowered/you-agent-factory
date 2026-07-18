@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "factory-recording/v1",
+  "id": "customer-support-triage-example",
+  "title": "Customer support triage topology",
+  "summary": "A minimal recording that establishes the Factory topology before work begins.",
+  "factory": {
+    "name": "customer-support-triage"
+  },
+  "events": [
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "evt-topology-001",
+      "type": "INITIAL_STRUCTURE_REQUEST",
+      "context": {
+        "sequence": 1,
+        "tick": 0,
+        "eventTime": "2026-07-18T00:00:00Z",
+        "sessionId": "session-customer-support-example",
+        "sessionSequence": 1
+      },
+      "payload": {
+        "factory": {
+          "name": "customer-support-triage"
+        }
+      }
+    }
+  ]
+}

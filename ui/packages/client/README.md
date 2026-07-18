@@ -10,6 +10,18 @@ The root entry point exports the generated `components`, `paths`, and
 `FactoryEventType`, and `FactoryDefinition` aliases. `FACTORY_EVENT_TYPES`
 provides the runtime event constants from the same generated contract.
 
+## Factory recordings
+
+`parseFactoryRecording` validates unknown input and returns a trusted
+`FactoryRecording`; invalid input throws `FactoryRecordingValidationError` with
+machine-readable issue codes and input paths. Use `safeParseFactoryRecording`
+for a discriminated result that never throws for invalid customer input.
+
+The packaged
+[`customer-support.factory-recording.v1.json`](examples/customer-support.factory-recording.v1.json)
+is a backend-free example of the public `factory-recording/v1` contract. It
+includes both a top-level Factory definition and a canonical topology event.
+
 ## Contract generation
 
 Run `bun run generate` from this directory after the checked-in dashboard
