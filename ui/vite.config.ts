@@ -251,6 +251,8 @@ export default defineConfig({
       "packages/components/src/**/*.test.ts",
       "packages/components/src/**/*.test.tsx",
       "packages/components/src/**/*.harness.test.ts",
+      "packages/factory-emulator/src/**/*.test.ts",
+      "packages/factory-emulator/src/**/*.test.tsx",
     ],
     globals: true,
     setupFiles: ["./src/testing/vitest.setup.ts"],
