@@ -29,6 +29,10 @@ type RootRunFunctionalHostConfig struct {
 	SystemRoot      string
 	FunctionalEdges wire.FunctionalEdges
 	StartupTimeout  time.Duration
+	// DisableMockWorkers preserves an injected worker command edge. The default
+	// remains mock workers so ordinary root-run functional scenarios stay local
+	// and deterministic.
+	DisableMockWorkers bool
 	// ListenAddress requests a specific loopback host and port. Empty reserves
 	// an ephemeral listener before root.Run starts.
 	ListenAddress string
@@ -151,11 +155,15 @@ func (host *RootRunFunctionalHost) run(
 	edges wire.FunctionalEdges,
 	diagnostics *bytes.Buffer,
 ) {
+	args := []string{
+		"you", "--server", host.endpoint, "run", "--dir", cfg.FactoryRoot,
+		"--continuously", "--quiet", "--verbose", "--no-record",
+	}
+	if !cfg.DisableMockWorkers {
+		args = append(args, "--with-mock-workers")
+	}
 	exitCode := root.Run(root.Input{
-		Args: []string{
-			"you", "--server", host.endpoint, "run", "--dir", cfg.FactoryRoot,
-			"--continuously", "--quiet", "--verbose", "--no-record", "--with-mock-workers",
-		},
+		Args:    args,
 		Env:     rootRunHostEnvironment(cfg.SystemRoot),
 		Stderr:  diagnostics,
 		Context: ctx,

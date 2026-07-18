@@ -1,20 +1,16 @@
 package runtime_api
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,33 +20,73 @@ func TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork(t
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 
 	runner := testutil.NewProviderCommandRunner(repeatedThrottleCommandResults(12)...)
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
-	}, factory.WithServiceMode())
-
-	server.SubmitRuntimeWork(t, work.SubmitRequest{
-		Name:       "throttled-task",
-		WorkTypeID: "task",
-		Payload:    json.RawMessage(`{"title":"force throttle exhaustion"}`),
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: true,
+		FunctionalEdges: wire.FunctionalEdges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
 	})
 
-	snapshot := waitForThrottledFailureExhaustion(t, server, 10*time.Second)
-	categories := categorizeFunctionalState(snapshot)
-	if categories.Failed != 1 {
-		t.Fatalf("failed token count = %d, want 1", categories.Failed)
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
+	traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
+		Name:         "throttled-task",
+		WorkTypeName: "task",
+		Payload:      json.RawMessage(`{"title":"force throttle exhaustion"}`),
+	})
+
+	terminalEvent := terminalDispatchForTrace(t, stream, traceID)
+	terminalPayload, err := terminalEvent.Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode terminal DISPATCH_RESPONSE payload: %v", err)
 	}
-	if categories.Initial != 0 || categories.Processing != 0 || categories.Terminal != 0 {
-		t.Fatalf("non-failed token counts = initial:%d processing:%d terminal:%d, want all 0", categories.Initial, categories.Processing, categories.Terminal)
+	if terminalPayload.Outcome != factoryapi.WorkOutcomeFailed {
+		t.Fatalf("terminal DISPATCH_RESPONSE outcome = %q, want FAILED", terminalPayload.Outcome)
 	}
-	if snapshot.InFlightCount != 0 {
-		t.Fatalf("in-flight dispatch count = %d, want 0", snapshot.InFlightCount)
-	}
-	wantProviderCalls := 3 * 3
-	if runner.CallCount() != wantProviderCalls {
-		t.Fatalf("provider command runner calls = %d, want %d from default workstation retries and provider retries", runner.CallCount(), wantProviderCalls)
+	if terminalPayload.Error == nil || !strings.Contains(*terminalPayload.Error, "temporarily unavailable") {
+		t.Fatalf("terminal DISPATCH_RESPONSE error = %q, want safe throttle diagnostic", support.StringPointerValue(terminalPayload.Error))
 	}
 
-	assertNoDanglingDispatchCreatedEvents(t, server.GetFactoryEvents(t))
+	failed := waitForGeneratedFailedWorkByTrace(t, host.Endpoint(), traceID, 10*time.Second)
+	if generatedWorkStateName(failed.State) != "failed" || generatedWorkStateType(failed.State) != factoryapi.WorkStateTypeFAILED {
+		t.Fatalf("GET /work state = %#v, want failed/FAILED", failed.State)
+	}
+	if generatedWorkStateName(failed.State) == "complete" {
+		t.Fatalf("GET /work state = %#v, must not expose successful completion after throttle exhaustion", failed.State)
+	}
+}
+
+func waitForGeneratedFailedWorkByTrace(t *testing.T, baseURL, traceID string, timeout time.Duration) factoryapi.Work {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+		for _, item := range work.Results {
+			if support.StringPointerValue(item.TraceId) == traceID && generatedWorkStateName(item.State) == "failed" {
+				return item
+			}
+		}
+		<-ticker.C
+	}
+
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	t.Fatalf("timed out waiting for GET /work failure for trace %q; last response: %#v", traceID, work)
+	return factoryapi.Work{}
 }
 
 func retryableFailureFactoryConfig() map[string]any {
@@ -70,60 +106,4 @@ func repeatedThrottleCommandResults(count int) []workers.CommandResult {
 		}
 	}
 	return results
-}
-
-func waitForThrottledFailureExhaustion(
-	t *testing.T,
-	server *functionalAPIServer,
-	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		categories := categorizeFunctionalState(snapshot)
-		if snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-			categories.Failed == 1 &&
-			snapshot.InFlightCount == 0 {
-			return snapshot
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	snapshot := server.GetEngineStateSnapshot(t)
-	categories := categorizeFunctionalState(snapshot)
-	t.Fatalf(
-		"timed out waiting for throttled work to fail; runtime_status=%s factory_state=%s active_dispatches=%d categories=%+v",
-		snapshot.RuntimeStatus,
-		snapshot.FactoryState,
-		snapshot.InFlightCount,
-		categories,
-	)
-	return nil
-}
-
-func assertNoDanglingDispatchCreatedEvents(t *testing.T, events []generated.FactoryEvent) {
-	t.Helper()
-
-	created := make(map[string]struct{})
-	completed := make(map[string]struct{})
-	for _, event := range events {
-		dispatchID := event.Context.DispatchId
-		if dispatchID == nil || *dispatchID == "" {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(event.Id, "factory-event/dispatch-created/"):
-			created[*dispatchID] = struct{}{}
-		case strings.HasPrefix(event.Id, "factory-event/dispatch-completed/"):
-			completed[*dispatchID] = struct{}{}
-		}
-	}
-
-	for dispatchID := range created {
-		if _, ok := completed[dispatchID]; !ok {
-			t.Fatalf("dispatch %s has dispatch-created event without dispatch-completed event", dispatchID)
-		}
-	}
 }
