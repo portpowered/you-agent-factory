@@ -260,9 +260,14 @@ calculated next state are built. Initial and interactive submission batches use
 the same ceiling. Their array cardinality is checked before any member is
 validated or copied; oversized initial input fails session construction and an
 oversized interactive command pauses without sink, state, or pending-transaction
-residue. The shared data-only validator uses an iterative traversal capped at
-10,000 nodes and 100 levels before cloning, so a single deeply nested Work input
-cannot overflow the host stack or introduce an unbounded calculation batch.
+residue. Cardinality inspection reads the array's own data descriptor inside an
+exception-safe boundary, so throwing, revoked, or otherwise uninspectable proxy
+inputs reject as detached command errors instead of leaking host exceptions.
+Configuration and command detachment failures are normalized through the same
+plain-data error boundary. The shared data-only validator uses an iterative
+traversal capped at 10,000 nodes and 100 levels before cloning, so a single
+deeply nested Work input cannot overflow the host stack or introduce an
+unbounded calculation batch.
 
 After each `maxSynchronousBatches` scheduler calculations, a long command awaits
 a host task boundary. The default uses the runtime task queue without a wall

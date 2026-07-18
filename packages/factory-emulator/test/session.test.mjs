@@ -1438,6 +1438,95 @@ test("oversized initial and interactive batches stop before input traversal or c
   assert.equal(interactive.emulator.pending(), undefined);
 });
 
+test("uninspectable submission batches reject as detached errors without state residue", async () => {
+  const { batches, emulator } = harness(scenario({ initialSubmissions: [] }));
+  await emulator.start();
+  const before = emulator.state();
+  const batchCount = batches.length;
+  let lengthReads = 0;
+  const throwingLengthBatch = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === "length") {
+        lengthReads += 1;
+        throw new Error("length trap ran");
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const revoked = Proxy.revocable([], {});
+  revoked.revoke();
+  const uncloneableBatch = new Proxy([
+    { id: "proxied", workType: "checkout" },
+  ], {});
+
+  for (const [name, submission] of [
+    ["throwing length", throwingLengthBatch],
+    ["revoked proxy", revoked.proxy],
+    ["uncloneable proxy", uncloneableBatch],
+  ]) {
+    const error = await rejectedValue(emulator.submit(submission));
+    assertCommandError(error, FactoryEmulatorSubmissionError, {
+      name: "FactoryEmulatorSubmissionError",
+      code: "INVALID_SUBMISSION",
+    });
+    assert.equal(error.diagnostics.length, 1, name);
+    assert.equal(error.diagnostics[0].code, "INVALID_SCENARIO_SHAPE", name);
+    assert.equal(error.diagnostics[0].path, "/submissions", name);
+    assert.deepEqual(emulator.state(), before, name);
+    assert.equal(batches.length, batchCount, name);
+    assert.equal(emulator.pending(), undefined, name);
+    assertStatus(emulator, { phase: "idle", reason: "no-unfinished-work" });
+  }
+
+  assert.equal(lengthReads, 1);
+  const receipt = await emulator.submit({ id: "accepted", workType: "checkout" });
+  assert.equal(receipt.status, "submitted");
+  assert.equal(emulator.state().works.length, 1);
+});
+
+test("uncloneable construction inputs reject as detached configuration errors", () => {
+  let lengthReads = 0;
+  const initialSubmissions = new Proxy([], {
+    get(target, property, receiver) {
+      if (property === "length") {
+        lengthReads += 1;
+        throw new Error("length trap ran");
+      }
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const cases = [
+    ["initial submissions", scenario({ initialSubmissions }), "INVALID_SCENARIO_SHAPE"],
+    ["scenario proxy", new Proxy(scenario(), {}), "INVALID_SCENARIO_SHAPE"],
+  ];
+
+  for (const [name, scenarioDocument, code] of cases) {
+    const error = thrownValue(() => harness(scenarioDocument));
+    assertCommandError(error, FactoryEmulatorConfigurationError, {
+      name: "FactoryEmulatorConfigurationError",
+      code: "INVALID_CONFIGURATION",
+    });
+    assert.equal(error.diagnostics.length, 1, name);
+    assert.equal(error.diagnostics[0].code, code, name);
+  }
+
+  const limitError = thrownValue(() => harness(scenario(), new Proxy({ maxEvents: 3 }, {})));
+  assertCommandError(limitError, FactoryEmulatorConfigurationError, {
+    name: "FactoryEmulatorConfigurationError",
+    code: "INVALID_CONFIGURATION",
+  });
+  assert.equal(limitError.diagnostics[0].code, "INVALID_LIMIT_CONFIGURATION");
+  const factoryError = thrownValue(() => harness(scenario(), undefined, {
+    factory: new Proxy(supportedFactory(), {}),
+  }));
+  assertCommandError(factoryError, FactoryEmulatorConfigurationError, {
+    name: "FactoryEmulatorConfigurationError",
+    code: "INVALID_CONFIGURATION",
+  });
+  assert.equal(factoryError.diagnostics[0].code, "INVALID_FACTORY_DEFINITION");
+  assert.equal(lengthReads, 1);
+});
+
 test("deep plain submission data rejects deterministically without a host stack overflow", async () => {
   const { batches, emulator } = harness(scenario({ initialSubmissions: [] }));
   await emulator.start();

@@ -114,7 +114,9 @@ export function createFactoryEmulatorSession({
   if (configurationDiagnostics.length > 0) {
     throw new FactoryEmulatorConfigurationError(configurationDiagnostics);
   }
-  const configuredLimitInput = limits === undefined ? undefined : copy(limits);
+  const configuredLimitInput = limits === undefined
+    ? undefined
+    : copyConfiguration(limits, "INVALID_LIMIT_CONFIGURATION", "/limits");
   const normalizedLimits = normalizeFactoryEmulatorLimits(configuredLimitInput);
   if (!normalizedLimits.success) {
     throw new FactoryEmulatorConfigurationError(normalizedLimits.diagnostics);
@@ -136,8 +138,16 @@ export function createFactoryEmulatorSession({
   if (configurationDiagnostics.length > 0) {
     throw new FactoryEmulatorConfigurationError(configurationDiagnostics);
   }
-  const configuredFactory = copy(factory);
-  const configuredScenario = copy(scenario);
+  const configuredFactory = copyConfiguration(
+    factory,
+    "INVALID_FACTORY_DEFINITION",
+    "/",
+  );
+  const configuredScenario = copyConfiguration(
+    scenario,
+    "INVALID_SCENARIO_SHAPE",
+    "/",
+  );
   let committedState = preStartState();
   let commandInProgress;
   let pendingTransaction;
@@ -506,8 +516,14 @@ export function createFactoryEmulatorSession({
     },
     async submit(submissionOrBatch) {
       assertCommandAvailable("submit");
-      assertSynchronousWorkWithinLimit(submissionBatchLength(submissionOrBatch));
-      const submissions = normalizeSubmissions(submissionOrBatch);
+      const batchInspection = inspectSubmissionBatch(submissionOrBatch);
+      if (!batchInspection.success) {
+        throw new FactoryEmulatorSubmissionError([
+          invalidDataDiagnostic("INVALID_SCENARIO_SHAPE", "/submissions"),
+        ]);
+      }
+      assertSynchronousWorkWithinLimit(batchInspection.length);
+      const submissions = normalizeSubmissions(submissionOrBatch, batchInspection.isBatch);
       const key = commandKey("submit", canonicalStringify(submissions));
       const retry = beginCommand("submit", key, "submitting");
       try {
@@ -869,8 +885,8 @@ function sessionIdentityCoordinates(factory, scenario, sessionId) {
   };
 }
 
-function normalizeSubmissions(submissionOrBatch) {
-  const submissionValues = Array.isArray(submissionOrBatch)
+function normalizeSubmissions(submissionOrBatch, isBatch) {
+  const submissionValues = isBatch
     ? submissionOrBatch
     : [submissionOrBatch];
   const diagnostics = dataOnlyDiagnostics(submissionValues, {
@@ -884,12 +900,9 @@ function normalizeSubmissions(submissionOrBatch) {
   try {
     submissions = copy(submissionValues);
   } catch {
-    throw new FactoryEmulatorSubmissionError([{
-      code: "INVALID_SCENARIO_SHAPE",
-      path: "/submissions",
-      message: "must contain structured-cloneable data values only",
-      expectation: "plain objects, dense arrays, null, booleans, strings, or finite numbers",
-    }]);
+    throw new FactoryEmulatorSubmissionError([
+      invalidDataDiagnostic("INVALID_SCENARIO_SHAPE", "/submissions"),
+    ]);
   }
   if (submissions.length === 0) {
     throw new FactoryEmulatorSubmissionError([{
@@ -902,8 +915,24 @@ function normalizeSubmissions(submissionOrBatch) {
   return submissions;
 }
 
-function submissionBatchLength(submissionOrBatch) {
-  return Array.isArray(submissionOrBatch) ? submissionOrBatch.length : 1;
+function inspectSubmissionBatch(submissionOrBatch) {
+  try {
+    if (!Array.isArray(submissionOrBatch)) {
+      return { success: true, isBatch: false, length: 1 };
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(submissionOrBatch, "length");
+    if (
+      descriptor === undefined
+      || !("value" in descriptor)
+      || !Number.isSafeInteger(descriptor.value)
+      || descriptor.value < 0
+    ) {
+      return { success: false };
+    }
+    return { success: true, isBatch: true, length: descriptor.value };
+  } catch {
+    return { success: false };
+  }
 }
 
 function submissionBatchLengthFromScenario(scenario) {
@@ -915,7 +944,8 @@ function submissionBatchLengthFromScenario(scenario) {
     if (descriptor === undefined || !("value" in descriptor)) {
       return 0;
     }
-    return submissionBatchLength(descriptor.value);
+    const inspection = inspectSubmissionBatch(descriptor.value);
+    return inspection.success ? inspection.length : 0;
   } catch {
     return 0;
   }
@@ -928,6 +958,25 @@ function synchronousInputConfigurationDiagnostic(configured, observed) {
     message:
       `/initialSubmissions contains ${observed} Work requests; the configured maximum is ${configured}.`,
     expectation: `at most ${configured} initial Work requests`,
+  };
+}
+
+function copyConfiguration(value, code, path) {
+  try {
+    return copy(value);
+  } catch {
+    throw new FactoryEmulatorConfigurationError([
+      invalidDataDiagnostic(code, path),
+    ]);
+  }
+}
+
+function invalidDataDiagnostic(code, path) {
+  return {
+    code,
+    path,
+    message: `${path} must contain structured-cloneable data values only`,
+    expectation: "plain objects, dense arrays, null, booleans, strings, or finite numbers",
   };
 }
 
