@@ -4,9 +4,13 @@ Use this map when changing the public REST contract.
 
 - Public TypeScript consumer contracts live in `packages/client`: generated
   OpenAPI namespaces stay in `src/generated/openapi.ts`, while stable aliases
-  stay handwritten in `src/contracts.ts`. Regenerate both the bundled API and
-  client projection with `make generate-client`; use `make client-test` for
-  byte-freshness, alias typechecking, and framework/host boundary evidence.
+  stay handwritten in `src/contracts.ts`. Recording shape validation consumes a
+  byte-identical generated copy of the standalone API schema, while handwritten
+  cross-event validation stays in `src/recording-parser.js` with declarations in
+  `recording-parser.d.ts`. Regenerate the bundled API, staged contracts, client
+  projection, and client schema copy with `make generate-client`; use `make
+  client-test` for byte-freshness, typechecking, parser behavior, and
+  framework/host boundary evidence.
 - Canonical backend `Work`, `WorkRequest`, ordered content, relations, dispatch
   identity, state-change, and payload-lineage contracts live in `pkg/work`.
   Generated OpenAPI conversion remains at transport boundaries such as

@@ -8,17 +8,22 @@ test("client package remains framework and host neutral", async () => {
   const packageJson = JSON.parse(
     await readFile(new URL("package.json", packageRoot), "utf8"),
   );
-  assert.deepEqual(packageJson.dependencies ?? {}, {});
+  assert.deepEqual(Object.keys(packageJson.dependencies ?? {}).sort(), [
+    "ajv",
+    "ajv-formats",
+  ]);
 
-  const contracts = await readFile(
-    new URL("src/contracts.ts", packageRoot),
-    "utf8",
-  );
-  const publicIndex = await readFile(
-    new URL("src/index.ts", packageRoot),
-    "utf8",
-  );
-  const publicSources = `${contracts}\n${publicIndex}`;
+  const publicSources = (
+    await Promise.all(
+      [
+        "src/contracts.ts",
+        "src/index.ts",
+        "src/index.js",
+        "src/recording-parser.d.ts",
+        "src/recording-parser.js",
+      ].map((path) => readFile(new URL(path, packageRoot), "utf8")),
+    )
+  ).join("\n");
 
   for (const prohibited of [
     "react",

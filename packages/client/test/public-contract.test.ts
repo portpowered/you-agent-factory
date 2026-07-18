@@ -1,16 +1,20 @@
-import type {
-  FactoryDefinition,
-  FactoryEvent,
-  FactoryEventType,
-  FactoryRecording,
-  components,
-  operations,
-  paths,
+import {
+  type components,
+  type FactoryDefinition,
+  type FactoryEvent,
+  type FactoryEventType,
+  type FactoryRecording,
+  type FactoryRecordingValidationError,
+  type operations,
+  parseFactoryRecording,
+  type paths,
+  safeParseFactoryRecording,
 } from "@you-agent-factory/client";
 
 type Equal<Left, Right> =
-  (<Value>() => Value extends Left ? 1 : 2) extends <Value>() =>
-    Value extends Right ? 1 : 2
+  (<Value>() => Value extends Left ? 1 : 2) extends <
+    Value,
+  >() => Value extends Right ? 1 : 2
     ? true
     : false;
 type Assert<Value extends true> = Value;
@@ -32,3 +36,15 @@ declare const apiPaths: paths;
 declare const apiOperations: operations;
 void apiPaths;
 void apiOperations;
+
+declare const unknownRecording: unknown;
+const parsedRecording: FactoryRecording =
+  parseFactoryRecording(unknownRecording);
+const safeResult = safeParseFactoryRecording(unknownRecording);
+if (!safeResult.success) {
+  const validationError: FactoryRecordingValidationError = safeResult.error;
+  const issueCode: string = safeResult.issues[0]?.code ?? "";
+  void validationError;
+  void issueCode;
+}
+void parsedRecording;
