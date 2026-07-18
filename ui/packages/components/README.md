@@ -25,9 +25,9 @@ Peer dependencies:
 - `react` ^19.0.0
 - `react-dom` ^19.0.0
 
-Some category entrypoints (for example charts and graphs) also require the
-package's direct dependencies (`recharts`, `@xyflow/react`). Install those in
-the host app when you import those categories.
+Runtime libraries used by category entrypoints (for example `recharts`,
+`@xyflow/react`, and Radix UI) are installed as direct package dependencies.
+Hosts only need to provide compatible React and React DOM peers.
 
 ## Import package styles
 
