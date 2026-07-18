@@ -1,4 +1,3 @@
-// biome-ignore lint/style/noExcessiveLinesPerFile: Replay projection is intentionally centralized until checkpoint replay can be split safely.
 import type { FactoryEvent, FactoryRelation } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {
@@ -45,7 +44,6 @@ import {
 import {
   applyScriptRequest,
   applyScriptResponse,
-  emptyReplayWorldState,
   inferenceAttemptsForDispatch,
   resolveDispatchTransitionID,
   syncCompletedDispatchAttempt,
@@ -66,7 +64,7 @@ import type {
   WorkStateChangeEvent,
 } from "./replayWorldStateTypes";
 import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
-import { orderedEvents, uniqueSorted } from "./shared";
+import { uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
 import { storeTextBlob } from "./text-blobs/timelineTextBlobs";
 import type { ReplayWorldState } from "./types";
@@ -82,49 +80,6 @@ function addTraceDispatch(
   completion: Parameters<typeof completionToTraceDispatch>[0],
 ): void {
   addTraceDispatchBase(state, traceID, completion, completionToTraceDispatch);
-}
-
-export function reconstructWorldState(
-  events: FactoryEvent[],
-  selectedTick: number,
-): ReplayWorldState {
-  const state = emptyReplayWorldState(selectedTick);
-  for (const event of orderedEvents(events)) {
-    if (event.context.tick <= selectedTick) {
-      applyReplayEvent(state, event);
-    }
-  }
-  return state;
-}
-
-export function advanceWorldStateFromCheckpoint(
-  checkpoint: ReplayWorldState,
-  events: FactoryEvent[],
-  selectedTick: number,
-): ReplayWorldState {
-  const state = checkpoint;
-  state.tick_count = selectedTick;
-  for (const event of orderedEvents(events)) {
-    if (event.context.tick <= selectedTick) {
-      applyReplayEvent(state, event);
-    }
-  }
-  return state;
-}
-
-export function advanceWorldStateFromAcceptedTail(
-  checkpoint: ReplayWorldState,
-  acceptedTail: FactoryEvent[],
-  selectedTick: number,
-): ReplayWorldState {
-  const state = checkpoint;
-  state.tick_count = selectedTick;
-  for (const event of orderedEvents(acceptedTail)) {
-    if (event.context.tick <= selectedTick) {
-      applyReplayEvent(state, event);
-    }
-  }
-  return state;
 }
 
 export function applyReplayEvent(

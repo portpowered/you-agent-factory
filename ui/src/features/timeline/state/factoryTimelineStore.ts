@@ -1,6 +1,7 @@
 import { create, type StateCreator } from "zustand";
 
 import type { FactoryEvent } from "../../../api/events";
+import { canonicalizeFactoryEvents } from "../../../../../packages/factory-replay/src/index.js";
 import {
   correlationTokenForIdentityScope,
   recordSessionPersistenceDiagnostic,
@@ -17,11 +18,6 @@ import {
 
 export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 
-import {
-  advanceWorldStateFromAcceptedTail,
-  reconstructWorldState,
-} from "./timeline/replayWorldState";
-import { orderedEvents } from "./timeline/shared";
 
 export type { WorldState } from "./timeline/types";
 
@@ -58,26 +54,14 @@ export function buildFactoryTimelineSnapshot(
   return buildProjectedTimelineSnapshot(
     events,
     selectedTick,
-    reconstructWorldState,
   );
 }
 
 const timelineStoreStateDeps: TimelineStoreStateDeps = {
   buildFactoryTimelineProjection: (events, selectedTick, checkpoint) =>
-    buildProjectedTimelineProjection(
-      events,
-      selectedTick,
-      checkpoint
-        ? (nextEvents, nextSelectedTick) =>
-            advanceWorldStateFromAcceptedTail(
-              structuredClone(checkpoint.replayState),
-              nextEvents,
-              nextSelectedTick,
-            )
-        : reconstructWorldState,
-    ),
+    buildProjectedTimelineProjection(events, selectedTick, checkpoint),
   buildFactoryTimelineSnapshot,
-  orderedEvents,
+  canonicalizeEvents: canonicalizeFactoryEvents,
 };
 
 function exactIdentity(

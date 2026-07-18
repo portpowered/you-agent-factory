@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 
 import { canonicalSessionLifecycleControlReplayEvents, canonicalSessionLifecycleReplayEvents } from "../../../../testing/session-lifecycle-replay-fixtures";
-import { reconstructWorldState } from "./replayWorldState";
+import { reconstructFactoryReplayState } from "./buildSnapshot";
 import { projectRuntime } from "./projectRuntime";
 import type { ReplayWorldState } from "./types";
 import { emptyWorldRuntime } from "./types";
@@ -263,7 +263,7 @@ it("projects session bracket, artifacts, and javascript dispatches into runtime 
 });
 
 it("projects paused and resumed lifecycle bracket from canonical replay world state", () => {
-  const pausedState = reconstructWorldState(
+    const pausedState = reconstructFactoryReplayState(
     [...canonicalSessionLifecycleReplayEvents],
     2,
   );
@@ -275,7 +275,7 @@ it("projects paused and resumed lifecycle bracket from canonical replay world st
     session_id: "session-alpha",
   });
 
-  const runningState = reconstructWorldState(
+    const runningState = reconstructFactoryReplayState(
     [...canonicalSessionLifecycleReplayEvents],
     3,
   );
@@ -291,7 +291,7 @@ it("projects paused and resumed lifecycle bracket from canonical replay world st
 });
 
 it("projects paused and resumed lifecycle bracket from SESSION_LIFECYCLE_CONTROL replay events", () => {
-  const pausedState = reconstructWorldState(
+    const pausedState = reconstructFactoryReplayState(
     [...canonicalSessionLifecycleControlReplayEvents],
     2,
   );
@@ -303,7 +303,7 @@ it("projects paused and resumed lifecycle bracket from SESSION_LIFECYCLE_CONTROL
     session_id: "session-alpha",
   });
 
-  const runningState = reconstructWorldState(
+    const runningState = reconstructFactoryReplayState(
     [...canonicalSessionLifecycleControlReplayEvents],
     3,
   );
