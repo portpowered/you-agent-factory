@@ -13,6 +13,11 @@ that consumes the replay kernel.
   IDs aligned with `pkg/factory/contracts/factory_graph_ids.go` and the graph
   editor connection-anchor vocabulary. Unknown references must become sorted
   projection issues instead of synthesized nodes or dangling connections.
+- `pkg/factory/events/snapshot/initial_structure.go` owns the canonical public
+  Factory definition serialized into initial and replacement topology events.
+  Preserve durable public entity IDs and worker/workstation resource
+  requirements here; selected-tick consumers cannot recover evidence omitted
+  by this producer.
 - `packages/factory-replay/src/activity.js` owns pure selected-tick active
   Dispatch, affected-workstation, Work-reference, and resource-occupancy
   projection. Missing optional relationships retain identifiable Dispatches
@@ -28,7 +33,9 @@ that consumes the replay kernel.
   ordering, duplicate-ID acceptance, current selection, fixed historical
   projection, checkpoint-plus-tail equivalence, selected-tick topology,
   stable graph identity, handle parity, and partial-topology behavior without
-  mutation. `public-api.test.ts` validates the public TypeScript boundary.
+  mutation. Its backend-boundary regression consumes events generated through
+  the Go snapshot producer rather than hand-authoring richer event factories.
+  `public-api.test.ts` validates the public TypeScript boundary.
 - `packages/factory-replay/test/activity.test.mjs` proves Dispatch
   start/completion, concurrency, historical and same-tick selection, stable
   topology references, occupancy certainty, partial input, and immutability.

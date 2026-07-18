@@ -2,6 +2,7 @@ package projections
 
 import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 )
 
 // snapshotFactoryTopology is the Factory-owned subset of a serialized Factory
@@ -17,39 +18,45 @@ type snapshotFactoryTopology struct {
 }
 
 type snapshotFactoryResource struct {
-	Name     string `json:"name"`
-	Capacity int    `json:"capacity"`
+	ID       *string `json:"id"`
+	Name     string  `json:"name"`
+	Capacity int     `json:"capacity"`
 }
 
 type snapshotFactoryWorker struct {
-	Name             string  `json:"name"`
-	Type             *string `json:"type"`
-	ExecutorProvider *string `json:"executorProvider"`
-	ModelProvider    *string `json:"modelProvider"`
-	Model            *string `json:"model"`
+	ID               *string                  `json:"id"`
+	Name             string                   `json:"name"`
+	Type             *string                  `json:"type"`
+	ExecutorProvider *string                  `json:"executorProvider"`
+	ModelProvider    *string                  `json:"modelProvider"`
+	Model            *string                  `json:"model"`
+	Resources        []factoryresource.Config `json:"resources"`
 }
 
 type snapshotFactoryWorkType struct {
+	ID     *string                    `json:"id"`
 	Name   string                     `json:"name"`
 	States []snapshotFactoryWorkState `json:"states"`
 }
 
 type snapshotFactoryWorkState struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	ID   *string `json:"id"`
+	Name string  `json:"name"`
+	Type string  `json:"type"`
 }
 
 type snapshotFactoryWorkstation struct {
-	ID          *string              `json:"id"`
-	Name        string               `json:"name"`
-	Worker      string               `json:"worker"`
-	Behavior    *string              `json:"behavior"`
-	Type        *string              `json:"type"`
-	Inputs      []snapshotFactoryIO  `json:"inputs"`
-	Outputs     *[]snapshotFactoryIO `json:"outputs"`
-	OnContinue  *[]snapshotFactoryIO `json:"onContinue"`
-	OnRejection *[]snapshotFactoryIO `json:"onRejection"`
-	OnFailure   *[]snapshotFactoryIO `json:"onFailure"`
+	ID          *string                  `json:"id"`
+	Name        string                   `json:"name"`
+	Worker      string                   `json:"worker"`
+	Behavior    *string                  `json:"behavior"`
+	Type        *string                  `json:"type"`
+	Inputs      []snapshotFactoryIO      `json:"inputs"`
+	Outputs     *[]snapshotFactoryIO     `json:"outputs"`
+	OnContinue  *[]snapshotFactoryIO     `json:"onContinue"`
+	OnRejection *[]snapshotFactoryIO     `json:"onRejection"`
+	OnFailure   *[]snapshotFactoryIO     `json:"onFailure"`
+	Resources   []factoryresource.Config `json:"resources"`
 }
 
 type snapshotFactoryIO struct {
@@ -84,8 +91,12 @@ func resourcesAndPlacesFromSnapshot(resources []snapshotFactoryResource) ([]inte
 	convertedResources := make([]interfaces.FactoryResource, 0, len(resources))
 	convertedPlaces := make([]interfaces.FactoryPlace, 0, len(resources))
 	for _, resource := range resources {
+		id := stringValue(resource.ID)
+		if id == "" {
+			id = resource.Name
+		}
 		convertedResources = append(convertedResources, interfaces.FactoryResource{
-			ID: resource.Name, Name: resource.Name, Capacity: resource.Capacity,
+			ID: id, Name: resource.Name, Capacity: resource.Capacity,
 		})
 		convertedPlaces = append(convertedPlaces, interfaces.FactoryPlace{
 			ID:     topologyPlaceID(resource.Name, interfaces.ResourceStateAvailable),
@@ -99,10 +110,15 @@ func workTypesAndPlacesFromSnapshot(workTypes []snapshotFactoryWorkType) ([]inte
 	convertedWorkTypes := make([]interfaces.FactoryWorkType, 0, len(workTypes))
 	convertedPlaces := make([]interfaces.FactoryPlace, 0)
 	for _, workType := range workTypes {
-		converted := interfaces.FactoryWorkType{ID: workType.Name, Name: workType.Name}
+		workTypeID := stringValue(workType.ID)
+		if workTypeID == "" {
+			workTypeID = workType.Name
+		}
+		converted := interfaces.FactoryWorkType{ID: workTypeID, Name: workType.Name}
 		for _, state := range workType.States {
+			stateID := stringValue(state.ID)
 			converted.States = append(converted.States, interfaces.FactoryStateDefinition{
-				Value: state.Name, Category: state.Type,
+				ID: stateID, Value: state.Name, Category: state.Type,
 			})
 			convertedPlaces = append(convertedPlaces, interfaces.FactoryPlace{
 				ID:     topologyPlaceID(workType.Name, state.Name),
@@ -117,14 +133,19 @@ func workTypesAndPlacesFromSnapshot(workTypes []snapshotFactoryWorkType) ([]inte
 func workersFromSnapshot(workers []snapshotFactoryWorker) []interfaces.FactoryWorker {
 	converted := make([]interfaces.FactoryWorker, 0, len(workers))
 	for _, worker := range workers {
+		id := stringValue(worker.ID)
+		if id == "" {
+			id = worker.Name
+		}
 		config := map[string]string{}
 		if workerType := stringValue(worker.Type); workerType != "" {
 			config["type"] = workerType
 		}
 		converted = append(converted, interfaces.FactoryWorker{
-			ID: worker.Name, Name: worker.Name,
+			ID: id, Name: worker.Name,
 			Provider: stringValue(worker.ExecutorProvider), ModelProvider: stringValue(worker.ModelProvider),
 			Model: stringValue(worker.Model), Config: nilIfEmptyStringMap(config),
+			Resources: append([]factoryresource.Config(nil), worker.Resources...),
 		})
 	}
 	return converted
@@ -148,6 +169,7 @@ func workstationsFromSnapshot(workstations []snapshotFactoryWorkstation) []inter
 		converted = append(converted, interfaces.FactoryWorkstation{
 			ID: id, Name: workstation.Name, WorkerID: workstation.Worker,
 			Kind: stringValue(workstation.Behavior), Config: nilIfEmptyStringMap(config),
+			Resources:         append([]factoryresource.Config(nil), workstation.Resources...),
 			InputPlaceIDs:     placeIDsFromSnapshotIOs(workstation.Inputs),
 			OutputPlaceIDs:    placeIDsFromSnapshotIOsPtr(workstation.Outputs),
 			ContinuePlaceIDs:  placeIDsFromSnapshotIOsPtr(workstation.OnContinue),

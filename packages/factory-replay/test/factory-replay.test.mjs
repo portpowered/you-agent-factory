@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   advanceFactoryReplay,
@@ -31,6 +34,11 @@ const reducer = {
     return { eventIDs: state.appliedIDs, logicalTick: state.selectedTick };
   },
 };
+
+const repositoryRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 
 test("canonicalization orders same-tick events and accepts each id once", () => {
   const events = Object.freeze([
@@ -277,6 +285,43 @@ test("public topology projection is stable, ordered, and handle-complete", () =>
       );
     }
   }
+});
+
+test("backend canonical topology snapshots preserve stable IDs and resource connections", () => {
+  const events = JSON.parse(
+    execFileSync(
+      "go",
+      ["run", "./packages/factory-replay/test/fixtures/canonical_topology_event"],
+      { cwd: repositoryRoot, encoding: "utf8" },
+    ),
+  );
+
+  const before = projectFactoryTopologyAtTick({ events, tick: 0 });
+  const after = projectFactoryTopologyAtTick({ events, tick: 3 });
+
+  assert.deepEqual(
+    before.nodes.map(({ id }) => id),
+    after.nodes.map(({ id }) => id),
+  );
+  assert.deepEqual(
+    before.connections.map(({ id }) => id),
+    after.connections.map(({ id }) => id),
+  );
+  assert.equal(before.nodes.find(({ id }) => id === "resource:gpu-stable")?.label, "gpu");
+  assert.equal(after.nodes.find(({ id }) => id === "resource:gpu-stable")?.label, "accelerator");
+  assert.deepEqual(
+    new Set(before.connections.map(({ kind }) => kind)),
+    new Set([
+      "worker-resource",
+      "work-type-state",
+      "worker-assignment",
+      "workstation-resource",
+      "workstation-input",
+      "workstation-output",
+      "workstation-on-failure",
+      "workstation-on-rejection",
+    ]),
+  );
 });
 
 test("selected-tick topology follows canonical replacement order", () => {

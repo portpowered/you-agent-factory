@@ -25,6 +25,12 @@ References that cannot be resolved are omitted from the connection collection
 and returned as structured projection issues, so consumers never receive a
 dangling edge.
 
+Canonical initial and replacement topology events retain durable IDs for
+resources, workers, workstations, Work Types, and Work States, plus authored
+worker and workstation resource requirements. This lets recordings preserve
+stable graph identity and both resource connection kinds even when public
+entity names change.
+
 `projectFactoryActivityAtTick` reconstructs active customer Dispatches,
 affected workstations, consumed Work IDs, workers, and resource occupancy from
 canonical event history. Consumers that already hold selected replay evidence
