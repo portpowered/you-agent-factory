@@ -1,3 +1,7 @@
+import { projectFactoryTopology } from "./topology.js";
+
+export { projectFactoryTopology } from "./topology.js";
+
 /**
  * Compare Factory events using the established dashboard replay order.
  *
@@ -158,4 +162,37 @@ export function projectFactoryWorldAtTick(input) {
     ...input,
     selection: { mode: "fixed", tick: input.tick },
   });
+}
+
+/**
+ * Reconstruct and project the public Factory topology at one logical tick.
+ * Only canonical topology replacement events participate in this projection.
+ *
+ * @param {import("./index.d.ts").FactoryTopologyAtTickInput} input
+ * @returns {import("./index.d.ts").FactoryTopologyProjection}
+ */
+export function projectFactoryTopologyAtTick(input) {
+  const events = canonicalizeFactoryEvents(input.events).filter(
+    (event) => event.context.tick <= input.tick,
+  );
+  let factory;
+  for (const event of events) {
+    if (
+      event.type !== "INITIAL_STRUCTURE_REQUEST" &&
+      event.type !== "FACTORY_CHANGE"
+    ) {
+      continue;
+    }
+    const payload = event.payload;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      "factory" in payload &&
+      payload.factory &&
+      typeof payload.factory === "object"
+    ) {
+      factory = payload.factory;
+    }
+  }
+  return projectFactoryTopology({ factory, selectedTick: input.tick });
 }

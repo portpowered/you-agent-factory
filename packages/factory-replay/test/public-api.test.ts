@@ -4,6 +4,9 @@ import {
   createFactoryReplayCheckpoint,
   initializeFactoryReplay,
   type FactoryReplayReducer,
+  type FactoryTopologyNode,
+  projectFactoryTopology,
+  projectFactoryTopologyAtTick,
 } from "../src/index.js";
 
 interface ReplayState {
@@ -48,3 +51,15 @@ const advanced = advanceFactoryReplay({
 });
 
 void advanced.checkpoint;
+
+const topology = projectFactoryTopology({
+  factory: {
+    name: "typed-factory",
+    resources: [{ capacity: 1, name: "slot" }],
+  },
+  selectedTick: 1,
+});
+const typedNode: FactoryTopologyNode | undefined = topology.nodes[0];
+void typedNode;
+
+void projectFactoryTopologyAtTick({ events: [event], tick: 1 }).issues;

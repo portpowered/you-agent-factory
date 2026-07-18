@@ -14,3 +14,13 @@ or diagnostics dependencies.
 from an accepted tail. Callers provide state-clone and selected-tick adapters;
 the kernel applies only unseen events after the checkpoint tick in canonical
 order and never mutates the supplied checkpoint.
+
+`projectFactoryTopologyAtTick` reconstructs the latest public Factory topology
+at or before an explicit logical tick. `projectFactoryTopology` projects an
+already selected `FactoryDefinition`. Both operations return deterministically
+ordered resource, worker, workstation, Work Type, and Work State nodes plus
+canonical connections. Node and connection IDs follow the public graph ID
+contract, and connection endpoints include renderer-compatible handle IDs.
+References that cannot be resolved are omitted from the connection collection
+and returned as structured projection issues, so consumers never receive a
+dangling edge.

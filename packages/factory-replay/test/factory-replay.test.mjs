@@ -6,6 +6,8 @@ import {
   canonicalizeFactoryEvents,
   createFactoryReplayCheckpoint,
   initializeFactoryReplay,
+  projectFactoryTopology,
+  projectFactoryTopologyAtTick,
   projectFactoryWorldAtTick,
 } from "../src/index.js";
 
@@ -174,4 +176,202 @@ test("accepted tails retain later canonical events at the checkpoint tick", () =
     ["same-tick-tail"],
   );
   assert.deepEqual(advanced.world.eventIDs, ["initial", "same-tick-tail"]);
+});
+
+const completeFactory = {
+  name: "publishing",
+  resources: [{ capacity: 2, id: "gpu-stable", name: "gpu" }],
+  workers: [
+    {
+      id: "writer-stable",
+      name: "writer",
+      resources: [{ capacity: 1, name: "gpu" }],
+    },
+  ],
+  workTypes: [
+    {
+      id: "task-stable",
+      name: "task",
+      states: [
+        { id: "queued-stable", name: "queued", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      id: "review-stable",
+      inputs: [{ state: "queued", workType: "task" }],
+      name: "review",
+      onContinue: [{ state: "queued", workType: "task" }],
+      onFailure: [{ state: "failed", workType: "task" }],
+      onRejection: [{ state: "queued", workType: "task" }],
+      outputs: [{ state: "done", workType: "task" }],
+      resources: [{ capacity: 1, name: "gpu" }],
+      worker: "writer",
+    },
+  ],
+};
+
+function topologyEvent(id, type, tick, sequence, factory) {
+  return {
+    context: {
+      eventTime: `2026-07-18T05:00:0${sequence}Z`,
+      sequence,
+      tick,
+    },
+    id,
+    payload: { factory },
+    type,
+  };
+}
+
+test("public topology projection is stable, ordered, and handle-complete", () => {
+  const first = projectFactoryTopology({
+    factory: completeFactory,
+    selectedTick: 4,
+  });
+  const repeated = projectFactoryTopology({
+    factory: structuredClone(completeFactory),
+    selectedTick: 4,
+  });
+
+  assert.deepEqual(first, repeated);
+  assert.deepEqual(
+    first.nodes.map((node) => node.id),
+    [...first.nodes.map((node) => node.id)].sort(),
+  );
+  assert.deepEqual(
+    first.connections.map((connection) => connection.id),
+    [...first.connections.map((connection) => connection.id)].sort(),
+  );
+  assert.deepEqual(
+    new Set(first.nodes.map((node) => node.kind)),
+    new Set(["resource", "worker", "work-state", "work-type", "workstation"]),
+  );
+  assert.deepEqual(
+    new Set(first.connections.map((connection) => connection.kind)),
+    new Set([
+      "worker-assignment",
+      "worker-resource",
+      "workstation-input",
+      "workstation-on-continue",
+      "workstation-on-failure",
+      "workstation-on-rejection",
+      "workstation-output",
+      "workstation-resource",
+      "work-type-state",
+    ]),
+  );
+  assert.equal(first.issues.length, 0);
+
+  const nodesByID = new Map(first.nodes.map((node) => [node.id, node]));
+  for (const connection of first.connections) {
+    for (const endpoint of [connection.source, connection.target]) {
+      const endpointNode = nodesByID.get(endpoint.nodeId);
+      assert.ok(endpointNode, `missing node ${endpoint.nodeId}`);
+      assert.ok(
+        endpointNode.handles.some((handle) => handle.id === endpoint.handleId),
+        `missing handle ${endpoint.handleId} on ${endpoint.nodeId}`,
+      );
+    }
+  }
+});
+
+test("selected-tick topology follows canonical replacement order", () => {
+  const replacement = structuredClone(completeFactory);
+  replacement.workstations[0].outputs = [
+    { state: "failed", workType: "task" },
+  ];
+  const events = [
+    topologyEvent("replacement", "FACTORY_CHANGE", 3, 2, replacement),
+    topologyEvent("initial", "INITIAL_STRUCTURE_REQUEST", 1, 0, completeFactory),
+  ];
+
+  const before = projectFactoryTopologyAtTick({ events, tick: 2 });
+  const after = projectFactoryTopologyAtTick({ events, tick: 3 });
+
+  assert.ok(
+    before.connections.some((connection) =>
+      connection.id.endsWith("->work-state:task-stable:done"),
+    ),
+  );
+  assert.ok(
+    after.connections.some((connection) =>
+      connection.id.endsWith("->work-state:task-stable:failed"),
+    ),
+  );
+  assert.deepEqual(
+    before.nodes.map((node) => node.id),
+    after.nodes.map((node) => node.id),
+  );
+  assert.equal(after.selectedTick, 3);
+});
+
+test("same-tick topology replacements use canonical sequence order", () => {
+  const replacement = { ...completeFactory, name: "replacement" };
+  const result = projectFactoryTopologyAtTick({
+    events: [
+      topologyEvent("later", "FACTORY_CHANGE", 7, 2, replacement),
+      topologyEvent("earlier", "FACTORY_CHANGE", 7, 1, { name: "empty" }),
+    ],
+    tick: 7,
+  });
+
+  assert.equal(result.nodes.length, 7);
+});
+
+test("partial topology omits dangling connections and returns stable issues", () => {
+  const partialFactory = {
+    name: "partial",
+    workers: [
+      {
+        name: "worker",
+        resources: [{ capacity: 1, name: "missing-worker-resource" }],
+      },
+    ],
+    workstations: [
+      {
+        inputs: [{ state: "missing", workType: "unknown" }],
+        name: "workstation",
+        resources: [{ capacity: 1, name: "missing-workstation-resource" }],
+        worker: "missing-worker",
+      },
+    ],
+  };
+
+  const result = projectFactoryTopology({
+    factory: partialFactory,
+    selectedTick: 1,
+  });
+
+  assert.deepEqual(result.connections, []);
+  assert.deepEqual(
+    result.issues.map((issue) => issue.id),
+    [...result.issues.map((issue) => issue.id)].sort(),
+  );
+  assert.equal(result.issues.length, 4);
+  assert.ok(
+    result.issues.every((issue) => issue.code === "UNRESOLVED_CONNECTION"),
+  );
+});
+
+test("missing topology and optional collections return deterministic results", () => {
+  assert.deepEqual(
+    projectFactoryTopology({ factory: { name: "empty" }, selectedTick: 2 }),
+    { connections: [], issues: [], nodes: [], selectedTick: 2 },
+  );
+  assert.deepEqual(projectFactoryTopologyAtTick({ events: [], tick: 2 }), {
+    connections: [],
+    issues: [
+      {
+        code: "MISSING_FACTORY",
+        id: "missing-factory",
+        message: "No Factory topology is available at the selected tick.",
+      },
+    ],
+    nodes: [],
+    selectedTick: 2,
+  });
 });
