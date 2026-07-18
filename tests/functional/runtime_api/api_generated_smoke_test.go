@@ -482,16 +482,6 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 	}
 }
 
-func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string) {
-	t.Helper()
-	stream := openDefaultSessionFactoryEventHTTPStream(t, baseURL)
-	runRequest, initialStructure := requireFunctionalEventStreamPrelude(t, stream)
-	assertFunctionalEventsUseCanonicalVocabulary(t, []factoryapi.FactoryEvent{runRequest, initialStructure},
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-	)
-}
-
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
 	if req.Name == "" {
