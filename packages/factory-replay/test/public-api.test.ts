@@ -1,5 +1,7 @@
 import type { FactoryEvent } from "@you-agent-factory/client";
 import {
+  advanceFactoryReplay,
+  createFactoryReplayCheckpoint,
   initializeFactoryReplay,
   type FactoryReplayReducer,
 } from "../src/index.js";
@@ -32,3 +34,17 @@ const result = initializeFactoryReplay({
 });
 
 void result.world;
+
+const checkpoint = createFactoryReplayCheckpoint(result, (state) => ({
+  ids: [...state.ids],
+}));
+const advanced = advanceFactoryReplay({
+  checkpoint,
+  cloneState: (state) => ({ ids: [...state.ids] }),
+  events: [],
+  reducer,
+  setSelectedTick: (state) => state,
+  tick: 1,
+});
+
+void advanced.checkpoint;

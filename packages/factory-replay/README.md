@@ -9,3 +9,8 @@ caller-defined Factory world at either the latest or an explicit historical
 logical tick. The caller supplies a pure reducer and projection adapter, so the
 package has no React, Zustand, browser, network, session-routing, persistence,
 or diagnostics dependencies.
+
+`createFactoryReplayCheckpoint` and `advanceFactoryReplay` support live replay
+from an accepted tail. Callers provide state-clone and selected-tick adapters;
+the kernel applies only unseen events after the checkpoint tick in canonical
+order and never mutates the supplied checkpoint.

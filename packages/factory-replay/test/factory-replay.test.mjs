@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  advanceFactoryReplay,
   canonicalizeFactoryEvents,
+  createFactoryReplayCheckpoint,
   initializeFactoryReplay,
   projectFactoryWorldAtTick,
 } from "../src/index.js";
@@ -76,4 +78,73 @@ test("fixed selection reconstructs only the historical logical tick", () => {
     eventIDs: ["event-1"],
     logicalTick: 1,
   });
+});
+
+const mutableReducer = {
+  createState(selectedTick) {
+    return { appliedIDs: [], eventKinds: {}, selectedTick };
+  },
+  applyEvent(state, factoryEvent) {
+    state.appliedIDs.push(factoryEvent.id);
+    state.eventKinds[factoryEvent.type] =
+      (state.eventKinds[factoryEvent.type] ?? 0) + 1;
+    return state;
+  },
+  projectWorld(state) {
+    return {
+      eventKinds: { ...state.eventKinds },
+      logicalTick: state.selectedTick,
+      processed: [...state.appliedIDs],
+    };
+  },
+};
+
+const cloneMutableState = (state) => structuredClone(state);
+const setMutableStateTick = (state, tick) => ({ ...state, selectedTick: tick });
+
+test("accepted tails advance a cloned checkpoint in canonical order", () => {
+  const baseEvents = [event("topology", 1, 0)];
+  const checkpoint = createFactoryReplayCheckpoint(
+    initializeFactoryReplay({
+      events: baseEvents,
+      reducer: mutableReducer,
+      selection: { mode: "current" },
+    }),
+    cloneMutableState,
+  );
+  const checkpointBeforeAdvance = structuredClone(checkpoint);
+  const acceptedTail = [
+    { ...event("lifecycle", 6, 0), type: "SESSION_STOPPED" },
+    { ...event("complete", 5, 1), type: "DISPATCH_RESPONSE" },
+    { ...event("work", 3, 0), type: "WORK_REQUEST" },
+    { ...event("dispatch", 5, 0), type: "DISPATCH_REQUEST" },
+    { ...event("topology", 1, 1), type: "RUN_REQUEST" },
+    { ...event("work", 3, 1), type: "WORK_REQUEST" },
+  ];
+
+  const advanced = advanceFactoryReplay({
+    checkpoint,
+    cloneState: cloneMutableState,
+    events: acceptedTail,
+    reducer: mutableReducer,
+    setSelectedTick: setMutableStateTick,
+    tick: 5,
+  });
+  const full = initializeFactoryReplay({
+    events: [...baseEvents, ...acceptedTail],
+    reducer: mutableReducer,
+    selection: { mode: "fixed", tick: 5 },
+  });
+
+  assert.deepEqual(
+    advanced.appliedEvents.map((factoryEvent) => factoryEvent.id),
+    ["work", "dispatch", "complete"],
+  );
+  assert.deepEqual(advanced.world, full.world);
+  assert.deepEqual(checkpoint, checkpointBeforeAdvance);
+
+  advanced.state.appliedIDs.push("caller-mutation");
+  advanced.world.processed.push("caller-mutation");
+  assert.deepEqual(checkpoint, checkpointBeforeAdvance);
+  assert.deepEqual(advanced.checkpoint.state, full.state);
 });

@@ -78,6 +78,74 @@ export function initializeFactoryReplay(input) {
 }
 
 /**
+ * Create an independent checkpoint from an already projected replay result.
+ * The caller provides cloning because the kernel cannot know the shape of a
+ * domain-specific replay state.
+ *
+ * @template State, World
+ * @param {import("./index.d.ts").FactoryReplayResult<State, World>} result
+ * @param {import("./index.d.ts").FactoryReplayStateCloner<State>} cloneState
+ * @returns {import("./index.d.ts").FactoryReplayCheckpoint<State>}
+ */
+export function createFactoryReplayCheckpoint(result, cloneState) {
+  return {
+    acceptedEventIDs: result.appliedEvents.map((event) => event.id),
+    selectedTick: result.selectedTick,
+    state: cloneState(result.state),
+  };
+}
+
+/**
+ * Advance an immutable replay checkpoint with an accepted event tail.
+ * Only previously unseen events after the checkpoint tick and at or before
+ * the target tick are applied. The returned checkpoint is independently
+ * cloned so callers can retain it for another historical reconstruction.
+ *
+ * @template State, World
+ * @param {import("./index.d.ts").FactoryReplayAdvanceInput<State, World>} input
+ * @returns {import("./index.d.ts").FactoryReplayAdvanceResult<State, World>}
+ */
+export function advanceFactoryReplay(input) {
+  const acceptedEventIDs = new Set(input.checkpoint.acceptedEventIDs);
+  const appliedEvents = canonicalizeFactoryEvents(input.events).filter(
+    (event) => {
+      if (
+        acceptedEventIDs.has(event.id) ||
+        event.context.tick <= input.checkpoint.selectedTick ||
+        event.context.tick > input.tick
+      ) {
+        return false;
+      }
+      acceptedEventIDs.add(event.id);
+      return true;
+    },
+  );
+  let state = input.setSelectedTick(
+    input.cloneState(input.checkpoint.state),
+    input.tick,
+  );
+  for (const event of appliedEvents) {
+    state = input.reducer.applyEvent(state, event);
+  }
+
+  return {
+    appliedEvents,
+    checkpoint: {
+      acceptedEventIDs: [...acceptedEventIDs],
+      selectedTick: input.tick,
+      state: input.cloneState(state),
+    },
+    latestTick: appliedEvents.reduce(
+      (latest, event) => Math.max(latest, event.context.tick),
+      input.checkpoint.selectedTick,
+    ),
+    selectedTick: input.tick,
+    state,
+    world: input.reducer.projectWorld(state),
+  };
+}
+
+/**
  * Reconstruct the canonical Factory world at one explicit logical tick.
  *
  * @template State, World

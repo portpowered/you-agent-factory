@@ -4,15 +4,17 @@ Use this map when changing deterministic Factory-event replay or a host adapter
 that consumes the replay kernel.
 
 - `packages/factory-replay/src/index.js` owns framework-independent canonical
-  ordering, event-ID acceptance, logical-tick selection, and reducer-driven
-  replay orchestration.
+  ordering, event-ID acceptance, logical-tick selection, immutable checkpoint
+  advancement, and reducer-driven replay orchestration. Accepted-tail callers
+  must supply explicit state cloning and selected-tick adapters because replay
+  state remains domain-owned.
 - `packages/factory-replay/src/index.d.ts` is the public typed boundary. It
   uses `FactoryEvent` from `@you-agent-factory/client`; do not substitute a
   dashboard-local event type at this boundary.
 - `packages/factory-replay/test/factory-replay.test.mjs` proves observable
-  ordering, duplicate-ID acceptance, current selection, and fixed historical
-  projection behavior. `public-api.test.ts` validates the public TypeScript
-  boundary.
+  ordering, duplicate-ID acceptance, current selection, fixed historical
+  projection, and checkpoint-plus-tail equivalence without mutation.
+  `public-api.test.ts` validates the public TypeScript boundary.
 - `ui/src/features/timeline/state/timeline/shared.ts` records the hosted
   ordering behavior that must remain aligned with the kernel during the
   migration.
