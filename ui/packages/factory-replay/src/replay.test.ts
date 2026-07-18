@@ -1,0 +1,193 @@
+import { describe, expect, it } from "vitest";
+
+import type { FactoryEvent } from "@you-agent-factory/client";
+
+import {
+  canonicalizeFactoryEvents,
+  initializeFactoryReplay,
+  projectFactoryStateAtTick,
+  type FactoryReplayReducer,
+} from "./index.js";
+
+interface EvidenceState {
+  appliedIds: string[];
+  selectedTick: number;
+  workIds: string[];
+}
+
+const reducer: FactoryReplayReducer<EvidenceState> = {
+  createState: (selectedTick) => ({
+    appliedIds: [],
+    selectedTick,
+    workIds: [],
+  }),
+  applyEvent: (state, event) => {
+    const payload = event.payload as Record<string, unknown>;
+    const works = Array.isArray(payload.works) ? payload.works : [];
+    const workIds = works.flatMap((work) => {
+      if (work === null || typeof work !== "object") return [];
+      const workId = (work as Record<string, unknown>).workId;
+      return typeof workId === "string" ? [workId] : [];
+    });
+    return {
+      ...state,
+      appliedIds: [...state.appliedIds, event.id],
+      workIds: [...state.workIds, ...workIds],
+    };
+  },
+};
+
+function event(
+  id: string,
+  tick: number,
+  sequence: number,
+  options: {
+    eventTime?: string;
+    sessionSequence?: number;
+    works?: unknown[];
+  } = {},
+): FactoryEvent {
+  return {
+    schemaVersion: "agent-factory.event.v1",
+    id,
+    type: "WORK_REQUEST",
+    context: {
+      sequence,
+      tick,
+      eventTime:
+        options.eventTime ?? `2026-07-18T00:00:${String(sequence).padStart(2, "0")}Z`,
+      ...(options.sessionSequence === undefined
+        ? {}
+        : { sessionSequence: options.sessionSequence }),
+    },
+    payload: {
+      type: "FACTORY_REQUEST_BATCH",
+      ...(options.works === undefined ? {} : { works: options.works }),
+    },
+  } as FactoryEvent;
+}
+
+describe("canonicalizeFactoryEvents", () => {
+  it("orders out-of-order input by tick and effective same-tick sequence", () => {
+    const input = [
+      event("later-tick", 2, 1, { sessionSequence: 1 }),
+      event("later-in-tick", 1, 2, { sessionSequence: 8 }),
+      event("earlier-in-tick", 1, 9, { sessionSequence: 3 }),
+    ];
+    const original = structuredClone(input);
+
+    expect(canonicalizeFactoryEvents(input).map(({ id }) => id)).toEqual([
+      "earlier-in-tick",
+      "later-in-tick",
+      "later-tick",
+    ]);
+    expect(input).toEqual(original);
+  });
+
+  it("uses canonical ties and accepts a repeated ID once in either arrival order", () => {
+    const beta = event("beta", 1, 4, {
+      eventTime: "2026-07-18T00:00:04Z",
+    });
+    const alpha = event("alpha", 1, 4, {
+      eventTime: "2026-07-18T00:00:04Z",
+    });
+    const duplicateLater = event("duplicate", 3, 9);
+    const duplicateEarlier = event("duplicate", 2, 8);
+
+    const forward = canonicalizeFactoryEvents([
+      beta,
+      duplicateLater,
+      alpha,
+      duplicateEarlier,
+    ]);
+    const reverse = canonicalizeFactoryEvents([
+      duplicateEarlier,
+      alpha,
+      duplicateLater,
+      beta,
+    ]);
+
+    expect(forward.map(({ id }) => id)).toEqual([
+      "alpha",
+      "beta",
+      "duplicate",
+    ]);
+    expect(reverse).toEqual(forward);
+    expect(forward[2]?.context.tick).toBe(2);
+
+    const forwardReplay = initializeFactoryReplay({
+      events: [beta, duplicateLater, alpha, duplicateEarlier],
+      reducer,
+      selection: { mode: "current" },
+    });
+    const reverseReplay = initializeFactoryReplay({
+      events: [duplicateEarlier, alpha, duplicateLater, beta],
+      reducer,
+      selection: { mode: "current" },
+    });
+    expect(reverseReplay.state).toEqual(forwardReplay.state);
+  });
+});
+
+describe("Factory replay selection", () => {
+  it("initializes empty history at baseline tick zero", () => {
+    expect(
+      initializeFactoryReplay({
+        events: [],
+        reducer,
+        selection: { mode: "current" },
+      }),
+    ).toEqual({
+      appliedEvents: [],
+      events: [],
+      latestTick: 0,
+      selectedTick: 0,
+      selection: { mode: "current" },
+      state: { appliedIds: [], selectedTick: 0, workIds: [] },
+    });
+  });
+
+  it("resolves current selection to the latest accepted tick", () => {
+    const result = initializeFactoryReplay({
+      events: [event("latest", 7, 2), event("earliest", 2, 1)],
+      reducer,
+      selection: { mode: "current" },
+    });
+
+    expect(result.selectedTick).toBe(7);
+    expect(result.latestTick).toBe(7);
+    expect(result.state.appliedIds).toEqual(["earliest", "latest"]);
+  });
+
+  it("reconstructs a fixed historical tick without applying future events", () => {
+    const result = projectFactoryStateAtTick({
+      events: [event("future", 6, 3), event("included", 3, 2)],
+      reducer,
+      tick: 3,
+    });
+
+    expect(result.events.map(({ id }) => id)).toEqual(["included", "future"]);
+    expect(result.appliedEvents.map(({ id }) => id)).toEqual(["included"]);
+    expect(result.state).toEqual({
+      appliedIds: ["included"],
+      selectedTick: 3,
+      workIds: [],
+    });
+  });
+
+  it("passes incomplete optional payload evidence without crashing or inventing work", () => {
+    const incomplete = event("incomplete", 1, 1);
+    const partial = event("partial", 2, 2, {
+      works: [null, {}, { workId: "known-work" }],
+    });
+
+    const result = projectFactoryStateAtTick({
+      events: [partial, incomplete],
+      reducer,
+      tick: 2,
+    });
+
+    expect(result.state.workIds).toEqual(["known-work"]);
+    expect(result.state.appliedIds).toEqual(["incomplete", "partial"]);
+  });
+});
