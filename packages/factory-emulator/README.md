@@ -249,8 +249,12 @@ valid phase; the kernel never fabricates failed Work to represent a pause.
 
 Before an atomic scheduler batch is materialized, the session examines at most
 `maxSynchronousWorkItems` retained Work values and then yields with an explicit
-plain-data inspection continuation. It counts at most one eligible Work beyond
-the limit. An oversized ready or due set pauses with a
+plain-data inspection continuation. That inspection returns the exact candidate
+indexes and lineage lookup consumed by pure calculation, so calculation does
+not rescan retained Work. Replacement materialization and detached command-state
+construction traverse retained Work with the same yield cadence instead of
+performing whole-state clones. The inspection counts at most one eligible Work
+beyond the limit. An oversized ready or due set pauses with a
 `synchronous-work-limit` diagnostic before dispatch/completion events or
 calculated next state are built. Initial and interactive submission batches use
 the same ceiling. Their array cardinality is checked before any member is

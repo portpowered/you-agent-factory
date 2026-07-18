@@ -1244,6 +1244,59 @@ test("cooperative scheduler yielding gives a host task a turn and keeps the comm
   assert.equal(emulator.state().virtualElapsedMs, 1);
 });
 
+test("scheduler planning, state materialization, and receipt detachment share the Work cadence", async () => {
+  let emulator;
+  let observeFinalAdvance = false;
+  let observedHostTurns = 0;
+  const { emulator: created } = harness(
+    scenario({ initialSubmissions: [] }),
+    { maxSynchronousWorkItems: 2 },
+    {
+      yieldControl: () => new Promise((resolve) => {
+        setImmediate(() => {
+          if (observeFinalAdvance) {
+            observedHostTurns += 1;
+            assertStatus(emulator, { phase: "active", reason: "advancing" });
+          }
+          resolve();
+        });
+      }),
+    },
+  );
+  emulator = created;
+  await emulator.start();
+
+  for (let ordinal = 0; ordinal < 6; ordinal += 1) {
+    await emulator.submit({ id: `completed-${ordinal}`, workType: "checkout" });
+    await emulator.advanceToNext();
+    await emulator.advanceToNext();
+  }
+  await emulator.submit({ id: "only-ready", workType: "checkout" });
+
+  observeFinalAdvance = true;
+  const receipt = await emulator.advanceToNext();
+  observeFinalAdvance = false;
+
+  // Seven retained Work values require three task boundaries for each complete
+  // retained-state pass: planning, replacement materialization, and detached
+  // receipt construction. Calculation itself consumes only the planned Work.
+  assert.equal(observedHostTurns, 9);
+  assert.equal(receipt.batches.length, 1);
+  assert.equal(receipt.batches[0].events.length, 1);
+  assert.deepEqual(
+    receipt.state.works.map((work) => work.phase),
+    [
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+      "active",
+    ],
+  );
+});
+
 test("synchronous Work limits pause before oversized submissions and scheduler batches materialize", async () => {
   const submission = harness(
     scenario({ initialSubmissions: [] }),

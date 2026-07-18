@@ -184,17 +184,17 @@ export function createFactoryEmulatorSession({
       if (receipt?.status !== "accepted") {
         throw new TypeError("sink.write must return an accepted receipt");
       }
-      committedState = copy(calculation.state);
+      committedState = calculation.state;
       pendingTransaction = undefined;
       runtimeError = undefined;
     } catch (error) {
-      pendingTransaction = copy({
+      pendingTransaction = {
         command,
         key,
         batch: calculation.batch,
         state: calculation.state,
         progress,
-      });
+      };
       runtimeError = sinkError("SINK_WRITE_REJECTED", "write", command, error);
       throw error;
     }
@@ -264,14 +264,17 @@ export function createFactoryEmulatorSession({
         if (inspection.batch !== undefined) {
           assertSynchronousWorkWithinLimit(inspection.batch.workItems);
         }
-        return;
+        return {
+          plan: inspection.plan,
+          hasWaitingWork: inspection.hasWaitingWork,
+        };
       }
       continuation = inspection.continuation;
       await yieldControl();
     }
   }
 
-  function finishAdvance(command, fromVirtualTime, batches, madeProgress) {
+  async function finishAdvance(command, fromVirtualTime, batches, madeProgress) {
     if (madeProgress || committedState.virtualTime !== fromVirtualTime) {
       committedState = {
         ...committedState,
@@ -281,7 +284,13 @@ export function createFactoryEmulatorSession({
         },
       };
     }
-    return advanceReceipt(command, fromVirtualTime, batches, madeProgress, committedState);
+    return advanceReceipt(
+      command,
+      fromVirtualTime,
+      batches,
+      madeProgress,
+      await detachState(committedState),
+    );
   }
 
   async function runAdvance(command, key, targetElapsedMs, retry) {
@@ -292,7 +301,7 @@ export function createFactoryEmulatorSession({
     };
     const fromVirtualTime = progress.fromVirtualTime;
     targetElapsedMs = progress.targetElapsedMs;
-    const batches = copy(progress.batches);
+    const batches = await detachBatches(progress.batches);
     let zeroDurationBatches = progress.zeroDurationBatches ?? 0;
     let synchronousBatches = 0;
     let madeProgress = batches.length > 0;
@@ -306,24 +315,20 @@ export function createFactoryEmulatorSession({
         : 0;
       madeProgress = true;
       if (command === "advanceToNext") {
-        return finishAdvance(command, fromVirtualTime, batches, true);
+        return await finishAdvance(command, fromVirtualTime, batches, true);
       }
     }
 
-    if (!hasUnfinishedWork(committedState) && batches.length === 0) {
-      return copy({
-        status: "idle",
-        command,
-        fromVirtualTime,
-        virtualTime: committedState.virtualTime,
-        virtualElapsedMs: committedState.virtualElapsedMs,
-        batches: [],
-        state: committedState,
-      });
-    }
-
     while (true) {
-      await inspectSchedulerBatchWithinLimit();
+      const inspection = await inspectSchedulerBatchWithinLimit();
+      const plan = inspection.plan;
+      if (
+        plan === undefined
+        && inspection.hasWaitingWork !== true
+        && batches.length === 0
+      ) {
+        targetElapsedMs = committedState.virtualElapsedMs;
+      }
       const calculation = calculateNextSchedulerBatch({
         createEvent,
         identityCoordinates: sessionIdentityCoordinates(
@@ -331,6 +336,7 @@ export function createFactoryEmulatorSession({
           configuredScenario,
           committedState.sessionId,
         ),
+        plan,
         scenario: configuredScenario,
         state: committedState,
       });
@@ -351,16 +357,17 @@ export function createFactoryEmulatorSession({
           virtualElapsedMs: committedState.virtualElapsedMs,
         }));
       }
-      if (calculation.batch !== undefined) {
-        await writeCalculation(command, key, calculation, {
+      const materialized = await materializeSchedulerCalculation(calculation);
+      if (materialized.batch !== undefined) {
+        await writeCalculation(command, key, materialized, {
           fromVirtualTime,
           targetElapsedMs,
           batches,
           zeroDurationBatches,
         });
-        batches.push(copy(calculation.batch));
+        batches.push(copy(materialized.batch));
       } else {
-        committedState = copy(calculation.state);
+        committedState = materialized.state;
       }
       zeroDurationBatches = nextZeroDurationBatches;
       madeProgress = true;
@@ -382,7 +389,72 @@ export function createFactoryEmulatorSession({
       assertCalculationWithinBudgets(command, { state: targetState });
       committedState = targetState;
     }
-    return finishAdvance(command, fromVirtualTime, batches, madeProgress);
+    return await finishAdvance(command, fromVirtualTime, batches, madeProgress);
+  }
+
+  async function materializeSchedulerCalculation(calculation) {
+    if (calculation === undefined || calculation.workReplacements === undefined) {
+      return calculation;
+    }
+    const works = await materializeWorks(
+      calculation.state.works,
+      calculation.workReplacements,
+    );
+    return {
+      ...calculation,
+      state: { ...calculation.state, works },
+      workReplacements: undefined,
+    };
+  }
+
+  async function materializeWorks(sourceWorks, replacements, appendedWorks = []) {
+    const works = [];
+    const total = sourceWorks.length + appendedWorks.length;
+    for (let index = 0; index < total; index += 1) {
+      if (index < sourceWorks.length) {
+        works.push(replacements?.get(index) ?? sourceWorks[index]);
+      } else {
+        works.push(appendedWorks[index - sourceWorks.length]);
+      }
+      if (
+        (index + 1) % configuredLimits.maxSynchronousWorkItems === 0
+        && index + 1 < total
+      ) {
+        await yieldControl();
+      }
+    }
+    return works;
+  }
+
+  async function detachState(state) {
+    const works = [];
+    for (let index = 0; index < state.works.length; index += 1) {
+      works.push(copy(state.works[index]));
+      if (
+        (index + 1) % configuredLimits.maxSynchronousWorkItems === 0
+        && index + 1 < state.works.length
+      ) {
+        await yieldControl();
+      }
+    }
+    const stateWithoutWorks = { ...state, works: undefined };
+    const detached = copy(stateWithoutWorks);
+    delete detached.works;
+    return { ...detached, works };
+  }
+
+  async function detachBatches(sourceBatches) {
+    const batches = [];
+    for (let index = 0; index < sourceBatches.length; index += 1) {
+      batches.push(copy(sourceBatches[index]));
+      if (
+        (index + 1) % configuredLimits.maxSynchronousBatches === 0
+        && index + 1 < sourceBatches.length
+      ) {
+        await yieldControl();
+      }
+    }
+    return batches;
   }
 
   return Object.freeze({
@@ -423,11 +495,11 @@ export function createFactoryEmulatorSession({
           });
           batches.push(copy(initial.batch));
         }
-        return copy({
+        return {
           status: "started",
-          batches,
-          state: committedState,
-        });
+          batches: copy(batches),
+          state: await detachState(committedState),
+        };
       } finally {
         commandInProgress = undefined;
       }
@@ -441,7 +513,11 @@ export function createFactoryEmulatorSession({
       try {
         if (retry !== undefined) {
           await writeCalculation("submit", key, retry);
-          return copy({ status: "submitted", batch: retry.batch, state: committedState });
+          return {
+            status: "submitted",
+            batch: copy(retry.batch),
+            state: await detachState(committedState),
+          };
         }
         const parsed = parseEmulatorScenario(
           {
@@ -461,18 +537,30 @@ export function createFactoryEmulatorSession({
           );
         }
 
-        const calculation = calculateSubmit(
+        const calculated = calculateSubmit(
           parsed.factory,
           configuredScenario,
           committedState,
           submissions,
         );
+        const calculation = {
+          ...calculated,
+          state: {
+            ...calculated.state,
+            works: await materializeWorks(
+              calculated.state.works,
+              undefined,
+              calculated.appendedWorks,
+            ),
+          },
+          appendedWorks: undefined,
+        };
         await writeCalculation("submit", key, calculation);
-        return copy({
+        return {
           status: "submitted",
-          batch: calculation.batch,
-          state: committedState,
-        });
+          batch: copy(calculation.batch),
+          state: await detachState(committedState),
+        };
       } finally {
         commandInProgress = undefined;
       }
@@ -518,15 +606,19 @@ export function createFactoryEmulatorSession({
           }
           pendingTransaction = undefined;
           runtimeError = undefined;
-          return copy({ status: "closed", batch: terminal.batch, state: committedState });
+          return {
+            status: "closed",
+            batch: copy(terminal.batch),
+            state: await detachState(committedState),
+          };
         } catch (error) {
-          pendingTransaction = copy({
+          pendingTransaction = {
             command: "close",
             key: "close",
             batch: terminal.batch,
             state: committedState,
             progress: { terminalAccepted: true },
-          });
+          };
           runtimeError = sinkError("SINK_CLOSE_REJECTED", "close", "close", error);
           throw error;
         }
@@ -568,10 +660,6 @@ export function createFactoryEmulatorSession({
   });
 }
 
-function hasUnfinishedWork(state) {
-  return state.works.some((work) => work.phase !== "completed");
-}
-
 function calculateSubmit(factory, scenario, state, submissions) {
   const identityCoordinates = sessionIdentityCoordinates(
     factory,
@@ -589,11 +677,10 @@ function calculateSubmit(factory, scenario, state, submissions) {
     sessionId: state.sessionId,
     submissions,
   });
-  return copy({
+  return {
     batch: { events: [event] },
     state: {
       ...state,
-      works: [...state.works, ...works],
       counters: {
         ...state.counters,
         commands: state.counters.commands + 1,
@@ -602,7 +689,8 @@ function calculateSubmit(factory, scenario, state, submissions) {
         works: state.counters.works + works.length,
       },
     },
-  });
+    appendedWorks: works,
+  };
 }
 
 function calculateStart(factory, scenario) {
@@ -931,7 +1019,7 @@ function calculateClose(state, factory, scenario) {
       reason: "emulator session closed",
     },
   });
-  return copy({
+  return {
     batch: { events: [event] },
     state: {
       ...state,
@@ -942,11 +1030,11 @@ function calculateClose(state, factory, scenario) {
         events: state.counters.events + 1,
       },
     },
-  });
+  };
 }
 
 function advanceReceipt(command, fromVirtualTime, batches, madeProgress, state) {
-  return copy({
+  return {
     status: !madeProgress && batches.length === 0 && state.virtualTime === fromVirtualTime
       ? "idle"
       : "advanced",
@@ -956,7 +1044,7 @@ function advanceReceipt(command, fromVirtualTime, batches, madeProgress, state) 
     virtualElapsedMs: state.virtualElapsedMs,
     batches,
     state,
-  });
+  };
 }
 
 function commandKey(command, value) {

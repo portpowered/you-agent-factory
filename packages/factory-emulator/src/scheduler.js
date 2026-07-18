@@ -13,42 +13,34 @@ import {
 export function calculateNextSchedulerBatch({
   createEvent,
   identityCoordinates,
+  plan,
   scenario,
   state,
 }) {
-  const dueNow = activeWorksAtEarliestDeadline(state)
-    .filter((work) => work.dispatch.dueElapsedMs <= state.virtualElapsedMs);
-  if (dueNow.length > 0) {
+  if (plan === undefined) {
+    return undefined;
+  }
+  const plannedWorks = plan.workIndexes.map((index) => ({
+    index,
+    work: state.works[index],
+  }));
+  if (plan.kind === "completion") {
     return calculateCompletions({
       createEvent,
       identityCoordinates,
       scenario,
       state,
-      completedWorks: dueNow,
+      completedWorks: plannedWorks,
     });
   }
-
-  const readyWorks = state.works.filter((work) => work.phase === "ready");
-  if (readyWorks.length > 0) {
-    return calculateDispatchStarts({
-      createEvent,
-      identityCoordinates,
-      scenario,
-      state,
-      readyWorks,
-    });
-  }
-
-  const earliest = activeWorksAtEarliestDeadline(state);
-  return earliest.length === 0
-    ? undefined
-    : calculateCompletions({
-        createEvent,
-        identityCoordinates,
-        scenario,
-        state,
-        completedWorks: earliest,
-      });
+  return calculateDispatchStarts({
+    createEvent,
+    identityCoordinates,
+    scenario,
+    state,
+    readyWorks: plannedWorks,
+    workIndexBySubmissionId: plan.workIndexBySubmissionId,
+  });
 }
 
 /**
@@ -63,79 +55,96 @@ export function inspectNextSchedulerBatch({
 }) {
   const inspection = continuation === undefined
     ? {
-        phase: "active",
         index: 0,
         earliestElapsedMs: undefined,
-        earliestWorkItems: 0,
-        eligibleWorkItems: 0,
+        earliestWorkIndexes: [],
+        hasWaitingWork: false,
+        readyWorkIndexes: [],
+        workIndexBySubmissionId: {},
       }
-    : { ...continuation };
+    : continuation;
   let examined = 0;
 
-  while (examined < maximumWorkItems) {
-    if (inspection.phase === "active") {
-      if (inspection.index === state.works.length) {
-        if (inspection.earliestElapsedMs <= state.virtualElapsedMs) {
-          return completedInspection("completion", inspection.earliestWorkItems);
-        }
-        inspection.phase = "ready";
-        inspection.index = 0;
-        inspection.eligibleWorkItems = 0;
-        continue;
-      }
-      const work = state.works[inspection.index];
-      inspection.index += 1;
-      examined += 1;
-      if (work.phase !== "active") {
-        continue;
-      }
+  while (examined < maximumWorkItems && inspection.index < state.works.length) {
+    const workIndex = inspection.index;
+    const work = state.works[workIndex];
+    inspection.index += 1;
+    examined += 1;
+    if (!Object.hasOwn(inspection.workIndexBySubmissionId, work.submissionId)) {
+      Object.defineProperty(inspection.workIndexBySubmissionId, work.submissionId, {
+        configurable: true,
+        enumerable: true,
+        value: workIndex,
+        writable: true,
+      });
+    }
+    if (work.phase === "active") {
       const deadline = work.dispatch.dueElapsedMs;
       if (
         inspection.earliestElapsedMs === undefined
         || deadline < inspection.earliestElapsedMs
       ) {
         inspection.earliestElapsedMs = deadline;
-        inspection.earliestWorkItems = 1;
+        inspection.earliestWorkIndexes = [workIndex];
       } else if (deadline === inspection.earliestElapsedMs) {
-        inspection.earliestWorkItems = boundedIncrement(
-          inspection.earliestWorkItems,
+        boundedPush(
+          inspection.earliestWorkIndexes,
+          workIndex,
           maximumWorkItems,
         );
       }
-      continue;
-    }
-
-    if (inspection.index === state.works.length) {
-      if (inspection.eligibleWorkItems > 0) {
-        return completedInspection("dispatch", inspection.eligibleWorkItems);
-      }
-      return inspection.earliestElapsedMs === undefined
-        ? { done: true, batch: undefined }
-        : completedInspection("completion", inspection.earliestWorkItems);
-    }
-    const work = state.works[inspection.index];
-    inspection.index += 1;
-    examined += 1;
-    if (work.phase === "ready") {
-      inspection.eligibleWorkItems = boundedIncrement(
-        inspection.eligibleWorkItems,
+    } else if (work.phase === "ready") {
+      boundedPush(
+        inspection.readyWorkIndexes,
+        workIndex,
         maximumWorkItems,
       );
-      if (inspection.eligibleWorkItems > maximumWorkItems) {
-        return completedInspection("dispatch", inspection.eligibleWorkItems);
-      }
+    } else if (work.phase === "waiting") {
+      inspection.hasWaitingWork = true;
     }
   }
 
+  if (inspection.index === state.works.length) {
+    const completionIsDue = inspection.earliestElapsedMs !== undefined
+      && inspection.earliestElapsedMs <= state.virtualElapsedMs;
+    if (completionIsDue) {
+      return completedInspection(
+        "completion",
+        inspection.earliestWorkIndexes,
+        inspection.workIndexBySubmissionId,
+      );
+    }
+    if (inspection.readyWorkIndexes.length > 0) {
+      return completedInspection(
+        "dispatch",
+        inspection.readyWorkIndexes,
+        inspection.workIndexBySubmissionId,
+      );
+    }
+    return inspection.earliestElapsedMs === undefined
+      ? { done: true, batch: undefined, hasWaitingWork: inspection.hasWaitingWork }
+      : completedInspection(
+          "completion",
+          inspection.earliestWorkIndexes,
+          inspection.workIndexBySubmissionId,
+        );
+  }
   return { done: false, continuation: inspection };
 }
 
-function boundedIncrement(value, maximum) {
-  return value > maximum ? value : value + 1;
+function boundedPush(values, value, maximum) {
+  if (values.length <= maximum) {
+    values.push(value);
+  }
 }
 
-function completedInspection(kind, workItems) {
-  return { done: true, batch: { kind, workItems } };
+function completedInspection(kind, workIndexes, workIndexBySubmissionId) {
+  return {
+    done: true,
+    batch: { kind, workItems: workIndexes.length },
+    hasWaitingWork: false,
+    plan: { kind, workIndexes, workIndexBySubmissionId },
+  };
 }
 
 function calculateDispatchStarts({
@@ -144,11 +153,12 @@ function calculateDispatchStarts({
   scenario,
   state,
   readyWorks,
+  workIndexBySubmissionId,
 }) {
   const ruleCursors = { ...state.ruleCursors };
   const replacements = new Map();
   let eventOrdinal = 0;
-  const events = readyWorks.flatMap((work) => {
+  const events = readyWorks.flatMap(({ index, work }) => {
     const submission = { ...work, id: work.submissionId };
     const rule = selectEmulatorRule(scenario, submission);
     const invocationIndex = rule === undefined ? 0 : (ruleCursors[rule.id] ?? 0);
@@ -162,7 +172,7 @@ function calculateDispatchStarts({
     }
     const outcome = resolutionOutcome(resolution);
     if (outcome === undefined) {
-      replacements.set(work.workId, { ...work, phase: "waiting" });
+      replacements.set(index, { ...work, phase: "waiting" });
       return [];
     }
     const transitionId = rule?.id ?? "emulator-unmatched";
@@ -172,6 +182,7 @@ function calculateDispatchStarts({
       scenario,
       state,
       work,
+      workIndexBySubmissionId,
     });
     const dispatchCoordinates = {
       ...identityCoordinates,
@@ -194,7 +205,7 @@ function calculateDispatchStarts({
       throw new FactoryEmulatorDurationError(durationMs);
     }
     virtualTimeAt(scenario, dueElapsedMs);
-    replacements.set(work.workId, {
+    replacements.set(index, {
       ...work,
       phase: "active",
       dispatch: {
@@ -224,12 +235,11 @@ function calculateDispatchStarts({
       },
     })];
   });
-  return copy({
+  return {
     elapsedMs: state.virtualElapsedMs,
     batch: events.length === 0 ? undefined : { events },
     state: {
       ...state,
-      works: replaceWorks(state.works, replacements),
       ruleCursors,
       counters: {
         ...state.counters,
@@ -237,7 +247,8 @@ function calculateDispatchStarts({
         dispatches: state.counters.dispatches + events.length,
       },
     },
-  });
+    workReplacements: replacements,
+  };
 }
 
 function calculateCompletions({
@@ -247,13 +258,13 @@ function calculateCompletions({
   state,
   completedWorks,
 }) {
-  const elapsedMs = completedWorks[0].dispatch.dueElapsedMs;
+  const elapsedMs = completedWorks[0].work.dispatch.dueElapsedMs;
   const eventTime = virtualTimeAt(scenario, elapsedMs);
   const replacements = new Map();
-  const events = completedWorks.map((work, ordinal) => {
+  const events = completedWorks.map(({ index, work }, ordinal) => {
     const { dispatch } = work;
     const accepted = dispatch.outcome.kind === "complete";
-    replacements.set(work.workId, {
+    replacements.set(index, {
       ...work,
       phase: "completed",
       tokenId: dispatch.outputTokenId,
@@ -283,19 +294,19 @@ function calculateCompletions({
       },
     });
   });
-  return copy({
+  return {
     elapsedMs,
     batch: { events },
     state: {
       ...stateAtElapsed(scenario, state, elapsedMs),
-      works: replaceWorks(state.works, replacements),
       counters: {
         ...state.counters,
         events: state.counters.events + events.length,
         completions: state.counters.completions + events.length,
       },
     },
-  });
+    workReplacements: replacements,
+  };
 }
 
 function resolutionOutcome(resolution) {
@@ -314,12 +325,11 @@ function resolveLineageTokenId({
   scenario,
   state,
   work,
+  workIndexBySubmissionId,
 }) {
   const cursor = outcome?.kind === "complete" ? outcome.lineageCursor : undefined;
   if (cursor?.kind === "initialSubmission") {
-    return state.works.find(
-      (candidate) => candidate.submissionId === cursor.submissionId,
-    )?.tokenId;
+    return state.works[workIndexBySubmissionId[cursor.submissionId]]?.tokenId;
   }
   if (cursor?.kind === "scriptedOutcome") {
     const ruleIndex = scenario.rules.findIndex((rule) => rule.id === cursor.ruleId);
@@ -336,15 +346,6 @@ function resolveLineageTokenId({
   return work.tokenId;
 }
 
-function activeWorksAtEarliestDeadline(state) {
-  const active = state.works.filter((work) => work.phase === "active");
-  if (active.length === 0) {
-    return [];
-  }
-  const earliest = Math.min(...active.map((work) => work.dispatch.dueElapsedMs));
-  return active.filter((work) => work.dispatch.dueElapsedMs === earliest);
-}
-
 function dispatchContext(work, dispatchId) {
   return {
     dispatchId,
@@ -353,12 +354,4 @@ function dispatchContext(work, dispatchId) {
     workIds: [work.workId],
     currentChainingTraceId: work.traceId,
   };
-}
-
-function replaceWorks(works, replacements) {
-  return works.map((work) => replacements.get(work.workId) ?? work);
-}
-
-function copy(value) {
-  return structuredClone(value);
 }
