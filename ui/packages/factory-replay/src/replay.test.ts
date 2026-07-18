@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import type { FactoryEvent } from "@you-agent-factory/client";
+import type {
+  FactoryEvent,
+  FactoryEventType,
+} from "@you-agent-factory/client";
 
 import {
+  advanceFactoryReplayCheckpoint,
   canonicalizeFactoryEvents,
   initializeFactoryReplay,
   projectFactoryStateAtTick,
@@ -16,6 +20,10 @@ interface EvidenceState {
 }
 
 const reducer: FactoryReplayReducer<EvidenceState> = {
+  cloneState: (state, selectedTick) => ({
+    ...structuredClone(state),
+    selectedTick,
+  }),
   createState: (selectedTick) => ({
     appliedIds: [],
     selectedTick,
@@ -43,6 +51,7 @@ function event(
   sequence: number,
   options: {
     eventTime?: string;
+    eventType?: FactoryEventType;
     sessionSequence?: number;
     works?: unknown[];
   } = {},
@@ -50,7 +59,7 @@ function event(
   return {
     schemaVersion: "agent-factory.event.v1",
     id,
-    type: "WORK_REQUEST",
+    type: options.eventType ?? "WORK_REQUEST",
     context: {
       sequence,
       tick,
@@ -139,6 +148,7 @@ describe("Factory replay selection", () => {
       }),
     ).toEqual({
       appliedEvents: [],
+      acceptedEventIds: new Set(),
       events: [],
       latestTick: 0,
       selectedTick: 0,
@@ -189,5 +199,116 @@ describe("Factory replay selection", () => {
 
     expect(result.state.workIds).toEqual(["known-work"]);
     expect(result.state.appliedIds).toEqual(["incomplete", "partial"]);
+  });
+});
+
+describe("Factory replay checkpoint advancement", () => {
+  function checkpoint(events: readonly FactoryEvent[], tick: number) {
+    return projectFactoryStateAtTick({ events, reducer, tick });
+  }
+
+  it("returns an independent result for an empty tail", () => {
+    const original = checkpoint([event("accepted", 1, 1)], 1);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [],
+      tick: 1,
+    });
+
+    expect(advanced.state).toEqual(original.state);
+    expect(advanced.state).not.toBe(original.state);
+    expect(advanced.acceptedEventIds).toEqual(new Set(["accepted"]));
+  });
+
+  it("ignores checkpoint IDs, duplicate tail IDs, and future events", () => {
+    const original = checkpoint([event("accepted", 1, 1)], 1);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [
+        event("future", 4, 4),
+        event("tail", 2, 3),
+        event("accepted", 2, 2),
+        event("tail", 3, 5),
+      ],
+      tick: 2,
+    });
+
+    expect(advanced.state.appliedIds).toEqual(["accepted", "tail"]);
+    expect(advanced.events.map(({ id }) => id)).toEqual(["accepted", "tail"]);
+    expect(advanced.acceptedEventIds).toEqual(
+      new Set(["accepted", "tail"]),
+    );
+  });
+
+  it("accepts a later same-tick sequence not represented by the checkpoint", () => {
+    const original = checkpoint([event("first", 3, 4)], 3);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [event("second", 3, 8)],
+      tick: 3,
+    });
+
+    expect(advanced.state.appliedIds).toEqual(["first", "second"]);
+    expect(advanced.selectedTick).toBe(3);
+  });
+
+  it("keeps checkpoint IDs, events, and reachable state isolated from the result", () => {
+    const original = checkpoint([event("accepted", 1, 1)], 1);
+    const originalEvent = structuredClone(original.appliedEvents[0]);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [event("tail", 2, 2)],
+      tick: 2,
+    });
+
+    advanced.acceptedEventIds.add("caller-mutation");
+    advanced.state.appliedIds.push("caller-mutation");
+    const advancedPayload = advanced.appliedEvents[0]?.payload as Record<
+      string,
+      unknown
+    >;
+    advancedPayload.callerMutation = true;
+
+    expect(original.acceptedEventIds).toEqual(new Set(["accepted"]));
+    expect(original.state.appliedIds).toEqual(["accepted"]);
+    expect(original.appliedEvents[0]).toEqual(originalEvent);
+  });
+
+  it("matches full replay for representative Factory lifecycle, Work, and Dispatch tails", () => {
+    const factoryStarted = event("factory-started", 1, 1, {
+      eventType: "SESSION_STARTED",
+    });
+    const workAccepted = event("work-accepted", 2, 2, {
+      eventType: "WORK_REQUEST",
+      works: [{ workId: "work-1" }],
+    });
+    const dispatchStarted = event("dispatch-started", 3, 3, {
+      eventType: "DISPATCH_REQUEST",
+    });
+    const dispatchCompleted = event("dispatch-completed", 4, 4, {
+      eventType: "DISPATCH_RESPONSE",
+    });
+    const history = [
+      factoryStarted,
+      workAccepted,
+      dispatchStarted,
+      dispatchCompleted,
+    ];
+    const original = checkpoint(history.slice(0, 2), 2);
+    const advanced = advanceFactoryReplayCheckpoint({
+      checkpoint: original,
+      reducer,
+      tail: [dispatchCompleted, dispatchStarted],
+      tick: 4,
+    });
+    const full = projectFactoryStateAtTick({ events: history, reducer, tick: 4 });
+
+    expect(advanced.state).toEqual(full.state);
+    expect(advanced.events).toEqual(full.appliedEvents);
+    expect(advanced.acceptedEventIds).toEqual(full.acceptedEventIds);
   });
 });

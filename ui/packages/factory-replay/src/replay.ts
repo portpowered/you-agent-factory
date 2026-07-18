@@ -12,6 +12,7 @@ export type FactoryReplaySelection =
 /** Domain interpretation stays with the consumer; the kernel owns replay semantics. */
 export interface FactoryReplayReducer<State> {
   applyEvent(state: State, event: FactoryEvent): State;
+  cloneState(state: State, selectedTick: number): State;
   createState(selectedTick: number): State;
 }
 
@@ -21,13 +22,33 @@ export interface FactoryReplayInitialization<State> {
   selection: FactoryReplaySelection;
 }
 
-export interface FactoryReplayResult<State> {
+export interface FactoryReplayCheckpoint<State> {
+  acceptedEventIds: ReadonlySet<string>;
+  appliedEvents: readonly FactoryEvent[];
+  selectedTick: number;
+  state: State;
+}
+
+export interface FactoryReplayCheckpointAdvancement<State> {
+  checkpoint: FactoryReplayCheckpoint<State>;
+  reducer: FactoryReplayReducer<State>;
+  tail: readonly FactoryEvent[];
+  tick: number;
+}
+
+export interface FactoryReplayResult<State>
+  extends FactoryReplayCheckpoint<State> {
+  acceptedEventIds: Set<string>;
   appliedEvents: FactoryEvent[];
   events: FactoryEvent[];
   latestTick: number;
   selectedTick: number;
   selection: FactoryReplaySelection;
   state: State;
+}
+
+function cloneFactoryEvent(event: FactoryEvent): FactoryEvent {
+  return JSON.parse(JSON.stringify(event)) as FactoryEvent;
 }
 
 function canonicalValue(value: unknown): string {
@@ -104,11 +125,47 @@ export function initializeFactoryReplay<State>(
   }
 
   return {
+    acceptedEventIds: new Set(appliedEvents.map(({ id }) => id)),
     appliedEvents,
     events,
     latestTick,
     selectedTick,
     selection: input.selection,
+    state,
+  };
+}
+
+/** Advance an immutable checkpoint with unseen accepted events through a tick. */
+export function advanceFactoryReplayCheckpoint<State>(
+  input: FactoryReplayCheckpointAdvancement<State>,
+): FactoryReplayResult<State> {
+  const checkpointEventIds = new Set(input.checkpoint.acceptedEventIds);
+  const eligibleTail = canonicalizeFactoryEvents(input.tail).filter(
+    (event) =>
+      event.context.tick <= input.tick && !checkpointEventIds.has(event.id),
+  );
+  let state = input.reducer.cloneState(input.checkpoint.state, input.tick);
+  for (const event of eligibleTail) {
+    state = input.reducer.applyEvent(state, event);
+  }
+
+  const events = [
+    ...input.checkpoint.appliedEvents.map(cloneFactoryEvent),
+    ...eligibleTail.map(cloneFactoryEvent),
+  ];
+  const acceptedEventIds = new Set(input.checkpoint.acceptedEventIds);
+  for (const event of eligibleTail) acceptedEventIds.add(event.id);
+
+  return {
+    acceptedEventIds,
+    appliedEvents: [...events],
+    events,
+    latestTick: events.reduce(
+      (latest, event) => Math.max(latest, event.context.tick),
+      0,
+    ),
+    selectedTick: input.tick,
+    selection: { mode: "fixed", tick: input.tick },
     state,
   };
 }
