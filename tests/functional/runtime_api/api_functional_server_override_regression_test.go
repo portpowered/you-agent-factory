@@ -7,10 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -30,7 +27,7 @@ func TestRootRunFunctionalHostWorkerOverridesCompleteThroughPublicRuntimeAPI(t *
 			Payload:      json.RawMessage(`{"title":"mock worker compatibility"}`),
 		})
 		assertAcceptedDispatchesForTrace(t, stream, traceID, "step-one", "step-two")
-		assertCompletedWorkerOverrideWork(t, host.Endpoint(), traceID)
+		assertTerminalWorkerOverrideWork(t, host.Endpoint(), traceID, "complete")
 	})
 
 	t.Run("ProviderOverrideCompletes", func(t *testing.T) {
@@ -52,7 +49,23 @@ func TestRootRunFunctionalHostWorkerOverridesCompleteThroughPublicRuntimeAPI(t *
 			Payload:      json.RawMessage(`{"title":"provider override regression"}`),
 		})
 		assertAcceptedDispatchesForTrace(t, stream, traceID, "step-one", "step-two")
-		assertCompletedWorkerOverrideWork(t, host.Endpoint(), traceID)
+		assertTerminalWorkerOverrideWork(t, host.Endpoint(), traceID, "complete")
+	})
+
+	t.Run("ScriptOverrideCompletes", func(t *testing.T) {
+		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
+		runner := support.NewRecordingCommandRunner("script alignment output")
+		host, stream := startWorkerOverrideRootRunHost(t, dir, true, wire.FunctionalEdges{
+			ScriptCommandRunner: runner,
+		})
+
+		traceID := submitGeneratedWork(t, host.Endpoint(), factoryapi.SubmitWorkRequest{
+			Name:         "script-override-regression",
+			WorkTypeName: "task",
+			Payload:      json.RawMessage(`"script override regression"`),
+		})
+		assertAcceptedDispatchesForTrace(t, stream, traceID, "run-script")
+		assertTerminalWorkerOverrideWork(t, host.Endpoint(), traceID, "done")
 	})
 }
 
@@ -112,79 +125,12 @@ func assertAcceptedDispatchesForTrace(
 	}
 }
 
-func assertCompletedWorkerOverrideWork(t *testing.T, endpoint string, traceID string) {
+func assertTerminalWorkerOverrideWork(t *testing.T, endpoint string, traceID string, wantState string) {
 	t.Helper()
 
-	work := waitForGeneratedWorkComplete(t, endpoint, traceID, 10*time.Second)
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(endpoint, "/work"))
 	completed := requireGeneratedWorkByTrace(t, work, traceID)
-	if generatedWorkStateName(completed.State) != "complete" || generatedWorkStateType(completed.State) != factoryapi.WorkStateTypeTERMINAL {
-		t.Fatalf("GET /work state = %#v, want complete/TERMINAL", completed.State)
+	if generatedWorkStateName(completed.State) != wantState || generatedWorkStateType(completed.State) != factoryapi.WorkStateTypeTERMINAL {
+		t.Fatalf("GET /work state = %#v, want %s/TERMINAL", completed.State, wantState)
 	}
-}
-
-// These legacy snapshot helpers remain for api_service_config_override_alignment_test.go
-// until those construction-focused scenarios move to their owner package.
-func waitForFunctionalServerCompletion(
-	t *testing.T,
-	server *functionalAPIServer,
-	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		if snapshot.FactoryState == string(interfaces.FactoryStateCompleted) {
-			return snapshot
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("factory did not reach COMPLETED within %s", timeout)
-	return nil
-}
-
-type functionalStateCategories struct {
-	Failed     int
-	Initial    int
-	Processing int
-	Terminal   int
-}
-
-func categorizeFunctionalState(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) functionalStateCategories {
-	var categories functionalStateCategories
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.WorkTypeID == "" {
-			continue
-		}
-		switch lookupFunctionalStateCategory(snapshot.Topology, token.PlaceID) {
-		case state.StateCategoryFailed:
-			categories.Failed++
-		case state.StateCategoryTerminal:
-			categories.Terminal++
-		case state.StateCategoryInitial:
-			categories.Initial++
-		default:
-			categories.Processing++
-		}
-	}
-	return categories
-}
-
-func lookupFunctionalStateCategory(net *state.Net, placeID string) state.StateCategory {
-	if net == nil {
-		return state.StateCategoryProcessing
-	}
-	place, ok := net.Places[placeID]
-	if !ok {
-		return state.StateCategoryProcessing
-	}
-	workType, ok := net.WorkTypes[place.TypeID]
-	if !ok {
-		return state.StateCategoryProcessing
-	}
-	for _, stateConfig := range workType.States {
-		if stateConfig.Value == place.State {
-			return stateConfig.Category
-		}
-	}
-	return state.StateCategoryProcessing
 }
