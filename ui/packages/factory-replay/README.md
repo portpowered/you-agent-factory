@@ -26,6 +26,10 @@ const result = projectFactoryStateAtTick({ events, reducer, tick: 12 });
 Use `projectFactoryWorkProgressAtTick` when canonical event history is the
 source for Work progress, or `projectFactoryWorkProgress` when the consumer
 already has explicit selected-tick evidence.
+Progress classification follows failed, completed, active, queued, then
+unclassified precedence. Active Dispatch evidence is ended by responses,
+interruptions, and terminal reconciliation events, using the same lifecycle
+rules as Dispatch overlays.
 
 Use `projectFactoryTopologyAtTick` to reconstruct the last canonical Factory
 topology effective at a selected tick. Use `projectFactoryTopology` when the

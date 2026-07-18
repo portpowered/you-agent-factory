@@ -188,6 +188,21 @@ function applyProgressEvent(
   }
   if (event.type === "DISPATCH_RESPONSE") {
     applyDispatchResponse(state, event, payload);
+    return;
+  }
+  if (event.type === "DISPATCH_INTERRUPTED") {
+    endDispatch(state, event);
+    return;
+  }
+  if (event.type === "DISPATCH_RECONCILED") {
+    const status = payload?.reconciledStatus;
+    if (
+      status === "COMPLETED" ||
+      status === "FAILED" ||
+      status === "INTERRUPTED"
+    ) {
+      endDispatch(state, event);
+    }
   }
 }
 
@@ -217,7 +232,7 @@ function applyDispatchRequest(
   const dispatchId = event.context.dispatchId;
   const transitionId = payload?.transitionId;
   if (
-    typeof transitionId !== "string" ||
+    typeof transitionId === "string" &&
     transitionId.startsWith("__system_time:")
   ) {
     return;
@@ -287,6 +302,12 @@ function applyDispatchResponse(
     if (typeof record?.workId === "string") {
       state.initialWorkIds.delete(record.workId);
     }
+  }
+}
+
+function endDispatch(state: ProgressReplayState, event: FactoryEvent): void {
+  if (event.context.dispatchId) {
+    state.activeDispatches.delete(event.context.dispatchId);
   }
 }
 
