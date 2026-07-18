@@ -288,6 +288,48 @@ test("authored lineage cursors determine observable token and canonical event id
   );
 });
 
+test("prototype-colliding rule IDs advance with own cursor state and deterministic reruns", async () => {
+  for (const ruleId of ["__proto__", "constructor", "toString"]) {
+    const collisionScenario = scenario({
+      rules: [{
+        id: ruleId,
+        match: { kind: "workType", workType: "checkout" },
+        outcomes: [
+          { kind: "complete", output: { invocation: 0 } },
+          { kind: "complete", output: { invocation: 1 } },
+        ],
+        exhaustionBehavior: { kind: "repeatLast" },
+      }],
+    });
+    const { batches, emulator } = harness(collisionScenario);
+
+    await emulator.start();
+    const firstDispatch = await emulator.advanceToNext();
+    const firstCompletion = await emulator.advanceToNext();
+    const firstRunBatches = structuredClone(batches);
+
+    assert.equal(Object.hasOwn(firstDispatch.state.ruleCursors, ruleId), true);
+    assert.equal(firstDispatch.state.ruleCursors[ruleId], 2);
+    assert.deepEqual(
+      firstDispatch.batches[0].events.map((event) => event.payload.transitionId),
+      [ruleId, ruleId],
+    );
+    assert.deepEqual(
+      firstCompletion.state.works.map((work) => work.output),
+      [{ invocation: 0 }, { invocation: 1 }],
+    );
+
+    emulator.reset();
+    const rerunBatchStart = batches.length;
+    await emulator.start();
+    const rerunDispatch = await emulator.advanceToNext();
+    const rerunCompletion = await emulator.advanceToNext();
+
+    assert.deepEqual(rerunDispatch, firstDispatch);
+    assert.deepEqual(rerunCompletion, firstCompletion);
+    assert.deepEqual(batches.slice(rerunBatchStart), firstRunBatches);
+  }
+});
 test("invalid lifecycle commands and unsupported configuration emit no events", async () => {
   const { batches, emulator } = harness();
 
