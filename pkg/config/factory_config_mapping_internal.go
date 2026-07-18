@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -253,8 +254,52 @@ func factoryLayoutInternalFromAPI(layout *factoryapi.FactoryLayout) *interfaces.
 		Nodes:         factoryLayoutNodesInternalFromAPI(layout.Nodes),
 		Edges:         factoryLayoutEdgesInternalFromAPI(layout.Edges),
 		Groups:        factoryLayoutGroupsInternalFromAPI(layout.Groups),
+		Annotations:   factoryLayoutAnnotationsInternalFromAPI(layout.Annotations),
 		Viewport:      factoryLayoutViewportInternalFromAPI(layout.Viewport),
 		Preferences:   factoryLayoutPreferencesInternalFromAPI(layout.Preferences),
+	}
+}
+
+func factoryLayoutAnnotationsInternalFromAPI(annotations *[]factoryapi.FactoryLayoutAnnotation) []interfaces.FactoryLayoutAnnotationConfig {
+	if annotations == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryLayoutAnnotationConfig, len(*annotations))
+	for i, annotation := range *annotations {
+		values[i] = interfaces.FactoryLayoutAnnotationConfig{
+			ID:       annotation.Id,
+			Kind:     string(annotation.Kind),
+			Position: factoryLayoutPointInternalFromAPI(annotation.Position),
+			Size:     factoryLayoutSizeInternalFromAPI(annotation.Size),
+			Note:     factoryLayoutNoteInternalFromAPI(annotation.Note),
+			Image:    factoryLayoutImageInternalFromAPI(annotation.Image),
+		}
+	}
+	return values
+}
+
+func factoryLayoutNoteInternalFromAPI(note *factoryapi.FactoryLayoutNote) *interfaces.FactoryLayoutNoteConfig {
+	if note == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutNoteConfig{
+		Title: stringValue(note.Title),
+		Body:  note.Body,
+		Tone:  string(note.Tone),
+	}
+}
+
+func factoryLayoutImageInternalFromAPI(image *factoryapi.FactoryLayoutImage) *interfaces.FactoryLayoutImageConfig {
+	if image == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutImageConfig{
+		Source: interfaces.FactoryLayoutImageSourceConfig{
+			Kind:      string(image.Source.Kind),
+			MediaType: string(image.Source.MediaType),
+			Data:      base64.StdEncoding.EncodeToString(image.Source.Data),
+		},
+		AlternativeText: image.AlternativeText,
 	}
 }
 

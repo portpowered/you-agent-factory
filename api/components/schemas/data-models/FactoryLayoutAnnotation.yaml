@@ -1,0 +1,21 @@
+type: object
+description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.
+additionalProperties: false
+required:
+  - id
+  - kind
+  - position
+properties:
+  id:
+    type: string
+    description: Stable annotation identifier unique within this layout.
+  kind:
+    $ref: './FactoryLayoutAnnotationKind.yaml'
+  position:
+    $ref: './FactoryLayoutPoint.yaml'
+  size:
+    $ref: './FactoryLayoutSize.yaml'
+  note:
+    $ref: './FactoryLayoutNote.yaml'
+  image:
+    $ref: './FactoryLayoutImage.yaml'

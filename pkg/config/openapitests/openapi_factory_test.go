@@ -102,6 +102,10 @@ func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 			"nodes":[{"id":"workstation:review","position":{"x":420,"y":180},"size":{"width":156,"height":196},"locked":false}],
 			"edges":[{"id":"workstation-output:workstation:review->work-state:task:done","waypoints":[{"x":540,"y":220}],"labelPosition":{"x":590,"y":204}}],
 			"groups":[{"id":"review-lane","label":"Review","bounds":{"x":360,"y":120,"width":520,"height":360},"nodeIds":["workstation:review"],"parentGroupId":null,"color":"blue","locked":false}],
+			"annotations":[
+				{"id":"review-note","kind":"NOTE","position":{"x":240,"y":96},"note":{"title":"Review guidance","body":"Inspect the result before approving.\nKeep this note literal.","tone":"INFO"}},
+				{"id":"review-image","kind":"IMAGE","position":{"x":820,"y":96},"size":{"width":180,"height":120},"image":{"source":{"kind":"EMBEDDED","mediaType":"image/png","data":"AQID"},"alternativeText":"Review workflow illustration"}}
+			],
 			"viewport":{"x":0,"y":0,"zoom":1},
 			"preferences":{"direction":"RIGHT"}
 		},
@@ -132,9 +136,21 @@ func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 	if cfg.Layout.Groups[0].ParentGroupID != nil {
 		t.Fatalf("expected parentGroupId null to remain nil, got %#v", cfg.Layout.Groups[0].ParentGroupID)
 	}
+	if len(cfg.Layout.Annotations) != 2 || cfg.Layout.Annotations[0].Note == nil || cfg.Layout.Annotations[1].Image == nil {
+		t.Fatalf("layout annotations = %#v, want one note and one image", cfg.Layout.Annotations)
+	}
+	if cfg.Layout.Annotations[0].Note.Body != "Inspect the result before approving.\nKeep this note literal." {
+		t.Fatalf("note body = %q, want literal line break preserved", cfg.Layout.Annotations[0].Note.Body)
+	}
+	if cfg.Layout.Annotations[1].Image.Source.MediaType != "image/png" || cfg.Layout.Annotations[1].Image.AlternativeText != "Review workflow illustration" {
+		t.Fatalf("image annotation = %#v", cfg.Layout.Annotations[1].Image)
+	}
 	public := FactoryConfigToOpenAPI(cfg)
 	if public.Layout == nil || public.Layout.Preferences == nil || public.Layout.Preferences.Direction == nil || *public.Layout.Preferences.Direction != factoryapi.RIGHT {
 		t.Fatalf("expected public layout preferences direction RIGHT, got %#v", public.Layout)
+	}
+	if public.Layout.Annotations == nil || len(*public.Layout.Annotations) != 2 || (*public.Layout.Annotations)[1].Image == nil {
+		t.Fatalf("expected annotation public roundtrip, got %#v", public.Layout.Annotations)
 	}
 	canonical, err := MarshalCanonicalFactoryConfig(cfg)
 	if err != nil {
@@ -147,6 +163,10 @@ func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 	layout := decoded["layout"].(map[string]any)
 	if layout["schemaVersion"] != float64(1) {
 		t.Fatalf("canonical schemaVersion = %#v", layout["schemaVersion"])
+	}
+	annotations := layout["annotations"].([]any)
+	if annotations[0].(map[string]any)["kind"] != "NOTE" || annotations[1].(map[string]any)["kind"] != "IMAGE" {
+		t.Fatalf("canonical annotations = %#v", annotations)
 	}
 	viewport := layout["viewport"].(map[string]any)
 	if viewport["zoom"] != float64(1) {
@@ -222,6 +242,27 @@ func TestFactoryConfigFromOpenAPIJSON_RejectsMalformedPortableLayoutContract(t *
 	}
 	if !strings.Contains(err.Error(), "layout.schemaVersion is required") {
 		t.Fatalf("expected missing schemaVersion error, got %v", err)
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_RejectsDuplicateLayoutAnnotationIDs(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{"schemaVersion":1,"annotations":[
+			{"id":"duplicate","kind":"NOTE","position":{"x":10,"y":20},"note":{"body":"First note","tone":"INFO"}},
+			{"id":"duplicate","kind":"NOTE","position":{"x":30,"y":40},"note":{"body":"Second note","tone":"WARNING"}}
+		]},
+		"workTypes":[{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
+		"workers":[{"name":"writer","type":"MODEL_WORKER"}],
+		"workstations":[{"name":"review","worker":"writer","inputs":[{"workType":"task","state":"ready"}],"outputs":[{"workType":"task","state":"done"}]}]
+	}`)
+
+	_, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected duplicate annotation id to be rejected")
+	}
+	if !strings.Contains(err.Error(), `layout.annotations[1].id "duplicate" duplicates`) {
+		t.Fatalf("expected duplicate annotation path, got %v", err)
 	}
 }
 

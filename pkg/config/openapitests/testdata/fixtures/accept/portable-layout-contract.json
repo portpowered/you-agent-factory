@@ -5,6 +5,7 @@
     "nodes": [{"id": "workstation:review", "position": {"x": 420, "y": 180}, "size": {"width": 156, "height": 196}, "locked": false}],
     "edges": [{"id": "workstation-output:workstation:review->work-state:task:done", "waypoints": [{"x": 540, "y": 220}], "labelPosition": {"x": 590, "y": 204}}],
     "groups": [{"id": "review-lane", "label": "Review", "bounds": {"x": 360, "y": 120, "width": 520, "height": 360}, "nodeIds": ["workstation:review"], "parentGroupId": null, "color": "blue", "locked": false}],
+    "annotations": [{"id": "review-note", "kind": "NOTE", "position": {"x": 240, "y": 96}, "note": {"body": "Inspect the result before approving.", "tone": "INFO"}}, {"id": "review-image", "kind": "IMAGE", "position": {"x": 820, "y": 96}, "size": {"width": 180, "height": 120}, "image": {"source": {"kind": "EMBEDDED", "mediaType": "image/png", "data": "AQID"}, "alternativeText": "Review workflow illustration"}}],
     "viewport": {"x": 0, "y": 0, "zoom": 1},
     "preferences": {"direction": "RIGHT"}
   },

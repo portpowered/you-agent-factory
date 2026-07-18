@@ -1325,6 +1325,13 @@
       "additionalProperties": false,
       "description": "Non-executable portable graph editor layout metadata keyed by canonical graph ids.",
       "properties": {
+        "annotations": {
+          "description": "Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.",
+          "items": {
+            "$ref": "#/$defs/FactoryLayoutAnnotation"
+          },
+          "type": "array"
+        },
         "edges": {
           "description": "Optional authored graph edge geometry keyed by canonical graph edge id.",
           "items": {
@@ -1363,6 +1370,45 @@
         "schemaVersion"
       ],
       "type": "object"
+    },
+    "FactoryLayoutAnnotation": {
+      "additionalProperties": false,
+      "description": "Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.",
+      "properties": {
+        "id": {
+          "description": "Stable annotation identifier unique within this layout.",
+          "type": "string"
+        },
+        "image": {
+          "$ref": "#/$defs/FactoryLayoutImage"
+        },
+        "kind": {
+          "$ref": "#/$defs/FactoryLayoutAnnotationKind"
+        },
+        "note": {
+          "$ref": "#/$defs/FactoryLayoutNote"
+        },
+        "position": {
+          "$ref": "#/$defs/FactoryLayoutPoint"
+        },
+        "size": {
+          "$ref": "#/$defs/FactoryLayoutSize"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "position"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutAnnotationKind": {
+      "description": "The inert annotation content variant.",
+      "enum": [
+        "NOTE",
+        "IMAGE"
+      ],
+      "type": "string"
     },
     "FactoryLayoutBounds": {
       "additionalProperties": false,
@@ -1462,6 +1508,57 @@
       ],
       "type": "object"
     },
+    "FactoryLayoutImage": {
+      "additionalProperties": false,
+      "description": "Inert embedded-raster image content with required alternative text.",
+      "properties": {
+        "alternativeText": {
+          "description": "Literal alternative text for the embedded image.",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/FactoryLayoutImageSource"
+        }
+      },
+      "required": [
+        "source",
+        "alternativeText"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutImageSource": {
+      "additionalProperties": false,
+      "description": "Extensible discriminated image-source shape. Version 1 supports only embedded raster data.",
+      "properties": {
+        "data": {
+          "description": "Base64 payload for the embedded raster source.",
+          "format": "byte",
+          "type": "string"
+        },
+        "kind": {
+          "description": "Source variant discriminator. EMBEDDED carries portable base64 raster data.",
+          "enum": [
+            "EMBEDDED"
+          ],
+          "type": "string"
+        },
+        "mediaType": {
+          "description": "Declared media type for the embedded raster.",
+          "enum": [
+            "image/png",
+            "image/jpeg",
+            "image/webp"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "mediaType",
+        "data"
+      ],
+      "type": "object"
+    },
     "FactoryLayoutNode": {
       "additionalProperties": false,
       "description": "Portable graph node layout keyed by canonical graph node id.",
@@ -1486,6 +1583,43 @@
         "position"
       ],
       "type": "object"
+    },
+    "FactoryLayoutNote": {
+      "additionalProperties": false,
+      "description": "Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.",
+      "properties": {
+        "body": {
+          "description": "Required literal plain-text note body.",
+          "maxLength": 4000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "title": {
+          "description": "Optional literal plain-text note title.",
+          "maxLength": 160,
+          "type": "string"
+        },
+        "tone": {
+          "$ref": "#/$defs/FactoryLayoutNoteTone"
+        }
+      },
+      "required": [
+        "body",
+        "tone"
+      ],
+      "type": "object"
+    },
+    "FactoryLayoutNoteTone": {
+      "description": "Presentation-only tone for a note annotation.",
+      "enum": [
+        "NEUTRAL",
+        "ACCENT",
+        "INFO",
+        "SUCCESS",
+        "WARNING",
+        "DANGER"
+      ],
+      "type": "string"
     },
     "FactoryLayoutPoint": {
       "additionalProperties": false,

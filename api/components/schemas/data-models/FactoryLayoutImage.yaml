@@ -1,0 +1,12 @@
+type: object
+description: Inert embedded-raster image content with required alternative text.
+additionalProperties: false
+required:
+  - source
+  - alternativeText
+properties:
+  source:
+    $ref: './FactoryLayoutImageSource.yaml'
+  alternativeText:
+    type: string
+    description: Literal alternative text for the embedded image.

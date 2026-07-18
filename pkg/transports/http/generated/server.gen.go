@@ -228,6 +228,34 @@ const (
 	FactoryInvocationUnknownNamedArgumentPolicyReject  FactoryInvocationUnknownNamedArgumentPolicy = "REJECT"
 )
 
+// Defines values for FactoryLayoutAnnotationKind.
+const (
+	IMAGE FactoryLayoutAnnotationKind = "IMAGE"
+	NOTE  FactoryLayoutAnnotationKind = "NOTE"
+)
+
+// Defines values for FactoryLayoutImageSourceKind.
+const (
+	EMBEDDED FactoryLayoutImageSourceKind = "EMBEDDED"
+)
+
+// Defines values for FactoryLayoutImageSourceMediaType.
+const (
+	Imagejpeg FactoryLayoutImageSourceMediaType = "image/jpeg"
+	Imagepng  FactoryLayoutImageSourceMediaType = "image/png"
+	Imagewebp FactoryLayoutImageSourceMediaType = "image/webp"
+)
+
+// Defines values for FactoryLayoutNoteTone.
+const (
+	ACCENT  FactoryLayoutNoteTone = "ACCENT"
+	DANGER  FactoryLayoutNoteTone = "DANGER"
+	INFO    FactoryLayoutNoteTone = "INFO"
+	NEUTRAL FactoryLayoutNoteTone = "NEUTRAL"
+	SUCCESS FactoryLayoutNoteTone = "SUCCESS"
+	WARNING FactoryLayoutNoteTone = "WARNING"
+)
+
 // Defines values for FactoryLayoutPreferencesDirection.
 const (
 	DOWN  FactoryLayoutPreferencesDirection = "DOWN"
@@ -1725,6 +1753,9 @@ type FactoryInvocationUnknownNamedArgumentPolicy string
 
 // FactoryLayout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 type FactoryLayout struct {
+	// Annotations Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.
+	Annotations *[]FactoryLayoutAnnotation `json:"annotations,omitempty"`
+
 	// Edges Optional authored graph edge geometry keyed by canonical graph edge id.
 	Edges *[]FactoryLayoutEdge `json:"edges,omitempty"`
 
@@ -1743,6 +1774,30 @@ type FactoryLayout struct {
 	// Viewport Shared authored graph camera position.
 	Viewport *FactoryLayoutViewport `json:"viewport,omitempty"`
 }
+
+// FactoryLayoutAnnotation Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.
+type FactoryLayoutAnnotation struct {
+	// Id Stable annotation identifier unique within this layout.
+	Id string `json:"id"`
+
+	// Image Inert embedded-raster image content with required alternative text.
+	Image *FactoryLayoutImage `json:"image,omitempty"`
+
+	// Kind The inert annotation content variant.
+	Kind FactoryLayoutAnnotationKind `json:"kind"`
+
+	// Note Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+	Note *FactoryLayoutNote `json:"note,omitempty"`
+
+	// Position Two-dimensional authored graph layout coordinate.
+	Position FactoryLayoutPoint `json:"position"`
+
+	// Size Authored node size in graph canvas units.
+	Size *FactoryLayoutSize `json:"size,omitempty"`
+}
+
+// FactoryLayoutAnnotationKind The inert annotation content variant.
+type FactoryLayoutAnnotationKind string
 
 // FactoryLayoutBounds Authored rectangular bounds in graph canvas units.
 type FactoryLayoutBounds struct {
@@ -1795,6 +1850,33 @@ type FactoryLayoutGroup struct {
 	ParentGroupId *string `json:"parentGroupId"`
 }
 
+// FactoryLayoutImage Inert embedded-raster image content with required alternative text.
+type FactoryLayoutImage struct {
+	// AlternativeText Literal alternative text for the embedded image.
+	AlternativeText string `json:"alternativeText"`
+
+	// Source Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+	Source FactoryLayoutImageSource `json:"source"`
+}
+
+// FactoryLayoutImageSource Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+type FactoryLayoutImageSource struct {
+	// Data Base64 payload for the embedded raster source.
+	Data []byte `json:"data"`
+
+	// Kind Source variant discriminator. EMBEDDED carries portable base64 raster data.
+	Kind FactoryLayoutImageSourceKind `json:"kind"`
+
+	// MediaType Declared media type for the embedded raster.
+	MediaType FactoryLayoutImageSourceMediaType `json:"mediaType"`
+}
+
+// FactoryLayoutImageSourceKind Source variant discriminator. EMBEDDED carries portable base64 raster data.
+type FactoryLayoutImageSourceKind string
+
+// FactoryLayoutImageSourceMediaType Declared media type for the embedded raster.
+type FactoryLayoutImageSourceMediaType string
+
 // FactoryLayoutNode Portable graph node layout keyed by canonical graph node id.
 type FactoryLayoutNode struct {
 	// Id Canonical graph node id such as workstation:<workstationId>.
@@ -1809,6 +1891,21 @@ type FactoryLayoutNode struct {
 	// Size Authored node size in graph canvas units.
 	Size *FactoryLayoutSize `json:"size,omitempty"`
 }
+
+// FactoryLayoutNote Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+type FactoryLayoutNote struct {
+	// Body Required literal plain-text note body.
+	Body string `json:"body"`
+
+	// Title Optional literal plain-text note title.
+	Title *string `json:"title,omitempty"`
+
+	// Tone Presentation-only tone for a note annotation.
+	Tone FactoryLayoutNoteTone `json:"tone"`
+}
+
+// FactoryLayoutNoteTone Presentation-only tone for a note annotation.
+type FactoryLayoutNoteTone string
 
 // FactoryLayoutPoint Two-dimensional authored graph layout coordinate.
 type FactoryLayoutPoint struct {

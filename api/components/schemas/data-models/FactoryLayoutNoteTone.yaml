@@ -1,0 +1,9 @@
+type: string
+description: Presentation-only tone for a note annotation.
+enum:
+  - NEUTRAL
+  - ACCENT
+  - INFO
+  - SUCCESS
+  - WARNING
+  - DANGER

@@ -185,8 +185,39 @@ type FactoryLayoutConfig struct {
 	Nodes         []FactoryLayoutNodeConfig       `json:"nodes,omitempty"`
 	Edges         []FactoryLayoutEdgeConfig       `json:"edges,omitempty"`
 	Groups        []FactoryLayoutGroupConfig      `json:"groups,omitempty"`
+	Annotations   []FactoryLayoutAnnotationConfig `json:"annotations,omitempty"`
 	Viewport      *FactoryLayoutViewportConfig    `json:"viewport,omitempty"`
 	Preferences   *FactoryLayoutPreferencesConfig `json:"preferences,omitempty"`
+}
+
+// FactoryLayoutAnnotationConfig is inert positioned canvas content. It is
+// intentionally separate from Factory topology and runtime configuration.
+type FactoryLayoutAnnotationConfig struct {
+	ID       string                    `json:"id"`
+	Kind     string                    `json:"kind"`
+	Position FactoryLayoutPointConfig  `json:"position"`
+	Size     *FactoryLayoutSizeConfig  `json:"size,omitempty"`
+	Note     *FactoryLayoutNoteConfig  `json:"note,omitempty"`
+	Image    *FactoryLayoutImageConfig `json:"image,omitempty"`
+}
+
+type FactoryLayoutNoteConfig struct {
+	Title string `json:"title,omitempty"`
+	Body  string `json:"body"`
+	Tone  string `json:"tone"`
+}
+
+type FactoryLayoutImageConfig struct {
+	Source          FactoryLayoutImageSourceConfig `json:"source"`
+	AlternativeText string                         `json:"alternativeText"`
+}
+
+// FactoryLayoutImageSourceConfig is the version-1 embedded image source. Its
+// discriminator leaves room for future safe source variants without URLs.
+type FactoryLayoutImageSourceConfig struct {
+	Kind      string `json:"kind"`
+	MediaType string `json:"mediaType"`
+	Data      string `json:"data"`
 }
 
 type FactoryLayoutNodeConfig struct {

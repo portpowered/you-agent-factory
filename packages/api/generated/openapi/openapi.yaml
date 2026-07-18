@@ -10163,6 +10163,101 @@ components:
         locked:
           type: boolean
           description: Optional authored group lock flag for future editor affordances.
+    FactoryLayoutAnnotationKind:
+      type: string
+      description: The inert annotation content variant.
+      enum:
+        - NOTE
+        - IMAGE
+    FactoryLayoutNoteTone:
+      type: string
+      description: Presentation-only tone for a note annotation.
+      enum:
+        - NEUTRAL
+        - ACCENT
+        - INFO
+        - SUCCESS
+        - WARNING
+        - DANGER
+    FactoryLayoutNote:
+      type: object
+      description: Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+      additionalProperties: false
+      required:
+        - body
+        - tone
+      properties:
+        title:
+          type: string
+          maxLength: 160
+          description: Optional literal plain-text note title.
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          description: Required literal plain-text note body.
+        tone:
+          $ref: '#/components/schemas/FactoryLayoutNoteTone'
+    FactoryLayoutImageSource:
+      type: object
+      description: Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+      additionalProperties: false
+      required:
+        - kind
+        - mediaType
+        - data
+      properties:
+        kind:
+          type: string
+          enum:
+            - EMBEDDED
+          description: Source variant discriminator. EMBEDDED carries portable base64 raster data.
+        mediaType:
+          type: string
+          enum:
+            - image/png
+            - image/jpeg
+            - image/webp
+          description: Declared media type for the embedded raster.
+        data:
+          type: string
+          format: byte
+          description: Base64 payload for the embedded raster source.
+    FactoryLayoutImage:
+      type: object
+      description: Inert embedded-raster image content with required alternative text.
+      additionalProperties: false
+      required:
+        - source
+        - alternativeText
+      properties:
+        source:
+          $ref: '#/components/schemas/FactoryLayoutImageSource'
+        alternativeText:
+          type: string
+          description: Literal alternative text for the embedded image.
+    FactoryLayoutAnnotation:
+      type: object
+      description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges.
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - position
+      properties:
+        id:
+          type: string
+          description: Stable annotation identifier unique within this layout.
+        kind:
+          $ref: '#/components/schemas/FactoryLayoutAnnotationKind'
+        position:
+          $ref: '#/components/schemas/FactoryLayoutPoint'
+        size:
+          $ref: '#/components/schemas/FactoryLayoutSize'
+        note:
+          $ref: '#/components/schemas/FactoryLayoutNote'
+        image:
+          $ref: '#/components/schemas/FactoryLayoutImage'
     FactoryLayoutViewport:
       type: object
       description: Shared authored graph camera position.
@@ -10221,6 +10316,11 @@ components:
           description: Optional flat background groups keyed independently from topology.
           items:
             $ref: '#/components/schemas/FactoryLayoutGroup'
+        annotations:
+          type: array
+          description: Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.
+          items:
+            $ref: '#/components/schemas/FactoryLayoutAnnotation'
         viewport:
           $ref: '#/components/schemas/FactoryLayoutViewport'
         preferences:

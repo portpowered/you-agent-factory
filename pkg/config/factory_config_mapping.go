@@ -4,6 +4,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -306,11 +307,95 @@ func validatePortableLayoutBoundaryJSON(data []byte) error {
 	if err := validateLayoutGroupArray(layout, "groups", "layout"); err != nil {
 		return err
 	}
+	if err := validateLayoutAnnotationArray(layout, "annotations", "layout"); err != nil {
+		return err
+	}
 	if err := validateOptionalPointObject(layout, "viewport", "layout", true, "zoom"); err != nil {
 		return err
 	}
 	if err := validateLayoutPreferences(layout, "preferences", "layout"); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateLayoutAnnotationArray(parent map[string]any, key string, path string) error {
+	values, ok, err := optionalObjectArray(parent, key, path)
+	if !ok || err != nil {
+		return err
+	}
+	seenIDs := make(map[string]struct{}, len(values))
+	for index, annotation := range values {
+		annotationPath := fmt.Sprintf("%s.%s[%d]", path, key, index)
+		if err := requireString(annotation, "id", annotationPath); err != nil {
+			return err
+		}
+		annotationID := annotation["id"].(string)
+		if _, duplicate := seenIDs[annotationID]; duplicate {
+			return fmt.Errorf("%s.id %q duplicates an earlier layout annotation", annotationPath, annotationID)
+		}
+		seenIDs[annotationID] = struct{}{}
+		if err := validateOptionalPointObject(annotation, "position", annotationPath, true); err != nil {
+			return err
+		}
+		if err := validateOptionalSizeObject(annotation, "size", annotationPath, false); err != nil {
+			return err
+		}
+		kind, err := requiredStringValue(annotation, "kind", annotationPath)
+		if err != nil {
+			return err
+		}
+		switch kind {
+		case "NOTE":
+			if err := validateLayoutAnnotationNote(annotation, annotationPath); err != nil {
+				return err
+			}
+		case "IMAGE":
+			if err := validateLayoutAnnotationImage(annotation, annotationPath); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("%s.kind must be one of NOTE, IMAGE", annotationPath)
+		}
+	}
+	return nil
+}
+
+func validateLayoutAnnotationNote(annotation map[string]any, path string) error {
+	note, err := requiredObject(annotation, "note", path)
+	if err != nil {
+		return err
+	}
+	if err := requireString(note, "body", path+".note"); err != nil {
+		return err
+	}
+	if err := requireString(note, "tone", path+".note"); err != nil {
+		return err
+	}
+	if title, ok := note["title"]; ok && title != nil {
+		if _, ok := title.(string); !ok {
+			return fmt.Errorf("%s.note.title must be a string", path)
+		}
+	}
+	return nil
+}
+
+func validateLayoutAnnotationImage(annotation map[string]any, path string) error {
+	image, err := requiredObject(annotation, "image", path)
+	if err != nil {
+		return err
+	}
+	if err := requireString(image, "alternativeText", path+".image"); err != nil {
+		return err
+	}
+	source, err := requiredObject(image, "source", path+".image")
+	if err != nil {
+		return err
+	}
+	for _, key := range []string{"kind", "mediaType", "data"} {
+		if err := requireString(source, key, path+".image.source"); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -533,6 +618,25 @@ func requireString(parent map[string]any, key string, path string) error {
 	return nil
 }
 
+func requiredStringValue(parent map[string]any, key string, path string) (string, error) {
+	if err := requireString(parent, key, path); err != nil {
+		return "", err
+	}
+	return parent[key].(string), nil
+}
+
+func requiredObject(parent map[string]any, key string, path string) (map[string]any, error) {
+	value, ok := parent[key]
+	if !ok || value == nil {
+		return nil, fmt.Errorf("%s.%s is required", path, key)
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s.%s must be an object", path, key)
+	}
+	return object, nil
+}
+
 func requireStringArray(parent map[string]any, key string, path string) error {
 	value, ok := parent[key]
 	if !ok || value == nil {
@@ -571,10 +675,62 @@ func factoryLayoutAPIFromInternal(layout *interfaces.FactoryLayoutConfig) *facto
 		Nodes:         factoryLayoutNodesAPIFromInternal(layout.Nodes),
 		Edges:         factoryLayoutEdgesAPIFromInternal(layout.Edges),
 		Groups:        factoryLayoutGroupsAPIFromInternal(layout.Groups),
+		Annotations:   factoryLayoutAnnotationsAPIFromInternal(layout.Annotations),
 		Viewport:      factoryLayoutViewportAPIFromInternal(layout.Viewport),
 		Preferences:   factoryLayoutPreferencesAPIFromInternal(layout.Preferences),
 	}
 	return apiLayout
+}
+
+func factoryLayoutAnnotationsAPIFromInternal(annotations []interfaces.FactoryLayoutAnnotationConfig) *[]factoryapi.FactoryLayoutAnnotation {
+	if len(annotations) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.FactoryLayoutAnnotation, len(annotations))
+	for i, annotation := range annotations {
+		values[i] = factoryapi.FactoryLayoutAnnotation{
+			Id:       annotation.ID,
+			Kind:     factoryapi.FactoryLayoutAnnotationKind(annotation.Kind),
+			Position: factoryLayoutPointAPIFromInternal(annotation.Position),
+			Size:     factoryLayoutSizeAPIFromInternal(annotation.Size),
+			Note:     factoryLayoutNoteAPIFromInternal(annotation.Note),
+			Image:    factoryLayoutImageAPIFromInternal(annotation.Image),
+		}
+	}
+	return &values
+}
+
+func factoryLayoutNoteAPIFromInternal(note *interfaces.FactoryLayoutNoteConfig) *factoryapi.FactoryLayoutNote {
+	if note == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayoutNote{
+		Title: stringPtrIfNotEmpty(note.Title),
+		Body:  note.Body,
+		Tone:  factoryapi.FactoryLayoutNoteTone(note.Tone),
+	}
+}
+
+func factoryLayoutImageAPIFromInternal(image *interfaces.FactoryLayoutImageConfig) *factoryapi.FactoryLayoutImage {
+	if image == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayoutImage{
+		Source: factoryapi.FactoryLayoutImageSource{
+			Kind:      factoryapi.FactoryLayoutImageSourceKind(image.Source.Kind),
+			MediaType: factoryapi.FactoryLayoutImageSourceMediaType(image.Source.MediaType),
+			Data:      decodeFactoryLayoutImageData(image.Source.Data),
+		},
+		AlternativeText: image.AlternativeText,
+	}
+}
+
+func decodeFactoryLayoutImageData(data string) []byte {
+	decoded, err := base64.StdEncoding.DecodeString(data)
+	if err != nil {
+		return nil
+	}
+	return decoded
 }
 
 func factoryLayoutNodesAPIFromInternal(nodes []interfaces.FactoryLayoutNodeConfig) *[]factoryapi.FactoryLayoutNode {

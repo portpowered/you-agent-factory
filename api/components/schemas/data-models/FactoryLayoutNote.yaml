@@ -1,0 +1,18 @@
+type: object
+description: Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+additionalProperties: false
+required:
+  - body
+  - tone
+properties:
+  title:
+    type: string
+    maxLength: 160
+    description: Optional literal plain-text note title.
+  body:
+    type: string
+    minLength: 1
+    maxLength: 4000
+    description: Required literal plain-text note body.
+  tone:
+    $ref: './FactoryLayoutNoteTone.yaml'

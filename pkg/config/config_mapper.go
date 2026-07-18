@@ -725,9 +725,44 @@ func cloneFactoryLayoutConfig(layout *interfaces.FactoryLayoutConfig) *interface
 		Nodes:         cloneFactoryLayoutNodeConfigs(layout.Nodes),
 		Edges:         cloneFactoryLayoutEdgeConfigs(layout.Edges),
 		Groups:        cloneFactoryLayoutGroupConfigs(layout.Groups),
+		Annotations:   cloneFactoryLayoutAnnotationConfigs(layout.Annotations),
 		Viewport:      cloneFactoryLayoutViewportConfig(layout.Viewport),
 		Preferences:   cloneFactoryLayoutPreferencesConfig(layout.Preferences),
 	}
+}
+
+func cloneFactoryLayoutAnnotationConfigs(annotations []interfaces.FactoryLayoutAnnotationConfig) []interfaces.FactoryLayoutAnnotationConfig {
+	if len(annotations) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.FactoryLayoutAnnotationConfig, len(annotations))
+	for i, annotation := range annotations {
+		cloned[i] = interfaces.FactoryLayoutAnnotationConfig{
+			ID:       annotation.ID,
+			Kind:     annotation.Kind,
+			Position: annotation.Position,
+			Size:     cloneFactoryLayoutSizeConfig(annotation.Size),
+			Note:     cloneFactoryLayoutNoteConfig(annotation.Note),
+			Image:    cloneFactoryLayoutImageConfig(annotation.Image),
+		}
+	}
+	return cloned
+}
+
+func cloneFactoryLayoutNoteConfig(note *interfaces.FactoryLayoutNoteConfig) *interfaces.FactoryLayoutNoteConfig {
+	if note == nil {
+		return nil
+	}
+	cloned := *note
+	return &cloned
+}
+
+func cloneFactoryLayoutImageConfig(image *interfaces.FactoryLayoutImageConfig) *interfaces.FactoryLayoutImageConfig {
+	if image == nil {
+		return nil
+	}
+	cloned := *image
+	return &cloned
 }
 
 func cloneFactoryLayoutNodeConfigs(nodes []interfaces.FactoryLayoutNodeConfig) []interfaces.FactoryLayoutNodeConfig {
