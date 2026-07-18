@@ -16,3 +16,25 @@ const parsed = parseFactoryEmulatorScenario(scenario, factory);
 The parser returns a detached scenario value. `safeParseFactoryEmulatorScenario`
 returns all structure and semantic diagnostics without partially accepting an
 invalid scenario.
+
+Factories can be preflighted against the deterministic v1 execution subset
+before any event history is emitted:
+
+```ts
+import {
+  inspectFactoryEmulatorCompatibility,
+  writeFactoryEventsIfCompatible,
+} from "@you-agent-factory/factory-emulator";
+
+const compatibility = inspectFactoryEmulatorCompatibility(factory);
+if (!compatibility.supported) {
+  console.error(compatibility.diagnostics);
+}
+
+// Incompatible Factories return every diagnostic without calling sink.write.
+await writeFactoryEventsIfCompatible(factory, eventBatch, sink);
+```
+
+The inspector treats an omitted orchestrator as the documented Petri default,
+does not mutate or retain the Factory, and reports stable codes with paths into
+the caller-supplied UI client `FactoryDefinition`.
