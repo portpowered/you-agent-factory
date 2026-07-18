@@ -161,14 +161,16 @@ function calculateDispatchStarts({
   const events = readyWorks.flatMap(({ index, work }) => {
     const submission = { ...work, id: work.submissionId };
     const rule = selectEmulatorRule(scenario, submission);
-    const invocationIndex = rule === undefined ? 0 : (ruleCursors[rule.id] ?? 0);
+    const invocationIndex = rule === undefined
+      ? 0
+      : ownNumberOrZero(ruleCursors, rule.id);
     const resolution = resolveEmulatorScenarioResult(
       scenario,
       submission,
       invocationIndex,
     );
     if (rule !== undefined) {
-      ruleCursors[rule.id] = invocationIndex + 1;
+      defineOwnValue(ruleCursors, rule.id, invocationIndex + 1);
     }
     const outcome = resolutionOutcome(resolution);
     if (outcome === undefined) {
@@ -329,7 +331,10 @@ function resolveLineageTokenId({
 }) {
   const cursor = outcome?.kind === "complete" ? outcome.lineageCursor : undefined;
   if (cursor?.kind === "initialSubmission") {
-    return state.works[workIndexBySubmissionId[cursor.submissionId]]?.tokenId;
+    const workIndex = Object.hasOwn(workIndexBySubmissionId, cursor.submissionId)
+      ? workIndexBySubmissionId[cursor.submissionId]
+      : undefined;
+    return state.works[workIndex]?.tokenId;
   }
   if (cursor?.kind === "scriptedOutcome") {
     const ruleIndex = scenario.rules.findIndex((rule) => rule.id === cursor.ruleId);
@@ -344,6 +349,19 @@ function resolveLineageTokenId({
     });
   }
   return work.tokenId;
+}
+
+function ownNumberOrZero(values, name) {
+  return Object.hasOwn(values, name) ? values[name] : 0;
+}
+
+function defineOwnValue(values, name, value) {
+  Object.defineProperty(values, name, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
 }
 
 function dispatchContext(work, dispatchId) {
