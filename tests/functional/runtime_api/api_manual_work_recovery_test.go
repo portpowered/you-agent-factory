@@ -2,18 +2,17 @@ package runtime_api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/wire"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
@@ -28,34 +27,41 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 		childWorkID  = "recovery-child-work-id"
 		traceID      = "trace-manual-work-recovery"
 		requestID    = "request-manual-work-recovery"
+		finishID     = "finish"
 	)
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "cascading_failure"))
-	provider := testutil.NewMockWorkerMapProviderWithDefault(map[string][]testutil.WorkResponse{
-		"starter": {
-			{Content: "COMPLETE"},
-			{Content: "COMPLETE"},
-		},
-		"finisher": {
-			{Error: errors.New("upstream service down")},
-			{Content: "COMPLETE"},
-			{Content: "COMPLETE"},
+	runner := testutil.NewProviderCommandRunner(
+		workers.CommandResult{Stdout: []byte("COMPLETE")},
+		workers.CommandResult{Stderr: []byte("upstream service down"), ExitCode: 1},
+		workers.CommandResult{Stdout: []byte("COMPLETE")},
+		workers.CommandResult{Stdout: []byte("COMPLETE")},
+		workers.CommandResult{Stdout: []byte("COMPLETE")},
+	)
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot:        dir,
+		SystemRoot:         t.TempDir(),
+		DisableMockWorkers: true,
+		FunctionalEdges: wire.FunctionalEdges{
+			ProviderCommandRunner: runner,
 		},
 	})
-
-	server := startFunctionalServerWithConfig(
-		t,
-		dir,
-		false,
-		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderOverride = provider
-		},
-		factory.WithServiceMode(),
-	)
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost() error = %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, shutdownErr := host.Shutdown(shutdownCtx); shutdownErr != nil {
+			t.Errorf("Shutdown() error = %v", shutdownErr)
+		}
+	})
+	stream := openRootRunFactoryEventHTTPStream(t, host)
+	requireFunctionalEventStreamPrelude(t, stream)
 
 	requiredState := "complete"
 	workTypeName := "task"
-	putGeneratedWorkRequest(t, server.URL(), requestID, factoryapi.WorkRequest{
+	putGeneratedWorkRequest(t, host.Endpoint(), requestID, factoryapi.WorkRequest{
 		RequestId: requestID,
 		Type:      factoryapi.WorkRequestTypeFactoryRequestBatch,
 		Works: &[]factoryapi.Work{
@@ -82,37 +88,27 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 		}},
 	})
 
-	waitForGeneratedWorkIDsAtState(t, server.URL(), []string{parentWorkID, childWorkID}, "failed", 15*time.Second)
+	waitForInitialRecoveryFailure(t, stream, parentWorkID)
+	assertGeneratedWorkStates(t, host.Endpoint(), map[string]string{
+		parentWorkID: "failed",
+		childWorkID:  "failed",
+	})
 
-	parentMoved := postGeneratedMoveWork(t, server.URL(), parentWorkID, "processing")
+	parentMoved := postGeneratedMoveWork(t, host.Endpoint(), parentWorkID, "processing")
 	if generatedWorkStateName(parentMoved.State) != "processing" {
 		t.Fatalf("parent move response = %#v, want processing", parentMoved)
 	}
 
-	childMoved := postGeneratedMoveWork(t, server.URL(), childWorkID, "init")
+	childMoved := postGeneratedMoveWork(t, host.Endpoint(), childWorkID, "init")
 	if generatedWorkStateName(childMoved.State) != "init" {
 		t.Fatalf("child move response = %#v, want init", childMoved)
 	}
 
-	assertManualRecoveryWorkStateChangeEvents(t, server, parentWorkID, childWorkID)
-
-	completed := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{childWorkID}, 15*time.Second)
-	if len(completed) != 1 || generatedWorkStateName(completed[0].State) != "complete" {
-		t.Fatalf("child completion = %#v, want complete", completed)
-	}
-
-	parent := requireGeneratedWorkByID(t, server.URL(), parentWorkID)
-	if generatedWorkStateName(parent.State) != "complete" {
-		t.Fatalf("parent after recovery = %#v, want complete", parent)
-	}
-
-	snapshot := server.GetEngineStateSnapshot(t)
-	if !markingContainsWorkAtPlace(&snapshot.Marking, childWorkID, "task:complete") {
-		t.Fatalf("marking = %#v, want child at task:complete", snapshot.Marking.Tokens)
-	}
-	if !markingContainsWorkAtPlace(&snapshot.Marking, parentWorkID, "task:complete") {
-		t.Fatalf("marking = %#v, want parent at task:complete", snapshot.Marking.Tokens)
-	}
+	waitForManualRecoveryEvents(t, stream, parentWorkID, childWorkID, finishID)
+	assertGeneratedWorkStates(t, host.Endpoint(), map[string]string{
+		parentWorkID: "complete",
+		childWorkID:  "complete",
+	})
 	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
 }
 
@@ -139,86 +135,83 @@ func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) fact
 	return work
 }
 
-func waitForGeneratedWorkIDsAtState(t *testing.T, baseURL string, workIDs []string, stateName string, timeout time.Duration) {
+func assertGeneratedWorkStates(t *testing.T, baseURL string, want map[string]string) {
 	t.Helper()
 
-	want := make(map[string]bool, len(workIDs))
-	for _, workID := range workIDs {
-		want[workID] = true
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
+	found := make(map[string]string, len(want))
+	for _, item := range work.Results {
+		workID := stringPointerValue(item.WorkId)
+		if _, expected := want[workID]; expected {
+			found[workID] = generatedWorkStateName(item.State)
+		}
 	}
-	deadline := time.Now().Add(timeout)
+	for workID, state := range want {
+		if found[workID] != state {
+			t.Fatalf("GET /work state for %q = %q, want %q; response = %#v", workID, found[workID], state, work)
+		}
+	}
+}
+
+func waitForInitialRecoveryFailure(t *testing.T, stream *factoryEventHTTPStream, parentWorkID string) {
+	t.Helper()
+
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
-		found := 0
-		for _, item := range work.Results {
-			workID := stringPointerValue(item.WorkId)
-			if want[workID] && generatedWorkStateName(item.State) == stateName {
-				found++
+		event := stream.next(time.Until(deadline))
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse || event.Context.WorkIds == nil {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode DISPATCH_RESPONSE payload: %v", err)
+		}
+		for _, workID := range *event.Context.WorkIds {
+			if workID == parentWorkID && payload.Outcome == factoryapi.WorkOutcomeFailed {
+				if payload.Error == nil || *payload.Error == "" {
+					t.Fatalf("failed recovery DISPATCH_RESPONSE error = %#v, want customer-readable failure", payload.Error)
+				}
+				return
 			}
 		}
-		if found == len(want) {
+	}
+	t.Fatalf("canonical session stream missing failed DISPATCH_RESPONSE for %q", parentWorkID)
+}
+
+func waitForManualRecoveryEvents(t *testing.T, stream *factoryEventHTTPStream, parentWorkID, childWorkID, finishTransitionID string) {
+	t.Helper()
+
+	wantMoves := map[string]string{parentWorkID: "processing", childWorkID: "init"}
+	wantCompletions := map[string]bool{parentWorkID: false, childWorkID: false}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		event := stream.next(time.Until(deadline))
+		switch event.Type {
+		case factoryapi.FactoryEventTypeWorkStateChange:
+			payload, err := event.Payload.AsWorkStateChangeEventPayload()
+			if err != nil {
+				t.Fatalf("decode WORK_STATE_CHANGE payload: %v", err)
+			}
+			if payload.Source == factoryapi.WorkStateChangeSourceAPI && wantMoves[payload.WorkId] == payload.ToState {
+				delete(wantMoves, payload.WorkId)
+			}
+		case factoryapi.FactoryEventTypeDispatchResponse:
+			payload, err := event.Payload.AsDispatchResponseEventPayload()
+			if err != nil {
+				t.Fatalf("decode DISPATCH_RESPONSE payload: %v", err)
+			}
+			if payload.Outcome != factoryapi.WorkOutcomeAccepted || payload.TransitionId != finishTransitionID || event.Context.WorkIds == nil {
+				continue
+			}
+			for _, workID := range *event.Context.WorkIds {
+				if _, expected := wantCompletions[workID]; expected {
+					wantCompletions[workID] = true
+				}
+			}
+		}
+		if len(wantMoves) == 0 && wantCompletions[parentWorkID] && wantCompletions[childWorkID] {
 			return
 		}
-		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
-	t.Fatalf("timed out waiting for work IDs %v at state %q; last work response: %#v", workIDs, stateName, work)
-}
-
-func requireGeneratedWorkByID(t *testing.T, baseURL, workID string) factoryapi.Work {
-	t.Helper()
-
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
-	for _, item := range work.Results {
-		if stringPointerValue(item.WorkId) == workID {
-			return item
-		}
-	}
-	t.Fatalf("work ID %q missing from generated work response: %#v", workID, work)
-	return factoryapi.Work{}
-}
-
-func assertManualRecoveryWorkStateChangeEvents(t *testing.T, server *functionalAPIServer, parentWorkID, childWorkID string) {
-	t.Helper()
-
-	events := server.GetFactoryEvents(t)
-	parentSeen := false
-	childSeen := false
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
-			continue
-		}
-		payload, err := event.Payload.AsWorkStateChangeEventPayload()
-		if err != nil {
-			t.Fatalf("decode WORK_STATE_CHANGE payload: %v", err)
-		}
-		if payload.Source != factoryapi.WorkStateChangeSourceAPI {
-			continue
-		}
-		switch payload.WorkId {
-		case parentWorkID:
-			if payload.FromState == "failed" && payload.ToState == "processing" {
-				parentSeen = true
-			}
-		case childWorkID:
-			if payload.FromState == "failed" && payload.ToState == "init" {
-				childSeen = true
-			}
-		}
-	}
-	if !parentSeen {
-		t.Fatalf("events missing parent WORK_STATE_CHANGE failed->processing: %#v", events)
-	}
-	if !childSeen {
-		t.Fatalf("events missing child WORK_STATE_CHANGE failed->init: %#v", events)
-	}
-}
-
-func markingContainsWorkAtPlace(marking *petri.MarkingSnapshot, workID, placeID string) bool {
-	for _, token := range marking.TokensInPlace(placeID) {
-		if token.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
+	t.Fatalf("canonical session stream missing recovery evidence: moves=%v completions=%v", wantMoves, wantCompletions)
 }
