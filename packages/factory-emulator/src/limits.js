@@ -15,6 +15,14 @@ export const FACTORY_EMULATOR_LIMIT_HARD_CAPS = Object.freeze({
 });
 
 const limitNames = Object.freeze(Object.keys(DEFAULT_FACTORY_EMULATOR_LIMITS));
+const minimumLimitValues = Object.freeze({
+  maxCompletedDispatches: 1,
+  // start always publishes INITIAL_STRUCTURE_REQUEST and RUN_REQUEST atomically.
+  maxEvents: 2,
+  maxVirtualElapsedMs: 1,
+  maxZeroDurationBatches: 1,
+  maxSynchronousBatches: 1,
+});
 
 /** Normalizes caller policy without reading environment or process-global state. */
 export function normalizeFactoryEmulatorLimits(limits) {
@@ -35,8 +43,11 @@ export function normalizeFactoryEmulatorLimits(limits) {
     if (value === undefined) {
       continue;
     }
-    if (!Number.isSafeInteger(value) || value <= 0) {
-      return invalid(`/limits/${name}`, "must be a positive safe integer");
+    if (!Number.isSafeInteger(value) || value < minimumLimitValues[name]) {
+      return invalid(
+        `/limits/${name}`,
+        `must be a safe integer no less than ${minimumLimitValues[name]}`,
+      );
     }
     if (value > FACTORY_EMULATOR_LIMIT_HARD_CAPS[name]) {
       return invalid(
@@ -89,7 +100,7 @@ function invalid(path, message) {
       code: "INVALID_LIMIT_CONFIGURATION",
       path,
       message,
-      expectation: "a supported positive integer no greater than its documented hard cap",
+      expectation: "a supported safe integer within its documented minimum and hard cap",
     }],
   };
 }

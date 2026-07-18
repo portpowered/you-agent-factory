@@ -966,6 +966,7 @@ test("limits publish stable defaults and reject invalid policy before bootstrap"
 
   for (const limits of [
     { maxEvents: 0 },
+    { maxEvents: 1 },
     { maxCompletedDispatches: 0.5 },
     { maxVirtualElapsedMs: Number.POSITIVE_INFINITY },
     { maxEvents: FACTORY_EMULATOR_LIMIT_HARD_CAPS.maxEvents + 1 },
@@ -977,6 +978,40 @@ test("limits publish stable defaults and reject invalid policy before bootstrap"
         && error.diagnostics[0].code === "INVALID_LIMIT_CONFIGURATION",
     );
   }
+});
+
+test("the smallest event budget pauses after bootstrap with a closeable session", async () => {
+  const { batches, emulator } = harness(scenario(), { maxEvents: 2 });
+
+  await assert.rejects(
+    emulator.start(),
+    (error) => assertPaused(error, "budget-exceeded", "events", 2, 3),
+  );
+
+  assert.equal(batches.length, 1);
+  assert.deepEqual(
+    batches[0].events.map((event) => event.type),
+    ["INITIAL_STRUCTURE_REQUEST", "RUN_REQUEST"],
+  );
+  assert.equal(emulator.state().lifecycle, "started");
+  assertStatus(emulator, {
+    phase: "error",
+    reason: "budget-exceeded",
+    virtualTime: "2026-07-18T07:30:00.000Z",
+    diagnostic: {
+      kind: "budget-exceeded",
+      limit: "events",
+      configured: 2,
+      observed: 3,
+      virtualTime: "2026-07-18T07:30:00.000Z",
+      virtualElapsedMs: 0,
+    },
+  });
+
+  const closed = await emulator.close();
+  assert.equal(closed.status, "closed");
+  assert.equal(closed.batch.events[0].type, "RUN_RESPONSE");
+  assert.equal(emulator.state().lifecycle, "closed");
 });
 
 test("event budget accepts the exact limit and pauses before the next batch", async () => {

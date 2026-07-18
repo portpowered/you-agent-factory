@@ -213,16 +213,19 @@ zero-duration chains at or below the threshold still complete normally.
 
 Callers may pass `limits` to `createFactoryEmulatorSession`. Every supplied
 value must be a positive safe integer and no greater than the exported
-`FACTORY_EMULATOR_LIMIT_HARD_CAPS`. The defaults and hard caps are exported as
+`FACTORY_EMULATOR_LIMIT_HARD_CAPS`. `maxEvents` has a minimum of 2 because the
+mandatory bootstrap atomically emits `INITIAL_STRUCTURE_REQUEST` and
+`RUN_REQUEST`; smaller configurations fail before sink activity. The defaults
+and hard caps are exported as
 `DEFAULT_FACTORY_EMULATOR_LIMITS` and `FACTORY_EMULATOR_LIMIT_HARD_CAPS`:
 
-| Limit | Default | Hard cap |
-| --- | ---: | ---: |
-| `maxCompletedDispatches` | 1,000 | 100,000 |
-| `maxEvents` | 10,000 | 1,000,000 |
-| `maxVirtualElapsedMs` | 3,600,000 | 31,536,000,000 |
-| `maxZeroDurationBatches` | 1,000 | 100,000 |
-| `maxSynchronousBatches` | 100 | 10,000 |
+| Limit | Minimum | Default | Hard cap |
+| --- | ---: | ---: | ---: |
+| `maxCompletedDispatches` | 1 | 1,000 | 100,000 |
+| `maxEvents` | 2 | 10,000 | 1,000,000 |
+| `maxVirtualElapsedMs` | 1 | 3,600,000 | 31,536,000,000 |
+| `maxZeroDurationBatches` | 1 | 1,000 | 100,000 |
+| `maxSynchronousBatches` | 1 | 100 | 10,000 |
 
 Invalid policy fails at session construction, before bootstrap activity. All
 kernel-produced command errors are detached plain-data values with `name`,
