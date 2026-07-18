@@ -173,6 +173,7 @@ bun run typecheck
 bun run test
 bun run test:build
 bun run check:pack
+bun run check:installed-consumer
 bun run check:package-boundary
 bun run check:package-dependency-direction
 bun run build-storybook
@@ -190,6 +191,15 @@ It checks every manifest export and transitive local stylesheet or asset
 reference, rejects development-only files, and removes the temporary artifact
 after verification. `test:build` covers both the compiled output and this real
 pack flow, including actionable failure diagnostics.
+
+`check:installed-consumer` installs that registry-format tarball and compatible
+React peers into a new temporary npm application, then typechecks and creates a
+Vite production bundle without workspace links, source aliases, or package
+source files. Chromium loads only the built consumer output at mobile and
+desktop viewports and verifies package styles, representative primitive,
+feedback, chart, and graph rendering, keyboard activation and focus, accessible
+state semantics, the shared React runtime, and page-level overflow. The check
+removes its temporary install and closes its verification server on exit.
 
 Package Storybook lives in `.storybook/` and discovers `src/**/*.stories.tsx`
 files. Preview decorators import the package token fixture stylesheet and

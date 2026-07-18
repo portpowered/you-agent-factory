@@ -102,6 +102,7 @@
   "scripts": {
     "build": "node scripts/build-package.mjs",
     "build-storybook": "storybook build --loglevel warn",
+    "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "check:package-dependency-direction": "node scripts/check-package-dependency-direction.mjs",

@@ -7,6 +7,7 @@ export default defineConfig({
     include: [
       "src/package-build.harness.test.ts",
       "src/package-pack.harness.test.ts",
+      "src/package-installed-consumer.harness.test.ts",
     ],
   },
 });
