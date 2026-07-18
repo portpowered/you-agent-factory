@@ -79,7 +79,16 @@ export type FactoryVisualizationLayoutIssueCode =
   | "unsupported_layout_schema_version"
   | "invalid_annotation_kind"
   | "invalid_empty_state_kind"
-  | "duplicate_annotation_id";
+  | "duplicate_annotation_id"
+  | "empty_text"
+  | "text_too_long"
+  | "unsafe_html"
+  | "unsafe_markdown"
+  | "unsafe_uri"
+  | "unsafe_content_field"
+  | "unsupported_note_tone"
+  | "invalid_coordinate"
+  | "invalid_dimension";
 
 export interface FactoryVisualizationLayoutIssue {
   category: "structure" | "semantic";

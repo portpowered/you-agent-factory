@@ -176,3 +176,195 @@ describe("Factory visualization layout structural diagnostics", () => {
     ).toThrowError(FactoryVisualizationLayoutValidationError);
   });
 });
+
+describe("Factory visualization note content safety", () => {
+  it("preserves valid multiline notes and accepts inclusive geometry boundaries", () => {
+    const input = exampleLayout();
+    input.annotations = [
+      {
+        id: "boundary-note",
+        kind: "note",
+        position: { x: -100_000, y: 100_000 },
+        size: { width: 0.01, height: 10_000 },
+        title: "Shift handoff",
+        body: "First authored line\nSecond authored line",
+        tone: "warning",
+      },
+      {
+        id: "boundary-image",
+        kind: "image",
+        position: { x: 100_000, y: -100_000 },
+        size: { width: 10_000, height: 0.01 },
+        altText: "Support mark",
+        source: {
+          kind: "embedded",
+          mediaType: "image/png",
+          base64: "iVBORw0KGgo=",
+        },
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: true });
+    if (result.success) {
+      expect(result.data.annotations?.[0]).toMatchObject({
+        body: "First authored line\nSecond authored line",
+      });
+    }
+  });
+});
+
+describe("Factory visualization note content diagnostics", () => {
+  it.each([
+    ["blank body", "   ", "empty_text"],
+    ["overlong body", "a".repeat(4_001), "text_too_long"],
+    ["HTML", "Use <strong>priority</strong> handling", "unsafe_html"],
+    ["Markdown", "See [runbook](docs/runbook)", "unsafe_markdown"],
+    ["URI", "Open https://example.com/runbook", "unsafe_uri"],
+  ])("rejects %s with a content-specific diagnostic", (_, body, code) => {
+    const input = exampleLayout();
+    input.annotations = [
+      {
+        id: "unsafe-note",
+        kind: "note",
+        position: { x: 0, y: 0 },
+        body,
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code,
+          path: ["annotations", 0, "body"],
+        }),
+      );
+    }
+  });
+
+  it("rejects overlong and unsafe titles plus unsupported tones", () => {
+    const input = exampleLayout();
+    input.annotations = [
+      {
+        id: "invalid-note",
+        kind: "note",
+        position: { x: 0, y: 0 },
+        title: `<img src="x">${"a".repeat(161)}`,
+        body: "Plain body",
+        tone: "critical",
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "text_too_long",
+            path: ["annotations", 0, "title"],
+          }),
+          expect.objectContaining({
+            code: "unsafe_html",
+            path: ["annotations", 0, "title"],
+          }),
+          expect.objectContaining({
+            code: "unsupported_note_tone",
+            path: ["annotations", 0, "tone"],
+          }),
+        ]),
+      );
+    }
+  });
+
+  it("rejects executable and connection-like note fields with content-specific diagnostics", () => {
+    const input = exampleLayout();
+    input.annotations = [
+      {
+        id: "active-note",
+        kind: "note",
+        position: { x: 0, y: 0 },
+        body: "Plain body",
+        callback: "run",
+        connection: "workstation:triage",
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(
+        result.issues.filter(({ code }) => code === "unsafe_content_field"),
+      ).toEqual([
+        expect.objectContaining({ path: ["annotations", 0, "callback"] }),
+        expect.objectContaining({ path: ["annotations", 0, "connection"] }),
+      ]);
+    }
+  });
+});
+
+describe("Factory visualization invalid annotation geometry", () => {
+  it.each([
+    ["NaN x", { x: Number.NaN, y: 0 }, ["position", "x"]],
+    ["infinite y", { x: 0, y: Number.POSITIVE_INFINITY }, ["position", "y"]],
+    ["low x", { x: -100_001, y: 0 }, ["position", "x"]],
+    ["high y", { x: 0, y: 100_001 }, ["position", "y"]],
+  ])("rejects %s", (_, position, pathSuffix) => {
+    const input = exampleLayout();
+    input.annotations = [
+      { id: "bad-position", kind: "note", position, body: "Plain body" },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "invalid_coordinate",
+          path: ["annotations", 0, ...pathSuffix],
+        }),
+      );
+    }
+  });
+
+  it.each([
+    ["zero width", { width: 0, height: 1 }, "width"],
+    ["negative height", { width: 1, height: -1 }, "height"],
+    ["oversized width", { width: 10_001, height: 1 }, "width"],
+    [
+      "infinite height",
+      { width: 1, height: Number.NEGATIVE_INFINITY },
+      "height",
+    ],
+  ])("rejects %s", (_, size, dimension) => {
+    const input = exampleLayout();
+    input.annotations = [
+      {
+        id: "bad-size",
+        kind: "note",
+        position: { x: 0, y: 0 },
+        size,
+        body: "Plain body",
+      },
+    ];
+
+    const result = safeParseFactoryVisualizationLayout(input, exampleFactory());
+
+    expect(result).toMatchObject({ success: false });
+    if (!result.success) {
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({
+          code: "invalid_dimension",
+          path: ["annotations", 0, "size", dimension],
+        }),
+      );
+    }
+  });
+});

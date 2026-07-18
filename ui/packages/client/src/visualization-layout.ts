@@ -5,38 +5,19 @@ import {
   type FactoryVisualizationLayoutV1,
   type SafeParseFactoryVisualizationLayoutResult,
 } from "./visualization-layout-contracts.js";
-
-export {
-  FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,
-  type FactoryVisualizationAnnotation,
-  type FactoryVisualizationEmbeddedImageSource,
-  type FactoryVisualizationImageAnnotation,
-  type FactoryVisualizationImageContent,
-  type FactoryVisualizationLayoutIssue,
-  type FactoryVisualizationLayoutIssueCode,
-  type FactoryVisualizationLayoutV1,
-  type FactoryVisualizationNodeEmptyState,
-  type FactoryVisualizationNoteAnnotation,
-  type FactoryVisualizationNoteTone,
-  type FactoryVisualizationPosition,
-  type FactoryVisualizationSize,
-  type FactoryVisualizationTextEmptyState,
-  type SafeParseFactoryVisualizationLayoutResult,
-} from "./visualization-layout-contracts.js";
-
-export class FactoryVisualizationLayoutValidationError extends Error {
-  readonly issues: readonly FactoryVisualizationLayoutIssue[];
-
-  constructor(issues: readonly FactoryVisualizationLayoutIssue[]) {
-    super(
-      issues.length === 1
-        ? `Factory visualization layout validation failed: ${issues[0]?.message}`
-        : `Factory visualization layout validation failed with ${issues.length} issues`,
-    );
-    this.name = "FactoryVisualizationLayoutValidationError";
-    this.issues = issues;
-  }
-}
+import { FactoryVisualizationLayoutValidationError } from "./visualization-layout-error.js";
+import {
+  isInvalidCoordinate,
+  isInvalidDimension,
+  isUnsafeContentField,
+  MAX_ANNOTATION_COORDINATE,
+  MAX_ANNOTATION_DIMENSION,
+  MAX_NOTE_BODY_LENGTH,
+  MAX_NOTE_TITLE_LENGTH,
+  MIN_ANNOTATION_COORDINATE,
+  validateDuplicateAnnotationIds,
+  validatePlainText,
+} from "./visualization-layout-safety.js";
 
 type InputRecord = Record<string, unknown>;
 type InputPath = readonly (string | number)[];
@@ -78,7 +59,6 @@ const noteTones = new Set([
   "warning",
   "danger",
 ]);
-
 function isRecord(value: unknown): value is InputRecord {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -97,6 +77,14 @@ function unsupportedFields(
         path: [...path, key],
         message: `Unsupported field ${key}.`,
       });
+      if (isUnsafeContentField(key)) {
+        issues.push({
+          category: "semantic",
+          code: "unsafe_content_field",
+          path: [...path, key],
+          message: `Executable, connection-like, and URI-bearing content field ${key} is not allowed.`,
+        });
+      }
     }
   }
 }
@@ -170,6 +158,17 @@ function validatePosition(
   unsupportedFields(input, positionFields, path, issues);
   numberField(input, "x", path, issues);
   numberField(input, "y", path, issues);
+  for (const coordinate of ["x", "y"] as const) {
+    const value = input[coordinate];
+    if (typeof value === "number" && isInvalidCoordinate(value)) {
+      issues.push({
+        category: "semantic",
+        code: "invalid_coordinate",
+        path: [...path, coordinate],
+        message: `Expected ${coordinate} to be finite and between ${MIN_ANNOTATION_COORDINATE} and ${MAX_ANNOTATION_COORDINATE}.`,
+      });
+    }
+  }
 }
 
 function validateSize(
@@ -189,6 +188,17 @@ function validateSize(
   unsupportedFields(input, sizeFields, path, issues);
   numberField(input, "width", path, issues);
   numberField(input, "height", path, issues);
+  for (const dimension of ["width", "height"] as const) {
+    const value = input[dimension];
+    if (typeof value === "number" && isInvalidDimension(value)) {
+      issues.push({
+        category: "semantic",
+        code: "invalid_dimension",
+        path: [...path, dimension],
+        message: `Expected ${dimension} to be finite, greater than zero, and at most ${MAX_ANNOTATION_DIMENSION}.`,
+      });
+    }
+  }
 }
 
 function validateImageSource(
@@ -270,8 +280,29 @@ function validateAnnotation(
 
   if (input.kind === "note") {
     unsupportedFields(input, noteFields, path, issues);
-    stringField(input, "body", path, issues);
-    stringField(input, "title", path, issues, false);
+    if (stringField(input, "body", path, issues)) {
+      validatePlainText(
+        input.body as string,
+        [...path, "body"],
+        MAX_NOTE_BODY_LENGTH,
+        "note body",
+        issues,
+        true,
+      );
+    }
+    if (
+      stringField(input, "title", path, issues, false) &&
+      typeof input.title === "string"
+    ) {
+      validatePlainText(
+        input.title,
+        [...path, "title"],
+        MAX_NOTE_TITLE_LENGTH,
+        "note title",
+        issues,
+        false,
+      );
+    }
     if (
       stringField(input, "tone", path, issues, false) &&
       input.tone !== undefined &&
@@ -279,7 +310,7 @@ function validateAnnotation(
     ) {
       issues.push({
         category: "structure",
-        code: "invalid_value",
+        code: "unsupported_note_tone",
         path: [...path, "tone"],
         message: `Unsupported note tone ${input.tone}.`,
       });
@@ -350,30 +381,6 @@ function validateNodeEmptyState(
   stringField(input, "nodeId", path, issues);
   if (requiredField(input, "content", path, issues)) {
     validateEmptyStateContent(input.content, [...path, "content"], issues);
-  }
-}
-
-function validateDuplicateAnnotationIds(
-  annotations: readonly unknown[],
-  issues: FactoryVisualizationLayoutIssue[],
-): void {
-  const indexesById = new Map<string, number[]>();
-  for (const [index, annotation] of annotations.entries()) {
-    if (!isRecord(annotation) || typeof annotation.id !== "string") continue;
-    const indexes = indexesById.get(annotation.id) ?? [];
-    indexes.push(index);
-    indexesById.set(annotation.id, indexes);
-  }
-  for (const [id, indexes] of indexesById) {
-    if (indexes.length < 2) continue;
-    for (const index of indexes) {
-      issues.push({
-        category: "semantic",
-        code: "duplicate_annotation_id",
-        path: ["annotations", index, "id"],
-        message: `Annotation ID ${id} is duplicated at annotation indexes ${indexes.join(", ")}.`,
-      });
-    }
   }
 }
 

@@ -34,6 +34,10 @@ export {
   safeParseFactoryEventReplayText,
 } from "./replay.js";
 export {
+  parseFactoryVisualizationLayout,
+  safeParseFactoryVisualizationLayout,
+} from "./visualization-layout.js";
+export {
   FACTORY_VISUALIZATION_LAYOUT_SCHEMA_VERSION,
   type FactoryVisualizationAnnotation,
   type FactoryVisualizationEmbeddedImageSource,
@@ -42,14 +46,12 @@ export {
   type FactoryVisualizationLayoutIssue,
   type FactoryVisualizationLayoutIssueCode,
   type FactoryVisualizationLayoutV1,
-  FactoryVisualizationLayoutValidationError,
   type FactoryVisualizationNodeEmptyState,
   type FactoryVisualizationNoteAnnotation,
   type FactoryVisualizationNoteTone,
   type FactoryVisualizationPosition,
   type FactoryVisualizationSize,
   type FactoryVisualizationTextEmptyState,
-  parseFactoryVisualizationLayout,
   type SafeParseFactoryVisualizationLayoutResult,
-  safeParseFactoryVisualizationLayout,
-} from "./visualization-layout.js";
+} from "./visualization-layout-contracts.js";
+export { FactoryVisualizationLayoutValidationError } from "./visualization-layout-error.js";
