@@ -23,6 +23,8 @@ timers, React, Zustand, dashboard state, or transport code.
 `@you-agent-factory/client` is a peer dependency because it supplies the
 canonical Factory event and recording types. Consumers install both published
 packages; the emulator package does not embed a checkout-relative dependency.
+The peer range remains unconstrained while this dependency is type-only and no
+minimum compatible client release has been established.
 
 `createFactoryEmulator({ initialState, calculateTick, sink })` provides the
 small logical-tick boundary used by an emulator host. It calculates a complete

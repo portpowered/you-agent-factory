@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -11,6 +11,7 @@ const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const clientPackage = join(repositoryRoot, "packages", "client");
 const typescript = join(packageDirectory, "node_modules", "typescript", "bin", "tsc");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const compatibleClientVersion = "0.1.0";
 
 function run(command, arguments_, { cwd, capture = false } = {}) {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -66,11 +67,25 @@ test("packed emulator resolves its canonical contract from a clean consumer", as
   t.after(() => rm(temporaryRoot, { recursive: true, force: true }));
   const packedDirectory = join(temporaryRoot, "packed");
   const consumerDirectory = join(temporaryRoot, "consumer");
+  const stagedClientDirectory = join(temporaryRoot, "client");
   await mkdir(packedDirectory);
   await mkdir(consumerDirectory);
+  await cp(clientPackage, stagedClientDirectory, {
+    recursive: true,
+    filter: (source) => source !== join(clientPackage, "node_modules"),
+  });
+  const stagedClientManifestPath = join(stagedClientDirectory, "package.json");
+  const stagedClientManifest = JSON.parse(
+    await readFile(stagedClientManifestPath, "utf8"),
+  );
+  stagedClientManifest.version = compatibleClientVersion;
+  await writeFile(
+    stagedClientManifestPath,
+    `${JSON.stringify(stagedClientManifest, null, 2)}\n`,
+  );
 
   const [clientTarball, emulatorTarball] = await Promise.all([
-    pack(clientPackage, packedDirectory),
+    pack(stagedClientDirectory, packedDirectory),
     pack(packageDirectory, packedDirectory),
   ]);
   await writeFile(
@@ -143,7 +158,20 @@ void createMemoryFactoryEventSink({ maxEvents: 1 });
     ),
   );
   assert.equal(installedManifest.dependencies, undefined);
-  assert.equal(installedManifest.peerDependencies["@you-agent-factory/client"], "^0.0.0");
+  assert.equal(installedManifest.peerDependencies["@you-agent-factory/client"], "*");
+  const installedClientManifest = JSON.parse(
+    await readFile(
+      join(
+        consumerDirectory,
+        "node_modules",
+        "@you-agent-factory",
+        "client",
+        "package.json",
+      ),
+      "utf8",
+    ),
+  );
+  assert.equal(installedClientManifest.version, compatibleClientVersion);
   const dependencyTree = JSON.parse(
     await run(npmCommand, ["ls", "--all", "--json"], {
       capture: true,

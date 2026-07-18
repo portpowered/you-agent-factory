@@ -21,7 +21,7 @@
     }
   },
   "peerDependencies": {
-    "@you-agent-factory/client": "^0.0.0"
+    "@you-agent-factory/client": "*"
   },
   "devDependencies": {
     "@you-agent-factory/client": "file:../client",
