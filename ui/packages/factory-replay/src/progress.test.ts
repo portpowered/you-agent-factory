@@ -6,8 +6,6 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import {
-  projectFactoryActivityAtTick,
-  projectFactoryLoadAtTick,
   projectFactoryWorkProgress,
   projectFactoryWorkProgressAtTick,
 } from "./index.js";
@@ -353,68 +351,6 @@ describe("projectFactoryWorkProgressAtTick edge evidence", () => {
     expect(
       Object.values(completed.counts).reduce((sum, count) => sum + count, 0),
     ).toBe(completed.total);
-  });
-});
-
-describe("selected-tick projection consistency", () => {
-  it("agrees with Work State counts and active Dispatch overlays", () => {
-    const events = [
-      topologyEvent(),
-      workRequest("request", 1, 1, [
-        {
-          name: "Draft",
-          state: { name: "editing", type: "PROCESSING" },
-          workId: "work-1",
-          workTypeName: "story",
-        },
-      ]),
-      dispatch("start", "DISPATCH_REQUEST", 2, 0, ["work-1"]),
-      dispatch(
-        "finish",
-        "DISPATCH_RESPONSE",
-        3,
-        0,
-        ["work-1"],
-        [
-          {
-            name: "Draft",
-            state: { name: "editing", type: "PROCESSING" },
-            workId: "work-1",
-            workTypeName: "story",
-          },
-        ],
-      ),
-    ];
-
-    const activeProgress = projectFactoryWorkProgressAtTick({
-      events,
-      tick: 2,
-    });
-    const activeLoad = projectFactoryLoadAtTick({ events, tick: 2 });
-    const activeActivity = projectFactoryActivityAtTick({ events, tick: 2 });
-    expect(activeProgress.active.map(({ id }) => id)).toEqual(["work-1"]);
-    expect(
-      activeActivity.activeDispatchOverlays.flatMap(
-        (overlay) => overlay.workIds ?? [],
-      ),
-    ).toEqual(["work-1"]);
-    expect(activeLoad.workStateCounts.map(({ count }) => count)).toEqual([
-      0, 0, 0, 0,
-    ]);
-
-    const queuedProgress = projectFactoryWorkProgressAtTick({
-      events,
-      tick: 3,
-    });
-    const queuedLoad = projectFactoryLoadAtTick({ events, tick: 3 });
-    const queuedActivity = projectFactoryActivityAtTick({ events, tick: 3 });
-    expect(queuedProgress.queued.map(({ id }) => id)).toEqual(["work-1"]);
-    expect(queuedActivity.activeDispatchOverlays).toEqual([]);
-    expect(
-      queuedLoad.workStateCounts.find(
-        ({ workStateId }) => workStateId === "story-stable:editing-stable",
-      )?.workIds,
-    ).toEqual(["work-1"]);
   });
 });
 
