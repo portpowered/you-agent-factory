@@ -44,6 +44,36 @@ test("parses a valid scenario without changing deterministic inputs or emitting 
   assert.deepEqual(result, { success: true, scenario, factory });
 });
 
+test("enforces the complete canonical Factory shape before support semantics", () => {
+  const cases = [
+    {
+      factory: {},
+      path: "/name",
+      expectation: 'required property "name"',
+    },
+    {
+      factory: supportedFactory({ unexpected: true }),
+      path: "/unexpected",
+      expectation: 'no additional property "unexpected"',
+    },
+  ];
+
+  for (const { factory, path, expectation } of cases) {
+    const result = parseEmulatorScenario(validScenario(), factory);
+
+    assert.equal(result.success, false, path);
+    assert.deepEqual(result.diagnostics.map((diagnostic) => ({
+      code: diagnostic.code,
+      path: diagnostic.path,
+      expectation: diagnostic.expectation,
+    })), [{
+      code: "INVALID_FACTORY_DEFINITION",
+      path,
+      expectation,
+    }]);
+  }
+});
+
 test("rejects nested structured-cloneable class instances at the data boundary", () => {
   const cases = [
     ["Date", new Date("2026-01-01T00:00:00Z")],
@@ -108,15 +138,24 @@ test("rejects unsupported executable Factory definitions before emulator activit
     supportedFactory({
       orchestrator: { kind: "JAVASCRIPT" },
       resources: [{ name: "provider-quota", capacity: 1 }],
-      guards: [{ type: "VISIT_COUNT" }],
+      guards: [{
+        type: "INFERENCE_THROTTLE_GUARD",
+        modelProvider: "CODEX",
+        refreshWindow: "1m",
+      }],
       workstations: [
         {
           name: "clock",
+          worker: "emulator",
           behavior: "CRON",
           cron: { schedule: "* * * * *" },
-          resources: [{ name: "quota" }],
+          resources: [{ name: "quota", capacity: 1 }],
           guards: [{ type: "VISIT_COUNT" }],
-          inputs: [{ guards: [{ type: "SAME_NAME" }] }],
+          inputs: [{
+            workType: "checkout",
+            state: "ready",
+            guards: [{ type: "SAME_NAME" }],
+          }],
         },
       ],
     }),
@@ -195,22 +234,46 @@ test("rejects malformed and unsupported workstation capability fields", () => {
   });
   const cases = [
     {
-      workstation: { behavior: "STANDARD", resources: [{ name: "quota" }] },
+      workstation: {
+        name: "complete",
+        worker: "emulator",
+        inputs: [],
+        behavior: "STANDARD",
+        resources: [{ name: "quota", capacity: 1 }],
+      },
       code: "UNSUPPORTED_FACTORY_CAPABILITY",
       path: "/workstations/0/resources",
     },
     {
-      workstation: { behavior: "STANDARD", guards: [{ type: "VISIT_COUNT" }] },
+      workstation: {
+        name: "complete",
+        worker: "emulator",
+        inputs: [],
+        behavior: "STANDARD",
+        guards: [{ type: "VISIT_COUNT" }],
+      },
       code: "UNSUPPORTED_FACTORY_CAPABILITY",
       path: "/workstations/0/guards",
     },
     {
-      workstation: { behavior: "STANDARD", resources: "not-an-array" },
+      workstation: {
+        name: "complete",
+        worker: "emulator",
+        inputs: [],
+        behavior: "STANDARD",
+        resources: "not-an-array",
+      },
       code: "INVALID_FACTORY_DEFINITION",
       path: "/workstations/0/resources",
     },
     {
-      workstation: { behavior: "STANDARD", guards: "not-an-array" },
+      workstation: {
+        name: "complete",
+        worker: "emulator",
+        inputs: [],
+        behavior: "STANDARD",
+        guards: "not-an-array",
+      },
       code: "INVALID_FACTORY_DEFINITION",
       path: "/workstations/0/guards",
     },
@@ -219,7 +282,7 @@ test("rejects malformed and unsupported workstation capability fields", () => {
   for (const testCase of cases) {
     const result = parseEmulatorScenario(scenario, {
       name: "checkout",
-      workTypes: [{ name: "checkout" }],
+      workTypes: [{ name: "checkout", states: [] }],
       workstations: [testCase.workstation],
     });
     assert.equal(result.success, false, testCase.path);
@@ -280,7 +343,10 @@ test("validates initial submissions and backward complete lineage cursors", () =
   const result = parseEmulatorScenario(
     scenario,
     supportedFactory({
-      workTypes: [{ name: "checkout" }, { name: "fulfillment" }],
+      workTypes: [
+        { name: "checkout", states: [] },
+        { name: "fulfillment", states: [] },
+      ],
     }),
   );
 
@@ -288,7 +354,10 @@ test("validates initial submissions and backward complete lineage cursors", () =
     success: true,
     scenario,
     factory: supportedFactory({
-      workTypes: [{ name: "checkout" }, { name: "fulfillment" }],
+      workTypes: [
+        { name: "checkout", states: [] },
+        { name: "fulfillment", states: [] },
+      ],
     }),
   });
 });
@@ -418,7 +487,10 @@ for (const invalidCase of [
     const result = parseEmulatorScenario(
       invalidCase.scenario,
       supportedFactory({
-        workTypes: [{ name: "checkout" }, { name: "fulfillment" }],
+        workTypes: [
+          { name: "checkout", states: [] },
+          { name: "fulfillment", states: [] },
+        ],
       }),
     );
 

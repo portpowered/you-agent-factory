@@ -329,6 +329,34 @@ test("invalid lifecycle commands and unsupported configuration emit no events", 
   assert.equal(invalid.emulator.state().lifecycle, "pre-start");
 });
 
+test("invalid canonical Factory definitions cannot reach bootstrap sink activity", async () => {
+  for (const factory of [{}, { ...supportedFactory(), unexpected: true }]) {
+    const batches = [];
+    const emulator = createFactoryEmulatorSession({
+      factory,
+      scenario: scenario({ initialSubmissions: [] }),
+      sink: {
+        async close() {
+          return { status: "closed" };
+        },
+        async write(batch) {
+          batches.push(structuredClone(batch));
+          return { status: "accepted" };
+        },
+      },
+    });
+
+    const error = await rejectedValue(emulator.start());
+    assertCommandError(error, FactoryEmulatorConfigurationError, {
+      name: "FactoryEmulatorConfigurationError",
+      code: "INVALID_CONFIGURATION",
+    });
+    assert.equal(error.diagnostics[0].code, "INVALID_FACTORY_DEFINITION");
+    assert.deepEqual(batches, []);
+    assert.equal(emulator.state().lifecycle, "pre-start");
+  }
+});
+
 test("every kernel command error family survives the structured-clone boundary", async () => {
   const invalidConfiguration = harness(scenario({
     rules: [{

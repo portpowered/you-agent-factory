@@ -33,14 +33,14 @@ test("inspection reports the parser-supported v1 scenario and Factory subset", (
   const unsupportedFactories = [
     {
       ...emulatorScenarioExamples[0].factory,
-      resources: [{ name: "quota" }],
+      resources: [{ name: "quota", capacity: 1 }],
     },
     {
       ...emulatorScenarioExamples[0].factory,
       workstations: [
         {
           ...emulatorScenarioExamples[0].factory.workstations[0],
-          guards: [{ type: "VISIT_COUNT" }],
+          guards: [{ type: "VISIT_COUNT", maxVisits: 1 }],
         },
       ],
     },
