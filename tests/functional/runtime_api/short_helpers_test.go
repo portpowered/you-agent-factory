@@ -1,5 +1,3 @@
-//go:build !functionallong
-
 package runtime_api
 
 import (
