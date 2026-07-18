@@ -13,7 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryChange(t *testing.T) {
+func TestCurrentFactoryGETAndPUT_ExposePortableLayoutThroughSupportedReads(t *testing.T) {
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -24,8 +24,8 @@ func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryCh
 	}
 
 	server := startFactoryTransformationServer(t, rootDir)
-	initialPayload := requireInitialStructurePayload(t, server.GetFactoryEvents(t))
-	assertFactoryEventLayout(t, initialPayload.Factory.Layout, factoryEventLayoutExpectation{
+	initial := getCurrentFactory(t, server.URL())
+	assertFactoryEventLayout(t, initial.Layout, factoryEventLayoutExpectation{
 		nodeX:       144,
 		nodeY:       288,
 		nodeWidth:   320,
@@ -43,9 +43,8 @@ func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryCh
 		direction:   factoryapi.RIGHT,
 	})
 
-	initialEvents := server.GetFactoryEvents(t)
 	current := getCurrentFactory(t, server.URL())
-	saveCurrentFactoryDefinition(
+	saved := saveCurrentFactoryDefinition(
 		t,
 		server.URL(),
 		string(functionalFactoryEventLayoutDocument(
@@ -57,12 +56,25 @@ func TestCurrentFactoryEvents_ExposePortableLayoutOnInitialStructureAndFactoryCh
 		)),
 	)
 
-	change := requireFactoryChangeAfter(t, initialEvents, server.GetFactoryEvents(t))
-	changePayload, err := change.Payload.AsFactoryChangeEventPayload()
-	if err != nil {
-		t.Fatalf("decode factory-change payload: %v", err)
-	}
-	assertFactoryEventLayout(t, changePayload.Factory.Layout, factoryEventLayoutExpectation{
+	assertFactoryEventLayout(t, saved.Layout, factoryEventLayoutExpectation{
+		nodeX:       344,
+		nodeY:       488,
+		nodeWidth:   360,
+		nodeHeight:  210,
+		nodeLocked:  false,
+		waypoints:   []factoryapi.FactoryLayoutPoint{{X: 260, Y: 340}, {X: 300, Y: 360}},
+		labelX:      275,
+		labelY:      325,
+		groupLabel:  "Execution",
+		groupColor:  "#ccddee",
+		groupLocked: false,
+		viewportX:   80,
+		viewportY:   90,
+		zoom:        1.1,
+		direction:   factoryapi.DOWN,
+	})
+	reloaded := getCurrentFactory(t, server.URL())
+	assertFactoryEventLayout(t, reloaded.Layout, factoryEventLayoutExpectation{
 		nodeX:       344,
 		nodeY:       488,
 		nodeWidth:   360,
@@ -604,22 +616,6 @@ func factoryEventLayout(
 		"viewport":    map[string]any{"x": viewportX, "y": viewportY, "zoom": zoom},
 		"preferences": map[string]any{"direction": direction},
 	}
-}
-
-func requireInitialStructurePayload(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.InitialStructureRequestEventPayload {
-	t.Helper()
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
-			continue
-		}
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
-			t.Fatalf("decode initial-structure payload: %v", err)
-		}
-		return payload
-	}
-	t.Fatalf("initial-structure event not found in %d events", len(events))
-	return factoryapi.InitialStructureRequestEventPayload{}
 }
 
 func assertFactoryEventLayout(t *testing.T, layout *factoryapi.FactoryLayout, want factoryEventLayoutExpectation) {

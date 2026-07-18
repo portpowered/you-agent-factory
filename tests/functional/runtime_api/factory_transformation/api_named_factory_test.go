@@ -160,28 +160,19 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidat
 	}
 }
 
-func TestFactoryTransformation_CreateNamedFactoryEmitsCanonicalFactoryChangeEvent(t *testing.T) {
+func TestFactoryTransformation_CreateNamedFactoryPersistsThroughSupportedRead(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
 	server := startFactoryTransformationServer(t, rootDir)
-	initialEvents := server.GetFactoryEvents(t)
 
 	createNamedFactoryFromBody(t, server.URL(), functionalNamedFactoryBody("beta", "beta-task"))
 
-	change := requireFactoryChangeAfter(t, initialEvents, server.GetFactoryEvents(t))
-	if change.Context.Tick <= latestEventTick(initialEvents) {
-		t.Fatalf("factory-change tick = %d, want > initial event tick", change.Context.Tick)
+	current := getCurrentFactory(t, server.URL())
+	if current.Name != factoryapi.FactoryName("beta") {
+		t.Fatalf("current factory name = %q, want beta", current.Name)
 	}
-
-	payload, err := change.Payload.AsFactoryChangeEventPayload()
-	if err != nil {
-		t.Fatalf("decode factory-change payload: %v", err)
-	}
-	if payload.Factory.Name != factoryapi.FactoryName("beta") {
-		t.Fatalf("factory-change payload name = %q, want beta", payload.Factory.Name)
-	}
-	assertFactoryWorkType(t, payload.Factory, "beta-task", "factory-change payload")
+	assertFactoryWorkType(t, current, "beta-task", "current factory readback")
 }
 
 func createNamedFactoryFromBody(t *testing.T, serverURL, body string) factoryapi.Factory {
@@ -338,14 +329,4 @@ func assertPersistedFactoryJSONStripsInlineBundledContent(t *testing.T, path str
 			t.Fatalf("persisted factory payload %s still contains inline portable content %q: %s", path, forbidden, payload)
 		}
 	}
-}
-
-func latestEventTick(events []factoryapi.FactoryEvent) int {
-	latest := -1
-	for _, event := range events {
-		if event.Context.Tick > latest {
-			latest = event.Context.Tick
-		}
-	}
-	return latest
 }

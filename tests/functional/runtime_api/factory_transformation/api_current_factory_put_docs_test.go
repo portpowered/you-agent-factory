@@ -14,7 +14,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent(t *testing.T) {
+func TestCurrentFactoryGET_InitialStructureIncludesBundledFileContent(t *testing.T) {
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
 		filepath.Join(rootDir, interfaces.FactoryConfigFile),
@@ -33,9 +33,9 @@ func TestCurrentFactoryEvents_InitialStructureIncludesBundledFileContent(t *test
 	}
 
 	server := startFactoryTransformationServer(t, rootDir)
-	payload := requireInitialStructurePayload(t, server.GetFactoryEvents(t))
-	assertDocBundledFileInline(t, payload.Factory, "factory/docs/overview.md", "# Overview\n")
-	assertScriptBundledFileInline(t, payload.Factory, "factory/scripts/setup-workspace.py", "print('setup')\n")
+	current := getCurrentFactory(t, server.URL())
+	assertDocBundledFileInline(t, current, "factory/docs/overview.md", "# Overview\n")
+	assertScriptBundledFileInline(t, current, "factory/scripts/setup-workspace.py", "print('setup')\n")
 }
 
 func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
@@ -125,12 +125,11 @@ func TestCurrentFactoryPUT_DocsCreateEditRenameDeleteRoundTrip(t *testing.T) {
 	assertScriptBundledFileInline(t, reloaded, "factory/scripts/setup-workspace.py", "print('setup')\n")
 }
 
-func TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion(t *testing.T) {
+func TestCurrentFactoryPUT_DocsSaveReadbackIncludesBundledFilesAndVersion(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
 	server := startFactoryTransformationServer(t, rootDir)
-	initialEvents := server.GetFactoryEvents(t)
 	current := getCurrentFactory(t, server.URL())
 
 	saved := saveCurrentFactoryDefinition(
@@ -146,14 +145,10 @@ func TestCurrentFactoryPUT_DocsSaveEmitsFactoryChangeWithBundledFilesAndVersion(
 		),
 	)
 
-	change := requireFactoryChangeAfter(t, initialEvents, server.GetFactoryEvents(t))
-	payload, err := change.Payload.AsFactoryChangeEventPayload()
-	if err != nil {
-		t.Fatalf("decode factory-change payload: %v", err)
-	}
-	assertFactoryChangeVersion(t, payload.Factory, saved)
-	assertDocBundledFileInline(t, payload.Factory, "factory/docs/overview.md", "# Overview\n")
-	assertScriptBundledFileInline(t, payload.Factory, "factory/scripts/setup-workspace.py", "print('setup')\n")
+	reloaded := getCurrentFactory(t, server.URL())
+	assertFactoryVersionMatches(t, reloaded, saved)
+	assertDocBundledFileInline(t, reloaded, "factory/docs/overview.md", "# Overview\n")
+	assertScriptBundledFileInline(t, reloaded, "factory/scripts/setup-workspace.py", "print('setup')\n")
 }
 
 func TestCurrentFactoryPUT_RejectsInvalidDocTargets(t *testing.T) {
@@ -380,16 +375,16 @@ func findBundledFile(t *testing.T, factory factoryapi.Factory, targetPath string
 	return nil
 }
 
-func assertFactoryChangeVersion(t *testing.T, eventFactory factoryapi.Factory, saved factoryapi.Factory) {
+func assertFactoryVersionMatches(t *testing.T, readback factoryapi.Factory, saved factoryapi.Factory) {
 	t.Helper()
 	if saved.Version == nil {
 		t.Fatal("saved factory version = nil, want version metadata")
 	}
-	if eventFactory.Version == nil {
-		t.Fatal("factory-change payload version = nil, want saved version metadata")
+	if readback.Version == nil {
+		t.Fatal("factory readback version = nil, want saved version metadata")
 	}
-	if eventFactory.Version.Logical != saved.Version.Logical || !eventFactory.Version.Physical.Equal(saved.Version.Physical) {
-		t.Fatalf("factory-change payload version = %#v, want saved version %#v", eventFactory.Version, saved.Version)
+	if readback.Version.Logical != saved.Version.Logical || !readback.Version.Physical.Equal(saved.Version.Physical) {
+		t.Fatalf("factory readback version = %#v, want saved version %#v", readback.Version, saved.Version)
 	}
 }
 

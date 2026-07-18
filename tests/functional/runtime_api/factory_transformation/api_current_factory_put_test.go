@@ -2,6 +2,7 @@ package factory_transformation
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -15,19 +16,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
-func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFactoryChangeEvent(t *testing.T) {
+func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionPersistsThroughSupportedRead(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
 	server := startFactoryTransformationServer(t, rootDir)
-	initialEvents := server.GetFactoryEvents(t)
 
 	current := getCurrentFactory(t, server.URL())
 	saved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
@@ -35,23 +33,19 @@ func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFac
 		t.Fatalf("saved current factory work types = %#v, want story", saved.WorkTypes)
 	}
 
-	change := requireFactoryChangeAfter(t, initialEvents, server.GetFactoryEvents(t))
-	payload, err := change.Payload.AsFactoryChangeEventPayload()
-	if err != nil {
-		t.Fatalf("decode factory-change payload: %v", err)
+	reloaded := getCurrentFactory(t, server.URL())
+	if reloaded.Name != factoryapi.FactoryName("alpha") {
+		t.Fatalf("reloaded factory name = %q, want alpha", reloaded.Name)
 	}
-	if payload.Factory.Name != factoryapi.FactoryName("alpha") {
-		t.Fatalf("factory-change payload name = %q, want alpha", payload.Factory.Name)
+	if reloaded.WorkTypes == nil || len(*reloaded.WorkTypes) != 1 || (*reloaded.WorkTypes)[0].Name != "story" {
+		t.Fatalf("reloaded factory work types = %#v, want story", reloaded.WorkTypes)
 	}
-	if payload.Factory.WorkTypes == nil || len(*payload.Factory.WorkTypes) != 1 || (*payload.Factory.WorkTypes)[0].Name != "story" {
-		t.Fatalf("factory-change payload work types = %#v, want story", payload.Factory.WorkTypes)
-	}
-	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 || (*payload.Factory.Workstations)[0].Name != "plan-task" {
-		t.Fatalf("factory-change payload workstations = %#v, want edited plan-task topology", payload.Factory.Workstations)
+	if reloaded.Workstations == nil || len(*reloaded.Workstations) != 1 || (*reloaded.Workstations)[0].Name != "plan-task" {
+		t.Fatalf("reloaded factory workstations = %#v, want edited plan-task topology", reloaded.Workstations)
 	}
 }
 
-func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T) {
+func TestCurrentFactoryPUT_ReadbackVersionsAdvanceOnEverySave(t *testing.T) {
 	rootDir := t.TempDir()
 	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
 
@@ -59,25 +53,17 @@ func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T)
 
 	current := getCurrentFactory(t, server.URL())
 	firstSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
-	firstChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
-	firstPayload, err := firstChange.Payload.AsFactoryChangeEventPayload()
-	if err != nil {
-		t.Fatalf("decode first factory-change payload: %v", err)
-	}
-	assertFactoryChangeVersion(t, firstPayload.Factory, firstSaved)
-	if firstPayload.Factory.Version.Logical != current.Version.Logical+1 {
-		t.Fatalf("first factory-change logical version = %d, want %d", firstPayload.Factory.Version.Logical, current.Version.Logical+1)
+	firstReadback := getCurrentFactory(t, server.URL())
+	assertFactoryVersionMatches(t, firstReadback, firstSaved)
+	if firstReadback.Version.Logical != current.Version.Logical+1 {
+		t.Fatalf("first readback logical version = %d, want %d", firstReadback.Version.Logical, current.Version.Logical+1)
 	}
 
 	secondSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "article", advancedFactoryVersion(t, firstSaved.Version)))
-	secondChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
-	secondPayload, err := secondChange.Payload.AsFactoryChangeEventPayload()
-	if err != nil {
-		t.Fatalf("decode second factory-change payload: %v", err)
-	}
-	assertFactoryChangeVersion(t, secondPayload.Factory, secondSaved)
-	if secondPayload.Factory.Version.Logical != firstPayload.Factory.Version.Logical+1 {
-		t.Fatalf("second factory-change logical version = %d, want %d", secondPayload.Factory.Version.Logical, firstPayload.Factory.Version.Logical+1)
+	secondReadback := getCurrentFactory(t, server.URL())
+	assertFactoryVersionMatches(t, secondReadback, secondSaved)
+	if secondReadback.Version.Logical != firstReadback.Version.Logical+1 {
+		t.Fatalf("second readback logical version = %d, want %d", secondReadback.Version.Logical, firstReadback.Version.Logical+1)
 	}
 }
 
@@ -604,17 +590,31 @@ func advancedVersionPassCase() advancedSaveVersionCase {
 	}
 }
 
-func startFactoryTransformationServer(t *testing.T, rootDir string) *support.FunctionalAPIServer {
+type factoryTransformationHost struct {
+	*support.RootRunFunctionalHost
+}
+
+func (host *factoryTransformationHost) URL() string {
+	return host.Endpoint()
+}
+
+func startFactoryTransformationServer(t *testing.T, rootDir string) *factoryTransformationHost {
 	t.Helper()
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
-		FactoryDir:                rootDir,
-		UseMockWorkers:            true,
-		WaitForServiceModeRuntime: true,
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.Logger = zap.NewNop()
-		},
+	host, err := support.StartRootRunFunctionalHost(context.Background(), support.RootRunFunctionalHostConfig{
+		FactoryRoot: rootDir,
+		SystemRoot:  t.TempDir(),
 	})
+	if err != nil {
+		t.Fatalf("StartRootRunFunctionalHost: %v", err)
+	}
+	t.Cleanup(func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := host.Shutdown(shutdownCtx); err != nil {
+			t.Errorf("Shutdown RootRunFunctionalHost: %v", err)
+		}
+	})
+	return &factoryTransformationHost{RootRunFunctionalHost: host}
 }
 
 func seedNamedFactoryRoot(t *testing.T, rootDir, name, workType string) {
@@ -831,34 +831,6 @@ func decodeJSONResponse(t *testing.T, resp *http.Response, target any, message s
 	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
 		t.Fatalf("%s: %v", message, err)
 	}
-}
-
-func requireFactoryChangeAfter(t *testing.T, before []factoryapi.FactoryEvent, after []factoryapi.FactoryEvent) factoryapi.FactoryEvent {
-	t.Helper()
-	minSequence := -1
-	for _, event := range before {
-		if event.Context.Sequence > minSequence {
-			minSequence = event.Context.Sequence
-		}
-	}
-	for _, event := range after {
-		if event.Context.Sequence > minSequence && event.Type == factoryapi.FactoryEventTypeFactoryChange {
-			return event
-		}
-	}
-	t.Fatalf("factory-change event not found after save; before=%d after=%d", len(before), len(after))
-	return factoryapi.FactoryEvent{}
-}
-
-func requireLatestFactoryChange(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.FactoryEvent {
-	t.Helper()
-	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].Type == factoryapi.FactoryEventTypeFactoryChange {
-			return events[i]
-		}
-	}
-	t.Fatalf("factory-change event not found; events=%d", len(events))
-	return factoryapi.FactoryEvent{}
 }
 
 func hasValidationTarget(
