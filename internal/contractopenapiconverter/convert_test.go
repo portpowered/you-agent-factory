@@ -96,6 +96,49 @@ func TestConvertCoreSchemaRejectsUnsupportedKeywords(t *testing.T) {
 	}
 }
 
+func TestConvertCoreSchemaPreservesOpenAPIExclusiveBounds(t *testing.T) {
+	input := map[string]any{
+		"type":             "number",
+		"minimum":          0,
+		"exclusiveMinimum": true,
+		"maximum":          10000,
+	}
+	converted, diagnostics := contractopenapiconverter.ConvertCoreSchema(input)
+	if len(diagnostics) != 0 {
+		t.Fatalf("ConvertCoreSchema() diagnostics = %#v, want none", diagnostics)
+	}
+	if _, exists := converted["minimum"]; exists {
+		t.Fatalf("converted schema = %#v, minimum must be replaced by the Draft 2020-12 exclusive bound", converted)
+	}
+	if converted["exclusiveMinimum"] != 0 {
+		t.Fatalf("exclusiveMinimum = %#v, want numeric zero", converted["exclusiveMinimum"])
+	}
+
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	if err := compiler.AddResource("exclusive.json", converted); err != nil {
+		t.Fatalf("AddResource(): %v", err)
+	}
+	schema, err := compiler.Compile("exclusive.json")
+	if err != nil {
+		t.Fatalf("Compile(): %v", err)
+	}
+	if err := schema.Validate(0); err == nil {
+		t.Fatal("Validate(0) error = nil, want exclusive lower-bound rejection")
+	}
+	if err := schema.Validate(0.5); err != nil {
+		t.Fatalf("Validate(0.5): %v", err)
+	}
+
+	failClosed, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(input, nil)
+	if len(diagnostics) != 0 {
+		t.Fatalf("ConvertFailClosedSchema() diagnostics = %#v, want none", diagnostics)
+	}
+	if _, exists := failClosed["minimum"]; exists || failClosed["exclusiveMinimum"] != 0 {
+		t.Fatalf("fail-closed converted schema = %#v, want numeric exclusive lower bound", failClosed)
+	}
+}
+
 func loadFixtureInput(t *testing.T, name string) map[string]any {
 	t.Helper()
 	path := filepath.Join("testdata", "inputs", name+".yaml")

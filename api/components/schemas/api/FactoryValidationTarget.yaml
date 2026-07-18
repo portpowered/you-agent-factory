@@ -16,3 +16,6 @@ properties:
     description: Human-readable explanation suitable for dialogs and summaries.
   subject:
     $ref: './FactoryValidationSubject.yaml'
+  path:
+    type: string
+    description: Canonical Factory definition path for the affected value when one is available.

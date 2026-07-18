@@ -9686,6 +9686,9 @@ components:
           description: Human-readable explanation suitable for dialogs and summaries.
         subject:
           $ref: '#/components/schemas/FactoryValidationSubject'
+        path:
+          type: string
+          description: Canonical Factory definition path for the affected value when one is available.
     FactoryValidationResult:
       type: object
       additionalProperties: false
@@ -10074,6 +10077,81 @@ components:
         height:
           type: number
           description: Authored node height.
+    FactoryLayoutImageSource:
+      type: object
+      description: Extensible discriminated image-source shape. Version 1 supports only embedded raster data.
+      additionalProperties: false
+      required:
+        - kind
+        - mediaType
+        - data
+      properties:
+        kind:
+          type: string
+          enum:
+            - EMBEDDED
+          description: Source variant discriminator. EMBEDDED carries portable base64 raster data.
+        mediaType:
+          type: string
+          enum:
+            - image/png
+            - image/jpeg
+            - image/webp
+          description: Declared media type for the embedded raster.
+        data:
+          type: string
+          format: byte
+          minLength: 4
+          maxLength: 2796204
+          description: Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
+    FactoryLayoutImage:
+      type: object
+      description: Inert embedded-raster image content with required alternative text.
+      additionalProperties: false
+      required:
+        - source
+        - alternativeText
+      properties:
+        source:
+          $ref: '#/components/schemas/FactoryLayoutImageSource'
+        alternativeText:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: \S
+          description: Literal alternative text for the embedded image.
+    FactoryLayoutEmptyState:
+      type: object
+      description: Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior.
+      additionalProperties: false
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - text
+          properties:
+            text:
+              type: string
+              minLength: 1
+              maxLength: 500
+              pattern: \S
+              description: Literal empty-state text. It is not rendered as HTML or Markdown.
+        - type: object
+          additionalProperties: false
+          required:
+            - image
+          properties:
+            image:
+              $ref: '#/components/schemas/FactoryLayoutImage'
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: \S
+          description: Literal empty-state text. It is not rendered as HTML or Markdown.
+        image:
+          $ref: '#/components/schemas/FactoryLayoutImage'
     FactoryLayoutNode:
       type: object
       description: Portable graph node layout keyed by canonical graph node id.
@@ -10084,6 +10162,8 @@ components:
       properties:
         id:
           type: string
+          minLength: 1
+          pattern: \S
           description: Canonical graph node id such as workstation:<workstationId>.
         position:
           $ref: '#/components/schemas/FactoryLayoutPoint'
@@ -10092,6 +10172,8 @@ components:
         locked:
           type: boolean
           description: Optional authored node lock flag for future editor affordances.
+        emptyState:
+          $ref: '#/components/schemas/FactoryLayoutEmptyState'
     FactoryLayoutEdge:
       type: object
       description: Portable graph edge layout keyed by canonical graph edge id.
@@ -10163,6 +10245,146 @@ components:
         locked:
           type: boolean
           description: Optional authored group lock flag for future editor affordances.
+    FactoryLayoutAnnotationPosition:
+      type: object
+      description: Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render.
+      additionalProperties: false
+      required:
+        - x
+        - 'y'
+      properties:
+        x:
+          type: number
+          minimum: -100000
+          maximum: 100000
+          description: Horizontal canvas coordinate between -100,000 and 100,000 inclusive.
+        'y':
+          type: number
+          minimum: -100000
+          maximum: 100000
+          description: Vertical canvas coordinate between -100,000 and 100,000 inclusive.
+    FactoryLayoutAnnotationSize:
+      type: object
+      description: Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it.
+      additionalProperties: false
+      required:
+        - width
+        - height
+      properties:
+        width:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 10000
+          description: Positive authored width no greater than 10,000 canvas units.
+        height:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 10000
+          description: Positive authored height no greater than 10,000 canvas units.
+    FactoryLayoutNoteTone:
+      type: string
+      description: Presentation-only tone for a note annotation.
+      enum:
+        - NEUTRAL
+        - ACCENT
+        - INFO
+        - SUCCESS
+        - WARNING
+        - DANGER
+    FactoryLayoutNote:
+      type: object
+      description: Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML.
+      additionalProperties: false
+      required:
+        - body
+        - tone
+      properties:
+        title:
+          type: string
+          maxLength: 160
+          description: Optional literal plain-text note title.
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+          pattern: \S
+          description: Required literal plain-text note body.
+        tone:
+          $ref: '#/components/schemas/FactoryLayoutNoteTone'
+    FactoryLayoutAnnotationKind:
+      type: string
+      description: The inert annotation content variant.
+      enum:
+        - NOTE
+        - IMAGE
+    FactoryLayoutAnnotation:
+      type: object
+      description: Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid.
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - position
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - kind
+            - position
+            - note
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - NOTE
+            position:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationPosition'
+            size:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationSize'
+            note:
+              $ref: '#/components/schemas/FactoryLayoutNote'
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - kind
+            - position
+            - size
+            - image
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - IMAGE
+            position:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationPosition'
+            size:
+              $ref: '#/components/schemas/FactoryLayoutAnnotationSize'
+            image:
+              $ref: '#/components/schemas/FactoryLayoutImage'
+      properties:
+        id:
+          type: string
+          minLength: 1
+          pattern: \S
+          description: Stable annotation identifier unique within this layout.
+        kind:
+          $ref: '#/components/schemas/FactoryLayoutAnnotationKind'
+        position:
+          $ref: '#/components/schemas/FactoryLayoutAnnotationPosition'
+        size:
+          $ref: '#/components/schemas/FactoryLayoutAnnotationSize'
+        note:
+          $ref: '#/components/schemas/FactoryLayoutNote'
+        image:
+          $ref: '#/components/schemas/FactoryLayoutImage'
     FactoryLayoutViewport:
       type: object
       description: Shared authored graph camera position.
@@ -10221,6 +10443,11 @@ components:
           description: Optional flat background groups keyed independently from topology.
           items:
             $ref: '#/components/schemas/FactoryLayoutGroup'
+        annotations:
+          type: array
+          description: Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology.
+          items:
+            $ref: '#/components/schemas/FactoryLayoutAnnotation'
         viewport:
           $ref: '#/components/schemas/FactoryLayoutViewport'
         preferences:

@@ -288,18 +288,6 @@ var productionBoundarySources = []struct {
 		sha256Hex:    "2e2709e8a15fcd509889e1b788d14b4ca7ab59904485c87069695417eaea6e8b",
 	},
 	{
-		relativePath: "pkg/config/factory_config_mapping.go",
-		sha256Hex:    "8fa4c2db6c5d5d20c5a75070b8cc8ef4c87918d8ec6502eed1ec71ec83753aca",
-	},
-	{
-		relativePath: "pkg/config/factory_config_mapping_internal.go",
-		sha256Hex:    "5898021e142108a34e4c6b2699b20fc882b26fbc44db10c9f03f866e8b6393f4",
-	},
-	{
-		relativePath: "pkg/factory/contracts/factory_config.go",
-		sha256Hex:    "24ec73a57af547860e0f9042f03a63c78e746a3bce6e5883d4b30300aca58fbb",
-	},
-	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",
 		sha256Hex:    "bf3b2eb5709d1b4828bb6c0542b22ff50fb1cfc56ab24cf02ae8f546388a9304",
 	},
@@ -314,10 +302,6 @@ var productionBoundarySources = []struct {
 	{
 		relativePath: "api/components/schemas/data-models/FactoryGuard.yaml",
 		sha256Hex:    "da72ecfe42451c48100348d8161f4511fcf208ce46adbae4b147e2b766d8f793",
-	},
-	{
-		relativePath: "api/components/schemas/data-models/FactoryLayout.yaml",
-		sha256Hex:    "f5b867440c883b88838197fc42d67f3efaf17ba76ac36eb802c38a428377dc73",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/FactoryOrchestrator.yaml",

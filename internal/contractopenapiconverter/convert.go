@@ -32,6 +32,8 @@ func convertSchemaObject(schema map[string]any, path string) (any, []contractval
 	}
 
 	result := make(map[string]any, len(schema))
+	exclusiveMinimum, hasExclusiveMinimum := openAPIExclusiveBound(schema, "minimum", "exclusiveMinimum")
+	exclusiveMaximum, hasExclusiveMaximum := openAPIExclusiveBound(schema, "maximum", "exclusiveMaximum")
 	for key, value := range schema {
 		childPath := joinPath(path, key)
 		switch key {
@@ -85,8 +87,27 @@ func convertSchemaObject(schema map[string]any, path string) (any, []contractval
 				return nil, []contractvalidator.Diagnostic{unsupportedKeyword("type:"+typeValue, childPath, profileStageCoreShapes)}
 			}
 			result[key] = typeValue
+		case "minimum":
+			if !hasExclusiveMinimum {
+				result[key] = value
+			}
+		case "maximum":
+			if !hasExclusiveMaximum {
+				result[key] = value
+			}
+		case "exclusiveMinimum":
+			if hasExclusiveMinimum {
+				result[key] = exclusiveMinimum
+			} else if enabled, ok := value.(bool); !ok || enabled {
+				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			}
+		case "exclusiveMaximum":
+			if hasExclusiveMaximum {
+				result[key] = exclusiveMaximum
+			} else if enabled, ok := value.(bool); !ok || enabled {
+				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			}
 		case "required", "enum", "description", "title", "format", "default",
-			"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
 			"minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems":
 			result[key] = value
 		default:
@@ -94,6 +115,18 @@ func convertSchemaObject(schema map[string]any, path string) (any, []contractval
 		}
 	}
 	return result, nil
+}
+
+func openAPIExclusiveBound(schema map[string]any, boundKey, exclusiveKey string) (any, bool) {
+	enabled, ok := schema[exclusiveKey].(bool)
+	if !ok || !enabled {
+		return nil, false
+	}
+	bound, ok := schema[boundKey]
+	if !ok {
+		return nil, false
+	}
+	return bound, true
 }
 
 func joinPath(base, segment string) string {

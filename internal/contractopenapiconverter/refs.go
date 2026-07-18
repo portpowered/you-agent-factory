@@ -109,6 +109,8 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 	}
 
 	result := make(map[string]any, len(schema))
+	exclusiveMinimum, hasExclusiveMinimum := openAPIExclusiveBound(schema, "minimum", "exclusiveMinimum")
+	exclusiveMaximum, hasExclusiveMaximum := openAPIExclusiveBound(schema, "maximum", "exclusiveMaximum")
 	for key, value := range schema {
 		if key == "nullable" {
 			continue
@@ -148,8 +150,27 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 				return nil, []contractvalidator.Diagnostic{unsupportedKeyword("type:"+typeValue, childPath, ctx.stage)}
 			}
 			result[key] = typeValue
+		case "minimum":
+			if !hasExclusiveMinimum {
+				result[key] = value
+			}
+		case "maximum":
+			if !hasExclusiveMaximum {
+				result[key] = value
+			}
+		case "exclusiveMinimum":
+			if hasExclusiveMinimum {
+				result[key] = exclusiveMinimum
+			} else if enabled, ok := value.(bool); !ok || enabled {
+				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			}
+		case "exclusiveMaximum":
+			if hasExclusiveMaximum {
+				result[key] = exclusiveMaximum
+			} else if enabled, ok := value.(bool); !ok || enabled {
+				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			}
 		case "required", "enum", "description", "title", "format", "default",
-			"minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum",
 			"minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems":
 			result[key] = value
 		default:

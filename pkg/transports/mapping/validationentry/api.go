@@ -30,6 +30,9 @@ func ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot, works
 		WorkstationLoader: workstationLoader,
 	})
 	if err != nil {
+		if _, ok := factoryconfig.PortableLayoutValidationTarget(err); ok {
+			return portableLayoutTopologyError(err)
+		}
 		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
 	}
 	if !result.HasBlockingTargets() {
@@ -38,6 +41,14 @@ func ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot, works
 	return apisurface.NewTopologyValidationError(
 		"Factory topology contains invalid graph references.",
 		apisurface.FactoryValidationTargetsToAPI(result.BlockingTargets()),
+	)
+}
+
+func portableLayoutTopologyError(err error) error {
+	target, _ := factoryconfig.PortableLayoutValidationTarget(err)
+	return apisurface.NewTopologyValidationError(
+		"Factory layout contains an invalid authored value.",
+		apisurface.FactoryValidationTargetsToAPI([]factoryvalidation.Target{target}),
 	)
 }
 

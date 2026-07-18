@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -253,8 +254,63 @@ func factoryLayoutInternalFromAPI(layout *factoryapi.FactoryLayout) *interfaces.
 		Nodes:         factoryLayoutNodesInternalFromAPI(layout.Nodes),
 		Edges:         factoryLayoutEdgesInternalFromAPI(layout.Edges),
 		Groups:        factoryLayoutGroupsInternalFromAPI(layout.Groups),
+		Annotations:   factoryLayoutAnnotationsInternalFromAPI(layout.Annotations),
 		Viewport:      factoryLayoutViewportInternalFromAPI(layout.Viewport),
 		Preferences:   factoryLayoutPreferencesInternalFromAPI(layout.Preferences),
+	}
+}
+
+func factoryLayoutAnnotationsInternalFromAPI(annotations *[]factoryapi.FactoryLayoutAnnotation) []interfaces.FactoryLayoutAnnotationConfig {
+	if annotations == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryLayoutAnnotationConfig, len(*annotations))
+	for i, annotation := range *annotations {
+		values[i] = interfaces.FactoryLayoutAnnotationConfig{
+			ID:       annotation.Id,
+			Kind:     string(annotation.Kind),
+			Position: factoryLayoutAnnotationPositionInternalFromAPI(annotation.Position),
+			Size:     factoryLayoutAnnotationSizeInternalFromAPI(annotation.Size),
+			Note:     factoryLayoutNoteInternalFromAPI(annotation.Note),
+			Image:    factoryLayoutImageInternalFromAPI(annotation.Image),
+		}
+	}
+	return values
+}
+
+func factoryLayoutAnnotationPositionInternalFromAPI(position factoryapi.FactoryLayoutAnnotationPosition) interfaces.FactoryLayoutPointConfig {
+	return interfaces.FactoryLayoutPointConfig{X: float64(position.X), Y: float64(position.Y)}
+}
+
+func factoryLayoutAnnotationSizeInternalFromAPI(size *factoryapi.FactoryLayoutAnnotationSize) *interfaces.FactoryLayoutSizeConfig {
+	if size == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutSizeConfig{Width: float64(size.Width), Height: float64(size.Height)}
+}
+
+func factoryLayoutNoteInternalFromAPI(note *factoryapi.FactoryLayoutNote) *interfaces.FactoryLayoutNoteConfig {
+	if note == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutNoteConfig{
+		Title: stringValue(note.Title),
+		Body:  note.Body,
+		Tone:  string(note.Tone),
+	}
+}
+
+func factoryLayoutImageInternalFromAPI(image *factoryapi.FactoryLayoutImage) *interfaces.FactoryLayoutImageConfig {
+	if image == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutImageConfig{
+		Source: interfaces.FactoryLayoutImageSourceConfig{
+			Kind:      string(image.Source.Kind),
+			MediaType: string(image.Source.MediaType),
+			Data:      base64.StdEncoding.EncodeToString(image.Source.Data),
+		},
+		AlternativeText: image.AlternativeText,
 	}
 }
 
@@ -265,13 +321,24 @@ func factoryLayoutNodesInternalFromAPI(nodes *[]factoryapi.FactoryLayoutNode) []
 	values := make([]interfaces.FactoryLayoutNodeConfig, len(*nodes))
 	for i, node := range *nodes {
 		values[i] = interfaces.FactoryLayoutNodeConfig{
-			ID:       node.Id,
-			Position: factoryLayoutPointInternalFromAPI(node.Position),
-			Size:     factoryLayoutSizeInternalFromAPI(node.Size),
-			Locked:   node.Locked,
+			ID:         node.Id,
+			Position:   factoryLayoutPointInternalFromAPI(node.Position),
+			Size:       factoryLayoutSizeInternalFromAPI(node.Size),
+			Locked:     node.Locked,
+			EmptyState: factoryLayoutEmptyStateInternalFromAPI(node.EmptyState),
 		}
 	}
 	return values
+}
+
+func factoryLayoutEmptyStateInternalFromAPI(emptyState *factoryapi.FactoryLayoutEmptyState) *interfaces.FactoryLayoutEmptyStateConfig {
+	if emptyState == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutEmptyStateConfig{
+		Text:  stringValue(emptyState.Text),
+		Image: factoryLayoutImageInternalFromAPI(emptyState.Image),
+	}
 }
 
 func factoryLayoutEdgesInternalFromAPI(edges *[]factoryapi.FactoryLayoutEdge) []interfaces.FactoryLayoutEdgeConfig {

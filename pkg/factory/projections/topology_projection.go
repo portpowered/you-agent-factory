@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
@@ -24,19 +25,28 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 		return interfaces.InitialStructurePayload{}
 	}
 	runtimeConfig := interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...)
+	factoryConfig := runtimeFactoryConfig(runtimeConfig)
 	return interfaces.InitialStructurePayload{
 		Name:             runtimeFactoryName(runtimeConfig),
 		Version:          runtimeFactoryVersion(runtimeConfig),
-		Resources:        factoryResources(net.Resources),
+		Resources:        factoryResources(net.Resources, factoryConfig),
 		ResourceManifest: runtimeFactoryResourceManifest(runtimeConfig),
 		Constraints:      factoryConstraints(net, runtimeConfig),
 		Layout:           runtimeFactoryLayout(runtimeConfig),
 		Workers:          factoryWorkers(net.Transitions, runtimeConfig),
-		WorkTypes:        factoryWorkTypes(net.WorkTypes),
+		WorkTypes:        factoryWorkTypes(net.WorkTypes, factoryConfig),
 		Workstations:     factoryWorkstations(net.Transitions, runtimeConfig),
 		Places:           factoryPlaces(net.Places, net),
 		Relations:        topologyRelations(net.Transitions),
 	}
+}
+
+func runtimeFactoryConfig(runtimeConfig interfaces.RuntimeDefinitionLookup) *interfaces.FactoryConfig {
+	reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok {
+		return nil
+	}
+	return reader.FactoryConfig()
 }
 
 func runtimeFactoryName(runtimeConfig interfaces.RuntimeDefinitionLookup) string {
@@ -83,7 +93,13 @@ func runtimeFactoryLayout(runtimeConfig interfaces.RuntimeDefinitionLookup) *int
 	return cloned.Layout
 }
 
-func factoryResources(resources map[string]*state.ResourceDef) []interfaces.FactoryResource {
+func factoryResources(resources map[string]*state.ResourceDef, factoryConfig *interfaces.FactoryConfig) []interfaces.FactoryResource {
+	authoredByName := make(map[string]factoryresource.Config)
+	if factoryConfig != nil {
+		for _, resource := range factoryConfig.Resources {
+			authoredByName[resource.Name] = resource
+		}
+	}
 	ids := sortedKeys(resources)
 	out := make([]interfaces.FactoryResource, 0, len(ids))
 	for _, id := range ids {
@@ -91,8 +107,9 @@ func factoryResources(resources map[string]*state.ResourceDef) []interfaces.Fact
 		if resource == nil {
 			continue
 		}
+		authored := authoredByName[resource.Name]
 		out = append(out, interfaces.FactoryResource{
-			ID:       resource.ID,
+			ID:       interfaces.CanonicalFactoryGraphEntityID(authored.ID, resource.ID),
 			Name:     resource.Name,
 			Capacity: resource.Capacity,
 		})
@@ -100,7 +117,13 @@ func factoryResources(resources map[string]*state.ResourceDef) []interfaces.Fact
 	return out
 }
 
-func factoryWorkTypes(workTypes map[string]*state.WorkType) []interfaces.FactoryWorkType {
+func factoryWorkTypes(workTypes map[string]*state.WorkType, factoryConfig *interfaces.FactoryConfig) []interfaces.FactoryWorkType {
+	authoredByName := make(map[string]interfaces.WorkTypeConfig)
+	if factoryConfig != nil {
+		for _, workType := range factoryConfig.WorkTypes {
+			authoredByName[workType.Name] = workType
+		}
+	}
 	ids := sortedKeys(workTypes)
 	out := make([]interfaces.FactoryWorkType, 0, len(ids))
 	for _, id := range ids {
@@ -108,15 +131,21 @@ func factoryWorkTypes(workTypes map[string]*state.WorkType) []interfaces.Factory
 		if workType == nil {
 			continue
 		}
+		authored := authoredByName[workType.Name]
+		stateIDsByName := make(map[string]string, len(authored.States))
+		for _, stateDef := range authored.States {
+			stateIDsByName[stateDef.Name] = stateDef.ID
+		}
 		states := make([]interfaces.FactoryStateDefinition, 0, len(workType.States))
 		for _, stateDef := range workType.States {
 			states = append(states, interfaces.FactoryStateDefinition{
+				ID:       stateIDsByName[stateDef.Value],
 				Value:    stateDef.Value,
 				Category: string(stateDef.Category),
 			})
 		}
 		out = append(out, interfaces.FactoryWorkType{
-			ID:     workType.ID,
+			ID:     interfaces.CanonicalFactoryGraphEntityID(authored.ID, workType.ID),
 			Name:   workType.Name,
 			States: states,
 		})
@@ -160,12 +189,13 @@ func transitionWorkerIDs(transitions map[string]*petri.Transition) []string {
 
 func factoryWorkerWithUsage(workerID string, def *workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) interfaces.FactoryWorker {
 	return interfaces.FactoryWorker{
-		ID:            workerID,
+		ID:            interfaces.CanonicalFactoryGraphEntityID(def.ID, workerID),
 		Name:          workerID,
 		Provider:      interfaces.PermissivePublicFactoryWorkerProvider(def.ExecutorProvider),
 		ModelProvider: interfaces.PermissivePublicFactoryWorkerModelProvider(def.ModelProvider),
 		Model:         def.Model,
 		Config:        workerConfigWithUsage(def, workstations),
+		Resources:     append([]factoryresource.Config(nil), def.Resources...),
 	}
 }
 
@@ -211,12 +241,20 @@ func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig
 			continue
 		}
 		kind := interfaces.CanonicalPublicWorkstationKind(workstationconfig.Kind(transition, runtimeConfig))
+		authored, _ := workstationconfig.Workstation(transition, runtimeConfig)
+		workstationID := transition.ID
+		var resources []factoryresource.Config
+		if authored != nil {
+			workstationID = interfaces.CanonicalFactoryGraphEntityID(authored.ID, workstationID)
+			resources = append(resources, authored.Resources...)
+		}
 		out = append(out, interfaces.FactoryWorkstation{
-			ID:                transition.ID,
+			ID:                workstationID,
 			Name:              transition.Name,
 			WorkerID:          transition.WorkerType,
 			Kind:              kind,
 			Config:            workstationConfig(transition, runtimeConfig),
+			Resources:         resources,
 			InputPlaceIDs:     arcPlaceIDs(transition.InputArcs),
 			OutputPlaceIDs:    arcPlaceIDs(transition.OutputArcs),
 			ContinuePlaceIDs:  arcPlaceIDs(transition.ContinueArcs),

@@ -1,4 +1,223 @@
 import type { FactoryEvent } from "@you-agent-factory/client";
+import type { FactoryDefinition } from "@you-agent-factory/client";
+
+export type FactoryTopologyNodeKind =
+  | "resource"
+  | "worker"
+  | "work-state"
+  | "work-type"
+  | "workstation";
+
+export type FactoryTopologyConnectionKind =
+  | "worker-assignment"
+  | "worker-resource"
+  | "workstation-input"
+  | "workstation-on-continue"
+  | "workstation-on-failure"
+  | "workstation-on-rejection"
+  | "workstation-output"
+  | "workstation-resource"
+  | "work-type-state";
+
+export interface FactoryTopologyHandle {
+  id: string;
+  role: "source" | "target";
+}
+
+interface FactoryTopologyNodeBase {
+  entityId: string;
+  handles: FactoryTopologyHandle[];
+  id: string;
+  kind: FactoryTopologyNodeKind;
+  label: string;
+}
+
+export interface FactoryResourceTopologyNode extends FactoryTopologyNodeBase {
+  capacity: number;
+  kind: "resource";
+}
+
+export interface FactoryWorkerTopologyNode extends FactoryTopologyNodeBase {
+  kind: "worker";
+}
+
+export interface FactoryWorkTypeTopologyNode extends FactoryTopologyNodeBase {
+  kind: "work-type";
+}
+
+export interface FactoryWorkStateTopologyNode extends FactoryTopologyNodeBase {
+  category: NonNullable<FactoryDefinition["workTypes"]>[number]["states"][number]["type"];
+  kind: "work-state";
+  workTypeId: string;
+}
+
+export interface FactoryWorkstationTopologyNode
+  extends FactoryTopologyNodeBase {
+  kind: "workstation";
+}
+
+export type FactoryTopologyNode =
+  | FactoryResourceTopologyNode
+  | FactoryWorkerTopologyNode
+  | FactoryWorkStateTopologyNode
+  | FactoryWorkTypeTopologyNode
+  | FactoryWorkstationTopologyNode;
+
+export interface FactoryTopologyConnectionEndpoint {
+  handleId: string;
+  nodeId: string;
+}
+
+export interface FactoryTopologyConnection {
+  id: string;
+  kind: FactoryTopologyConnectionKind;
+  source: FactoryTopologyConnectionEndpoint;
+  target: FactoryTopologyConnectionEndpoint;
+}
+
+export interface FactoryTopologyProjectionIssue {
+  code: "DUPLICATE_ENTITY_ID" | "MISSING_FACTORY" | "UNRESOLVED_CONNECTION";
+  connectionKind?: FactoryTopologyConnectionKind;
+  id: string;
+  message: string;
+  nodeId?: string;
+  sourceReference?: string;
+  targetReference?: string;
+}
+
+export interface FactoryTopologyProjection {
+  connections: FactoryTopologyConnection[];
+  issues: FactoryTopologyProjectionIssue[];
+  nodes: FactoryTopologyNode[];
+  selectedTick: number;
+}
+
+export interface FactoryTopologyProjectionInput {
+  factory?: FactoryDefinition | undefined;
+  selectedTick: number;
+}
+
+export interface FactoryTopologyAtTickInput {
+  events: readonly FactoryEvent[];
+  tick: number;
+}
+
+export interface FactoryActiveDispatchEvidence {
+  id: string;
+  resourceNames?: readonly string[];
+  startedTick: number;
+  transitionId: string;
+  workIds: readonly string[];
+}
+
+export interface FactoryActiveDispatchProjection {
+  id: string;
+  resourceIds: string[];
+  startedTick: number;
+  transitionId: string;
+  workIds: string[];
+  workerId?: string;
+  workstationId?: string;
+  workstationNodeId?: string;
+}
+
+export interface FactoryResourceOccupancyProjection {
+  availableQuantity?: number;
+  capacity: number;
+  evidence: "known" | "unavailable";
+  occupiedQuantity?: number;
+  occupiedTokenIds?: string[];
+  resourceId: string;
+  resourceNodeId: string;
+}
+
+export interface FactoryActivityProjectionIssue {
+  code:
+    | "RESOURCE_CAPACITY_EXCEEDED"
+    | "UNRESOLVED_RESOURCE"
+    | "UNRESOLVED_WORKER"
+    | "UNRESOLVED_WORKSTATION";
+  dispatchId?: string;
+  id: string;
+  message: string;
+  reference?: string;
+}
+
+export interface FactoryActivityProjection {
+  activeDispatches: FactoryActiveDispatchProjection[];
+  activeWorkstationIds: string[];
+  issues: FactoryActivityProjectionIssue[];
+  resourceOccupancy: FactoryResourceOccupancyProjection[];
+  selectedTick: number;
+}
+
+export interface FactoryActivityProjectionInput {
+  activeDispatches: readonly FactoryActiveDispatchEvidence[];
+  factory?: FactoryDefinition | undefined;
+  selectedTick: number;
+}
+
+export interface FactoryActivityAtTickInput {
+  events: readonly FactoryEvent[];
+  tick: number;
+}
+
+export type FactoryWorkStateCategory =
+  | "FAILED"
+  | "INITIAL"
+  | "PROCESSING"
+  | "TERMINAL";
+
+export type FactoryWorkProgressCategory =
+  | "failed"
+  | "completed"
+  | "active"
+  | "queued"
+  | "unclassified";
+
+export interface FactoryWorkProgressStateEvidence {
+  category?: FactoryWorkStateCategory;
+  id?: string;
+  name?: string;
+}
+
+export interface FactoryWorkProgressEvidence {
+  id: string;
+  state?: FactoryWorkProgressStateEvidence;
+  workTypeId?: string;
+}
+
+export interface FactoryWorkProgressItem {
+  id: string;
+  stateId?: string;
+  stateName?: string;
+  workTypeId?: string;
+}
+
+export type FactoryWorkProgressCounts = Record<FactoryWorkProgressCategory, number>;
+
+export interface FactoryWorkProgressProjection {
+  active: FactoryWorkProgressItem[];
+  completed: FactoryWorkProgressItem[];
+  counts: FactoryWorkProgressCounts;
+  failed: FactoryWorkProgressItem[];
+  queued: FactoryWorkProgressItem[];
+  selectedTick: number;
+  total: number;
+  unclassified: FactoryWorkProgressItem[];
+}
+
+export interface FactoryWorkProgressProjectionInput {
+  activeWorkIds: readonly string[];
+  factory?: FactoryDefinition | undefined;
+  selectedTick: number;
+  works: readonly FactoryWorkProgressEvidence[];
+}
+
+export interface FactoryWorkProgressAtTickInput {
+  events: readonly FactoryEvent[];
+  tick: number;
+}
 
 export type FactoryReplaySelection =
   | { mode: "current" }
@@ -79,3 +298,27 @@ export function projectFactoryWorldAtTick<State, World>(
     tick: number;
   },
 ): FactoryReplayResult<State, World>;
+
+export function projectFactoryTopology(
+  input: FactoryTopologyProjectionInput,
+): FactoryTopologyProjection;
+
+export function projectFactoryTopologyAtTick(
+  input: FactoryTopologyAtTickInput,
+): FactoryTopologyProjection;
+
+export function projectFactoryActivity(
+  input: FactoryActivityProjectionInput,
+): FactoryActivityProjection;
+
+export function projectFactoryActivityAtTick(
+  input: FactoryActivityAtTickInput,
+): FactoryActivityProjection;
+
+export function projectFactoryWorkProgress(
+  input: FactoryWorkProgressProjectionInput,
+): FactoryWorkProgressProjection;
+
+export function projectFactoryWorkProgressAtTick(
+  input: FactoryWorkProgressAtTickInput,
+): FactoryWorkProgressProjection;

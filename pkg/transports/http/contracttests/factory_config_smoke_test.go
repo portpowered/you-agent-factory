@@ -239,6 +239,32 @@ func TestFactoryConfigSmoke_OpenAPIFactorySchemaRejectsLegacySnakeCasePublicFiel
 	t.Fatalf("expected schema rejection to reference missing canonical camelCase fields, got %v", err)
 }
 
+func TestFactoryConfigSmoke_OpenAPIFactorySchemaRejectsZeroAnnotationSize(t *testing.T) {
+	factorySchema := loadFactorySchemaForSmoke(t)
+	payloadJSON := `{
+		"name":"layout-factory",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":"note-1","kind":"NOTE","position":{"x":0,"y":0},"size":{"width":0,"height":80},
+			"note":{"body":"literal note","tone":"NEUTRAL"}
+		}]}
+	}`
+	var payload any
+	if err := json.Unmarshal([]byte(payloadJSON), &payload); err != nil {
+		t.Fatalf("unmarshal layout factory payload: %v", err)
+	}
+	if err := factorySchema.VisitJSON(payload); err == nil {
+		t.Fatal("OpenAPI Factory schema accepted zero annotation width, want exclusive lower-bound rejection")
+	}
+
+	positivePayload := strings.Replace(payloadJSON, `"width":0`, `"width":0.5`, 1)
+	if err := json.Unmarshal([]byte(positivePayload), &payload); err != nil {
+		t.Fatalf("unmarshal positive layout factory payload: %v", err)
+	}
+	if err := factorySchema.VisitJSON(payload); err != nil {
+		t.Fatalf("OpenAPI Factory schema rejected positive annotation width: %v", err)
+	}
+}
+
 func loadFactorySchemaForSmoke(t *testing.T) *openapi3.Schema {
 	t.Helper()
 

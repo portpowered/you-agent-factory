@@ -2,7 +2,10 @@ import { QueryClient } from "@tanstack/react-query";
 
 import type { DashboardSnapshot } from "../../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
-import type { WorldState } from "../../../timeline/state/factoryTimelineStore";
+import {
+  emptyHostedFactoryReplayProjection,
+  type WorldState,
+} from "../../../timeline/state/factoryTimelineStore";
 
 export const SEEDED_SNAPSHOT: DashboardSnapshot = {
   factory_state: "IDLE",
@@ -27,6 +30,7 @@ export const SEEDED_SNAPSHOT: DashboardSnapshot = {
 export function timelineSnapshot(snapshot: DashboardSnapshot): WorldState {
   return {
     ...snapshot,
+    factoryReplay: emptyHostedFactoryReplayProjection(snapshot.tick_count),
     relationsByWorkID: {},
     tracesByWorkID: {},
     workstationRequestsByDispatchID: {},

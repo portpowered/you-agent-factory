@@ -4840,6 +4840,8 @@ export interface components {
       /** @description Human-readable explanation suitable for dialogs and summaries. */
       message: string;
       subject: components["schemas"]["FactoryValidationSubject"];
+      /** @description Canonical Factory definition path for the affected value when one is available. */
+      path?: string;
     };
     /**
      * @example {
@@ -5055,6 +5057,44 @@ export interface components {
       /** @description Authored node height. */
       height: number;
     };
+    /** @description Extensible discriminated image-source shape. Version 1 supports only embedded raster data. */
+    FactoryLayoutImageSource: {
+      /**
+       * @description Source variant discriminator. EMBEDDED carries portable base64 raster data.
+       * @enum {string}
+       */
+      kind: FactoryLayoutImageSourceKind;
+      /**
+       * @description Declared media type for the embedded raster.
+       * @enum {string}
+       */
+      mediaType: FactoryLayoutImageSourceMediaType;
+      /**
+       * Format: byte
+       * @description Strict padded base64 payload for the embedded raster source, limited to 2 MiB after decoding.
+       */
+      data: string;
+    };
+    /** @description Inert embedded-raster image content with required alternative text. */
+    FactoryLayoutImage: {
+      source: components["schemas"]["FactoryLayoutImageSource"];
+      /** @description Literal alternative text for the embedded image. */
+      alternativeText: string;
+    };
+    /** @description Inert presentation content for one canonical topology node when it has no live activity. It is definition metadata only and does not create events or runtime behavior. */
+    FactoryLayoutEmptyState: {
+      /** @description Literal empty-state text. It is not rendered as HTML or Markdown. */
+      text?: string;
+      image?: components["schemas"]["FactoryLayoutImage"];
+    } & (
+      | {
+          /** @description Literal empty-state text. It is not rendered as HTML or Markdown. */
+          text: string;
+        }
+      | {
+          image: components["schemas"]["FactoryLayoutImage"];
+        }
+    );
     /** @description Portable graph node layout keyed by canonical graph node id. */
     FactoryLayoutNode: {
       /** @description Canonical graph node id such as workstation:<workstationId>. */
@@ -5063,6 +5103,7 @@ export interface components {
       size?: components["schemas"]["FactoryLayoutSize"];
       /** @description Optional authored node lock flag for future editor affordances. */
       locked?: boolean;
+      emptyState?: components["schemas"]["FactoryLayoutEmptyState"];
     };
     /** @description Portable graph edge layout keyed by canonical graph edge id. */
     FactoryLayoutEdge: {
@@ -5099,6 +5140,65 @@ export interface components {
       /** @description Optional authored group lock flag for future editor affordances. */
       locked?: boolean;
     };
+    /** @description Explicit finite annotation position in canvas units. Each coordinate is bounded to keep portable layout metadata safe to render. */
+    FactoryLayoutAnnotationPosition: {
+      /** @description Horizontal canvas coordinate between -100,000 and 100,000 inclusive. */
+      x: number;
+      /** @description Vertical canvas coordinate between -100,000 and 100,000 inclusive. */
+      y: number;
+    };
+    /** @description Optional finite annotation dimensions in canvas units. Image annotations require this size; note annotations may omit it. */
+    FactoryLayoutAnnotationSize: {
+      /** @description Positive authored width no greater than 10,000 canvas units. */
+      width: number;
+      /** @description Positive authored height no greater than 10,000 canvas units. */
+      height: number;
+    };
+    /**
+     * @description Presentation-only tone for a note annotation.
+     * @enum {string}
+     */
+    FactoryLayoutNoteTone: FactoryLayoutNoteTone;
+    /** @description Literal plain-text note content. Line breaks are preserved as authored text and are not interpreted as Markdown or HTML. */
+    FactoryLayoutNote: {
+      /** @description Optional literal plain-text note title. */
+      title?: string;
+      /** @description Required literal plain-text note body. */
+      body: string;
+      tone: components["schemas"]["FactoryLayoutNoteTone"];
+    };
+    /**
+     * @description The inert annotation content variant.
+     * @enum {string}
+     */
+    FactoryLayoutAnnotationKind: FactoryLayoutAnnotationKind;
+    /** @description Inert positioned canvas annotation. Its kind selects either note or image content; annotations never identify graph nodes or edges, and connection-like fields are invalid. */
+    FactoryLayoutAnnotation: {
+      /** @description Stable annotation identifier unique within this layout. */
+      id: string;
+      kind: components["schemas"]["FactoryLayoutAnnotationKind"];
+      position: components["schemas"]["FactoryLayoutAnnotationPosition"];
+      size?: components["schemas"]["FactoryLayoutAnnotationSize"];
+      note?: components["schemas"]["FactoryLayoutNote"];
+      image?: components["schemas"]["FactoryLayoutImage"];
+    } & (
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: FactoryLayoutAnnotationOneOf0Kind;
+          position: components["schemas"]["FactoryLayoutAnnotationPosition"];
+          size?: components["schemas"]["FactoryLayoutAnnotationSize"];
+          note: components["schemas"]["FactoryLayoutNote"];
+        }
+      | {
+          id: string;
+          /** @enum {string} */
+          kind: FactoryLayoutAnnotationOneOf1Kind;
+          position: components["schemas"]["FactoryLayoutAnnotationPosition"];
+          size: components["schemas"]["FactoryLayoutAnnotationSize"];
+          image: components["schemas"]["FactoryLayoutImage"];
+        }
+    );
     /** @description Shared authored graph camera position. */
     FactoryLayoutViewport: {
       /** @description Authored viewport horizontal offset. */
@@ -5129,6 +5229,8 @@ export interface components {
       edges?: components["schemas"]["FactoryLayoutEdge"][];
       /** @description Optional flat background groups keyed independently from topology. */
       groups?: components["schemas"]["FactoryLayoutGroup"][];
+      /** @description Optional inert positioned notes and embedded-raster images that decorate the canvas without becoming graph topology. */
+      annotations?: components["schemas"]["FactoryLayoutAnnotation"][];
       viewport?: components["schemas"]["FactoryLayoutViewport"];
       preferences?: components["schemas"]["FactoryLayoutPreferences"];
     };
@@ -7959,6 +8061,44 @@ export const WorkTypeHandlingBehavior = {
 } as const;
 export type WorkTypeHandlingBehavior =
   (typeof WorkTypeHandlingBehavior)[keyof typeof WorkTypeHandlingBehavior];
+export const FactoryLayoutImageSourceKind = {
+  EMBEDDED: "EMBEDDED",
+} as const;
+export type FactoryLayoutImageSourceKind =
+  (typeof FactoryLayoutImageSourceKind)[keyof typeof FactoryLayoutImageSourceKind];
+export const FactoryLayoutImageSourceMediaType = {
+  image_png: "image/png",
+  image_jpeg: "image/jpeg",
+  image_webp: "image/webp",
+} as const;
+export type FactoryLayoutImageSourceMediaType =
+  (typeof FactoryLayoutImageSourceMediaType)[keyof typeof FactoryLayoutImageSourceMediaType];
+export const FactoryLayoutNoteTone = {
+  NEUTRAL: "NEUTRAL",
+  ACCENT: "ACCENT",
+  INFO: "INFO",
+  SUCCESS: "SUCCESS",
+  WARNING: "WARNING",
+  DANGER: "DANGER",
+} as const;
+export type FactoryLayoutNoteTone =
+  (typeof FactoryLayoutNoteTone)[keyof typeof FactoryLayoutNoteTone];
+export const FactoryLayoutAnnotationKind = {
+  NOTE: "NOTE",
+  IMAGE: "IMAGE",
+} as const;
+export type FactoryLayoutAnnotationKind =
+  (typeof FactoryLayoutAnnotationKind)[keyof typeof FactoryLayoutAnnotationKind];
+export const FactoryLayoutAnnotationOneOf0Kind = {
+  NOTE: "NOTE",
+} as const;
+export type FactoryLayoutAnnotationOneOf0Kind =
+  (typeof FactoryLayoutAnnotationOneOf0Kind)[keyof typeof FactoryLayoutAnnotationOneOf0Kind];
+export const FactoryLayoutAnnotationOneOf1Kind = {
+  IMAGE: "IMAGE",
+} as const;
+export type FactoryLayoutAnnotationOneOf1Kind =
+  (typeof FactoryLayoutAnnotationOneOf1Kind)[keyof typeof FactoryLayoutAnnotationOneOf1Kind];
 export const FactoryLayoutPreferencesDirection = {
   UP: "UP",
   DOWN: "DOWN",

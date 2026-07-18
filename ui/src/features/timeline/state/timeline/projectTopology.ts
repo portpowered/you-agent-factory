@@ -1,3 +1,4 @@
+import type { FactoryTopologyProjection } from "../../../../../../packages/factory-replay/src/index.js";
 import type {
   DashboardPlaceKind,
   DashboardSnapshot,
@@ -15,10 +16,21 @@ type FactoryWorkstationShape = NonNullable<
 
 export function projectTopology(
   topology: ProjectedInitialStructure,
+  sharedTopology?: FactoryTopologyProjection,
 ): DashboardSnapshot["topology"] {
-  const workstations = [...(topology.workstations ?? [])].sort((left, right) =>
-    left.id.localeCompare(right.id),
-  );
+  const sharedWorkstationIDs = sharedTopology
+    ? new Set(
+        sharedTopology.nodes.flatMap((node) =>
+          node.kind === "workstation" ? [node.entityId] : [],
+        ),
+      )
+    : undefined;
+  const workstations = [...(topology.workstations ?? [])]
+    .filter(
+      (workstation) =>
+        !sharedWorkstationIDs || sharedWorkstationIDs.has(workstation.id),
+    )
+    .sort((left, right) => left.id.localeCompare(right.id));
   const placesByID = Object.fromEntries(
     (topology.places ?? []).map((place) => [place.id, place]),
   );
@@ -30,7 +42,12 @@ export function projectTopology(
   );
 
   return {
-    edges: buildTopologyEdges(workstations, placesByID, workTypeIDs),
+    edges: buildTopologyEdges(
+      workstations,
+      placesByID,
+      workTypeIDs,
+      sharedTopology,
+    ),
     submit_work_types: projectSubmitWorkTypes(topology),
     workstation_node_ids: workstations.map((workstation) => workstation.id),
     workstation_nodes_by_id: Object.fromEntries(
@@ -75,6 +92,7 @@ function buildTopologyEdges(
   workstations: FactoryWorkstationShape[],
   placesByID: Record<string, FactoryPlace>,
   workTypeIDs: Set<string>,
+  sharedTopology?: FactoryTopologyProjection,
 ): DashboardWorkstationEdge[] {
   const inputsByPlace = new Map<string, string[]>();
   for (const workstation of workstations) {
@@ -102,6 +120,7 @@ function buildTopologyEdges(
         inputsByPlace,
         placesByID,
         seen,
+        sharedTopology,
       ),
       ...buildTopologyEdgesForPlaces(
         workstation.id,
@@ -110,6 +129,7 @@ function buildTopologyEdges(
         inputsByPlace,
         placesByID,
         seen,
+        sharedTopology,
       ),
       ...buildTopologyEdgesForPlaces(
         workstation.id,
@@ -118,6 +138,7 @@ function buildTopologyEdges(
         inputsByPlace,
         placesByID,
         seen,
+        sharedTopology,
       ),
       ...buildTopologyEdgesForPlaces(
         workstation.id,
@@ -126,6 +147,7 @@ function buildTopologyEdges(
         inputsByPlace,
         placesByID,
         seen,
+        sharedTopology,
       ),
     );
   }
@@ -140,6 +162,7 @@ function buildTopologyEdgesForPlaces(
   inputsByPlace: Map<string, string[]>,
   placesByID: Record<string, FactoryPlace>,
   seen: Set<string>,
+  sharedTopology?: FactoryTopologyProjection,
 ): DashboardWorkstationEdge[] {
   return uniqueSorted(placeIDs).flatMap((placeID) => {
     const place = placesByID[placeID];
@@ -148,6 +171,18 @@ function buildTopologyEdgesForPlaces(
     }
 
     return (inputsByPlace.get(placeID) ?? []).flatMap((destID) => {
+      if (
+        sharedTopology &&
+        !sharedTopologyConnectsWorkstations(
+          sharedTopology,
+          sourceID,
+          destID,
+          place,
+          outcome,
+        )
+      ) {
+        return [];
+      }
       const edgeID = `${sourceID}:${destID}:${placeID}:${outcome}`;
       if (seen.has(edgeID)) {
         return [];
@@ -168,6 +203,51 @@ function buildTopologyEdgesForPlaces(
       ];
     });
   });
+}
+
+function sharedTopologyConnectsWorkstations(
+  topology: FactoryTopologyProjection,
+  sourceID: string,
+  targetID: string,
+  place: FactoryPlace,
+  outcome: NonNullable<DashboardWorkstationEdge["outcome_kind"]>,
+): boolean {
+  const workType = topology.nodes.find(
+    (node) => node.kind === "work-type" && node.label === place.type_id,
+  );
+  const workState = topology.nodes.find(
+    (node) =>
+      node.kind === "work-state" &&
+      node.workTypeId === workType?.entityId &&
+      node.label === place.state,
+  );
+  if (!workState) {
+    return false;
+  }
+  const outputKind =
+    outcome === "continue"
+      ? "workstation-on-continue"
+      : outcome === "failed"
+        ? "workstation-on-failure"
+        : outcome === "rejected"
+          ? "workstation-on-rejection"
+          : "workstation-output";
+  const sourceNodeID = `workstation:${sourceID}`;
+  const targetNodeID = `workstation:${targetID}`;
+  return (
+    topology.connections.some(
+      (connection) =>
+        connection.kind === outputKind &&
+        connection.source.nodeId === sourceNodeID &&
+        connection.target.nodeId === workState.id,
+    ) &&
+    topology.connections.some(
+      (connection) =>
+        connection.kind === "workstation-input" &&
+        connection.source.nodeId === workState.id &&
+        connection.target.nodeId === targetNodeID,
+    )
+  );
 }
 
 function projectWorkstation(

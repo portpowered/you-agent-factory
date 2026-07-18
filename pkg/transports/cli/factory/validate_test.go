@@ -3,11 +3,172 @@ package factory
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestValidate_EnforcesAuthoredPortableLayoutBoundary(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range portableLayoutBoundaryCases() {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			factory := test.factory
+			if factory == "" {
+				factory = portableLayoutFactoryJSON(
+					test.data,
+					test.width,
+					test.alt,
+					test.positionExtra,
+					test.sourceExtra,
+				)
+			}
+			path := writeValidateFixture(t, factory)
+
+			var out strings.Builder
+			err := Validate(ValidateConfig{Path: path, Output: &out})
+			if test.wantPath == "" {
+				if err != nil {
+					t.Fatalf("Validate valid annotated factory: %v", err)
+				}
+				if !strings.Contains(out.String(), "Factory validation passed.") {
+					t.Fatalf("output = %q, want validation success", out.String())
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("Validate invalid annotated factory error = nil, want path %q", test.wantPath)
+			}
+			if !strings.Contains(err.Error(), test.wantPath) {
+				t.Fatalf("Validate error = %q, want field path %q", err, test.wantPath)
+			}
+		})
+	}
+}
+
+type portableLayoutBoundaryCase struct {
+	name          string
+	factory       string
+	data          string
+	width         int
+	alt           string
+	positionExtra string
+	sourceExtra   string
+	wantPath      string
+}
+
+func portableLayoutBoundaryCases() []portableLayoutBoundaryCase {
+	return []portableLayoutBoundaryCase{
+		{name: "valid annotated factory", data: "AQID", width: 120, alt: "diagram"},
+		{name: "valid note annotation", factory: portableLayoutNoteFactoryJSON("note-1", "safe")},
+		{
+			name:     "note rejects null image field",
+			factory:  strings.Replace(portableLayoutNoteFactoryJSON("note-1", "safe"), `"note":`, `"image":null,"note":`, 1),
+			wantPath: "layout.annotations[0].image",
+		},
+		{
+			name:     "image rejects null note field",
+			factory:  strings.Replace(portableLayoutFactoryJSON("AQID", 120, "diagram", "", ""), `"image":`, `"note":null,"image":`, 1),
+			wantPath: "layout.annotations[0].note",
+		},
+		{
+			name:     "non-strict base64",
+			data:     "AQI=\n",
+			width:    120,
+			alt:      "diagram",
+			wantPath: "layout.annotations[0].image.source.data",
+		},
+		{
+			name:     "empty alternative text",
+			data:     "AQID",
+			width:    120,
+			wantPath: "layout.annotations[0].image.alternativeText",
+		},
+		{
+			name:     "whitespace-only alternative text",
+			data:     "AQID",
+			width:    120,
+			alt:      " \t ",
+			wantPath: "layout.annotations[0].image.alternativeText",
+		},
+		{
+			name:     "whitespace-only note body",
+			factory:  portableLayoutNoteFactoryJSON("note-1", " \n\t "),
+			wantPath: "layout.annotations[0].note.body",
+		},
+		{
+			name:     "whitespace-only empty-state text",
+			factory:  portableLayoutNodeFactoryJSON("workstation:review", " \n\t "),
+			wantPath: "layout.nodes[0].emptyState.text",
+		},
+		{
+			name:     "blank annotation id",
+			factory:  strings.Replace(portableLayoutFactoryJSON("AQID", 120, "diagram", "", ""), `"id":"image-1"`, `"id":""`, 1),
+			wantPath: "layout.annotations[0].id",
+		},
+		{
+			name:     "whitespace-only canonical node id",
+			factory:  portableLayoutNodeFactoryJSON("   ", "Nothing here"),
+			wantPath: "layout.nodes[0].id",
+		},
+		{
+			name:     "zero image width",
+			data:     "AQID",
+			width:    0,
+			alt:      "diagram",
+			wantPath: "layout.annotations[0].size.width",
+		},
+		{
+			name:        "remote URL source field",
+			data:        "AQID",
+			width:       120,
+			alt:         "diagram",
+			sourceExtra: `,"url":"https://example.invalid/image.png"`,
+			wantPath:    "layout.annotations[0].image.source.url",
+		},
+		{
+			name:          "nested connection reference",
+			data:          "AQID",
+			width:         120,
+			alt:           "diagram",
+			positionExtra: `,"connection":{"nodeId":"workstation:review"}`,
+			wantPath:      "layout.annotations[0].position.connection",
+		},
+	}
+}
+
+func portableLayoutFactoryJSON(data string, width int, alternativeText, positionExtra, sourceExtra string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-cli",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":"image-1","kind":"IMAGE","position":{"x":0,"y":0%s},"size":{"width":%d,"height":80},
+			"image":{"alternativeText":%q,"source":{"kind":"EMBEDDED","mediaType":"image/png","data":%q%s}}
+		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
+	}`, positionExtra, width, alternativeText, data, sourceExtra)
+}
+
+func portableLayoutNoteFactoryJSON(id, body string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-cli",
+		"layout":{"schemaVersion":1,"annotations":[{
+			"id":%q,"kind":"NOTE","position":{"x":0,"y":0},
+			"note":{"body":%q,"tone":"NEUTRAL"}
+		}],"viewport":{"x":0,"y":0,"zoom":1},"preferences":{"direction":"RIGHT"}}
+	}`, id, body)
+}
+
+func portableLayoutNodeFactoryJSON(id, text string) string {
+	return fmt.Sprintf(`{
+		"name":"layout-cli",
+		"layout":{"schemaVersion":1,"nodes":[{
+			"id":%q,"position":{"x":0,"y":0},"emptyState":{"text":%q}
+		}]}
+	}`, id, text)
+}
 
 func TestValidate_HumanOutputShowsNewTaxonomyAndCompatibilityFinding(t *testing.T) {
 	path := writeValidateFixture(t, newTaxonomyFactoryJSON())

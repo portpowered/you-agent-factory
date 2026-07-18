@@ -75,10 +75,11 @@ func withExportImportPortableLayout(t *testing.T, canonicalFactoryJSON []byte) [
 	payload["layout"] = map[string]any{
 		"schemaVersion": 1,
 		"nodes": []map[string]any{{
-			"id":       "workstation:step-one",
-			"position": map[string]any{"x": 128, "y": 256},
-			"size":     map[string]any{"width": 320, "height": 180},
-			"locked":   true,
+			"id":         "workstation:step-one",
+			"position":   map[string]any{"x": 128, "y": 256},
+			"size":       map[string]any{"width": 320, "height": 180},
+			"locked":     true,
+			"emptyState": map[string]any{"text": "No work is waiting."},
 		}},
 		"edges": []map[string]any{{
 			"id":        "workstation-output:workstation:step-one->work-state:task:processing",
@@ -90,6 +91,31 @@ func withExportImportPortableLayout(t *testing.T, canonicalFactoryJSON []byte) [
 			"nodeIds": []string{"workstation:step-one"},
 			"bounds":  map[string]any{"x": 100, "y": 200, "width": 400, "height": 240},
 		}},
+		"annotations": []map[string]any{
+			{
+				"id":       "portable-note",
+				"kind":     "NOTE",
+				"position": map[string]any{"x": -80, "y": 120},
+				"note": map[string]any{
+					"body": "Portable guidance\nremains literal.",
+					"tone": "INFO",
+				},
+			},
+			{
+				"id":       "portable-image",
+				"kind":     "IMAGE",
+				"position": map[string]any{"x": 560, "y": 120},
+				"size":     map[string]any{"width": 160, "height": 90},
+				"image": map[string]any{
+					"source": map[string]any{
+						"kind":      "EMBEDDED",
+						"mediaType": "image/png",
+						"data":      "AQID",
+					},
+					"alternativeText": "Portable workflow illustration",
+				},
+			},
+		},
 		"viewport":    map[string]any{"x": 40, "y": 60, "zoom": 0.9},
 		"preferences": map[string]any{"direction": "RIGHT"},
 	}

@@ -330,7 +330,6 @@ test("prototype-colliding rule IDs advance with own cursor state and determinist
     assert.deepEqual(batches.slice(rerunBatchStart), firstRunBatches);
   }
 });
-
 test("invalid lifecycle commands and unsupported configuration emit no events", async () => {
   const { batches, emulator } = harness();
 
