@@ -20,6 +20,10 @@ event bound.
 This package intentionally does not own replay history or depend on browser
 timers, React, Zustand, dashboard state, or transport code.
 
+`@you-agent-factory/client` is a peer dependency because it supplies the
+canonical Factory event and recording types. Consumers install both published
+packages; the emulator package does not embed a checkout-relative dependency.
+
 `createFactoryEmulator({ initialState, calculateTick, sink })` provides the
 small logical-tick boundary used by an emulator host. It calculates a complete
 batch from a detached committed-state snapshot, waits for `sink.write`, and
