@@ -1,3 +1,19 @@
+export {
+  factoryDispatchOverlayId,
+  factoryWorkProjectionId,
+  projectFactoryActivity,
+} from "./activity.js";
+export type {
+  FactoryActiveDispatchEvidence,
+  FactoryActivityAtTickInput,
+  FactoryActivityProjection,
+  FactoryActivityProjectionInput,
+  FactoryActivityProjectionIssue,
+  FactoryDispatchOverlayEvidenceStatus,
+  FactoryDispatchOverlayProjection,
+  FactoryDispatchRouteEvidence,
+} from "./activity-contract.js";
+export { projectFactoryActivityAtTick } from "./activity-replay.js";
 export { projectFactoryLoad } from "./load.js";
 export type {
   FactoryActiveResourceClaimsEvidence,

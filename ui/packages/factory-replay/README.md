@@ -43,6 +43,14 @@ is reported as unavailable rather than fabricated as zero; dangling,
 contradictory, invalid-capacity, and over-capacity evidence remains visible
 through deterministic structured issues.
 
+Use `projectFactoryActivityAtTick` to reconstruct active Dispatch overlays
+after all canonically ordered events at a selected tick, or
+`projectFactoryActivity` with explicit selected-tick evidence. Overlays use
+stable Dispatch and Work projection IDs, reference known worker, workstation,
+resource, and topology-connection IDs, and expose unavailable Work, resource,
+or route evidence without inventing endpoints. Completion, interruption, and
+terminal reconciliation remove activity and release occupancy.
+
 ## Distribution verification
 
 Run `bun run verify` from this directory to typecheck and test the package,
