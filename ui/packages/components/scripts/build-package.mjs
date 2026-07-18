@@ -67,7 +67,11 @@ async function copyStyleDependency(sourcePath, copiedPaths = new Set()) {
 
   await Promise.all(
     referencedPaths
-      .filter((referencedPath) => !/^(?:[a-z]+:|data:|#)/i.test(referencedPath))
+      .filter(
+        (referencedPath) =>
+          referencedPath.startsWith(".") &&
+          !/^(?:[a-z]+:|data:|#)/i.test(referencedPath),
+      )
       .map((referencedPath) =>
         copyStyleDependency(
           path.resolve(

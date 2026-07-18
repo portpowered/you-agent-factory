@@ -9,6 +9,7 @@ export const COMPONENT_CATEGORY_EXPORT_PATHS = [
   "overlays",
   "charts",
   "graphs",
+  "visualizers",
   "recipes",
   "icons",
   "utilities",

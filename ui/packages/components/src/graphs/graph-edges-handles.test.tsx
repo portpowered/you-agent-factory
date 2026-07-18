@@ -1,16 +1,15 @@
 // @vitest-environment happy-dom
 
 import { Position, ReactFlowProvider } from "@xyflow/react";
-import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
-
 import {
   GraphEdge,
   GraphNodeButton,
+  type GraphNodeHandle,
   GraphNodeHandleBadge,
   GraphNodeShell,
-  type GraphNodeHandle,
 } from "@you-agent-factory/components/graphs";
+import type { ReactElement } from "react";
+import { describe, expect, it } from "vitest";
 import { renderPackageComponent, screen } from "../testing/render";
 
 const sourceHandle: GraphNodeHandle = {
@@ -103,8 +102,12 @@ describe("graph edges and handles", () => {
       </>,
     );
 
-    expect(screen.getByLabelText("Input connection")).toBeInTheDocument();
-    expect(screen.getByLabelText("Output connection")).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Input connection" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("img", { name: "Output connection" }),
+    ).toBeInTheDocument();
     expect(
       document.querySelector('[data-node-handle-badge="input-target"]'),
     ).toHaveAttribute("data-node-handle-tone", "input");
@@ -129,8 +132,12 @@ describe("graph edges and handles", () => {
     const leftRail = shell?.querySelector('[data-node-handle-rail="left"]');
     const rightRail = shell?.querySelector('[data-node-handle-rail="right"]');
 
-    expect(leftRail?.querySelector('[data-node-handle-badge="input-target"]')).toBeInTheDocument();
-    expect(rightRail?.querySelector('[data-node-handle-badge="output-source"]')).toBeInTheDocument();
+    expect(
+      leftRail?.querySelector('[data-node-handle-badge="input-target"]'),
+    ).toBeInTheDocument();
+    expect(
+      rightRail?.querySelector('[data-node-handle-badge="output-source"]'),
+    ).toBeInTheDocument();
     expect(shell).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("Input connection")).toBeInTheDocument();
     expect(screen.getByLabelText("Output connection")).toBeInTheDocument();

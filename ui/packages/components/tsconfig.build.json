@@ -30,6 +30,7 @@
     "src/overlays/index.ts",
     "src/charts/index.ts",
     "src/graphs/index.ts",
+    "src/visualizers/index.ts",
     "src/recipes/index.ts",
     "src/icons/index.ts",
     "src/utilities/index.ts",

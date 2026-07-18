@@ -66,6 +66,7 @@ main { display: grid; gap: 1rem; margin: 0 auto; max-width: 72rem; padding: 1rem
 .consumer-chart { min-height: 16rem; min-width: 0; }
 .consumer-graph { min-height: 13rem; min-width: 0; padding: 1rem; }
 .consumer-node { min-height: 9rem; }
+.consumer-topology { height: 22rem; min-width: 0; }
 `,
   "src/main.tsx": `import React, { useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -75,6 +76,7 @@ import { SurfacePanel } from "@you-agent-factory/components/layout";
 import { AlertPanel, AlertPanelText, AlertPanelTitle } from "@you-agent-factory/components/feedback";
 import { ChartContainer, type ChartConfig } from "@you-agent-factory/components/charts";
 import { GraphViewportSurface, type GraphEdgeWaypoint } from "@you-agent-factory/components/graphs";
+import { FactoryTopologyReplay, type FactoryTopologyReplayMessages, type FactoryTopologyReplayProjection } from "@you-agent-factory/components/visualizers";
 import { COMPONENTS_CATEGORY as ICONS_CATEGORY, type ComponentsCategory as IconsCategory } from "@you-agent-factory/components/icons";
 import { cn } from "@you-agent-factory/components/utilities";
 import { COMPONENTS_CATEGORY as TOKENS_CATEGORY, type ComponentsCategory as TokensCategory } from "@you-agent-factory/components/tokens";
@@ -84,6 +86,38 @@ const chartData = [18, 42, 31, 64];
 const chartConfig: ChartConfig = { throughput: { color: "var(--color-primary)", label: "Throughput" } };
 const graphRoute: GraphEdgeWaypoint[] = [{ x: 20, y: 70 }, { x: 80, y: 70 }, { x: 220, y: 70 }, { x: 280, y: 70 }];
 const categories: [IconsCategory, TokensCategory] = [ICONS_CATEGORY, TOKENS_CATEGORY];
+const topologyMessages: FactoryTopologyReplayMessages = {
+  activeDispatchCount: (count) => String(count) + " active Dispatches",
+  connectionLabel: () => "Work type state",
+  failedDescription: "Prepared topology failed.",
+  failedTitle: "Topology unavailable",
+  handleLabel: (id, role) => role + " " + id,
+  inactiveDispatch: "No active Dispatches",
+  nodeKind: (kind) => kind,
+  occupancy: (occupied, capacity) => occupied + " of " + capacity + " occupied",
+  occupancyUnavailable: "Occupancy unavailable",
+  regionLabel: "Installed Factory topology",
+  selectedNode: "Selected",
+  selectedTick: (tick) => "Logical tick " + tick,
+  workStateCount: (count) => count + " Work",
+};
+const topologyProjection: FactoryTopologyReplayProjection = {
+  activity: { activeDispatches: [], activeWorkstationIds: [], issues: [], resourceOccupancy: [], selectedTick: 7 },
+  topology: {
+    connections: [{
+      id: "type-to-state", kind: "work-type-state",
+      source: { handleId: "work-type-state-source", nodeId: "work-type:task" },
+      target: { handleId: "work-type-state-target", nodeId: "work-state:ready" },
+    }],
+    issues: [],
+    nodes: [
+      { entityId: "task", handles: [{ id: "work-type-state-source", role: "source" }], id: "work-type:task", kind: "work-type", label: "Task" },
+      { entityId: "ready", handles: [{ id: "work-type-state-target", role: "target" }], id: "work-state:ready", kind: "work-state", label: "Ready" },
+    ],
+    selectedTick: 7,
+  },
+  workStateCounts: [{ count: 3, nodeId: "work-state:ready" }],
+};
 
 function Feedback({ children, semantic }: { children?: ReactNode; semantic: "loading" | "empty" | "error" | "success" }) {
   return (
@@ -132,6 +166,8 @@ function App() {
           </article>
         </GraphViewportSurface>
       </section>
+
+      <FactoryTopologyReplay className="consumer-topology" messages={topologyMessages} projection={topologyProjection} />
     </main>
   );
 }
@@ -301,6 +337,24 @@ async function startBuiltConsumer(distRoot) {
   return { server, url: `http://127.0.0.1:${address.port}` };
 }
 
+function assertViewportSemantics(semantics, viewportLabel) {
+  if (!semantics.cssPrimary)
+    throw new Error(`${viewportLabel}: package CSS tokens did not load`);
+  if (semantics.minButtonHeight < 40)
+    throw new Error(`${viewportLabel}: package button styles did not compile`);
+  if (semantics.alerts < 1 || semantics.statuses < 3 || semantics.busy !== 1) {
+    throw new Error(
+      `${viewportLabel}: feedback semantics were incomplete: ${JSON.stringify(semantics)}`,
+    );
+  }
+  if (semantics.overflow > 4)
+    throw new Error(
+      `${viewportLabel}: horizontal overflow was ${semantics.overflow}px`,
+    );
+  if (semantics.topologyState !== "ready")
+    throw new Error(`${viewportLabel}: installed topology did not render`);
+}
+
 async function verifyBrowser(distRoot) {
   const { server, url } = await startBuiltConsumer(distRoot);
   let browser;
@@ -327,6 +381,10 @@ async function verifyBrowser(distRoot) {
       await page
         .getByRole("region", { name: "Caller-provided graph" })
         .waitFor();
+      await page
+        .getByRole("region", { name: "Installed Factory topology" })
+        .waitFor();
+      await page.getByText("3 Work", { exact: true }).waitFor();
 
       const semantics = await page.evaluate(() => {
         const rootStyles = getComputedStyle(document.documentElement);
@@ -344,27 +402,12 @@ async function verifyBrowser(distRoot) {
             document.documentElement.scrollWidth -
             document.documentElement.clientWidth,
           statuses: document.querySelectorAll('[role="status"]').length,
+          topologyState: document
+            .querySelector('[aria-label="Installed Factory topology"]')
+            ?.getAttribute("data-factory-topology-state"),
         };
       });
-      if (!semantics.cssPrimary)
-        throw new Error(`${viewport.label}: package CSS tokens did not load`);
-      if (semantics.minButtonHeight < 40)
-        throw new Error(
-          `${viewport.label}: package button styles did not compile`,
-        );
-      if (
-        semantics.alerts < 1 ||
-        semantics.statuses < 3 ||
-        semantics.busy !== 1
-      ) {
-        throw new Error(
-          `${viewport.label}: feedback semantics were incomplete: ${JSON.stringify(semantics)}`,
-        );
-      }
-      if (semantics.overflow > 4)
-        throw new Error(
-          `${viewport.label}: horizontal overflow was ${semantics.overflow}px`,
-        );
+      assertViewportSemantics(semantics, viewport.label);
     }
 
     const button = page.getByRole("button", { name: "Activate visualizer" });

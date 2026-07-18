@@ -72,19 +72,22 @@ describe("components package production build", () => {
   });
 
   it("loads representative exports from emitted JavaScript", async () => {
-    const [root, primitives, utilities, charts, graphs] = await Promise.all([
-      importBuiltEntry("index.js"),
-      importBuiltEntry("primitives/index.js"),
-      importBuiltEntry("utilities/index.js"),
-      importBuiltEntry("charts/index.js"),
-      importBuiltEntry("graphs/index.js"),
-    ]);
+    const [root, primitives, utilities, charts, graphs, visualizers] =
+      await Promise.all([
+        importBuiltEntry("index.js"),
+        importBuiltEntry("primitives/index.js"),
+        importBuiltEntry("utilities/index.js"),
+        importBuiltEntry("charts/index.js"),
+        importBuiltEntry("graphs/index.js"),
+        importBuiltEntry("visualizers/index.js"),
+      ]);
 
     expect(root.COMPONENTS_PACKAGE_NAME).toBe("@you-agent-factory/components");
     expect(primitives.Button).toBeDefined();
     expect(utilities.cn("alpha", false, "beta")).toBe("alpha beta");
     expect(charts.ChartContainer).toBeDefined();
     expect(graphs.GraphNodeShell).toBeDefined();
+    expect(visualizers.FactoryTopologyReplay).toBeDefined();
   });
 
   it("copies a self-contained stylesheet and asset tree", async () => {
@@ -103,7 +106,12 @@ describe("components package production build", () => {
       ].map((match) => match[1]);
 
       for (const referencedPath of referencedPaths) {
-        if (/^(?:[a-z]+:|data:|#)/i.test(referencedPath)) continue;
+        if (
+          !referencedPath.startsWith(".") ||
+          /^(?:[a-z]+:|data:|#)/i.test(referencedPath)
+        ) {
+          continue;
+        }
         const resolvedPath = path.resolve(
           path.dirname(stylesheetPath),
           referencedPath.split(/[?#]/, 1)[0],

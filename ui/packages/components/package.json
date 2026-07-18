@@ -73,6 +73,11 @@
       "import": "./dist/graphs/index.js",
       "default": "./dist/graphs/index.js"
     },
+    "./visualizers": {
+      "types": "./dist/visualizers/index.d.ts",
+      "import": "./dist/visualizers/index.js",
+      "default": "./dist/visualizers/index.js"
+    },
     "./recipes": {
       "types": "./dist/recipes/index.d.ts",
       "import": "./dist/recipes/index.js",

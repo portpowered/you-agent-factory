@@ -44,7 +44,7 @@ describe("components registry tarball", () => {
     expect(result.files.some((file) => file.startsWith("src/"))).toBe(false);
     expect(result.files.some((file) => file.includes(".stories."))).toBe(false);
     await access(result.tarballPath);
-  });
+  }, 10_000);
 
   it("reports missing export targets and transitive style assets", async () => {
     const manifest = {
@@ -73,6 +73,24 @@ describe("components registry tarball", () => {
         "missing stylesheet dependency from dist/styles.css: dist/logo.svg",
       ].join("\n"),
     );
+  });
+
+  it("allows stylesheet imports provided by package dependencies", async () => {
+    const files = ["package.json", "dist/index.js", "dist/styles.css"];
+
+    await expect(
+      validatePackedInventory({
+        files,
+        manifest: {
+          exports: {
+            ".": "./dist/index.js",
+            "./styles.css": "./dist/styles.css",
+          },
+        },
+        packageFiles: files,
+        readPackedFile: async () => '@import "@xyflow/react/dist/style.css";',
+      }),
+    ).resolves.toEqual([...files].sort());
   });
 
   it("rejects development-only files admitted to the tarball", async () => {

@@ -54,6 +54,7 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
         isConnectable={handle.connectable ?? true}
         onClick={handle.onButtonClick}
         position={position}
+        role="img"
         style={
           {
             ...overlayHandleStyle,
@@ -91,9 +92,7 @@ function handleDotColor(tone: GraphNodeHandleTone): string {
   }
 }
 
-function anchoredHandleStyle(
-  side: GraphNodeHandle["side"],
-): CSSProperties {
+function anchoredHandleStyle(side: GraphNodeHandle["side"]): CSSProperties {
   return side === "left"
     ? {
         left: "50%",

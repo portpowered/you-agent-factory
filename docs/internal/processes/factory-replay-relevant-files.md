@@ -31,6 +31,13 @@ that consumes the replay kernel.
 - `packages/factory-replay/src/index.d.ts` is the public typed boundary. It
   uses `FactoryEvent` from `@you-agent-factory/client`; do not substitute a
   dashboard-local event type at this boundary.
+- `ui/packages/components/src/visualizers/factory-topology-replay.tsx` renders
+  prepared topology and activity without owning event history, replay, ticks,
+  playback, storage, or transport. Its structural public input stays compatible
+  with the factory-replay projections while keeping the component package
+  independently installable. The adjacent projection adapter is the sole owner
+  of renderer layout and must validate node-handle endpoint roles before React
+  Flow receives disposable nodes and edges.
 - `packages/factory-replay/test/factory-replay.test.mjs` proves observable
   ordering, duplicate-ID acceptance, current selection, fixed historical
   projection, checkpoint-plus-tail equivalence, selected-tick topology,

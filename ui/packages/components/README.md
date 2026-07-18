@@ -66,7 +66,8 @@ import { cn } from "@you-agent-factory/components/utilities";
 `COMPONENTS_PACKAGE_NAME` is the stable package identifier
 (`"@you-agent-factory/components"`). Category paths include `primitives`, `forms`,
 `layout`, `feedback`, `data-display`, `navigation`, `overlays`, `charts`,
-`graphs`, `recipes`, `icons`, `utilities`, `testing`, and `tokens`.
+`graphs`, `visualizers`, `recipes`, `icons`, `utilities`, `testing`, and
+`tokens`.
 
 Use `cn` from `@you-agent-factory/components/utilities` for class name composition
 in component code instead of dashboard-local helpers.
@@ -144,6 +145,9 @@ directory:
 - [`docs/graphs.md`](./docs/graphs.md) — graph node shell, node button, edge,
   viewport surface, handle badge, edge path helpers, React Flow boundary, and
   Storybook example map
+- [`docs/factory-topology-replay.md`](./docs/factory-topology-replay.md) —
+  controlled prepared-topology rendering, host ownership, endpoint validity,
+  messages, selection, and failure containment
 - [AlertPanel semantic feedback variants](./docs/feedback-alert-panel.md)
 - [Skeleton loading placeholders](./docs/feedback-skeleton.md)
 - [CodePanel long-content containment](./docs/data-display-code-panel.md)

@@ -3,6 +3,7 @@
  * Shared role, palette, typography, and layout tokens for component consumers.
  */
 
+@import "@xyflow/react/dist/style.css";
 @import "./styles/color-palette-presets.css";
 @import "./styles/color-role-tokens.css";
 @import "./styles/text-color-role-tokens.css";

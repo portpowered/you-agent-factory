@@ -150,7 +150,12 @@ export async function validatePackedInventory({
 
     const styles = await readPackedFile(stylesheetPath);
     for (const referencedPath of referencedStylePaths(styles)) {
-      if (/^(?:[a-z]+:|data:|#)/i.test(referencedPath)) continue;
+      if (
+        !referencedPath.startsWith(".") ||
+        /^(?:[a-z]+:|data:|#)/i.test(referencedPath)
+      ) {
+        continue;
+      }
       const resolvedPath = path.posix.normalize(
         path.posix.join(
           path.posix.dirname(stylesheetPath),
