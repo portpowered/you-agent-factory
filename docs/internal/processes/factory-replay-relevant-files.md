@@ -100,5 +100,14 @@ that consumes the replay kernel.
   projection's submit-eligible work-type names for text-only host composers.
   Keep this generated-contract gap normalization at the host boundary; the
   shared composer remains transport and replay-store neutral.
+- `ui/src/features/submit-work/components/submit-work-widget.tsx` is the
+  dashboard transport adapter for the controlled composers. It forwards the
+  bento-selected Factory state and current-versus-history selection to the
+  simple composer, while its typed submit mutation maps the name-free text
+  payload to the generated `SubmitWorkRequest` contract.
+- `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
+  single-work submission. The HTTP adapter leaves canonical identity assignment
+  to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in
+  a text-only UI host.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.

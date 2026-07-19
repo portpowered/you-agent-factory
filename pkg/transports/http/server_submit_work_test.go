@@ -594,7 +594,7 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "workTypeName is required")
 }
 
-func TestSubmitWorkMissingName(t *testing.T) {
+func TestSubmitWorkMissingNameUsesCanonicalSingleWorkIdentity(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
@@ -602,13 +602,15 @@ func TestSubmitWorkMissingName(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 || mf.Submitted[0].Name != "work-1" {
+		t.Fatalf("submitted = %#v, want one canonically named work", mf.Submitted)
 	}
 }
 
-func TestSubmitWorkBlankName(t *testing.T) {
+func TestSubmitWorkBlankNameUsesCanonicalSingleWorkIdentity(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
@@ -616,9 +618,11 @@ func TestSubmitWorkBlankName(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if len(mf.Submitted) != 1 || mf.Submitted[0].Name != "work-1" {
+		t.Fatalf("submitted = %#v, want one canonically named work", mf.Submitted)
 	}
 }
 

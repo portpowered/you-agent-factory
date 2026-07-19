@@ -367,7 +367,7 @@ func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkBySessionIdJSONReques
 	}
 
 	submitReq := workdomain.SubmitRequest{
-		Name:                   strings.TrimSpace(req.Name),
+		Name:                   strings.TrimSpace(stringValue(req.Name)),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
 		TraceID:                factoryrequests.ResolveWorkRequestCurrentChainingTraceID(stringValue(req.CurrentChainingTraceId), stringValue(req.TraceId)),
@@ -610,9 +610,6 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkBySession
 	}
 	if err := validateWorkContentField(fields, ""); err != nil {
 		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
-	}
-	if strings.TrimSpace(req.Name) == "" {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, requestFieldValidationError{message: "name is required"}
 	}
 	return req, nil
 }
