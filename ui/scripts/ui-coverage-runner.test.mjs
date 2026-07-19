@@ -13,6 +13,7 @@ import { expect, test, vi } from "vitest";
 import {
   buildMainCoveredShardPhase,
   buildUiCoveragePhases,
+  isolatedFactoryTopologyCoverageFiles,
   isolatedReactFlowCoverageFiles,
   cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
@@ -57,13 +58,15 @@ test("keeps coverage phase names stable and explicit", () => {
   expect(uiCoveragePhases.map((phase) => phase.name)).toEqual([
     mainCoveredPhaseName,
     "Isolated React Flow covered pass",
+    "Isolated Factory topology covered pass",
     "Blob report merge pass",
     "Standalone script-style test",
   ]);
 });
 
 test("uses safe parallelism for the main covered pass only", () => {
-  const [mainCoveredPass, isolatedReactFlowPass] = buildUiCoveragePhases({
+  const [mainCoveredPass, isolatedReactFlowPass, isolatedFactoryTopologyPass] =
+    buildUiCoveragePhases({
     mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
   });
 
@@ -72,6 +75,7 @@ test("uses safe parallelism for the main covered pass only", () => {
   );
   expect(mainCoveredPass.args).not.toContain("--maxWorkers=1");
   expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
+  expect(isolatedFactoryTopologyPass.args).toContain("--maxWorkers=1");
 });
 
 test("allows repo-owned coverage command to tune main covered pass workers", () => {
@@ -84,7 +88,7 @@ test("allows repo-owned coverage command to tune main covered pass workers", () 
 });
 
 test("keeps browser-backed and standalone script-style tests outside the main covered pass", () => {
-  const [mainCoveredPass, , , standaloneScriptStyleTest] =
+  const [mainCoveredPass, , , , standaloneScriptStyleTest] =
     buildUiCoveragePhases({
       mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
     });
@@ -105,9 +109,10 @@ test("keeps browser-backed and standalone script-style tests outside the main co
 });
 
 test("keeps the React Flow coverage files isolated from the main covered pass", () => {
-  const [mainCoveredPass, isolatedReactFlowPass] = buildUiCoveragePhases({
-    mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
-  });
+  const [mainCoveredPass, isolatedReactFlowPass, isolatedFactoryTopologyPass] =
+    buildUiCoveragePhases({
+      mainCoveredMaxWorkers: defaultMainCoveredMaxWorkers,
+    });
 
   for (const reactFlowCoverageFile of isolatedReactFlowCoverageFiles) {
     expect(mainCoveredPass.args).toEqual(
@@ -116,6 +121,16 @@ test("keeps the React Flow coverage files isolated from the main covered pass", 
     expect(isolatedReactFlowPass.args).toContain(reactFlowCoverageFile);
   }
   expect(isolatedReactFlowPass.args).toContain("--maxWorkers=1");
+
+  for (const factoryTopologyCoverageFile of isolatedFactoryTopologyCoverageFiles) {
+    expect(mainCoveredPass.args).toEqual(
+      expect.arrayContaining(["--exclude", factoryTopologyCoverageFile]),
+    );
+    expect(isolatedFactoryTopologyPass.args).toContain(
+      factoryTopologyCoverageFile,
+    );
+  }
+  expect(isolatedFactoryTopologyPass.args).toContain("--maxWorkers=1");
 });
 
 test("parses vitest default reporter file durations from a fixture log snippet", () => {
@@ -214,6 +229,10 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
       "--exclude",
       "scripts/ui-coverage-runner.shard-merge.test.mjs",
       ...isolatedReactFlowCoverageFiles.flatMap((file) => ["--exclude", file]),
+      ...isolatedFactoryTopologyCoverageFiles.flatMap((file) => [
+        "--exclude",
+        file,
+      ]),
     ]),
   );
 });
