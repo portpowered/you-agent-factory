@@ -71,7 +71,3 @@ that consumes the replay kernel.
   outside `packages/factory-replay`.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.
-- `ui/packages/factory-emulator/src/runtime-reference.ts` validates frozen
-  emulator conformance evidence before execution. Its logical ticks are the
-  canonical contiguous zero-based comparison timeline, not merely increasing
-  labels; preserve that binding so stale evidence cannot match positionally.
