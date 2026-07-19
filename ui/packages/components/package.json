@@ -68,6 +68,11 @@
       "import": "./dist/charts/index.js",
       "default": "./dist/charts/index.js"
     },
+    "./factory-emulator": {
+      "types": "./dist/factory-emulator/index.d.ts",
+      "import": "./dist/factory-emulator/index.js",
+      "default": "./dist/factory-emulator/index.js"
+    },
     "./graphs": {
       "types": "./dist/graphs/index.d.ts",
       "import": "./dist/graphs/index.js",

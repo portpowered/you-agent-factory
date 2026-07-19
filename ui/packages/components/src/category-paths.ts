@@ -8,6 +8,7 @@ export const COMPONENT_CATEGORY_EXPORT_PATHS = [
   "navigation",
   "overlays",
   "charts",
+  "factory-emulator",
   "graphs",
   "recipes",
   "icons",

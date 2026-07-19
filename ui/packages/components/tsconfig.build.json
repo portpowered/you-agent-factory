@@ -29,6 +29,7 @@
     "src/navigation/index.ts",
     "src/overlays/index.ts",
     "src/charts/index.ts",
+    "src/factory-emulator/index.ts",
     "src/graphs/index.ts",
     "src/recipes/index.ts",
     "src/icons/index.ts",

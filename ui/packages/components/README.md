@@ -66,7 +66,8 @@ import { cn } from "@you-agent-factory/components/utilities";
 `COMPONENTS_PACKAGE_NAME` is the stable package identifier
 (`"@you-agent-factory/components"`). Category paths include `primitives`, `forms`,
 `layout`, `feedback`, `data-display`, `navigation`, `overlays`, `charts`,
-`graphs`, `recipes`, `icons`, `utilities`, `testing`, and `tokens`.
+`factory-emulator`, `graphs`, `recipes`, `icons`, `utilities`, `testing`, and
+`tokens`.
 
 Use `cn` from `@you-agent-factory/components/utilities` for class name composition
 in component code instead of dashboard-local helpers.
@@ -163,6 +164,8 @@ route, generated registry, or additional build-time documentation tooling.
 
 - [Charts](./docs/charts.md) — config, presentation, tooltip and legend,
   state panels, and caller-owned series state
+- [Factory emulator controls](./docs/factory-emulator.md) — controlled playback,
+  speed, and host-owned runtime status
 
 ## Development
 

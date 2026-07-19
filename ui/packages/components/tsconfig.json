@@ -11,6 +11,11 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
+    "baseUrl": ".",
+    "paths": {
+      "@you-agent-factory/components": ["src/index.ts"],
+      "@you-agent-factory/components/*": ["src/*"]
+    },
     "strict": true,
     "noEmit": true,
     "jsx": "react-jsx",
