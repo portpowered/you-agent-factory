@@ -39,6 +39,36 @@ The inspector treats an omitted orchestrator as the documented Petri default,
 does not mutate or retain the Factory, and reports stable codes with paths into
 the caller-supplied UI client `FactoryDefinition`.
 
+## Long-lived session lifecycle
+
+Create a framework-independent session from a compatible Factory, a parsed
+scenario, and a caller-owned event sink. Construction revalidates the inputs
+and optional safety limits before any event is written.
+
+```ts
+import {
+  createFactoryEmulatorSession,
+  MemoryFactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
+
+const sink = new MemoryFactoryEventSink({ maxEvents: 10_000 });
+const session = createFactoryEmulatorSession({
+  factory,
+  scenario: parsed,
+  sink,
+});
+
+const before = session.status();
+const started = await session.start();
+const current = session.state();
+```
+
+`start()` writes one atomic canonical bootstrap batch in `RUN_REQUEST`,
+`INITIAL_STRUCTURE_REQUEST`, `SESSION_STARTED` order. The started state becomes
+visible only after the sink accepts the complete batch. `state()` and
+`status()` return detached, structured-cloneable snapshots; the kernel does not
+retain playback or event history. An idle session remains open for later Work.
+
 ## Caller-owned event history
 
 `MemoryFactoryEventSink` retains ordered Factory Events up to a required
