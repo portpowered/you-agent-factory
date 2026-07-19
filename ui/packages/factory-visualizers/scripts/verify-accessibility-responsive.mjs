@@ -148,6 +148,10 @@ async function verifyChromeOperationalDetail(browserInstance) {
         (await page.getByText("7 Work in this state").count()) > 0,
         `${storyId} omitted Work State evidence at ${viewport.width}px.`,
       );
+      await page.waitForFunction(
+        () => document.querySelectorAll(".react-flow__edge").length > 0,
+        { timeout: 5_000 },
+      );
       assert(
         (await page.locator(".react-flow__edge").count()) > 0,
         `${storyId} omitted its active route at ${viewport.width}px.`,
