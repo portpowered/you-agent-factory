@@ -59,6 +59,11 @@ keeps fixed history stable as later evidence arrives, and can return to current
 mode with its follow-latest action. Current mode also incorporates newly
 accepted same-tick events in canonical sequence order.
 
+The installed-consumer verification uses the public client parser and public
+replay projection functions before passing the prepared topology to
+`FactoryTopologyReplay`. It imports the client recording fixture and both
+package style entry points only through public package exports.
+
 Run `make storybook` in this directory for package-local development. Use
 `make storybook-build` and `make storybook-test` for deterministic static and
 browser verification, or run `bun run verify` to typecheck, lint, and test the
