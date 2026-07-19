@@ -25,6 +25,7 @@ const prohibitedRuntimeNames = [
   ["EventSource", /\bEventSource\b/],
   ["browser storage", /\b(?:localStorage|sessionStorage)\b/],
   ["browser timer", /\b(?:setInterval|setTimeout)\s*\(/],
+  ["Web Worker", /\b(?:SharedWorker|Worker)\s*\(/],
 ];
 
 async function sourceFiles(directory) {
