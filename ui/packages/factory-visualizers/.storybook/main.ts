@@ -40,6 +40,7 @@ const config: StorybookConfig = {
             ),
           },
         ],
+        dedupe: ["react", "react-dom", "react/jsx-runtime"],
       },
     });
   },

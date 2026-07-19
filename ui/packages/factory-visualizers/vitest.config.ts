@@ -9,6 +9,10 @@ const uiNodeModules = path.join(uiRoot, "node_modules");
 export default defineConfig({
   resolve: {
     alias: {
+      "@testing-library/react": path.join(
+        uiNodeModules,
+        "@testing-library/react",
+      ),
       "@you-agent-factory/components": path.resolve(
         packageRoot,
         "../components/src/index.ts",
@@ -27,5 +31,17 @@ export default defineConfig({
     environment: "happy-dom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["./src/testing/vitest.setup.ts"],
+    server: {
+      deps: {
+        moduleDirectories: [uiNodeModules],
+        inline: [
+          "react",
+          "react-dom",
+          "react-dom/client",
+          "react/jsx-runtime",
+          "@testing-library/react",
+        ],
+      },
+    },
   },
 });
