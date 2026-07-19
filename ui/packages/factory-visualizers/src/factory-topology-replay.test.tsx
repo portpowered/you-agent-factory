@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import "./testing/vitest.setup";
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +14,16 @@ import {
 } from "./factory-topology-replay";
 import { createFactoryTopologyProjection } from "./testing/factory-topology-projection";
 
-const mockFlow = vi.hoisted(() => ({ error: undefined as Error | undefined }));
+const mockFlow = vi.hoisted(() => ({
+  error: undefined as Error | undefined,
+  nodes: [] as Array<{
+    draggable?: boolean;
+    id: string;
+    position: { x: number; y: number };
+    selectable?: boolean;
+    type: string;
+  }>,
+}));
 
 vi.mock("@xyflow/react", () => ({
   Background: () => <div data-testid="flow-background" />,
@@ -39,6 +49,7 @@ vi.mock("@xyflow/react", () => ({
     nodeTypes: Record<string, ComponentType<{ data: Record<string, unknown> }>>;
   }) => {
     if (mockFlow.error) throw mockFlow.error;
+    mockFlow.nodes = nodes;
     return (
       <div data-testid="react-flow">
         {nodes.map((node) => {
@@ -62,6 +73,8 @@ vi.mock("@xyflow/react", () => ({
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
+  annotationsHidden: "Show annotations",
+  annotationsVisible: "Hide annotations",
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
   inactiveDispatches: "No active Dispatch",
@@ -81,6 +94,7 @@ describe("FactoryTopologyReplay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFlow.error = undefined;
+    mockFlow.nodes = [];
   });
 
   it("renders semantic endpoints and selected-tick activity and load evidence", () => {
@@ -155,7 +169,101 @@ describe("FactoryTopologyReplay", () => {
       ),
     );
   });
+
+  it("projects read-only annotations without changing topology or routing", () => {
+    const projection = createFactoryTopologyProjection();
+    const layout = annotationLayout();
+    const flow = projectFactoryTopologyFlow(
+      projection,
+      messages,
+      undefined,
+      undefined,
+      false,
+      layout,
+    );
+
+    expect(flow.edges).toHaveLength(projection.topology.connections.length);
+    expect(flow.nodes.filter((node) => node.type === "factoryTopologyNode")).toHaveLength(
+      projection.topology.nodes.length,
+    );
+    expect(flow.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          draggable: false,
+          id: "annotation:review-note",
+          position: { x: 90, y: 45 },
+          selectable: false,
+          type: "factoryTopologyAnnotation",
+        }),
+        expect.objectContaining({
+          id: "annotation:diagram",
+          position: { x: 940, y: 20 },
+          type: "factoryTopologyAnnotation",
+        }),
+      ]),
+    );
+  });
+
+  it("toggles annotations as an accessible group without rendering hidden content", () => {
+    render(
+      <FactoryTopologyReplay
+        layout={annotationLayout()}
+        messages={messages}
+        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+      />,
+    );
+
+    expect(annotationBody()).toBeVisible();
+    expect(screen.getByRole("img", { name: "Review diagram" })).toBeVisible();
+    expect(mockFlow.nodes).toHaveLength(6);
+    const toggle = screen.getByRole("button", { name: messages.annotationsVisible });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(toggle);
+
+    expect(screen.queryByText(annotationBodyMatcher)).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Review diagram" })).not.toBeInTheDocument();
+    expect(mockFlow.nodes).toHaveLength(4);
+    expect(
+      screen.getByRole("button", { name: messages.annotationsHidden }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
 });
+
+function annotationLayout(): FactoryVisualizationLayoutV1 {
+  return {
+    annotations: [
+      {
+        body: "First line\nSecond line",
+        id: "review-note",
+        kind: "note",
+        position: { x: 90, y: 45 },
+        title: "Review notes",
+        tone: "info",
+      },
+      {
+        altText: "Review diagram",
+        id: "diagram",
+        kind: "image",
+        position: { x: 940, y: 20 },
+        size: { height: 80, width: 120 },
+        source: {
+          base64: "iVBORw0KGgo=",
+          kind: "embedded",
+          mediaType: "image/png",
+        },
+      },
+    ],
+    schemaVersion: "factory-visualization-layout/v1",
+  };
+}
+
+const annotationBodyMatcher = (_: string, element: Element | null) =>
+  element?.textContent === "First line\nSecond line";
+
+function annotationBody(): HTMLElement {
+  return screen.getByText(annotationBodyMatcher);
+}
 
 describe("FactoryTopologyReplay controlled states and failures", () => {
   beforeEach(() => {

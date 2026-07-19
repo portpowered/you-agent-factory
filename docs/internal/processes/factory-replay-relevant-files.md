@@ -69,5 +69,10 @@ that consumes the replay kernel.
   dashboard-specific Factory-world event reducer; `projectSnapshot.ts` owns
   its projection. Keep browser state, checkpoints, persistence, and Zustand
   outside `packages/factory-replay`.
+- `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` converts
+  caller-validated `FactoryVisualizationLayoutV1` annotations into separate,
+  inert React Flow nodes. Keep them out of canonical topology layout and edge
+  routing; visibility may remove only those projected nodes so React Flow
+  fit-to-view remains derived from what is currently visible.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.

@@ -35,6 +35,8 @@ vi.mock("@xyflow/react", () => ({
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
+  annotationsHidden: "Show annotations",
+  annotationsVisible: "Hide annotations",
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
   inactiveDispatches: "No active Dispatch",

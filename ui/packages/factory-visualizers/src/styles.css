@@ -67,6 +67,83 @@
   inline-size: 13.5rem;
 }
 
+.factory-topology-replay .react-flow__node:has(.factory-topology-replay__annotation) {
+  inline-size: auto;
+}
+
+.factory-topology-replay__annotation-toggle {
+  position: absolute;
+  z-index: 5;
+  inset-block-start: 1rem;
+  inset-inline-end: 1rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-on-primary, #fff);
+  cursor: pointer;
+  background: var(--color-primary, var(--color-af-foundation-accent));
+  border: 1px solid var(--color-primary, var(--color-af-foundation-accent));
+  border-radius: 0.5rem;
+}
+
+.factory-topology-replay__annotation-toggle:focus-visible {
+  outline: 0.1875rem solid var(--color-on-surface);
+  outline-offset: 0.25rem;
+}
+
+.factory-topology-replay__annotation {
+  box-sizing: border-box;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  margin: 0;
+  color: var(--color-on-surface);
+  pointer-events: none;
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline);
+  border-radius: 0.75rem;
+}
+
+.factory-topology-replay__annotation[data-tone="accent"] {
+  border-color: var(--color-primary, var(--color-af-foundation-accent));
+}
+
+.factory-topology-replay__annotation[data-tone="info"] {
+  border-color: var(--color-info);
+}
+
+.factory-topology-replay__annotation[data-tone="success"] {
+  border-color: var(--color-success);
+}
+
+.factory-topology-replay__annotation[data-tone="warning"] {
+  border-color: var(--color-warning);
+}
+
+.factory-topology-replay__annotation[data-tone="danger"] {
+  border-color: var(--color-error);
+}
+
+.factory-topology-replay__annotation-title,
+.factory-topology-replay__annotation-body {
+  overflow-wrap: anywhere;
+}
+
+.factory-topology-replay__annotation-body {
+  white-space: pre-wrap;
+}
+
+.factory-topology-replay__annotation--image {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+
+.factory-topology-replay__annotation-image {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
 .factory-topology-replay__node-button,
 .factory-topology-replay__node-static {
   display: block;

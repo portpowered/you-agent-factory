@@ -12,6 +12,10 @@ import {
   GraphNodeShell,
 } from "@you-agent-factory/components/graphs";
 import type {
+  FactoryVisualizationAnnotation,
+  FactoryVisualizationLayoutV1,
+} from "@you-agent-factory/client";
+import type {
   FactoryActivityProjection,
   FactoryLoadProjection,
   FactoryTopologyConnection,
@@ -47,6 +51,8 @@ export type FactoryTopologyReplayState =
 
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
+  annotationsHidden: string;
+  annotationsVisible: string;
   empty: string;
   failed: string;
   inactiveDispatches: string;
@@ -62,6 +68,8 @@ export interface FactoryTopologyReplayMessages {
 }
 
 export interface FactoryTopologyReplayProps {
+  /** Validated, presentation-only data owned by the visualizer host. */
+  layout?: FactoryVisualizationLayoutV1;
   messages: FactoryTopologyReplayMessages;
   onError?: (error: FactoryVisualizerError) => void;
   onRetry?: () => void;
@@ -87,9 +95,13 @@ interface TopologyNodeData extends Record<string, unknown> {
   };
 }
 
+interface AnnotationNodeData extends Record<string, unknown> {
+  annotation: FactoryVisualizationAnnotation;
+}
+
 export interface FactoryTopologyFlowProjection {
   edges: Edge[];
-  nodes: Node<TopologyNodeData>[];
+  nodes: Node<TopologyNodeData | AnnotationNodeData>[];
   validEndpoints: boolean;
 }
 
@@ -105,7 +117,10 @@ interface PreparedFlowFailure {
 
 type PreparedFlow = PreparedFlowFailure | PreparedFlowSuccess;
 
-const nodeTypes = { factoryTopologyNode: FactoryTopologyNodeView };
+const nodeTypes = {
+  factoryTopologyAnnotation: FactoryTopologyAnnotationView,
+  factoryTopologyNode: FactoryTopologyNodeView,
+};
 const columnByKind: Record<FactoryTopologyNode["kind"], number> = {
   resource: 0,
   worker: 1,
@@ -121,6 +136,7 @@ export function projectFactoryTopologyFlow(
   selectedNodeId: string | undefined,
   onSelectNode: FactoryTopologyReplayProps["onSelectNode"],
   prefersReducedMotion = false,
+  layout?: FactoryVisualizationLayoutV1,
 ): FactoryTopologyFlowProjection {
   let topologyNodes: FactoryTopologyNode[];
   let connections: FactoryTopologyConnection[];
@@ -189,6 +205,25 @@ export function projectFactoryTopologyFlow(
       };
     });
 
+    const annotationNodes = (layout?.annotations ?? []).map<
+      Node<AnnotationNodeData>
+    >((annotation) => ({
+      data: { annotation },
+      draggable: false,
+      id: `annotation:${annotation.id}`,
+      position: annotation.position,
+      selectable: false,
+      type: "factoryTopologyAnnotation",
+      ...(annotation.size
+        ? {
+            style: {
+              height: annotation.size.height,
+              width: annotation.size.width,
+            },
+          }
+        : {}),
+    }));
+
     return {
       edges: endpointsValid
         ? connections.map((connection) => ({
@@ -205,7 +240,7 @@ export function projectFactoryTopologyFlow(
             targetHandle: connection.target.handleId,
           }))
         : [],
-      nodes,
+      nodes: [...nodes, ...annotationNodes],
       validEndpoints: endpointsValid,
     };
   } catch (error) {
@@ -231,6 +266,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
 function FactoryTopologyReplayContent({
   messages,
   onError,
+  layout,
   onRetry,
   onSelectNode,
   selectedNodeId,
@@ -251,6 +287,7 @@ function FactoryTopologyReplayContent({
       onError={onError}
       onRetry={onRetry}
       onSelectNode={onSelectNode}
+      layout={layout}
       projection={state.projection}
       selectedNodeId={selectedNodeId}
     />
@@ -260,6 +297,7 @@ function FactoryTopologyReplayContent({
 function PreparedTopology({
   messages,
   onError,
+  layout,
   onRetry,
   onSelectNode,
   projection,
@@ -276,6 +314,7 @@ function PreparedTopology({
         selectedNodeId,
         onSelectNode,
         prefersReducedMotion,
+        layout,
       );
       return flow.validEndpoints
         ? { flow, status: "ready" }
@@ -291,6 +330,7 @@ function PreparedTopology({
     onSelectNode,
     prefersReducedMotion,
     projection,
+    layout,
     selectedNodeId,
   ]);
   useDistinctTopologyErrorReport(
@@ -320,35 +360,98 @@ function PreparedTopology({
         messages={messages}
         onError={onError}
         onRetry={onRetry}
-        resetKeys={[projection, messages, selectedNodeId, onSelectNode]}
+        resetKeys={[projection, messages, selectedNodeId, onSelectNode, layout]}
         withinRegion
       >
-        <ReactFlowCanvas flow={prepared.flow} />
+        <ReactFlowCanvas flow={prepared.flow} messages={messages} />
       </FactoryTopologyErrorBoundary>
     </section>
   );
 }
 
-function ReactFlowCanvas({ flow }: { flow: FactoryTopologyFlowProjection }) {
+function ReactFlowCanvas({
+  flow,
+  messages,
+}: {
+  flow: FactoryTopologyFlowProjection;
+  messages: FactoryTopologyReplayMessages;
+}) {
+  const [annotationsVisible, setAnnotationsVisible] = useState(true);
+  const visibleNodes = annotationsVisible
+    ? flow.nodes
+    : flow.nodes.filter((node) => node.type !== "factoryTopologyAnnotation");
+  const hasAnnotations = flow.nodes.some(
+    (node) => node.type === "factoryTopologyAnnotation",
+  );
+
   return (
-    <ReactFlow
-      edges={flow.edges}
-      edgesFocusable={false}
-      elementsSelectable={false}
-      fitView
-      nodes={flow.nodes}
-      nodesConnectable={false}
-      nodesDraggable={false}
-      nodeTypes={nodeTypes}
-      // XYFlow disables pointer events on otherwise non-interactive node
-      // wrappers. The nested GraphNodeButton remains the selection owner.
-      onNodeClick={preserveNestedNodePointerEvents}
-      panOnDrag
-      proOptions={{ hideAttribution: true }}
+    <>
+      {hasAnnotations ? (
+        <button
+          aria-pressed={annotationsVisible}
+          className="factory-topology-replay__annotation-toggle"
+          onClick={() => setAnnotationsVisible((visible) => !visible)}
+          type="button"
+        >
+          {annotationsVisible
+            ? messages.annotationsVisible
+            : messages.annotationsHidden}
+        </button>
+      ) : null}
+      <ReactFlow
+        edges={flow.edges}
+        edgesFocusable={false}
+        elementsSelectable={false}
+        fitView
+        fitViewOptions={{ includeHiddenNodes: false }}
+        key={annotationsVisible ? "annotations-visible" : "annotations-hidden"}
+        nodes={visibleNodes}
+        nodesConnectable={false}
+        nodesDraggable={false}
+        nodeTypes={nodeTypes}
+        // XYFlow disables pointer events on otherwise non-interactive node
+        // wrappers. The nested GraphNodeButton remains the selection owner.
+        onNodeClick={preserveNestedNodePointerEvents}
+        panOnDrag
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </>
+  );
+}
+
+function FactoryTopologyAnnotationView({
+  data,
+}: NodeProps<Node<AnnotationNodeData>>) {
+  const { annotation } = data;
+  if (annotation.kind === "image") {
+    return (
+      <figure className="factory-topology-replay__annotation factory-topology-replay__annotation--image">
+        <img
+          alt={annotation.altText}
+          className="factory-topology-replay__annotation-image"
+          src={`data:${annotation.source.mediaType};base64,${annotation.source.base64}`}
+        />
+      </figure>
+    );
+  }
+
+  return (
+    <aside
+      className="factory-topology-replay__annotation"
+      data-tone={annotation.tone ?? "neutral"}
     >
-      <Background />
-      <Controls showInteractive={false} />
-    </ReactFlow>
+      {annotation.title ? (
+        <strong className="factory-topology-replay__annotation-title">
+          {annotation.title}
+        </strong>
+      ) : null}
+      <span className="factory-topology-replay__annotation-body">
+        {annotation.body}
+      </span>
+    </aside>
   );
 }
 

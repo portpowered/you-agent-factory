@@ -40,6 +40,8 @@ const messages: FactoryRecordingTopologyReplayMessages = {
   topology: {
     activeDispatches: (count) =>
       `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+    annotationsHidden: "Show annotations",
+    annotationsVisible: "Hide annotations",
     empty: "No Factory topology is available at this tick.",
     failed: "The Factory topology could not be shown.",
     inactiveDispatches: "No active Dispatch",
