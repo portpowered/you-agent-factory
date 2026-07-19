@@ -1,0 +1,71 @@
+{
+  "name": "@you-agent-factory/factory-visualizers",
+  "version": "0.0.0",
+  "description": "Controlled React visualizers for caller-prepared Factory replay projections.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git",
+    "directory": "ui/packages/factory-visualizers"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "LICENSE.md",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "scripts": {
+    "build": "node scripts/build-package.mjs",
+    "build-storybook": "storybook build --loglevel warn",
+    "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
+    "check:pack": "node scripts/verify-package-pack.mjs",
+    "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "prepare:dependencies": "bun run --cwd ../components build && bun run --cwd ../factory-replay build",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "bun run prepare:dependencies && tsc -p tsconfig.json --noEmit --pretty false",
+    "verify:accessibility-responsive": "node scripts/verify-accessibility-responsive.mjs",
+    "verify": "bun run typecheck && bun run test && bun run build && bun run build-storybook && bun run verify:accessibility-responsive && bun run check:package-boundary && bun run check:pack && bun run check:installed-consumer"
+  },
+  "dependencies": {
+    "@you-agent-factory/components": "0.0.0",
+    "@xyflow/react": "^12.10.2"
+  },
+  "peerDependencies": {
+    "@you-agent-factory/factory-replay": "0.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^10.3.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react-swc": "^4.1.0",
+    "@you-agent-factory/factory-replay": "file:../factory-replay",
+    "happy-dom": "^20.9.0",
+    "jest-axe": "^10.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "storybook": "^10.3.5",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "4.1.3"
+  }
+}

@@ -13,6 +13,21 @@ const uiRoot = path.dirname(fileURLToPath(import.meta.url));
 const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
 const sharedReactAliases = [
   {
+    find: "@testing-library/jest-dom/vitest",
+    replacement: path.join(
+      uiRoot,
+      "node_modules/@testing-library/jest-dom/vitest",
+    ),
+  },
+  {
+    find: "@testing-library/react",
+    replacement: path.join(uiRoot, "node_modules/@testing-library/react"),
+  },
+  {
+    find: "@testing-library/user-event",
+    replacement: path.join(uiRoot, "node_modules/@testing-library/user-event"),
+  },
+  {
     find: "react",
     replacement: path.join(uiRoot, "node_modules/react"),
   },
