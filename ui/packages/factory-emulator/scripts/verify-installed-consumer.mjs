@@ -66,10 +66,13 @@ async function prepareClientPackage(npm) {
 
 const typeConsumer = `import type { FactoryDefinition, FactoryEvent } from "@you-agent-factory/client";
 import {
+  type FactoryEmulatorSession,
+  type FactoryEmulatorSessionOptions,
   type FactoryEmulatorScenario,
   type FactoryEventSink,
   MemoryFactoryEventSink,
   RecordingFactoryEventSink,
+  createFactoryEmulatorSession,
   inspectFactoryEmulatorCompatibility,
   parseFactoryEmulatorScenario,
   scenarioSchema,
@@ -80,6 +83,8 @@ declare const event: FactoryEvent;
 declare const input: unknown;
 const scenario: FactoryEmulatorScenario = parseFactoryEmulatorScenario(input, factory);
 const sink: FactoryEventSink = new MemoryFactoryEventSink({ maxEvents: 1 });
+const options: FactoryEmulatorSessionOptions = { factory, scenario, sink };
+const session: FactoryEmulatorSession = createFactoryEmulatorSession(options);
 const recordingSink = new RecordingFactoryEventSink({
   maxEvents: 1,
   recording: {
@@ -91,6 +96,7 @@ const recordingSink = new RecordingFactoryEventSink({
 void event;
 void scenario;
 void sink;
+void session;
 void recordingSink;
 void scenarioSchema;
 void inspectFactoryEmulatorCompatibility(factory);
@@ -101,6 +107,7 @@ import { safeParseFactoryRecording } from "@you-agent-factory/client";
 import {
   MemoryFactoryEventSink,
   RecordingFactoryEventSink,
+  createFactoryEmulatorSession,
   inspectFactoryEmulatorCompatibility,
   parseFactoryEmulatorScenario,
   scenarioSchema,
@@ -141,6 +148,39 @@ if (scenario.id !== "customer-support-happy-path" || installedSchema.$id !== sce
 }
 if (!inspectFactoryEmulatorCompatibility(factory).supported) {
   throw new Error("installed compatibility inspector rejected the supported Factory");
+}
+
+async function runSession(recordingId) {
+  const sink = new RecordingFactoryEventSink({
+    maxEvents: 100,
+    recording: {
+      schemaVersion: "factory-recording/v1",
+      id: recordingId,
+      title: "Installed consumer session",
+      factory,
+    },
+  });
+  const session = createFactoryEmulatorSession({ factory, scenario, sink });
+  await session.start();
+  await session.advanceToNext();
+  const completed = await session.advanceToNext();
+  const closed = await session.close();
+  const snapshot = sink.snapshot();
+  if (
+    completed.virtualElapsedMs !== 25 ||
+    closed.status !== "closed" ||
+    session.status().phase !== "closed" ||
+    !safeParseFactoryRecording(snapshot).success
+  ) {
+    throw new Error("installed session did not start, advance, and close cleanly");
+  }
+  return snapshot.events;
+}
+
+const firstHistory = await runSession("installed-session-first");
+const rerunHistory = await runSession("installed-session-rerun");
+if (JSON.stringify(firstHistory) !== JSON.stringify(rerunHistory)) {
+  throw new Error("installed session rerun was not byte-equivalent");
 }
 
 const events = [
@@ -188,7 +228,9 @@ if (memory.snapshot().length !== 2 || !safeParseFactoryRecording(snapshot).succe
   throw new Error("installed sinks did not produce valid retained history");
 }
 await Promise.all([memory.close(), recording.close()]);
-process.stdout.write(\`verified \${scenario.id} with \${snapshot.events.length} events\n\`);
+process.stdout.write(
+  \`verified \${scenario.id} with \${snapshot.events.length} sink events and \${firstHistory.length} deterministic session events\n\`,
+);
 `;
 
 async function writeConsumer(consumerRoot, clientTarball, emulatorTarball) {
