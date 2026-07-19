@@ -9,6 +9,7 @@ import {
 import stylesCss from "@you-agent-factory/components/styles.css?inline";
 import * as charts from "@you-agent-factory/components/charts";
 import * as dataDisplay from "@you-agent-factory/components/data-display";
+import * as factoryEmulator from "@you-agent-factory/components/factory-emulator";
 import * as feedback from "@you-agent-factory/components/feedback";
 import * as forms from "@you-agent-factory/components/forms";
 import * as graphs from "@you-agent-factory/components/graphs";
@@ -37,6 +38,7 @@ const categoryModules = {
   navigation,
   overlays,
   charts,
+  "factory-emulator": factoryEmulator,
   graphs,
   recipes,
   icons,

@@ -129,7 +129,9 @@ async function verifyAnnotatedRecording(page) {
     name: /^(Show|Hide) annotations$/,
   });
   await annotationsToggle.waitFor({ state: "visible", timeout: 5_000 });
-  if (await page.getByRole("button", { name: "Hide annotations" }).isVisible()) {
+  if (
+    await page.getByRole("button", { name: "Hide annotations" }).isVisible()
+  ) {
     await annotationsToggle.click();
     await showAnnotations.waitFor({ state: "visible", timeout: 5_000 });
   }
@@ -307,6 +309,11 @@ async function verifyResponsiveViewports(browserInstance) {
       `factory-visualizers-workprogressvisualizer--${viewport.progress}`,
     );
     await verifyLayout(
+      page,
+      "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
+    );
+    await verifyLayout(page, "factory-visualizers-factoryemulatorview--full");
+    await openStory(
       page,
       "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
     );

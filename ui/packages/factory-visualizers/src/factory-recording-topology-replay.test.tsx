@@ -1,8 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import "./testing/vitest.setup";
 
-import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import type { ComponentType, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -84,9 +84,9 @@ const messages: FactoryRecordingTopologyReplayMessages = {
     activeDispatches: (count) => `${count} active Dispatches`,
     empty: "No Factory topology is available.",
     failed: "The Factory topology could not be shown.",
-  inactiveDispatches: "No active Dispatch",
-  imageFailed: "The annotation image could not be shown.",
-  imageLoading: "Loading annotation image.",
+    inactiveDispatches: "No active Dispatch",
+    imageFailed: "The annotation image could not be shown.",
+    imageLoading: "Loading annotation image.",
     loading: "Loading Factory topology.",
     nodeLabel: (kind, label) => `${kind}: ${label}`,
     regionLabel: "Factory topology replay",

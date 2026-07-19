@@ -150,7 +150,10 @@ export function useDistinctTopologyErrorReport(
     const key =
       error.kind === "layout-validation"
         ? error.issues
-            .map((issue) => `${issue.category}:${issue.code}:${issue.path.join(".")}`)
+            .map(
+              (issue) =>
+                `${issue.category}:${issue.code}:${issue.path.join(".")}`,
+            )
             .join("|")
         : factoryVisualizerErrorKey(error);
     if (reportedErrors.current.has(key)) return;

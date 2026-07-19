@@ -1,15 +1,15 @@
 import type { Node, NodeProps } from "@xyflow/react";
-import {
-  GraphNodeButton,
-  type GraphNodeHandle,
-  GraphNodeShell,
-} from "@you-agent-factory/components/graphs";
 import type {
   FactoryVisualizationAnnotation,
   FactoryVisualizationEmbeddedImageSource,
   FactoryVisualizationImageContent,
   FactoryVisualizationNodeEmptyState,
 } from "@you-agent-factory/client";
+import {
+  GraphNodeButton,
+  type GraphNodeHandle,
+  GraphNodeShell,
+} from "@you-agent-factory/components/graphs";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
 import { useEffect, useRef, useState } from "react";
 

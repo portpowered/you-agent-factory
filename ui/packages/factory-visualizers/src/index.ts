@@ -1,4 +1,17 @@
 export {
+  FactoryEmulatorControls,
+  type FactoryEmulatorControlsProps,
+  type FactoryEmulatorControlsTimeline,
+} from "./factory-emulator-controls.js";
+export type { FactoryEmulatorFailure } from "./factory-emulator-error-boundary.js";
+export {
+  FactoryEmulatorView,
+  type FactoryEmulatorViewPreset,
+  type FactoryEmulatorViewProps,
+  type FactoryEmulatorViewVisibility,
+} from "./factory-emulator-view.js";
+
+export {
   FactoryRecordingTopologyReplay,
   type FactoryRecordingTopologyReplayError,
   type FactoryRecordingTopologyReplayMessages,
@@ -28,10 +41,10 @@ export {
 
 export type {
   FactoryTopologyReplayError,
+  FactoryVisualizationLayoutDiagnostic,
   FactoryVisualizerError,
   FactoryVisualizerErrorCause,
   FactoryVisualizerErrorKind,
-  FactoryVisualizationLayoutDiagnostic,
 } from "./visualizer-error.js";
 
 export {

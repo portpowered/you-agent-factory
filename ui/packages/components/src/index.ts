@@ -135,6 +135,14 @@ export {
   inputVariants,
   textareaVariants,
 } from "./forms";
+
+export { FactoryEmulatorControls } from "./factory-emulator";
+export type {
+  FactoryEmulatorAction,
+  FactoryEmulatorControlsProps,
+  FactoryEmulatorRuntimeStatus,
+  FactoryEmulatorSpeed,
+} from "./factory-emulator";
 export type {
   EnumSelectOption,
   EnumSelectProps,
@@ -206,4 +214,3 @@ export type {
   ScrollAreaProps,
   ScrollBarProps,
 } from "./overlays";
-
