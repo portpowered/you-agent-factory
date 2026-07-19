@@ -11,3 +11,4 @@ export type {
 } from "../components/submit-work-card";
 export * from "../components/submit-work-widget";
 export * from "../lib/factory-simple-submission-eligibility";
+export * from "../lib/factory-simple-submission-host-adapter";

@@ -95,5 +95,10 @@ that consumes the replay kernel.
   is the hosted replay boundary. It forwards its optional caller-owned layout
   sidecar to the controlled renderer and must not place it in timeline or
   stream-store state.
+- `ui/src/features/submit-work/lib/factory-simple-submission-host-adapter.ts`
+  joins the generated Factory definition's `handlingBehavior` with the replay
+  projection's submit-eligible work-type names for text-only host composers.
+  Keep this generated-contract gap normalization at the host boundary; the
+  shared composer remains transport and replay-store neutral.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.
