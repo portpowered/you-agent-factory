@@ -808,7 +808,7 @@ jobs:
           fi
 
           threshold_result="failed"
-          if [[ -f "$artifact_root/command.log" ]] && rg -q "ERROR.*Coverage for" "$artifact_root/command.log"; then
+          if [[ -f "$artifact_root/command.log" ]] && grep -Eq "ERROR.*Coverage for" "$artifact_root/command.log"; then
             threshold_result="failed (merged coverage thresholds)"
           fi
 

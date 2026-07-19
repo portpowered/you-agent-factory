@@ -291,7 +291,7 @@ export function buildUiCoveragePhases(options = {}) {
         "--coverage.thresholds.branches=0",
         "--reporter=default",
         "--reporter=blob",
-        "--outputFile.blob=.vitest-reports/factory-topology.json",
+        "--outputFile.blob=.vitest-isolated-reports/factory-topology.json",
         ...isolatedFactoryTopologyCoverageFiles,
       ],
     },
@@ -358,6 +358,7 @@ export function formatPhaseElapsed(phaseName, elapsedMs) {
 export function cleanCoverageArtifacts() {
   rmSync("coverage", { force: true, recursive: true });
   rmSync(".vitest-reports", { force: true, recursive: true });
+  rmSync(".vitest-isolated-reports", { force: true, recursive: true });
   rmSync(defaultTimingReportsDir, { force: true, recursive: true });
   mkdirSync("coverage/.tmp", { recursive: true });
   mkdirSync(".vitest-reports", { recursive: true });

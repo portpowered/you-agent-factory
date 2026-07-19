@@ -269,11 +269,13 @@ test("cleanCoverageArtifacts recreates coverage temp and blob report directories
     process.chdir(tempDir);
     mkdirSync("coverage/old", { recursive: true });
     mkdirSync(".vitest-reports/old", { recursive: true });
+    mkdirSync(".vitest-isolated-reports/old", { recursive: true });
 
     cleanCoverageArtifacts();
 
     expect(existsSync("coverage/.tmp")).toBe(true);
     expect(existsSync(".vitest-reports")).toBe(true);
+    expect(existsSync(".vitest-isolated-reports")).toBe(false);
   } finally {
     process.chdir(cwd);
     rmSync(tempDir, { force: true, recursive: true });
