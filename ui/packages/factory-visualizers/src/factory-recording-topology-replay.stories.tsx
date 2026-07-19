@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import { expect, fn, userEvent, within } from "storybook/test";
 import customerSupportRecording from "../examples/support-playback.factory-recording.v1.json";
 
@@ -232,6 +233,22 @@ export const DenseRecording: Story = {
   },
 };
 
+export const AnnotatedRecording: Story = {
+  args: {
+    layout: recordingLayout(),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Escalations are reviewed here.")).toBeVisible();
+    await userEvent.click(
+      canvas.getByRole("button", { name: messages.topology.annotationsVisible }),
+    );
+    await expect(
+      canvas.queryByText("Escalations are reviewed here."),
+    ).toBeNull();
+  },
+};
+
 export const LocalizedRecording: Story = {
   args: {
     formatNumber: new Intl.NumberFormat("de-DE").format,
@@ -406,5 +423,21 @@ function playbackRecording(): unknown {
     id: "same-tick-history-current",
     schemaVersion: "factory-recording/v1",
     title: "Same-tick history and current playback",
+  };
+}
+
+function recordingLayout(): FactoryVisualizationLayoutV1 {
+  return {
+    annotations: [
+      {
+        id: "escalations",
+        kind: "note",
+        position: { x: 920, y: 110 },
+        body: "Escalations are reviewed here.",
+        tone: "info",
+      },
+    ],
+    nodeEmptyStates: [],
+    schemaVersion: "factory-visualization-layout/v1",
   };
 }

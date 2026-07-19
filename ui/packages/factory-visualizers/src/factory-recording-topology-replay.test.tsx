@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import "./testing/vitest.setup";
 
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -101,6 +102,25 @@ const messages: FactoryRecordingTopologyReplayMessages = {
 };
 
 describe("FactoryRecordingTopologyReplay", () => {
+  it("forwards the caller-owned layout sidecar without changing recording replay", () => {
+    const recording = activeRecording();
+
+    render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        layout={annotationLayout()}
+        messages={messages}
+        recording={recording}
+      />,
+    );
+
+    expect(screen.getByText("Customer escalation path")).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: messages.regionLabel }),
+    ).toHaveAttribute("data-selected-tick", "3");
+    expect(recording).toEqual(activeRecording());
+  });
+
   it("validates caller input and delegates selected-tick projections to the shared views", () => {
     const recording = activeRecording();
     const original = structuredClone(recording);
@@ -198,6 +218,22 @@ describe("FactoryRecordingTopologyReplay", () => {
     );
   });
 });
+
+function annotationLayout(): FactoryVisualizationLayoutV1 {
+  return {
+    annotations: [
+      {
+        id: "escalation-note",
+        kind: "note",
+        position: { x: 900, y: 120 },
+        body: "Customer escalation path",
+        tone: "info",
+      },
+    ],
+    nodeEmptyStates: [],
+    schemaVersion: "factory-visualization-layout/v1",
+  };
+}
 
 describe("FactoryRecordingTopologyReplay recording contract", () => {
   it("rejects duplicate event IDs through the public recording contract", async () => {

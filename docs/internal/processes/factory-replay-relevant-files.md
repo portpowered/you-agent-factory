@@ -80,5 +80,10 @@ that consumes the replay kernel.
   visibility is likewise derived from selected-tick Work-State counts, active
   Dispatches, and active routes; retain identity and telemetry outside its
   activity-detail region.
+- `ui/packages/factory-visualizers/src/factory-recording-topology-replay.tsx`
+  validates and owns static recording replay, then forwards the caller-owned
+  layout sidecar unchanged to the controlled topology renderer. Other hosts
+  should likewise supply the sidecar as an explicit presentation input rather
+  than attaching it to replay state or recordings.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.

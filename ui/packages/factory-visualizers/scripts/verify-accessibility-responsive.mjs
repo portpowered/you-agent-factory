@@ -61,6 +61,7 @@ async function verifyRecordingPresentations(browserInstance) {
   const stories = [
     "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
     "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
+    "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
     "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
   ];
   for (const storyId of stories) {
@@ -108,6 +109,22 @@ async function verifyRecordingPresentations(browserInstance) {
   assert(
     await page.getByText("2 Aufträge insgesamt").isVisible(),
     "The localized recording does not use localized plural Work copy.",
+  );
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
+  );
+  const annotationToggle = page.getByRole("button", {
+    name: "Hide annotations",
+  });
+  assert(
+    await page.getByText("Escalations are reviewed here.").isVisible(),
+    "The annotated recording did not render its caller-owned layout sidecar.",
+  );
+  await annotationToggle.click();
+  assert(
+    !(await page.getByText("Escalations are reviewed here.").isVisible()),
+    "Hiding annotations in the recording did not remove the annotation node.",
   );
   await context.close();
 

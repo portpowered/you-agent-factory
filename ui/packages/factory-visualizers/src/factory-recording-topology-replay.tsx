@@ -1,5 +1,6 @@
 import {
   type FactoryRecording,
+  type FactoryVisualizationLayoutV1,
   type RecordingValidationIssue,
   safeParseFactoryRecording,
 } from "@you-agent-factory/client";
@@ -64,6 +65,8 @@ export interface FactoryRecordingTopologyReplayMessages {
 export interface FactoryRecordingTopologyReplayProps {
   defaultSelectedTick?: number;
   formatNumber: (value: number) => string;
+  /** Validated, presentation-only content shared with the controlled topology renderer. */
+  layout?: FactoryVisualizationLayoutV1;
   messages: FactoryRecordingTopologyReplayMessages;
   onError?: (error: FactoryRecordingTopologyReplayError) => void;
   onSelectNode?: (node: FactoryTopologyNode) => void;
@@ -90,6 +93,7 @@ const MAX_CACHED_RECORDING_PROJECTIONS = 32;
 export function FactoryRecordingTopologyReplay({
   defaultSelectedTick,
   formatNumber,
+  layout,
   messages,
   onError,
   onSelectNode,
@@ -144,6 +148,7 @@ export function FactoryRecordingTopologyReplay({
       defaultSelectedTick={defaultSelectedTick}
       formatNumber={formatNumber}
       key={parsed.data.id}
+      layout={layout}
       messages={messages}
       onError={onError}
       onSelectNode={onSelectNode}
@@ -156,6 +161,7 @@ export function FactoryRecordingTopologyReplay({
 function ValidatedRecordingReplay({
   defaultSelectedTick,
   formatNumber,
+  layout,
   messages,
   onError,
   onSelectNode,
@@ -235,6 +241,7 @@ function ValidatedRecordingReplay({
         }}
       />
       <FactoryTopologyReplay
+        layout={layout}
         messages={messages.topology}
         onError={onError}
         onSelectNode={onSelectNode}
