@@ -41,6 +41,7 @@ export const isolatedFactoryTopologyCoverageFiles = [
   "packages/factory-visualizers/src/factory-topology-chrome-render.test.tsx",
   "packages/factory-visualizers/src/factory-topology-chrome.test.ts",
   "packages/factory-visualizers/src/factory-topology-replay.test.tsx",
+  "packages/factory-visualizers/src/factory-topology-state.test.tsx",
 ];
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
