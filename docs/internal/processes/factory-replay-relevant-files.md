@@ -8,12 +8,6 @@ that consumes the replay kernel.
   advancement, reducer-driven replay orchestration, and selected-tick topology
   event selection. Accepted-tail callers must supply explicit state cloning
   and selected-tick adapters because replay state remains domain-owned.
-- `packages/factory-replay/src/replay.ts` also exposes compact world
-  checkpoints for hosted consumers. Keep cloning, tick assignment, and world
-  projection supplied by the consumer; checkpoints retain accepted IDs and
-  state, never dashboard dependencies or replay-history references. An unseen
-  later event at the checkpoint's selected tick remains part of the accepted
-  tail and must be applied; event IDs, not tick equality, provide idempotency.
 - `packages/factory-replay/src/topology.js` owns the pure public Factory
   topology projection. Keep canonical node/connection IDs and renderer handle
   IDs aligned with `pkg/factory/contracts/factory_graph_ids.go` and the graph
@@ -67,11 +61,6 @@ that consumes the replay kernel.
 - `ui/src/features/timeline/state/timeline/factory-replay-kernel.compatibility.test.ts`
   compares the package-selected historical projection with the existing hosted
   reducer and projection.
-- `ui/src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts`
-  is the deterministic 10,000-event retained-state budget harness. It measures
-  serialized retained history plus checkpoint state, not wall-clock time or
-  process heap noise, and requires identical repeated runs to retain the same
-  amount of state.
 - `ui/src/features/timeline/state/timeline/projections/factory-replay-projections.compatibility.test.ts`
   proves the hosted adapter preserves shared topology IDs and handle parity,
   Dispatch/resource occupancy, exclusive Work progress, and same-tick

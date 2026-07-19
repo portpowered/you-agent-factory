@@ -25,13 +25,16 @@ function factoryStateEvents(): FactoryEvent[] {
   });
 }
 
-function replayMeasurement(events: FactoryEvent[]) {
+function replayMeasurement(
+  events: FactoryEvent[],
+  checkpoint = {
+    acceptedEventIDs: [],
+    selectedTick: 0,
+    state: emptyReplayWorldState(0),
+  },
+) {
   const result = advanceFactoryReplay({
-    checkpoint: {
-      acceptedEventIDs: [],
-      selectedTick: 0,
-      state: emptyReplayWorldState(0),
-    },
+    checkpoint,
     cloneState: structuredClone,
     events: events as Parameters<typeof advanceFactoryReplay>[0]["events"],
     reducer: hostedFactoryReplayReducer,
@@ -45,15 +48,24 @@ function replayMeasurement(events: FactoryEvent[]) {
     JSON.stringify({ events, checkpoint: result.checkpoint }),
   ).byteLength;
 
-  return { retainedBytes, world: projectSnapshot(result.state) };
+  return {
+    acceptedEventIDs: result.checkpoint.acceptedEventIDs,
+    checkpoint: result.checkpoint,
+    retainedBytes,
+    world: projectSnapshot(result.state),
+  };
 }
 
 describe("hosted replay retained-state budget", () => {
   it("replays 10,000 events deterministically within the retained-state budget", () => {
     const events = factoryStateEvents();
-    const measurements = Array.from({ length: 3 }, () =>
-      replayMeasurement(events),
-    );
+    const measurements = [];
+    let checkpoint = undefined;
+    for (let run = 0; run < 3; run += 1) {
+      const measurement = replayMeasurement(events, checkpoint);
+      measurements.push(measurement);
+      checkpoint = measurement.checkpoint;
+    }
 
     expect(measurements.map(({ retainedBytes }) => retainedBytes)).toEqual([
       measurements[0]?.retainedBytes,
@@ -63,6 +75,14 @@ describe("hosted replay retained-state budget", () => {
     expect(measurements[0]?.retainedBytes).toBeLessThanOrEqual(
       MAX_RETAINED_BYTES,
     );
+    expect(measurements.map(({ acceptedEventIDs }) => acceptedEventIDs)).toEqual(
+      [
+        measurements[0]?.acceptedEventIDs,
+        measurements[0]?.acceptedEventIDs,
+        measurements[0]?.acceptedEventIDs,
+      ],
+    );
+    expect(measurements[0]?.acceptedEventIDs).toHaveLength(EVENT_COUNT);
     expect(measurements.map(({ world }) => world)).toEqual([
       measurements[0]?.world,
       measurements[0]?.world,
