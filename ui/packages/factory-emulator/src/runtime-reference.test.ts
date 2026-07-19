@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   loadFactoryEmulatorRuntimeReferences,
@@ -5,6 +7,13 @@ import {
 } from "./runtime-reference.js";
 import { compareFactoryEmulatorRuntimeReference } from "./runtime-reference-conformance.js";
 import { runtimeReferenceFixtures } from "./runtime-reference-fixtures.js";
+
+function headingAnchor(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replaceAll(/[^\w\s-]/g, "")
+    .replaceAll(/\s+/g, "-");
+}
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: This cohesive fixture-contract suite keeps loading and rejection evidence adjacent.
 describe("frozen runtime references", () => {
@@ -75,6 +84,27 @@ describe("frozen runtime references", () => {
       expect(reference.orderedEventKinds).toEqual(
         reference.ticks.flatMap(({ eventKinds }) => eventKinds),
       );
+    }
+  });
+
+  it("uses existing documentation anchors as frozen evidence provenance", () => {
+    const referenceDirectory = resolve(
+      import.meta.dirname,
+      "../../../../docs/reference",
+    );
+    for (const reference of loadFactoryEmulatorRuntimeReferences()) {
+      const source = reference.provenance.source.match(
+        /^docs\/reference\/(.+)#([^\s]+) \(pre-existing public runtime behavior documentation\)$/,
+      );
+      expect(source, reference.id).not.toBeNull();
+      if (source === null)
+        throw new Error(`Invalid provenance for ${reference.id}.`);
+      const [, file, anchor] = source;
+      const markdown = readFileSync(resolve(referenceDirectory, file), "utf8");
+      const anchors = Array.from(markdown.matchAll(/^#{1,6}\s+(.+)$/gm)).map(
+        ([, heading]) => headingAnchor(heading ?? ""),
+      );
+      expect(anchors, reference.id).toContain(anchor);
     }
   });
 

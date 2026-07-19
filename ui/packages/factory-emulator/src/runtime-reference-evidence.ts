@@ -223,7 +223,7 @@ export const frozenRuntimeReferenceEvidence: Readonly<
       ),
     ];
     return {
-      provenance: source("workstations.md#work-propagation"),
+      provenance: source("workstations.md#work-payload-propagation"),
       ticks,
       orderedEventKinds: ordered(ticks),
     };
