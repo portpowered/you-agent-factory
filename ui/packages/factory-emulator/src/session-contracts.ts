@@ -190,11 +190,21 @@ export interface FactoryEmulatorSessionWork {
   readonly submissionId: string;
   readonly requestId: string;
   readonly traceId: string;
+  /** Consumable token identity; routed fan-out tokens may share one Work ID. */
+  readonly tokenId: string;
   readonly workId: string;
+  /** Stable root identity used by lineage-scoped scenario cursors. */
+  readonly rootWorkId: string;
+  /** Deterministic transition visit counts carried by this Work lineage. */
+  readonly visits: Readonly<Record<string, number>>;
   readonly workType: string;
   readonly state: string;
   readonly input?: string;
   readonly parent?: string;
+  /** Virtual instant when this Work entered its current queue. */
+  readonly queuedElapsedMs: number;
+  /** Earliest completed dispatch for this Work lineage, when initialized. */
+  readonly lastDispatchElapsedMs?: number;
   readonly phase: "ready" | "waiting" | "active" | "completed";
   readonly dispatch?: {
     readonly dispatchId: string;
@@ -204,6 +214,13 @@ export interface FactoryEmulatorSessionWork {
     readonly worker: string;
     readonly startedElapsedMs: number;
     readonly dueElapsedMs: number;
+    /** Stable declared-input order for every token consumed by this dispatch. */
+    readonly inputTokenIds: readonly string[];
+    /** Factory-scoped capacity held until this dispatch reaches an outcome. */
+    readonly resources: readonly {
+      readonly name: string;
+      readonly capacity: number;
+    }[];
     readonly outcome: import("./scenario-contracts.js").FactoryEmulatorOutcome;
   };
 }

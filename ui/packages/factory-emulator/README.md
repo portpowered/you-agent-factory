@@ -93,6 +93,30 @@ outcome through its requested instant. Event timestamps are always the scenario
 or browser timers. Receipts, state, status, and validation errors are detached
 structured-cloneable values.
 
+Each scheduler batch considers at most 50 eligible bindings in deterministic
+Work-in-queue order. Multi-input workstations require a stable binding for every
+input, and selected candidates claim all consumable Work and declared top-level
+resource capacity atomically. Independent candidates can start together when
+capacity permits; active dispatches retain their claims until completion, and
+released capacity is available to waiting Work in the following scheduler
+batch. Worker-only resource metadata does not change mocked execution capacity.
+
+Accepted, continued, rejected, and failed outcomes preserve Work lineage while
+routing to explicit destinations in declared order. Accepted fan-out supports
+multiple outputs and both `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT` propagation.
+Missing routes use the supported Factory defaults: failures enter the input Work
+Type's failed state, STANDARD rejections use the effective failure route, and
+REPEATER rejections return to their inputs.
+
+Supported workerless `LOGICAL_MOVE` workstations do not need scenario rules.
+Their `VISIT_COUNT` guards read the inclusive transition counts carried by the
+first authored input lineage, and an eligible move routes synchronously at the
+current virtual instant without creating active worker-dispatch state. The
+resulting canonical `DISPATCH_RESPONSE` preserves lineage, propagation mode,
+and declared output order; session Work snapshots expose the carried `visits`
+map for deterministic inspection. Zero-duration logical cycles share the
+session's configured cycle and cooperative-yield boundaries.
+
 Canonical identities and event ordering are derived from the Factory identity,
 the complete validated scenario (including its seed), normalized command
 inputs, command order, and virtual elapsed time. Object key insertion order,

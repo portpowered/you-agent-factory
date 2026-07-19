@@ -115,14 +115,21 @@ import {
 
 const factory = {
   name: "customer-support",
-  workTypes: [{
-    name: "ticket",
-    states: [
-      { name: "new", type: "INITIAL" },
-      { name: "done", type: "TERMINAL" },
-      { name: "failed", type: "FAILED" },
-    ],
-  }],
+  workTypes: [
+    {
+      name: "ticket",
+      states: [
+        { name: "new", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
+      ],
+    },
+    {
+      name: "audit",
+      states: [{ name: "recorded", type: "TERMINAL" }],
+    },
+  ],
+  resources: [{ name: "agent-slot", capacity: 1 }],
   workers: [{ name: "support-agent", type: "AGENT_WORKER" }],
   workstations: [{
     name: "triage",
@@ -130,8 +137,12 @@ const factory = {
     behavior: "STANDARD",
     worker: "support-agent",
     inputs: [{ workType: "ticket", state: "new" }],
-    outputs: [{ workType: "ticket", state: "done" }],
+    outputs: [
+      { workType: "ticket", state: "done" },
+      { workType: "audit", state: "recorded" },
+    ],
     onFailure: [{ workType: "ticket", state: "failed" }],
+    resources: [{ name: "agent-slot", capacity: 1 }],
   }],
 };
 const exampleUrl = import.meta.resolve(
@@ -162,12 +173,46 @@ async function runSession(recordingId) {
   });
   const session = createFactoryEmulatorSession({ factory, scenario, sink });
   await session.start();
-  await session.advanceToNext();
+  await session.submit({
+    name: "ticket-002",
+    workType: "ticket",
+    state: "new",
+    input: "Customer cannot reset password",
+  });
+  const firstDispatch = await session.advanceToNext();
+  if (
+    firstDispatch.state.works.filter(({ phase }) => phase === "active").length !== 1 ||
+    firstDispatch.state.works.filter(({ phase }) => phase === "ready").length !== 1
+  ) {
+    throw new Error("installed scheduler did not enforce resource contention");
+  }
+  const firstCompletion = await session.advanceToNext();
+  const secondDispatch = await session.advanceToNext();
   const completed = await session.advanceToNext();
+  const routedDestinations = [firstCompletion, completed].flatMap(({ batches }) =>
+    batches.flatMap((batch) =>
+      batch.flatMap(({ payload }) =>
+        "outputWork" in payload
+          ? payload.outputWork.map(({ state, workTypeName }) =>
+              workTypeName + ":" + state.name,
+            )
+          : [],
+      ),
+    ),
+  );
   const closed = await session.close();
   const snapshot = sink.snapshot();
   if (
-    completed.virtualElapsedMs !== 25 ||
+    firstCompletion.virtualElapsedMs !== 25 ||
+    secondDispatch.state.works.filter(({ phase }) => phase === "active").length !== 1 ||
+    completed.virtualElapsedMs !== 50 ||
+    JSON.stringify(routedDestinations) !==
+      JSON.stringify([
+        "ticket:done",
+        "audit:recorded",
+        "ticket:done",
+        "audit:recorded",
+      ]) ||
     closed.status !== "closed" ||
     session.status().phase !== "closed" ||
     !safeParseFactoryRecording(snapshot).success
@@ -229,7 +274,7 @@ if (memory.snapshot().length !== 2 || !safeParseFactoryRecording(snapshot).succe
 }
 await Promise.all([memory.close(), recording.close()]);
 process.stdout.write(
-  \`verified \${scenario.id} with \${snapshot.events.length} sink events and \${firstHistory.length} deterministic session events\n\`,
+  \`verified \${scenario.id} with \${snapshot.events.length} sink events and \${firstHistory.length} deterministic contention-and-routing events\n\`,
 );
 `;
 

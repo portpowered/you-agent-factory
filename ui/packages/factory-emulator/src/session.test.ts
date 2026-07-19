@@ -268,6 +268,1021 @@ describe("Factory emulator Work submission", () => {
   });
 });
 
+describe("Factory emulator scheduler dispatch", () => {
+  it("starts only the same highest-ranked 50 Work bindings per batch", async () => {
+    const boundedScenario = executionScenario({
+      initialSubmissions: Array.from({ length: 75 }, (_, index) => ({
+        name: `queued-${String(74 - index).padStart(2, "0")}`,
+        workType: "task",
+        state: "ready",
+      })),
+    });
+    const dispatchOnce = async () => {
+      const emulator = executionHarness(boundedScenario);
+      await emulator.start();
+      return emulator.advanceToNext();
+    };
+
+    const first = await dispatchOnce();
+    const second = await dispatchOnce();
+    const dispatchedWorkIds = (receipt: typeof first) =>
+      receipt.batches[0]?.map(({ context }) => context.workIds?.[0]);
+
+    expect(first.batches[0]).toHaveLength(50);
+    expect(
+      first.state.works.filter(({ phase }) => phase === "active"),
+    ).toHaveLength(50);
+    expect(
+      first.state.works.filter(({ phase }) => phase === "ready"),
+    ).toHaveLength(25);
+    expect(dispatchedWorkIds(second)).toEqual(dispatchedWorkIds(first));
+  });
+
+  it("routes an eligible logical move ahead of a competing worker without an active dispatch", async () => {
+    const competingFactory = {
+      ...executionFactory,
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          name: "a-worker-run",
+          outputs: [{ workType: "task", state: "ready" }],
+        },
+        {
+          name: "z-logical-move",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "done" }],
+          guards: [
+            {
+              type: "VISIT_COUNT",
+              workstation: "a-worker-run",
+              maxVisits: 1,
+            },
+          ],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const competingScenario = executionScenario({
+      factory: { name: competingFactory.name },
+      initialSubmissions: [
+        { name: "shared", workType: "task", state: "ready" },
+      ],
+      rules: [
+        {
+          id: "worker-outcome",
+          selector: { workstation: "a-worker-run" },
+          cursor: { scope: "lineage", input: "rootWorkId" },
+          outcomes: [{ result: "accepted", durationMs: 1 }],
+          exhaustion: "repeat-last",
+        },
+      ],
+    });
+    const emulator = createFactoryEmulatorSession({
+      factory: competingFactory,
+      scenario: competingScenario,
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    const workerDispatch = await emulator.advanceToNext();
+    const workerCompletion = await emulator.advanceToNext();
+    const moved = await emulator.advanceToNext();
+
+    expect(workerDispatch.batches[0]?.[0]?.type).toBe("DISPATCH_REQUEST");
+    expect(workerCompletion.state.works.at(-1)?.visits).toEqual({
+      "a-worker-run": 1,
+    });
+    expect(moved.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_RESPONSE",
+    ]);
+    expect(moved.batches[0]?.[0]).toMatchObject({
+      payload: {
+        transitionId: "z-logical-move",
+        outcome: "ACCEPTED",
+        durationMillis: 0,
+      },
+    });
+    expect(moved.batches[0]?.[0]?.context.dispatchId).toBeUndefined();
+    expect(moved.state.works.some(({ phase }) => phase === "active")).toBe(
+      false,
+    );
+    expect(moved.state.works.at(-1)).toMatchObject({
+      state: "done",
+      phase: "completed",
+      visits: { "a-worker-run": 1, "z-logical-move": 1 },
+    });
+  });
+});
+
+describe("Factory emulator guarded logical moves", () => {
+  it("preserves lineage, payload, and declared fan-out order", async () => {
+    const logicalFactory = {
+      name: "logical-routing-factory",
+      orchestrator: { kind: "PETRI" },
+      workTypes: [
+        {
+          name: "task",
+          states: [
+            { name: "ready", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+        {
+          name: "audit",
+          states: [{ name: "recorded", type: "TERMINAL" }],
+        },
+      ],
+      workers: [{ name: "worker", type: "AGENT_WORKER" }],
+      workstations: [
+        {
+          name: "execute",
+          type: "AGENT_RUN",
+          worker: "worker",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "ready" }],
+        },
+        {
+          name: "loop-breaker",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [
+            { workType: "audit", state: "recorded" },
+            { workType: "task", state: "done" },
+          ],
+          guards: [
+            { type: "VISIT_COUNT", workstation: "execute", maxVisits: 1 },
+          ],
+          workPropagation: { mode: "PRESERVE_INPUT" },
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const logicalScenario = executionScenario({
+      factory: { name: logicalFactory.name },
+      initialSubmissions: [
+        {
+          name: "logical-input",
+          workType: "task",
+          state: "ready",
+          input: "original",
+        },
+      ],
+      rules: [
+        {
+          id: "execute-outcome",
+          selector: { workstation: "execute" },
+          cursor: { scope: "lineage", input: "rootWorkId" },
+          outcomes: [
+            { result: "accepted", durationMs: 1, output: "worker-output" },
+          ],
+          exhaustion: "repeat-last",
+        },
+      ],
+    });
+    const emulator = createFactoryEmulatorSession({
+      factory: logicalFactory,
+      scenario: logicalScenario,
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    await emulator.advanceToNext();
+    await emulator.advanceToNext();
+    const moved = await emulator.advanceToNext();
+    const response = moved.batches[0]?.[0];
+    if (response?.type !== "DISPATCH_RESPONSE") {
+      throw new Error("missing logical-move response");
+    }
+    const outputWork = response.payload.outputWork ?? [];
+
+    expect(
+      outputWork.map(({ workTypeName, state, payload }) => ({
+        workTypeName,
+        state: state.name,
+        payload,
+      })),
+    ).toEqual([
+      { workTypeName: "audit", state: "recorded", payload: "worker-output" },
+      { workTypeName: "task", state: "done", payload: "worker-output" },
+    ]);
+    expect(
+      moved.state.works.slice(-2).map(({ workType, rootWorkId }) => ({
+        workType,
+        rootWorkId,
+      })),
+    ).toEqual([
+      { workType: "audit", rootWorkId: moved.state.works[0]?.rootWorkId },
+      { workType: "task", rootWorkId: moved.state.works[0]?.rootWorkId },
+    ]);
+  });
+});
+
+describe("Factory emulator logical-move cycle safety", () => {
+  it("pauses a zero-duration logical cycle at the configured cooperative boundary", async () => {
+    const cycleFactory = {
+      ...executionFactory,
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          name: "execute",
+          outputs: [{ workType: "task", state: "ready" }],
+        },
+        {
+          name: "cycle",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "ready" }],
+          guards: [
+            { type: "VISIT_COUNT", workstation: "execute", maxVisits: 1 },
+          ],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const writes: FactoryEvent[][] = [];
+    let yields = 0;
+    const emulator = createFactoryEmulatorSession({
+      factory: cycleFactory,
+      scenario: executionScenario({
+        factory: { name: cycleFactory.name },
+        initialSubmissions: [
+          { name: "cycle-input", workType: "task", state: "ready" },
+        ],
+        rules: [
+          {
+            id: "execute-outcome",
+            selector: { workstation: "execute" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 1 }],
+            exhaustion: "repeat-last",
+          },
+        ],
+      }),
+      sink: {
+        write: async (events) => {
+          writes.push(structuredClone(events) as FactoryEvent[]);
+        },
+      },
+      limits: { maxZeroDurationBatches: 3, maxSynchronousBatches: 1 },
+      yieldControl: () => {
+        yields += 1;
+      },
+    });
+
+    await emulator.start();
+    await expect(emulator.advanceBy(1)).rejects.toMatchObject({
+      name: "FactoryEmulatorExecutionPausedError",
+      diagnostic: {
+        kind: "zero-duration-cycle",
+        configured: 3,
+        observed: 4,
+      },
+    } satisfies Partial<FactoryEmulatorExecutionPausedError>);
+
+    expect(yields).toBeGreaterThan(0);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      virtualElapsedMs: 1,
+      error: { diagnostic: { kind: "zero-duration-cycle" } },
+    });
+    expect(emulator.state().lifecycle).toBe("started");
+    const state = emulator.state();
+    if (state.lifecycle !== "started") throw new Error("session not started");
+    expect(state.works.at(-1)).toMatchObject({
+      state: "ready",
+      phase: "ready",
+      visits: { execute: 1, cycle: 3 },
+    });
+    const logicalEvents = writes
+      .flat()
+      .filter(
+        (event) =>
+          event.type === "DISPATCH_RESPONSE" &&
+          event.payload.transitionId === "cycle",
+      );
+    expect(logicalEvents).toHaveLength(3);
+    expect(
+      writes
+        .flat()
+        .some(
+          (event) =>
+            event.type === "DISPATCH_RESPONSE" &&
+            event.payload.outcome === "FAILED",
+        ),
+    ).toBe(false);
+  });
+});
+
+describe("Factory emulator resource-capacity dispatch", () => {
+  it("starts independent Work up to capacity and reuses released capacity", async () => {
+    const resourceFactory = {
+      ...executionFactory,
+      resources: [{ name: "agent-slot", capacity: 2 }],
+      workers: [
+        {
+          ...executionFactory.workers[0],
+          resources: [{ name: "agent-slot", capacity: 2 }],
+        },
+      ],
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          resources: [{ name: "agent-slot", capacity: 1 }],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const resourceScenario = executionScenario({
+      initialSubmissions: ["third", "first", "second"].map((name) => ({
+        name,
+        workType: "task",
+        state: "ready",
+      })),
+    });
+    const runFirstBatch = async () => {
+      const emulator = createFactoryEmulatorSession({
+        factory: resourceFactory,
+        scenario: resourceScenario,
+        sink: { write: async () => undefined },
+      });
+      await emulator.start();
+      return { emulator, receipt: await emulator.advanceToNext() };
+    };
+
+    const first = await runFirstBatch();
+    const repeated = await runFirstBatch();
+    const activeWorkIds = (receipt: typeof first.receipt) =>
+      receipt.state.works
+        .filter(({ phase }) => phase === "active")
+        .map(({ workId }) => workId);
+
+    expect(activeWorkIds(first.receipt)).toHaveLength(2);
+    expect(activeWorkIds(repeated.receipt)).toEqual(
+      activeWorkIds(first.receipt),
+    );
+    expect(first.receipt.batches[0]?.map(({ payload }) => payload)).toEqual([
+      expect.objectContaining({
+        resources: [{ name: "agent-slot", capacity: 2 }],
+      }),
+      expect.objectContaining({
+        resources: [{ name: "agent-slot", capacity: 2 }],
+      }),
+    ]);
+
+    const completed = await first.emulator.advanceToNext();
+    expect(completed.batches[0]).toHaveLength(2);
+    expect(
+      completed.state.works.filter(({ phase }) => phase === "ready"),
+    ).toHaveLength(1);
+
+    const released = await first.emulator.advanceToNext();
+    expect(released.batches[0]).toHaveLength(1);
+    expect(
+      released.state.works.filter(({ phase }) => phase === "active"),
+    ).toHaveLength(1);
+  });
+
+  it("leaves Work ready without events when total capacity is insufficient", async () => {
+    const resourceFactory = {
+      ...executionFactory,
+      resources: [{ name: "agent-slot", capacity: 1 }],
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          resources: [{ name: "agent-slot", capacity: 2 }],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const emulator = createFactoryEmulatorSession({
+      factory: resourceFactory,
+      scenario: executionScenario({
+        initialSubmissions: [
+          { name: "blocked", workType: "task", state: "ready" },
+        ],
+      }),
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    const receipt = await emulator.advanceToNext();
+
+    expect(receipt).toMatchObject({ status: "idle", batches: [] });
+    expect(receipt.state.works[0]).toMatchObject({
+      submissionId: "blocked",
+      phase: "ready",
+    });
+    expect(receipt.state.works[0]?.dispatch).toBeUndefined();
+  });
+});
+
+const joinFactory = {
+  name: "join-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "left",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+    {
+      name: "right",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+    {
+      name: "joined",
+      states: [{ name: "ready", type: "INITIAL" }],
+    },
+  ],
+  workers: [{ name: "join-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "join",
+      type: "AGENT_RUN",
+      worker: "join-worker",
+      inputs: [
+        { workType: "left", state: "ready" },
+        { workType: "right", state: "ready" },
+      ],
+      outputs: [
+        { workType: "left", state: "done" },
+        { workType: "joined", state: "ready" },
+        { workType: "right", state: "done" },
+      ],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function joinScenario(
+  overrides: Partial<FactoryEmulatorScenario> = {},
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "join-scenario",
+    factory: { name: joinFactory.name },
+    seed: "join-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    rules: [
+      {
+        id: "join-outcomes",
+        selector: { workstation: "join" },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          { result: "accepted", durationMs: 5, output: "joined output" },
+        ],
+        exhaustion: "repeat-last",
+      },
+    ],
+    unmatched: { behavior: "error" },
+    ...overrides,
+  };
+}
+
+function joinHarness(
+  scenarioInput: FactoryEmulatorScenario,
+  factoryInput: FactoryDefinition = joinFactory,
+) {
+  return createFactoryEmulatorSession({
+    factory: factoryInput,
+    scenario: scenarioInput,
+    sink: { write: async () => undefined },
+  });
+}
+
+describe("Factory emulator multi-input binding and output routing", () => {
+  it("keeps an incomplete join ready until every declared input is present", async () => {
+    const emulator = joinHarness(
+      joinScenario({
+        initialSubmissions: [
+          { name: "left-only", workType: "left", state: "ready" },
+        ],
+      }),
+    );
+    await emulator.start();
+
+    const blocked = await emulator.advanceToNext();
+    expect(blocked).toMatchObject({ status: "idle", batches: [] });
+    expect(blocked.state.works[0]).toMatchObject({ phase: "ready" });
+
+    await emulator.submit({
+      name: "right-later",
+      workType: "right",
+      state: "ready",
+    });
+    const dispatched = await emulator.advanceToNext();
+    expect(dispatched.batches[0]?.[0]).toMatchObject({
+      type: "DISPATCH_REQUEST",
+      payload: {
+        inputs: [
+          { workId: dispatched.state.works[0]?.workId },
+          { workId: dispatched.state.works[1]?.workId },
+        ],
+      },
+    });
+    expect(dispatched.state.works.map(({ phase }) => phase)).toEqual([
+      "active",
+      "active",
+    ]);
+  });
+
+  it("selects the same independent join bindings from competing inputs", async () => {
+    const scenarioInput = joinScenario({
+      initialSubmissions: [
+        { name: "right-two", workType: "right", state: "ready" },
+        { name: "left-one", workType: "left", state: "ready" },
+        { name: "right-one", workType: "right", state: "ready" },
+        { name: "left-two", workType: "left", state: "ready" },
+      ],
+    });
+    const dispatchOnce = async () => {
+      const emulator = joinHarness(scenarioInput);
+      await emulator.start();
+      const receipt = await emulator.advanceToNext();
+      return receipt.batches[0]?.map(
+        ({ payload }) => (payload as { inputs: { workId: string }[] }).inputs,
+      );
+    };
+
+    const first = await dispatchOnce();
+    expect(first).toHaveLength(2);
+    expect(await dispatchOnce()).toEqual(first);
+    expect(new Set(first?.flat().map(({ workId }) => workId)).size).toBe(4);
+  });
+
+  it("bounds deterministic join derivation with the synchronous Work budget", async () => {
+    const initialSubmissions = ["left", "right"].flatMap((workType) =>
+      Array.from({ length: 8 }, (_, index) => ({
+        name: `${workType}-${String(7 - index).padStart(2, "0")}`,
+        workType,
+        state: "ready",
+      })),
+    );
+    const dispatchOnce = async () => {
+      const emulator = createFactoryEmulatorSession({
+        factory: joinFactory,
+        scenario: joinScenario({ initialSubmissions }),
+        sink: { write: async () => undefined },
+        limits: { maxSynchronousWorkItems: 72 },
+      });
+      await emulator.start();
+      return emulator.advanceToNext();
+    };
+
+    const first = await dispatchOnce();
+    const second = await dispatchOnce();
+    expect(second.batches).toEqual(first.batches);
+    expect(first.batches[0]?.length).toBeLessThanOrEqual(50);
+
+    const bounded = createFactoryEmulatorSession({
+      factory: joinFactory,
+      scenario: joinScenario({ initialSubmissions }),
+      sink: { write: async () => undefined },
+      limits: { maxSynchronousWorkItems: 71 },
+    });
+    await bounded.start();
+    const before = bounded.state();
+    await expect(bounded.advanceToNext()).rejects.toMatchObject({
+      diagnostic: {
+        kind: "bounded-work-exceeded",
+        limit: "synchronousWorkItems",
+        configured: 71,
+        observed: 72,
+      },
+    });
+    expect(bounded.state()).toEqual(before);
+  });
+});
+
+describe("Factory emulator multi-output routing and join cursors", () => {
+  it("routes accepted fan-out in authored order with output payloads", async () => {
+    const emulator = joinHarness(
+      joinScenario({
+        initialSubmissions: [
+          {
+            name: "left-input",
+            workType: "left",
+            state: "ready",
+            input: "left payload",
+          },
+          {
+            name: "right-input",
+            workType: "right",
+            state: "ready",
+            input: "right payload",
+          },
+        ],
+      }),
+    );
+    await emulator.start();
+    await emulator.advanceToNext();
+    const completed = await emulator.advanceToNext();
+    const response = completed.batches[0]?.[0];
+    if (response === undefined) throw new Error("missing dispatch response");
+    const outputWork = (
+      response.payload as {
+        outputWork: {
+          workTypeName: string;
+          state: { name: string };
+          payload: string;
+        }[];
+      }
+    ).outputWork;
+
+    expect(
+      outputWork.map(({ workTypeName, state }) => [workTypeName, state.name]),
+    ).toEqual([
+      ["left", "done"],
+      ["joined", "ready"],
+      ["right", "done"],
+    ]);
+    expect(outputWork.map(({ payload }) => payload)).toEqual([
+      "joined output",
+      "joined output",
+      "joined output",
+    ]);
+    expect(
+      completed.state.works.slice(-3).map(({ workType, state, phase }) => ({
+        workType,
+        state,
+        phase,
+      })),
+    ).toEqual([
+      { workType: "left", state: "done", phase: "completed" },
+      { workType: "joined", state: "ready", phase: "ready" },
+      { workType: "right", state: "done", phase: "completed" },
+    ]);
+  });
+
+  it("preserves matching inputs and advances a join cursor after continued re-entry", async () => {
+    const loopingFactory = {
+      ...joinFactory,
+      workstations: [
+        {
+          ...joinFactory.workstations[0],
+          workPropagation: { mode: "PRESERVE_INPUT" },
+          onContinue: [
+            { workType: "left", state: "ready" },
+            { workType: "right", state: "ready" },
+          ],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const emulator = joinHarness(
+      joinScenario({
+        initialSubmissions: [
+          {
+            name: "left-loop",
+            workType: "left",
+            state: "ready",
+            input: "left payload",
+          },
+          {
+            name: "right-loop",
+            workType: "right",
+            state: "ready",
+            input: "right payload",
+          },
+        ],
+        rules: [
+          {
+            id: "join-outcomes",
+            selector: { workstation: "join" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [
+              { result: "continued", durationMs: 0, output: "ignored" },
+              { result: "accepted", durationMs: 1, output: "second" },
+            ],
+            exhaustion: "fail",
+          },
+        ],
+      }),
+      loopingFactory,
+    );
+    await emulator.start();
+    await emulator.advanceToNext();
+    const continued = await emulator.advanceToNext();
+    const response = continued.batches[0]?.[0];
+    if (response === undefined) throw new Error("missing dispatch response");
+    const continuedOutput = (
+      response.payload as {
+        outputWork: { payload: string }[];
+      }
+    ).outputWork;
+    expect(continuedOutput.map(({ payload }) => payload)).toEqual([
+      "left payload",
+      "right payload",
+    ]);
+
+    const repeated = await emulator.advanceToNext();
+    expect(
+      repeated.state.works.find(({ phase }) => phase === "active")?.dispatch,
+    ).toMatchObject({ outcome: { result: "accepted", output: "second" } });
+    expect(Object.values(repeated.state.ruleCursors)).toEqual([2]);
+  });
+});
+
+const outcomeRoutingFactory = {
+  name: "outcome-routing-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "task",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "review", type: "PROCESSING" },
+        { name: "retry", type: "PROCESSING" },
+        { name: "done", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
+      ],
+    },
+  ],
+  workers: [{ name: "routing-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "route-task",
+      type: "AGENT_RUN",
+      behavior: "STANDARD",
+      worker: "routing-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "done" }],
+      onContinue: [{ workType: "task", state: "retry" }],
+      onRejection: [
+        { workType: "task", state: "review" },
+        { workType: "task", state: "retry" },
+      ],
+      onFailure: [{ workType: "task", state: "review" }],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function outcomeRoutingScenario(
+  outcomes: FactoryEmulatorScenario["rules"][number]["outcomes"],
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "outcome-routing-scenario",
+    factory: { name: outcomeRoutingFactory.name },
+    seed: "outcome-routing-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    initialSubmissions: [
+      { name: "routed-task", workType: "task", state: "ready" },
+    ],
+    rules: [
+      {
+        id: "route-outcomes",
+        selector: { workstation: "route-task" },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes,
+        exhaustion: "fail",
+      },
+    ],
+    unmatched: { behavior: "error" },
+  };
+}
+
+async function completeFirstOutcome(
+  factoryInput: FactoryDefinition,
+  scenarioInput: FactoryEmulatorScenario,
+) {
+  const emulator = createFactoryEmulatorSession({
+    factory: factoryInput,
+    scenario: scenarioInput,
+    sink: { write: async () => undefined },
+  });
+  await emulator.start();
+  await emulator.advanceToNext();
+  return { emulator, receipt: await emulator.advanceToNext() };
+}
+
+function routedStatesFrom(response: FactoryEvent | undefined): string[] {
+  return (
+    (
+      response?.payload as
+        | { outputWork?: { state: { name: string } }[] }
+        | undefined
+    )?.outputWork?.map(({ state }) => state.name) ?? []
+  );
+}
+
+describe("Factory emulator standard and repeater outcome routing", () => {
+  it("uses the Factory workstation identity for worker dispatch events", async () => {
+    const emulator = createFactoryEmulatorSession({
+      factory: outcomeRoutingFactory,
+      scenario: outcomeRoutingScenario([
+        { result: "accepted", durationMs: 0, output: "routed output" },
+      ]),
+      sink: { write: async () => undefined },
+    });
+    await emulator.start();
+
+    const dispatched = await emulator.advanceToNext();
+    const completed = await emulator.advanceToNext();
+
+    expect(dispatched.batches[0]?.[0]).toMatchObject({
+      type: "DISPATCH_REQUEST",
+      payload: { transitionId: "route-task" },
+    });
+    expect(completed.batches[0]?.[0]).toMatchObject({
+      type: "DISPATCH_RESPONSE",
+      payload: {
+        transitionId: "route-task",
+        outputWork: [
+          {
+            workTypeName: "task",
+            state: { name: "done" },
+            payload: "routed output",
+          },
+        ],
+      },
+    });
+  });
+
+  it.each([
+    ["continued", "CONTINUE", ["retry"]],
+    ["rejected", "REJECTED", ["review", "retry"]],
+    ["failed", "FAILED", ["review"]],
+  ] as const)(
+    "gives explicit %s routes precedence in authored order",
+    async (result, canonicalOutcome, expectedStates) => {
+      const outcome =
+        result === "failed"
+          ? { result, durationMs: 0, error: "scripted failure" }
+          : { result, durationMs: 0 };
+      const { receipt } = await completeFirstOutcome(
+        outcomeRoutingFactory,
+        outcomeRoutingScenario([outcome]),
+      );
+      const response = receipt.batches[0]?.[0];
+
+      expect(response).toMatchObject({
+        type: "DISPATCH_RESPONSE",
+        payload: { outcome: canonicalOutcome },
+      });
+      expect(routedStatesFrom(response)).toEqual(expectedStates);
+    },
+  );
+});
+
+describe("Factory emulator failure-lane payload routing", () => {
+  it.each([
+    ["failed", "explicit failure", "review"],
+    ["failed", "implicit failure", "failed"],
+    ["rejected", "explicit rejection-to-failure", "failed"],
+    ["rejected", "implicit rejection-to-failure", "failed"],
+  ] as const)(
+    "preserves request payload for %s through %s routing",
+    async (result, routeKind, expectedState) => {
+      const factoryInput = structuredClone(
+        outcomeRoutingFactory,
+      ) as FactoryDefinition;
+      const workstation = factoryInput.workstations?.[0];
+      if (workstation === undefined) throw new Error("missing workstation");
+      if (routeKind === "implicit failure") workstation.onFailure = [];
+      if (routeKind === "explicit rejection-to-failure") {
+        workstation.onRejection = [{ workType: "task", state: "failed" }];
+      }
+      if (routeKind === "implicit rejection-to-failure") {
+        workstation.onRejection = [];
+      }
+      const outcome =
+        result === "failed"
+          ? {
+              result,
+              durationMs: 0,
+              output: "worker output",
+              error: "scripted failure",
+            }
+          : { result, durationMs: 0, output: "worker output" };
+      const scenarioInput = outcomeRoutingScenario([outcome]);
+      scenarioInput.initialSubmissions = [
+        {
+          name: "routed-task",
+          workType: "task",
+          state: "ready",
+          input: "request payload",
+        },
+      ];
+
+      const { receipt } = await completeFirstOutcome(
+        factoryInput,
+        scenarioInput,
+      );
+      const routed = receipt.state.works.at(-1);
+      expect(routed).toMatchObject({
+        state: expectedState,
+        input: "request payload",
+      });
+      expect(receipt.batches[0]?.[0]).toMatchObject({
+        payload: {
+          output: "worker output",
+          outputWork: [
+            {
+              state: { name: expectedState },
+              payload: "request payload",
+            },
+          ],
+        },
+      });
+    },
+  );
+
+  it("keeps worker output for rejection routes that are not failure states", async () => {
+    const scenarioInput = outcomeRoutingScenario([
+      { result: "rejected", durationMs: 0, output: "worker output" },
+    ]);
+    scenarioInput.initialSubmissions = [
+      {
+        name: "routed-task",
+        workType: "task",
+        state: "ready",
+        input: "request payload",
+      },
+    ];
+    const { receipt } = await completeFirstOutcome(
+      outcomeRoutingFactory,
+      scenarioInput,
+    );
+
+    expect(
+      receipt.state.works.slice(-2).map(({ state, input }) => ({
+        state,
+        input,
+      })),
+    ).toEqual([
+      { state: "review", input: "worker output" },
+      { state: "retry", input: "worker output" },
+    ]);
+  });
+});
+
+describe("Factory emulator implicit outcome routing", () => {
+  it.each([
+    ["failed", "STANDARD", "failed"],
+    ["rejected", "STANDARD", "failed"],
+    ["rejected", "REPEATER", "ready"],
+  ] as const)(
+    "routes implicit %s for %s workstations to %s",
+    async (result, behavior, expectedState) => {
+      const factoryInput = structuredClone(
+        outcomeRoutingFactory,
+      ) as FactoryDefinition;
+      const workstation = factoryInput.workstations?.[0];
+      if (workstation === undefined) throw new Error("missing workstation");
+      workstation.behavior = behavior;
+      workstation.onFailure = [];
+      workstation.onRejection = [];
+      const outcome =
+        result === "failed"
+          ? { result, durationMs: 0, error: "scripted failure" }
+          : { result, durationMs: 0 };
+      const { receipt } = await completeFirstOutcome(
+        factoryInput,
+        outcomeRoutingScenario([outcome]),
+      );
+
+      expect(routedStatesFrom(receipt.batches[0]?.[0])).toEqual([
+        expectedState,
+      ]);
+    },
+  );
+
+  it.each([
+    ["REPEATER", false],
+    ["STANDARD", true],
+  ] as const)(
+    "re-enters a %s rejection loop and advances its lineage cursor",
+    async (behavior, explicitReviewRoute) => {
+      const factoryInput = structuredClone(
+        outcomeRoutingFactory,
+      ) as FactoryDefinition;
+      const workstation = factoryInput.workstations?.[0];
+      if (workstation === undefined) throw new Error("missing workstation");
+      workstation.behavior = behavior;
+      workstation.onRejection = explicitReviewRoute
+        ? [{ workType: "task", state: "ready" }]
+        : [];
+      const { emulator, receipt: rejected } = await completeFirstOutcome(
+        factoryInput,
+        outcomeRoutingScenario([
+          { result: "rejected", durationMs: 0, feedback: "try again" },
+          { result: "accepted", durationMs: 1, output: "finished" },
+        ]),
+      );
+
+      expect(routedStatesFrom(rejected.batches[0]?.[0])).toEqual(["ready"]);
+      const repeated = await emulator.advanceToNext();
+      expect(
+        repeated.state.works.find(({ phase }) => phase === "active")?.dispatch,
+      ).toMatchObject({ outcome: { result: "accepted", output: "finished" } });
+      expect(Object.values(repeated.state.ruleCursors)).toEqual([2]);
+    },
+  );
+});
+
 describe("Factory emulator virtual-time advancement", () => {
   it("processes deadlines through an exact target and jumps to the next due instant", async () => {
     const emulator = executionHarness(
@@ -343,7 +1358,164 @@ describe("Factory emulator virtual-time advancement", () => {
     expect(idle).toMatchObject({ status: "idle", batches: [] });
     expect(emulator.state()).toEqual(before);
   });
+});
 
+describe("Factory emulator scheduler batch separation", () => {
+  it("routes simultaneous completions atomically before dispatching newly eligible Work", async () => {
+    const chainFactory = {
+      ...executionFactory,
+      workTypes: [
+        {
+          name: "task",
+          states: [
+            { name: "ready", type: "INITIAL" },
+            { name: "prepared", type: "INTERMEDIATE" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          name: "prepare",
+          type: "AGENT_RUN",
+          worker: "scripted-worker",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "prepared" }],
+        },
+        {
+          name: "finish",
+          type: "AGENT_RUN",
+          worker: "scripted-worker",
+          inputs: [{ workType: "task", state: "prepared" }],
+          outputs: [{ workType: "task", state: "done" }],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const writes: FactoryEvent[][] = [];
+    const emulator = createFactoryEmulatorSession({
+      factory: chainFactory,
+      scenario: executionScenario({
+        initialSubmissions: [
+          { name: "first", workType: "task", state: "ready" },
+          { name: "second", workType: "task", state: "ready" },
+        ],
+        rules: [
+          {
+            id: "prepare-outcome",
+            selector: { workstation: "prepare" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 25 }],
+            exhaustion: "repeat-last",
+          },
+          {
+            id: "finish-outcome",
+            selector: { workstation: "finish" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 0 }],
+            exhaustion: "repeat-last",
+          },
+        ],
+      }),
+      sink: {
+        write: async (events) => writes.push(structuredClone(events)),
+      },
+    });
+    await emulator.start();
+    await emulator.advanceToNext();
+
+    const completed = await emulator.advanceToNext();
+
+    expect(completed.batches).toHaveLength(1);
+    expect(completed.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_RESPONSE",
+      "DISPATCH_RESPONSE",
+    ]);
+    expect(
+      completed.state.works.filter(({ phase }) => phase === "ready"),
+    ).toHaveLength(2);
+    expect(writes.at(-1)).toEqual(completed.batches[0]);
+
+    const followingBatch = await emulator.advanceToNext();
+    expect(followingBatch.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_REQUEST",
+      "DISPATCH_REQUEST",
+    ]);
+    expect(followingBatch.virtualElapsedMs).toBe(25);
+  });
+});
+
+describe("Factory emulator completion transaction retry", () => {
+  it("retries a rejected simultaneous completion without advancing any scheduler state", async () => {
+    const resourceFactory = {
+      ...executionFactory,
+      resources: [{ name: "agent-slot", capacity: 2 }],
+      workstations: executionFactory.workstations.map((workstation) => ({
+        ...workstation,
+        resources: [{ name: "agent-slot", capacity: 1 }],
+      })),
+    } satisfies FactoryDefinition;
+    const attempts: FactoryEvent[][] = [];
+    let rejectCompletion = true;
+    const emulator = createFactoryEmulatorSession({
+      factory: resourceFactory,
+      scenario: executionScenario({
+        initialSubmissions: [
+          { name: "first", workType: "task", state: "ready" },
+          { name: "second", workType: "task", state: "ready" },
+        ],
+      }),
+      sink: {
+        write: async (events) => {
+          attempts.push(structuredClone(events));
+          if (
+            rejectCompletion &&
+            events.some(({ type }) => type === "DISPATCH_RESPONSE")
+          ) {
+            rejectCompletion = false;
+            throw new Error("completion recording unavailable");
+          }
+        },
+      },
+    });
+    await emulator.start();
+    await emulator.advanceToNext();
+    const before = emulator.state();
+    const budgetBefore = emulator.status().budgetUsage;
+    expect(
+      before.works.flatMap(({ dispatch }) => dispatch?.resources ?? []),
+    ).toEqual([
+      { name: "agent-slot", capacity: 1 },
+      { name: "agent-slot", capacity: 1 },
+    ]);
+    expect(Object.values(before.ruleCursors)).toEqual([1, 1]);
+
+    await expect(emulator.advanceToNext()).rejects.toThrow(
+      "completion recording unavailable",
+    );
+
+    expect(emulator.state()).toEqual(before);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      virtualTime: before.virtualTime,
+      virtualElapsedMs: before.virtualElapsedMs,
+      budgetUsage: budgetBefore,
+      pendingTransaction: {
+        command: "advanceToNext",
+        phase: "sink-write",
+        eventCount: 2,
+      },
+    });
+
+    const retried = await emulator.advanceToNext();
+    expect(attempts.at(-1)).toEqual(attempts.at(-2));
+    expect(retried.batches).toEqual([attempts.at(-1)]);
+    expect(retried.state.counters.completedDispatches).toBe(
+      before.counters.completedDispatches + 2,
+    );
+  });
+});
+
+describe("Factory emulator virtual-time duration validation", () => {
   it("rejects invalid durations without changing virtual time or emitting events", async () => {
     const writes: FactoryEvent[][] = [];
     const emulator = executionHarness(undefined, {

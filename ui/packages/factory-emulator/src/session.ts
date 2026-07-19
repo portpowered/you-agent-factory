@@ -5,6 +5,10 @@ import type {
 } from "@you-agent-factory/client";
 import { inspectFactoryEmulatorCompatibility } from "./compatibility.js";
 import type { FactoryEventSink } from "./event-sink.js";
+import {
+  visitCountGuardsAllow,
+  visitsAfterTransition,
+} from "./logical-move.js";
 import { safeParseFactoryEmulatorScenario } from "./scenario.js";
 import type {
   FactoryEmulatorInitialSubmission,
@@ -13,6 +17,13 @@ import type {
   FactoryEmulatorScenario,
   FactoryEmulatorScenarioIssue,
 } from "./scenario-contracts.js";
+import {
+  compareFactorySchedulerCandidates,
+  FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT,
+  type FactorySchedulerCandidate,
+  type FactorySchedulerResourceClaim,
+  selectFactorySchedulerCandidates,
+} from "./scheduler.js";
 import {
   DEFAULT_FACTORY_EMULATOR_LIMITS,
   FACTORY_EMULATOR_LIMIT_HARD_CAPS,
@@ -93,6 +104,13 @@ interface WorkExecution {
   readonly rule?: FactoryEmulatorRule;
   readonly outcome?: FactoryEmulatorOutcome;
   readonly workstation?: NonNullable<FactoryDefinition["workstations"]>[number];
+}
+
+interface DispatchCandidateValue {
+  readonly indexes: readonly number[];
+  readonly execution: WorkExecution;
+  readonly invocation: number;
+  readonly cursorKey?: string;
 }
 
 function clone<Value>(value: Value): Value {
@@ -298,7 +316,7 @@ function bootstrapEvents(
 
 function ruleMatches(
   rule: FactoryEmulatorRule,
-  submission: FactoryEmulatorInitialSubmission,
+  submissions: readonly FactoryEmulatorInitialSubmission[],
   workstation: NonNullable<FactoryDefinition["workstations"]>[number],
 ): boolean {
   const selector = rule.selector;
@@ -306,30 +324,33 @@ function ruleMatches(
     (selector.workstation === undefined ||
       selector.workstation === workstation.name) &&
     (selector.worker === undefined || selector.worker === workstation.worker) &&
-    (selector.input?.workType === undefined ||
-      selector.input.workType === submission.workType) &&
-    (selector.input?.state === undefined ||
-      selector.input.state === submission.state) &&
-    (selector.input?.name === undefined ||
-      selector.input.name === submission.name)
+    (selector.input === undefined ||
+      submissions.some(
+        (submission) =>
+          (selector.input?.workType === undefined ||
+            selector.input.workType === submission.workType) &&
+          (selector.input?.state === undefined ||
+            selector.input.state === submission.state) &&
+          (selector.input?.name === undefined ||
+            selector.input.name === submission.name),
+      ))
   );
 }
 
 function executionFor(
   configuration: ValidatedConfiguration,
-  submission: FactoryEmulatorInitialSubmission,
+  submissions: readonly FactoryEmulatorInitialSubmission[],
+  workstation: NonNullable<FactoryDefinition["workstations"]>[number],
   invocationIndex = 0,
 ): WorkExecution {
-  const workstation = configuration.factory.workstations?.find((candidate) =>
-    candidate.inputs.some(
-      (input) =>
-        input.workType === submission.workType &&
-        input.state === submission.state,
-    ),
-  );
-  if (workstation === undefined) return {};
+  if (workstation.type === "LOGICAL_MOVE") {
+    return {
+      workstation,
+      outcome: { result: "accepted", durationMs: 0 },
+    };
+  }
   const rule = configuration.scenario.rules.find((candidate) =>
-    ruleMatches(candidate, submission, workstation),
+    ruleMatches(candidate, submissions, workstation),
   );
   if (rule === undefined) {
     return configuration.scenario.unmatched.behavior === "outcome"
@@ -340,6 +361,344 @@ function executionFor(
     rule.outcomes[invocationIndex] ??
     (rule.exhaustion === "repeat-last" ? rule.outcomes.at(-1) : undefined);
   return { rule, workstation, outcome };
+}
+
+function submissionForWork(
+  work: FactoryEmulatorSessionWork,
+): FactoryEmulatorInitialSubmission {
+  return {
+    name: work.submissionId,
+    workType: work.workType,
+    state: work.state,
+    ...(work.input === undefined ? {} : { input: work.input }),
+    ...(work.parent === undefined ? {} : { parent: work.parent }),
+  };
+}
+
+function bindingIndexesFor(
+  state: StartedState,
+  workstation: NonNullable<FactoryDefinition["workstations"]>[number],
+  observeExpansion: () => void,
+  visit: (indexes: readonly number[]) => void,
+): void {
+  const inputs = workstation.inputs.map((input) =>
+    state.works.flatMap((work, index) =>
+      work.phase === "ready" &&
+      work.workType === input.workType &&
+      work.state === input.state
+        ? [index]
+        : [],
+    ),
+  );
+  if (inputs.some((matches) => matches.length === 0)) return;
+
+  const append = (slot: number, selected: number[]): void => {
+    if (slot === inputs.length) {
+      visit(selected);
+      return;
+    }
+    for (const index of inputs[slot] ?? []) {
+      if (!selected.includes(index)) {
+        observeExpansion();
+        append(slot + 1, [...selected, index]);
+      }
+    }
+  };
+  append(0, []);
+}
+
+function schedulerCandidatesFor(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  cursors: Readonly<Record<string, number>>,
+  assertBindingBudget: (observed: number) => void,
+): {
+  readonly candidates: readonly FactorySchedulerCandidate<DispatchCandidateValue>[];
+  readonly executableWork: ReadonlySet<number>;
+} {
+  const candidates: FactorySchedulerCandidate<DispatchCandidateValue>[] = [];
+  const executableWork = new Set<number>();
+  let observedExpansions = 0;
+  const retainBoundedCandidate = (
+    candidate: FactorySchedulerCandidate<DispatchCandidateValue>,
+  ): void => {
+    candidates.push(candidate);
+    candidates.sort(compareFactorySchedulerCandidates);
+    if (candidates.length > FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT) {
+      candidates.pop();
+    }
+  };
+  for (const workstation of configuration.factory.workstations ?? []) {
+    const potentiallyBound = state.works.flatMap((work, index) =>
+      work.phase === "ready" &&
+      workstation.inputs.some(
+        (input) =>
+          input.workType === work.workType && input.state === work.state,
+      )
+        ? [index]
+        : [],
+    );
+    let foundBinding = false;
+    const seenBindings = new Set<string>();
+    bindingIndexesFor(
+      state,
+      workstation,
+      () => {
+        observedExpansions += 1;
+        assertBindingBudget(observedExpansions);
+      },
+      (indexes) => {
+        foundBinding = true;
+        const key = [...indexes]
+          .map((index) => state.works[index]?.tokenId ?? "")
+          .sort()
+          .join("\u0000");
+        if (seenBindings.has(key)) return;
+        seenBindings.add(key);
+        const works = indexes.flatMap((index) => {
+          const work = state.works[index];
+          return work === undefined ? [] : [work];
+        });
+        const primary = works[0];
+        if (primary === undefined || works.length !== workstation.inputs.length)
+          return;
+        if (
+          workstation.type === "LOGICAL_MOVE" &&
+          !visitCountGuardsAllow(workstation.guards ?? [], primary.visits)
+        ) {
+          return;
+        }
+        const submissions = works.map(submissionForWork);
+        const initial = executionFor(configuration, submissions, workstation);
+        const lineage = [
+          ...new Set(works.map(({ rootWorkId }) => rootWorkId)),
+        ].sort();
+        const cursorKey =
+          initial.rule === undefined
+            ? undefined
+            : `${initial.rule.id}:${canonicalJson(lineage)}`;
+        const invocation =
+          cursorKey === undefined ? 0 : (cursors[cursorKey] ?? 0);
+        const execution = executionFor(
+          configuration,
+          submissions,
+          workstation,
+          invocation,
+        );
+        if (execution.outcome === undefined) return;
+        for (const index of indexes) executableWork.add(index);
+        retainBoundedCandidate({
+          transitionId: workstation.name,
+          workerId: workstation.worker,
+          workstationKind:
+            workstation.type === "LOGICAL_MOVE" ? "logical" : "normal",
+          resources: (workstation.resources ?? []).map(
+            ({ name, capacity }) => ({
+              name,
+              capacity,
+            }),
+          ),
+          tokens: works.map((work) => ({
+            tokenId: work.tokenId,
+            customerWork: true,
+            processing:
+              configuration.factory.workTypes
+                ?.find(({ name }) => name === work.workType)
+                ?.states.find(({ name }) => name === work.state)?.type ===
+              "PROCESSING",
+            queuedElapsedMs: work.queuedElapsedMs,
+            ...(work.lastDispatchElapsedMs === undefined
+              ? {}
+              : { lastDispatchElapsedMs: work.lastDispatchElapsedMs }),
+          })),
+          value: {
+            indexes,
+            execution,
+            invocation,
+            ...(cursorKey === undefined ? {} : { cursorKey }),
+          },
+        });
+      },
+    );
+    if (!foundBinding) {
+      for (const index of potentiallyBound) executableWork.add(index);
+    }
+  }
+  return { candidates, executableWork };
+}
+
+function availableResourcesFor(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+): Readonly<Record<string, number>> {
+  const allocated = state.works.reduce<Record<string, number>>(
+    (claims, work) => {
+      if (work.phase !== "active" || work.dispatch === undefined) return claims;
+      for (const resource of work.dispatch.resources) {
+        claims[resource.name] =
+          (claims[resource.name] ?? 0) + resource.capacity;
+      }
+      return claims;
+    },
+    {},
+  );
+  return Object.fromEntries(
+    (configuration.factory.resources ?? []).map((resource) => [
+      resource.name,
+      Math.max(0, resource.capacity - (allocated[resource.name] ?? 0)),
+    ]),
+  );
+}
+
+function eventResourcesFor(
+  configuration: ValidatedConfiguration,
+  claims: readonly FactorySchedulerResourceClaim[],
+): { name: string; capacity: number }[] {
+  const totals = new Map(
+    (configuration.factory.resources ?? []).map(({ name, capacity }) => [
+      name,
+      capacity,
+    ]),
+  );
+  return claims.map(({ name }) => ({ name, capacity: totals.get(name) ?? 0 }));
+}
+
+type Workstation = NonNullable<FactoryDefinition["workstations"]>[number];
+type WorkstationRoute = Workstation["inputs"][number];
+
+function defaultFailureRoutesFor(
+  configuration: ValidatedConfiguration,
+  workstation: Workstation,
+): readonly WorkstationRoute[] {
+  const routes: WorkstationRoute[] = [];
+  const seen = new Set<string>();
+  for (const input of workstation.inputs) {
+    const failedState = configuration.factory.workTypes
+      ?.find(({ name }) => name === input.workType)
+      ?.states.find(({ type }) => type === "FAILED")?.name;
+    if (failedState === undefined) continue;
+    const key = `${input.workType}\u0000${failedState}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    routes.push({ workType: input.workType, state: failedState });
+  }
+  return routes;
+}
+
+function outcomeRoutesFor(
+  configuration: ValidatedConfiguration,
+  workstation: Workstation,
+  result: FactoryEmulatorOutcome["result"],
+): readonly WorkstationRoute[] {
+  if (result === "accepted") return workstation.outputs ?? [];
+  if (result === "continued") return workstation.onContinue ?? [];
+  if (result === "failed" && (workstation.onFailure?.length ?? 0) > 0) {
+    return workstation.onFailure ?? [];
+  }
+  if (result === "rejected" && (workstation.onRejection?.length ?? 0) > 0) {
+    return workstation.onRejection ?? [];
+  }
+
+  if (result === "rejected" && workstation.behavior === "REPEATER") {
+    return workstation.inputs;
+  }
+  return defaultFailureRoutesFor(configuration, workstation);
+}
+
+function routedWorksFor(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  dispatch: NonNullable<FactoryEmulatorSessionWork["dispatch"]>,
+  inputs: readonly FactoryEmulatorSessionWork[],
+): readonly FactoryEmulatorSessionWork[] {
+  const workstation = configuration.factory.workstations?.find(
+    ({ name }) => name === dispatch.workstation,
+  );
+  const first = inputs[0];
+  if (workstation === undefined || first === undefined) return [];
+  const routes = outcomeRoutesFor(
+    configuration,
+    workstation,
+    dispatch.outcome.result,
+  );
+  const visits = visitsAfterTransition(
+    inputs.map((input) => input.visits),
+    workstation.name,
+  );
+
+  return routes.map((route, ordinal) => {
+    const matching = inputs.find(({ workType }) => workType === route.workType);
+    const lineageSource = matching ?? first;
+    const workId =
+      matching?.workId ??
+      identity(
+        "work",
+        state.sessionId,
+        "route",
+        dispatch.dispatchId,
+        ordinal,
+        route,
+      );
+    const targetStateType = configuration.factory.workTypes
+      ?.find(({ name }) => name === route.workType)
+      ?.states.find(({ name }) => name === route.state)?.type;
+    const preserveInput =
+      workstation.workPropagation?.mode === "PRESERVE_INPUT" ||
+      dispatch.outcome.result === "failed" ||
+      (dispatch.outcome.result === "rejected" && targetStateType === "FAILED");
+    const input = preserveInput
+      ? lineageSource.input
+      : (dispatch.outcome.output ?? lineageSource.input);
+    return {
+      submissionId: `${first.submissionId}/${workstation.name}/${ordinal}`,
+      requestId: first.requestId,
+      traceId: lineageSource.traceId,
+      tokenId: identity("token", dispatch.dispatchId, ordinal, route),
+      workId,
+      rootWorkId: lineageSource.rootWorkId,
+      visits,
+      workType: route.workType,
+      state: route.state,
+      ...(input === undefined ? {} : { input }),
+      ...(matching !== undefined
+        ? matching.parent === undefined
+          ? {}
+          : { parent: matching.parent }
+        : { parent: first.workId }),
+      queuedElapsedMs: dispatch.dueElapsedMs,
+      lastDispatchElapsedMs: Math.min(
+        lineageSource.lastDispatchElapsedMs ?? dispatch.dueElapsedMs,
+        dispatch.dueElapsedMs,
+      ),
+      phase:
+        targetStateType === "TERMINAL" || targetStateType === "FAILED"
+          ? ("completed" as const)
+          : ("ready" as const),
+    };
+  });
+}
+
+function eventWorkFor(
+  configuration: ValidatedConfiguration,
+  work: FactoryEmulatorSessionWork,
+) {
+  return {
+    name: work.submissionId,
+    workId: work.workId,
+    requestId: work.requestId,
+    workTypeName: work.workType,
+    state: {
+      name: work.state,
+      type:
+        configuration.factory.workTypes
+          ?.find(({ name }) => name === work.workType)
+          ?.states.find(({ name }) => name === work.state)?.type ??
+        "PROCESSING",
+    },
+    currentChainingTraceId: work.traceId,
+    traceId: work.traceId,
+    ...(work.input === undefined ? {} : { payload: work.input }),
+  };
 }
 
 function workRequestCalculation(
@@ -371,11 +730,15 @@ function workRequestCalculation(
       submissionId: submission.name,
       requestId,
       traceId,
+      tokenId: identity("token", workId, submission.workType, submission.state),
       workId,
+      rootWorkId: workId,
+      visits: {},
       workType: submission.workType,
       state: submission.state,
       ...(submission.input === undefined ? {} : { input: submission.input }),
       ...(submission.parent === undefined ? {} : { parent: submission.parent }),
+      queuedElapsedMs: state.virtualElapsedMs,
       phase: "ready" as const,
     };
   });
@@ -412,6 +775,122 @@ function workRequestCalculation(
           ...(work.input === undefined ? {} : { payload: work.input }),
         })),
       },
+    },
+  };
+}
+
+function logicalMoveCalculation(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  workstation: Workstation,
+  outcome: FactoryEmulatorOutcome,
+  inputs: readonly FactoryEmulatorSessionWork[],
+  resources: readonly FactorySchedulerResourceClaim[],
+  logicalMoveId: string,
+  sequence: number,
+): {
+  readonly routedWorks: readonly FactoryEmulatorSessionWork[];
+  readonly event: FactoryEvent;
+} {
+  const primary = inputs[0];
+  if (primary === undefined) throw new Error("Logical move has no input Work.");
+  const routedWorks = routedWorksFor(
+    configuration,
+    state,
+    {
+      dispatchId: logicalMoveId,
+      completionId: identity("completion", logicalMoveId),
+      transitionId: workstation.name,
+      workstation: workstation.name,
+      worker: "",
+      startedElapsedMs: state.virtualElapsedMs,
+      dueElapsedMs: state.virtualElapsedMs,
+      inputTokenIds: inputs.map(({ tokenId }) => tokenId),
+      resources,
+      outcome,
+    },
+    inputs,
+  );
+  return {
+    routedWorks,
+    event: {
+      schemaVersion: "agent-factory.event.v1",
+      id: identity(
+        "event",
+        state.sessionId,
+        sequence,
+        "DISPATCH_RESPONSE",
+        logicalMoveId,
+      ),
+      type: "DISPATCH_RESPONSE",
+      context: eventContext(state, sequence, state.virtualTime, {
+        requestId: primary.requestId,
+        traceIds: inputs.map(({ traceId }) => traceId),
+        workIds: inputs.map(({ workId }) => workId),
+        currentChainingTraceId: primary.traceId,
+        previousChainingTraceIds: inputs.slice(1).map(({ traceId }) => traceId),
+      }),
+      payload: {
+        transitionId: workstation.name,
+        outcome: "ACCEPTED",
+        durationMillis: 0,
+        ...(routedWorks.length === 0
+          ? {}
+          : {
+              outputWork: routedWorks.map((routed) =>
+                eventWorkFor(configuration, routed),
+              ),
+            }),
+      },
+    },
+  };
+}
+
+function replaceInputPhases(
+  replacements: FactoryEmulatorSessionWork[],
+  state: StartedState,
+  indexes: readonly number[],
+  phase: FactoryEmulatorSessionWork["phase"],
+): void {
+  for (const index of indexes) {
+    const consumed = state.works[index];
+    if (consumed !== undefined) replacements[index] = { ...consumed, phase };
+  }
+}
+
+function workerDispatchRequestEvent(
+  state: StartedState,
+  inputs: readonly FactoryEmulatorSessionWork[],
+  transitionId: string,
+  dispatchId: string,
+  resources: readonly { name: string; capacity: number }[],
+  sequence: number,
+): FactoryEvent {
+  const primary = inputs[0];
+  if (primary === undefined)
+    throw new Error("Worker dispatch has no input Work.");
+  return {
+    schemaVersion: "agent-factory.event.v1",
+    id: identity(
+      "event",
+      state.sessionId,
+      sequence,
+      "DISPATCH_REQUEST",
+      dispatchId,
+    ),
+    type: "DISPATCH_REQUEST",
+    context: eventContext(state, sequence, state.virtualTime, {
+      dispatchId,
+      requestId: primary.requestId,
+      traceIds: inputs.map(({ traceId }) => traceId),
+      workIds: inputs.map(({ workId }) => workId),
+      currentChainingTraceId: primary.traceId,
+      previousChainingTraceIds: inputs.slice(1).map(({ traceId }) => traceId),
+    }),
+    payload: {
+      transitionId,
+      inputs: inputs.map(({ workId }) => ({ workId })),
+      ...(resources.length === 0 ? {} : { resources: [...resources] }),
     },
   };
 }
@@ -843,48 +1322,70 @@ export function createFactoryEmulatorSession(
   };
 
   const dispatchCalculation = (
+    command: "advanceBy" | "advanceToNext",
     state: StartedState,
   ): { batch: readonly FactoryEvent[]; state: StartedState } => {
     const replacements = [...state.works];
     const cursors = { ...state.ruleCursors };
     const events: FactoryEvent[] = [];
-    for (const [index, work] of state.works.entries()) {
-      if (work.phase !== "ready") continue;
-      const submission = {
-        name: work.submissionId,
-        workType: work.workType,
-        state: work.state,
-        ...(work.input === undefined ? {} : { input: work.input }),
-        ...(work.parent === undefined ? {} : { parent: work.parent }),
-      };
-      const initial = executionFor(configuration, submission);
-      const cursorKey =
-        initial.rule === undefined
-          ? undefined
-          : `${initial.rule.id}:${work.workId}`;
-      const invocation =
-        cursorKey === undefined ? 0 : (cursors[cursorKey] ?? 0);
-      const execution = executionFor(configuration, submission, invocation);
+    const { candidates, executableWork } = schedulerCandidatesFor(
+      configuration,
+      state,
+      cursors,
+      (observed) => assertWorkBound(command, observed),
+    );
+    for (const { value, resources } of selectFactorySchedulerCandidates(
+      candidates,
+      undefined,
+      availableResourcesFor(configuration, state),
+    )) {
+      const { indexes, execution, invocation, cursorKey } = value;
+      const works = indexes.flatMap((index) => {
+        const work = state.works[index];
+        return work === undefined ? [] : [work];
+      });
+      const work = works[0];
       if (
+        work === undefined ||
+        works.length !== indexes.length ||
         execution.workstation === undefined ||
         execution.outcome === undefined
-      ) {
-        replacements[index] = { ...work, phase: "waiting" };
+      )
         continue;
-      }
       if (cursorKey !== undefined) cursors[cursorKey] = invocation + 1;
-      const transitionId = execution.rule?.id ?? "emulator-unmatched";
+      const logicalMove = execution.workstation.type === "LOGICAL_MOVE";
+      const transitionId = execution.workstation.name;
       const dispatchId = identity(
-        "dispatch",
-        work.workId,
+        logicalMove ? "logical-move" : "dispatch",
+        works.map(({ tokenId }) => tokenId),
         transitionId,
         invocation,
       );
       const completionId = identity("completion", dispatchId);
       const dueElapsedMs =
         state.virtualElapsedMs + execution.outcome.durationMs;
+      const eventResources = eventResourcesFor(configuration, resources);
       virtualTimeAt(configuration.scenario, dueElapsedMs);
-      replacements[index] = {
+      if (logicalMove) {
+        const calculation = logicalMoveCalculation(
+          configuration,
+          state,
+          execution.workstation,
+          execution.outcome,
+          works,
+          resources,
+          dispatchId,
+          state.counters.events + events.length,
+        );
+        replaceInputPhases(replacements, state, indexes, "completed");
+        replacements.push(...calculation.routedWorks);
+        events.push(calculation.event);
+        continue;
+      }
+      replaceInputPhases(replacements, state, indexes, "active");
+      const primaryIndex = indexes[0];
+      if (primaryIndex === undefined) continue;
+      replacements[primaryIndex] = {
         ...work,
         phase: "active",
         dispatch: {
@@ -895,29 +1396,27 @@ export function createFactoryEmulatorSession(
           worker: execution.workstation.worker,
           startedElapsedMs: state.virtualElapsedMs,
           dueElapsedMs,
+          inputTokenIds: works.map(({ tokenId }) => tokenId),
+          resources,
           outcome: execution.outcome,
         },
       };
       const sequence = state.counters.events + events.length;
-      events.push({
-        schemaVersion: "agent-factory.event.v1",
-        id: identity(
-          "event",
-          state.sessionId,
+      events.push(
+        workerDispatchRequestEvent(
+          state,
+          works,
+          transitionId,
+          dispatchId,
+          eventResources,
           sequence,
-          "DISPATCH_REQUEST",
-          dispatchId,
         ),
-        type: "DISPATCH_REQUEST",
-        context: eventContext(state, sequence, state.virtualTime, {
-          dispatchId,
-          requestId: work.requestId,
-          traceIds: [work.traceId],
-          workIds: [work.workId],
-          currentChainingTraceId: work.traceId,
-        }),
-        payload: { transitionId, inputs: [{ workId: work.workId }] },
-      });
+      );
+    }
+    for (const [index, work] of state.works.entries()) {
+      if (work.phase === "ready" && !executableWork.has(index)) {
+        replacements[index] = { ...work, phase: "waiting" };
+      }
     }
     return {
       batch: events,
@@ -940,13 +1439,26 @@ export function createFactoryEmulatorSession(
     const replacements = [...state.works];
     const events: FactoryEvent[] = [];
     const eventTime = virtualTimeAt(configuration.scenario, dueElapsedMs);
-    for (const [index, work] of state.works.entries()) {
+    for (const work of state.works) {
       if (
         work.phase !== "active" ||
         work.dispatch?.dueElapsedMs !== dueElapsedMs
       )
         continue;
       const { dispatch } = work;
+      const inputs = dispatch.inputTokenIds.flatMap((tokenId) => {
+        const input = state.works.find(
+          (candidate) => candidate.tokenId === tokenId,
+        );
+        return input === undefined ? [] : [input];
+      });
+      if (inputs.length !== dispatch.inputTokenIds.length) continue;
+      const routedWorks = routedWorksFor(
+        configuration,
+        state,
+        dispatch,
+        inputs,
+      );
       const sequence = state.counters.events + events.length;
       const outcome = {
         accepted: "ACCEPTED",
@@ -967,9 +1479,12 @@ export function createFactoryEmulatorSession(
         context: eventContext(state, sequence, eventTime, {
           dispatchId: dispatch.dispatchId,
           requestId: work.requestId,
-          traceIds: [work.traceId],
-          workIds: [work.workId],
+          traceIds: inputs.map(({ traceId }) => traceId),
+          workIds: inputs.map(({ workId }) => workId),
           currentChainingTraceId: work.traceId,
+          previousChainingTraceIds: inputs
+            .slice(1)
+            .map(({ traceId }) => traceId),
         }),
         payload: {
           completionId: dispatch.completionId,
@@ -985,9 +1500,23 @@ export function createFactoryEmulatorSession(
           ...(dispatch.outcome.error === undefined
             ? {}
             : { error: dispatch.outcome.error }),
+          ...(routedWorks.length === 0
+            ? {}
+            : {
+                outputWork: routedWorks.map((routed) =>
+                  eventWorkFor(configuration, routed),
+                ),
+              }),
         },
       });
-      replacements[index] = { ...work, phase: "completed" };
+      for (const input of inputs) {
+        const inputIndex = state.works.findIndex(
+          ({ tokenId }) => tokenId === input.tokenId,
+        );
+        if (inputIndex >= 0)
+          replacements[inputIndex] = { ...input, phase: "completed" };
+      }
+      replacements.push(...routedWorks);
     }
     return {
       batch: events,
@@ -1104,7 +1633,7 @@ export function createFactoryEmulatorSession(
       while (continueAdvancing) {
         const state = committedState as StartedState;
         if (state.works.some(({ phase }) => phase === "ready")) {
-          const calculation = dispatchCalculation(state);
+          const calculation = dispatchCalculation(command, state);
           if (calculation.batch.length > 0) {
             await acceptSchedulerBatch(calculation);
             if (command === "advanceToNext") break;
