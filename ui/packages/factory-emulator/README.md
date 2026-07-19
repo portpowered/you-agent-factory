@@ -136,6 +136,11 @@ own Work Type's failed state through a deterministic breadth-first closure in
 that same completion tick. Each move emits one canonical `WORK_STATE_CHANGE`
 with source `cascading-failure`; terminal and already-failed Work is unchanged.
 
+The package's frozen runtime-reference corpus includes both a `DEPENDS_ON`
+prerequisite release and a terminal-failure cascade. Conformance compares
+dependency eligibility, dispatch selection, consumed Work, routes, terminal
+states, and submission replay projection at every logical tick.
+
 Accepted, continued, rejected, and failed outcomes preserve Work lineage while
 routing to explicit destinations in declared order. Accepted fan-out supports
 multiple outputs and both `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT` propagation.
@@ -249,11 +254,41 @@ const detachedRecording = recordingSink.snapshot();
 
 The package is built and verified independently from the dashboard. Run
 `bun run verify` from this directory to check the generated schema module,
-types, formatting and lint rules, focused tests, compiled output, dependency
-boundary, packed inventory, and a clean installed consumer. `bun run generate`
-refreshes the committed runtime schema module after editing
+types, formatting and lint rules, focused tests, compiled frozen-reference
+conformance and determinism, dependency boundary, packed inventory, and a
+clean installed consumer. The installed consumer reruns every frozen reference
+from the packed artifact, so fixture freshness is proven without a backend or
+fixture generator. `bun run generate` refreshes the committed runtime schema module after editing
 `schema/scenario.schema.json`.
 
 `@you-agent-factory/client` is an explicit peer contract because the emulator
 uses its canonical Factory, Factory Event, and recording APIs without bundling
 or duplicating them. Consumers install both packages at the same version.
+
+## Frozen runtime references
+
+`loadFactoryEmulatorRuntimeReferences()` returns detached package-local
+references for the documented supported subset. The loader validates each
+fixture's public provenance, Factory and scenario, strictly ordered logical
+ticks, and flattened Factory-event kind sequence before a conformance consumer
+can compare emulator semantics. These references remain frontend-only and do
+not invoke a backend, Go, or WASM fixture generator.
+
+The corpus includes resource contention, parallel dispatch, and simultaneous
+completion cases. Their frozen ticks preserve the selected Work, consumed Work,
+completion outcomes, terminal routes, and replay projection so capacity and
+same-deadline behavior remain reproducible between runs.
+
+Each fixture records its specific public documentation provenance. In particular,
+the repeater fixture observes a `CONTINUE` route, the routing fixture observes a
+`REJECTED` route, the propagation fixture compares the routed payload under
+`PRESERVE_INPUT`, and the logical-move fixture first makes its `VISIT_COUNT`
+guard eligible before recording the workerless move's synchronous route.
+
+`compareFactoryEmulatorRuntimeReference(reference)` runs a reference through a
+fresh deterministic session and compares each logical tick independently. It
+compares ordered event kinds plus normalized dispatch choices, consumed Work,
+outcomes, routes (including routed payload), terminal states, and submission replay projection. Event
+identities and virtual timestamps are deliberately excluded; all other compared
+values are semantic evidence. A mismatch returns the fixture ID, first divergent
+logical tick, comparison surface, expected value, and actual value.

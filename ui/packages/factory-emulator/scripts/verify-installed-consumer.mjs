@@ -107,8 +107,10 @@ import { safeParseFactoryRecording } from "@you-agent-factory/client";
 import {
   MemoryFactoryEventSink,
   RecordingFactoryEventSink,
+  compareFactoryEmulatorRuntimeReference,
   createFactoryEmulatorSession,
   inspectFactoryEmulatorCompatibility,
+  loadFactoryEmulatorRuntimeReferences,
   parseFactoryEmulatorScenario,
   scenarioSchema,
 } from "@you-agent-factory/factory-emulator";
@@ -159,6 +161,19 @@ if (scenario.id !== "customer-support-happy-path" || installedSchema.$id !== sce
 }
 if (!inspectFactoryEmulatorCompatibility(factory).supported) {
   throw new Error("installed compatibility inspector rejected the supported Factory");
+}
+const references = loadFactoryEmulatorRuntimeReferences();
+const conformance = await Promise.all(
+  references.map((reference) => compareFactoryEmulatorRuntimeReference(reference)),
+);
+const conformanceRerun = await Promise.all(
+  references.map((reference) => compareFactoryEmulatorRuntimeReference(reference)),
+);
+if (
+  conformance.some((result) => !result.matches) ||
+  JSON.stringify(conformance) !== JSON.stringify(conformanceRerun)
+) {
+  throw new Error("installed frozen runtime references did not conform deterministically");
 }
 
 async function runSession(recordingId) {
@@ -274,7 +289,7 @@ if (memory.snapshot().length !== 2 || !safeParseFactoryRecording(snapshot).succe
 }
 await Promise.all([memory.close(), recording.close()]);
 process.stdout.write(
-  \`verified \${scenario.id} with \${snapshot.events.length} sink events and \${firstHistory.length} deterministic contention-and-routing events\n\`,
+  \`verified \${scenario.id}, \${references.length} frozen runtime references, \${snapshot.events.length} sink events, and \${firstHistory.length} deterministic contention-and-routing events\n\`,
 );
 `;
 
