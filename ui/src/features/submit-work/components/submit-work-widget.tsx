@@ -5,7 +5,7 @@ import { useCurrentFactoryDefinition } from "../../current-factory-definition/pu
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
-import { FactorySubmissionComposer } from "./factory-submission-composer";
+import { FactorySubmissionComposer } from "./composer/factory-submission-composer";
 import { FactoryInvocationWidget } from "./invocation/factory-invocation-widget";
 
 export interface SubmitWorkWidgetProps {

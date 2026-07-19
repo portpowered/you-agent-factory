@@ -1,5 +1,5 @@
-export * from "../components/factory-simple-submission-composer";
-export * from "../components/factory-submission-composer";
+export * from "../components/composer/factory-simple-submission-composer";
+export * from "../components/composer/factory-submission-composer";
 export type {
   SubmitWorkDraft as FactorySubmissionDraft,
   SubmitWorkDraftFileItem as FactorySubmissionDraftFileItem,

@@ -1,4 +1,4 @@
-import { SubmitWorkCard, type SubmitWorkCardProps } from "./submit-work-card";
+import { SubmitWorkCard, type SubmitWorkCardProps } from "../submit-work-card";
 
 /**
  * Transport-neutral rich Factory submission surface.

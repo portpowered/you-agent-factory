@@ -1,11 +1,12 @@
 import { useState } from "react";
 
-import { Button, Label, Textarea } from "../../../components/ui";
+import { Button, Label, Textarea } from "../../../../components/ui";
 import {
   type FactorySimpleSubmissionAvailability,
   type FactorySimpleSubmissionEligibilityInput,
   resolveFactorySimpleSubmissionAvailability,
-} from "../lib/factory-simple-submission-eligibility";
+} from "../../lib/factory-simple-submission-eligibility";
+import { getSubmitWorkMessages } from "../../messages/submit-work";
 
 type FactorySimpleSubmissionUnavailableReason = Extract<
   FactorySimpleSubmissionAvailability,
@@ -16,6 +17,7 @@ export interface FactorySimpleSubmissionComposerProps
   extends FactorySimpleSubmissionEligibilityInput {
   draft: string;
   isSubmitting?: boolean;
+  locale?: string;
   onDraftChange: (value: string) => void;
   onSubmit: (submission: FactorySimpleTextSubmission) => Promise<void>;
   submissionError?: string;
@@ -30,18 +32,6 @@ export interface FactorySimpleTextSubmission {
   workTypeName: string;
 }
 
-const DEFAULT_UNAVAILABLE_MESSAGES = {
-  "ambiguous-default":
-    "Multiple default work types are configured, so a submission cannot be routed safely.",
-  closed: "This Factory is closed and cannot accept submissions.",
-  error: "This Factory has an error and cannot accept submissions.",
-  history: "Return to the latest Factory state to submit work.",
-  invalid: "This Factory is invalid and cannot accept submissions.",
-  loading: "The Factory is still loading. Try again when it is ready.",
-  "no-default":
-    "No eligible default work type is available for text submissions.",
-} as const;
-
 function resizeTextarea(textarea: HTMLTextAreaElement) {
   textarea.style.height = "auto";
   textarea.style.height = `${textarea.scrollHeight}px`;
@@ -52,12 +42,14 @@ export function FactorySimpleSubmissionComposer({
   factoryState,
   isCurrent,
   isSubmitting = false,
+  locale,
   onDraftChange,
   onSubmit,
   submissionError,
-  unavailableMessage = (reason) => DEFAULT_UNAVAILABLE_MESSAGES[reason],
+  unavailableMessage,
   workTypes,
 }: FactorySimpleSubmissionComposerProps) {
+  const messages = getSubmitWorkMessages(locale).simpleComposer;
   const [localSubmissionError, setLocalSubmissionError] = useState<string>();
   const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
   const availability = resolveFactorySimpleSubmissionAvailability({
@@ -88,9 +80,7 @@ export function FactorySimpleSubmissionComposer({
       onDraftChange("");
     } catch (error) {
       setLocalSubmissionError(
-        error instanceof Error
-          ? error.message
-          : "We couldn't submit this work. Try again.",
+        error instanceof Error ? error.message : messages.errorFallback,
       );
     } finally {
       setIsLocallySubmitting(false);
@@ -99,7 +89,7 @@ export function FactorySimpleSubmissionComposer({
 
   return (
     <form
-      aria-label="Simple work submission"
+      aria-label={messages.formLabel}
       className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
       onSubmit={(event) => {
         event.preventDefault();
@@ -108,7 +98,7 @@ export function FactorySimpleSubmissionComposer({
     >
       <div className="grid gap-1">
         <label htmlFor="factory-simple-submission-draft">
-          <Label>Submit text</Label>
+          <Label>{messages.textLabel}</Label>
         </label>
         <Textarea
           aria-describedby={
@@ -126,13 +116,13 @@ export function FactorySimpleSubmissionComposer({
               void submit();
             }
           }}
-          placeholder="Describe the work to submit."
+          placeholder={messages.placeholder}
           className="min-h-24 max-h-48 resize-none overflow-y-auto"
           value={draft}
         />
       </div>
       <Button disabled={isDisabled || isDraftBlank} type="submit">
-        {isSubmitPending ? "Submitting..." : "Submit"}
+        {isSubmitPending ? messages.submittingAction : messages.submitAction}
       </Button>
       {unavailableReason ? (
         <p
@@ -140,7 +130,8 @@ export function FactorySimpleSubmissionComposer({
           id="factory-simple-submission-status"
           role="status"
         >
-          {unavailableMessage(unavailableReason)}
+          {unavailableMessage?.(unavailableReason) ??
+            messages.unavailable[unavailableReason]}
         </p>
       ) : null}
       {errorMessage ? (
