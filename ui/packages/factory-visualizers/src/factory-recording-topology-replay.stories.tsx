@@ -45,9 +45,9 @@ const messages: FactoryRecordingTopologyReplayMessages = {
     annotationsVisible: "Hide annotations",
     empty: "No Factory topology is available at this tick.",
     failed: "The Factory topology could not be shown.",
-  inactiveDispatches: "No active Dispatch",
-  imageFailed: "The annotation image could not be shown.",
-  imageLoading: "Loading annotation image.",
+    inactiveDispatches: "No active Dispatch",
+    imageFailed: "The annotation image could not be shown.",
+    imageLoading: "Loading annotation image.",
     loading: "Loading Factory topology.",
     nodeLabel: (kind, label) => `${kind}: ${label}`,
     regionLabel: "Recorded Factory topology",
@@ -239,9 +239,13 @@ export const AnnotatedRecording: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText("Escalations are reviewed here.")).toBeVisible();
+    await expect(
+      canvas.getByText("Escalations are reviewed here."),
+    ).toBeVisible();
     await userEvent.click(
-      canvas.getByRole("button", { name: messages.topology.annotationsVisible }),
+      canvas.getByRole("button", {
+        name: messages.topology.annotationsVisible,
+      }),
     );
     await expect(
       canvas.queryByText("Escalations are reviewed here."),

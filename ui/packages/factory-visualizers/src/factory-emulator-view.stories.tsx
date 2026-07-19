@@ -47,9 +47,13 @@ const meta = {
     topology: {
       messages: {
         activeDispatches: (count: number) => `${count} active Dispatches`,
+        annotationsHidden: "Show annotations",
+        annotationsVisible: "Hide annotations",
         empty: "No topology.",
         failed: "Topology failed.",
         inactiveDispatches: "No active Dispatches",
+        imageFailed: "Annotation image unavailable.",
+        imageLoading: "Loading annotation image.",
         loading: "Loading topology.",
         nodeLabel: (kind: string, label: string) => `${kind}: ${label}`,
         regionLabel: "Factory topology",

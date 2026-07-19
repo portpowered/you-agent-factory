@@ -7,28 +7,25 @@ import type {
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
-
-import {
-  FactoryTopologyErrorBoundary,
-  FactoryTopologyStateRegion,
-  useDistinctTopologyErrorReport,
-} from "./factory-topology-state";
-
-import {
-  normalizeFactoryVisualizerError,
-  toFactoryVisualizerError,
-} from "./visualizer-error";
 import {
   type FactoryTopologyFlowProjection,
   projectFactoryTopologyFlow,
 } from "./factory-topology-flow-projection";
 import { nodeTypes } from "./factory-topology-replay-nodes";
+import {
+  FactoryTopologyErrorBoundary,
+  FactoryTopologyStateRegion,
+  useDistinctTopologyErrorReport,
+} from "./factory-topology-state";
+import {
+  normalizeFactoryVisualizerError,
+  toFactoryVisualizerError,
+} from "./visualizer-error";
 
 export type { FactoryTopologyFlowProjection } from "./factory-topology-flow-projection";
 export { projectFactoryTopologyFlow } from "./factory-topology-flow-projection";
-import type {
-  FactoryTopologyReplayError,
-} from "./visualizer-error";
+
+import type { FactoryTopologyReplayError } from "./visualizer-error";
 
 export interface FactoryTopologyReplayProjection {
   activity: FactoryActivityProjection;

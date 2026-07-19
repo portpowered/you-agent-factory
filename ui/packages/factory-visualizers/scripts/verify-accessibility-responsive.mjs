@@ -129,7 +129,9 @@ async function verifyAnnotatedRecording(page) {
     name: /^(Show|Hide) annotations$/,
   });
   await annotationsToggle.waitFor({ state: "visible", timeout: 5_000 });
-  if (await page.getByRole("button", { name: "Hide annotations" }).isVisible()) {
+  if (
+    await page.getByRole("button", { name: "Hide annotations" }).isVisible()
+  ) {
     await annotationsToggle.click();
     await showAnnotations.waitFor({ state: "visible", timeout: 5_000 });
   }

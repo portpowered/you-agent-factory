@@ -41,10 +41,10 @@ export {
 
 export type {
   FactoryTopologyReplayError,
+  FactoryVisualizationLayoutDiagnostic,
   FactoryVisualizerError,
   FactoryVisualizerErrorCause,
   FactoryVisualizerErrorKind,
-  FactoryVisualizationLayoutDiagnostic,
 } from "./visualizer-error.js";
 
 export {

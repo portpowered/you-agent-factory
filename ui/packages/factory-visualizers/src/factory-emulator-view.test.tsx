@@ -49,9 +49,13 @@ const controls: FactoryEmulatorControlsProps = {
 const topology: FactoryTopologyReplayProps = {
   messages: {
     activeDispatches: (count) => `${count} active Dispatches`,
+    annotationsHidden: "Show annotations",
+    annotationsVisible: "Hide annotations",
     empty: "No topology.",
     failed: "Topology failed.",
     inactiveDispatches: "No active Dispatches",
+    imageFailed: "Annotation image unavailable.",
+    imageLoading: "Loading annotation image.",
     loading: "Loading topology.",
     nodeLabel: (kind, label) => `${kind}: ${label}`,
     regionLabel: "Factory topology",
@@ -207,6 +211,26 @@ describe("FactoryEmulatorView", () => {
 });
 
 describe("FactoryEmulatorView failure containment", () => {
+  it("forwards topology layout diagnostics through the view error callback", async () => {
+    const onError = vi.fn();
+    render(
+      <FactoryEmulatorView
+        controls={controls}
+        onError={onError}
+        topology={{
+          ...topology,
+          layout: { schemaVersion: "unsupported" },
+        }}
+        workProgress={workProgress}
+      />,
+    );
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "layout-validation" }),
+      ),
+    );
+  });
+
   it("contains composition failures and forwards a safe diagnostic", async () => {
     const onError = vi.fn();
     const consoleError = vi

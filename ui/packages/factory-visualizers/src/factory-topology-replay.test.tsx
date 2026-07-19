@@ -729,7 +729,10 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
           }}
           messages={messages}
           onError={onError}
-          state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+          state={{
+            projection: createFactoryTopologyProjection(),
+            status: "ready",
+          }}
         />
         <p>Canonical host content survives</p>
       </>,

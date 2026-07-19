@@ -111,7 +111,8 @@
   inline-size: 13.5rem;
 }
 
-.factory-topology-replay .react-flow__node:has(.factory-topology-replay__annotation) {
+.factory-topology-replay
+  .react-flow__node:has(.factory-topology-replay__annotation) {
   inline-size: auto;
 }
 

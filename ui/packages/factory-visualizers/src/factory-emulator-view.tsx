@@ -12,7 +12,10 @@ import {
   FactoryTopologyReplay,
   type FactoryTopologyReplayProps,
 } from "./factory-topology-replay";
-import type { FactoryVisualizerError } from "./visualizer-error";
+import type {
+  FactoryTopologyReplayError,
+  FactoryVisualizerError,
+} from "./visualizer-error";
 import {
   WorkProgressVisualizer,
   type WorkProgressVisualizerProps,
@@ -33,7 +36,7 @@ export interface FactoryEmulatorViewProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "onError"> {
   controls: FactoryEmulatorControlsProps;
   failure?: FactoryEmulatorFailure;
-  onError?: (error: FactoryVisualizerError) => void;
+  onError?: (error: FactoryTopologyReplayError) => void;
   preset?: FactoryEmulatorViewPreset;
   submission?: ReactNode;
   topology: FactoryTopologyReplayProps;
@@ -105,7 +108,10 @@ export function FactoryEmulatorView({
         {showControls ? (
           <FactoryEmulatorControls
             {...controls}
-            onError={combineErrorReports(controls.onError, onError)}
+            onError={combineErrorReports<FactoryVisualizerError>(
+              controls.onError,
+              onError,
+            )}
             showPlaybackControls={regions.playbackControls}
             showRuntimeStatus={regions.runtimeStatus}
             showSpeedControl={regions.speedControl}
@@ -114,7 +120,10 @@ export function FactoryEmulatorView({
         ) : regions.timelineScrubber ? (
           <FactoryEmulatorControls
             {...controls}
-            onError={combineErrorReports(controls.onError, onError)}
+            onError={combineErrorReports<FactoryVisualizerError>(
+              controls.onError,
+              onError,
+            )}
             showPlaybackControls={false}
             showRuntimeStatus={false}
             showSpeedControl={false}
@@ -123,7 +132,10 @@ export function FactoryEmulatorView({
         ) : null}
         <FactoryTopologyReplay
           {...topology}
-          onError={combineErrorReports(topology.onError, onError)}
+          onError={combineErrorReports<FactoryTopologyReplayError>(
+            topology.onError,
+            onError,
+          )}
         />
         {regions.workProgress ? (
           <WorkProgressVisualizer {...workProgress} />
@@ -141,13 +153,13 @@ export function FactoryEmulatorView({
   );
 }
 
-function combineErrorReports(
-  primary: ((error: FactoryVisualizerError) => void) | undefined,
-  secondary: ((error: FactoryVisualizerError) => void) | undefined,
+function combineErrorReports<TError>(
+  primary: ((error: TError) => void) | undefined,
+  secondary: ((error: TError) => void) | undefined,
 ) {
   if (!secondary || primary === secondary) return primary;
   if (!primary) return secondary;
-  return (error: FactoryVisualizerError) => {
+  return (error: TError) => {
     primary(error);
     secondary(error);
   };
