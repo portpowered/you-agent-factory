@@ -232,8 +232,9 @@ func submitWorkAndExpectStatus(
 ) *http.Response {
 	t.Helper()
 
+	name := "export-import-smoke"
 	request := factoryapi.SubmitWorkRequest{
-		Name:         "export-import-smoke",
+		Name:         &name,
 		WorkTypeName: workTypeName,
 		Payload:      []byte(`{"title":"` + title + `"}`),
 	}

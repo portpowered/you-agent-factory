@@ -29,7 +29,7 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-api-integration-smoke",
+		Name:         stringPtr("generated-api-integration-smoke"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated API integration smoke"},
 	})
@@ -325,7 +325,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-api-items-mixed",
+		Name:         stringPtr("generated-api-items-mixed"),
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkTextItem(t, "Review this screenshot."),
@@ -368,7 +368,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-api-items-unsupported-mixed",
+		Name:         stringPtr("generated-api-items-unsupported-mixed"),
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkTextItem(t, "Review this screenshot."),
@@ -409,7 +409,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileR
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
 	req := factoryapi.SubmitWorkRequest{
-		Name:         "generated-api-forged-staged-ref",
+		Name:         stringPtr("generated-api-forged-staged-ref"),
 		WorkTypeName: "task",
 		Items: &[]factoryapi.SubmitWorkItem{
 			mustSubmitWorkImageItem(t, "staged://forged-review.png", "file://forged-review.png", "review.png", "image/png"),
@@ -471,8 +471,8 @@ func assertGeneratedEventsStreamHasCanonicalHistory(t *testing.T, baseURL string
 
 func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWorkRequest) string {
 	t.Helper()
-	if req.Name == "" {
-		req.Name = "generated-api-submit"
+	if req.Name == nil || *req.Name == "" {
+		req.Name = stringPtr("generated-api-submit")
 	}
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -491,6 +491,10 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 		t.Fatalf("decode generated submit response: %v", err)
 	}
 	return out.TraceId
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 func stageGeneratedSubmitWorkFile(

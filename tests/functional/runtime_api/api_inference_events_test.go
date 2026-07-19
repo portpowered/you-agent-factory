@@ -114,7 +114,7 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 	_, _ = requireFunctionalEventStreamPrelude(t, stream)
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "Retrying inference stream",
+		Name:         stringPtr("Retrying inference stream"),
 		WorkTypeName: "task",
 		Payload: map[string]string{
 			"title": "retry provider attempts",
