@@ -29,6 +29,15 @@ export function Topology(props: FactoryTopologyReplayProps) {
 `recording-validation` diagnostic and renders the same accessible failed
 presentation as the controlled topology component. It does not require a
 router, data provider, store, browser persistence, network request, or backend.
+Asynchronous hosts can pass a controlled `state` with `loading`, `ready`, or
+`failed` status; a controlled state takes precedence over the direct `recording`
+shorthand. Controlled failures report their structured visualizer diagnostic
+once while keeping diagnostic details out of the localized presentation.
+
+A validated recording whose selected projection has no topology nodes renders
+the shared empty presentation. Loading, empty, validation failure, and
+projection failure therefore remain distinct from a successfully rendered
+closed local recording.
 
 Recording playback opens in current mode at the latest accepted logical tick.
 Pass a `defaultSelectedTick` that exists in the recording to open a fixed

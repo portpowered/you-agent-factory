@@ -55,6 +55,29 @@ async function verifyRecordingComposition(browserInstance) {
   const page = await context.newPage();
   await openStory(
     page,
+    "factory-visualizers-factoryrecordingtopologyreplay--loading",
+  );
+  const loadingRegion = page.getByRole("region", {
+    name: "Recorded Factory topology",
+  });
+  assert(
+    (await loadingRegion.getAttribute("aria-busy")) === "true",
+    "The recording loading story does not expose an accessible busy state.",
+  );
+
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--empty-recording",
+  );
+  assert(
+    await page
+      .getByText("No Factory topology is available at this tick.")
+      .isVisible(),
+    "The empty recording story does not expose an intentional empty topology state.",
+  );
+
+  await openStory(
+    page,
     "factory-visualizers-factoryrecordingtopologyreplay--validated-recording",
   );
   assert(
@@ -106,6 +129,31 @@ async function verifyRecordingComposition(browserInstance) {
   assert(
     await page.getByRole("alert").isVisible(),
     "The invalid recording does not render the shared accessible failure.",
+  );
+  assert(
+    await page
+      .getByRole("button", { name: "Sibling example control" })
+      .isVisible(),
+    "The invalid recording made sibling Storybook content unusable.",
+  );
+
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--projection-failure",
+  );
+  assert(
+    await page.getByRole("alert").isVisible(),
+    "The projection failure does not render the shared accessible failure.",
+  );
+  assert(
+    (await page.locator(".react-flow").count()) === 0,
+    "The projection failure retained stale ready-state graph content.",
+  );
+  assert(
+    await page
+      .getByRole("button", { name: "Sibling example control" })
+      .isVisible(),
+    "The projection failure made sibling Storybook content unusable.",
   );
   await context.close();
 }

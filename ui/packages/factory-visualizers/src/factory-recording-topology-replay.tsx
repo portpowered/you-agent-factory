@@ -29,6 +29,7 @@ import {
   type FactoryTopologyReplayMessages,
 } from "./factory-topology-replay";
 import type { FactoryVisualizerError } from "./visualizer-error";
+import { factoryVisualizerErrorKey } from "./visualizer-error";
 import {
   WorkProgressVisualizer,
   type WorkProgressVisualizerMessages,
@@ -66,9 +67,15 @@ export interface FactoryRecordingTopologyReplayProps {
   messages: FactoryRecordingTopologyReplayMessages;
   onError?: (error: FactoryRecordingTopologyReplayError) => void;
   onSelectNode?: (node: FactoryTopologyNode) => void;
-  recording: unknown;
+  recording?: unknown;
   selectedNodeId?: string;
+  state?: FactoryRecordingTopologyReplayState;
 }
+
+export type FactoryRecordingTopologyReplayState =
+  | { error: FactoryVisualizerError; status: "failed" }
+  | { status: "loading" }
+  | { recording: unknown; status: "ready" };
 
 interface RecordingProjection {
   activity: FactoryActivityProjection;
@@ -88,14 +95,21 @@ export function FactoryRecordingTopologyReplay({
   onSelectNode,
   recording,
   selectedNodeId,
+  state,
 }: FactoryRecordingTopologyReplayProps) {
+  const status = state?.status ?? "ready";
+  const recordingInput =
+    state?.status === "ready" ? state.recording : recording;
   const parsed = useMemo(
-    () => safeParseFactoryRecording(recording),
-    [recording],
+    () =>
+      status === "ready"
+        ? safeParseFactoryRecording(recordingInput)
+        : undefined,
+    [recordingInput, status],
   );
   const validationError = useMemo(
     () =>
-      parsed.success
+      !parsed || parsed.success
         ? undefined
         : toRecordingValidationDiagnostic(
             parsed.issues,
@@ -104,8 +118,18 @@ export function FactoryRecordingTopologyReplay({
     [messages.validationFailed, parsed],
   );
   useDistinctRecordingErrorReport(validationError, onError);
+  useDistinctVisualizerErrorReport(
+    state?.status === "failed" ? state.error : undefined,
+    onError,
+  );
 
-  if (!parsed.success) {
+  if (status === "loading" || status === "failed") {
+    return (
+      <FactoryTopologyReplay messages={messages.topology} state={{ status }} />
+    );
+  }
+
+  if (!parsed?.success) {
     return (
       <FactoryTopologyReplay
         messages={messages.topology}
@@ -216,12 +240,16 @@ function ValidatedRecordingReplay({
         onSelectNode={onSelectNode}
         selectedNodeId={selectedNodeId}
         state={{
-          projection: {
-            activity: prepared.activity,
-            load: prepared.load,
-            topology: prepared.topology,
-          },
-          status: "ready",
+          ...(prepared.topology.nodes.length === 0
+            ? { status: "empty" as const }
+            : {
+                projection: {
+                  activity: prepared.activity,
+                  load: prepared.load,
+                  topology: prepared.topology,
+                },
+                status: "ready" as const,
+              }),
         }}
       />
       <WorkProgressVisualizer
@@ -302,6 +330,20 @@ function useDistinctRecordingErrorReport(
     const key = error.issues
       .map((issue) => `${issue.category}:${issue.code}:${issue.path.join(".")}`)
       .join("|");
+    if (reported.current.has(key)) return;
+    reported.current.add(key);
+    onError?.(error);
+  }, [error, onError]);
+}
+
+function useDistinctVisualizerErrorReport(
+  error: FactoryVisualizerError | undefined,
+  onError: FactoryRecordingTopologyReplayProps["onError"],
+) {
+  const reported = useRef(new Set<string>());
+  useEffect(() => {
+    if (!error) return;
+    const key = factoryVisualizerErrorKey(error);
     if (reported.current.has(key)) return;
     reported.current.add(key);
     onError?.(error);

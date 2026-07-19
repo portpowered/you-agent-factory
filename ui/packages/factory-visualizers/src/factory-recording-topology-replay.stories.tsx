@@ -65,11 +65,53 @@ const meta = {
     onSelectNode: fn(),
     recording: customerSupportRecording,
   },
+  decorators: [
+    (Story) => (
+      <>
+        <Story />
+        <button type="button">Sibling example control</button>
+      </>
+    ),
+  ],
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof FactoryRecordingTopologyReplay>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const Loading: Story = {
+  args: {
+    recording: undefined,
+    state: { status: "loading" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("region", { name: messages.topology.regionLabel }),
+    ).toHaveAttribute("aria-busy", "true");
+    await expect(canvas.getByRole("status")).toHaveTextContent(
+      messages.topology.loading,
+    );
+  },
+};
+
+export const EmptyRecording: Story = {
+  args: {
+    recording: undefined,
+    state: { recording: emptyRecording(), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      within(
+        canvas.getByRole("region", { name: messages.topology.regionLabel }),
+      ).getByRole("status"),
+    ).toHaveTextContent(messages.topology.empty);
+    await expect(
+      canvas.getByRole("region", { name: messages.progress.regionLabel }),
+    ).toHaveAttribute("data-work-progress-total", "0");
+  },
+};
 
 export const ValidatedRecording: Story = {
   play: async ({ args, canvasElement }) => {
@@ -104,6 +146,36 @@ export const InvalidRecording: Story = {
     await expect(args.onError).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "recording-validation" }),
     );
+    await expect(
+      canvas.getByRole("button", { name: "Sibling example control" }),
+    ).toBeVisible();
+  },
+};
+
+export const ProjectionFailure: Story = {
+  args: {
+    recording: undefined,
+    state: {
+      error: {
+        cause: { code: "INVALID_PROJECTION", name: "ProjectionError" },
+        kind: "projection",
+        message: "The prepared topology projection could not be read.",
+        recoverable: true,
+      },
+      status: "failed",
+    },
+  },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole("alert")).toHaveTextContent(
+      messages.topology.failed,
+    );
+    await expect(args.onError).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "projection" }),
+    );
+    await expect(
+      canvas.getByRole("button", { name: "Sibling example control" }),
+    ).toBeVisible();
   },
 };
 
@@ -133,6 +205,31 @@ function category(name: string) {
   return {
     plural: (count: string) => `${count} ${name} Work`,
     singular: (count: string) => `${count} ${name} Work`,
+  };
+}
+
+function emptyRecording(): unknown {
+  const factory = { name: "empty-local-recording" };
+  return {
+    events: [
+      {
+        context: {
+          eventTime: "2026-07-18T19:00:00Z",
+          sequence: 1,
+          sessionId: "storybook-empty-session",
+          sessionSequence: 1,
+          tick: 0,
+        },
+        id: "empty-topology",
+        payload: { factory },
+        schemaVersion: "agent-factory.event.v1",
+        type: "INITIAL_STRUCTURE_REQUEST",
+      },
+    ],
+    factory,
+    id: "empty-recording",
+    schemaVersion: "factory-recording/v1",
+    title: "Empty local recording",
   };
 }
 
