@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
-import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
+import { FactorySubmissionComposer } from "./factory-submission-composer";
 import { FactoryInvocationWidget } from "./invocation/factory-invocation-widget";
-import { SubmitWorkCard } from "./submit-work-card";
 
 export interface SubmitWorkWidgetProps {
   headerAction?: ReactNode;
@@ -48,7 +48,7 @@ export function SubmitWorkWidget({
   }
 
   return (
-    <SubmitWorkCard
+    <FactorySubmissionComposer
       draft={draft}
       headerAction={headerAction}
       isSubmitting={isSubmitting}
