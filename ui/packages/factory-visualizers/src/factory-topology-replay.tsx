@@ -56,11 +56,11 @@ export type FactoryTopologyReplayState =
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
   /** Formats a deterministic logical-tick duration for an active Work row. */
-  activeWorkDuration?: (ticks: number) => string;
+  activeWorkDuration: (ticks: number) => string;
   /** Labels the extra active Work rows omitted after the first three. */
-  activeWorkOverflow?: (count: number) => string;
+  activeWorkOverflow: (count: number) => string;
   /** Labels the read-only active Work list within a workstation node. */
-  activeWorkRows?: (count: number) => string;
+  activeWorkRows: (count: number) => string;
   empty: string;
   failed: string;
   hideNodeKinds: string;

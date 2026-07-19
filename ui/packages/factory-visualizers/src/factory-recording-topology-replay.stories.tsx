@@ -40,6 +40,9 @@ const messages: FactoryRecordingTopologyReplayMessages = {
   topology: {
     activeDispatches: (count) =>
       `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+    activeWorkDuration: (ticks) => `${ticks} logical ticks`,
+    activeWorkOverflow: (count) => `+${count} active Work`,
+    activeWorkRows: (count) => `${count} active Work rows`,
     empty: "No Factory topology is available at this tick.",
     failed: "The Factory topology could not be shown.",
     hideNodeKinds: "Hide node kinds",

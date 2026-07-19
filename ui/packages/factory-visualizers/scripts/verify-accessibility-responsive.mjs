@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
+import { verifyDenseTopologyChromeModes } from "./verify-topology-chrome-modes.mjs";
 
 const require = createRequire(import.meta.url);
 const axePath = require.resolve("axe-core/axe.min.js");
@@ -265,42 +266,13 @@ async function verifyResponsiveViewports(browserInstance) {
       page,
       `factory-visualizers-workprogressvisualizer--${viewport.progress}`,
     );
-    await verifyLayout(
+    await verifyDenseTopologyChromeModes({
+      assert,
       page,
-      "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
-    );
-    assert(
-      await page.locator(".react-flow__controls").isVisible(),
-      `Dense topology controls are hidden at ${viewport.width}px.`,
-    );
-    assert(
-      await page.getByRole("group", { name: "5 active Work rows" }).isVisible(),
-      `Dense topology active Work rows are hidden at ${viewport.width}px.`,
-    );
-    assert(
-      await page.getByText("+2 active Work").isVisible(),
-      `Dense topology active Work overflow is hidden at ${viewport.width}px.`,
-    );
-
-    const workstation = page.getByRole("button", {
-      name: "workstation: Review",
+      tabTo,
+      verifyLayout,
+      width: viewport.width,
     });
-    await tabTo(page, workstation, 50);
-    assert(
-      (await workstation.evaluate(
-        (element) => getComputedStyle(element).outlineWidth,
-      )) !== "0px",
-      `Topology node focus is not visible at ${viewport.width}px.`,
-    );
-    await page.keyboard.press("Enter");
-    const zoomIn = page.getByRole("button", { name: "Zoom in" });
-    await tabTo(page, zoomIn, 50);
-    assert(
-      (await zoomIn.evaluate(
-        (element) => getComputedStyle(element).outlineStyle,
-      )) !== "none",
-      `Graph control focus is not visible at ${viewport.width}px.`,
-    );
 
     await verifyLayout(
       page,

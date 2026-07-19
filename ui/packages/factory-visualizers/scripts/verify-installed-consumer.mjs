@@ -58,7 +58,7 @@ const timelineMessages: FactoryTimelineScrubberMessages = {
   sliderLabel: "Selected tick", title: "Replay timeline", unavailable: "Unavailable",
 };
 const topologyMessages: FactoryTopologyReplayMessages = {
-  activeDispatches: (count) => count + " active Dispatches", empty: "No topology", failed: "Topology failed",
+  activeDispatches: (count) => count + " active Dispatches", activeWorkDuration: (ticks) => ticks + " logical ticks", activeWorkOverflow: (count) => "+" + count + " active Work", activeWorkRows: (count) => count + " active Work rows", empty: "No topology", failed: "Topology failed",
   hideNodeKinds: "Hide node kinds", inactiveDispatches: "No active Dispatch", legendLabel: "Topology legend",
   loading: "Loading topology", nodeLabel: (kind, label) => kind + ": " + label,
   regionLabel: "Factory topology", resourceOccupancy: (occupied, capacity) => occupied + " of " + capacity + " occupied",

@@ -20,9 +20,7 @@ export function ActiveWorkRows({
   const overflow = items.length - visibleItems.length;
   return (
     <fieldset
-      aria-label={
-        messages.activeWorkRows?.(items.length) ?? `${items.length} active Work`
-      }
+      aria-label={messages.activeWorkRows(items.length)}
       className="factory-topology-replay__active-work"
     >
       <ul className="factory-topology-replay__active-work-list">
@@ -35,15 +33,14 @@ export function ActiveWorkRows({
               {item.id}
             </span>
             <span className="factory-topology-replay__active-work-duration">
-              {messages.activeWorkDuration?.(item.durationTicks) ??
-                `${item.durationTicks} ticks`}
+              {messages.activeWorkDuration(item.durationTicks)}
             </span>
           </li>
         ))}
       </ul>
       {overflow > 0 ? (
         <span className="factory-topology-replay__active-work-overflow">
-          {messages.activeWorkOverflow?.(overflow) ?? `+${overflow} more`}
+          {messages.activeWorkOverflow(overflow)}
         </span>
       ) : null}
     </fieldset>

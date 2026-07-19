@@ -65,6 +65,13 @@ that consumes the replay kernel.
   read-only workstation Work rows solely from active Dispatch work IDs and
   logical ticks. Keep the first-three-plus-overflow presentation independent
   of optional chrome, and do not add selection or mutation affordances there.
+  Its row, duration, and overflow labels are required caller-localized
+  messages; do not introduce English fallback copy in the public package.
+- `ui/packages/factory-visualizers/scripts/verify-topology-chrome-modes.mjs`
+  verifies dense runtime evidence and viewport-control behavior for every
+  chrome preset at each responsive browser width. Extend this helper when a
+  chrome region changes instead of testing only the default/full Storybook
+  story.
 - `ui/packages/factory-visualizers/src/factory-topology-flow-support.ts` holds
   pure endpoint and activity-count helpers used by the disposable React Flow
   projection; keep it free of renderer state and caller mutation.

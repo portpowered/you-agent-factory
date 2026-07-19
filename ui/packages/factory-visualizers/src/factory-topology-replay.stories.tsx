@@ -129,6 +129,20 @@ export const DensePreparedProjection: Story = {
   },
 };
 
+export const DenseMinimalChrome: Story = {
+  args: {
+    chrome: { preset: "minimal" },
+    state: { projection: createProjection(true), status: "ready" },
+  },
+};
+
+export const DenseNoChrome: Story = {
+  args: {
+    chrome: { preset: "none" },
+    state: { projection: createProjection(true), status: "ready" },
+  },
+};
+
 export const TouchPanePanning: Story = {
   args: {
     state: { projection: createProjection(true), status: "ready" },

@@ -47,6 +47,9 @@ vi.mock("@xyflow/react", () => ({
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
+  activeWorkDuration: (ticks) => `${ticks} logical ticks`,
+  activeWorkOverflow: (count) => `+${count} active Work`,
+  activeWorkRows: (count) => `${count} active Work rows`,
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
   hideNodeKinds: "Hide node kinds",

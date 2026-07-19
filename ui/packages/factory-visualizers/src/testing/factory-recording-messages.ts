@@ -57,6 +57,9 @@ export function createGermanRecordingMessages(): FactoryRecordingTopologyReplayM
     topology: {
       activeDispatches: (count) =>
         `${count} aktive ${count === 1 ? "Ausführung" : "Ausführungen"}`,
+      activeWorkDuration: (ticks) => `${ticks} logische Schritte`,
+      activeWorkOverflow: (count) => `+${count} weitere Aufträge`,
+      activeWorkRows: (count) => `${count} aktive Arbeitszeilen`,
       empty: "Für diesen Schritt ist keine Fabriktopologie verfügbar.",
       failed: "Die Fabriktopologie konnte nicht angezeigt werden.",
       hideNodeKinds: "Knotenarten ausblenden",
