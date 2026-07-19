@@ -60,7 +60,9 @@ that consumes the replay kernel.
   through `factory-topology-chrome.ts` before rendering; it may conditionally
   mount presentation regions but must not change the caller-provided topology,
   activity, or load projection. Keep disabled regions unmounted so they do not
-  remain in the accessibility tree.
+  remain in the accessibility tree. The chrome-region React Flow wrapper must
+  retain the node-click pointer-event preservation hook so nested read-only
+  `GraphNodeButton` controls remain browser-clickable above the pan pane.
 - `ui/packages/factory-visualizers/src/factory-topology-active-work.tsx` derives
   read-only workstation Work rows solely from active Dispatch work IDs and
   logical ticks. Keep the first-three-plus-overflow presentation independent

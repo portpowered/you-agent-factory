@@ -53,6 +53,9 @@ export function FactoryTopologyChromeRegions({
         nodesConnectable={false}
         nodesDraggable={false}
         nodeTypes={factoryTopologyNodeTypes}
+        // XYFlow otherwise places the draggable pane above non-interactive node
+        // wrappers. The nested GraphNodeButton remains the selection owner.
+        onNodeClick={preserveNestedNodePointerEvents}
         panOnDrag
         proOptions={{ hideAttribution: true }}
       >
@@ -66,6 +69,8 @@ export function FactoryTopologyChromeRegions({
     </>
   );
 }
+
+function preserveNestedNodePointerEvents(): void {}
 
 function TopologyLegend({ label }: { label: string }) {
   return (
