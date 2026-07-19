@@ -257,3 +257,12 @@ refreshes the committed runtime schema module after editing
 `@you-agent-factory/client` is an explicit peer contract because the emulator
 uses its canonical Factory, Factory Event, and recording APIs without bundling
 or duplicating them. Consumers install both packages at the same version.
+
+## Frozen runtime references
+
+`loadFactoryEmulatorRuntimeReferences()` returns detached package-local
+references for the documented supported subset. The loader validates each
+fixture's public provenance, Factory and scenario, strictly ordered logical
+ticks, and flattened Factory-event kind sequence before a conformance consumer
+can compare emulator semantics. These references remain frontend-only and do
+not invoke a backend, Go, or WASM fixture generator.

@@ -17,6 +17,17 @@ export {
   type RecordingFactoryEventSinkOptions,
 } from "./recording-sink.js";
 export {
+  FACTORY_EMULATOR_RUNTIME_REFERENCE_SCHEMA_VERSION,
+  type FactoryEmulatorRuntimeReference,
+  type FactoryEmulatorRuntimeReferenceIssue,
+  type FactoryEmulatorRuntimeReferenceIssueCode,
+  type FactoryEmulatorRuntimeReferenceProvenance,
+  type FactoryEmulatorRuntimeReferenceTick,
+  loadFactoryEmulatorRuntimeReferences,
+  type SafeParseFactoryEmulatorRuntimeReferenceResult,
+  safeParseFactoryEmulatorRuntimeReference,
+} from "./runtime-reference.js";
+export {
   FACTORY_EMULATOR_SCENARIO_SCHEMA_VERSION,
   type FactoryEmulatorInitialSubmission,
   type FactoryEmulatorInitialSubmissions,
