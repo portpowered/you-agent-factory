@@ -348,6 +348,24 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
   });
 });
 
+describe("FactoryTopologyReplay chrome in non-ready states", () => {
+  it("keeps non-ready states explicit when chrome includes an override", () => {
+    render(
+      <FactoryTopologyReplay
+        chrome={{ preset: "none", visibilityControls: true }}
+        messages={messages}
+        state={{ status: "loading" }}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(messages.loading);
+    expect(screen.queryByTestId("react-flow")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: messages.hideNodeKinds }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("FactoryTopologyReplay controlled updates", () => {
   it("emits selection intent while selection styling remains host-controlled", () => {
     const projection = createFactoryTopologyProjection();
