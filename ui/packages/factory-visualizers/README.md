@@ -2,12 +2,15 @@
 
 Controlled React components for rendering caller-prepared Factory replay
 projections. The package exports `FactoryTopologyReplay`,
-`FactoryTimelineScrubber`, and `WorkProgressVisualizer` together with their
-message, formatting, status, callback, and structured error contracts.
+`FactoryRecordingTopologyReplay`, `FactoryTimelineScrubber`, and
+`WorkProgressVisualizer` together with their message, formatting, status,
+callback, and structured error contracts.
 
-The host owns event replay, transport, persistence, playback, selected state,
-and canonical Factory data. Import the package styles once, prepare projections
-with `@you-agent-factory/factory-replay`, and pass controlled props:
+The host always owns transport, persistence, and canonical Factory data. It can
+either prepare controlled projections with `@you-agent-factory/factory-replay`
+or pass an unknown recording directly to `FactoryRecordingTopologyReplay`,
+which validates it through `@you-agent-factory/client` before deriving the
+selected-tick projections. Import the package styles once:
 
 ```tsx
 import {
@@ -21,6 +24,11 @@ export function Topology(props: FactoryTopologyReplayProps) {
   return <FactoryTopologyReplay {...props} />;
 }
 ```
+
+`FactoryRecordingTopologyReplay` reports invalid input as one sanitized
+`recording-validation` diagnostic and renders the same accessible failed
+presentation as the controlled topology component. It does not require a
+router, data provider, store, browser persistence, network request, or backend.
 
 Run `bun run verify` in this directory to typecheck and test the components,
 build Storybook, exercise accessibility and responsive behavior, validate the

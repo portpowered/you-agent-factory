@@ -37,6 +37,7 @@ try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
   await verifyResponsiveViewports(browser);
+  await verifyRecordingComposition(browser);
   await verifyGermanFormatting(browser);
   await verifyReducedMotion(browser);
   console.log(
@@ -45,6 +46,43 @@ try {
 } finally {
   await browser?.close();
   server.kill();
+}
+
+async function verifyRecordingComposition(browserInstance) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 720, height: 900 },
+  });
+  const page = await context.newPage();
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--validated-recording",
+  );
+  assert(
+    await page
+      .getByRole("region", { name: "Recorded Factory playback" })
+      .isVisible(),
+    "The validated recording composition is not a visible labeled region.",
+  );
+  const workstation = page.getByRole("button", {
+    name: "workstation: triage",
+  });
+  await tabTo(page, workstation, 50);
+  assert(
+    (await workstation.evaluate(
+      (element) => getComputedStyle(element).outlineWidth,
+    )) !== "0px",
+    "The validated recording topology does not expose visible keyboard focus.",
+  );
+
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--invalid-recording",
+  );
+  assert(
+    await page.getByRole("alert").isVisible(),
+    "The invalid recording does not render the shared accessible failure.",
+  );
+  await context.close();
 }
 
 async function verifyResponsiveViewports(browserInstance) {

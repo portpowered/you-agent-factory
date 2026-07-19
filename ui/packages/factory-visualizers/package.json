@@ -35,7 +35,7 @@
     "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
-    "prepare:dependencies": "bun run --cwd ../components build && bun run --cwd ../factory-replay build",
+    "prepare:dependencies": "bun run --cwd ../client build && bun run --cwd ../components build && bun run --cwd ../factory-replay build",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "bun run prepare:dependencies && tsc -p tsconfig.json --noEmit --pretty false",
     "verify:accessibility-responsive": "node scripts/verify-accessibility-responsive.mjs",
@@ -46,6 +46,7 @@
     "@xyflow/react": "^12.10.2"
   },
   "peerDependencies": {
+    "@you-agent-factory/client": "0.0.0",
     "@you-agent-factory/factory-replay": "0.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
@@ -58,6 +59,7 @@
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react-swc": "^4.1.0",
+    "@you-agent-factory/client": "file:../client",
     "@you-agent-factory/factory-replay": "file:../factory-replay",
     "happy-dom": "^20.9.0",
     "jest-axe": "^10.0.0",
