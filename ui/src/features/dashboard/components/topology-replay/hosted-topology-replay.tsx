@@ -1,3 +1,4 @@
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import type { FactoryTopologyNode } from "@you-agent-factory/factory-replay";
 import {
   FactoryTimelineScrubber,
@@ -12,6 +13,8 @@ import {
 } from "../../messages/hosted-topology-replay";
 
 export interface HostedTopologyReplayProps {
+  /** Validated, caller-owned presentation data; never part of replay state. */
+  layout?: FactoryVisualizationLayoutV1;
   locale?: string;
   onSelectResource?: (resourceID: string) => void;
   onSelectStateNode?: (stateID: string) => void;
@@ -22,6 +25,7 @@ export interface HostedTopologyReplayProps {
 }
 
 export function HostedTopologyReplay({
+  layout,
   locale,
   onSelectResource,
   onSelectStateNode,
@@ -73,6 +77,7 @@ export function HostedTopologyReplay({
       ) : null}
       <FactoryTopologyReplay
         key={visualizerRetryKey}
+        layout={layout}
         messages={messages.topology}
         onRetry={
           adapter.state.topologyState.status === "ready"

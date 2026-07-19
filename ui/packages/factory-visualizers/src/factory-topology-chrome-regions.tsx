@@ -6,7 +6,7 @@ import type {
   FactoryTopologyFlowProjection,
   FactoryTopologyReplayMessages,
 } from "./factory-topology-replay";
-import { factoryTopologyNodeTypes } from "./factory-topology-replay";
+import { nodeTypes } from "./factory-topology-replay-nodes";
 
 interface FactoryTopologyChromeRegionsProps {
   chrome: ResolvedFactoryTopologyChrome;
@@ -21,38 +21,62 @@ export function FactoryTopologyChromeRegions({
   messages,
 }: FactoryTopologyChromeRegionsProps) {
   const [showNodeKinds, setShowNodeKinds] = useState(true);
-  const renderedFlow = showNodeKinds
-    ? flow
-    : {
-        ...flow,
-        nodes: flow.nodes.map((node) => ({
-          ...node,
-          data: { ...node.data, showNodeKinds: false },
-        })),
-      };
+  const [annotationsVisible, setAnnotationsVisible] = useState(true);
+  const renderedFlow = {
+    ...flow,
+    nodes: flow.nodes
+      .filter(
+        (node) =>
+          annotationsVisible || node.type !== "factoryTopologyAnnotation",
+      )
+      .map((node) =>
+        node.type === "factoryTopologyNode"
+          ? { ...node, data: { ...node.data, showNodeKinds } }
+          : node,
+      ),
+  };
+  const hasAnnotations = flow.nodes.some(
+    (node) => node.type === "factoryTopologyAnnotation",
+  );
 
   return (
     <>
       {chrome.legend ? <TopologyLegend label={messages.legendLabel} /> : null}
       {chrome.visibilityControls ? (
-        <button
-          aria-pressed={showNodeKinds}
-          className="factory-topology-replay__visibility-control"
-          onClick={() => setShowNodeKinds((visible) => !visible)}
-          type="button"
-        >
-          {showNodeKinds ? messages.hideNodeKinds : messages.showNodeKinds}
-        </button>
+        <>
+          <button
+            aria-pressed={showNodeKinds}
+            className="factory-topology-replay__visibility-control"
+            onClick={() => setShowNodeKinds((visible) => !visible)}
+            type="button"
+          >
+            {showNodeKinds ? messages.hideNodeKinds : messages.showNodeKinds}
+          </button>
+          {hasAnnotations ? (
+            <button
+              aria-pressed={annotationsVisible}
+              className="factory-topology-replay__annotation-toggle"
+              onClick={() => setAnnotationsVisible((visible) => !visible)}
+              type="button"
+            >
+              {annotationsVisible
+                ? messages.annotationsVisible
+                : messages.annotationsHidden}
+            </button>
+          ) : null}
+        </>
       ) : null}
       <ReactFlow
         edges={renderedFlow.edges}
         edgesFocusable={false}
         elementsSelectable={false}
         fitView
+        fitViewOptions={{ includeHiddenNodes: false }}
+        key={`${annotationsVisible}:${showNodeKinds}`}
         nodes={renderedFlow.nodes}
         nodesConnectable={false}
         nodesDraggable={false}
-        nodeTypes={factoryTopologyNodeTypes}
+        nodeTypes={nodeTypes}
         // XYFlow otherwise places the draggable pane above non-interactive node
         // wrappers. The nested GraphNodeButton remains the selection owner.
         onNodeClick={preserveNestedNodePointerEvents}

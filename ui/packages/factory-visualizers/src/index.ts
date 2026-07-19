@@ -36,6 +36,8 @@ export {
 } from "./factory-topology-replay.js";
 
 export type {
+  FactoryTopologyReplayError,
+  FactoryVisualizationLayoutDiagnostic,
   FactoryVisualizerError,
   FactoryVisualizerErrorCause,
   FactoryVisualizerErrorKind,

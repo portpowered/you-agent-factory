@@ -45,6 +45,10 @@ import {
 } from "./visualization-layout-topology.js";
 
 type InputPath = readonly (string | number)[];
+/** A prepared topology can supply its canonical node IDs without owning Factory state. */
+export interface FactoryVisualizationLayoutCanonicalNodeContext {
+  canonicalNodeIds: ReadonlySet<string>;
+}
 const imageMediaTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 const noteTones = new Set([
   "neutral",
@@ -357,7 +361,7 @@ function validateNodeEmptyState(
  */
 export function safeParseFactoryVisualizationLayout(
   input: unknown,
-  factory: Readonly<FactoryDefinition>,
+  factory: Readonly<FactoryDefinition> | FactoryVisualizationLayoutCanonicalNodeContext,
 ): SafeParseFactoryVisualizationLayoutResult {
   if (!isInputRecord(input)) {
     return {
@@ -380,7 +384,10 @@ export function safeParseFactoryVisualizationLayout(
     total: 0,
     aggregateLimitReported: false,
   };
-  const canonicalNodeIds = factoryVisualizationCanonicalNodeIds(factory);
+  const canonicalNodeIds =
+    "canonicalNodeIds" in factory
+      ? factory.canonicalNodeIds
+      : factoryVisualizationCanonicalNodeIds(factory);
   unsupportedFields(input, layoutFields, [], issues);
   if (
     stringField(input, "schemaVersion", [], issues) &&
@@ -442,7 +449,7 @@ export function safeParseFactoryVisualizationLayout(
 
 export function parseFactoryVisualizationLayout(
   input: unknown,
-  factory: Readonly<FactoryDefinition>,
+  factory: Readonly<FactoryDefinition> | FactoryVisualizationLayoutCanonicalNodeContext,
 ): FactoryVisualizationLayoutV1 {
   const result = safeParseFactoryVisualizationLayout(input, factory);
   if (!result.success) {

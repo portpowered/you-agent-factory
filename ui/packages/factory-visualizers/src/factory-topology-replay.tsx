@@ -1,22 +1,11 @@
-import type { Edge, Node, NodeProps } from "@xyflow/react";
-import {
-  GraphNodeButton,
-  type GraphNodeHandle,
-  GraphNodeShell,
-} from "@you-agent-factory/components/graphs";
+import { safeParseFactoryVisualizationLayout } from "@you-agent-factory/client";
 import type {
   FactoryActivityProjection,
   FactoryLoadProjection,
-  FactoryTopologyConnection,
   FactoryTopologyNode,
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
-import {
-  type ActiveWorkItem,
-  ActiveWorkRows,
-  activeWorkByWorkstationNode,
-} from "./factory-topology-active-work";
 import {
   type FactoryTopologyChromeConfiguration,
   type ResolvedFactoryTopologyChrome,
@@ -24,22 +13,23 @@ import {
 } from "./factory-topology-chrome";
 import { FactoryTopologyChromeRegions } from "./factory-topology-chrome-regions";
 import {
-  activityCounts,
-  connectionHasRenderedEndpoints,
-} from "./factory-topology-flow-support";
-
+  type FactoryTopologyFlowProjection,
+  projectFactoryTopologyFlow,
+} from "./factory-topology-flow-projection";
 import {
   FactoryTopologyErrorBoundary,
   FactoryTopologyStateRegion,
   useDistinctTopologyErrorReport,
 } from "./factory-topology-state";
-
 import {
-  type FactoryVisualizerError,
-  FactoryVisualizerInternalError,
   normalizeFactoryVisualizerError,
   toFactoryVisualizerError,
 } from "./visualizer-error";
+
+export type { FactoryTopologyFlowProjection } from "./factory-topology-flow-projection";
+export { projectFactoryTopologyFlow } from "./factory-topology-flow-projection";
+
+import type { FactoryTopologyReplayError } from "./visualizer-error";
 
 export interface FactoryTopologyReplayProjection {
   activity: FactoryActivityProjection;
@@ -55,16 +45,17 @@ export type FactoryTopologyReplayState =
 
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
-  /** Formats a deterministic logical-tick duration for an active Work row. */
   activeWorkDuration: (ticks: number) => string;
-  /** Labels the extra active Work rows omitted after the first three. */
   activeWorkOverflow: (count: number) => string;
-  /** Labels the read-only active Work list within a workstation node. */
   activeWorkRows: (count: number) => string;
+  annotationsHidden: string;
+  annotationsVisible: string;
   empty: string;
   failed: string;
   hideNodeKinds: string;
   inactiveDispatches: string;
+  imageFailed: string;
+  imageLoading: string;
   legendLabel: string;
   loading: string;
   nodeLabel: (kind: FactoryTopologyNode["kind"], label: string) => string;
@@ -80,37 +71,14 @@ export interface FactoryTopologyReplayMessages {
 
 export interface FactoryTopologyReplayProps {
   chrome?: FactoryTopologyChromeConfiguration;
+  /** Presentation-only input validated against the prepared canonical topology. */
+  layout?: unknown;
   messages: FactoryTopologyReplayMessages;
-  onError?: (error: FactoryVisualizerError) => void;
+  onError?: (error: FactoryTopologyReplayError) => void;
   onRetry?: () => void;
   onSelectNode?: (node: FactoryTopologyNode) => void;
   selectedNodeId?: string;
   state: FactoryTopologyReplayState;
-}
-
-interface TopologyNodeData extends Record<string, unknown> {
-  activityCount: number;
-  activeWorkItems: readonly ActiveWorkItem[];
-  messages: FactoryTopologyReplayMessages;
-  node: FactoryTopologyNode;
-  occupancy?: {
-    capacity?: number;
-    evidence: "known" | "unavailable";
-    occupied?: number;
-  };
-  onSelectNode?: (node: FactoryTopologyNode) => void;
-  selected: boolean;
-  showNodeKinds: boolean;
-  workStateCount?: {
-    count?: number;
-    evidence: "known" | "unavailable";
-  };
-}
-
-export interface FactoryTopologyFlowProjection {
-  edges: Edge[];
-  nodes: Node<TopologyNodeData>[];
-  validEndpoints: boolean;
 }
 
 interface PreparedFlowSuccess {
@@ -119,128 +87,11 @@ interface PreparedFlowSuccess {
 }
 
 interface PreparedFlowFailure {
-  error: FactoryVisualizerError;
+  error: FactoryTopologyReplayError;
   status: "failed";
 }
 
 type PreparedFlow = PreparedFlowFailure | PreparedFlowSuccess;
-
-export const factoryTopologyNodeTypes = {
-  factoryTopologyNode: FactoryTopologyNodeView,
-};
-const columnByKind: Record<FactoryTopologyNode["kind"], number> = {
-  resource: 0,
-  worker: 1,
-  "work-type": 2,
-  "work-state": 3,
-  workstation: 4,
-};
-
-/** Convert immutable replay projections into disposable React Flow view data. */
-export function projectFactoryTopologyFlow(
-  projection: FactoryTopologyReplayProjection,
-  messages: FactoryTopologyReplayMessages,
-  selectedNodeId: string | undefined,
-  onSelectNode: FactoryTopologyReplayProps["onSelectNode"],
-  prefersReducedMotion = false,
-  showNodeKinds = true,
-): FactoryTopologyFlowProjection {
-  let topologyNodes: FactoryTopologyNode[];
-  let connections: FactoryTopologyConnection[];
-  try {
-    topologyNodes = projection.topology.nodes;
-    connections = projection.topology.connections;
-  } catch (error) {
-    throw new FactoryVisualizerInternalError("projection", error);
-  }
-
-  try {
-    const nodeById = new Map(topologyNodes.map((node) => [node.id, node]));
-    const endpointsValid = connections.every((connection) =>
-      connectionHasRenderedEndpoints(connection, nodeById),
-    );
-    const activityCountByNode = activityCounts(projection.activity);
-    const activeWorkByWorkstation = activeWorkByWorkstationNode(
-      projection.activity,
-    );
-    const occupancyByNode = new Map(
-      projection.load.resourceOccupancy.map((occupancy) => [
-        occupancy.resourceNodeId,
-        occupancy,
-      ]),
-    );
-    const workStateCountByNode = new Map(
-      projection.load.workStateCounts.map((count) => [
-        count.workStateNodeId,
-        count,
-      ]),
-    );
-    const rowByKind = new Map<FactoryTopologyNode["kind"], number>();
-
-    const nodes = topologyNodes.map<Node<TopologyNodeData>>((node) => {
-      const row = rowByKind.get(node.kind) ?? 0;
-      rowByKind.set(node.kind, row + 1);
-      const occupancy = occupancyByNode.get(node.id);
-      const workStateCount = workStateCountByNode.get(node.id);
-      return {
-        data: {
-          activityCount: activityCountByNode.get(node.id) ?? 0,
-          activeWorkItems: activeWorkByWorkstation.get(node.id) ?? [],
-          messages,
-          node,
-          ...(occupancy
-            ? {
-                occupancy: {
-                  capacity: occupancy.capacity,
-                  evidence: occupancy.evidence,
-                  occupied: occupancy.occupiedQuantity,
-                },
-              }
-            : {}),
-          onSelectNode,
-          selected: selectedNodeId === node.id,
-          showNodeKinds,
-          ...(workStateCount
-            ? {
-                workStateCount: {
-                  count: workStateCount.count,
-                  evidence: workStateCount.evidence,
-                },
-              }
-            : {}),
-        },
-        draggable: false,
-        id: node.id,
-        position: layoutNode(node.kind, row),
-        selectable: false,
-        type: "factoryTopologyNode",
-      };
-    });
-
-    return {
-      edges: endpointsValid
-        ? connections.map((connection) => ({
-            animated:
-              !prefersReducedMotion &&
-              projection.activity.activeDispatchOverlays.some((overlay) =>
-                overlay.connectionIds.includes(connection.id),
-              ),
-            data: { relationship: connection.kind },
-            id: connection.id,
-            source: connection.source.nodeId,
-            sourceHandle: connection.source.handleId,
-            target: connection.target.nodeId,
-            targetHandle: connection.target.handleId,
-          }))
-        : [],
-      nodes,
-      validEndpoints: endpointsValid,
-    };
-  } catch (error) {
-    if (error instanceof FactoryVisualizerInternalError) throw error;
-    throw new FactoryVisualizerInternalError("projection", error);
-  }
-}
 
 export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
   return (
@@ -249,7 +100,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
       messages={props.messages}
       onError={props.onError}
       onRetry={props.onRetry}
-      resetKeys={[props.state, props.messages, props.chrome]}
+      resetKeys={[props.state, props.messages]}
     >
       <FactoryTopologyReplayContent {...props} />
     </FactoryTopologyErrorBoundary>
@@ -260,6 +111,7 @@ function FactoryTopologyReplayContent({
   chrome,
   messages,
   onError,
+  layout,
   onRetry,
   onSelectNode,
   selectedNodeId,
@@ -280,6 +132,7 @@ function FactoryTopologyReplayContent({
       onError={onError}
       onRetry={onRetry}
       onSelectNode={onSelectNode}
+      layout={layout}
       projection={state.projection}
       selectedNodeId={selectedNodeId}
       chrome={resolveFactoryTopologyChrome(chrome)}
@@ -291,6 +144,7 @@ function PreparedTopology({
   chrome,
   messages,
   onError,
+  layout,
   onRetry,
   onSelectNode,
   projection,
@@ -302,12 +156,36 @@ function PreparedTopology({
   const prefersReducedMotion = usePrefersReducedMotion();
   const prepared = useMemo<PreparedFlow>(() => {
     try {
+      const parsedLayout =
+        layout === undefined
+          ? undefined
+          : safeParseFactoryVisualizationLayout(layout, {
+              canonicalNodeIds: new Set(
+                projection.topology.nodes.map((node) => node.id),
+              ),
+            });
+      if (parsedLayout && !parsedLayout.success) {
+        return {
+          error: {
+            issues: parsedLayout.issues.map(({ category, code, path }) => ({
+              category,
+              code,
+              path,
+            })),
+            kind: "layout-validation",
+            message: "The topology layout could not be prepared.",
+            recoverable: true,
+          },
+          status: "failed",
+        };
+      }
       const flow = projectFactoryTopologyFlow(
         projection,
         messages,
         selectedNodeId,
         onSelectNode,
         prefersReducedMotion,
+        parsedLayout?.data,
       );
       return flow.validEndpoints
         ? { flow, status: "ready" }
@@ -323,6 +201,7 @@ function PreparedTopology({
     onSelectNode,
     prefersReducedMotion,
     projection,
+    layout,
     selectedNodeId,
   ]);
   useDistinctTopologyErrorReport(
@@ -352,7 +231,7 @@ function PreparedTopology({
         messages={messages}
         onError={onError}
         onRetry={onRetry}
-        resetKeys={[projection, messages, selectedNodeId, onSelectNode]}
+        resetKeys={[projection, messages, selectedNodeId, onSelectNode, layout]}
         withinRegion
       >
         <FactoryTopologyChromeRegions
@@ -362,109 +241,6 @@ function PreparedTopology({
         />
       </FactoryTopologyErrorBoundary>
     </section>
-  );
-}
-
-function layoutNode(
-  kind: FactoryTopologyNode["kind"],
-  row: number,
-): { x: number; y: number } {
-  const column = columnByKind[kind];
-  if (column === undefined || !Number.isSafeInteger(row) || row < 0) {
-    throw new FactoryVisualizerInternalError("layout");
-  }
-  return { x: column * 260, y: row * 170 };
-}
-
-function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
-  const {
-    activityCount,
-    activeWorkItems,
-    messages,
-    node,
-    occupancy,
-    onSelectNode,
-    selected,
-    showNodeKinds,
-    workStateCount,
-  } = data;
-  const state = selected ? "selected" : "default";
-  const handles: GraphNodeHandle[] = node.handles.map((handle) => ({
-    connectable: false,
-    id: handle.id,
-    label: handle.id,
-    side: handle.role === "target" ? "left" : "right",
-    type: handle.role,
-  }));
-  const content = (
-    <GraphNodeShell
-      className={
-        activityCount > 0 ? "factory-topology-replay__node--active" : ""
-      }
-      data-dispatch-activity={activityCount > 0 ? "active" : "inactive"}
-      handles={handles}
-      nodeKind={node.kind}
-      showStateIndicator={false}
-      state={state}
-    >
-      <strong className="factory-topology-replay__node-title">
-        {node.label}
-      </strong>
-      {showNodeKinds ? (
-        <span className="factory-topology-replay__node-kind">{node.kind}</span>
-      ) : null}
-      <span className="factory-topology-replay__node-cue">
-        {activityCount > 0 ? "●" : "○"}{" "}
-        {activityCount > 0
-          ? messages.activeDispatches(activityCount)
-          : messages.inactiveDispatches}
-      </span>
-      {node.kind === "workstation" && activeWorkItems.length > 0 ? (
-        <ActiveWorkRows items={activeWorkItems} messages={messages} />
-      ) : null}
-      {node.kind === "resource" ? (
-        <span className="factory-topology-replay__node-cue">
-          ◫{" "}
-          {occupancy?.evidence === "known" &&
-          occupancy.occupied !== undefined &&
-          occupancy.capacity !== undefined
-            ? messages.resourceOccupancy(occupancy.occupied, occupancy.capacity)
-            : messages.resourceOccupancyUnavailable}
-        </span>
-      ) : null}
-      {node.kind === "work-state" ? (
-        <span className="factory-topology-replay__node-cue">
-          ∑{" "}
-          {workStateCount?.evidence === "known" &&
-          workStateCount.count !== undefined
-            ? messages.workStateCount(workStateCount.count)
-            : messages.workStateCountUnavailable}
-        </span>
-      ) : null}
-      {selected ? (
-        <span className="factory-topology-replay__node-cue">
-          ✓ {messages.selectedNode}
-        </span>
-      ) : null}
-    </GraphNodeShell>
-  );
-
-  return onSelectNode ? (
-    <GraphNodeButton
-      aria-label={messages.nodeLabel(node.kind, node.label)}
-      className="factory-topology-replay__node-button"
-      graphState={state}
-      onClick={() => onSelectNode(node)}
-    >
-      {content}
-    </GraphNodeButton>
-  ) : (
-    <figure
-      aria-label={messages.nodeLabel(node.kind, node.label)}
-      className="factory-topology-replay__node-static"
-    >
-      {content}
-    </figure>
   );
 }
 

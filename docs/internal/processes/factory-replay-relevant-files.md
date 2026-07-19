@@ -91,5 +91,31 @@ that consumes the replay kernel.
   dashboard-specific Factory-world event reducer; `projectSnapshot.ts` owns
   its projection. Keep browser state, checkpoints, persistence, and Zustand
   outside `packages/factory-replay`.
+- `ui/packages/factory-visualizers/src/factory-topology-flow-projection.ts`
+  derives caller-validated `FactoryVisualizationLayoutV1` annotations as
+  separate, inert React Flow nodes; `factory-topology-replay-nodes.tsx` owns
+  their read-only node and image rendering. Keep them out of canonical topology
+  layout and edge routing; visibility may remove only those projected nodes so React Flow
+  fit-to-view remains derived from what is currently visible. Embedded raster
+  annotations must decode into Blob URLs, revoke those URLs on replacement,
+  removal, image failure, and unmount, and contain preparation failures in the
+  affected annotation rather than failing the topology region. Node empty-state
+  visibility is likewise derived from selected-tick Work-State counts, active
+  Dispatches, and active routes; retain identity and telemetry outside its
+  activity-detail region.
+- `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` validates
+  unknown caller layout input with the client parser against the prepared
+  canonical node-ID context before deriving React Flow data. Report invalid
+  layout as safe field-level diagnostics and contain it to the visualizer;
+  never rely on a TypeScript-only layout assertion at this boundary.
+- `ui/packages/factory-visualizers/src/factory-recording-topology-replay.tsx`
+  validates and owns static recording replay, then forwards the caller-owned
+  layout sidecar unchanged to the controlled topology renderer. Other hosts
+  should likewise supply the sidecar as an explicit presentation input rather
+  than attaching it to replay state or recordings.
+- `ui/src/features/dashboard/components/topology-replay/hosted-topology-replay.tsx`
+  is the hosted replay boundary. It forwards its optional caller-owned layout
+  sidecar to the controlled renderer and must not place it in timeline or
+  stream-store state.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.

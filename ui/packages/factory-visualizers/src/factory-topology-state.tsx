@@ -12,6 +12,7 @@ import type {
   FactoryTopologyReplayProps,
 } from "./factory-topology-replay";
 import {
+  type FactoryTopologyReplayError,
   type FactoryVisualizerError,
   type FactoryVisualizerErrorKind,
   factoryVisualizerErrorKey,
@@ -140,13 +141,21 @@ export class FactoryTopologyErrorBoundary extends Component<
 }
 
 export function useDistinctTopologyErrorReport(
-  error: FactoryVisualizerError | undefined,
+  error: FactoryTopologyReplayError | undefined,
   onError: FactoryTopologyReplayProps["onError"],
 ) {
   const reportedErrors = useRef(new Set<string>());
   useEffect(() => {
     if (!error) return;
-    const key = factoryVisualizerErrorKey(error);
+    const key =
+      error.kind === "layout-validation"
+        ? error.issues
+            .map(
+              (issue) =>
+                `${issue.category}:${issue.code}:${issue.path.join(".")}`,
+            )
+            .join("|")
+        : factoryVisualizerErrorKey(error);
     if (reportedErrors.current.has(key)) return;
     reportedErrors.current.add(key);
     onError?.(error);

@@ -73,6 +73,8 @@ const messages: FactoryRecordingTopologyReplayMessages = {
     empty: "No Factory topology is available.",
     failed: "The Factory topology could not be shown.",
     inactiveDispatches: "No active Dispatch",
+    imageFailed: "The annotation image could not be shown.",
+    imageLoading: "Loading annotation image.",
     loading: "Loading Factory topology.",
     nodeLabel: (kind, label) => `${kind}: ${label}`,
     regionLabel: "Factory topology replay",
