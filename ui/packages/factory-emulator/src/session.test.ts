@@ -463,6 +463,273 @@ describe("Factory emulator resource-capacity dispatch", () => {
   });
 });
 
+const joinFactory = {
+  name: "join-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "left",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+    {
+      name: "right",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+    {
+      name: "joined",
+      states: [{ name: "ready", type: "INITIAL" }],
+    },
+  ],
+  workers: [{ name: "join-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "join",
+      type: "AGENT_RUN",
+      worker: "join-worker",
+      inputs: [
+        { workType: "left", state: "ready" },
+        { workType: "right", state: "ready" },
+      ],
+      outputs: [
+        { workType: "left", state: "done" },
+        { workType: "joined", state: "ready" },
+        { workType: "right", state: "done" },
+      ],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function joinScenario(
+  overrides: Partial<FactoryEmulatorScenario> = {},
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "join-scenario",
+    factory: { name: joinFactory.name },
+    seed: "join-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    rules: [
+      {
+        id: "join-outcomes",
+        selector: { workstation: "join" },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          { result: "accepted", durationMs: 5, output: "joined output" },
+        ],
+        exhaustion: "repeat-last",
+      },
+    ],
+    unmatched: { behavior: "error" },
+    ...overrides,
+  };
+}
+
+function joinHarness(
+  scenarioInput: FactoryEmulatorScenario,
+  factoryInput: FactoryDefinition = joinFactory,
+) {
+  return createFactoryEmulatorSession({
+    factory: factoryInput,
+    scenario: scenarioInput,
+    sink: { write: async () => undefined },
+  });
+}
+
+describe("Factory emulator multi-input binding and output routing", () => {
+  it("keeps an incomplete join ready until every declared input is present", async () => {
+    const emulator = joinHarness(
+      joinScenario({
+        initialSubmissions: [
+          { name: "left-only", workType: "left", state: "ready" },
+        ],
+      }),
+    );
+    await emulator.start();
+
+    const blocked = await emulator.advanceToNext();
+    expect(blocked).toMatchObject({ status: "idle", batches: [] });
+    expect(blocked.state.works[0]).toMatchObject({ phase: "ready" });
+
+    await emulator.submit({
+      name: "right-later",
+      workType: "right",
+      state: "ready",
+    });
+    const dispatched = await emulator.advanceToNext();
+    expect(dispatched.batches[0]?.[0]).toMatchObject({
+      type: "DISPATCH_REQUEST",
+      payload: {
+        inputs: [
+          { workId: dispatched.state.works[0]?.workId },
+          { workId: dispatched.state.works[1]?.workId },
+        ],
+      },
+    });
+    expect(dispatched.state.works.map(({ phase }) => phase)).toEqual([
+      "active",
+      "active",
+    ]);
+  });
+
+  it("selects the same independent join bindings from competing inputs", async () => {
+    const scenarioInput = joinScenario({
+      initialSubmissions: [
+        { name: "right-two", workType: "right", state: "ready" },
+        { name: "left-one", workType: "left", state: "ready" },
+        { name: "right-one", workType: "right", state: "ready" },
+        { name: "left-two", workType: "left", state: "ready" },
+      ],
+    });
+    const dispatchOnce = async () => {
+      const emulator = joinHarness(scenarioInput);
+      await emulator.start();
+      const receipt = await emulator.advanceToNext();
+      return receipt.batches[0]?.map(
+        ({ payload }) => (payload as { inputs: { workId: string }[] }).inputs,
+      );
+    };
+
+    const first = await dispatchOnce();
+    expect(first).toHaveLength(2);
+    expect(await dispatchOnce()).toEqual(first);
+    expect(new Set(first?.flat().map(({ workId }) => workId)).size).toBe(4);
+  });
+});
+
+describe("Factory emulator multi-output routing and join cursors", () => {
+  it("routes accepted fan-out in authored order with output payloads", async () => {
+    const emulator = joinHarness(
+      joinScenario({
+        initialSubmissions: [
+          {
+            name: "left-input",
+            workType: "left",
+            state: "ready",
+            input: "left payload",
+          },
+          {
+            name: "right-input",
+            workType: "right",
+            state: "ready",
+            input: "right payload",
+          },
+        ],
+      }),
+    );
+    await emulator.start();
+    await emulator.advanceToNext();
+    const completed = await emulator.advanceToNext();
+    const response = completed.batches[0]?.[0];
+    if (response === undefined) throw new Error("missing dispatch response");
+    const outputWork = (
+      response.payload as {
+        outputWork: {
+          workTypeName: string;
+          state: { name: string };
+          payload: string;
+        }[];
+      }
+    ).outputWork;
+
+    expect(
+      outputWork.map(({ workTypeName, state }) => [workTypeName, state.name]),
+    ).toEqual([
+      ["left", "done"],
+      ["joined", "ready"],
+      ["right", "done"],
+    ]);
+    expect(outputWork.map(({ payload }) => payload)).toEqual([
+      "joined output",
+      "joined output",
+      "joined output",
+    ]);
+    expect(
+      completed.state.works.slice(-3).map(({ workType, state, phase }) => ({
+        workType,
+        state,
+        phase,
+      })),
+    ).toEqual([
+      { workType: "left", state: "done", phase: "completed" },
+      { workType: "joined", state: "ready", phase: "ready" },
+      { workType: "right", state: "done", phase: "completed" },
+    ]);
+  });
+
+  it("preserves matching inputs and advances a join cursor after continued re-entry", async () => {
+    const loopingFactory = {
+      ...joinFactory,
+      workstations: [
+        {
+          ...joinFactory.workstations[0],
+          workPropagation: { mode: "PRESERVE_INPUT" },
+          onContinue: [
+            { workType: "left", state: "ready" },
+            { workType: "right", state: "ready" },
+          ],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const emulator = joinHarness(
+      joinScenario({
+        initialSubmissions: [
+          {
+            name: "left-loop",
+            workType: "left",
+            state: "ready",
+            input: "left payload",
+          },
+          {
+            name: "right-loop",
+            workType: "right",
+            state: "ready",
+            input: "right payload",
+          },
+        ],
+        rules: [
+          {
+            id: "join-outcomes",
+            selector: { workstation: "join" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [
+              { result: "continued", durationMs: 0, output: "ignored" },
+              { result: "accepted", durationMs: 1, output: "second" },
+            ],
+            exhaustion: "fail",
+          },
+        ],
+      }),
+      loopingFactory,
+    );
+    await emulator.start();
+    await emulator.advanceToNext();
+    const continued = await emulator.advanceToNext();
+    const response = continued.batches[0]?.[0];
+    if (response === undefined) throw new Error("missing dispatch response");
+    const continuedOutput = (
+      response.payload as {
+        outputWork: { payload: string }[];
+      }
+    ).outputWork;
+    expect(continuedOutput.map(({ payload }) => payload)).toEqual([
+      "left payload",
+      "right payload",
+    ]);
+
+    const repeated = await emulator.advanceToNext();
+    expect(
+      repeated.state.works.find(({ phase }) => phase === "active")?.dispatch,
+    ).toMatchObject({ outcome: { result: "accepted", output: "second" } });
+    expect(Object.values(repeated.state.ruleCursors)).toEqual([2]);
+  });
+});
+
 describe("Factory emulator virtual-time advancement", () => {
   it("processes deadlines through an exact target and jumps to the next due instant", async () => {
     const emulator = executionHarness(

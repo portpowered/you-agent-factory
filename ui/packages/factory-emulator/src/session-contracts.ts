@@ -190,7 +190,11 @@ export interface FactoryEmulatorSessionWork {
   readonly submissionId: string;
   readonly requestId: string;
   readonly traceId: string;
+  /** Consumable token identity; routed fan-out tokens may share one Work ID. */
+  readonly tokenId: string;
   readonly workId: string;
+  /** Stable root identity used by lineage-scoped scenario cursors. */
+  readonly rootWorkId: string;
   readonly workType: string;
   readonly state: string;
   readonly input?: string;
@@ -208,6 +212,8 @@ export interface FactoryEmulatorSessionWork {
     readonly worker: string;
     readonly startedElapsedMs: number;
     readonly dueElapsedMs: number;
+    /** Stable declared-input order for every token consumed by this dispatch. */
+    readonly inputTokenIds: readonly string[];
     /** Factory-scoped capacity held until this dispatch reaches an outcome. */
     readonly resources: readonly {
       readonly name: string;
