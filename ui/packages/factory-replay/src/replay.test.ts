@@ -2,11 +2,15 @@ import type { FactoryEvent, FactoryEventType } from "@you-agent-factory/client";
 import { describe, expect, it } from "vitest";
 
 import {
+  advanceFactoryReplay,
   advanceFactoryReplayCheckpoint,
   canonicalizeFactoryEvents,
+  createFactoryReplayWorldCheckpoint,
   type FactoryReplayReducer,
+  type FactoryReplayWorldReducer,
   initializeFactoryReplay,
   projectFactoryStateAtTick,
+  projectFactoryWorldAtTick,
 } from "./index.js";
 
 interface EvidenceState {
@@ -35,6 +39,17 @@ const reducer: FactoryReplayReducer<EvidenceState> = {
       workIds: [...state.workIds, ...workIds],
     };
   },
+};
+
+const worldReducer: FactoryReplayWorldReducer<
+  EvidenceState,
+  Pick<EvidenceState, "selectedTick" | "workIds">
+> = {
+  ...reducer,
+  projectWorld: (state) => ({
+    selectedTick: state.selectedTick,
+    workIds: [...state.workIds],
+  }),
 };
 
 function event(
@@ -357,5 +372,65 @@ describe("Factory replay checkpoint ownership and equivalence", () => {
     expect(advanced.state).toEqual(full.state);
     expect(advanced.events).toEqual(full.appliedEvents);
     expect(advanced.acceptedEventIds).toEqual(full.acceptedEventIds);
+  });
+});
+
+describe("Factory replay compact world checkpoints", () => {
+  it("reconstructs and advances a consumer-owned world without retaining history", () => {
+    const initial = projectFactoryWorldAtTick({
+      events: [event("initial", 1, 1, { works: [{ workId: "work-1" }] })],
+      reducer: worldReducer,
+      tick: 1,
+    });
+    const checkpoint = createFactoryReplayWorldCheckpoint(
+      initial,
+      structuredClone,
+    );
+    const advanced = advanceFactoryReplay({
+      checkpoint,
+      cloneState: structuredClone,
+      events: [
+        event("duplicate", 2, 2, { works: [{ workId: "work-2" }] }),
+        event("duplicate", 3, 3, { works: [{ workId: "ignored" }] }),
+      ],
+      reducer: worldReducer,
+      setSelectedTick: (state, selectedTick) => ({ ...state, selectedTick }),
+      tick: 2,
+    });
+
+    expect(advanced.world).toEqual({
+      selectedTick: 2,
+      workIds: ["work-1", "work-2"],
+    });
+    expect(advanced.checkpoint.acceptedEventIDs).toEqual([
+      "initial",
+      "duplicate",
+    ]);
+    expect(advanced.appliedEvents.map((item) => item.id)).toEqual([
+      "duplicate",
+    ]);
+  });
+
+  it("applies an unseen later sequence at the checkpoint tick", () => {
+    const initial = projectFactoryWorldAtTick({
+      events: [event("initial", 2, 1, { works: [{ workId: "work-1" }] })],
+      reducer: worldReducer,
+      tick: 2,
+    });
+    const advanced = advanceFactoryReplay({
+      checkpoint: createFactoryReplayWorldCheckpoint(initial, structuredClone),
+      cloneState: structuredClone,
+      events: [
+        event("same-tick-tail", 2, 2, { works: [{ workId: "work-2" }] }),
+      ],
+      reducer: worldReducer,
+      setSelectedTick: (state, selectedTick) => ({ ...state, selectedTick }),
+      tick: 2,
+    });
+
+    expect(advanced.world.workIds).toEqual(["work-1", "work-2"]);
+    expect(advanced.appliedEvents.map((item) => item.id)).toEqual([
+      "same-tick-tail",
+    ]);
   });
 });

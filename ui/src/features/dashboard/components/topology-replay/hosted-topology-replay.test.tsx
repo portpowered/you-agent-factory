@@ -129,7 +129,7 @@ describe("hosted topology replay rendering", () => {
 });
 
 describe("hosted topology replay timeline rendering", () => {
-  it("renders current and fixed history from accepted exact-entry tails", () => {
+  it("renders current and fixed history from accepted exact-entry tails", async () => {
     const session = identity("session-a");
     act(() => {
       useFactoryTimelineStore.getState().appendEventsForEntry(session, [
@@ -170,7 +170,7 @@ describe("hosted topology replay timeline rendering", () => {
         }),
       );
     });
-    expect(screen.getByText("approved")).toBeInTheDocument();
+    expect(await screen.findByText("approved")).toBeInTheDocument();
 
     const entryAfterTail = useFactoryTimelineStore
       .getState()

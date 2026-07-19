@@ -71,6 +71,7 @@ Run `bun run build` to emit the ESM runtime and declarations in `dist`. Run
 inventory, export targets, and declared runtime dependency boundary. Run
 `bun run check:installed-consumer` to install that tarball in a clean temporary
 project, typecheck the public contracts, and execute the recording, ordering,
-cursor, and replay helpers against the packaged customer example. `bun run
+cursor, and replay helpers against the packaged customer example using only its
+declared runtime dependencies. `bun run
 verify` runs these checks after generation freshness, package typecheck, and
 focused tests.

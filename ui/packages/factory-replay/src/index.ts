@@ -41,8 +41,10 @@ export {
   projectFactoryWorkProgressAtTick,
 } from "./progress.js";
 export {
+  advanceFactoryReplay,
   advanceFactoryReplayCheckpoint,
   canonicalizeFactoryEvents,
+  createFactoryReplayWorldCheckpoint,
   type FactoryReplayCheckpoint,
   type FactoryReplayCheckpointAdvancement,
   type FactoryReplayFixedSelection,
@@ -50,8 +52,15 @@ export {
   type FactoryReplayReducer,
   type FactoryReplayResult,
   type FactoryReplaySelection,
+  type FactoryReplayStateCloner,
+  type FactoryReplayWorldAdvanceInput,
+  type FactoryReplayWorldAdvanceResult,
+  type FactoryReplayWorldCheckpoint,
+  type FactoryReplayWorldReducer,
+  type FactoryReplayWorldResult,
   initializeFactoryReplay,
   projectFactoryStateAtTick,
+  projectFactoryWorldAtTick,
 } from "./replay.js";
 export {
   FACTORY_TOPOLOGY_RELATIONSHIPS,
