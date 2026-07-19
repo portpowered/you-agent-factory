@@ -129,6 +129,24 @@ describe("frozen runtime references", () => {
     });
   });
 
+  it("does not compare a reference with a stale ordered event-kind sequence", async () => {
+    const invalid = structuredClone(runtimeReferenceFixtures[0]);
+    invalid.orderedEventKinds[0] = "SESSION_COMPLETED";
+    await expect(
+      compareFactoryEmulatorRuntimeReference(invalid),
+    ).resolves.toEqual({
+      matches: false,
+      validationIssues: [
+        {
+          code: "invalid_value",
+          path: ["orderedEventKinds"],
+          message:
+            "Ordered event kinds must exactly concatenate the logical-tick event kinds.",
+        },
+      ],
+    });
+  });
+
   it("rejects a fixture that omits per-tick semantic evidence", () => {
     const invalid = structuredClone(runtimeReferenceFixtures[0]) as {
       ticks: { semantics?: unknown }[];

@@ -2,9 +2,11 @@ import type { FactoryEvent } from "@you-agent-factory/client";
 import { MemoryFactoryEventSink } from "./event-sink.js";
 import type {
   FactoryEmulatorRuntimeReference,
+  FactoryEmulatorRuntimeReferenceIssue,
   FactoryEmulatorRuntimeReferenceSemantics,
   FactoryEmulatorRuntimeReferenceTick,
 } from "./runtime-reference.js";
+import { safeParseFactoryEmulatorRuntimeReference } from "./runtime-reference.js";
 import { createFactoryEmulatorSession } from "./session.js";
 import { replayFactoryEmulatorSubmissions } from "./submission-replay.js";
 
@@ -22,6 +24,10 @@ export interface FactoryEmulatorRuntimeReferenceDivergence {
 
 export type FactoryEmulatorRuntimeReferenceConformanceResult =
   | { readonly matches: true }
+  | {
+      readonly matches: false;
+      readonly validationIssues: readonly FactoryEmulatorRuntimeReferenceIssue[];
+    }
   | {
       readonly matches: false;
       readonly divergence: FactoryEmulatorRuntimeReferenceDivergence;
@@ -127,8 +133,13 @@ function firstDifference(
 
 /** Runs the supported emulator subset and reports its first frozen-reference divergence. */
 export async function compareFactoryEmulatorRuntimeReference(
-  reference: FactoryEmulatorRuntimeReference,
+  input: unknown,
 ): Promise<FactoryEmulatorRuntimeReferenceConformanceResult> {
+  const parsed = safeParseFactoryEmulatorRuntimeReference(input);
+  if (!parsed.success) {
+    return { matches: false, validationIssues: parsed.issues };
+  }
+  const reference = parsed.data;
   const sink = new MemoryFactoryEventSink({ maxEvents: 10_000 });
   const emulator = createFactoryEmulatorSession({
     factory: reference.factory,
