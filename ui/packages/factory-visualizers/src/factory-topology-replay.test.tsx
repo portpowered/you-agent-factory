@@ -26,8 +26,15 @@ const mockFlow = vi.hoisted(() => ({
 }));
 
 vi.mock("@xyflow/react", () => ({
-  Background: () => <div data-testid="flow-background" />,
-  Controls: () => <div data-testid="flow-controls" />,
+  Background: ({ className }: { className?: string }) => (
+    <div className={className} data-testid="flow-background" />
+  ),
+  Controls: ({ "aria-label": ariaLabel }: { "aria-label"?: string }) => (
+    <fieldset data-testid="flow-controls">
+      <legend>{ariaLabel}</legend>
+      <button type="button">Zoom in</button>
+    </fieldset>
+  ),
   Handle: ({ id, type }: { id: string; type: string }) => (
     <span data-handle-id={id} data-handle-role={type} />
   ),
@@ -80,6 +87,9 @@ const messages: FactoryTopologyReplayMessages = {
   inactiveDispatches: "No active Dispatch",
   imageFailed: "The annotation image could not be shown.",
   imageLoading: "Loading annotation image.",
+  legendActiveRoute: "Active route",
+  legendInactiveRoute: "Inactive route",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
@@ -88,6 +98,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Resource occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected",
+  viewportControlsLabel: "Topology viewport controls",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };

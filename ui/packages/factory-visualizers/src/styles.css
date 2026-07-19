@@ -134,6 +134,55 @@
   outline-offset: 0.25rem;
 }
 
+.factory-topology-replay__legend {
+  min-inline-size: 0;
+  margin: 0;
+  position: absolute;
+  z-index: 5;
+  inset-block-end: 1rem;
+  inset-inline-end: 1rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-outline);
+  border-radius: 0.5rem;
+}
+
+.factory-topology-replay__legend > legend {
+  padding: 0;
+}
+
+.factory-topology-replay__legend ul {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.factory-topology-replay__legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.factory-topology-replay__legend-swatch {
+  inline-size: 0.75rem;
+  block-size: 0.1875rem;
+  background: var(--color-outline);
+}
+
+.factory-topology-replay__legend-swatch--active {
+  block-size: 0.25rem;
+  background: var(--color-warning);
+}
+
+.factory-topology-replay .react-flow__controls button:focus-visible {
+  outline: 0.1875rem solid
+    var(--color-primary, var(--color-af-foundation-accent));
+  outline-offset: 0.125rem;
+}
+
 .factory-topology-replay__annotation {
   box-sizing: border-box;
   display: grid;

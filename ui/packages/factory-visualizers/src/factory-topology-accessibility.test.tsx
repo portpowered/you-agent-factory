@@ -14,8 +14,13 @@ import {
 import { createFactoryTopologyProjection } from "./testing/factory-topology-projection";
 
 vi.mock("@xyflow/react", () => ({
-  Background: () => <div />,
-  Controls: () => <div />,
+  Background: () => <div data-testid="flow-background" />,
+  Controls: ({ "aria-label": ariaLabel }: { "aria-label"?: string }) => (
+    <fieldset data-testid="flow-controls">
+      <legend>{ariaLabel}</legend>
+      <button type="button">Zoom in</button>
+    </fieldset>
+  ),
   Handle: ({ id, type }: { id: string; type: string }) => (
     <span data-handle-id={id} data-handle-role={type} />
   ),
@@ -57,6 +62,9 @@ const messages: FactoryTopologyReplayMessages = {
   inactiveDispatches: "No active Dispatch",
   imageFailed: "The annotation image could not be shown.",
   imageLoading: "Loading annotation image.",
+  legendActiveRoute: "Active route",
+  legendInactiveRoute: "Inactive route",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
@@ -65,6 +73,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Resource occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected",
+  viewportControlsLabel: "Topology viewport controls",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };
@@ -134,6 +143,34 @@ describe("FactoryTopologyReplay inclusive interaction", () => {
     expect(onSelectNode).toHaveBeenCalledWith(
       expect.objectContaining({ id: "workstation:review" }),
     );
+  });
+
+  it("keeps enabled controls named and keyboard reachable while unmounting disabled chrome", async () => {
+    const user = userEvent.setup();
+    render(
+      <FactoryTopologyReplay
+        chrome={{ legend: false, preset: "full", visibilityControls: false }}
+        messages={messages}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("flow-background")).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: messages.viewportControlsLabel }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: messages.legendLabel }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: messages.annotationsVisible }),
+    ).not.toBeInTheDocument();
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Zoom in" })).toHaveFocus();
   });
 
   it("has no automated accessibility violations in the ready state", async () => {

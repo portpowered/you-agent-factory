@@ -8,7 +8,10 @@ import type {
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
 
-import type { FactoryTopologyChromeConfiguration } from "./factory-topology-chrome";
+import {
+  type FactoryTopologyChromeConfiguration,
+  resolveFactoryTopologyChrome,
+} from "./factory-topology-chrome";
 import {
   type FactoryTopologyFlowProjection,
   projectFactoryTopologyFlow,
@@ -50,6 +53,9 @@ export interface FactoryTopologyReplayMessages {
   inactiveDispatches: string;
   imageFailed: string;
   imageLoading: string;
+  legendActiveRoute: string;
+  legendInactiveRoute: string;
+  legendLabel: string;
   loading: string;
   nodeLabel: (kind: FactoryTopologyNode["kind"], label: string) => string;
   regionLabel: string;
@@ -57,6 +63,7 @@ export interface FactoryTopologyReplayMessages {
   resourceOccupancyUnavailable: string;
   retry: string;
   selectedNode: string;
+  viewportControlsLabel: string;
   workStateCount: (count: number) => string;
   workStateCountUnavailable: string;
 }
@@ -101,6 +108,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
 }
 
 function FactoryTopologyReplayContent({
+  chrome,
   messages,
   onError,
   layout,
@@ -121,6 +129,7 @@ function FactoryTopologyReplayContent({
   return (
     <PreparedTopology
       messages={messages}
+      chrome={chrome}
       onError={onError}
       onRetry={onRetry}
       onSelectNode={onSelectNode}
@@ -132,6 +141,7 @@ function FactoryTopologyReplayContent({
 }
 
 function PreparedTopology({
+  chrome,
   messages,
   onError,
   layout,
@@ -143,6 +153,7 @@ function PreparedTopology({
   projection: FactoryTopologyReplayProjection;
 }) {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const resolvedChrome = resolveFactoryTopologyChrome(chrome);
   const prepared = useMemo<PreparedFlow>(() => {
     try {
       const parsedLayout =
@@ -223,16 +234,22 @@ function PreparedTopology({
         resetKeys={[projection, messages, selectedNodeId, onSelectNode, layout]}
         withinRegion
       >
-        <ReactFlowCanvas flow={prepared.flow} messages={messages} />
+        <ReactFlowCanvas
+          chrome={resolvedChrome}
+          flow={prepared.flow}
+          messages={messages}
+        />
       </FactoryTopologyErrorBoundary>
     </section>
   );
 }
 
 function ReactFlowCanvas({
+  chrome,
   flow,
   messages,
 }: {
+  chrome: ReturnType<typeof resolveFactoryTopologyChrome>;
   flow: FactoryTopologyFlowProjection;
   messages: FactoryTopologyReplayMessages;
 }) {
@@ -246,7 +263,8 @@ function ReactFlowCanvas({
 
   return (
     <>
-      {hasAnnotations ? (
+      {chrome.legend ? <TopologyLegend messages={messages} /> : null}
+      {chrome.visibilityControls && hasAnnotations ? (
         <button
           aria-pressed={annotationsVisible}
           className="factory-topology-replay__annotation-toggle"
@@ -275,10 +293,45 @@ function ReactFlowCanvas({
         panOnDrag
         proOptions={{ hideAttribution: true }}
       >
-        <Background />
-        <Controls showInteractive={false} />
+        {chrome.background ? (
+          <Background className="factory-topology-replay__background" />
+        ) : null}
+        {chrome.viewportControls ? (
+          <Controls
+            aria-label={messages.viewportControlsLabel}
+            showInteractive={false}
+          />
+        ) : null}
       </ReactFlow>
     </>
+  );
+}
+
+function TopologyLegend({
+  messages,
+}: {
+  messages: FactoryTopologyReplayMessages;
+}) {
+  return (
+    <fieldset className="factory-topology-replay__legend">
+      <legend>{messages.legendLabel}</legend>
+      <ul>
+        <li>
+          <span
+            aria-hidden="true"
+            className="factory-topology-replay__legend-swatch factory-topology-replay__legend-swatch--active"
+          />
+          {messages.legendActiveRoute}
+        </li>
+        <li>
+          <span
+            aria-hidden="true"
+            className="factory-topology-replay__legend-swatch"
+          />
+          {messages.legendInactiveRoute}
+        </li>
+      </ul>
+    </fieldset>
   );
 }
 

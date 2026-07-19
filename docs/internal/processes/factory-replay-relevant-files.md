@@ -104,6 +104,11 @@ that consumes the replay kernel.
   pure, presentation-only resolution of public topology chrome. Start from a
   named preset and apply defined per-region overrides afterward; never pass
   replay projections into this resolver or mutate caller-owned configuration.
+- `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` consumes
+  resolved chrome only after the prepared projection succeeds. Disabled
+  background, legend, viewport, and annotation-visibility regions must be
+  unmounted rather than visually hidden; caller-provided messages own every
+  accessible chrome label.
 - `ui/packages/factory-visualizers/src/factory-recording-topology-replay.tsx`
   validates and owns static recording replay, then forwards the caller-owned
   layout sidecar unchanged to the controlled topology renderer. Other hosts
