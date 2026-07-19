@@ -100,6 +100,10 @@ that consumes the replay kernel.
   canonical node-ID context before deriving React Flow data. Report invalid
   layout as safe field-level diagnostics and contain it to the visualizer;
   never rely on a TypeScript-only layout assertion at this boundary.
+- `ui/packages/factory-visualizers/src/factory-topology-chrome.ts` owns the
+  pure, presentation-only resolution of public topology chrome. Start from a
+  named preset and apply defined per-region overrides afterward; never pass
+  replay projections into this resolver or mutate caller-owned configuration.
 - `ui/packages/factory-visualizers/src/factory-recording-topology-replay.tsx`
   validates and owns static recording replay, then forwards the caller-owned
   layout sidecar unchanged to the controlled topology renderer. Other hosts

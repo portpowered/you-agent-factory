@@ -6,6 +6,12 @@ projections. The package exports `FactoryTopologyReplay`,
 `WorkProgressVisualizer`, and `FactoryEmulatorControls` together with their
 message, formatting, status, callback, and structured error contracts.
 
+`FactoryTopologyReplay` accepts a presentation-only `chrome` configuration.
+Choose the `full`, `minimal`, or `none` preset, then override `legend`,
+`background`, `viewportControls`, or `visibilityControls` individually. The
+resolver starts from the selected preset and applies supplied overrides without
+changing the caller-provided topology, activity, or Work-progress projection.
+
 `FactoryEmulatorControls` composes the lower-level controlled playback toolbar
 with `FactoryTimelineScrubber`. Hosts provide the current/history selection and
 all callbacks. Selecting an earlier tick requests pause before selection; Play
