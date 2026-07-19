@@ -144,6 +144,19 @@
   object-fit: contain;
 }
 
+.factory-topology-replay__annotation-image-state {
+  display: grid;
+  min-block-size: 4rem;
+  place-items: center;
+  padding: 0.75rem;
+  color: var(--color-on-surface-variant);
+  text-align: center;
+}
+
+.factory-topology-replay__annotation-image-state[role="alert"] {
+  color: var(--color-error);
+}
+
 .factory-topology-replay__node-button,
 .factory-topology-replay__node-static {
   display: block;

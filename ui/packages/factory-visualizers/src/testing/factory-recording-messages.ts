@@ -62,6 +62,8 @@ export function createGermanRecordingMessages(): FactoryRecordingTopologyReplayM
       empty: "Für diesen Schritt ist keine Fabriktopologie verfügbar.",
       failed: "Die Fabriktopologie konnte nicht angezeigt werden.",
       inactiveDispatches: "Keine aktive Ausführung",
+      imageFailed: "Das Anmerkungsbild konnte nicht angezeigt werden.",
+      imageLoading: "Anmerkungsbild wird geladen.",
       loading: "Fabriktopologie wird geladen.",
       nodeLabel: (kind, label) => `${kindNames[kind]}: ${label}`,
       regionLabel: "Aufgezeichnete Fabriktopologie",

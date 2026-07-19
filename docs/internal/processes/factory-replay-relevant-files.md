@@ -73,6 +73,9 @@ that consumes the replay kernel.
   caller-validated `FactoryVisualizationLayoutV1` annotations into separate,
   inert React Flow nodes. Keep them out of canonical topology layout and edge
   routing; visibility may remove only those projected nodes so React Flow
-  fit-to-view remains derived from what is currently visible.
+  fit-to-view remains derived from what is currently visible. Embedded raster
+  annotations must decode into Blob URLs, revoke those URLs on replacement,
+  removal, image failure, and unmount, and contain preparation failures in the
+  affected annotation rather than failing the topology region.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.

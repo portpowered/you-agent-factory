@@ -78,6 +78,8 @@ const messages: FactoryTopologyReplayMessages = {
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
   inactiveDispatches: "No active Dispatch",
+  imageFailed: "The annotation image could not be shown.",
+  imageLoading: "Loading annotation image.",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
@@ -228,6 +230,104 @@ describe("FactoryTopologyReplay", () => {
       screen.getByRole("button", { name: messages.annotationsHidden }),
     ).toHaveAttribute("aria-pressed", "false");
   });
+
+  it("creates and revokes Blob URLs as annotation images change, disappear, and unmount", async () => {
+    const createObjectURL = vi
+      .fn()
+      .mockReturnValueOnce("blob:diagram-one")
+      .mockReturnValueOnce("blob:diagram-two")
+      .mockReturnValueOnce("blob:diagram-three");
+    const revokeObjectURL = vi.fn();
+    const BrowserUrl = class extends URL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = revokeObjectURL;
+    };
+    vi.stubGlobal("URL", BrowserUrl);
+    vi.stubGlobal("atob", () => "\u0089PNG\r\n\u001a\n");
+    const { rerender, unmount } = render(
+      <FactoryTopologyReplay
+        layout={imageOnlyLayout("iVBORw0KGgo=")}
+        messages={messages}
+        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+      />,
+    );
+
+    expect(await screen.findByRole("img", { name: "Review diagram" })).toHaveAttribute(
+      "src",
+      "blob:diagram-one",
+    );
+    rerender(
+      <FactoryTopologyReplay
+        layout={imageOnlyLayout("/9j/4AAQ")}
+        messages={messages}
+        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Review diagram" })).toHaveAttribute(
+        "src",
+        "blob:diagram-two",
+      ),
+    );
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagram-one");
+
+    fireEvent.click(screen.getByRole("button", { name: messages.annotationsVisible }));
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagram-two");
+
+    rerender(
+      <FactoryTopologyReplay
+        layout={imageOnlyLayout("iVBORw0KGgo=")}
+        messages={messages}
+        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: messages.annotationsHidden }));
+    expect(await screen.findByRole("img", { name: "Review diagram" })).toHaveAttribute(
+      "src",
+      "blob:diagram-three",
+    );
+    unmount();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagram-three");
+    vi.unstubAllGlobals();
+  });
+
+  it("contains image preparation and loading failures in the annotation region", async () => {
+    const createObjectURL = vi.fn(() => {
+      throw new Error("image preparation failed");
+    });
+    const BrowserUrl = class extends URL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = vi.fn();
+    };
+    vi.stubGlobal("URL", BrowserUrl);
+    vi.stubGlobal("atob", () => "\u0089PNG\r\n\u001a\n");
+    const { rerender } = render(
+      <FactoryTopologyReplay
+        layout={imageOnlyLayout("iVBORw0KGgo=")}
+        messages={messages}
+        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+      />,
+    );
+    expect(await screen.findByRole("alert", { name: "Review diagram" })).toHaveTextContent(
+      messages.imageFailed,
+    );
+    expect(screen.getAllByText(/No active Dispatch/)).not.toHaveLength(0);
+
+    createObjectURL.mockReturnValue("blob:diagram");
+    rerender(
+      <FactoryTopologyReplay
+        layout={imageOnlyLayout("iVBORw0KGgo=")}
+        messages={messages}
+        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+      />,
+    );
+    expect(await screen.findByRole("img", { name: "Review diagram" })).toBeVisible();
+    fireEvent.error(screen.getByRole("img", { name: "Review diagram" }));
+    expect(await screen.findByRole("alert", { name: "Review diagram" })).toHaveTextContent(
+      messages.imageFailed,
+    );
+    vi.unstubAllGlobals();
+  });
 });
 
 function annotationLayout(): FactoryVisualizationLayoutV1 {
@@ -252,6 +352,22 @@ function annotationLayout(): FactoryVisualizationLayoutV1 {
           kind: "embedded",
           mediaType: "image/png",
         },
+      },
+    ],
+    schemaVersion: "factory-visualization-layout/v1",
+  };
+}
+
+function imageOnlyLayout(base64: string): FactoryVisualizationLayoutV1 {
+  return {
+    annotations: [
+      {
+        altText: "Review diagram",
+        id: "diagram",
+        kind: "image",
+        position: { x: 940, y: 20 },
+        size: { height: 80, width: 120 },
+        source: { base64, kind: "embedded", mediaType: "image/png" },
       },
     ],
     schemaVersion: "factory-visualization-layout/v1",

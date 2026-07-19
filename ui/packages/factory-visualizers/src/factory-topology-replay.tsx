@@ -13,6 +13,7 @@ import {
 } from "@you-agent-factory/components/graphs";
 import type {
   FactoryVisualizationAnnotation,
+  FactoryVisualizationEmbeddedImageSource,
   FactoryVisualizationLayoutV1,
 } from "@you-agent-factory/client";
 import type {
@@ -22,7 +23,7 @@ import type {
   FactoryTopologyNode,
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   FactoryTopologyErrorBoundary,
@@ -56,6 +57,8 @@ export interface FactoryTopologyReplayMessages {
   empty: string;
   failed: string;
   inactiveDispatches: string;
+  imageFailed: string;
+  imageLoading: string;
   loading: string;
   nodeLabel: (kind: FactoryTopologyNode["kind"], label: string) => string;
   regionLabel: string;
@@ -97,6 +100,7 @@ interface TopologyNodeData extends Record<string, unknown> {
 
 interface AnnotationNodeData extends Record<string, unknown> {
   annotation: FactoryVisualizationAnnotation;
+  messages: FactoryTopologyReplayMessages;
 }
 
 export interface FactoryTopologyFlowProjection {
@@ -208,7 +212,7 @@ export function projectFactoryTopologyFlow(
     const annotationNodes = (layout?.annotations ?? []).map<
       Node<AnnotationNodeData>
     >((annotation) => ({
-      data: { annotation },
+      data: { annotation, messages },
       draggable: false,
       id: `annotation:${annotation.id}`,
       position: annotation.position,
@@ -425,16 +429,10 @@ function ReactFlowCanvas({
 function FactoryTopologyAnnotationView({
   data,
 }: NodeProps<Node<AnnotationNodeData>>) {
-  const { annotation } = data;
+  const { annotation, messages } = data;
   if (annotation.kind === "image") {
     return (
-      <figure className="factory-topology-replay__annotation factory-topology-replay__annotation--image">
-        <img
-          alt={annotation.altText}
-          className="factory-topology-replay__annotation-image"
-          src={`data:${annotation.source.mediaType};base64,${annotation.source.base64}`}
-        />
-      </figure>
+      <FactoryTopologyAnnotationImage annotation={annotation} messages={messages} />
     );
   }
 
@@ -453,6 +451,86 @@ function FactoryTopologyAnnotationView({
       </span>
     </aside>
   );
+}
+
+function FactoryTopologyAnnotationImage({
+  annotation,
+  messages,
+}: {
+  annotation: Extract<FactoryVisualizationAnnotation, { kind: "image" }>;
+  messages: FactoryTopologyReplayMessages;
+}) {
+  const image = useEmbeddedImageUrl(annotation.source);
+  return (
+    <figure className="factory-topology-replay__annotation factory-topology-replay__annotation--image">
+      {image.status === "ready" ? (
+        <img
+          alt={annotation.altText}
+          className="factory-topology-replay__annotation-image"
+          onError={image.fail}
+          src={image.url}
+        />
+      ) : (
+        <div
+          aria-label={annotation.altText}
+          className="factory-topology-replay__annotation-image-state"
+          role={image.status === "failed" ? "alert" : "status"}
+        >
+          {image.status === "failed"
+            ? messages.imageFailed
+            : messages.imageLoading}
+        </div>
+      )}
+    </figure>
+  );
+}
+
+function useEmbeddedImageUrl(source: FactoryVisualizationEmbeddedImageSource): {
+  fail: () => void;
+  status: "failed" | "loading" | "ready";
+  url?: string;
+} {
+  const urlRef = useRef<string | undefined>(undefined);
+  const [state, setState] = useState<
+    { status: "failed" | "loading" } | { status: "ready"; url: string }
+  >({ status: "loading" });
+  useEffect(() => {
+    try {
+      const bytes = decodeEmbeddedImage(source.base64);
+      const url = URL.createObjectURL(new Blob([bytes], { type: source.mediaType }));
+      urlRef.current = url;
+      setState({ status: "ready", url });
+      return () => {
+        if (urlRef.current === url) {
+          URL.revokeObjectURL(url);
+          urlRef.current = undefined;
+        }
+      };
+    } catch {
+      setState({ status: "failed" });
+      return undefined;
+    }
+  }, [source]);
+
+  return {
+    fail: () => {
+      if (urlRef.current) {
+        URL.revokeObjectURL(urlRef.current);
+        urlRef.current = undefined;
+      }
+      setState({ status: "failed" });
+    },
+    ...state,
+  };
+}
+
+function decodeEmbeddedImage(base64: string): ArrayBuffer {
+  const decoded = atob(base64);
+  const bytes = new Uint8Array(decoded.length);
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index);
+  }
+  return bytes.buffer;
 }
 
 function preserveNestedNodePointerEvents(): void {}
