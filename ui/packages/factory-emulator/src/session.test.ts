@@ -730,6 +730,178 @@ describe("Factory emulator multi-output routing and join cursors", () => {
   });
 });
 
+const outcomeRoutingFactory = {
+  name: "outcome-routing-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "task",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "review", type: "PROCESSING" },
+        { name: "retry", type: "PROCESSING" },
+        { name: "done", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
+      ],
+    },
+  ],
+  workers: [{ name: "routing-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "route-task",
+      type: "AGENT_RUN",
+      behavior: "STANDARD",
+      worker: "routing-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "done" }],
+      onContinue: [{ workType: "task", state: "retry" }],
+      onRejection: [
+        { workType: "task", state: "review" },
+        { workType: "task", state: "retry" },
+      ],
+      onFailure: [{ workType: "task", state: "review" }],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function outcomeRoutingScenario(
+  outcomes: FactoryEmulatorScenario["rules"][number]["outcomes"],
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "outcome-routing-scenario",
+    factory: { name: outcomeRoutingFactory.name },
+    seed: "outcome-routing-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    initialSubmissions: [
+      { name: "routed-task", workType: "task", state: "ready" },
+    ],
+    rules: [
+      {
+        id: "route-outcomes",
+        selector: { workstation: "route-task" },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes,
+        exhaustion: "fail",
+      },
+    ],
+    unmatched: { behavior: "error" },
+  };
+}
+
+async function completeFirstOutcome(
+  factoryInput: FactoryDefinition,
+  scenarioInput: FactoryEmulatorScenario,
+) {
+  const emulator = createFactoryEmulatorSession({
+    factory: factoryInput,
+    scenario: scenarioInput,
+    sink: { write: async () => undefined },
+  });
+  await emulator.start();
+  await emulator.advanceToNext();
+  return { emulator, receipt: await emulator.advanceToNext() };
+}
+
+function routedStatesFrom(response: FactoryEvent | undefined): string[] {
+  return (
+    (
+      response?.payload as
+        | { outputWork?: { state: { name: string } }[] }
+        | undefined
+    )?.outputWork?.map(({ state }) => state.name) ?? []
+  );
+}
+
+describe("Factory emulator standard and repeater outcome routing", () => {
+  it.each([
+    ["continued", "CONTINUE", ["retry"]],
+    ["rejected", "REJECTED", ["review", "retry"]],
+    ["failed", "FAILED", ["review"]],
+  ] as const)(
+    "gives explicit %s routes precedence in authored order",
+    async (result, canonicalOutcome, expectedStates) => {
+      const outcome =
+        result === "failed"
+          ? { result, durationMs: 0, error: "scripted failure" }
+          : { result, durationMs: 0 };
+      const { receipt } = await completeFirstOutcome(
+        outcomeRoutingFactory,
+        outcomeRoutingScenario([outcome]),
+      );
+      const response = receipt.batches[0]?.[0];
+
+      expect(response).toMatchObject({
+        type: "DISPATCH_RESPONSE",
+        payload: { outcome: canonicalOutcome },
+      });
+      expect(routedStatesFrom(response)).toEqual(expectedStates);
+    },
+  );
+
+  it.each([
+    ["failed", "STANDARD", "failed"],
+    ["rejected", "STANDARD", "failed"],
+    ["rejected", "REPEATER", "ready"],
+  ] as const)(
+    "routes implicit %s for %s workstations to %s",
+    async (result, behavior, expectedState) => {
+      const factoryInput = structuredClone(
+        outcomeRoutingFactory,
+      ) as FactoryDefinition;
+      const workstation = factoryInput.workstations?.[0];
+      if (workstation === undefined) throw new Error("missing workstation");
+      workstation.behavior = behavior;
+      workstation.onFailure = [];
+      workstation.onRejection = [];
+      const outcome =
+        result === "failed"
+          ? { result, durationMs: 0, error: "scripted failure" }
+          : { result, durationMs: 0 };
+      const { receipt } = await completeFirstOutcome(
+        factoryInput,
+        outcomeRoutingScenario([outcome]),
+      );
+
+      expect(routedStatesFrom(receipt.batches[0]?.[0])).toEqual([
+        expectedState,
+      ]);
+    },
+  );
+
+  it.each([
+    ["REPEATER", false],
+    ["STANDARD", true],
+  ] as const)(
+    "re-enters a %s rejection loop and advances its lineage cursor",
+    async (behavior, explicitReviewRoute) => {
+      const factoryInput = structuredClone(
+        outcomeRoutingFactory,
+      ) as FactoryDefinition;
+      const workstation = factoryInput.workstations?.[0];
+      if (workstation === undefined) throw new Error("missing workstation");
+      workstation.behavior = behavior;
+      workstation.onRejection = explicitReviewRoute
+        ? [{ workType: "task", state: "ready" }]
+        : [];
+      const { emulator, receipt: rejected } = await completeFirstOutcome(
+        factoryInput,
+        outcomeRoutingScenario([
+          { result: "rejected", durationMs: 0, feedback: "try again" },
+          { result: "accepted", durationMs: 1, output: "finished" },
+        ]),
+      );
+
+      expect(routedStatesFrom(rejected.batches[0]?.[0])).toEqual(["ready"]);
+      const repeated = await emulator.advanceToNext();
+      expect(
+        repeated.state.works.find(({ phase }) => phase === "active")?.dispatch,
+      ).toMatchObject({ outcome: { result: "accepted", output: "finished" } });
+      expect(Object.values(repeated.state.ruleCursors)).toEqual([2]);
+    },
+  );
+});
+
 describe("Factory emulator virtual-time advancement", () => {
   it("processes deadlines through an exact target and jumps to the next due instant", async () => {
     const emulator = executionHarness(

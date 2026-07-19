@@ -523,6 +523,48 @@ function eventResourcesFor(
   return claims.map(({ name }) => ({ name, capacity: totals.get(name) ?? 0 }));
 }
 
+type Workstation = NonNullable<FactoryDefinition["workstations"]>[number];
+type WorkstationRoute = Workstation["inputs"][number];
+
+function defaultFailureRoutesFor(
+  configuration: ValidatedConfiguration,
+  workstation: Workstation,
+): readonly WorkstationRoute[] {
+  const routes: WorkstationRoute[] = [];
+  const seen = new Set<string>();
+  for (const input of workstation.inputs) {
+    const failedState = configuration.factory.workTypes
+      ?.find(({ name }) => name === input.workType)
+      ?.states.find(({ type }) => type === "FAILED")?.name;
+    if (failedState === undefined) continue;
+    const key = `${input.workType}\u0000${failedState}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    routes.push({ workType: input.workType, state: failedState });
+  }
+  return routes;
+}
+
+function outcomeRoutesFor(
+  configuration: ValidatedConfiguration,
+  workstation: Workstation,
+  result: FactoryEmulatorOutcome["result"],
+): readonly WorkstationRoute[] {
+  if (result === "accepted") return workstation.outputs ?? [];
+  if (result === "continued") return workstation.onContinue ?? [];
+  if (result === "failed" && (workstation.onFailure?.length ?? 0) > 0) {
+    return workstation.onFailure ?? [];
+  }
+  if (result === "rejected" && (workstation.onRejection?.length ?? 0) > 0) {
+    return workstation.onRejection ?? [];
+  }
+
+  if (result === "rejected" && workstation.behavior === "REPEATER") {
+    return workstation.inputs;
+  }
+  return defaultFailureRoutesFor(configuration, workstation);
+}
+
 function routedWorksFor(
   configuration: ValidatedConfiguration,
   state: StartedState,
@@ -532,14 +574,13 @@ function routedWorksFor(
   const workstation = configuration.factory.workstations?.find(
     ({ name }) => name === dispatch.workstation,
   );
-  const routes =
-    dispatch.outcome.result === "accepted"
-      ? (workstation?.outputs ?? [])
-      : dispatch.outcome.result === "continued"
-        ? (workstation?.onContinue ?? [])
-        : [];
   const first = inputs[0];
   if (workstation === undefined || first === undefined) return [];
+  const routes = outcomeRoutesFor(
+    configuration,
+    workstation,
+    dispatch.outcome.result,
+  );
 
   return routes.map((route, ordinal) => {
     const matching = inputs.find(({ workType }) => workType === route.workType);
