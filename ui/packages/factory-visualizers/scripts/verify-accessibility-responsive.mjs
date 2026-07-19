@@ -118,7 +118,21 @@ async function verifyRecordingPresentations(browserInstance) {
   const showAnnotations = page.getByRole("button", {
     name: "Show annotations",
   });
-  if (await showAnnotations.isVisible()) await showAnnotations.click();
+  const annotationsToggle = page.getByRole("button", {
+    name: /^(Show|Hide) annotations$/,
+  });
+  await annotationsToggle.waitFor({ state: "visible", timeout: 5_000 });
+  if (await page.getByRole("button", { name: "Hide annotations" }).isVisible()) {
+    await annotationsToggle.click();
+    await showAnnotations.waitFor({ state: "visible", timeout: 5_000 });
+  }
+  await showAnnotations.click();
+  await page
+    .getByRole("button", { name: "Hide annotations" })
+    .waitFor({ state: "visible", timeout: 5_000 });
+  await page
+    .getByText("Escalations are reviewed here.")
+    .waitFor({ state: "visible", timeout: 5_000 });
   assert(
     await page.getByText("Escalations are reviewed here.").isVisible(),
     "The annotated recording did not render its caller-owned layout sidecar.",
