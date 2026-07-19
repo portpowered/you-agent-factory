@@ -11,7 +11,9 @@ that consumes the replay kernel.
 - `packages/factory-replay/src/replay.ts` also exposes compact world
   checkpoints for hosted consumers. Keep cloning, tick assignment, and world
   projection supplied by the consumer; checkpoints retain accepted IDs and
-  state, never dashboard dependencies or replay-history references.
+  state, never dashboard dependencies or replay-history references. An unseen
+  later event at the checkpoint's selected tick remains part of the accepted
+  tail and must be applied; event IDs, not tick equality, provide idempotency.
 - `packages/factory-replay/src/topology.js` owns the pure public Factory
   topology projection. Keep canonical node/connection IDs and renderer handle
   IDs aligned with `pkg/factory/contracts/factory_graph_ids.go` and the graph

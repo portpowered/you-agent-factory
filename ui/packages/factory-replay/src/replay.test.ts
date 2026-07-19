@@ -9,8 +9,8 @@ import {
   type FactoryReplayReducer,
   type FactoryReplayWorldReducer,
   initializeFactoryReplay,
-  projectFactoryWorldAtTick,
   projectFactoryStateAtTick,
+  projectFactoryWorldAtTick,
 } from "./index.js";
 
 interface EvidenceState {
@@ -408,6 +408,29 @@ describe("Factory replay compact world checkpoints", () => {
     ]);
     expect(advanced.appliedEvents.map((item) => item.id)).toEqual([
       "duplicate",
+    ]);
+  });
+
+  it("applies an unseen later sequence at the checkpoint tick", () => {
+    const initial = projectFactoryWorldAtTick({
+      events: [event("initial", 2, 1, { works: [{ workId: "work-1" }] })],
+      reducer: worldReducer,
+      tick: 2,
+    });
+    const advanced = advanceFactoryReplay({
+      checkpoint: createFactoryReplayWorldCheckpoint(initial, structuredClone),
+      cloneState: structuredClone,
+      events: [
+        event("same-tick-tail", 2, 2, { works: [{ workId: "work-2" }] }),
+      ],
+      reducer: worldReducer,
+      setSelectedTick: (state, selectedTick) => ({ ...state, selectedTick }),
+      tick: 2,
+    });
+
+    expect(advanced.world.workIds).toEqual(["work-1", "work-2"]);
+    expect(advanced.appliedEvents.map((item) => item.id)).toEqual([
+      "same-tick-tail",
     ]);
   });
 });

@@ -250,7 +250,7 @@ export function advanceFactoryReplay<State, World>(
     (event) => {
       if (
         acceptedEventIDs.has(event.id) ||
-        event.context.tick <= input.checkpoint.selectedTick ||
+        event.context.tick < input.checkpoint.selectedTick ||
         event.context.tick > input.tick
       ) {
         return false;

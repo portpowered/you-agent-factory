@@ -86,7 +86,7 @@ afterEach(() => {
 });
 
 describe("hosted topology replay rendering", () => {
-  it("renders current and fixed history from accepted exact-entry tails", () => {
+  it("renders current and fixed history from accepted exact-entry tails", async () => {
     const session = identity("session-a");
     act(() => {
       useFactoryTimelineStore.getState().appendEventsForEntry(session, [
@@ -127,7 +127,7 @@ describe("hosted topology replay rendering", () => {
         }),
       );
     });
-    expect(screen.getByText("approved")).toBeInTheDocument();
+    expect(await screen.findByText("approved")).toBeInTheDocument();
 
     const entryAfterTail = useFactoryTimelineStore
       .getState()
@@ -342,7 +342,6 @@ describe("hosted topology replay status and accessibility", () => {
       screen.getByRole("slider", { name: "Select Factory replay tick" }),
     ).toBeDisabled();
   });
-
 });
 
 describe("hosted topology replay selection accessibility", () => {
