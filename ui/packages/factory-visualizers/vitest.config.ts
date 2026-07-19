@@ -25,6 +25,10 @@ export default defineConfig({
         packageRoot,
         "../components/src/index.ts",
       ),
+      "@you-agent-factory/client": path.resolve(
+        packageRoot,
+        "../client/src/index.ts",
+      ),
       "@xyflow/react": path.join(uiNodeModules, "@xyflow/react"),
       "@you-agent-factory/factory-replay": path.resolve(
         packageRoot,

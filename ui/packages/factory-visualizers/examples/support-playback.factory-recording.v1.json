@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "factory-recording/v1",
+  "id": "support-playback-example",
+  "title": "Support playback topology",
+  "summary": "A backend-free recording with current and historical projections.",
+  "factory": {
+    "name": "support-playback",
+    "workers": [{ "name": "support-agent" }],
+    "workTypes": [
+      {
+        "name": "support-request",
+        "states": [
+          { "name": "queued", "type": "INITIAL" },
+          { "name": "resolved", "type": "TERMINAL" }
+        ]
+      }
+    ],
+    "workstations": [
+      {
+        "name": "triage",
+        "worker": "support-agent",
+        "inputs": [{ "workType": "support-request", "state": "queued" }],
+        "outputs": [{ "workType": "support-request", "state": "resolved" }]
+      }
+    ]
+  },
+  "events": [
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "support-topology",
+      "type": "INITIAL_STRUCTURE_REQUEST",
+      "context": {
+        "sequence": 1,
+        "tick": 1,
+        "eventTime": "2026-07-18T20:00:01Z",
+        "sessionId": "support-playback-session",
+        "sessionSequence": 1
+      },
+      "payload": {
+        "factory": {
+          "name": "support-playback",
+          "workers": [{ "name": "support-agent" }],
+          "workTypes": [
+            {
+              "name": "support-request",
+              "states": [
+                { "name": "queued", "type": "INITIAL" },
+                { "name": "resolved", "type": "TERMINAL" }
+              ]
+            }
+          ],
+          "workstations": [
+            {
+              "name": "triage",
+              "worker": "support-agent",
+              "inputs": [{ "workType": "support-request", "state": "queued" }],
+              "outputs": [
+                { "workType": "support-request", "state": "resolved" }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "schemaVersion": "agent-factory.event.v1",
+      "id": "support-work",
+      "type": "WORK_REQUEST",
+      "context": {
+        "sequence": 2,
+        "tick": 2,
+        "eventTime": "2026-07-18T20:00:02Z",
+        "sessionId": "support-playback-session",
+        "sessionSequence": 2
+      },
+      "payload": {
+        "type": "FACTORY_REQUEST_BATCH",
+        "works": [
+          {
+            "name": "Support request 1",
+            "workId": "support-1",
+            "workTypeName": "support-request"
+          }
+        ]
+      }
+    }
+  ]
+}

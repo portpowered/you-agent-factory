@@ -1,11 +1,11 @@
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react-swc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
-import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { configDefaults, coverageConfigDefaults } from "vitest/config";
+import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
@@ -26,6 +26,14 @@ const sharedReactAliases = [
   {
     find: "@testing-library/user-event",
     replacement: path.join(uiRoot, "node_modules/@testing-library/user-event"),
+  },
+  {
+    find: "@you-agent-factory/client",
+    replacement: path.join(uiRoot, "packages/client/src/index.ts"),
+  },
+  {
+    find: "@you-agent-factory/factory-replay",
+    replacement: path.join(uiRoot, "packages/factory-replay/src/index.ts"),
   },
   {
     find: "react",

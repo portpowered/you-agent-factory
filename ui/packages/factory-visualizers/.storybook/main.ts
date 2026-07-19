@@ -26,6 +26,10 @@ const config: StorybookConfig = {
             ),
           },
           {
+            find: "@you-agent-factory/client",
+            replacement: path.resolve(packageRoot, "../client/src/index.ts"),
+          },
+          {
             find: "@you-agent-factory/components/graphs",
             replacement: path.resolve(
               packageRoot,

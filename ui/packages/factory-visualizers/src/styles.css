@@ -1,5 +1,18 @@
 @import "@xyflow/react/dist/style.css";
 
+.factory-recording-topology-replay {
+  display: grid;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  gap: 1rem;
+}
+
+.factory-recording-topology-replay__tick {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+}
+
 .factory-timeline-scrubber {
   box-sizing: border-box;
   inline-size: 100%;

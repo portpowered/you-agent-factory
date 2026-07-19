@@ -1,4 +1,14 @@
 export {
+  FactoryRecordingTopologyReplay,
+  type FactoryRecordingTopologyReplayError,
+  type FactoryRecordingTopologyReplayMessages,
+  type FactoryRecordingTopologyReplayProps,
+  type FactoryRecordingTopologyReplayState,
+  type FactoryRecordingValidationDiagnostic,
+  type FactoryRecordingValidationDiagnosticIssue,
+} from "./factory-recording-topology-replay.js";
+
+export {
   type FactoryTimelineMode,
   FactoryTimelineScrubber,
   type FactoryTimelineScrubberMessages,
