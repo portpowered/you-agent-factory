@@ -58,6 +58,10 @@ that consumes the replay kernel.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.
+- `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
+  controlled host adapter for playback and the shared scrubber. It may request
+  pause before historical selection and follow-latest before Play or Step, but
+  it must not retain a second selected tick, create timers, or own replay data.
 - `ui/src/features/timeline/state/timeline/factory-replay-kernel.compatibility.test.ts`
   compares the package-selected historical projection with the existing hosted
   reducer and projection.

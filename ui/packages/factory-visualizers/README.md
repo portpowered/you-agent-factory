@@ -3,8 +3,14 @@
 Controlled React components for rendering caller-prepared Factory replay
 projections. The package exports `FactoryTopologyReplay`,
 `FactoryRecordingTopologyReplay`, `FactoryTimelineScrubber`, and
-`WorkProgressVisualizer` together with their message, formatting, status,
-callback, and structured error contracts.
+`WorkProgressVisualizer`, and `FactoryEmulatorControls` together with their
+message, formatting, status, callback, and structured error contracts.
+
+`FactoryEmulatorControls` composes the lower-level controlled playback toolbar
+with `FactoryTimelineScrubber`. Hosts provide the current/history selection and
+all callbacks. Selecting an earlier tick requests pause before selection; Play
+and Step request follow-latest before their host command in history mode. It
+never creates a timer, mutates replay data, or owns emulator state.
 
 The host always owns transport, persistence, and canonical Factory data. It can
 either prepare controlled projections with `@you-agent-factory/factory-replay`

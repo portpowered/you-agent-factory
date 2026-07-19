@@ -1,4 +1,10 @@
 export {
+  FactoryEmulatorControls,
+  type FactoryEmulatorControlsProps,
+  type FactoryEmulatorControlsTimeline,
+} from "./factory-emulator-controls.js";
+
+export {
   FactoryRecordingTopologyReplay,
   type FactoryRecordingTopologyReplayError,
   type FactoryRecordingTopologyReplayMessages,

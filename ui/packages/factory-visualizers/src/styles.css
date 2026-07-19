@@ -8,6 +8,11 @@
   gap: 1rem;
 }
 
+.factory-emulator-controls {
+  display: grid;
+  gap: 1rem;
+}
+
 .factory-recording-topology-replay__tick {
   margin: 0;
   color: var(--color-on-surface-variant);
@@ -377,6 +382,7 @@
 @media (prefers-reduced-motion: reduce) {
   .factory-topology-replay *,
   .factory-timeline-scrubber *,
+  .factory-emulator-controls *,
   .factory-work-progress * {
     scroll-behavior: auto;
     animation-duration: 0.01ms;
