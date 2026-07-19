@@ -13,6 +13,7 @@ const packageRoot = path.resolve(
   "..",
 );
 const metadataFiles = ["LICENSE.md", "README.md", "package.json"];
+const exampleFiles = ["examples/support-playback.factory-recording.v1.json"];
 
 async function listFiles(directory, relativeRoot) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -85,6 +86,7 @@ export async function packAndVerify(destination) {
     .sort();
   const expectedFiles = [
     ...metadataFiles,
+    ...exampleFiles,
     ...(await listFiles(path.join(packageRoot, "dist"), "dist")),
   ].sort();
   if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {

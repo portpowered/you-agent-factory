@@ -13,6 +13,7 @@
   },
   "files": [
     "dist",
+    "examples",
     "LICENSE.md",
     "README.md"
   ],
@@ -27,7 +28,8 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./styles.css": "./dist/styles.css"
+    "./styles.css": "./dist/styles.css",
+    "./examples/support-playback.factory-recording.v1.json": "./examples/support-playback.factory-recording.v1.json"
   },
   "scripts": {
     "build": "node scripts/build-package.mjs",
@@ -35,11 +37,14 @@
     "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "lint": "biome check .",
     "prepare:dependencies": "bun run --cwd ../client build && bun run --cwd ../components build && bun run --cwd ../factory-replay build",
+    "storybook": "storybook dev -p 6027",
     "test": "vitest run --config vitest.config.ts",
+    "test-storybook": "bun run build-storybook && bun run verify:accessibility-responsive",
     "typecheck": "bun run prepare:dependencies && tsc -p tsconfig.json --noEmit --pretty false",
     "verify:accessibility-responsive": "node scripts/verify-accessibility-responsive.mjs",
-    "verify": "bun run typecheck && bun run test && bun run build && bun run build-storybook && bun run verify:accessibility-responsive && bun run check:package-boundary && bun run check:pack && bun run check:installed-consumer"
+    "verify": "bun run typecheck && bun run lint && bun run test && bun run build && bun run test-storybook && bun run check:package-boundary && bun run check:pack && bun run check:installed-consumer"
   },
   "dependencies": {
     "@you-agent-factory/components": "0.0.0",

@@ -20,9 +20,11 @@ const packageRoot = path.resolve(
 
 const mainSource = `import { createRoot } from "react-dom/client";
 import {
+  FactoryRecordingTopologyReplay,
   FactoryTimelineScrubber,
   FactoryTopologyReplay,
   WorkProgressVisualizer,
+  type FactoryRecordingTopologyReplayMessages,
   type FactoryTimelineScrubberMessages,
   type FactoryTopologyReplayMessages,
   type FactoryTopologyReplayProjection,
@@ -30,6 +32,7 @@ import {
   type WorkProgressVisualizerMessages,
 } from "@you-agent-factory/factory-visualizers";
 import type { FactoryWorkProgressProjection } from "@you-agent-factory/factory-replay";
+import supportPlayback from "@you-agent-factory/factory-visualizers/examples/support-playback.factory-recording.v1.json";
 import "@you-agent-factory/components/styles.css";
 import "@you-agent-factory/factory-visualizers/styles.css";
 import "./styles.css";
@@ -61,6 +64,14 @@ const topologyMessages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected",
   workStateCount: (count) => count + " Work", workStateCountUnavailable: "Work unavailable",
 };
+const recordingMessages: FactoryRecordingTopologyReplayMessages = {
+  progress: progressMessages,
+  regionLabel: "Recorded Factory playback",
+  selectedTick: (tick) => "Selected logical tick " + tick,
+  timeline: timelineMessages,
+  topology: topologyMessages,
+  validationFailed: "Recording validation failed",
+};
 const topology: FactoryTopologyReplayProjection = {
   activity: { activeDispatchOverlays: [], activeWorkstationNodeIds: [], issues: [], resourceOccupancy: [], selectedTick: 4 },
   load: { issues: [], resourceOccupancy: [], selectedTick: 4, workStateCounts: [] },
@@ -70,6 +81,8 @@ const reportError = (_error: FactoryVisualizerError) => {};
 
 function App() {
   return <main>
+    <FactoryRecordingTopologyReplay formatNumber={String} messages={recordingMessages} recording={supportPlayback} />
+    <FactoryRecordingTopologyReplay defaultSelectedTick={1} formatNumber={String} messages={recordingMessages} recording={supportPlayback} />
     <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ projection: topology, status: "ready" }} />
     <FactoryTimelineScrubber formatTick={String} messages={timelineMessages} onFollowLatest={() => {}} onSelectTick={() => {}} state={{ earliestTick: 0, latestTick: 4, mode: "history", selectedTick: 2, status: "available" }} />
     <WorkProgressVisualizer formatNumber={(value) => new Intl.NumberFormat("en").format(value)} messages={progressMessages} projection={progress} />
@@ -151,6 +164,7 @@ async function writeConsumer(root, tarballs) {
           module: "ESNext",
           moduleResolution: "Bundler",
           noEmit: true,
+          resolveJsonModule: true,
           strict: true,
           target: "ES2022",
           types: ["vite/client"],
@@ -230,7 +244,17 @@ async function verifyBrowser(distRoot) {
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(url, { waitUntil: "networkidle" });
     for (const name of ["Factory topology", "Replay timeline", "Work progress"])
-      await page.getByRole("region", { name }).waitFor();
+      await page.getByRole("region", { name }).first().waitFor();
+    const recordings = page.getByRole("region", {
+      name: "Recorded Factory playback",
+    });
+    if ((await recordings.count()) !== 2)
+      throw new Error("expected current and historical recording examples");
+    await recordings.nth(0).waitFor();
+    if ((await recordings.nth(0).getAttribute("data-selected-tick")) !== "2")
+      throw new Error("installed current recording did not select tick 2");
+    if ((await recordings.nth(1).getAttribute("data-selected-tick")) !== "1")
+      throw new Error("installed historical recording did not select tick 1");
     await page.getByText("6 total", { exact: true }).waitFor();
     if (failures.length > 0) throw new Error(failures.join("\n"));
   } finally {
@@ -291,7 +315,7 @@ try {
   );
   await verifyBrowser(path.join(roots.consumer, "dist"));
   process.stdout.write(
-    "[factory-visualizers-consumer] installed, typechecked, built, and rendered all public components\n",
+    "[factory-visualizers-consumer] installed, typechecked, built, and rendered current and historical packaged recordings\n",
   );
 } finally {
   await rm(temporaryRoot, { force: true, recursive: true });

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, userEvent, within } from "storybook/test";
-import customerSupportRecording from "../../client/examples/customer-support.factory-recording.v1.json";
+import customerSupportRecording from "../examples/support-playback.factory-recording.v1.json";
 
 import {
   FactoryRecordingTopologyReplay,
@@ -120,7 +120,7 @@ export const ValidatedRecording: Story = {
     const canvas = within(canvasElement);
     await expect(
       canvas.getByRole("region", { name: messages.regionLabel }),
-    ).toHaveAttribute("data-selected-tick", "0");
+    ).toHaveAttribute("data-selected-tick", "2");
     const workstation = canvas.getByRole("button", {
       name: "workstation: triage",
     });

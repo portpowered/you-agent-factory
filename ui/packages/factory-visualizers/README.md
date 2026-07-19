@@ -25,6 +25,19 @@ export function Topology(props: FactoryTopologyReplayProps) {
 }
 ```
 
+The package also ships a validated recording that can be imported through the
+intentional example export:
+
+```tsx
+import supportPlayback from "@you-agent-factory/factory-visualizers/examples/support-playback.factory-recording.v1.json";
+
+<FactoryRecordingTopologyReplay
+  defaultSelectedTick={1}
+  messages={messages}
+  recording={supportPlayback}
+/>;
+```
+
 `FactoryRecordingTopologyReplay` reports invalid input as one sanitized
 `recording-validation` diagnostic and renders the same accessible failed
 presentation as the controlled topology component. It does not require a
@@ -46,7 +59,9 @@ keeps fixed history stable as later evidence arrives, and can return to current
 mode with its follow-latest action. Current mode also incorporates newly
 accepted same-tick events in canonical sequence order.
 
-Run `bun run verify` in this directory to typecheck and test the components,
-build Storybook, exercise accessibility and responsive behavior, validate the
-compiled dependency boundary and tarball inventory, and install, build, and
-render all public components in a clean temporary consumer.
+Run `make storybook` in this directory for package-local development. Use
+`make storybook-build` and `make storybook-test` for deterministic static and
+browser verification, or run `bun run verify` to typecheck, lint, and test the
+components, exercise Storybook accessibility and responsive behavior, validate
+the compiled dependency boundary and tarball inventory, and install, build,
+and render the public recording composition in a clean temporary consumer.
