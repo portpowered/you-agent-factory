@@ -172,6 +172,91 @@ function executionHarness(
   });
 }
 
+const dependencyFactory = {
+  name: "dependency-execution-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "task",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "complete", type: "TERMINAL" },
+      ],
+    },
+    {
+      name: "draft",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "review", type: "PROCESSING" },
+      ],
+    },
+  ],
+  workers: [{ name: "dependency-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "complete-task-a",
+      type: "AGENT_RUN",
+      worker: "dependency-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "complete" }],
+    },
+    {
+      name: "complete-task-b",
+      type: "AGENT_RUN",
+      worker: "dependency-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "complete" }],
+    },
+    {
+      name: "review-draft",
+      type: "AGENT_RUN",
+      worker: "dependency-worker",
+      inputs: [{ workType: "draft", state: "ready" }],
+      outputs: [{ workType: "draft", state: "review" }],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function dependencyScenario(
+  initialSubmissions: NonNullable<
+    FactoryEmulatorScenario["initialSubmissions"]
+  >,
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "dependency-execution-scenario",
+    factory: { name: dependencyFactory.name },
+    seed: "dependency-execution-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    initialSubmissions,
+    rules: dependencyFactory.workstations.map((workstation) => ({
+      id: `${workstation.name}-outcome`,
+      selector: { workstation: workstation.name },
+      cursor: { scope: "lineage", input: "rootWorkId" },
+      outcomes: [
+        {
+          result: "accepted" as const,
+          durationMs: workstation.name === "review-draft" ? 20 : 10,
+        },
+      ],
+      exhaustion: "repeat-last" as const,
+    })),
+    unmatched: { behavior: "error" },
+  };
+}
+
+function dependencyHarness(
+  initialSubmissions: NonNullable<
+    FactoryEmulatorScenario["initialSubmissions"]
+  >,
+) {
+  return createFactoryEmulatorSession({
+    factory: dependencyFactory,
+    scenario: dependencyScenario(initialSubmissions),
+    sink: { write: async () => undefined },
+  });
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: The table keeps every invalid relationship case on the same atomicity harness.
 describe("Factory emulator dependency submission", () => {
   it("normalizes the shared scenario and runtime DEPENDS_ON batch contract", async () => {
@@ -671,6 +756,107 @@ describe("Factory emulator Work submission", () => {
     } satisfies Partial<FactoryEmulatorSubmissionError>);
     expect(emulator.state()).toEqual(before);
     expect(writes).toHaveLength(1);
+  });
+});
+
+describe("Factory emulator dependency-aware scheduler dispatch", () => {
+  it("keeps default-complete dependents blocked while unrelated Work dispatches", async () => {
+    const emulator = dependencyHarness({
+      works: [
+        { name: "prerequisite", workType: "task", state: "ready" },
+        { name: "dependent", workType: "task", state: "ready" },
+        { name: "unrelated", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "dependent",
+          targetWorkName: "prerequisite",
+        },
+      ],
+    });
+
+    const started = await emulator.start();
+    const dependentId = started.state.works.find(
+      ({ submissionId }) => submissionId === "dependent",
+    )?.workId;
+    const firstDispatch = await emulator.advanceToNext();
+
+    expect(
+      firstDispatch.batches[0]?.flatMap(({ context }) => context.workIds ?? []),
+    ).not.toContain(dependentId);
+    expect(
+      firstDispatch.state.works.find(
+        ({ submissionId }) => submissionId === "dependent",
+      ),
+    ).toMatchObject({ phase: "ready", state: "ready" });
+    expect(
+      firstDispatch.state.works.filter(({ phase }) => phase === "active"),
+    ).toHaveLength(2);
+
+    const completedAndUnblocked = await emulator.advanceBy(10);
+    expect(
+      completedAndUnblocked.batches.map((batch) => batch[0]?.type),
+    ).toEqual(["DISPATCH_RESPONSE", "DISPATCH_REQUEST"]);
+    expect(
+      completedAndUnblocked.state.works.find(
+        ({ submissionId, phase }) =>
+          submissionId === "dependent" && phase === "active",
+      ),
+    ).toMatchObject({ workId: dependentId, state: "ready" });
+  });
+
+  it("requires every default and explicit dependency across all candidate bindings", async () => {
+    const emulator = dependencyHarness({
+      works: [
+        { name: "complete-target", workType: "task", state: "ready" },
+        { name: "review-target", workType: "draft", state: "ready" },
+        { name: "dependent", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "dependent",
+          targetWorkName: "complete-target",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "dependent",
+          targetWorkName: "review-target",
+          requiredState: "review",
+        },
+      ],
+    });
+
+    await emulator.start();
+    await emulator.advanceToNext();
+    const partiallySatisfied = await emulator.advanceBy(10);
+    expect(partiallySatisfied.batches).toHaveLength(1);
+    expect(
+      partiallySatisfied.state.works.find(
+        ({ submissionId }) => submissionId === "dependent",
+      ),
+    ).toMatchObject({ phase: "ready", state: "ready" });
+
+    const fullySatisfied = await emulator.advanceBy(10);
+    expect(fullySatisfied.batches.map((batch) => batch[0]?.type)).toEqual([
+      "DISPATCH_RESPONSE",
+      "DISPATCH_REQUEST",
+    ]);
+    expect(
+      fullySatisfied.state.works.find(
+        ({ submissionId, phase }) =>
+          submissionId === "dependent" && phase === "active",
+      ),
+    ).toBeDefined();
+    const reviewTargetId = fullySatisfied.state.works.find(
+      ({ submissionId }) => submissionId === "review-target",
+    )?.workId;
+    expect(
+      fullySatisfied.state.works.filter(
+        ({ workId, state }) => workId === reviewTargetId && state === "review",
+      ),
+    ).toHaveLength(1);
   });
 });
 

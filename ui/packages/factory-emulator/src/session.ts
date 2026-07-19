@@ -424,6 +424,54 @@ function bindingIndexesFor(
   append(0, []);
 }
 
+function dependencyStatesFor(state: StartedState): ReadonlyMap<string, string> {
+  const current = new Map<string, string>();
+  for (const work of state.works) {
+    if (work.phase !== "active") current.set(work.workId, work.state);
+    else current.delete(work.workId);
+  }
+  return current;
+}
+
+function dependenciesSatisfied(
+  work: FactoryEmulatorSessionWork,
+  dependencyStates: ReadonlyMap<string, string>,
+): boolean {
+  return (
+    work.relations?.every(
+      ({ targetWorkId, requiredState }) =>
+        dependencyStates.get(targetWorkId) === requiredState,
+    ) ?? true
+  );
+}
+
+function dependenciesAllow(
+  works: readonly FactoryEmulatorSessionWork[],
+  indexes: readonly number[],
+  dependencyStates: ReadonlyMap<string, string>,
+  executableWork: Set<number>,
+): boolean {
+  if (works.every((work) => dependenciesSatisfied(work, dependencyStates))) {
+    return true;
+  }
+  for (const index of indexes) executableWork.add(index);
+  return false;
+}
+
+function potentiallyBoundIndexes(
+  state: StartedState,
+  workstation: NonNullable<FactoryDefinition["workstations"]>[number],
+): readonly number[] {
+  return state.works.flatMap((work, index) =>
+    work.phase === "ready" &&
+    workstation.inputs.some(
+      (input) => input.workType === work.workType && input.state === work.state,
+    )
+      ? [index]
+      : [],
+  );
+}
+
 function schedulerCandidatesFor(
   configuration: ValidatedConfiguration,
   state: StartedState,
@@ -435,6 +483,7 @@ function schedulerCandidatesFor(
 } {
   const candidates: FactorySchedulerCandidate<DispatchCandidateValue>[] = [];
   const executableWork = new Set<number>();
+  const dependencyStates = dependencyStatesFor(state);
   let observedExpansions = 0;
   const retainBoundedCandidate = (
     candidate: FactorySchedulerCandidate<DispatchCandidateValue>,
@@ -446,15 +495,7 @@ function schedulerCandidatesFor(
     }
   };
   for (const workstation of configuration.factory.workstations ?? []) {
-    const potentiallyBound = state.works.flatMap((work, index) =>
-      work.phase === "ready" &&
-      workstation.inputs.some(
-        (input) =>
-          input.workType === work.workType && input.state === work.state,
-      )
-        ? [index]
-        : [],
-    );
+    const potentiallyBound = potentiallyBoundIndexes(state, workstation);
     let foundBinding = false;
     const seenBindings = new Set<string>();
     bindingIndexesFor(
@@ -478,6 +519,10 @@ function schedulerCandidatesFor(
         });
         const primary = works[0];
         if (primary === undefined || works.length !== workstation.inputs.length)
+          return;
+        if (
+          !dependenciesAllow(works, indexes, dependencyStates, executableWork)
+        )
           return;
         if (
           workstation.type === "LOGICAL_MOVE" &&

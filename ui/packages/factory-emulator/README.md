@@ -124,7 +124,12 @@ input, and selected candidates claim all consumable Work and declared top-level
 resource capacity atomically. Independent candidates can start together when
 capacity permits; active dispatches retain their claims until completion, and
 released capacity is available to waiting Work in the following scheduler
-batch. Worker-only resource metadata does not change mocked execution capacity.
+batch. Work with `DEPENDS_ON` relations remains ready but cannot enter a
+scheduler candidate until every target Work currently occupies its normalized
+required state. Dependency eligibility is recalculated after each accepted
+completion batch, so newly unblocked Work can dispatch in the same `advanceBy()`
+command. Worker-only resource metadata does not change mocked execution
+capacity.
 
 Accepted, continued, rejected, and failed outcomes preserve Work lineage while
 routing to explicit destinations in declared order. Accepted fan-out supports
