@@ -8,11 +8,17 @@ export interface FactorySchedulerToken {
   readonly lastDispatchElapsedMs?: number;
 }
 
+export interface FactorySchedulerResourceClaim {
+  readonly name: string;
+  readonly capacity: number;
+}
+
 export interface FactorySchedulerCandidate<Value = unknown> {
   readonly transitionId: string;
   readonly workerId: string;
   readonly workstationKind: "logical" | "normal";
   readonly tokens: readonly FactorySchedulerToken[];
+  readonly resources: readonly FactorySchedulerResourceClaim[];
   readonly value: Value;
 }
 
@@ -113,9 +119,11 @@ export function compareFactorySchedulerCandidates(
 export function selectFactorySchedulerCandidates<Value>(
   candidates: readonly FactorySchedulerCandidate<Value>[],
   limit = FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT,
+  availableResources: Readonly<Record<string, number>> = {},
 ): readonly FactorySchedulerCandidate<Value>[] {
   const selected: FactorySchedulerCandidate<Value>[] = [];
   const claimed = new Set<string>();
+  const claimedResources: Record<string, number> = {};
   const boundedLimit = Math.max(
     0,
     Math.min(limit, FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT),
@@ -132,7 +140,27 @@ export function selectFactorySchedulerCandidates<Value>(
     ) {
       continue;
     }
+    const resourceClaims = candidate.resources.reduce<Record<string, number>>(
+      (claims, resource) => {
+        claims[resource.name] =
+          (claims[resource.name] ?? 0) + resource.capacity;
+        return claims;
+      },
+      {},
+    );
+    if (
+      Object.entries(resourceClaims).some(
+        ([name, capacity]) =>
+          capacity + (claimedResources[name] ?? 0) >
+          (availableResources[name] ?? 0),
+      )
+    ) {
+      continue;
+    }
     for (const tokenId of tokenIds) claimed.add(tokenId);
+    for (const [name, capacity] of Object.entries(resourceClaims)) {
+      claimedResources[name] = (claimedResources[name] ?? 0) + capacity;
+    }
     selected.push(candidate);
   }
   return selected;

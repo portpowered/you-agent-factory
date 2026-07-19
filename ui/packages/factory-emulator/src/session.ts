@@ -15,6 +15,7 @@ import type {
 } from "./scenario-contracts.js";
 import {
   type FactorySchedulerCandidate,
+  type FactorySchedulerResourceClaim,
   selectFactorySchedulerCandidates,
 } from "./scheduler.js";
 import {
@@ -394,6 +395,10 @@ function schedulerCandidatesFor(
         workerId: workstation.worker,
         workstationKind:
           workstation.type === "LOGICAL_MOVE" ? "logical" : "normal",
+        resources: (workstation.resources ?? []).map(({ name, capacity }) => ({
+          name,
+          capacity,
+        })),
         tokens: [
           {
             tokenId: work.workId,
@@ -419,6 +424,42 @@ function schedulerCandidatesFor(
     }
   }
   return { candidates, executableWork };
+}
+
+function availableResourcesFor(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+): Readonly<Record<string, number>> {
+  const allocated = state.works.reduce<Record<string, number>>(
+    (claims, work) => {
+      if (work.phase !== "active" || work.dispatch === undefined) return claims;
+      for (const resource of work.dispatch.resources) {
+        claims[resource.name] =
+          (claims[resource.name] ?? 0) + resource.capacity;
+      }
+      return claims;
+    },
+    {},
+  );
+  return Object.fromEntries(
+    (configuration.factory.resources ?? []).map((resource) => [
+      resource.name,
+      Math.max(0, resource.capacity - (allocated[resource.name] ?? 0)),
+    ]),
+  );
+}
+
+function eventResourcesFor(
+  configuration: ValidatedConfiguration,
+  claims: readonly FactorySchedulerResourceClaim[],
+): { name: string; capacity: number }[] {
+  const totals = new Map(
+    (configuration.factory.resources ?? []).map(({ name, capacity }) => [
+      name,
+      capacity,
+    ]),
+  );
+  return claims.map(({ name }) => ({ name, capacity: totals.get(name) ?? 0 }));
 }
 
 function workRequestCalculation(
@@ -933,7 +974,11 @@ export function createFactoryEmulatorSession(
       state,
       cursors,
     );
-    for (const { value } of selectFactorySchedulerCandidates(candidates)) {
+    for (const { value, resources } of selectFactorySchedulerCandidates(
+      candidates,
+      undefined,
+      availableResourcesFor(configuration, state),
+    )) {
       const { index, execution, invocation, cursorKey } = value;
       const work = state.works[index];
       if (
@@ -953,6 +998,7 @@ export function createFactoryEmulatorSession(
       const completionId = identity("completion", dispatchId);
       const dueElapsedMs =
         state.virtualElapsedMs + execution.outcome.durationMs;
+      const eventResources = eventResourcesFor(configuration, resources);
       virtualTimeAt(configuration.scenario, dueElapsedMs);
       replacements[index] = {
         ...work,
@@ -965,6 +1011,7 @@ export function createFactoryEmulatorSession(
           worker: execution.workstation.worker,
           startedElapsedMs: state.virtualElapsedMs,
           dueElapsedMs,
+          resources,
           outcome: execution.outcome,
         },
       };
@@ -986,7 +1033,11 @@ export function createFactoryEmulatorSession(
           workIds: [work.workId],
           currentChainingTraceId: work.traceId,
         }),
-        payload: { transitionId, inputs: [{ workId: work.workId }] },
+        payload: {
+          transitionId,
+          inputs: [{ workId: work.workId }],
+          ...(eventResources.length === 0 ? {} : { resources: eventResources }),
+        },
       });
     }
     for (const [index, work] of state.works.entries()) {

@@ -14,6 +14,10 @@ interface CandidateOptions {
   readonly transitionId?: string;
   readonly workerId?: string;
   readonly workstationKind?: "logical" | "normal";
+  readonly resources?: readonly {
+    readonly name: string;
+    readonly capacity: number;
+  }[];
 }
 
 function candidate(
@@ -24,6 +28,7 @@ function candidate(
     transitionId: options.transitionId ?? value,
     workerId: options.workerId ?? "worker",
     workstationKind: options.workstationKind ?? "normal",
+    resources: options.resources ?? [],
     tokens: [
       {
         tokenId: options.tokenId ?? `token-${value}`,
@@ -150,5 +155,50 @@ describe("Factory emulator Work-in-queue scheduler", () => {
     expect(first).toHaveLength(FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT);
     expect(second).toEqual(first);
     expect(first.at(-1)).toBe("candidate-49");
+  });
+});
+
+describe("Factory emulator resource claims", () => {
+  it("claims complete requirements atomically in ranked order", () => {
+    const selected = selectFactorySchedulerCandidates(
+      [
+        candidate("blocked-winner", {
+          transitionId: "a-blocked",
+          resources: [
+            { name: "gpu", capacity: 1 },
+            { name: "slot", capacity: 2 },
+          ],
+        }),
+        candidate("gpu-fallback", {
+          transitionId: "b-fallback",
+          resources: [{ name: "gpu", capacity: 1 }],
+        }),
+        candidate("slot-fallback", {
+          transitionId: "c-fallback",
+          resources: [{ name: "slot", capacity: 1 }],
+        }),
+      ],
+      undefined,
+      { gpu: 1, slot: 1 },
+    );
+
+    expect(selected.map(({ value }) => value)).toEqual([
+      "gpu-fallback",
+      "slot-fallback",
+    ]);
+  });
+
+  it("never allocates aggregate capacity twice in one batch", () => {
+    const selected = selectFactorySchedulerCandidates(
+      ["third", "first", "second"].map((value) =>
+        candidate(value, {
+          resources: [{ name: "agent-slot", capacity: 1 }],
+        }),
+      ),
+      undefined,
+      { "agent-slot": 2 },
+    );
+
+    expect(selected.map(({ value }) => value)).toEqual(["first", "second"]);
   });
 });

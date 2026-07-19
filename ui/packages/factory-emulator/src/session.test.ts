@@ -362,6 +362,107 @@ describe("Factory emulator scheduler dispatch", () => {
   });
 });
 
+describe("Factory emulator resource-capacity dispatch", () => {
+  it("starts independent Work up to capacity and reuses released capacity", async () => {
+    const resourceFactory = {
+      ...executionFactory,
+      resources: [{ name: "agent-slot", capacity: 2 }],
+      workers: [
+        {
+          ...executionFactory.workers[0],
+          resources: [{ name: "agent-slot", capacity: 2 }],
+        },
+      ],
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          resources: [{ name: "agent-slot", capacity: 1 }],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const resourceScenario = executionScenario({
+      initialSubmissions: ["third", "first", "second"].map((name) => ({
+        name,
+        workType: "task",
+        state: "ready",
+      })),
+    });
+    const runFirstBatch = async () => {
+      const emulator = createFactoryEmulatorSession({
+        factory: resourceFactory,
+        scenario: resourceScenario,
+        sink: { write: async () => undefined },
+      });
+      await emulator.start();
+      return { emulator, receipt: await emulator.advanceToNext() };
+    };
+
+    const first = await runFirstBatch();
+    const repeated = await runFirstBatch();
+    const activeWorkIds = (receipt: typeof first.receipt) =>
+      receipt.state.works
+        .filter(({ phase }) => phase === "active")
+        .map(({ workId }) => workId);
+
+    expect(activeWorkIds(first.receipt)).toHaveLength(2);
+    expect(activeWorkIds(repeated.receipt)).toEqual(
+      activeWorkIds(first.receipt),
+    );
+    expect(first.receipt.batches[0]?.map(({ payload }) => payload)).toEqual([
+      expect.objectContaining({
+        resources: [{ name: "agent-slot", capacity: 2 }],
+      }),
+      expect.objectContaining({
+        resources: [{ name: "agent-slot", capacity: 2 }],
+      }),
+    ]);
+
+    const completed = await first.emulator.advanceToNext();
+    expect(completed.batches[0]).toHaveLength(2);
+    expect(
+      completed.state.works.filter(({ phase }) => phase === "ready"),
+    ).toHaveLength(1);
+
+    const released = await first.emulator.advanceToNext();
+    expect(released.batches[0]).toHaveLength(1);
+    expect(
+      released.state.works.filter(({ phase }) => phase === "active"),
+    ).toHaveLength(1);
+  });
+
+  it("leaves Work ready without events when total capacity is insufficient", async () => {
+    const resourceFactory = {
+      ...executionFactory,
+      resources: [{ name: "agent-slot", capacity: 1 }],
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          resources: [{ name: "agent-slot", capacity: 2 }],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const emulator = createFactoryEmulatorSession({
+      factory: resourceFactory,
+      scenario: executionScenario({
+        initialSubmissions: [
+          { name: "blocked", workType: "task", state: "ready" },
+        ],
+      }),
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    const receipt = await emulator.advanceToNext();
+
+    expect(receipt).toMatchObject({ status: "idle", batches: [] });
+    expect(receipt.state.works[0]).toMatchObject({
+      submissionId: "blocked",
+      phase: "ready",
+    });
+    expect(receipt.state.works[0]?.dispatch).toBeUndefined();
+  });
+});
+
 describe("Factory emulator virtual-time advancement", () => {
   it("processes deadlines through an exact target and jumps to the next due instant", async () => {
     const emulator = executionHarness(

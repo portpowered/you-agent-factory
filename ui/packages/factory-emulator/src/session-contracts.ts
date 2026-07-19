@@ -208,6 +208,11 @@ export interface FactoryEmulatorSessionWork {
     readonly worker: string;
     readonly startedElapsedMs: number;
     readonly dueElapsedMs: number;
+    /** Factory-scoped capacity held until this dispatch reaches an outcome. */
+    readonly resources: readonly {
+      readonly name: string;
+      readonly capacity: number;
+    }[];
     readonly outcome: import("./scenario-contracts.js").FactoryEmulatorOutcome;
   };
 }
