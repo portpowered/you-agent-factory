@@ -45,9 +45,13 @@ const hostedTopologyReplayMessagesByLocale = {
     topology: {
       activeDispatches: (count) =>
         count === 1 ? "1 active Dispatch" : `${count} active Dispatches`,
+      annotationsHidden: "Show annotations",
+      annotationsVisible: "Hide annotations",
       empty: "No Factory topology is available at this tick.",
       failed: "The Factory topology could not be displayed.",
       inactiveDispatches: "No active Dispatch",
+      imageFailed: "The annotation image could not be shown.",
+      imageLoading: "Loading annotation image.",
       loading: "Loading Factory topology...",
       nodeLabel: (kind, label) => `Select ${label} ${kind}`,
       regionLabel: "Factory topology",
@@ -81,9 +85,13 @@ const hostedTopologyReplayMessagesByLocale = {
     },
     topology: {
       activeDispatches: (count) => `${count} 个活动派遣`,
+      annotationsHidden: "显示注释",
+      annotationsVisible: "隐藏注释",
       empty: "此时刻没有可用的工厂拓扑。",
       failed: "无法显示工厂拓扑。",
       inactiveDispatches: "没有活动派遣",
+      imageFailed: "无法显示注释图像。",
+      imageLoading: "正在加载注释图像。",
       loading: "正在加载工厂拓扑...",
       nodeLabel: (kind, label) => `选择 ${label} ${kind}`,
       regionLabel: "工厂拓扑",

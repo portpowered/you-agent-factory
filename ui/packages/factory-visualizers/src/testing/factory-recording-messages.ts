@@ -57,9 +57,13 @@ export function createGermanRecordingMessages(): FactoryRecordingTopologyReplayM
     topology: {
       activeDispatches: (count) =>
         `${count} aktive ${count === 1 ? "Ausführung" : "Ausführungen"}`,
+      annotationsHidden: "Anmerkungen anzeigen",
+      annotationsVisible: "Anmerkungen ausblenden",
       empty: "Für diesen Schritt ist keine Fabriktopologie verfügbar.",
       failed: "Die Fabriktopologie konnte nicht angezeigt werden.",
       inactiveDispatches: "Keine aktive Ausführung",
+      imageFailed: "Das Anmerkungsbild konnte nicht angezeigt werden.",
+      imageLoading: "Anmerkungsbild wird geladen.",
       loading: "Fabriktopologie wird geladen.",
       nodeLabel: (kind, label) => `${kindNames[kind]}: ${label}`,
       regionLabel: "Aufgezeichnete Fabriktopologie",

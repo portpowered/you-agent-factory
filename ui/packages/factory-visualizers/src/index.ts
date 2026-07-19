@@ -27,9 +27,11 @@ export {
 } from "./factory-topology-replay.js";
 
 export type {
+  FactoryTopologyReplayError,
   FactoryVisualizerError,
   FactoryVisualizerErrorCause,
   FactoryVisualizerErrorKind,
+  FactoryVisualizationLayoutDiagnostic,
 } from "./visualizer-error.js";
 
 export {

@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FactoryEvent } from "../../../../api/events";
@@ -86,6 +87,48 @@ afterEach(() => {
 });
 
 describe("hosted topology replay rendering", () => {
+  it("forwards caller-owned annotations without changing hosted replay", () => {
+    const session = identity("session-with-layout");
+    act(() => {
+      useFactoryTimelineStore.getState().appendEventForEntry(
+        session,
+        topologyEvent({
+          id: "initial",
+          sequence: 1,
+          stateName: "queued",
+          tick: 1,
+          workTypeName: "story",
+        }),
+      );
+      useDashboardStreamStore.setState({
+        resolvedStreamIdentity: session,
+        streamState: liveStreamState,
+      });
+    });
+    const layout: FactoryVisualizationLayoutV1 = {
+      annotations: [
+        {
+          body: "Caller-owned hosted context",
+          id: "hosted-context",
+          kind: "note",
+          position: { x: 720, y: 20 },
+          size: { height: 90, width: 180 },
+        },
+      ],
+      schemaVersion: "factory-visualization-layout/v1",
+    };
+
+    render(<HostedTopologyReplay layout={layout} />);
+
+    expect(screen.getByText("Caller-owned hosted context")).toBeInTheDocument();
+    expect(screen.getByText("queued")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hide annotations" }));
+    expect(screen.queryByText("Caller-owned hosted context")).toBeNull();
+    expect(screen.getByText("queued")).toBeInTheDocument();
+  });
+});
+
+describe("hosted topology replay timeline rendering", () => {
   it("renders current and fixed history from accepted exact-entry tails", () => {
     const session = identity("session-a");
     act(() => {
@@ -342,7 +385,6 @@ describe("hosted topology replay status and accessibility", () => {
       screen.getByRole("slider", { name: "Select Factory replay tick" }),
     ).toBeDisabled();
   });
-
 });
 
 describe("hosted topology replay selection accessibility", () => {

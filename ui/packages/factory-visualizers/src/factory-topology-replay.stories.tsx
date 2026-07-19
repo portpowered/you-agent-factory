@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
 import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 
@@ -12,9 +13,13 @@ import {
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) =>
     `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+  annotationsHidden: "Show annotations",
+  annotationsVisible: "Hide annotations",
   empty: "No Factory topology is available at this tick.",
   failed: "The Factory topology could not be shown.",
   inactiveDispatches: "No active Dispatch",
+  imageFailed: "The annotation image could not be shown.",
+  imageLoading: "Loading annotation image.",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology at selected tick",
@@ -84,6 +89,68 @@ export const TouchPanePanning: Story = {
     state: { projection: createProjection(true), status: "ready" },
   },
   render: (args) => <SelectionHost {...args} />,
+};
+
+export const AnnotationVisibility: Story = {
+  args: {
+    layout: annotationLayout(),
+    state: { projection: createProjection(), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("img", { name: "Review process diagram" }),
+    ).toBeVisible();
+    const toggle = canvas.getByRole("button", {
+      name: messages.annotationsVisible,
+    });
+    await userEvent.click(toggle);
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      canvas.queryByRole("img", { name: "Review process diagram" }),
+    ).not.toBeInTheDocument();
+  },
+};
+
+/** Emulator-ready boundary: caller-prepared projection plus sidecar only. */
+export const EmulatorReadyDenseAnnotations: Story = {
+  args: {
+    layout: annotationLayout(),
+    state: { projection: createProjection(true), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("img", { name: "Review process diagram" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "workstation: Review" }),
+    ).toBeVisible();
+  },
+};
+
+export const InactiveNodeEmptyState: Story = {
+  args: {
+    layout: {
+      nodeEmptyStates: [
+        {
+          content: { kind: "text", text: "No review work is waiting." },
+          nodeId: "workstation:review",
+        },
+      ],
+      schemaVersion: "factory-visualization-layout/v1",
+    },
+    state: { projection: createInactiveProjection(), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText("No review work is waiting."),
+    ).toBeVisible();
+  },
+};
+
+export const EmulatorReadyInactiveEmptyState: Story = {
+  ...InactiveNodeEmptyState,
 };
 
 export const Loading: Story = {
@@ -259,5 +326,49 @@ function createProjection(dense = false): FactoryTopologyReplayProjection {
       ok: true,
       selectedTick: 18,
     },
+  };
+}
+
+function createInactiveProjection(): FactoryTopologyReplayProjection {
+  const projection = createProjection();
+  projection.activity = {
+    ...projection.activity,
+    activeDispatchOverlays: [],
+    activeWorkstationNodeIds: [],
+  };
+  projection.load = {
+    ...projection.load,
+    workStateCounts: projection.load.workStateCounts.map((count) => ({
+      ...count,
+      count: 0,
+    })),
+  };
+  return projection;
+}
+
+function annotationLayout(): FactoryVisualizationLayoutV1 {
+  return {
+    annotations: [
+      {
+        body: "Read the validation notes before routing work.",
+        id: "review-note",
+        kind: "note",
+        position: { x: 80, y: 40 },
+        tone: "info",
+      },
+      {
+        altText: "Review process diagram",
+        id: "review-diagram",
+        kind: "image",
+        position: { x: 900, y: 10 },
+        size: { height: 80, width: 120 },
+        source: {
+          base64: "iVBORw0KGgo=",
+          kind: "embedded",
+          mediaType: "image/png",
+        },
+      },
+    ],
+    schemaVersion: "factory-visualization-layout/v1",
   };
 }
