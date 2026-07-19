@@ -7,6 +7,15 @@ import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layou
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
+const hostedTopologyMocks = vi.hoisted(() => ({
+  adapter: vi.fn(() => ({ state: { status: "not-ready" } })),
+}));
+
+vi.mock("../../dashboard/public", () => ({
+  HostedTopologyReplay: () => <div data-testid="hosted-topology-replay" />,
+  useHostedTopologyReplayAdapter: hostedTopologyMocks.adapter,
+}));
+
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
     addControls,
@@ -199,8 +208,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       selectedWaypointEdgeId: null,
       waypointAriaLabel: vi.fn(),
       waypointControls: null,
-      ...((merged as { edgeWaypointControls?: object })
-        .edgeWaypointControls ?? {}),
+      ...((merged as { edgeWaypointControls?: object }).edgeWaypointControls ??
+        {}),
     },
     visualGroupControls: {
       canEditVisualGroups: true,
@@ -322,6 +331,30 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: surface coverage keeps the shared editor chrome fixtures together.
 describe("CurrentActivityGraphSurface", () => {
+  beforeEach(() => {
+    hostedTopologyMocks.adapter.mockReturnValue({
+      state: { status: "not-ready" },
+    });
+  });
+
+  it("uses the controlled hosted topology renderer for a ready exact entry", () => {
+    hostedTopologyMocks.adapter.mockReturnValue({
+      state: { status: "ready" },
+    });
+
+    render(
+      <CurrentActivityGraphSurface
+        viewModel={createViewModelStub({ editorMode: false }) as never}
+        imports={{} as never}
+        selection={null}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByTestId("hosted-topology-replay")).toBeTruthy();
+    expect(screen.queryByTestId("graph-viewport")).toBeNull();
+  });
+
   it("renders the empty state when no topology is loaded outside editor mode", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.factory = undefined;
@@ -362,9 +395,7 @@ describe("CurrentActivityGraphSurface", () => {
     expect(
       screen.queryByText("A newer factory definition is available"),
     ).toBeNull();
-    expect(
-      screen.queryByTestId("graph-viewport"),
-    ).toBeTruthy();
+    expect(screen.queryByTestId("graph-viewport")).toBeTruthy();
   });
 
   it("renders shared-surface notices and forwards viewport editor actions", () => {
@@ -460,8 +491,7 @@ describe("CurrentActivityGraphSurface", () => {
                 },
                 {
                   code: "factory.workstation.missingFailureRoute",
-                  message:
-                    'Workstation "review" must define a failure route.',
+                  message: 'Workstation "review" must define a failure route.',
                   severity: "error",
                   subject: {
                     id: "review",

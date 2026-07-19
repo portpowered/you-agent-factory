@@ -244,9 +244,14 @@ function appendFoundationConnections(
 }
 
 function sortedRoutes(
-  routes: readonly WorkstationIO[] | undefined,
+  routes: readonly WorkstationIO[] | WorkstationIO | null | undefined,
 ): WorkstationIO[] {
-  return [...(routes ?? [])].sort((left, right) =>
+  const normalizedRoutes = !routes
+    ? []
+    : Array.isArray(routes)
+      ? routes
+      : [routes as WorkstationIO];
+  return [...normalizedRoutes].sort((left, right) =>
     `${left.workType}:${left.state}`.localeCompare(
       `${right.workType}:${right.state}`,
     ),

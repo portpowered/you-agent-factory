@@ -9,6 +9,10 @@ import {
   SurfacePanel,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import {
+  HostedTopologyReplay,
+  useHostedTopologyReplayAdapter,
+} from "../../dashboard/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { NODE_TYPES } from "../../flowchart/public";
 import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
@@ -81,6 +85,7 @@ function CurrentActivityGraphSurfaceContent({
   snapshot: DashboardSnapshot;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
+  const hostedTopologyReplay = useHostedTopologyReplayAdapter();
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const saveError = model.status.saveError;
@@ -190,6 +195,13 @@ function CurrentActivityGraphSurfaceContent({
   }
   const layoutControls = model.layoutControls;
   const edgeWaypointControls = model.edgeWaypointControls;
+
+  if (
+    !editorControls.isEditing &&
+    hostedTopologyReplay.state.status === "ready"
+  ) {
+    return <HostedTopologyReplay locale={locale} />;
+  }
 
   if (!snapshotHasObserverGraph(snapshot) && !editorControls.isEditing) {
     return <EmptyCurrentActivityState locale={locale} />;

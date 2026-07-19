@@ -169,6 +169,44 @@ describe("projectFactoryTopology", () => {
     expect(result.issues).toEqual([]);
   });
 
+  it("normalizes singleton workstation routes emitted by hosted event streams", () => {
+    const result = projectFactoryTopology({
+      factory: {
+        name: "hosted-singleton-routes",
+        workTypes: [
+          {
+            name: "task",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            inputs: [{ state: "queued", workType: "task" }],
+            name: "guard",
+            onFailure: { state: "failed", workType: "task" },
+            onRejection: { state: "failed", workType: "task" },
+            outputs: [{ state: "failed", workType: "task" }],
+            worker: "",
+          },
+        ],
+      } as unknown as FactoryDefinition,
+      selectedTick: 3,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.connections.map((connection) => connection.kind)).toEqual(
+      expect.arrayContaining([
+        "workstation-on-failure",
+        "workstation-on-rejection",
+        "workstation-output",
+      ]),
+    );
+  });
+
   it("returns a valid empty projection for an empty Factory", () => {
     expect(
       projectFactoryTopology({ factory: { name: "empty" }, selectedTick: 0 }),

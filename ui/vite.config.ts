@@ -1,17 +1,37 @@
-import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react-swc";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react-swc";
 import { defineConfig } from "vite";
-import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { configDefaults, coverageConfigDefaults } from "vitest/config";
+import { createComponentsPackageAliases } from "./packages/components/src/vite-aliases";
 
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const uiRoot = path.dirname(fileURLToPath(import.meta.url));
 const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
+const factoryReplayPackageRoot = path.resolve(
+  uiRoot,
+  "packages/factory-replay/src",
+);
+const factoryVisualizersPackageRoot = path.resolve(
+  uiRoot,
+  "packages/factory-visualizers/src",
+);
 const sharedReactAliases = [
+  {
+    find: "@you-agent-factory/factory-visualizers/styles.css",
+    replacement: path.join(factoryVisualizersPackageRoot, "styles.css"),
+  },
+  {
+    find: "@you-agent-factory/factory-visualizers",
+    replacement: path.join(factoryVisualizersPackageRoot, "index.ts"),
+  },
+  {
+    find: "@you-agent-factory/factory-replay",
+    replacement: path.join(factoryReplayPackageRoot, "index.ts"),
+  },
   {
     find: "@testing-library/jest-dom/vitest",
     replacement: path.join(
