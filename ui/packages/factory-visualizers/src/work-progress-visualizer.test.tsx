@@ -1,5 +1,8 @@
 // @vitest-environment happy-dom
 
+import "@testing-library/jest-dom/vitest";
+import "./testing/vitest.setup";
+
 import { render, screen } from "@testing-library/react";
 import type { FactoryWorkProgressProjection } from "@you-agent-factory/factory-replay";
 import { axe } from "jest-axe";

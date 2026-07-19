@@ -9,6 +9,10 @@ const uiNodeModules = path.join(uiRoot, "node_modules");
 export default defineConfig({
   resolve: {
     alias: {
+      "@testing-library/jest-dom/vitest": path.join(
+        uiNodeModules,
+        "@testing-library/jest-dom/vitest",
+      ),
       "@testing-library/react": path.join(
         uiNodeModules,
         "@testing-library/react",

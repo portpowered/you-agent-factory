@@ -1,3 +1,6 @@
+import "@testing-library/jest-dom/vitest";
+import "./testing/vitest.setup";
+
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
