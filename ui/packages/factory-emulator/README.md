@@ -66,6 +66,22 @@ await session.submit({
   state: "ready",
   input: "Customer reply",
 });
+
+await session.submit({
+  works: [
+    { name: "reply", workType: "ticket", state: "ready" },
+    { name: "approval", workType: "ticket", state: "ready" },
+  ],
+  relations: [
+    {
+      type: "DEPENDS_ON",
+      sourceWorkName: "reply",
+      targetWorkName: "approval",
+      // Omit only when the target Work Type declares the default "complete".
+      requiredState: "classified",
+    },
+  ],
+});
 const dispatched = await session.advanceToNext();
 const advanced = await session.advanceBy(250);
 const current = session.state();
@@ -78,11 +94,20 @@ visible only after the sink accepts the complete batch. `state()` and
 `status()` return detached, structured-cloneable snapshots; the kernel does not
 retain playback or event history. An idle session remains open for later Work.
 
-`submit()` accepts one validated scenario Work value or a non-empty batch and
-normalizes it into one canonical `WORK_REQUEST`. The complete request is
-validated before its atomic sink write, so an invalid item cannot partially
-create Work. Submissions remain available while other Work is active and after
-the session returns to idle.
+`submit()` accepts one validated scenario Work value, a relationship-free Work
+array, or a `{ works, relations }` batch. `DEPENDS_ON` is the only supported
+emulator relationship; both endpoints must be names from that batch. The
+complete request is validated before its atomic sink write, so an invalid item
+or graph cannot partially create Work. Submissions remain available while
+other Work is active and after the session returns to idle.
+
+Accepted relationship batches emit one canonical `WORK_REQUEST` carrying the
+resolved relations, followed by one `RELATIONSHIP_CHANGE_REQUEST` per relation
+in declared order. The complete event sequence is one sink batch, and state and
+identity counters commit only after that batch succeeds. Use
+`replayFactoryEmulatorSubmissions(events)` to reconstruct detached Work identity,
+initial state, payload, and outbound relationships from canonical submission
+events.
 
 Virtual time advances only when the host calls `advanceBy(durationMs)` or
 `advanceToNext()`. Ready Work starts in one deterministic scheduler batch;
@@ -99,7 +124,17 @@ input, and selected candidates claim all consumable Work and declared top-level
 resource capacity atomically. Independent candidates can start together when
 capacity permits; active dispatches retain their claims until completion, and
 released capacity is available to waiting Work in the following scheduler
-batch. Worker-only resource metadata does not change mocked execution capacity.
+batch. Work with `DEPENDS_ON` relations remains ready but cannot enter a
+scheduler candidate until every target Work currently occupies its normalized
+required state. Dependency eligibility is recalculated after each accepted
+completion batch, so newly unblocked Work can dispatch in the same `advanceBy()`
+command. Worker-only resource metadata does not change mocked execution
+capacity.
+
+When a target enters a failed state, every non-terminal dependent moves to its
+own Work Type's failed state through a deterministic breadth-first closure in
+that same completion tick. Each move emits one canonical `WORK_STATE_CHANGE`
+with source `cascading-failure`; terminal and already-failed Work is unchanged.
 
 Accepted, continued, rejected, and failed outcomes preserve Work lineage while
 routing to explicit destinations in declared order. Accepted fan-out supports

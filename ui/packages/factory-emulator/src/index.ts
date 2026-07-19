@@ -19,6 +19,7 @@ export {
 export {
   FACTORY_EMULATOR_SCENARIO_SCHEMA_VERSION,
   type FactoryEmulatorInitialSubmission,
+  type FactoryEmulatorInitialSubmissions,
   type FactoryEmulatorOutcome,
   type FactoryEmulatorRule,
   type FactoryEmulatorRuleSelector,
@@ -26,6 +27,8 @@ export {
   type FactoryEmulatorScenarioIssue,
   type FactoryEmulatorScenarioIssueCode,
   FactoryEmulatorScenarioValidationError,
+  type FactoryEmulatorSubmissionBatch,
+  type FactoryEmulatorSubmissionRelation,
   parseFactoryEmulatorScenario,
   type SafeParseFactoryEmulatorScenarioResult,
   safeParseFactoryEmulatorScenario,
@@ -46,6 +49,7 @@ export {
   FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   type FactoryEmulatorLimits,
+  type FactoryEmulatorNormalizedRelation,
   FactoryEmulatorPendingCommandError,
   type FactoryEmulatorPendingTransactionStatus,
   type FactoryEmulatorResetReceipt,
@@ -61,3 +65,7 @@ export {
   type FactoryEmulatorSubmitReceipt,
   type ResolvedFactoryEmulatorLimits,
 } from "./session.js";
+export {
+  type FactoryEmulatorReplayedWork,
+  replayFactoryEmulatorSubmissions,
+} from "./submission-replay.js";

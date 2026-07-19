@@ -16,6 +16,8 @@ import type {
   FactoryEmulatorRule,
   FactoryEmulatorScenario,
   FactoryEmulatorScenarioIssue,
+  FactoryEmulatorSubmissionBatch,
+  FactoryEmulatorSubmissionRelation,
 } from "./scenario-contracts.js";
 import {
   compareFactorySchedulerCandidates,
@@ -38,6 +40,7 @@ import {
   FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   type FactoryEmulatorLimits,
+  type FactoryEmulatorNormalizedRelation,
   FactoryEmulatorPendingCommandError,
   type FactoryEmulatorResetReceipt,
   type FactoryEmulatorSession,
@@ -111,6 +114,20 @@ interface DispatchCandidateValue {
   readonly execution: WorkExecution;
   readonly invocation: number;
   readonly cursorKey?: string;
+}
+
+interface ValidatedSubmissionBatch {
+  readonly works: readonly FactoryEmulatorInitialSubmission[];
+  readonly relations: readonly FactoryEmulatorSubmissionRelation[];
+}
+
+function isSubmissionArray(
+  value:
+    | FactoryEmulatorInitialSubmission
+    | readonly FactoryEmulatorInitialSubmission[]
+    | FactoryEmulatorSubmissionBatch,
+): value is readonly FactoryEmulatorInitialSubmission[] {
+  return Array.isArray(value);
 }
 
 function clone<Value>(value: Value): Value {
@@ -407,6 +424,54 @@ function bindingIndexesFor(
   append(0, []);
 }
 
+function dependencyStatesFor(state: StartedState): ReadonlyMap<string, string> {
+  const current = new Map<string, string>();
+  for (const work of state.works) {
+    if (work.phase !== "active") current.set(work.workId, work.state);
+    else current.delete(work.workId);
+  }
+  return current;
+}
+
+function dependenciesSatisfied(
+  work: FactoryEmulatorSessionWork,
+  dependencyStates: ReadonlyMap<string, string>,
+): boolean {
+  return (
+    work.relations?.every(
+      ({ targetWorkId, requiredState }) =>
+        dependencyStates.get(targetWorkId) === requiredState,
+    ) ?? true
+  );
+}
+
+function dependenciesAllow(
+  works: readonly FactoryEmulatorSessionWork[],
+  indexes: readonly number[],
+  dependencyStates: ReadonlyMap<string, string>,
+  executableWork: Set<number>,
+): boolean {
+  if (works.every((work) => dependenciesSatisfied(work, dependencyStates))) {
+    return true;
+  }
+  for (const index of indexes) executableWork.add(index);
+  return false;
+}
+
+function potentiallyBoundIndexes(
+  state: StartedState,
+  workstation: NonNullable<FactoryDefinition["workstations"]>[number],
+): readonly number[] {
+  return state.works.flatMap((work, index) =>
+    work.phase === "ready" &&
+    workstation.inputs.some(
+      (input) => input.workType === work.workType && input.state === work.state,
+    )
+      ? [index]
+      : [],
+  );
+}
+
 function schedulerCandidatesFor(
   configuration: ValidatedConfiguration,
   state: StartedState,
@@ -418,6 +483,7 @@ function schedulerCandidatesFor(
 } {
   const candidates: FactorySchedulerCandidate<DispatchCandidateValue>[] = [];
   const executableWork = new Set<number>();
+  const dependencyStates = dependencyStatesFor(state);
   let observedExpansions = 0;
   const retainBoundedCandidate = (
     candidate: FactorySchedulerCandidate<DispatchCandidateValue>,
@@ -429,15 +495,7 @@ function schedulerCandidatesFor(
     }
   };
   for (const workstation of configuration.factory.workstations ?? []) {
-    const potentiallyBound = state.works.flatMap((work, index) =>
-      work.phase === "ready" &&
-      workstation.inputs.some(
-        (input) =>
-          input.workType === work.workType && input.state === work.state,
-      )
-        ? [index]
-        : [],
-    );
+    const potentiallyBound = potentiallyBoundIndexes(state, workstation);
     let foundBinding = false;
     const seenBindings = new Set<string>();
     bindingIndexesFor(
@@ -461,6 +519,10 @@ function schedulerCandidatesFor(
         });
         const primary = works[0];
         if (primary === undefined || works.length !== workstation.inputs.length)
+          return;
+        if (
+          !dependenciesAllow(works, indexes, dependencyStates, executableWork)
+        )
           return;
         if (
           workstation.type === "LOGICAL_MOVE" &&
@@ -665,6 +727,9 @@ function routedWorksFor(
           ? {}
           : { parent: matching.parent }
         : { parent: first.workId }),
+      ...(matching?.relations === undefined
+        ? {}
+        : { relations: matching.relations }),
       queuedElapsedMs: dispatch.dueElapsedMs,
       lastDispatchElapsedMs: Math.min(
         lineageSource.lastDispatchElapsedMs ?? dispatch.dueElapsedMs,
@@ -701,13 +766,195 @@ function eventWorkFor(
   };
 }
 
+function stateTypeFor(
+  configuration: ValidatedConfiguration,
+  work: Pick<FactoryEmulatorSessionWork, "workType" | "state">,
+): "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED" | undefined {
+  return configuration.factory.workTypes
+    ?.find(({ name }) => name === work.workType)
+    ?.states.find(({ name }) => name === work.state)?.type;
+}
+
+function failedStateFor(
+  configuration: ValidatedConfiguration,
+  workType: string,
+): string | undefined {
+  return configuration.factory.workTypes
+    ?.find(({ name }) => name === workType)
+    ?.states.find(({ type }) => type === "FAILED")?.name;
+}
+
+function cascadeDependencyFailures(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  eventTime: string,
+  sequence: number,
+): {
+  readonly events: readonly FactoryEvent[];
+  readonly works: readonly FactoryEmulatorSessionWork[];
+} {
+  const works = [...state.works];
+  const currentIndexes = new Map<string, number>();
+  for (const [index, work] of works.entries())
+    currentIndexes.set(work.workId, index);
+  const currentWorks = [...currentIndexes.values()].flatMap((index) => {
+    const work = works[index];
+    return work === undefined ? [] : [work];
+  });
+  const dependents = new Map<string, FactoryEmulatorSessionWork[]>();
+  for (const work of currentWorks) {
+    for (const relation of work.relations ?? []) {
+      const existing = dependents.get(relation.targetWorkId) ?? [];
+      existing.push(work);
+      dependents.set(relation.targetWorkId, existing);
+    }
+  }
+
+  const queue = currentWorks
+    .filter((work) => stateTypeFor(configuration, work) === "FAILED")
+    .map(({ workId }) => workId);
+  const cascaded = new Set<string>();
+  const events: FactoryEvent[] = [];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const triggerWorkId = queue[cursor];
+    if (triggerWorkId === undefined) continue;
+    for (const dependent of dependents.get(triggerWorkId) ?? []) {
+      if (cascaded.has(dependent.workId)) continue;
+      const index = currentIndexes.get(dependent.workId);
+      const current = index === undefined ? undefined : works[index];
+      if (index === undefined || current === undefined) continue;
+      const currentType = stateTypeFor(configuration, current);
+      if (currentType === "TERMINAL" || currentType === "FAILED") continue;
+      const failedState = failedStateFor(configuration, current.workType);
+      if (failedState === undefined) continue;
+
+      cascaded.add(current.workId);
+      queue.push(current.workId);
+      works[index] = {
+        ...current,
+        state: failedState,
+        phase: "completed",
+        dispatch: undefined,
+      };
+      const eventSequence = sequence + events.length;
+      const reason = `cascading failure: dependency ${triggerWorkId} failed`;
+      events.push({
+        schemaVersion: "agent-factory.event.v1",
+        id: identity(
+          "event",
+          state.sessionId,
+          eventSequence,
+          "WORK_STATE_CHANGE",
+          current.workId,
+        ),
+        type: "WORK_STATE_CHANGE",
+        context: eventContext(state, eventSequence, eventTime, {
+          requestId: current.requestId,
+          workIds: [current.workId],
+        }),
+        payload: {
+          workId: current.workId,
+          workTypeName: current.workType,
+          fromState: current.state,
+          toState: failedState,
+          fromPlaceId: `${current.workType}:${current.state}`,
+          toPlaceId: `${current.workType}:${failedState}`,
+          source: "cascading-failure",
+          triggerWorkId,
+          reason,
+        },
+      } satisfies FactoryEvent);
+    }
+  }
+  return { events, works };
+}
+
+function workRequestEvent(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  sequence: number,
+  requestId: string,
+  works: readonly FactoryEmulatorSessionWork[],
+  relations: readonly FactoryEmulatorNormalizedRelation[],
+): FactoryEvent {
+  return {
+    schemaVersion: "agent-factory.event.v1",
+    id: identity("event", state.sessionId, sequence, "WORK_REQUEST"),
+    type: "WORK_REQUEST",
+    context: eventContext(state, sequence, state.virtualTime, {
+      requestId,
+      traceIds: works.map(({ traceId }) => traceId),
+      workIds: works.map(({ workId }) => workId),
+    }),
+    payload: {
+      type: "FACTORY_REQUEST_BATCH",
+      source: "emulator",
+      works: works.map((work) => ({
+        name: work.submissionId,
+        workId: work.workId,
+        requestId: work.requestId,
+        workTypeName: work.workType,
+        state: {
+          name: work.state,
+          type:
+            configuration.factory.workTypes
+              ?.find(({ name }) => name === work.workType)
+              ?.states.find(({ name }) => name === work.state)?.type ??
+            "INITIAL",
+        },
+        currentChainingTraceId: work.traceId,
+        traceId: work.traceId,
+        ...(work.input === undefined ? {} : { payload: work.input }),
+      })),
+      ...(relations.length === 0
+        ? {}
+        : { relations: relations.map((relation) => ({ ...relation })) }),
+    },
+  };
+}
+
+function relationshipChangeEvents(
+  state: StartedState,
+  sequence: number,
+  requestId: string,
+  workByName: ReadonlyMap<string, FactoryEmulatorSessionWork>,
+  relations: readonly FactoryEmulatorNormalizedRelation[],
+): readonly FactoryEvent[] {
+  return relations.map((relation, ordinal) => {
+    const source = workByName.get(relation.sourceWorkName);
+    const target = workByName.get(relation.targetWorkName);
+    if (source === undefined || target === undefined) {
+      throw new Error("Validated submission relationship endpoint is missing.");
+    }
+    const relationshipSequence = sequence + ordinal + 1;
+    return {
+      schemaVersion: "agent-factory.event.v1",
+      id: identity(
+        "event",
+        state.sessionId,
+        relationshipSequence,
+        "RELATIONSHIP_CHANGE_REQUEST",
+        requestId,
+        ordinal,
+      ),
+      type: "RELATIONSHIP_CHANGE_REQUEST",
+      context: eventContext(state, relationshipSequence, state.virtualTime, {
+        requestId,
+        traceIds: [source.traceId, target.traceId],
+        workIds: [source.workId, target.workId],
+      }),
+      payload: { relation },
+    } satisfies FactoryEvent;
+  });
+}
+
 function workRequestCalculation(
   configuration: ValidatedConfiguration,
   state: StartedState,
-  submissions: readonly FactoryEmulatorInitialSubmission[],
+  submissionBatch: ValidatedSubmissionBatch,
   command: "start" | "submit",
 ): {
-  readonly event: FactoryEvent;
+  readonly events: readonly FactoryEvent[];
   readonly works: readonly FactoryEmulatorSessionWork[];
 } {
   const requestId = identity(
@@ -716,7 +963,7 @@ function workRequestCalculation(
     command,
     state.counters.commands,
   );
-  const works = submissions.map((submission, ordinal) => {
+  const works = submissionBatch.works.map((submission, ordinal) => {
     const workId = identity(
       "work",
       state.sessionId,
@@ -742,40 +989,52 @@ function workRequestCalculation(
       phase: "ready" as const,
     };
   });
+  const workByName = new Map(works.map((work) => [work.submissionId, work]));
+  const resolvedWorkId = (name: string): string => {
+    const resolved = workByName.get(name);
+    if (resolved === undefined) {
+      throw new Error(`Validated submission target ${name} is missing.`);
+    }
+    return resolved.workId;
+  };
+  const normalizedWorks = works.map((work) => {
+    const relations = submissionBatch.relations
+      .filter(({ sourceWorkName }) => sourceWorkName === work.submissionId)
+      .map((relation) => ({
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: relation.sourceWorkName,
+        targetWorkName: relation.targetWorkName,
+        targetWorkId: resolvedWorkId(relation.targetWorkName),
+        requiredState: relation.requiredState ?? "complete",
+      }));
+    return relations.length === 0 ? work : { ...work, relations };
+  });
+  const normalizedRelations = submissionBatch.relations.map((relation) => ({
+    type: "DEPENDS_ON" as const,
+    sourceWorkName: relation.sourceWorkName,
+    targetWorkName: relation.targetWorkName,
+    targetWorkId: resolvedWorkId(relation.targetWorkName),
+    requiredState: relation.requiredState ?? "complete",
+  }));
   const sequence = state.counters.events;
+  const request = workRequestEvent(
+    configuration,
+    state,
+    sequence,
+    requestId,
+    normalizedWorks,
+    normalizedRelations,
+  );
+  const relationshipEvents = relationshipChangeEvents(
+    state,
+    sequence,
+    requestId,
+    workByName,
+    normalizedRelations,
+  );
   return {
-    works,
-    event: {
-      schemaVersion: "agent-factory.event.v1",
-      id: identity("event", state.sessionId, sequence, "WORK_REQUEST"),
-      type: "WORK_REQUEST",
-      context: eventContext(state, sequence, state.virtualTime, {
-        requestId,
-        traceIds: works.map(({ traceId }) => traceId),
-        workIds: works.map(({ workId }) => workId),
-      }),
-      payload: {
-        type: "FACTORY_REQUEST_BATCH",
-        source: "emulator",
-        works: works.map((work) => ({
-          name: work.submissionId,
-          workId: work.workId,
-          requestId: work.requestId,
-          workTypeName: work.workType,
-          state: {
-            name: work.state,
-            type:
-              configuration.factory.workTypes
-                ?.find(({ name }) => name === work.workType)
-                ?.states.find(({ name }) => name === work.state)?.type ??
-              "INITIAL",
-          },
-          currentChainingTraceId: work.traceId,
-          traceId: work.traceId,
-          ...(work.input === undefined ? {} : { payload: work.input }),
-        })),
-      },
-    },
+    works: normalizedWorks,
+    events: [request, ...relationshipEvents],
   };
 }
 
@@ -858,6 +1117,16 @@ function replaceInputPhases(
   }
 }
 
+function worksAtIndexes(
+  works: readonly FactoryEmulatorSessionWork[],
+  indexes: readonly number[],
+): FactoryEmulatorSessionWork[] {
+  return indexes.flatMap((index) => {
+    const work = works[index];
+    return work === undefined ? [] : [work];
+  });
+}
+
 function workerDispatchRequestEvent(
   state: StartedState,
   inputs: readonly FactoryEmulatorSessionWork[],
@@ -900,11 +1169,18 @@ function validateSubmissions(
   state: StartedState,
   value:
     | FactoryEmulatorInitialSubmission
-    | readonly FactoryEmulatorInitialSubmission[],
-): readonly FactoryEmulatorInitialSubmission[] {
-  const submissions = Array.isArray(value) ? value : [value];
+    | readonly FactoryEmulatorInitialSubmission[]
+    | FactoryEmulatorSubmissionBatch,
+): ValidatedSubmissionBatch {
+  const batch: FactoryEmulatorSubmissionBatch = isSubmissionArray(value)
+    ? { works: value }
+    : "works" in value
+      ? value
+      : { works: [value] };
+  const scenarioSubmissions =
+    isSubmissionArray(value) || !("works" in value) ? batch.works : batch;
   const parsed = safeParseFactoryEmulatorScenario(
-    { ...configuration.scenario, initialSubmissions: submissions },
+    { ...configuration.scenario, initialSubmissions: scenarioSubmissions },
     configuration.factory,
   );
   const issues: FactoryEmulatorScenarioIssue[] = parsed.success
@@ -914,7 +1190,7 @@ function validateSubmissions(
         path: ["submissions", ...issue.path.slice(1)],
       }));
   const known = new Set(state.works.map(({ submissionId }) => submissionId));
-  submissions.forEach((submission, index) => {
+  batch.works.forEach((submission, index) => {
     if (known.has(submission?.name)) {
       issues.push({
         category: "semantic",
@@ -925,7 +1201,7 @@ function validateSubmissions(
     }
   });
   if (issues.length > 0) throw new FactoryEmulatorSubmissionError(issues);
-  return clone(submissions);
+  return clone({ works: batch.works, relations: batch.relations ?? [] });
 }
 
 function rejectionMessage(rejection: unknown): string {
@@ -1246,22 +1522,34 @@ export function createFactoryEmulatorSession(
         },
       };
       const batches: (readonly FactoryEvent[])[] = [bootstrap];
-      const initial = configuration.scenario.initialSubmissions ?? [];
-      assertWorkBound("start", initial.length);
+      const initialValue = configuration.scenario.initialSubmissions ?? [];
+      const initial: ValidatedSubmissionBatch = isSubmissionArray(initialValue)
+        ? { works: initialValue, relations: [] }
+        : {
+            works: initialValue.works,
+            relations: initialValue.relations ?? [],
+          };
+      assertWorkBound("start", initial.works.length);
       let combined = bootstrap;
-      if (initial.length > 0) {
+      if (initial.works.length > 0) {
         const calculation = workRequestCalculation(
           configuration,
           { ...candidate, counters: { ...candidate.counters, commands: 0 } },
           initial,
           "start",
         );
-        const submissionBatch = [calculation.event];
+        const cascade = cascadeDependencyFailures(
+          configuration,
+          { ...candidate, works: calculation.works },
+          candidate.virtualTime,
+          candidate.counters.events + calculation.events.length,
+        );
+        const submissionBatch = [...calculation.events, ...cascade.events];
         batches.push(submissionBatch);
         combined = [...bootstrap, ...submissionBatch];
         candidate = {
           ...candidate,
-          works: calculation.works,
+          works: cascade.works,
           counters: { ...candidate.counters, events: combined.length },
         };
       }
@@ -1275,7 +1563,8 @@ export function createFactoryEmulatorSession(
   const submit = async (
     value:
       | FactoryEmulatorInitialSubmission
-      | readonly FactoryEmulatorInitialSubmission[],
+      | readonly FactoryEmulatorInitialSubmission[]
+      | FactoryEmulatorSubmissionBatch,
   ): Promise<FactoryEmulatorSubmitReceipt> => {
     const retryKey = canonicalJson(Array.isArray(value) ? value : [value]);
     const retry = assertCommand("submit", retryKey);
@@ -1293,7 +1582,14 @@ export function createFactoryEmulatorSession(
       }
     }
     const state = committedState as StartedState;
-    assertWorkBound("submit", Array.isArray(value) ? value.length : 1);
+    assertWorkBound(
+      "submit",
+      isSubmissionArray(value)
+        ? value.length
+        : "works" in value
+          ? value.works.length
+          : 1,
+    );
     const submissions = validateSubmissions(configuration, state, value);
     commandInFlight = "submit";
     lastError = undefined;
@@ -1304,14 +1600,20 @@ export function createFactoryEmulatorSession(
         submissions,
         "submit",
       );
-      const batch = [calculation.event];
+      const cascade = cascadeDependencyFailures(
+        configuration,
+        { ...state, works: [...state.works, ...calculation.works] },
+        state.virtualTime,
+        state.counters.events + calculation.events.length,
+      );
+      const batch = [...calculation.events, ...cascade.events];
       const candidate: StartedState = {
         ...state,
-        works: [...state.works, ...calculation.works],
+        works: cascade.works,
         counters: {
           ...state.counters,
           commands: state.counters.commands + 1,
-          events: state.counters.events + 1,
+          events: state.counters.events + batch.length,
         },
       };
       await write("submit", retryKey, batch, candidate);
@@ -1319,6 +1621,21 @@ export function createFactoryEmulatorSession(
     } finally {
       commandInFlight = undefined;
     }
+  };
+
+  const cascadeLogicalMoveFailures = (
+    state: StartedState,
+    replacements: FactoryEmulatorSessionWork[],
+    events: FactoryEvent[],
+  ): void => {
+    const cascade = cascadeDependencyFailures(
+      configuration,
+      { ...state, works: replacements },
+      virtualTimeAt(configuration.scenario, state.virtualElapsedMs),
+      state.counters.events + events.length,
+    );
+    replacements.splice(0, replacements.length, ...cascade.works);
+    events.push(...cascade.events);
   };
 
   const dispatchCalculation = (
@@ -1340,14 +1657,12 @@ export function createFactoryEmulatorSession(
       availableResourcesFor(configuration, state),
     )) {
       const { indexes, execution, invocation, cursorKey } = value;
-      const works = indexes.flatMap((index) => {
-        const work = state.works[index];
-        return work === undefined ? [] : [work];
-      });
+      const works = worksAtIndexes(replacements, indexes);
       const work = works[0];
       if (
         work === undefined ||
         works.length !== indexes.length ||
+        works.some(({ phase }) => phase !== "ready") ||
         execution.workstation === undefined ||
         execution.outcome === undefined
       )
@@ -1380,6 +1695,7 @@ export function createFactoryEmulatorSession(
         replaceInputPhases(replacements, state, indexes, "completed");
         replacements.push(...calculation.routedWorks);
         events.push(calculation.event);
+        cascadeLogicalMoveFailures(state, replacements, events);
         continue;
       }
       replaceInputPhases(replacements, state, indexes, "active");
@@ -1414,7 +1730,11 @@ export function createFactoryEmulatorSession(
       );
     }
     for (const [index, work] of state.works.entries()) {
-      if (work.phase === "ready" && !executableWork.has(index)) {
+      if (
+        work.phase === "ready" &&
+        replacements[index]?.phase === "ready" &&
+        !executableWork.has(index)
+      ) {
         replacements[index] = { ...work, phase: "waiting" };
       }
     }
@@ -1518,18 +1838,26 @@ export function createFactoryEmulatorSession(
       }
       replacements.push(...routedWorks);
     }
+    const completedDispatches = events.length;
+    const cascade = cascadeDependencyFailures(
+      configuration,
+      { ...state, works: replacements },
+      eventTime,
+      state.counters.events + events.length,
+    );
+    events.push(...cascade.events);
     return {
       batch: events,
       state: {
         ...state,
         virtualElapsedMs: dueElapsedMs,
         virtualTime: eventTime,
-        works: replacements,
+        works: cascade.works,
         counters: {
           ...state.counters,
           events: state.counters.events + events.length,
           completedDispatches:
-            state.counters.completedDispatches + events.length,
+            state.counters.completedDispatches + completedDispatches,
         },
       },
     };

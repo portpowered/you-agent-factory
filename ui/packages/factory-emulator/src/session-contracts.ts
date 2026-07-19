@@ -7,6 +7,7 @@ import type {
   FactoryEmulatorInitialSubmission,
   FactoryEmulatorScenario,
   FactoryEmulatorScenarioIssue,
+  FactoryEmulatorSubmissionBatch,
 } from "./scenario-contracts.js";
 
 export const DEFAULT_FACTORY_EMULATOR_LIMITS = Object.freeze({
@@ -186,6 +187,14 @@ export interface FactoryEmulatorSessionCounters {
   readonly completedDispatches: number;
 }
 
+export interface FactoryEmulatorNormalizedRelation {
+  readonly type: "DEPENDS_ON";
+  readonly sourceWorkName: string;
+  readonly targetWorkName: string;
+  readonly targetWorkId: string;
+  readonly requiredState: string;
+}
+
 export interface FactoryEmulatorSessionWork {
   readonly submissionId: string;
   readonly requestId: string;
@@ -201,6 +210,8 @@ export interface FactoryEmulatorSessionWork {
   readonly state: string;
   readonly input?: string;
   readonly parent?: string;
+  /** Canonical outbound execution relationships for which this Work is blocked. */
+  readonly relations?: readonly FactoryEmulatorNormalizedRelation[];
   /** Virtual instant when this Work entered its current queue. */
   readonly queuedElapsedMs: number;
   /** Earliest completed dispatch for this Work lineage, when initialized. */
@@ -346,7 +357,8 @@ export interface FactoryEmulatorSession {
   submit(
     submissionOrBatch:
       | FactoryEmulatorInitialSubmission
-      | readonly FactoryEmulatorInitialSubmission[],
+      | readonly FactoryEmulatorInitialSubmission[]
+      | FactoryEmulatorSubmissionBatch,
   ): Promise<FactoryEmulatorSubmitReceipt>;
   advanceBy(durationMs: number): Promise<FactoryEmulatorAdvanceReceipt>;
   advanceToNext(): Promise<FactoryEmulatorAdvanceReceipt>;

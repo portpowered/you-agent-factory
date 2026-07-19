@@ -3,6 +3,7 @@ import type {
   FactoryDefinition,
   FactoryEvent,
 } from "@you-agent-factory/client";
+import { safeParseFactoryRecording } from "@you-agent-factory/client";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { FactoryEventSink } from "./event-sink.js";
 import { RecordingFactoryEventSink } from "./recording-sink.js";
@@ -19,6 +20,7 @@ import {
   type FactoryEmulatorSession,
   type FactoryEmulatorSubmissionError,
 } from "./session.js";
+import { replayFactoryEmulatorSubmissions } from "./submission-replay.js";
 
 const factory = {
   name: "lifecycle-factory",
@@ -119,6 +121,7 @@ const executionFactory = {
       name: "task",
       states: [
         { name: "ready", type: "INITIAL" },
+        { name: "complete", type: "PROCESSING" },
         { name: "done", type: "TERMINAL" },
       ],
     },
@@ -168,6 +171,495 @@ function executionHarness(
     sink,
   });
 }
+
+const dependencyFactory = {
+  name: "dependency-execution-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "task",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "complete", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
+      ],
+    },
+    {
+      name: "draft",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "review", type: "PROCESSING" },
+      ],
+    },
+  ],
+  workers: [{ name: "dependency-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "complete-task-a",
+      type: "AGENT_RUN",
+      worker: "dependency-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "complete" }],
+    },
+    {
+      name: "complete-task-b",
+      type: "AGENT_RUN",
+      worker: "dependency-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "complete" }],
+    },
+    {
+      name: "review-draft",
+      type: "AGENT_RUN",
+      worker: "dependency-worker",
+      inputs: [{ workType: "draft", state: "ready" }],
+      outputs: [{ workType: "draft", state: "review" }],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function dependencyScenario(
+  initialSubmissions: NonNullable<
+    FactoryEmulatorScenario["initialSubmissions"]
+  >,
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "dependency-execution-scenario",
+    factory: { name: dependencyFactory.name },
+    seed: "dependency-execution-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    initialSubmissions,
+    rules: dependencyFactory.workstations.map((workstation) => ({
+      id: `${workstation.name}-outcome`,
+      selector: { workstation: workstation.name },
+      cursor: { scope: "lineage", input: "rootWorkId" },
+      outcomes: [
+        {
+          result: "accepted" as const,
+          durationMs: workstation.name === "review-draft" ? 20 : 10,
+        },
+      ],
+      exhaustion: "repeat-last" as const,
+    })),
+    unmatched: { behavior: "error" },
+  };
+}
+
+function dependencyHarness(
+  initialSubmissions: NonNullable<
+    FactoryEmulatorScenario["initialSubmissions"]
+  >,
+) {
+  return createFactoryEmulatorSession({
+    factory: dependencyFactory,
+    scenario: dependencyScenario(initialSubmissions),
+    sink: { write: async () => undefined },
+  });
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: The table keeps every invalid relationship case on the same atomicity harness.
+describe("Factory emulator dependency submission", () => {
+  it("normalizes the shared scenario and runtime DEPENDS_ON batch contract", async () => {
+    const batch = {
+      works: [
+        { name: "blocked", workType: "task", state: "ready" },
+        { name: "prerequisite", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON" as const,
+          sourceWorkName: "blocked",
+          targetWorkName: "prerequisite",
+        },
+      ],
+    };
+    const initial = executionHarness(
+      executionScenario({ initialSubmissions: batch }),
+    );
+    const initialState = (await initial.start()).state;
+    const runtime = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await runtime.start();
+    const runtimeState = (await runtime.submit(batch)).state;
+
+    for (const state of [initialState, runtimeState]) {
+      const blocked = state.works.find(
+        ({ submissionId }) => submissionId === "blocked",
+      );
+      const prerequisite = state.works.find(
+        ({ submissionId }) => submissionId === "prerequisite",
+      );
+      expect(blocked?.relations).toEqual([
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "prerequisite",
+          targetWorkId: prerequisite?.workId,
+          requiredState: "complete",
+        },
+      ]);
+      expect(blocked?.workId).toBeTruthy();
+      expect(prerequisite?.workId).toBeTruthy();
+    }
+
+    const explicit = await runtime.submit({
+      works: [
+        { name: "explicit-blocked", workType: "task", state: "ready" },
+        { name: "explicit-target", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "explicit-blocked",
+          targetWorkName: "explicit-target",
+          requiredState: "done",
+        },
+      ],
+    });
+    expect(
+      explicit.state.works.find(
+        ({ submissionId }) => submissionId === "explicit-blocked",
+      )?.relations?.[0]?.requiredState,
+    ).toBe("done");
+  });
+
+  it.each([
+    [
+      "duplicate relations",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "missing source",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "missing",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "missing target",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "missing",
+        },
+      ],
+    ],
+    [
+      "self relation",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "blocked",
+        },
+      ],
+    ],
+    [
+      "cycle",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "target",
+          targetWorkName: "blocked",
+        },
+      ],
+    ],
+    [
+      "invalid required state",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+          requiredState: "missing",
+        },
+      ],
+    ],
+    [
+      "parent-child",
+      [
+        {
+          type: "PARENT_CHILD",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "spawned-by",
+      [
+        {
+          type: "SPAWNED_BY",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "unknown relationship type",
+      [
+        {
+          type: "BLOCKS" as never,
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+  ] as const)(
+    "atomically rejects %s dependency batches",
+    async (_label, relations) => {
+      const writes: FactoryEvent[][] = [];
+      const emulator = executionHarness(
+        executionScenario({ initialSubmissions: [] }),
+        {
+          write: async (events) =>
+            writes.push(structuredClone(events) as FactoryEvent[]),
+        },
+      );
+      await emulator.start();
+      const before = emulator.state();
+      await expect(
+        emulator.submit({
+          works: [
+            { name: "blocked", workType: "task", state: "ready" },
+            { name: "target", workType: "task", state: "ready" },
+          ],
+          relations,
+        }),
+      ).rejects.toMatchObject({
+        name: "FactoryEmulatorSubmissionError",
+        code: "invalid_submission",
+        diagnostics: expect.arrayContaining([expect.any(Object)]),
+      } satisfies Partial<FactoryEmulatorSubmissionError>);
+      expect(emulator.state()).toEqual(before);
+      expect(writes).toHaveLength(1);
+    },
+  );
+
+  it("does not consume deterministic identity after relationship rejection", async () => {
+    const valid = {
+      works: [
+        { name: "blocked", workType: "task", state: "ready" },
+        { name: "target", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON" as const,
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    };
+    const afterRejection = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await afterRejection.start();
+    await expect(
+      afterRejection.submit({
+        ...valid,
+        relations: [{ ...valid.relations[0], targetWorkName: "missing" }],
+      }),
+    ).rejects.toBeInstanceOf(Error);
+    const retried = await afterRejection.submit(valid);
+
+    const firstTry = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await firstTry.start();
+    const first = await firstTry.submit(valid);
+    expect(retried.state.works).toEqual(first.state.works);
+    expect(retried.batch).toEqual(first.batch);
+  });
+
+  it("emits canonical request and relationship evidence in stable order", async () => {
+    const emulator = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    const started = await emulator.start();
+    const submitted = await emulator.submit({
+      works: [
+        {
+          name: "blocked",
+          workType: "task",
+          state: "ready",
+          input: "blocked payload",
+        },
+        { name: "first", workType: "task", state: "ready" },
+        { name: "second", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "second",
+          requiredState: "done",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "first",
+        },
+      ],
+    });
+
+    expect(submitted.batch.map(({ type }) => type)).toEqual([
+      "WORK_REQUEST",
+      "RELATIONSHIP_CHANGE_REQUEST",
+      "RELATIONSHIP_CHANGE_REQUEST",
+    ]);
+    expect(submitted.batch.map(({ context }) => context.sequence)).toEqual([
+      3, 4, 5,
+    ]);
+    const request = submitted.batch[0];
+    if (request?.type !== "WORK_REQUEST") throw new Error("missing request");
+    const relations = (request.payload as { relations?: unknown[] }).relations;
+    expect(relations).toEqual(
+      submitted.batch
+        .slice(1)
+        .map((event) => (event.payload as { relation: unknown }).relation),
+    );
+    expect(relations).toEqual([
+      expect.objectContaining({
+        sourceWorkName: "blocked",
+        targetWorkName: "second",
+        targetWorkId: expect.any(String),
+        requiredState: "done",
+      }),
+      expect.objectContaining({
+        sourceWorkName: "blocked",
+        targetWorkName: "first",
+        targetWorkId: expect.any(String),
+        requiredState: "complete",
+      }),
+    ]);
+    expect(
+      safeParseFactoryRecording({
+        schemaVersion: "factory-recording/v1",
+        id: "dependency-recording",
+        title: "Dependency recording",
+        factory: executionFactory,
+        events: [...started.batches.flat(), ...submitted.batch],
+      }),
+    ).toMatchObject({ success: true });
+
+    const replayed = replayFactoryEmulatorSubmissions([
+      ...started.batches.flat(),
+      ...submitted.batch,
+    ]);
+    expect(replayed).toEqual(
+      submitted.state.works.map((work) => ({
+        submissionId: work.submissionId,
+        workId: work.workId,
+        requestId: work.requestId,
+        traceId: work.traceId,
+        workType: work.workType,
+        state: work.state,
+        ...(work.input === undefined ? {} : { input: work.input }),
+        ...(work.relations === undefined ? {} : { relations: work.relations }),
+      })),
+    );
+
+    emulator.reset();
+    const rerunStart = await emulator.start();
+    const rerunSubmission = await emulator.submit({
+      works: [
+        {
+          name: "blocked",
+          workType: "task",
+          state: "ready",
+          input: "blocked payload",
+        },
+        { name: "first", workType: "task", state: "ready" },
+        { name: "second", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "second",
+          requiredState: "done",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "first",
+        },
+      ],
+    });
+    expect(rerunStart.batches).toEqual(started.batches);
+    expect(rerunSubmission).toEqual(submitted);
+  });
+
+  it("keeps relationship state and identity uncommitted until one sink batch succeeds", async () => {
+    const attempts: FactoryEvent[][] = [];
+    let rejectSubmission = true;
+    const emulator = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+      {
+        write: async (events) => {
+          attempts.push(structuredClone(events) as FactoryEvent[]);
+          if (events[0]?.type === "WORK_REQUEST" && rejectSubmission) {
+            rejectSubmission = false;
+            throw new Error("temporary relationship write failure");
+          }
+        },
+      },
+    );
+    await emulator.start();
+    const before = emulator.state();
+    const batch = {
+      works: [
+        { name: "blocked", workType: "task", state: "ready" },
+        { name: "target", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON" as const,
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    };
+
+    await expect(emulator.submit(batch)).rejects.toThrow(
+      "temporary relationship write failure",
+    );
+    expect(emulator.state()).toEqual(before);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      pendingTransaction: { command: "submit", eventCount: 2 },
+    });
+    const retried = await emulator.submit(batch);
+    expect(attempts.slice(-2)).toEqual([retried.batch, retried.batch]);
+    expect(retried.state.counters).toEqual({
+      commands: before.counters.commands + 1,
+      events: before.counters.events + 2,
+      completedDispatches: before.counters.completedDispatches,
+    });
+  });
+});
 
 describe("Factory emulator Work submission", () => {
   it("normalizes initial, active, and idle submissions into atomic Work requests", async () => {
@@ -265,6 +757,447 @@ describe("Factory emulator Work submission", () => {
     } satisfies Partial<FactoryEmulatorSubmissionError>);
     expect(emulator.state()).toEqual(before);
     expect(writes).toHaveLength(1);
+  });
+});
+
+describe("Factory emulator dependency-aware scheduler dispatch", () => {
+  it("keeps default-complete dependents blocked while unrelated Work dispatches", async () => {
+    const emulator = dependencyHarness({
+      works: [
+        { name: "prerequisite", workType: "task", state: "ready" },
+        { name: "dependent", workType: "task", state: "ready" },
+        { name: "unrelated", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "dependent",
+          targetWorkName: "prerequisite",
+        },
+      ],
+    });
+
+    const started = await emulator.start();
+    const dependentId = started.state.works.find(
+      ({ submissionId }) => submissionId === "dependent",
+    )?.workId;
+    const firstDispatch = await emulator.advanceToNext();
+
+    expect(
+      firstDispatch.batches[0]?.flatMap(({ context }) => context.workIds ?? []),
+    ).not.toContain(dependentId);
+    expect(
+      firstDispatch.state.works.find(
+        ({ submissionId }) => submissionId === "dependent",
+      ),
+    ).toMatchObject({ phase: "ready", state: "ready" });
+    expect(
+      firstDispatch.state.works.filter(({ phase }) => phase === "active"),
+    ).toHaveLength(2);
+
+    const completedAndUnblocked = await emulator.advanceBy(10);
+    expect(
+      completedAndUnblocked.batches.map((batch) => batch[0]?.type),
+    ).toEqual(["DISPATCH_RESPONSE", "DISPATCH_REQUEST"]);
+    expect(
+      completedAndUnblocked.state.works.find(
+        ({ submissionId, phase }) =>
+          submissionId === "dependent" && phase === "active",
+      ),
+    ).toMatchObject({ workId: dependentId, state: "ready" });
+  });
+
+  it("requires every default and explicit dependency across all candidate bindings", async () => {
+    const emulator = dependencyHarness({
+      works: [
+        { name: "complete-target", workType: "task", state: "ready" },
+        { name: "review-target", workType: "draft", state: "ready" },
+        { name: "dependent", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "dependent",
+          targetWorkName: "complete-target",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "dependent",
+          targetWorkName: "review-target",
+          requiredState: "review",
+        },
+      ],
+    });
+
+    await emulator.start();
+    await emulator.advanceToNext();
+    const partiallySatisfied = await emulator.advanceBy(10);
+    expect(partiallySatisfied.batches).toHaveLength(1);
+    expect(
+      partiallySatisfied.state.works.find(
+        ({ submissionId }) => submissionId === "dependent",
+      ),
+    ).toMatchObject({ phase: "ready", state: "ready" });
+
+    const fullySatisfied = await emulator.advanceBy(10);
+    expect(fullySatisfied.batches.map((batch) => batch[0]?.type)).toEqual([
+      "DISPATCH_RESPONSE",
+      "DISPATCH_REQUEST",
+    ]);
+    expect(
+      fullySatisfied.state.works.find(
+        ({ submissionId, phase }) =>
+          submissionId === "dependent" && phase === "active",
+      ),
+    ).toBeDefined();
+    const reviewTargetId = fullySatisfied.state.works.find(
+      ({ submissionId }) => submissionId === "review-target",
+    )?.workId;
+    expect(
+      fullySatisfied.state.works.filter(
+        ({ workId, state }) => workId === reviewTargetId && state === "review",
+      ),
+    ).toHaveLength(1);
+  });
+});
+
+function dependencyFailureHarness(): FactoryEmulatorSession {
+  const initialSubmissions = {
+    works: [
+      { name: "leaf", workType: "task", state: "ready" },
+      { name: "root-a", workType: "task", state: "ready" },
+      { name: "terminal", workType: "task", state: "complete" },
+      { name: "middle", workType: "task", state: "ready" },
+      { name: "root-b", workType: "task", state: "ready" },
+      { name: "converging", workType: "task", state: "ready" },
+      { name: "unrelated", workType: "task", state: "ready" },
+      { name: "already-failed", workType: "task", state: "failed" },
+    ],
+    relations: [
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "leaf",
+        targetWorkName: "middle",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "middle",
+        targetWorkName: "root-a",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "converging",
+        targetWorkName: "root-a",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "converging",
+        targetWorkName: "root-b",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "terminal",
+        targetWorkName: "root-a",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "already-failed",
+        targetWorkName: "root-a",
+      },
+    ],
+  };
+  const baseScenario = dependencyScenario(initialSubmissions);
+  const failureScenario: FactoryEmulatorScenario = {
+    ...baseScenario,
+    rules: [
+      {
+        id: "fail-roots",
+        selector: { input: { name: "root-a" } },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          { result: "failed", durationMs: 10, error: "root-a failed" },
+        ],
+        exhaustion: "repeat-last",
+      },
+      {
+        id: "fail-second-root",
+        selector: { input: { name: "root-b" } },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          { result: "failed", durationMs: 10, error: "root-b failed" },
+        ],
+        exhaustion: "repeat-last",
+      },
+      ...baseScenario.rules,
+    ],
+  };
+  return createFactoryEmulatorSession({
+    factory: dependencyFactory,
+    scenario: failureScenario,
+    sink: { write: async () => undefined },
+  });
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: These boundary regressions keep the atomic start and logical-tick assertions together.
+describe("Factory emulator dependency failure closure boundaries", () => {
+  it("cascades an initially failed dependency in the atomic start batch and retries exactly", async () => {
+    const attempts: FactoryEvent[][] = [];
+    let rejectStart = true;
+    const emulator = createFactoryEmulatorSession({
+      factory: dependencyFactory,
+      scenario: dependencyScenario({
+        works: [
+          { name: "root", workType: "task", state: "failed" },
+          { name: "dependent", workType: "task", state: "ready" },
+          { name: "terminal", workType: "task", state: "complete" },
+          { name: "unrelated", workType: "task", state: "ready" },
+        ],
+        relations: [
+          {
+            type: "DEPENDS_ON",
+            sourceWorkName: "dependent",
+            targetWorkName: "root",
+          },
+          {
+            type: "DEPENDS_ON",
+            sourceWorkName: "terminal",
+            targetWorkName: "root",
+          },
+        ],
+      }),
+      sink: {
+        write: async (events) => {
+          attempts.push(structuredClone(events) as FactoryEvent[]);
+          if (rejectStart) {
+            rejectStart = false;
+            throw new Error("initial cascade write rejected");
+          }
+        },
+      },
+    });
+
+    await expect(emulator.start()).rejects.toThrow(
+      "initial cascade write rejected",
+    );
+    expect(emulator.state()).toMatchObject({
+      lifecycle: "pre-start",
+      counters: { events: 0 },
+    });
+
+    const started = await emulator.start();
+    const cascadeEvents = started.batches[1]?.filter(
+      ({ type }) => type === "WORK_STATE_CHANGE",
+    );
+    expect(attempts).toEqual([started.batches.flat(), started.batches.flat()]);
+    expect(cascadeEvents).toHaveLength(1);
+    expect(cascadeEvents?.[0]).toMatchObject({
+      context: { tick: 1 },
+      payload: {
+        source: "cascading-failure",
+        fromState: "ready",
+        toState: "failed",
+      },
+    });
+    expect(
+      started.state.works.map(({ submissionId, state, phase }) => ({
+        submissionId,
+        state,
+        phase,
+      })),
+    ).toEqual([
+      { submissionId: "root", state: "failed", phase: "ready" },
+      { submissionId: "dependent", state: "failed", phase: "completed" },
+      { submissionId: "terminal", state: "complete", phase: "ready" },
+      { submissionId: "unrelated", state: "ready", phase: "ready" },
+    ]);
+  });
+
+  it("cascades a logical-move failure before any dependent can dispatch", async () => {
+    const logicalFailureFactory = {
+      ...dependencyFactory,
+      workstations: [
+        {
+          name: "a-fail-logically",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "failed" }],
+          guards: [
+            {
+              type: "VISIT_COUNT",
+              workstation: "complete-task-a",
+              maxVisits: 1,
+            },
+          ],
+        },
+        ...dependencyFactory.workstations.map((workstation) => ({
+          ...workstation,
+          outputs: [{ workType: "task", state: "ready" }],
+        })),
+      ],
+    } satisfies FactoryDefinition;
+    const emulator = createFactoryEmulatorSession({
+      factory: logicalFailureFactory,
+      scenario: {
+        ...dependencyScenario({
+          works: [
+            { name: "root", workType: "task", state: "ready" },
+            { name: "dependent", workType: "task", state: "ready" },
+          ],
+          relations: [
+            {
+              type: "DEPENDS_ON",
+              sourceWorkName: "dependent",
+              targetWorkName: "root",
+            },
+          ],
+        }),
+        id: "logical-failure-scenario",
+        factory: { name: logicalFailureFactory.name },
+        seed: "logical-failure-seed",
+      },
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    await emulator.advanceToNext();
+    await emulator.advanceToNext();
+    const advanced = await emulator.advanceToNext();
+
+    expect(advanced.batches).toHaveLength(1);
+    expect(advanced.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_RESPONSE",
+      "WORK_STATE_CHANGE",
+    ]);
+    expect(advanced.batches[0]?.[0]).toMatchObject({
+      payload: { outputWork: [{ state: { name: "failed" } }] },
+    });
+    expect(advanced.batches[0]?.[1]).toMatchObject({
+      context: { tick: 3 },
+      payload: {
+        source: "cascading-failure",
+        fromState: "ready",
+        toState: "failed",
+      },
+    });
+    expect(
+      advanced.batches[0]?.some(
+        ({ type, context }) =>
+          type === "DISPATCH_REQUEST" &&
+          context.workIds?.some((workId) =>
+            advanced.state.works.some(
+              (work) =>
+                work.workId === workId && work.submissionId === "dependent",
+            ),
+          ),
+      ),
+    ).toBe(false);
+    expect(
+      advanced.state.works
+        .filter(({ submissionId }) =>
+          ["root", "dependent"].includes(submissionId),
+        )
+        .map(({ submissionId, state, phase }) => ({
+          submissionId,
+          state,
+          phase,
+        })),
+    ).toEqual([
+      { submissionId: "root", state: "ready", phase: "completed" },
+      { submissionId: "dependent", state: "failed", phase: "completed" },
+    ]);
+  });
+});
+
+describe("Factory emulator dependency failure cascade", () => {
+  it("fails every non-terminal transitive dependent once in the completion tick", async () => {
+    const emulator = dependencyFailureHarness();
+    const started = await emulator.start();
+    const identityByName = new Map(
+      started.state.works.map(({ submissionId, workId }) => [
+        submissionId,
+        workId,
+      ]),
+    );
+    await emulator.advanceToNext();
+    const beforeFailure = emulator.state();
+    const completed = await emulator.advanceBy(10);
+
+    expect(completed.batches).toHaveLength(1);
+    const cascadeEvents = completed.batches[0]?.filter(
+      ({ type }) => type === "WORK_STATE_CHANGE",
+    );
+    expect(cascadeEvents?.map(({ context }) => context.workIds?.[0])).toEqual([
+      identityByName.get("middle"),
+      identityByName.get("converging"),
+      identityByName.get("leaf"),
+    ]);
+    expect(
+      cascadeEvents?.map(({ context, payload }) => ({
+        tick: context.tick,
+        source: (payload as { source: string }).source,
+        triggerWorkId: (payload as { triggerWorkId: string }).triggerWorkId,
+      })),
+    ).toEqual([
+      {
+        tick: cascadeEvents?.[0]?.context.tick,
+        source: "cascading-failure",
+        triggerWorkId: identityByName.get("root-a"),
+      },
+      {
+        tick: cascadeEvents?.[0]?.context.tick,
+        source: "cascading-failure",
+        triggerWorkId: identityByName.get("root-a"),
+      },
+      {
+        tick: cascadeEvents?.[0]?.context.tick,
+        source: "cascading-failure",
+        triggerWorkId: identityByName.get("middle"),
+      },
+    ]);
+    expect(
+      completed.state.works
+        .filter(({ submissionId }) =>
+          ["middle", "converging", "leaf"].includes(submissionId),
+        )
+        .map(({ submissionId, state, phase }) => ({
+          submissionId,
+          state,
+          phase,
+        })),
+    ).toEqual([
+      { submissionId: "leaf", state: "failed", phase: "completed" },
+      { submissionId: "middle", state: "failed", phase: "completed" },
+      { submissionId: "converging", state: "failed", phase: "completed" },
+    ]);
+    expect(
+      completed.state.works.find(
+        ({ submissionId }) => submissionId === "terminal",
+      ),
+    ).toEqual(
+      beforeFailure.works.find(
+        ({ submissionId }) => submissionId === "terminal",
+      ),
+    );
+    expect(
+      completed.state.works.find(
+        ({ submissionId }) => submissionId === "already-failed",
+      ),
+    ).toEqual(
+      beforeFailure.works.find(
+        ({ submissionId }) => submissionId === "already-failed",
+      ),
+    );
+    expect(
+      completed.state.works.find(
+        ({ workId, state }) =>
+          workId === identityByName.get("unrelated") && state === "complete",
+      ),
+    ).toMatchObject({ phase: "completed" });
+    expect(
+      completed.batches[0]?.filter(({ type }) => type === "DISPATCH_REQUEST"),
+    ).toHaveLength(0);
+    expect(completed.state.counters.completedDispatches).toBe(3);
   });
 });
 
