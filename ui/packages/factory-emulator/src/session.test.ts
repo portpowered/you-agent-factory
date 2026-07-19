@@ -1189,7 +1189,164 @@ describe("Factory emulator virtual-time advancement", () => {
     expect(idle).toMatchObject({ status: "idle", batches: [] });
     expect(emulator.state()).toEqual(before);
   });
+});
 
+describe("Factory emulator scheduler batch separation", () => {
+  it("routes simultaneous completions atomically before dispatching newly eligible Work", async () => {
+    const chainFactory = {
+      ...executionFactory,
+      workTypes: [
+        {
+          name: "task",
+          states: [
+            { name: "ready", type: "INITIAL" },
+            { name: "prepared", type: "INTERMEDIATE" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          name: "prepare",
+          type: "AGENT_RUN",
+          worker: "scripted-worker",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "prepared" }],
+        },
+        {
+          name: "finish",
+          type: "AGENT_RUN",
+          worker: "scripted-worker",
+          inputs: [{ workType: "task", state: "prepared" }],
+          outputs: [{ workType: "task", state: "done" }],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const writes: FactoryEvent[][] = [];
+    const emulator = createFactoryEmulatorSession({
+      factory: chainFactory,
+      scenario: executionScenario({
+        initialSubmissions: [
+          { name: "first", workType: "task", state: "ready" },
+          { name: "second", workType: "task", state: "ready" },
+        ],
+        rules: [
+          {
+            id: "prepare-outcome",
+            selector: { workstation: "prepare" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 25 }],
+            exhaustion: "repeat-last",
+          },
+          {
+            id: "finish-outcome",
+            selector: { workstation: "finish" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 0 }],
+            exhaustion: "repeat-last",
+          },
+        ],
+      }),
+      sink: {
+        write: async (events) => writes.push(structuredClone(events)),
+      },
+    });
+    await emulator.start();
+    await emulator.advanceToNext();
+
+    const completed = await emulator.advanceToNext();
+
+    expect(completed.batches).toHaveLength(1);
+    expect(completed.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_RESPONSE",
+      "DISPATCH_RESPONSE",
+    ]);
+    expect(
+      completed.state.works.filter(({ phase }) => phase === "ready"),
+    ).toHaveLength(2);
+    expect(writes.at(-1)).toEqual(completed.batches[0]);
+
+    const followingBatch = await emulator.advanceToNext();
+    expect(followingBatch.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_REQUEST",
+      "DISPATCH_REQUEST",
+    ]);
+    expect(followingBatch.virtualElapsedMs).toBe(25);
+  });
+});
+
+describe("Factory emulator completion transaction retry", () => {
+  it("retries a rejected simultaneous completion without advancing any scheduler state", async () => {
+    const resourceFactory = {
+      ...executionFactory,
+      resources: [{ name: "agent-slot", capacity: 2 }],
+      workstations: executionFactory.workstations.map((workstation) => ({
+        ...workstation,
+        resources: [{ name: "agent-slot", capacity: 1 }],
+      })),
+    } satisfies FactoryDefinition;
+    const attempts: FactoryEvent[][] = [];
+    let rejectCompletion = true;
+    const emulator = createFactoryEmulatorSession({
+      factory: resourceFactory,
+      scenario: executionScenario({
+        initialSubmissions: [
+          { name: "first", workType: "task", state: "ready" },
+          { name: "second", workType: "task", state: "ready" },
+        ],
+      }),
+      sink: {
+        write: async (events) => {
+          attempts.push(structuredClone(events));
+          if (
+            rejectCompletion &&
+            events.some(({ type }) => type === "DISPATCH_RESPONSE")
+          ) {
+            rejectCompletion = false;
+            throw new Error("completion recording unavailable");
+          }
+        },
+      },
+    });
+    await emulator.start();
+    await emulator.advanceToNext();
+    const before = emulator.state();
+    const budgetBefore = emulator.status().budgetUsage;
+    expect(
+      before.works.flatMap(({ dispatch }) => dispatch?.resources ?? []),
+    ).toEqual([
+      { name: "agent-slot", capacity: 1 },
+      { name: "agent-slot", capacity: 1 },
+    ]);
+    expect(Object.values(before.ruleCursors)).toEqual([1, 1]);
+
+    await expect(emulator.advanceToNext()).rejects.toThrow(
+      "completion recording unavailable",
+    );
+
+    expect(emulator.state()).toEqual(before);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      virtualTime: before.virtualTime,
+      virtualElapsedMs: before.virtualElapsedMs,
+      budgetUsage: budgetBefore,
+      pendingTransaction: {
+        command: "advanceToNext",
+        phase: "sink-write",
+        eventCount: 2,
+      },
+    });
+
+    const retried = await emulator.advanceToNext();
+    expect(attempts.at(-1)).toEqual(attempts.at(-2));
+    expect(retried.batches).toEqual([attempts.at(-1)]);
+    expect(retried.state.counters.completedDispatches).toBe(
+      before.counters.completedDispatches + 2,
+    );
+  });
+});
+
+describe("Factory emulator virtual-time duration validation", () => {
   it("rejects invalid durations without changing virtual time or emitting events", async () => {
     const writes: FactoryEvent[][] = [];
     const emulator = executionHarness(undefined, {
