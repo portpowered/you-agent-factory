@@ -6,6 +6,7 @@ import {
 import { compareFactoryEmulatorRuntimeReference } from "./runtime-reference-conformance.js";
 import { runtimeReferenceFixtures } from "./runtime-reference-fixtures.js";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: This cohesive fixture-contract suite keeps loading and rejection evidence adjacent.
 describe("frozen runtime references", () => {
   it("compares each supported reference at every logical tick", async () => {
     for (const reference of loadFactoryEmulatorRuntimeReferences()) {
@@ -55,6 +56,35 @@ describe("frozen runtime references", () => {
         reference.ticks.flatMap(({ eventKinds }) => eventKinds),
       );
     }
+  });
+
+  it("freezes the named outcome routes, propagation payload, and eligible logical move", () => {
+    const byId = new Map(
+      loadFactoryEmulatorRuntimeReferences().map((reference) => [
+        reference.id,
+        reference,
+      ]),
+    );
+    expect(byId.get("repeaters")?.ticks[3]?.semantics).toMatchObject({
+      outcomes: ["CONTINUE"],
+      routes: ['task:ready:"frozen input"'],
+    });
+    expect(byId.get("routing")?.ticks[3]?.semantics).toMatchObject({
+      outcomes: ["REJECTED"],
+      routes: ['task:failed:"frozen input"'],
+      terminalStates: ["task:failed"],
+    });
+    expect(byId.get("propagation")?.ticks[3]?.semantics.routes).toEqual([
+      'task:done:"frozen input"',
+    ]);
+    expect(byId.get("logical-moves")?.ticks[4]).toMatchObject({
+      eventKinds: ["DISPATCH_RESPONSE"],
+      semantics: {
+        outcomes: ["ACCEPTED"],
+        routes: ['task:done:"worker output"'],
+        terminalStates: ["task:done"],
+      },
+    });
   });
 
   it("rejects missing reference evidence and invalid fixture schemas", () => {

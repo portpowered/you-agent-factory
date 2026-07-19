@@ -57,10 +57,13 @@ function normalizedSemantics(
           const value = work as {
             workTypeName?: unknown;
             state?: { name?: unknown };
+            payload?: unknown;
           };
           return typeof value.workTypeName === "string" &&
             typeof value.state?.name === "string"
-            ? [`${value.workTypeName}:${value.state.name}`]
+            ? [
+                `${value.workTypeName}:${value.state.name}:${JSON.stringify(value.payload)}`,
+              ]
             : [];
         })
       : [];

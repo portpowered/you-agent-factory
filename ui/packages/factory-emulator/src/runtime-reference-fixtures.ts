@@ -53,6 +53,7 @@ function fixture(
     .map(({ name, workType, state }) => `${name}:${workType}:${state}`)
     .sort();
   const terminal = `${initialSubmissions[0]?.workType}:done`;
+  const terminalRoute = `${terminal}:${JSON.stringify(initialSubmissions[0]?.input)}`;
   const outputCount = firstWorkstation(factory).outputs?.length ?? 0;
   const holdsAtVisitGuard = firstWorkstation(factory).type === "LOGICAL_MOVE";
   const ticks = holdsAtVisitGuard
@@ -97,7 +98,7 @@ function fixture(
             ...emptySemantics,
             consumedWork: initialSubmissions.map(({ name }) => name).sort(),
             outcomes: ["ACCEPTED"],
-            routes: Array.from({ length: outputCount }, () => terminal),
+            routes: Array.from({ length: outputCount }, () => terminalRoute),
             terminalStates: Array.from({ length: outputCount }, () => terminal),
             replayProjection,
           },
@@ -110,6 +111,157 @@ function fixture(
     provenance: { kind: "public-documentation", source },
     factory,
     scenario,
+    ticks,
+    orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
+  };
+}
+
+function singleOutcomeFixture(
+  id: string,
+  title: string,
+  factory: FactoryDefinition,
+  scenario: FactoryEmulatorScenario,
+  outcome: "ACCEPTED" | "REJECTED",
+  route: string,
+  terminalState: string,
+): FactoryEmulatorRuntimeReference {
+  const initial = scenario.initialSubmissions;
+  if (!Array.isArray(initial) || initial[0] === undefined) {
+    throw new Error("Frozen single-outcome reference requires one submission.");
+  }
+  const input = initial[0];
+  const replayProjection = [`${input.name}:${input.workType}:${input.state}`];
+  const ticks: FactoryEmulatorRuntimeReferenceTick[] = [
+    {
+      logicalTick: 0,
+      eventKinds: eventKinds.slice(0, 3),
+      semantics: { ...emptySemantics, replayProjection: [] },
+    },
+    {
+      logicalTick: 1,
+      eventKinds: eventKinds.slice(3, 4),
+      semantics: { ...emptySemantics, replayProjection },
+    },
+    {
+      logicalTick: 2,
+      eventKinds: eventKinds.slice(4, 5),
+      semantics: {
+        ...emptySemantics,
+        dispatchChoices: [`${firstWorkstation(factory).name}:${input.name}`],
+        replayProjection,
+      },
+    },
+    {
+      logicalTick: 3,
+      eventKinds: eventKinds.slice(5),
+      semantics: {
+        ...emptySemantics,
+        consumedWork: [input.name],
+        outcomes: [outcome],
+        routes: [route],
+        terminalStates: [terminalState],
+        replayProjection,
+      },
+    },
+  ];
+  return {
+    schemaVersion: "factory-emulator-runtime-reference/v1",
+    id,
+    title,
+    provenance: {
+      kind: "public-documentation",
+      source:
+        "ui/packages/factory-emulator/README.md#long-lived-session-lifecycle (documented outcome routes and propagation)",
+    },
+    factory,
+    scenario,
+    ticks,
+    orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
+  };
+}
+
+function repeaterFixture(): FactoryEmulatorRuntimeReference {
+  const baseScenario = scenario("repeaters", repeater.name, "execute");
+  const [rule] = baseScenario.rules;
+  if (rule === undefined)
+    throw new Error("Frozen repeater reference needs a rule.");
+  const repeaterScenario: FactoryEmulatorScenario = {
+    ...baseScenario,
+    rules: [
+      {
+        ...rule,
+        outcomes: [
+          { result: "continued", durationMs: 1 },
+          { result: "accepted", durationMs: 1 },
+        ],
+      },
+    ],
+  };
+  const replayProjection = ["input:task:ready"];
+  const ticks: FactoryEmulatorRuntimeReferenceTick[] = [
+    {
+      logicalTick: 0,
+      eventKinds: eventKinds.slice(0, 3),
+      semantics: { ...emptySemantics, replayProjection: [] },
+    },
+    {
+      logicalTick: 1,
+      eventKinds: eventKinds.slice(3, 4),
+      semantics: { ...emptySemantics, replayProjection },
+    },
+    {
+      logicalTick: 2,
+      eventKinds: eventKinds.slice(4, 5),
+      semantics: {
+        ...emptySemantics,
+        dispatchChoices: ["execute:input"],
+        replayProjection,
+      },
+    },
+    {
+      logicalTick: 3,
+      eventKinds: eventKinds.slice(5),
+      semantics: {
+        ...emptySemantics,
+        consumedWork: ["input"],
+        outcomes: ["CONTINUE"],
+        routes: ['task:ready:"frozen input"'],
+        replayProjection,
+      },
+    },
+    {
+      logicalTick: 4,
+      eventKinds: eventKinds.slice(4, 5),
+      semantics: {
+        ...emptySemantics,
+        dispatchChoices: ["execute:input/execute/0"],
+        replayProjection,
+      },
+    },
+    {
+      logicalTick: 5,
+      eventKinds: eventKinds.slice(5),
+      semantics: {
+        ...emptySemantics,
+        consumedWork: ["input"],
+        outcomes: ["ACCEPTED"],
+        routes: ['task:done:"frozen input"'],
+        terminalStates: ["task:done"],
+        replayProjection,
+      },
+    },
+  ];
+  return {
+    schemaVersion: "factory-emulator-runtime-reference/v1",
+    id: "repeaters",
+    title: "Repeater continuation",
+    provenance: {
+      kind: "public-documentation",
+      source:
+        "ui/packages/factory-emulator/README.md#long-lived-session-lifecycle (documented continued outcome route)",
+    },
+    factory: repeater,
+    scenario: repeaterScenario,
     ticks,
     orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
   };
@@ -178,6 +330,18 @@ function standardFactory(
   };
 }
 
+function scenarioWithOutcome(
+  id: string,
+  factoryName: string,
+  workstation: string,
+  outcome: FactoryEmulatorScenario["rules"][number]["outcomes"][number],
+): FactoryEmulatorScenario {
+  const baseScenario = scenario(id, factoryName, workstation);
+  const [rule] = baseScenario.rules;
+  if (rule === undefined) throw new Error("Frozen reference needs a rule.");
+  return { ...baseScenario, rules: [{ ...rule, outcomes: [outcome] }] };
+}
+
 function concurrentFixture(
   id: string,
   title: string,
@@ -229,7 +393,9 @@ function concurrentFixture(
         ...emptySemantics,
         consumedWork: [...group].sort(),
         outcomes: group.map(() => "ACCEPTED"),
-        routes: group.map(() => "task:done"),
+        routes: group.map(
+          (name) => `task:done:${JSON.stringify(`${name} frozen input`)}`,
+        ),
         terminalStates: completed.map(() => "task:done"),
         replayProjection,
       },
@@ -328,7 +494,9 @@ function dependencyFixture(
         ...emptySemantics,
         consumedWork: ["prerequisite"],
         outcomes: [failed ? "FAILED" : "ACCEPTED"],
-        routes: [failed ? "task:failed" : "task:done"],
+        routes: [
+          `${failed ? "task:failed" : "task:done"}:${JSON.stringify("prerequisite")}`,
+        ],
         terminalStates: failed ? ["task:failed", "task:failed"] : ["task:done"],
         replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
       },
@@ -353,7 +521,7 @@ function dependencyFixture(
           ...emptySemantics,
           consumedWork: ["blocked"],
           outcomes: ["ACCEPTED"],
-          routes: ["task:done"],
+          routes: ['task:done:"blocked"'],
           terminalStates: ["task:done", "task:done"],
           replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
         },
@@ -419,13 +587,98 @@ if (logicalMoveWorkstations === undefined) {
   throw new Error("Frozen logical-move reference requires a workstation.");
 }
 logicalMoveWorkstations[0] = {
+  name: "execute",
+  type: "AGENT_RUN",
+  worker: "worker",
+  inputs: [{ workType: "task", state: "ready" }],
+  outputs: [{ workType: "task", state: "ready" }],
+};
+logicalMoveWorkstations.push({
   name: "move",
   type: "LOGICAL_MOVE",
   worker: "",
   inputs: [{ workType: "task", state: "ready" }],
   outputs: [{ workType: "task", state: "done" }],
-  guards: [{ type: "VISIT_COUNT", workstation: "move", maxVisits: 1 }],
-};
+  guards: [{ type: "VISIT_COUNT", workstation: "execute", maxVisits: 1 }],
+  workPropagation: { mode: "PRESERVE_INPUT" },
+});
+
+function logicalMoveFixture(): FactoryEmulatorRuntimeReference {
+  const baseScenario = scenario("logical-moves", logicalMove.name, "execute");
+  const [rule] = baseScenario.rules;
+  if (rule === undefined)
+    throw new Error("Frozen logical-move reference needs a rule.");
+  const logicalScenario: FactoryEmulatorScenario = {
+    ...baseScenario,
+    rules: [
+      {
+        ...rule,
+        outcomes: [
+          { result: "accepted", durationMs: 1, output: "worker output" },
+        ],
+      },
+    ],
+  };
+  const replayProjection = ["input:task:ready"];
+  const ticks: FactoryEmulatorRuntimeReferenceTick[] = [
+    {
+      logicalTick: 0,
+      eventKinds: eventKinds.slice(0, 3),
+      semantics: { ...emptySemantics, replayProjection: [] },
+    },
+    {
+      logicalTick: 1,
+      eventKinds: eventKinds.slice(3, 4),
+      semantics: { ...emptySemantics, replayProjection },
+    },
+    {
+      logicalTick: 2,
+      eventKinds: eventKinds.slice(4, 5),
+      semantics: {
+        ...emptySemantics,
+        dispatchChoices: ["execute:input"],
+        replayProjection,
+      },
+    },
+    {
+      logicalTick: 3,
+      eventKinds: eventKinds.slice(5),
+      semantics: {
+        ...emptySemantics,
+        consumedWork: ["input"],
+        outcomes: ["ACCEPTED"],
+        routes: ['task:ready:"worker output"'],
+        replayProjection,
+      },
+    },
+    {
+      logicalTick: 4,
+      eventKinds: ["DISPATCH_RESPONSE"],
+      semantics: {
+        ...emptySemantics,
+        consumedWork: ["input"],
+        outcomes: ["ACCEPTED"],
+        routes: ['task:done:"worker output"'],
+        terminalStates: ["task:done"],
+        replayProjection,
+      },
+    },
+  ];
+  return {
+    schemaVersion: "factory-emulator-runtime-reference/v1",
+    id: "logical-moves",
+    title: "Logical move",
+    provenance: {
+      kind: "public-documentation",
+      source:
+        "ui/packages/factory-emulator/README.md#long-lived-session-lifecycle (documented eligible LOGICAL_MOVE route)",
+    },
+    factory: logicalMove,
+    scenario: logicalScenario,
+    ticks,
+    orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
+  };
+}
 const parallel = cloneFactory(standardFactory("runtime-reference-parallel"));
 const contention = cloneFactory(
   standardFactory("runtime-reference-resource-contention"),
@@ -441,35 +694,38 @@ export const runtimeReferenceFixtures = [
     basic,
     scenario("basic-execution", basic.name, "execute"),
   ),
-  fixture(
-    "repeaters",
-    "Repeater continuation",
-    repeater,
-    scenario("repeaters", repeater.name, "execute"),
-  ),
-  fixture(
+  repeaterFixture(),
+  singleOutcomeFixture(
     "routing",
     "Outcome routing",
     routing,
-    scenario("routing", routing.name, "execute"),
+    scenarioWithOutcome("routing", routing.name, "execute", {
+      result: "rejected",
+      durationMs: 1,
+    }),
+    "REJECTED",
+    'task:failed:"frozen input"',
+    "task:failed",
   ),
-  fixture(
-    "logical-moves",
-    "Logical move",
-    logicalMove,
-    scenario("logical-moves", logicalMove.name, "move"),
-  ),
+  logicalMoveFixture(),
   fixture(
     "multi-input-output",
     "Multi-input and multi-output",
     multiInputOutput,
     multiInputOutputScenario,
   ),
-  fixture(
+  singleOutcomeFixture(
     "propagation",
     "Work propagation",
     propagation,
-    scenario("propagation", propagation.name, "execute"),
+    scenarioWithOutcome("propagation", propagation.name, "execute", {
+      result: "accepted",
+      durationMs: 1,
+      output: "worker output",
+    }),
+    "ACCEPTED",
+    'task:done:"frozen input"',
+    "task:done",
   ),
   concurrentFixture(
     "parallel-dispatch",

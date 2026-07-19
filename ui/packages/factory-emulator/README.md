@@ -279,10 +279,16 @@ completion cases. Their frozen ticks preserve the selected Work, consumed Work,
 completion outcomes, terminal routes, and replay projection so capacity and
 same-deadline behavior remain reproducible between runs.
 
+Each fixture records its specific public documentation provenance. In particular,
+the repeater fixture observes a `CONTINUE` route, the routing fixture observes a
+`REJECTED` route, the propagation fixture compares the routed payload under
+`PRESERVE_INPUT`, and the logical-move fixture first makes its `VISIT_COUNT`
+guard eligible before recording the workerless move's synchronous route.
+
 `compareFactoryEmulatorRuntimeReference(reference)` runs a reference through a
 fresh deterministic session and compares each logical tick independently. It
 compares ordered event kinds plus normalized dispatch choices, consumed Work,
-outcomes, routes, terminal states, and submission replay projection. Event
+outcomes, routes (including routed payload), terminal states, and submission replay projection. Event
 identities and virtual timestamps are deliberately excluded; all other compared
 values are semantic evidence. A mismatch returns the fixture ID, first divergent
 logical tick, comparison surface, expected value, and actual value.
