@@ -938,6 +938,177 @@ function dependencyFailureHarness(): FactoryEmulatorSession {
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: These boundary regressions keep the atomic start and logical-tick assertions together.
+describe("Factory emulator dependency failure closure boundaries", () => {
+  it("cascades an initially failed dependency in the atomic start batch and retries exactly", async () => {
+    const attempts: FactoryEvent[][] = [];
+    let rejectStart = true;
+    const emulator = createFactoryEmulatorSession({
+      factory: dependencyFactory,
+      scenario: dependencyScenario({
+        works: [
+          { name: "root", workType: "task", state: "failed" },
+          { name: "dependent", workType: "task", state: "ready" },
+          { name: "terminal", workType: "task", state: "complete" },
+          { name: "unrelated", workType: "task", state: "ready" },
+        ],
+        relations: [
+          {
+            type: "DEPENDS_ON",
+            sourceWorkName: "dependent",
+            targetWorkName: "root",
+          },
+          {
+            type: "DEPENDS_ON",
+            sourceWorkName: "terminal",
+            targetWorkName: "root",
+          },
+        ],
+      }),
+      sink: {
+        write: async (events) => {
+          attempts.push(structuredClone(events) as FactoryEvent[]);
+          if (rejectStart) {
+            rejectStart = false;
+            throw new Error("initial cascade write rejected");
+          }
+        },
+      },
+    });
+
+    await expect(emulator.start()).rejects.toThrow(
+      "initial cascade write rejected",
+    );
+    expect(emulator.state()).toMatchObject({
+      lifecycle: "pre-start",
+      counters: { events: 0 },
+    });
+
+    const started = await emulator.start();
+    const cascadeEvents = started.batches[1]?.filter(
+      ({ type }) => type === "WORK_STATE_CHANGE",
+    );
+    expect(attempts).toEqual([started.batches.flat(), started.batches.flat()]);
+    expect(cascadeEvents).toHaveLength(1);
+    expect(cascadeEvents?.[0]).toMatchObject({
+      context: { tick: 1 },
+      payload: {
+        source: "cascading-failure",
+        fromState: "ready",
+        toState: "failed",
+      },
+    });
+    expect(
+      started.state.works.map(({ submissionId, state, phase }) => ({
+        submissionId,
+        state,
+        phase,
+      })),
+    ).toEqual([
+      { submissionId: "root", state: "failed", phase: "ready" },
+      { submissionId: "dependent", state: "failed", phase: "completed" },
+      { submissionId: "terminal", state: "complete", phase: "ready" },
+      { submissionId: "unrelated", state: "ready", phase: "ready" },
+    ]);
+  });
+
+  it("cascades a logical-move failure before any dependent can dispatch", async () => {
+    const logicalFailureFactory = {
+      ...dependencyFactory,
+      workstations: [
+        {
+          name: "a-fail-logically",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "failed" }],
+          guards: [
+            {
+              type: "VISIT_COUNT",
+              workstation: "complete-task-a",
+              maxVisits: 1,
+            },
+          ],
+        },
+        ...dependencyFactory.workstations.map((workstation) => ({
+          ...workstation,
+          outputs: [{ workType: "task", state: "ready" }],
+        })),
+      ],
+    } satisfies FactoryDefinition;
+    const emulator = createFactoryEmulatorSession({
+      factory: logicalFailureFactory,
+      scenario: {
+        ...dependencyScenario({
+          works: [
+            { name: "root", workType: "task", state: "ready" },
+            { name: "dependent", workType: "task", state: "ready" },
+          ],
+          relations: [
+            {
+              type: "DEPENDS_ON",
+              sourceWorkName: "dependent",
+              targetWorkName: "root",
+            },
+          ],
+        }),
+        id: "logical-failure-scenario",
+        factory: { name: logicalFailureFactory.name },
+        seed: "logical-failure-seed",
+      },
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    await emulator.advanceToNext();
+    await emulator.advanceToNext();
+    const advanced = await emulator.advanceToNext();
+
+    expect(advanced.batches).toHaveLength(1);
+    expect(advanced.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_RESPONSE",
+      "WORK_STATE_CHANGE",
+    ]);
+    expect(advanced.batches[0]?.[0]).toMatchObject({
+      payload: { outputWork: [{ state: { name: "failed" } }] },
+    });
+    expect(advanced.batches[0]?.[1]).toMatchObject({
+      context: { tick: 3 },
+      payload: {
+        source: "cascading-failure",
+        fromState: "ready",
+        toState: "failed",
+      },
+    });
+    expect(
+      advanced.batches[0]?.some(
+        ({ type, context }) =>
+          type === "DISPATCH_REQUEST" &&
+          context.workIds?.some((workId) =>
+            advanced.state.works.some(
+              (work) =>
+                work.workId === workId && work.submissionId === "dependent",
+            ),
+          ),
+      ),
+    ).toBe(false);
+    expect(
+      advanced.state.works
+        .filter(({ submissionId }) =>
+          ["root", "dependent"].includes(submissionId),
+        )
+        .map(({ submissionId, state, phase }) => ({
+          submissionId,
+          state,
+          phase,
+        })),
+    ).toEqual([
+      { submissionId: "root", state: "ready", phase: "completed" },
+      { submissionId: "dependent", state: "failed", phase: "completed" },
+    ]);
+  });
+});
+
 describe("Factory emulator dependency failure cascade", () => {
   it("fails every non-terminal transitive dependent once in the completion tick", async () => {
     const emulator = dependencyFailureHarness();

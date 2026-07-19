@@ -1117,6 +1117,16 @@ function replaceInputPhases(
   }
 }
 
+function worksAtIndexes(
+  works: readonly FactoryEmulatorSessionWork[],
+  indexes: readonly number[],
+): FactoryEmulatorSessionWork[] {
+  return indexes.flatMap((index) => {
+    const work = works[index];
+    return work === undefined ? [] : [work];
+  });
+}
+
 function workerDispatchRequestEvent(
   state: StartedState,
   inputs: readonly FactoryEmulatorSessionWork[],
@@ -1528,12 +1538,18 @@ export function createFactoryEmulatorSession(
           initial,
           "start",
         );
-        const submissionBatch = calculation.events;
+        const cascade = cascadeDependencyFailures(
+          configuration,
+          { ...candidate, works: calculation.works },
+          candidate.virtualTime,
+          candidate.counters.events + calculation.events.length,
+        );
+        const submissionBatch = [...calculation.events, ...cascade.events];
         batches.push(submissionBatch);
         combined = [...bootstrap, ...submissionBatch];
         candidate = {
           ...candidate,
-          works: calculation.works,
+          works: cascade.works,
           counters: { ...candidate.counters, events: combined.length },
         };
       }
@@ -1584,10 +1600,16 @@ export function createFactoryEmulatorSession(
         submissions,
         "submit",
       );
-      const batch = calculation.events;
+      const cascade = cascadeDependencyFailures(
+        configuration,
+        { ...state, works: [...state.works, ...calculation.works] },
+        state.virtualTime,
+        state.counters.events + calculation.events.length,
+      );
+      const batch = [...calculation.events, ...cascade.events];
       const candidate: StartedState = {
         ...state,
-        works: [...state.works, ...calculation.works],
+        works: cascade.works,
         counters: {
           ...state.counters,
           commands: state.counters.commands + 1,
@@ -1599,6 +1621,21 @@ export function createFactoryEmulatorSession(
     } finally {
       commandInFlight = undefined;
     }
+  };
+
+  const cascadeLogicalMoveFailures = (
+    state: StartedState,
+    replacements: FactoryEmulatorSessionWork[],
+    events: FactoryEvent[],
+  ): void => {
+    const cascade = cascadeDependencyFailures(
+      configuration,
+      { ...state, works: replacements },
+      virtualTimeAt(configuration.scenario, state.virtualElapsedMs),
+      state.counters.events + events.length,
+    );
+    replacements.splice(0, replacements.length, ...cascade.works);
+    events.push(...cascade.events);
   };
 
   const dispatchCalculation = (
@@ -1620,14 +1657,12 @@ export function createFactoryEmulatorSession(
       availableResourcesFor(configuration, state),
     )) {
       const { indexes, execution, invocation, cursorKey } = value;
-      const works = indexes.flatMap((index) => {
-        const work = state.works[index];
-        return work === undefined ? [] : [work];
-      });
+      const works = worksAtIndexes(replacements, indexes);
       const work = works[0];
       if (
         work === undefined ||
         works.length !== indexes.length ||
+        works.some(({ phase }) => phase !== "ready") ||
         execution.workstation === undefined ||
         execution.outcome === undefined
       )
@@ -1660,6 +1695,7 @@ export function createFactoryEmulatorSession(
         replaceInputPhases(replacements, state, indexes, "completed");
         replacements.push(...calculation.routedWorks);
         events.push(calculation.event);
+        cascadeLogicalMoveFailures(state, replacements, events);
         continue;
       }
       replaceInputPhases(replacements, state, indexes, "active");
@@ -1694,7 +1730,11 @@ export function createFactoryEmulatorSession(
       );
     }
     for (const [index, work] of state.works.entries()) {
-      if (work.phase === "ready" && !executableWork.has(index)) {
+      if (
+        work.phase === "ready" &&
+        replacements[index]?.phase === "ready" &&
+        !executableWork.has(index)
+      ) {
         replacements[index] = { ...work, phase: "waiting" };
       }
     }
