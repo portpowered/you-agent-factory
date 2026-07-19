@@ -11,7 +11,6 @@ import type { ReadFactoryImportFile } from "../../../import/hooks/use-factory-pn
 import { createFactoryImportConfirmInput } from "../../../import/lib/factory-import-confirm-input.test-helpers";
 import type { FactoryImportConfirmInput } from "../../../import/lib/factory-import-save-choice";
 import type { FactoryPngImportValue } from "../../../import/lib/factory-png-import";
-import { getDashboardFlowAxisLegendMessages } from "../../messages/dashboard-flow-axis-legend";
 import {
   createFactoryImportValue,
   createFileDropTransfer,
@@ -25,7 +24,6 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
   registerCurrentActivityCardTestLifecycle();
 
   it("scopes file drag-over and drop handling to the graph viewport and opens a preview", async () => {
-    const legendMessages = getDashboardFlowAxisLegendMessages("en");
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const importValue = createFactoryImportValue();
     const onFactoryImportReady =
@@ -46,11 +44,9 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
     });
-    const legendToggle = screen.getByRole("button", {
-      name: legendMessages.expandToggleLabel("graph legend"),
-    });
+    const editModeButton = screen.getByRole("button", { name: "Edit mode" });
 
-    fireEvent.dragOver(legendToggle, createFileDropTransfer([file]));
+    fireEvent.dragOver(editModeButton, createFileDropTransfer([file]));
 
     expect(viewport.getAttribute("data-current-activity-drop-state")).toBe(
       "idle",
@@ -106,7 +102,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     });
     expect(importValue.revokePreviewImageSrc).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: "Select Review workstation" }),
+      screen.getByRole("region", { name: "Factory topology" }),
     ).toBeTruthy();
   });
 
@@ -173,19 +169,11 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
   });
 
   it("preserves the lean outer card shell while keeping the current activity region semantics", () => {
-    const legendMessages = getDashboardFlowAxisLegendMessages("en");
-
     renderCurrentActivity({
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
     const card = screen.getByLabelText("Current activity");
-    const legendToggle = screen.getByRole("button", {
-      name: legendMessages.expandToggleLabel("graph legend"),
-    });
-    const legend = legendToggle.closest(
-      "[data-dashboard-flow-axis-legend]",
-    ) as HTMLElement | null;
     const viewport = screen.getByRole("region", {
       name: "Work graph viewport",
     });
@@ -203,23 +191,14 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.queryByText("Observe")).toBeNull();
-    expect(legend?.className).toContain("absolute");
-    expect(legend?.className).toContain("left-4");
-    expect(legend?.className).toContain("right-4");
-    expect(legend?.className).toContain("top-4");
-    expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.className).toContain("h-full");
-    expect(viewport.className).toContain("min-h-96");
-    expect(viewport.className).not.toContain("max-h-full");
+    expect(screen.getByText("Observe")).toBeTruthy();
+    expect(viewport.className).toContain("relative");
+    expect(viewport.className).toContain("min-h-0");
     expect(viewport.className).toContain("overflow-hidden");
-    expect(viewport.style.height).toBe("100%");
-    expect(viewport.style.maxHeight).toBe("100%");
-    expect(viewport.style.overflow).toBe("hidden");
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
-    expect(viewport.getAttribute("aria-describedby")).toMatch(
-      /^workflow-graph-heading-/,
-    );
+    expect(
+      within(viewport).getByRole("region", { name: "Factory topology" }),
+    ).toBeTruthy();
   });
 
   it("renders a clear local alert when dropped PNG validation fails", async () => {
@@ -266,7 +245,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
       "error",
     );
     expect(
-      await screen.findByRole("button", { name: "Select Review workstation" }),
+      screen.getByRole("region", { name: "Factory topology" }),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));

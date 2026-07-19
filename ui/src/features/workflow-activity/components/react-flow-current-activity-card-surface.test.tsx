@@ -322,6 +322,14 @@ function createGraphStub() {
   };
 }
 
+const importControllerStub = {
+  dropState: { status: "idle" },
+  onDragEnter: vi.fn(),
+  onDragLeave: vi.fn(),
+  onDragOver: vi.fn(),
+  onDrop: vi.fn(),
+} as never;
+
 function createViewModelStub(overrides: Record<string, unknown> = {}) {
   return {
     ...createEditorStub(overrides),
@@ -335,7 +343,7 @@ describe("CurrentActivityGraphSurface", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={createViewModelStub({ editorMode: false }) as never}
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -349,7 +357,7 @@ describe("CurrentActivityGraphSurface", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={createViewModelStub({ editorMode: false }) as never}
-        imports={{} as never}
+        imports={importControllerStub}
         selection={{ kind: "state-node", placeId: "story:queued" }}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -370,7 +378,7 @@ describe("CurrentActivityGraphSurface", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={createViewModelStub({ editorMode: false }) as never}
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={snapshot}
       />,
@@ -384,7 +392,7 @@ describe("CurrentActivityGraphSurface", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={createViewModelStub({ editorMode: false }) as never}
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -407,7 +415,7 @@ describe("CurrentActivityGraphSurface", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={viewModel as never}
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -520,7 +528,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -572,7 +580,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={{ kind: "node", nodeId: "review" }}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -610,7 +618,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -656,7 +664,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={{ kind: "node", nodeId: "work-type:story" }}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -700,7 +708,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={{ kind: "state-node", placeId: "story:queued" }}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -756,7 +764,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={{ kind: "node", nodeId: "workstation:process" }}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,
@@ -788,7 +796,7 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        imports={{} as never}
+        imports={importControllerStub}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
       />,

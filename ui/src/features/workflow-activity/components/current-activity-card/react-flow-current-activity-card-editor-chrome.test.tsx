@@ -21,36 +21,30 @@ import { useFactoryGraphDraftState } from "../../../factory-graph-editor/hooks/f
 import { useEditableFactoryGraph } from "../../../factory-graph-editor/hooks/use-editable-factory-graph";
 import { removeFactoryGraphNode } from "../../../factory-graph-editor/lib/operations/factory-graph-operations";
 import {
-  currentFactoryDocumentFromSnapshot,
   dashboardSnapshotWithActiveWorkItemCount,
   dashboardSnapshotWithEditableFactory,
   defaultDraftState,
-  refreshFactoryFromTopology,
   registerCurrentActivityCardTestLifecycle,
   renderCurrentActivity,
   workerDenseSnapshot,
 } from "./test-support/react-flow-current-activity-card-component.harness";
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editor chrome scenarios share one current deployment harness seam.
 describe("ReactFlowCurrentActivityCard editor chrome", () => {
   registerCurrentActivityCardTestLifecycle();
 
-  it("keeps editor controls unavailable until the graph editor mode is enabled", async () => {
+  it("uses the shared observer renderer until graph editor mode is enabled", () => {
     renderCurrentActivity({
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
     expect(screen.getByRole("button", { name: "Edit mode" })).toBeTruthy();
-    const toolbar = screen.getByRole("region", {
-      name: "Factory graph editor tools",
-    });
     expect(
-      within(toolbar).getByRole("button", {
-        name: "Show or hide",
-      }),
+      screen.getByRole("region", { name: "Factory topology" }),
     ).toBeTruthy();
-    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
-    expect(screen.queryByText("Observe")).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Factory graph editor tools" }),
+    ).toBeNull();
+    expect(screen.getByText("Observe")).toBeTruthy();
   });
 
   it("shows the add and delete toolbar in editor mode", async () => {
@@ -110,20 +104,13 @@ describe("ReactFlowCurrentActivityCard editor chrome", () => {
     });
     expect(unavailableEditorButton.getAttribute("disabled")).not.toBeNull();
     expect(
-      screen.queryByText(
+      screen.getByText(
         'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
       ),
-    ).toBeNull();
-
-    const toolbar = screen.getByRole("region", {
-      name: "Factory graph editor tools",
-    });
-    expect(
-      within(toolbar).getByRole("button", {
-        name: "Show or hide",
-      }),
     ).toBeTruthy();
-    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Factory graph editor tools" }),
+    ).toBeNull();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
 
@@ -287,248 +274,6 @@ describe("ReactFlowCurrentActivityCard editor chrome", () => {
     ]);
   }, 30_000);
 
-  it("keeps editor mode on the shared observer graph surface", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: baseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
-      ...defaultDraftState,
-      graph: {
-        edges: [],
-        nodes: [
-          {
-            id: "worker:writer",
-            key: { kind: "worker", name: "writer" },
-            kind: "worker",
-            label: "writer",
-          },
-          {
-            id: "workstation:review",
-            key: { kind: "workstation", name: "review" },
-            kind: "workstation",
-            label: "review",
-          },
-        ],
-      },
-      hasChanges: true,
-      draft: {
-        ...defaultDraftState.draft,
-        additions: {
-          ...defaultDraftState.draft.additions,
-          workstations: [
-            {
-              inputs: [],
-              name: "review",
-              outputs: [],
-              type: "MODEL_WORKSTATION",
-              worker: "writer",
-            },
-          ],
-        },
-      },
-    } as never);
-
-    renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-
-    await waitFor(() => {
-      expect(
-        document.querySelector(
-          '[data-current-activity-node-type="workstation"]',
-        ),
-      ).toBeTruthy();
-    });
-    expect(screen.queryByText("Pending")).toBeNull();
-  });
-
-  it("renders worker and resource nodes from the canonical snapshot factory in observer mode", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: workerDenseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
-      ...defaultDraftState,
-      latestDocument: workerDenseFactoryDefinitionDocument,
-      pendingFactoryDefinition: workerDenseFactoryDefinitionDocument,
-    } as never);
-    const snapshot = workerDenseSnapshot();
-    snapshot.factory = workerDenseFactoryDefinitionDocument;
-
-    renderCurrentActivity({
-      snapshot,
-    });
-
-    await waitFor(() => {
-      expect(
-        document.querySelector(
-          '[data-current-activity-node-type="workstation"]',
-        ),
-      ).toBeTruthy();
-    });
-
-    await waitFor(() => {
-      expect(document.querySelector('[data-id="worker:writer"]')).toBeTruthy();
-      expect(
-        document.querySelector('[data-id="worker:reviewer"]'),
-      ).toBeTruthy();
-      expect(document.querySelector('[data-id="worker:stalled"]')).toBeTruthy();
-      expect(document.querySelector('[data-id="resource:gpu"]')).toBeTruthy();
-    });
-  });
-
-  it("renders event snapshot workstations in observe mode while the factory document is pending", async () => {
-    const snapshot = buildDivergentPlaneDashboardSnapshot();
-    if (snapshot.factory) {
-      snapshot.factory.workstations = snapshot.factory.workstations?.filter(
-        (workstation) => workstation.name !== "Document Only",
-      );
-    }
-    wireMockEditableFactoryGraph(
-      {
-        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
-        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
-      },
-      createMockGraphEditorDraftState({
-        baseDocument: null,
-        latestDocument: null,
-        pendingFactoryDefinition: null,
-      }),
-    );
-
-    renderCurrentActivity({
-      currentFactoryDocument: null,
-      currentFactoryDocumentStatus: "pending",
-      snapshot,
-    });
-
-    expect(
-      await screen.findByRole("region", { name: "Work graph viewport" }),
-    ).toBeTruthy();
-    expect(
-      await screen.findByRole("button", {
-        name: "Select Snapshot Only workstation",
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", {
-        name: "Select Document Only workstation",
-      }),
-    ).toBeNull();
-  });
-
-  it("renders nested bundled docs as observe-mode graph nodes from the saved factory document", async () => {
-    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-    refreshFactoryFromTopology(snapshot);
-    const nestedDocPath = "factory/docs/standards/review.md";
-    const savedDocument = {
-      ...currentFactoryDocumentFromSnapshot(snapshot),
-      supportingFiles: {
-        bundledFiles: [
-          {
-            content: { encoding: "utf-8", inline: "# Overview" },
-            targetPath: "factory/docs/overview.md",
-            type: "DOC",
-          },
-          {
-            content: { encoding: "utf-8", inline: "# Review standards" },
-            targetPath: nestedDocPath,
-            type: "DOC",
-          },
-        ],
-      },
-    };
-    snapshot.factory = savedDocument;
-
-    renderCurrentActivity({
-      snapshot,
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Select review.md doc" }),
-      ).toBeTruthy();
-    });
-    expect(screen.getByText(nestedDocPath)).toBeTruthy();
-  });
-
-  it("renders bundled docs as observe-mode graph nodes from the saved factory document", async () => {
-    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-    refreshFactoryFromTopology(snapshot);
-    const savedDocument = {
-      ...currentFactoryDocumentFromSnapshot(snapshot),
-      supportingFiles: {
-        bundledFiles: [
-          {
-            content: { encoding: "utf-8", inline: "# Overview" },
-            targetPath: "factory/docs/overview.md",
-            type: "DOC",
-          },
-          {
-            content: { encoding: "utf-8", inline: "# Planning" },
-            targetPath: "factory/docs/planning.md",
-            type: "DOC",
-          },
-        ],
-      },
-    };
-    snapshot.factory = savedDocument;
-
-    renderCurrentActivity({
-      snapshot,
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Select overview.md doc" }),
-      ).toBeTruthy();
-    });
-    expect(
-      screen.getByRole("button", { name: "Select planning.md doc" }),
-    ).toBeTruthy();
-  });
-
-  it("renders event snapshot workstations in observe mode when the document plane diverges from the snapshot", async () => {
-    const snapshot = buildDivergentPlaneDashboardSnapshot();
-    if (snapshot.factory) {
-      snapshot.factory.workstations = snapshot.factory.workstations?.filter(
-        (workstation) => workstation.name !== "Document Only",
-      );
-    }
-    wireMockEditableFactoryGraph(
-      {
-        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
-        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
-      },
-      createMockGraphEditorDraftState({
-        baseDocument: divergentDocumentPlaneFactoryDocument,
-        latestDocument: divergentDocumentPlaneFactoryDocument,
-        pendingFactoryDefinition: divergentDocumentPlaneFactoryDocument,
-      }),
-    );
-
-    renderCurrentActivity({
-      currentFactoryDocument: divergentDocumentPlaneFactoryDocument,
-      snapshot,
-    });
-
-    expect(
-      await screen.findByRole("button", {
-        name: "Select Snapshot Only workstation",
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", {
-        name: "Select Document Only workstation",
-      }),
-    ).toBeNull();
-  });
-
   it("renders document-only workstations in edit mode when the snapshot plane diverges", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
     wireMockEditableFactoryGraph(
@@ -621,86 +366,15 @@ describe("ReactFlowCurrentActivityCard editor chrome", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
-    await waitFor(() => {
-      expect(
-        document.querySelector(
-          '[data-current-activity-node-type="workstation"]',
-        ),
-      ).toBeTruthy();
-    });
+    expect(
+      await screen.findByRole("region", {
+        name: "Factory graph editor tools",
+      }),
+    ).toBeTruthy();
 
     expect(screen.queryByRole("button", { name: "Infrastructure" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Workflow" })).toBeNull();
     expect(screen.queryByRole("button", { name: "All" })).toBeNull();
-  });
-
-  it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {
-    const snapshot = semanticWorkflowDashboardSnapshot;
-    const document = currentFactoryDocumentFromSnapshot(snapshot);
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: document,
-      error: null,
-      status: "success",
-    } as never);
-    wireMockEditableFactoryGraph(
-      {
-        useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
-        useFactoryGraphDraftState: vi.mocked(useFactoryGraphDraftState),
-      },
-      createMockGraphEditorDraftState({
-        baseDocument: document,
-        latestDocument: document,
-        pendingFactoryDefinition: document,
-      }),
-    );
-
-    renderCurrentActivity({
-      snapshot,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-
-    expect(
-      await screen.findAllByLabelText(
-        "Route successful output from this workstation.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText(
-        "Accept an input work state for this workstation.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText(
-        "Route this work state into a workstation input.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText(
-        "Receive workstation output into this work state.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText(
-        "Route successful output from this workstation.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText("Assign this worker to a workstation."),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText(
-        "Accept a worker assignment for this workstation.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText(
-        "Accept a resource requirement for this workstation.",
-      ),
-    ).not.toHaveLength(0);
-    expect(
-      screen.getAllByLabelText("Provide this resource to a workstation."),
-    ).not.toHaveLength(0);
   });
 
   it("removes a workstation without opening a confirmation", () => {
@@ -715,73 +389,6 @@ describe("ReactFlowCurrentActivityCard editor chrome", () => {
       return;
     }
     expect(result.value.removals.workstations).toEqual(["review"]);
-  });
-
-  it("keeps worker nodes visible but not workstation-style deletion targets", async () => {
-    renderCurrentActivity({
-      snapshot: dashboardSnapshotWithEditableFactory(),
-    });
-
-    expect(
-      await screen.findByRole("button", {
-        name: "Select writer worker",
-      }),
-    ).toBeTruthy();
-    expect(await screen.findByLabelText("worker:writer")).toBeTruthy();
-    expect(
-      await screen.findByRole("button", {
-        name: /Select .* workstation/,
-      }),
-    ).toBeTruthy();
-
-    const removeWorker = removeFactoryGraphNode({
-      baseFactoryDefinition: baseFactoryDefinitionDocument,
-      draft: defaultDraftState.draft,
-      nodeId: "worker:writer",
-    });
-    expect(removeWorker).toMatchObject({
-      ok: false,
-      reason: "BLOCKED_REMOVAL",
-    });
-  });
-
-  it("keeps removed server-backed workstations visible with a pending-removal badge", async () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: baseFactoryDefinitionDocument,
-      error: null,
-      status: "success",
-    } as never);
-    vi.mocked(useFactoryGraphDraftState).mockReturnValue({
-      ...defaultDraftState,
-      draft: {
-        ...defaultDraftState.draft,
-        removals: {
-          ...defaultDraftState.draft.removals,
-          workstations: ["review"],
-        },
-      },
-      graph: {
-        edges: [],
-        nodes: [],
-      },
-      hasChanges: true,
-    } as never);
-
-    renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-
-    expect(
-      await screen.findByRole("button", {
-        name: "Select Review workstation",
-      }),
-    ).toBeTruthy();
-    const toggle = screen.getByRole("button", {
-      name: "Leave editor",
-    });
-    expect(toggle.className).toContain("border-af-warning-border");
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {

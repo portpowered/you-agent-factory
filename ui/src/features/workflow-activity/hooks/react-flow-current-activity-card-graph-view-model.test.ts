@@ -6,13 +6,11 @@ import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-
 import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
-  buildDivergentPlaneDashboardSnapshot,
   createMockGraphEditorDraftState,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
-import { sessionFactoryDocumentFromSnapshot } from "../../../testing/session-factory-mocks";
-import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-graph-view-model";
 
@@ -41,63 +39,8 @@ function createEditorStub(
   } as Parameters<typeof currentActivityCardFactoryDefinition>[0];
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this suite keeps the factory selection contract cases together.
 describe("currentActivityCardFactoryDefinition", () => {
-  it("returns the timeline snapshot in observe mode while the scoped factory document is pending", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
-
-    expect(
-      currentActivityCardFactoryDefinition(
-        createEditorStub({
-          editableFactoryDocumentStatus: "pending",
-          editorMode: false,
-        }),
-        snapshot,
-      ),
-    ).toEqual(snapshot.factory);
-  });
-
-  it("returns the event-computed snapshot factory in observe mode while shared draft state has a saved document", () => {
-    const savedDocument = {
-      ...baseFactoryDefinitionDocument,
-      layout: {
-        nodes: [
-          {
-            id: "workstation:draft",
-            position: { x: 540, y: 260 },
-          },
-        ],
-        schemaVersion: 1 as const,
-        viewport: { x: 14, y: 18, zoom: 1.2 },
-      },
-    };
-    const snapshot = {
-      ...structuredClone(singleNodeDashboardSnapshot),
-      factory: {
-        ...savedDocument,
-        layout: undefined,
-      },
-    };
-
-    expect(
-      currentActivityCardFactoryDefinition(
-        createEditorStub({
-          draftState: createMockGraphEditorDraftState({
-            baseDocument: savedDocument,
-            latestDocument: savedDocument,
-          }),
-          editableFactoryDocument: undefined,
-          editableFactoryDocumentStatus: "pending",
-          editorMode: false,
-        }),
-        snapshot,
-      ),
-    ).toEqual(snapshot.factory);
-  });
-
-  it("returns the event-computed snapshot factory in observe mode once the scoped factory document succeeds", () => {
-    const snapshot = buildDivergentPlaneDashboardSnapshot();
-
+  it("does not expose the retired app-local projection in observe mode", () => {
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
@@ -105,27 +48,22 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "success",
           editorMode: false,
         }),
-        snapshot,
       ),
-    ).toEqual(snapshot.factory);
+    ).toBeNull();
   });
 
   it("returns null in editor mode while the scoped factory document is pending", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
-
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
           editableFactoryDocumentStatus: "pending",
           editorMode: true,
         }),
-        snapshot,
       ),
     ).toBeNull();
   });
 
   it("returns the pending document definition in editor mode after the document succeeds", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
     const draftState = createMockGraphEditorDraftState({
       latestDocument: baseFactoryDefinitionDocument,
       pendingFactoryDefinition: baseFactoryDefinitionDocument,
@@ -138,13 +76,11 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "success",
           editorMode: true,
         }),
-        snapshot,
       ),
     ).toEqual(baseFactoryDefinitionDocument);
   });
 
   it("keeps the pending draft definition in editor mode when a topology save updates the saved document", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
     const pendingDraft = {
       ...baseFactoryDefinitionDocument,
       workers: [
@@ -189,78 +125,8 @@ describe("currentActivityCardFactoryDefinition", () => {
           editableFactoryDocumentStatus: "success",
           editorMode: true,
         }),
-        snapshot,
       ),
     ).toEqual(pendingDraft);
-  });
-});
-
-describe("currentActivityCardFactoryDefinition bundled docs", () => {
-  it("keeps bundled docs from the saved document when observe mode prefers the timeline snapshot", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
-    const savedDocument = {
-      ...sessionFactoryDocumentFromSnapshot(snapshot),
-      supportingFiles: {
-        bundledFiles: [
-          {
-            content: { encoding: "utf-8", inline: "# Overview" },
-            targetPath: "factory/docs/overview.md",
-            type: "DOC",
-          },
-        ],
-      },
-    };
-
-    expect(
-      currentActivityCardFactoryDefinition(
-        createEditorStub({
-          editableFactoryDocument: savedDocument,
-          editableFactoryDocumentStatus: "success",
-          editorMode: false,
-        }),
-        snapshot,
-      ),
-    ).toMatchObject({
-      supportingFiles: savedDocument.supportingFiles,
-      workstations: snapshot.factory?.workstations,
-    });
-  });
-
-  it("keeps snapshot layout in observe mode when the saved document omits it", () => {
-    const snapshot = structuredClone(singleNodeDashboardSnapshot);
-    if (!snapshot.factory) {
-      throw new Error("expected snapshot factory fixture");
-    }
-
-    snapshot.factory.layout = {
-      nodes: [
-        {
-          id: "workstation:draft",
-          position: { x: 480, y: 240 },
-        },
-      ],
-      schemaVersion: 1,
-      viewport: { x: 10, y: 20, zoom: 1.25 },
-    };
-
-    const savedDocument = {
-      ...sessionFactoryDocumentFromSnapshot(snapshot),
-    };
-    delete savedDocument.layout;
-
-    expect(
-      currentActivityCardFactoryDefinition(
-        createEditorStub({
-          editableFactoryDocument: savedDocument,
-          editableFactoryDocumentStatus: "success",
-          editorMode: false,
-        }),
-        snapshot,
-      ),
-    ).toMatchObject({
-      layout: snapshot.factory.layout,
-      workstations: savedDocument.workstations,
-    });
   });
 });
 
@@ -415,7 +281,8 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
   });
 
   it("derives node and edge selected flags from editor-local graph selection", () => {
-    const edgeId = "workstation-output:workstation:review->work-state:story:done";
+    const edgeId =
+      "workstation-output:workstation:review->work-state:story:done";
     const graphLayout: GraphLayout = {
       edges: [
         {
@@ -598,7 +465,8 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
 
 describe("useCurrentActivityGraphViewModel edge waypoints", () => {
   it("decorates React Flow edges with waypoints from the rendered graph layout", () => {
-    const edgeId = "workstation-output:workstation:review->work-state:story:done";
+    const edgeId =
+      "workstation-output:workstation:review->work-state:story:done";
     const graphLayout: GraphLayout = {
       edges: [
         {

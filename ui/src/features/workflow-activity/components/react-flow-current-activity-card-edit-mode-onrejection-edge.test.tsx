@@ -270,8 +270,6 @@ describe("ReactFlowCurrentActivityCard edit-mode onRejection edge regression", (
     const factoryDocument = reproductionFactoryDocument();
     renderCurrentActivity(buildReproductionSnapshot(factoryDocument));
 
-    await screen.findByRole("region", { name: "Work graph viewport" });
-
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     await waitFor(() => {

@@ -278,7 +278,7 @@ async function expectEditorModeOff(page) {
     .toBe(0);
   await graphCard
     .getByRole("button", {
-      name: "Show or hide",
+      name: "Edit mode",
     })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }

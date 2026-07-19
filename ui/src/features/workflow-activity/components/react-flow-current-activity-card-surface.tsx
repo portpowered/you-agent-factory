@@ -22,6 +22,10 @@ import {
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
+import {
+  GraphDropOverlay,
+  graphDropStateAttribute,
+} from "./react-flow-current-activity-card-import";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type CurrentActivityGraphSurfaceModel = CurrentActivityGraphCardViewModel;
@@ -216,15 +220,35 @@ function CurrentActivityGraphSurfaceContent({
 
   if (!editorControls.isEditing) {
     return (
-      <HostedTopologyReplay
-        locale={locale}
-        onSelectResource={onSelectResource}
-        onSelectStateNode={onSelectStateNode}
-        onSelectWorker={onSelectWorker}
-        onSelectWorkType={onSelectWorkType}
-        onSelectWorkstation={onSelectWorkstation}
-        selectedNodeID={hostedTopologySelectionID(selection)}
-      />
+      <section
+        aria-label={messages.viewportLabel}
+        className={cn(
+          "relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-3xl border transition-colors",
+          (imports.dropState.status === "drag-active" ||
+            imports.dropState.status === "reading") &&
+            "border-primary bg-primary-container",
+          imports.dropState.status === "error" && "border-af-danger-border",
+          imports.dropState.status === "idle" && "border-transparent",
+        )}
+        data-current-activity-drop-state={graphDropStateAttribute(
+          imports.dropState,
+        )}
+        onDragEnter={imports.onDragEnter}
+        onDragLeave={imports.onDragLeave}
+        onDragOver={imports.onDragOver}
+        onDrop={imports.onDrop}
+      >
+        <HostedTopologyReplay
+          locale={locale}
+          onSelectResource={onSelectResource}
+          onSelectStateNode={onSelectStateNode}
+          onSelectWorker={onSelectWorker}
+          onSelectWorkType={onSelectWorkType}
+          onSelectWorkstation={onSelectWorkstation}
+          selectedNodeID={hostedTopologySelectionID(selection)}
+        />
+        <GraphDropOverlay dropState={imports.dropState} locale={locale} />
+      </section>
     );
   }
 
