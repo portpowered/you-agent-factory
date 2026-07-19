@@ -117,6 +117,30 @@ state. A terminal write or sink-close rejection remains retryable. Sink-close
 retries never duplicate an already accepted terminal event, and successful
 close rejects all later state-changing commands.
 
+## Execution safety and cooperative scheduling
+
+The session enforces deterministic safety budgets before a calculated batch is
+sent to the sink. Defaults allow 1,000 completed dispatches, 10,000 canonical
+events, one virtual hour, 1,000 consecutive zero-duration scheduler batches,
+100 synchronous scheduler batches, and 1,000 Work items in one synchronous
+batch. Overrides must be positive safe integers and cannot exceed the exported
+`FACTORY_EMULATOR_LIMIT_HARD_CAPS`.
+
+Crossing an event, completed-dispatch, or virtual-time budget throws
+`FactoryEmulatorExecutionPausedError` and exposes a detached
+`budget-exceeded` diagnostic through `status().error`. The diagnostic identifies
+the limit, configured and observed values, and virtual-time context. The
+calculated over-limit batch is not written or committed, and the kernel does
+not fabricate failed Work. A consecutive zero-time scheduler chain uses the
+distinct `zero-duration-cycle` diagnostic. Initial and runtime Work sets larger
+than `maxSynchronousWorkItems` fail atomically with
+`bounded-work-exceeded` before partial Work or events become visible.
+
+Hosts can provide `yieldControl` to choose their own cooperative task boundary.
+Long advancement commands await it after every `maxSynchronousBatches`
+accepted scheduler batches and then resume the same serialized deterministic
+command. The kernel itself does not create timers or Web Workers.
+
 ## Caller-owned event history
 
 `MemoryFactoryEventSink` retains ordered Factory Events up to a required

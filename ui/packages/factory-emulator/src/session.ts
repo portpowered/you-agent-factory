@@ -23,6 +23,8 @@ import {
   type FactoryEmulatorConfigurationDiagnostic,
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
+  type FactoryEmulatorExecutionDiagnostic,
+  FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   type FactoryEmulatorLimits,
   FactoryEmulatorPendingCommandError,
@@ -76,6 +78,7 @@ interface PendingAdvanceContext {
   readonly target?: number;
   readonly wasUnfinished: boolean;
   readonly batches: (readonly FactoryEvent[])[];
+  zeroDurationBatches: number;
 }
 
 interface ValidatedConfiguration {
@@ -492,6 +495,73 @@ export function createFactoryEmulatorSession(
   let commandInFlight: FactoryEmulatorCommand | undefined;
   let lastError: FactoryEmulatorSessionError | undefined;
 
+  const pauseExecution = (
+    command: FactoryEmulatorCommand,
+    diagnostic: FactoryEmulatorExecutionDiagnostic,
+  ): never => {
+    lastError = {
+      code: "execution_paused",
+      operation: "execute",
+      command,
+      message: `Factory emulator execution paused: ${diagnostic.kind}.`,
+      diagnostic: clone(diagnostic),
+    };
+    throw new FactoryEmulatorExecutionPausedError(diagnostic);
+  };
+
+  const assertCandidateWithinBudgets = (
+    command: FactoryEmulatorCommand,
+    candidate: StartedState | ClosedState,
+  ): void => {
+    const checks = [
+      {
+        limit: "completedDispatches" as const,
+        configured: configuration.limits.maxCompletedDispatches,
+        observed: candidate.counters.completedDispatches,
+      },
+      {
+        limit: "events" as const,
+        configured: configuration.limits.maxEvents,
+        observed: candidate.counters.events,
+      },
+      {
+        limit: "virtualElapsedMs" as const,
+        configured: configuration.limits.maxVirtualElapsedMs,
+        observed: candidate.virtualElapsedMs,
+      },
+    ];
+    const exceeded = checks.find(
+      ({ configured, observed }) => observed > configured,
+    );
+    if (exceeded !== undefined) {
+      pauseExecution(command, {
+        kind: "budget-exceeded",
+        ...exceeded,
+        virtualTime: candidate.virtualTime,
+        virtualElapsedMs: candidate.virtualElapsedMs,
+      });
+    }
+  };
+
+  const assertWorkBound = (
+    command: FactoryEmulatorCommand,
+    observed: number,
+  ): void => {
+    if (observed <= configuration.limits.maxSynchronousWorkItems) return;
+    const state = committedState;
+    pauseExecution(command, {
+      kind: "bounded-work-exceeded",
+      limit: "synchronousWorkItems",
+      configured: configuration.limits.maxSynchronousWorkItems,
+      observed,
+      virtualTime:
+        state.lifecycle === "pre-start"
+          ? configuration.scenario.startAt
+          : state.virtualTime,
+      virtualElapsedMs: state.virtualElapsedMs,
+    });
+  };
+
   const status = (): FactoryEmulatorSessionStatus => {
     const common = {
       virtualTime:
@@ -506,9 +576,11 @@ export function createFactoryEmulatorSession(
         ...common,
         phase: "error",
         reason:
-          lastError.operation === "close"
-            ? "The event sink rejected the pending close."
-            : "The event sink rejected the pending transaction.",
+          lastError.operation === "execute"
+            ? "Execution paused at a configured safety boundary."
+            : lastError.operation === "close"
+              ? "The event sink rejected the pending close."
+              : "The event sink rejected the pending transaction.",
         ...(pendingTransaction === undefined
           ? {}
           : {
@@ -650,6 +722,7 @@ export function createFactoryEmulatorSession(
     batch: readonly FactoryEvent[],
     candidate: StartedState | ClosedState,
   ): Promise<void> => {
+    assertCandidateWithinBudgets(command, candidate);
     pendingTransaction = {
       command,
       retryKey,
@@ -695,6 +768,7 @@ export function createFactoryEmulatorSession(
       };
       const batches: (readonly FactoryEvent[])[] = [bootstrap];
       const initial = configuration.scenario.initialSubmissions ?? [];
+      assertWorkBound("start", initial.length);
       let combined = bootstrap;
       if (initial.length > 0) {
         const calculation = workRequestCalculation(
@@ -740,6 +814,7 @@ export function createFactoryEmulatorSession(
       }
     }
     const state = committedState as StartedState;
+    assertWorkBound("submit", Array.isArray(value) ? value.length : 1);
     const submissions = validateSubmissions(configuration, state, value);
     commandInFlight = "submit";
     lastError = undefined;
@@ -931,6 +1006,7 @@ export function createFactoryEmulatorSession(
     };
   };
 
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: Advancement keeps retry, budget, yield, and transaction state in one traceable command boundary.
   const runAdvance = async (
     command: "advanceBy" | "advanceToNext",
     requestedDuration?: number,
@@ -962,6 +1038,7 @@ export function createFactoryEmulatorSession(
             ...(target === undefined ? {} : { target }),
             wasUnfinished: unfinished(original),
             batches: [],
+            zeroDurationBatches: 0,
           }
         : pendingAdvanceContext;
     if (context === undefined) {
@@ -969,9 +1046,58 @@ export function createFactoryEmulatorSession(
     }
     pendingAdvanceContext = context;
     commandInFlight = command;
+    let synchronousBatches = 0;
+    const acceptSchedulerBatch = async (calculation: {
+      batch: readonly FactoryEvent[];
+      state: StartedState;
+    }): Promise<void> => {
+      const beforeElapsedMs = (committedState as StartedState).virtualElapsedMs;
+      const nextZeroDurationBatches =
+        calculation.state.virtualElapsedMs === beforeElapsedMs
+          ? context.zeroDurationBatches + 1
+          : 0;
+      if (
+        nextZeroDurationBatches > configuration.limits.maxZeroDurationBatches
+      ) {
+        pauseExecution(command, {
+          kind: "zero-duration-cycle",
+          limit: "zeroDurationBatches",
+          configured: configuration.limits.maxZeroDurationBatches,
+          observed: nextZeroDurationBatches,
+          virtualTime: (committedState as StartedState).virtualTime,
+          virtualElapsedMs: beforeElapsedMs,
+        });
+      }
+      assertWorkBound(command, calculation.batch.length);
+      context.batches.push(calculation.batch);
+      await write(command, retryKey, calculation.batch, calculation.state);
+      context.zeroDurationBatches = nextZeroDurationBatches;
+      synchronousBatches += 1;
+      if (
+        configuration.yieldControl !== undefined &&
+        synchronousBatches >= configuration.limits.maxSynchronousBatches
+      ) {
+        synchronousBatches = 0;
+        await configuration.yieldControl();
+      }
+    };
     try {
-      if (retry !== undefined) await acceptPendingTransaction();
-      else lastError = undefined;
+      if (retry !== undefined) {
+        const beforeElapsedMs = original.virtualElapsedMs;
+        await acceptPendingTransaction();
+        context.zeroDurationBatches =
+          (committedState as StartedState).virtualElapsedMs === beforeElapsedMs
+            ? context.zeroDurationBatches + 1
+            : 0;
+        synchronousBatches = 1;
+        if (
+          configuration.yieldControl !== undefined &&
+          synchronousBatches >= configuration.limits.maxSynchronousBatches
+        ) {
+          synchronousBatches = 0;
+          await configuration.yieldControl();
+        }
+      } else lastError = undefined;
       const continueAdvancing = !(
         retry !== undefined && command === "advanceToNext"
       );
@@ -980,13 +1106,7 @@ export function createFactoryEmulatorSession(
         if (state.works.some(({ phase }) => phase === "ready")) {
           const calculation = dispatchCalculation(state);
           if (calculation.batch.length > 0) {
-            context.batches.push(calculation.batch);
-            await write(
-              command,
-              retryKey,
-              calculation.batch,
-              calculation.state,
-            );
+            await acceptSchedulerBatch(calculation);
             if (command === "advanceToNext") break;
             continue;
           }
@@ -1005,8 +1125,7 @@ export function createFactoryEmulatorSession(
           committedState as StartedState,
           earliest,
         );
-        context.batches.push(calculation.batch);
-        await write(command, retryKey, calculation.batch, calculation.state);
+        await acceptSchedulerBatch(calculation);
         if (command === "advanceToNext") break;
       }
       let finalState = committedState as StartedState;
@@ -1032,6 +1151,7 @@ export function createFactoryEmulatorSession(
             commands: finalState.counters.commands + 1,
           },
         };
+        assertCandidateWithinBudgets(command, finalState);
         committedState = finalState;
       }
       const receipt: FactoryEmulatorAdvanceReceipt = clone({

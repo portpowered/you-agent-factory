@@ -42,6 +42,8 @@ export {
   type FactoryEmulatorConfigurationDiagnostic,
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
+  type FactoryEmulatorExecutionDiagnostic,
+  FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   type FactoryEmulatorLimits,
   FactoryEmulatorPendingCommandError,

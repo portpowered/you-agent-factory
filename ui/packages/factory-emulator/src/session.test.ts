@@ -13,6 +13,7 @@ import {
   FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   FactoryEmulatorConfigurationError,
   FactoryEmulatorDurationError,
+  FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorPendingCommandError,
   type FactoryEmulatorSession,
@@ -937,5 +938,219 @@ describe("Factory emulator terminal retry", () => {
     expect(receipt.batch).toEqual(writes.at(-1));
     expect(beforeRetry.lifecycle).toBe("started");
     expect(receipt.state.lifecycle).toBe("closed");
+  });
+});
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Safety edge cases share one configured-session fixture.
+describe("Factory emulator execution safety limits", () => {
+  function limitedHarness(
+    limits: Parameters<typeof createFactoryEmulatorSession>[0]["limits"],
+    scenarioOverride: FactoryEmulatorScenario = executionScenario({
+      initialSubmissions: [
+        { name: "initial", workType: "task", state: "ready" },
+      ],
+    }),
+    options: {
+      readonly sink?: FactoryEventSink;
+      readonly yieldControl?: () => void | PromiseLike<void>;
+    } = {},
+  ) {
+    return createFactoryEmulatorSession({
+      factory: executionFactory,
+      scenario: scenarioOverride,
+      sink: options.sink ?? { write: async () => undefined },
+      limits,
+      ...(options.yieldControl === undefined
+        ? {}
+        : { yieldControl: options.yieldControl }),
+    });
+  }
+
+  it("accepts exact event and dispatch limits and pauses a whole one-over batch", async () => {
+    const exact = limitedHarness({
+      maxEvents: 6,
+      maxCompletedDispatches: 1,
+    });
+    await exact.start();
+    await exact.advanceBy(25);
+    expect(exact.state().counters).toMatchObject({
+      events: 6,
+      completedDispatches: 1,
+    });
+
+    const writes: FactoryEvent[][] = [];
+    const paused = limitedHarness(
+      { maxEvents: 5, maxCompletedDispatches: 1 },
+      undefined,
+      {
+        sink: {
+          write: async (events) => writes.push(structuredClone(events)),
+        },
+      },
+    );
+    await paused.start();
+    await expect(paused.advanceBy(25)).rejects.toMatchObject({
+      diagnostic: {
+        kind: "budget-exceeded",
+        limit: "events",
+        configured: 5,
+        observed: 6,
+      },
+    });
+    expect(paused.state().counters).toMatchObject({
+      events: 5,
+      completedDispatches: 0,
+    });
+    expect(writes.flat().some(({ type }) => type === "WORK_FAILED")).toBe(
+      false,
+    );
+    expect(paused.status()).toMatchObject({
+      phase: "error",
+      error: { code: "execution_paused" },
+    });
+
+    const dispatchPaused = limitedHarness({
+      maxEvents: 20,
+      maxCompletedDispatches: 1,
+    });
+    await dispatchPaused.start();
+    await dispatchPaused.advanceBy(25);
+    await dispatchPaused.submit({
+      name: "second",
+      workType: "task",
+      state: "ready",
+    });
+    await dispatchPaused.advanceToNext();
+    const before = dispatchPaused.state();
+    await expect(dispatchPaused.advanceToNext()).rejects.toMatchObject({
+      diagnostic: {
+        kind: "budget-exceeded",
+        limit: "completedDispatches",
+        configured: 1,
+        observed: 2,
+      },
+    });
+    expect(dispatchPaused.state()).toEqual(before);
+  });
+
+  it("enforces the virtual-hour boundary without moving time or writing past it", async () => {
+    const exact = limitedHarness({ maxVirtualElapsedMs: 25 });
+    await exact.start();
+    await exact.advanceBy(25);
+    expect(exact.state().virtualElapsedMs).toBe(25);
+    await exact.submit({ name: "second", workType: "task", state: "ready" });
+    await exact.advanceToNext();
+    const before = exact.state();
+
+    await expect(exact.advanceToNext()).rejects.toMatchObject({
+      diagnostic: {
+        kind: "budget-exceeded",
+        limit: "virtualElapsedMs",
+        configured: 25,
+        observed: 50,
+        virtualElapsedMs: 50,
+      },
+    });
+    expect(exact.state()).toEqual(before);
+  });
+
+  it("distinguishes a finite zero-duration chain from a cycle threshold", async () => {
+    const immediate = executionScenario({
+      initialSubmissions: [
+        { name: "initial", workType: "task", state: "ready" },
+      ],
+      rules: [
+        {
+          id: "immediate",
+          selector: { workstation: "scripted-run" },
+          cursor: { scope: "lineage", input: "rootWorkId" },
+          outcomes: [{ result: "accepted", durationMs: 0 }],
+          exhaustion: "repeat-last",
+        },
+      ],
+    });
+    const finite = limitedHarness({ maxZeroDurationBatches: 2 }, immediate);
+    await finite.start();
+    await finite.advanceBy(0);
+    expect(finite.status().phase).toBe("idle");
+
+    const paused = limitedHarness({ maxZeroDurationBatches: 1 }, immediate);
+    await paused.start();
+    await expect(paused.advanceBy(0)).rejects.toMatchObject({
+      diagnostic: {
+        kind: "zero-duration-cycle",
+        limit: "zeroDurationBatches",
+        configured: 1,
+        observed: 2,
+      },
+    });
+    expect(paused.state()).toMatchObject({
+      virtualElapsedMs: 0,
+      counters: { completedDispatches: 0 },
+    });
+    expect(
+      (paused.state() as { works: { phase: string }[] }).works[0]?.phase,
+    ).toBe("active");
+  });
+
+  it("rejects oversized initial and runtime Work batches without partial events", async () => {
+    const initialWrites: FactoryEvent[][] = [];
+    const oversizedInitial = limitedHarness(
+      { maxSynchronousWorkItems: 1 },
+      executionScenario({
+        initialSubmissions: [
+          { name: "first", workType: "task", state: "ready" },
+          { name: "second", workType: "task", state: "ready" },
+        ],
+      }),
+      {
+        sink: {
+          write: async (events) => initialWrites.push(structuredClone(events)),
+        },
+      },
+    );
+    await expect(oversizedInitial.start()).rejects.toBeInstanceOf(
+      FactoryEmulatorExecutionPausedError,
+    );
+    expect(initialWrites).toEqual([]);
+    expect(oversizedInitial.state().lifecycle).toBe("pre-start");
+
+    const runtime = limitedHarness(
+      { maxSynchronousWorkItems: 1 },
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await runtime.start();
+    const before = runtime.state();
+    await expect(
+      runtime.submit([
+        { name: "first", workType: "task", state: "ready" },
+        { name: "second", workType: "task", state: "ready" },
+      ]),
+    ).rejects.toMatchObject({
+      diagnostic: {
+        kind: "bounded-work-exceeded",
+        configured: 1,
+        observed: 2,
+      },
+    });
+    expect(runtime.state()).toEqual(before);
+  });
+
+  it("awaits the caller-owned yield cadence and resumes deterministically", async () => {
+    let yields = 0;
+    const emulator = limitedHarness({ maxSynchronousBatches: 1 }, undefined, {
+      yieldControl: async () => {
+        yields += 1;
+        await Promise.resolve();
+      },
+    });
+    await emulator.start();
+    const receipt = await emulator.advanceBy(25);
+
+    expect(yields).toBe(2);
+    expect(receipt.batches).toHaveLength(2);
+    expect(receipt.state.works[0]?.phase).toBe("completed");
+    expect(() => structuredClone(receipt)).not.toThrow();
+    expect(() => structuredClone(emulator.status())).not.toThrow();
   });
 });

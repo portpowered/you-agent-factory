@@ -132,6 +132,45 @@ export class FactoryEmulatorSubmissionError extends Error {
   }
 }
 
+export type FactoryEmulatorExecutionDiagnostic =
+  | {
+      readonly kind: "budget-exceeded";
+      readonly limit: "completedDispatches" | "events" | "virtualElapsedMs";
+      readonly configured: number;
+      readonly observed: number;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+    }
+  | {
+      readonly kind: "zero-duration-cycle";
+      readonly limit: "zeroDurationBatches";
+      readonly configured: number;
+      readonly observed: number;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+    }
+  | {
+      readonly kind: "bounded-work-exceeded";
+      readonly limit: "synchronousWorkItems";
+      readonly configured: number;
+      readonly observed: number;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+    };
+
+export class FactoryEmulatorExecutionPausedError extends Error {
+  readonly code = "execution_paused" as const;
+  readonly diagnostic: FactoryEmulatorExecutionDiagnostic;
+
+  constructor(diagnostic: FactoryEmulatorExecutionDiagnostic) {
+    super(`Factory emulator execution paused: ${diagnostic.kind}.`);
+    this.name = "FactoryEmulatorExecutionPausedError";
+    this.diagnostic = JSON.parse(
+      JSON.stringify(diagnostic),
+    ) as FactoryEmulatorExecutionDiagnostic;
+  }
+}
+
 export interface FactoryEmulatorSessionOptions {
   readonly factory: FactoryDefinition;
   readonly scenario: FactoryEmulatorScenario;
@@ -221,6 +260,13 @@ export type FactoryEmulatorSessionError =
       readonly operation: "close";
       readonly command: FactoryEmulatorCommand;
       readonly message: string;
+    }
+  | {
+      readonly code: "execution_paused";
+      readonly operation: "execute";
+      readonly command: FactoryEmulatorCommand;
+      readonly message: string;
+      readonly diagnostic: FactoryEmulatorExecutionDiagnostic;
     };
 
 export interface FactoryEmulatorSessionStatus {
