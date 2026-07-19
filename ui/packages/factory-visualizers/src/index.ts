@@ -7,6 +7,15 @@ export {
 } from "./factory-timeline-scrubber.js";
 
 export {
+  type FactoryTopologyFlowProjection,
+  FactoryTopologyReplay,
+  type FactoryTopologyReplayMessages,
+  type FactoryTopologyReplayProjection,
+  type FactoryTopologyReplayProps,
+  projectFactoryTopologyFlow,
+} from "./factory-topology-replay.js";
+
+export {
   type WorkProgressCategoryMessage,
   WorkProgressVisualizer,
   type WorkProgressVisualizerMessages,

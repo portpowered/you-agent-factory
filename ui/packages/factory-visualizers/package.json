@@ -24,7 +24,8 @@
     "verify": "bun run typecheck && bun run test && bun run build-storybook"
   },
   "dependencies": {
-    "@you-agent-factory/components": "file:../components"
+    "@you-agent-factory/components": "file:../components",
+    "@xyflow/react": "^12.10.2"
   },
   "peerDependencies": {
     "@you-agent-factory/factory-replay": "0.0.0",

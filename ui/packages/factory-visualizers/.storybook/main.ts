@@ -19,6 +19,20 @@ const config: StorybookConfig = {
       resolve: {
         alias: [
           {
+            find: "@xyflow/react",
+            replacement: path.resolve(
+              packageRoot,
+              "../../node_modules/@xyflow/react",
+            ),
+          },
+          {
+            find: "@you-agent-factory/components/graphs",
+            replacement: path.resolve(
+              packageRoot,
+              "../components/src/graphs/index.ts",
+            ),
+          },
+          {
             find: "@you-agent-factory/components/styles.css",
             replacement: path.resolve(
               packageRoot,
@@ -40,7 +54,7 @@ const config: StorybookConfig = {
             ),
           },
         ],
-        dedupe: ["react", "react-dom", "react/jsx-runtime"],
+        dedupe: ["@xyflow/react", "react", "react-dom", "react/jsx-runtime"],
       },
     });
   },

@@ -1,3 +1,5 @@
+@import "@xyflow/react/dist/style.css";
+
 .factory-timeline-scrubber {
   box-sizing: border-box;
   inline-size: 100%;
@@ -7,6 +9,67 @@
   background: var(--color-surface-container-low);
   border: 1px solid var(--color-outline-variant);
   border-radius: 1rem;
+}
+
+.factory-topology-replay {
+  box-sizing: border-box;
+  inline-size: 100%;
+  block-size: clamp(28rem, 68vh, 48rem);
+  min-inline-size: 0;
+  overflow: hidden;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 1rem;
+}
+
+.factory-topology-replay .react-flow__node {
+  inline-size: 13.5rem;
+}
+
+.factory-topology-replay__node-button,
+.factory-topology-replay__node-static {
+  display: block;
+  inline-size: 100%;
+  margin: 0;
+}
+
+.factory-topology-replay__node-button:focus-visible {
+  border-radius: 0.625rem;
+  outline: 0.1875rem solid
+    var(--color-primary, var(--color-af-foundation-accent));
+  outline-offset: 0.25rem;
+}
+
+.factory-topology-replay__node-title,
+.factory-topology-replay__node-kind,
+.factory-topology-replay__node-cue {
+  display: block;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.factory-topology-replay__node-kind,
+.factory-topology-replay__node-cue {
+  color: var(--color-on-surface-variant);
+  font-size: 0.75rem;
+}
+
+.factory-topology-replay__node-kind {
+  text-transform: capitalize;
+}
+
+.factory-topology-replay__node-cue {
+  margin-block-start: 0.25rem;
+}
+
+.factory-topology-replay__node--active {
+  border-block-start: 0.25rem solid var(--color-warning);
+}
+
+.factory-topology-replay .react-flow__edge.animated path {
+  stroke: var(--color-warning);
+  stroke-width: 0.1875rem;
 }
 
 .factory-timeline-scrubber__header,

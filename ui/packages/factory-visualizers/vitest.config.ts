@@ -13,10 +13,15 @@ export default defineConfig({
         uiNodeModules,
         "@testing-library/react",
       ),
+      "@you-agent-factory/components/graphs": path.resolve(
+        packageRoot,
+        "../components/src/graphs/index.ts",
+      ),
       "@you-agent-factory/components": path.resolve(
         packageRoot,
         "../components/src/index.ts",
       ),
+      "@xyflow/react": path.join(uiNodeModules, "@xyflow/react"),
       "@you-agent-factory/factory-replay": path.resolve(
         packageRoot,
         "../factory-replay/src/index.ts",
