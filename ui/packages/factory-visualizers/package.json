@@ -1,0 +1,50 @@
+{
+  "name": "@you-agent-factory/factory-visualizers",
+  "version": "0.0.0",
+  "description": "Controlled React visualizers for caller-prepared Factory replay projections.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/portpowered/you-agent-factory.git",
+    "directory": "ui/packages/factory-visualizers"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": [
+    "*.css",
+    "**/*.css"
+  ],
+  "scripts": {
+    "build-storybook": "storybook build --loglevel warn",
+    "prepare:dependencies": "bun run --cwd ../components build && bun run --cwd ../factory-replay build",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "bun run prepare:dependencies && tsc -p tsconfig.json --noEmit --pretty false",
+    "verify": "bun run typecheck && bun run test && bun run build-storybook"
+  },
+  "dependencies": {
+    "@you-agent-factory/components": "file:../components"
+  },
+  "peerDependencies": {
+    "@you-agent-factory/factory-replay": "0.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@storybook/react-vite": "^10.3.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react-swc": "^4.1.0",
+    "@you-agent-factory/factory-replay": "file:../factory-replay",
+    "happy-dom": "^20.9.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "storybook": "^10.3.5",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.7",
+    "vitest": "4.1.3"
+  }
+}
