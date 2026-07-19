@@ -1326,9 +1326,7 @@ export function createFactoryEmulatorSession(
         continue;
       if (cursorKey !== undefined) cursors[cursorKey] = invocation + 1;
       const logicalMove = execution.workstation.type === "LOGICAL_MOVE";
-      const transitionId = logicalMove
-        ? execution.workstation.name
-        : (execution.rule?.id ?? "emulator-unmatched");
+      const transitionId = execution.workstation.name;
       const dispatchId = identity(
         logicalMove ? "logical-move" : "dispatch",
         works.map(({ tokenId }) => tokenId),

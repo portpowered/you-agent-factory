@@ -1026,6 +1026,38 @@ function routedStatesFrom(response: FactoryEvent | undefined): string[] {
 }
 
 describe("Factory emulator standard and repeater outcome routing", () => {
+  it("uses the Factory workstation identity for worker dispatch events", async () => {
+    const emulator = createFactoryEmulatorSession({
+      factory: outcomeRoutingFactory,
+      scenario: outcomeRoutingScenario([
+        { result: "accepted", durationMs: 0, output: "routed output" },
+      ]),
+      sink: { write: async () => undefined },
+    });
+    await emulator.start();
+
+    const dispatched = await emulator.advanceToNext();
+    const completed = await emulator.advanceToNext();
+
+    expect(dispatched.batches[0]?.[0]).toMatchObject({
+      type: "DISPATCH_REQUEST",
+      payload: { transitionId: "route-task" },
+    });
+    expect(completed.batches[0]?.[0]).toMatchObject({
+      type: "DISPATCH_RESPONSE",
+      payload: {
+        transitionId: "route-task",
+        outputWork: [
+          {
+            workTypeName: "task",
+            state: { name: "done" },
+            payload: "routed output",
+          },
+        ],
+      },
+    });
+  });
+
   it.each([
     ["continued", "CONTINUE", ["retry"]],
     ["rejected", "REJECTED", ["review", "retry"]],
