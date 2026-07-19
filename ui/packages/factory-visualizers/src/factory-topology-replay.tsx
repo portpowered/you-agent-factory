@@ -12,13 +12,21 @@ import type {
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
-
+import {
+  type ActiveWorkItem,
+  ActiveWorkRows,
+  activeWorkByWorkstationNode,
+} from "./factory-topology-active-work";
 import {
   type FactoryTopologyChromeConfiguration,
   type ResolvedFactoryTopologyChrome,
   resolveFactoryTopologyChrome,
 } from "./factory-topology-chrome";
 import { FactoryTopologyChromeRegions } from "./factory-topology-chrome-regions";
+import {
+  activityCounts,
+  connectionHasRenderedEndpoints,
+} from "./factory-topology-flow-support";
 
 import {
   FactoryTopologyErrorBoundary,
@@ -47,6 +55,12 @@ export type FactoryTopologyReplayState =
 
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
+  /** Formats a deterministic logical-tick duration for an active Work row. */
+  activeWorkDuration?: (ticks: number) => string;
+  /** Labels the extra active Work rows omitted after the first three. */
+  activeWorkOverflow?: (count: number) => string;
+  /** Labels the read-only active Work list within a workstation node. */
+  activeWorkRows?: (count: number) => string;
   empty: string;
   failed: string;
   hideNodeKinds: string;
@@ -76,6 +90,7 @@ export interface FactoryTopologyReplayProps {
 
 interface TopologyNodeData extends Record<string, unknown> {
   activityCount: number;
+  activeWorkItems: readonly ActiveWorkItem[];
   messages: FactoryTopologyReplayMessages;
   node: FactoryTopologyNode;
   occupancy?: {
@@ -145,6 +160,9 @@ export function projectFactoryTopologyFlow(
       connectionHasRenderedEndpoints(connection, nodeById),
     );
     const activityCountByNode = activityCounts(projection.activity);
+    const activeWorkByWorkstation = activeWorkByWorkstationNode(
+      projection.activity,
+    );
     const occupancyByNode = new Map(
       projection.load.resourceOccupancy.map((occupancy) => [
         occupancy.resourceNodeId,
@@ -167,6 +185,7 @@ export function projectFactoryTopologyFlow(
       return {
         data: {
           activityCount: activityCountByNode.get(node.id) ?? 0,
+          activeWorkItems: activeWorkByWorkstation.get(node.id) ?? [],
           messages,
           node,
           ...(occupancy
@@ -360,6 +379,7 @@ function layoutNode(
 function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
   const {
     activityCount,
+    activeWorkItems,
     messages,
     node,
     occupancy,
@@ -399,6 +419,9 @@ function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
           ? messages.activeDispatches(activityCount)
           : messages.inactiveDispatches}
       </span>
+      {node.kind === "workstation" && activeWorkItems.length > 0 ? (
+        <ActiveWorkRows items={activeWorkItems} messages={messages} />
+      ) : null}
       {node.kind === "resource" ? (
         <span className="factory-topology-replay__node-cue">
           ◫{" "}
@@ -443,41 +466,6 @@ function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
       {content}
     </figure>
   );
-}
-
-function connectionHasRenderedEndpoints(
-  connection: FactoryTopologyConnection,
-  nodeById: ReadonlyMap<string, FactoryTopologyNode>,
-): boolean {
-  const source = nodeById.get(connection.source.nodeId);
-  const target = nodeById.get(connection.target.nodeId);
-  return Boolean(
-    source?.handles.some(
-      (handle) =>
-        handle.id === connection.source.handleId && handle.role === "source",
-    ) &&
-      target?.handles.some(
-        (handle) =>
-          handle.id === connection.target.handleId && handle.role === "target",
-      ),
-  );
-}
-
-function activityCounts(
-  activity: FactoryActivityProjection,
-): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const overlay of activity.activeDispatchOverlays) {
-    const nodeIds = new Set([
-      overlay.workerNodeId,
-      overlay.workstationNodeId,
-      ...(overlay.resourceNodeIds ?? []),
-    ]);
-    for (const nodeId of nodeIds) {
-      if (nodeId) counts.set(nodeId, (counts.get(nodeId) ?? 0) + 1);
-    }
-  }
-  return counts;
 }
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";

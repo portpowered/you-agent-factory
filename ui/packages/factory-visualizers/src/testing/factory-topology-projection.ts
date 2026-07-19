@@ -104,3 +104,17 @@ export function createFactoryTopologyProjection(): FactoryTopologyReplayProjecti
     },
   };
 }
+
+export function createDenseFactoryTopologyProjection(): FactoryTopologyReplayProjection {
+  const projection = createFactoryTopologyProjection();
+  projection.activity.selectedTick = 11;
+  projection.activity.activeDispatchOverlays[0].startedTick = 7;
+  projection.activity.activeDispatchOverlays[0].workIds = [
+    "work-1",
+    "work-2",
+    "work-3",
+    "work-4",
+    "work-5",
+  ];
+  return projection;
+}

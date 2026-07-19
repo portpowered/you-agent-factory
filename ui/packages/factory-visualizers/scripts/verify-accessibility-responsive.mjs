@@ -273,6 +273,14 @@ async function verifyResponsiveViewports(browserInstance) {
       await page.locator(".react-flow__controls").isVisible(),
       `Dense topology controls are hidden at ${viewport.width}px.`,
     );
+    assert(
+      await page.getByRole("group", { name: "5 active Work rows" }).isVisible(),
+      `Dense topology active Work rows are hidden at ${viewport.width}px.`,
+    );
+    assert(
+      await page.getByText("+2 active Work").isVisible(),
+      `Dense topology active Work overflow is hidden at ${viewport.width}px.`,
+    );
 
     const workstation = page.getByRole("button", {
       name: "workstation: Review",

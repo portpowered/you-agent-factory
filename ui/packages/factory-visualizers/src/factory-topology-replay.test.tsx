@@ -11,7 +11,10 @@ import {
   type FactoryTopologyReplayProjection,
   projectFactoryTopologyFlow,
 } from "./factory-topology-replay";
-import { createFactoryTopologyProjection } from "./testing/factory-topology-projection";
+import {
+  createDenseFactoryTopologyProjection,
+  createFactoryTopologyProjection,
+} from "./testing/factory-topology-projection";
 
 const mockFlow = vi.hoisted(() => ({ error: undefined as Error | undefined }));
 
@@ -62,6 +65,9 @@ vi.mock("@xyflow/react", () => ({
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
+  activeWorkDuration: (ticks) => `${ticks} logical ticks`,
+  activeWorkOverflow: (count) => `+${count} active Work`,
+  activeWorkRows: (count) => `${count} active Work rows`,
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
   hideNodeKinds: "Hide node kinds",
@@ -224,6 +230,36 @@ describe("FactoryTopologyReplay chrome", () => {
     expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
     expect(screen.getByText(/3 Work in this state/)).toBeVisible();
   });
+
+  it.each(["full", "minimal", "none"] as const)(
+    "keeps dense canonical runtime evidence visible with %s chrome",
+    (preset) => {
+      render(
+        <FactoryTopologyReplay
+          chrome={{ preset }}
+          messages={messages}
+          state={{
+            projection: createDenseFactoryTopologyProjection(),
+            status: "ready",
+          }}
+        />,
+      );
+
+      expect(
+        screen.getByRole("group", { name: "5 active Work rows" }),
+      ).toBeVisible();
+      for (const workId of ["work-1", "work-2", "work-3"]) {
+        expect(screen.getByText(workId)).toBeVisible();
+      }
+      expect(screen.getAllByText("4 logical ticks")).toHaveLength(3);
+      expect(screen.getByText("+2 active Work")).toBeVisible();
+      expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
+      expect(screen.getByText(/3 Work in this state/)).toBeVisible();
+      expect(
+        document.querySelector('[data-edge-id="worker-assignment"]'),
+      ).toHaveAttribute("data-animated", "true");
+    },
+  );
 });
 
 describe("FactoryTopologyReplay controlled states and failures", () => {

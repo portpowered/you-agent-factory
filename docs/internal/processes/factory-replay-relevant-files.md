@@ -61,6 +61,13 @@ that consumes the replay kernel.
   mount presentation regions but must not change the caller-provided topology,
   activity, or load projection. Keep disabled regions unmounted so they do not
   remain in the accessibility tree.
+- `ui/packages/factory-visualizers/src/factory-topology-active-work.tsx` derives
+  read-only workstation Work rows solely from active Dispatch work IDs and
+  logical ticks. Keep the first-three-plus-overflow presentation independent
+  of optional chrome, and do not add selection or mutation affordances there.
+- `ui/packages/factory-visualizers/src/factory-topology-flow-support.ts` holds
+  pure endpoint and activity-count helpers used by the disposable React Flow
+  projection; keep it free of renderer state and caller mutation.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.

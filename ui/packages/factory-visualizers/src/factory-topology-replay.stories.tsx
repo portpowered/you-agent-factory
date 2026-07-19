@@ -12,6 +12,9 @@ import {
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) =>
     `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+  activeWorkDuration: (ticks) => `${ticks} logical ticks`,
+  activeWorkOverflow: (count) => `+${count} active Work`,
+  activeWorkRows: (count) => `${count} active Work rows`,
   empty: "No Factory topology is available at this tick.",
   failed: "The Factory topology could not be shown.",
   hideNodeKinds: "Hide node kinds",
@@ -103,6 +106,10 @@ export const DensePreparedProjection: Story = {
   },
   play: async ({ args, canvasElement }) => {
     const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("group", { name: "5 active Work rows" }),
+    ).toBeVisible();
+    await expect(canvas.getByText("+2 active Work")).toBeVisible();
     const workstation = canvas.getByRole("button", {
       name: "workstation: Review",
     });
@@ -216,6 +223,11 @@ function createProjection(dense = false): FactoryTopologyReplayProjection {
           id: "overlay:dispatch-1",
           resourceNodeIds: ["resource:gpu"],
           startedTick: 17,
+          ...(dense
+            ? {
+                workIds: ["work-1", "work-2", "work-3", "work-4", "work-5"],
+              }
+            : {}),
           workerNodeId: "worker:alice",
           workstationNodeId: "workstation:review",
         },
