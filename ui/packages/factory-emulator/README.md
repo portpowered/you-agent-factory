@@ -136,6 +136,11 @@ own Work Type's failed state through a deterministic breadth-first closure in
 that same completion tick. Each move emits one canonical `WORK_STATE_CHANGE`
 with source `cascading-failure`; terminal and already-failed Work is unchanged.
 
+The package's frozen runtime-reference corpus includes both a `DEPENDS_ON`
+prerequisite release and a terminal-failure cascade. Conformance compares
+dependency eligibility, dispatch selection, consumed Work, routes, terminal
+states, and submission replay projection at every logical tick.
+
 Accepted, continued, rejected, and failed outcomes preserve Work lineage while
 routing to explicit destinations in declared order. Accepted fan-out supports
 multiple outputs and both `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT` propagation.

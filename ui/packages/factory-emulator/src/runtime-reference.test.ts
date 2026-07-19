@@ -46,6 +46,8 @@ describe("frozen runtime references", () => {
       "parallel-dispatch",
       "simultaneous-completion",
       "resource-contention",
+      "depends-on-release",
+      "depends-on-terminal-failure",
     ]);
     for (const reference of references) {
       expect(reference.provenance.source).toContain("README.md");
@@ -145,6 +147,40 @@ describe("concurrent frozen runtime references", () => {
         logicalTick: 2,
         surface: "dispatchChoices",
         expected: ["execute:third"],
+      },
+    });
+  });
+});
+
+describe("DEPENDS_ON frozen runtime references", () => {
+  it("matches prerequisite release and terminal-failure cascade semantics", async () => {
+    const dependencies = loadFactoryEmulatorRuntimeReferences().filter(
+      ({ id }) =>
+        ["depends-on-release", "depends-on-terminal-failure"].includes(id),
+    );
+    for (const reference of dependencies) {
+      await expect(
+        compareFactoryEmulatorRuntimeReference(reference),
+      ).resolves.toEqual({ matches: true });
+    }
+  });
+
+  it("reports a dependency dispatch mismatch at its first divergent tick", async () => {
+    const reference = structuredClone(
+      runtimeReferenceFixtures.find(({ id }) => id === "depends-on-release"),
+    );
+    if (reference === undefined) throw new Error("Missing dependency fixture.");
+    reference.ticks[2].semantics.dispatchChoices = ["execute:blocked"];
+    await expect(
+      compareFactoryEmulatorRuntimeReference(reference),
+    ).resolves.toEqual({
+      matches: false,
+      divergence: {
+        fixture: "depends-on-release",
+        logicalTick: 2,
+        surface: "dispatchChoices",
+        expected: ["execute:blocked"],
+        actual: ["execute:prerequisite"],
       },
     });
   });

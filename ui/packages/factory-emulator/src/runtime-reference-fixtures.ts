@@ -1,3 +1,4 @@
+// biome-ignore lint/style/noExcessiveLinesPerFile: Frozen fixture evidence remains intentionally adjacent for review.
 import type { FactoryDefinition } from "@you-agent-factory/client";
 import type {
   FactoryEmulatorRuntimeReference,
@@ -246,6 +247,131 @@ function concurrentFixture(
   };
 }
 
+function dependencyFixture(
+  id: string,
+  title: string,
+  prerequisiteOutcome: "accepted" | "failed",
+): FactoryEmulatorRuntimeReference {
+  const factory = standardFactory(`runtime-reference-${id}`);
+  const dependencyScenario: FactoryEmulatorScenario = {
+    ...scenario(id, factory.name, "execute"),
+    initialSubmissions: {
+      works: [
+        { name: "blocked", workType: "task", state: "ready", input: "blocked" },
+        {
+          name: "prerequisite",
+          workType: "task",
+          state: "ready",
+          input: "prerequisite",
+        },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "prerequisite",
+          requiredState: "done",
+        },
+      ],
+    },
+    rules: [
+      {
+        id: "prerequisite-outcome",
+        selector: { input: { name: "prerequisite" } },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          prerequisiteOutcome === "accepted"
+            ? { result: "accepted", durationMs: 1 }
+            : { result: "failed", durationMs: 1, error: "prerequisite failed" },
+        ],
+        exhaustion: "repeat-last",
+      },
+      {
+        id: "blocked-outcome",
+        selector: { input: { name: "blocked" } },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [{ result: "accepted", durationMs: 1 }],
+        exhaustion: "repeat-last",
+      },
+    ],
+  };
+  const failed = prerequisiteOutcome === "failed";
+  const ticks: FactoryEmulatorRuntimeReferenceTick[] = [
+    {
+      logicalTick: 0,
+      eventKinds: eventKinds.slice(0, 3),
+      semantics: { ...emptySemantics, replayProjection: [] },
+    },
+    {
+      logicalTick: 1,
+      eventKinds: ["WORK_REQUEST", "RELATIONSHIP_CHANGE_REQUEST"],
+      semantics: {
+        ...emptySemantics,
+        replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
+      },
+    },
+    {
+      logicalTick: 2,
+      eventKinds: ["DISPATCH_REQUEST"],
+      semantics: {
+        ...emptySemantics,
+        dispatchChoices: ["execute:prerequisite"],
+        replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
+      },
+    },
+    {
+      logicalTick: 3,
+      eventKinds: failed
+        ? ["DISPATCH_RESPONSE", "WORK_STATE_CHANGE"]
+        : ["DISPATCH_RESPONSE"],
+      semantics: {
+        ...emptySemantics,
+        consumedWork: ["prerequisite"],
+        outcomes: [failed ? "FAILED" : "ACCEPTED"],
+        routes: [failed ? "task:failed" : "task:done"],
+        terminalStates: failed ? ["task:failed", "task:failed"] : ["task:done"],
+        replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
+      },
+    },
+  ];
+  if (!failed) {
+    ticks.push(
+      {
+        logicalTick: 4,
+        eventKinds: ["DISPATCH_REQUEST"],
+        semantics: {
+          ...emptySemantics,
+          dispatchChoices: ["execute:blocked"],
+          terminalStates: ["task:done"],
+          replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
+        },
+      },
+      {
+        logicalTick: 5,
+        eventKinds: ["DISPATCH_RESPONSE"],
+        semantics: {
+          ...emptySemantics,
+          consumedWork: ["blocked"],
+          outcomes: ["ACCEPTED"],
+          routes: ["task:done"],
+          terminalStates: ["task:done", "task:done"],
+          replayProjection: ["blocked:task:ready", "prerequisite:task:ready"],
+        },
+      },
+    );
+  }
+  return {
+    schemaVersion: "factory-emulator-runtime-reference/v1",
+    id,
+    title,
+    provenance: { kind: "public-documentation", source },
+    factory,
+    scenario: dependencyScenario,
+    ticks,
+    orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
+  };
+}
+
 const basic = standardFactory("runtime-reference-basic");
 const repeater = cloneFactory(standardFactory("runtime-reference-repeater"));
 firstWorkstation(repeater).behavior = "REPEATER";
@@ -365,5 +491,15 @@ export const runtimeReferenceFixtures = [
     contention,
     ["first", "second", "third"],
     [["first", "third"], ["second"]],
+  ),
+  dependencyFixture(
+    "depends-on-release",
+    "DEPENDS_ON prerequisite release",
+    "accepted",
+  ),
+  dependencyFixture(
+    "depends-on-terminal-failure",
+    "DEPENDS_ON terminal failure cascade",
+    "failed",
   ),
 ] satisfies readonly FactoryEmulatorRuntimeReference[];
