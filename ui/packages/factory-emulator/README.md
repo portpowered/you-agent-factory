@@ -93,6 +93,15 @@ outcome through its requested instant. Event timestamps are always the scenario
 or browser timers. Receipts, state, status, and validation errors are detached
 structured-cloneable values.
 
+Canonical identities and event ordering are derived from the Factory identity,
+the complete validated scenario (including its seed), normalized command
+inputs, command order, and virtual elapsed time. Object key insertion order,
+wall-clock time, and host playback speed do not participate. `reset()` restores
+the pre-start counters, rule cursors, identities, initial submissions, and
+virtual-time origin while retaining the caller-owned sink, so the host can
+clear or replace its own recording destination and reproduce the same supported
+history byte for byte.
+
 Every state-changing command retains its complete detached candidate state and
 canonical event batch until the caller-owned sink accepts the batch. While a
 write is pending, other state-changing commands fail with

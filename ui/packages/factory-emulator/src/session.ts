@@ -96,6 +96,27 @@ function clone<Value>(value: Value): Value {
   return JSON.parse(JSON.stringify(value)) as Value;
 }
 
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, nested: unknown) => {
+    if (
+      nested === null ||
+      typeof nested !== "object" ||
+      Array.isArray(nested)
+    ) {
+      return nested;
+    }
+    return Object.fromEntries(
+      Object.entries(nested).sort(([left], [right]) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      ),
+    );
+  });
+}
+
+function canonicalClone<Value>(value: Value): Value {
+  return JSON.parse(canonicalJson(value)) as Value;
+}
+
 function resolveLimits(
   configured: FactoryEmulatorLimits | undefined,
   diagnostics: FactoryEmulatorConfigurationDiagnostic[],
@@ -173,8 +194,8 @@ function validateConfiguration(
     throw new FactoryEmulatorConfigurationError(diagnostics);
   }
   return {
-    factory: clone(factory),
-    scenario,
+    factory: canonicalClone(factory),
+    scenario: canonicalClone(scenario),
     sink: options.sink,
     limits,
     yieldControl: options.yieldControl,
@@ -191,19 +212,14 @@ function deterministicHash(value: string): string {
 }
 
 function identity(kind: string, ...coordinates: readonly unknown[]): string {
-  return `emulator-${kind}-${deterministicHash(JSON.stringify(coordinates))}`;
+  return `emulator-${kind}-${deterministicHash(canonicalJson(coordinates))}`;
 }
 
 function sessionIdentity(
   factory: FactoryDefinition,
   scenario: FactoryEmulatorScenario,
 ): string {
-  return identity(
-    "session",
-    factory.id ?? factory.name,
-    scenario.id,
-    scenario.seed,
-  );
+  return identity("session", factory.id ?? factory.name, scenario);
 }
 
 function virtualTimeAt(scenario: FactoryEmulatorScenario, elapsedMs: number) {
@@ -708,7 +724,7 @@ export function createFactoryEmulatorSession(
       | FactoryEmulatorInitialSubmission
       | readonly FactoryEmulatorInitialSubmission[],
   ): Promise<FactoryEmulatorSubmitReceipt> => {
-    const retryKey = JSON.stringify(value);
+    const retryKey = canonicalJson(Array.isArray(value) ? value : [value]);
     const retry = assertCommand("submit", retryKey);
     if (retry !== undefined) {
       commandInFlight = "submit";
@@ -925,7 +941,7 @@ export function createFactoryEmulatorSession(
     ) {
       throw new FactoryEmulatorDurationError(requestedDuration);
     }
-    const retryKey = JSON.stringify([command, requestedDuration]);
+    const retryKey = canonicalJson([command, requestedDuration]);
     const retry = assertCommand(command, retryKey);
     const original = committedState as StartedState;
     const target =

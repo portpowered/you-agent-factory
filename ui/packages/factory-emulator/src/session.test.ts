@@ -368,6 +368,182 @@ describe("Factory emulator virtual-time advancement", () => {
   });
 });
 
+const runDeterministicHistory = async (
+  factoryInput: FactoryDefinition,
+  scenarioInput: FactoryEmulatorScenario,
+  runtimeSubmission: { readonly name: string; readonly input: string },
+) => {
+  const history: FactoryEvent[] = [];
+  const emulator = createFactoryEmulatorSession({
+    factory: factoryInput,
+    scenario: scenarioInput,
+    sink: {
+      write: async (events) => {
+        history.push(...structuredClone(events));
+      },
+    },
+  });
+  await emulator.start();
+  await emulator.advanceToNext();
+  const dispatched = emulator.state();
+  await emulator.advanceToNext();
+  await emulator.submit({
+    ...runtimeSubmission,
+    workType: "task",
+    state: "ready",
+  });
+  await emulator.advanceBy(25);
+  return { emulator, history, dispatched };
+};
+
+const deterministicScenario = executionScenario({
+  initialSubmissions: [{ name: "initial", workType: "task", state: "ready" }],
+});
+
+describe("Factory emulator deterministic reruns", () => {
+  it("reproduces canonical history and cursor state across fresh and reset runs", async () => {
+    const first = await runDeterministicHistory(
+      executionFactory,
+      deterministicScenario,
+      { name: "runtime", input: "stable input" },
+    );
+    const second = await runDeterministicHistory(
+      executionFactory,
+      deterministicScenario,
+      { name: "runtime", input: "stable input" },
+    );
+
+    expect(JSON.stringify(second.history)).toBe(JSON.stringify(first.history));
+    expect(second.dispatched).toEqual(first.dispatched);
+    const sequences = first.history.map(({ context }) => context.sequence);
+    expect(sequences).toEqual(sequences.map((_, index) => index));
+    expect(first.history.map(({ context }) => context.sessionSequence)).toEqual(
+      sequences,
+    );
+    expect(
+      first.history.map(({ type, context }) => [type, context.tick]),
+    ).toEqual([
+      ["RUN_REQUEST", 0],
+      ["INITIAL_STRUCTURE_REQUEST", 0],
+      ["SESSION_STARTED", 0],
+      ["WORK_REQUEST", 0],
+      ["DISPATCH_REQUEST", 1],
+      ["DISPATCH_RESPONSE", 2],
+      ["WORK_REQUEST", 3],
+      ["DISPATCH_REQUEST", 4],
+      ["DISPATCH_RESPONSE", 4],
+    ]);
+
+    const resetHistory: FactoryEvent[] = [];
+    const resetSession = createFactoryEmulatorSession({
+      factory: executionFactory,
+      scenario: deterministicScenario,
+      sink: {
+        write: async (events) => {
+          resetHistory.push(...structuredClone(events));
+        },
+      },
+    });
+    await resetSession.start();
+    await resetSession.advanceToNext();
+    await resetSession.advanceToNext();
+    await resetSession.submit({
+      name: "runtime",
+      workType: "task",
+      state: "ready",
+      input: "stable input",
+    });
+    await resetSession.advanceBy(25);
+    resetSession.reset();
+    resetHistory.length = 0;
+    await resetSession.start();
+    await resetSession.advanceToNext();
+    const resetDispatched = resetSession.state();
+    await resetSession.advanceToNext();
+    await resetSession.submit({
+      name: "runtime",
+      workType: "task",
+      state: "ready",
+      input: "stable input",
+    });
+    await resetSession.advanceBy(25);
+
+    expect(JSON.stringify(resetHistory)).toBe(JSON.stringify(first.history));
+    expect(resetDispatched).toEqual(first.dispatched);
+  });
+});
+
+describe("Factory emulator canonical inputs", () => {
+  it("canonicalizes equivalent object key order before deriving history", async () => {
+    const reorderedFactory = {
+      workstations: executionFactory.workstations,
+      workers: executionFactory.workers,
+      workTypes: executionFactory.workTypes,
+      orchestrator: executionFactory.orchestrator,
+      name: executionFactory.name,
+    } satisfies FactoryDefinition;
+    const reorderedScenario = {
+      initialSubmissions: deterministicScenario.initialSubmissions,
+      unmatched: deterministicScenario.unmatched,
+      rules: deterministicScenario.rules,
+      startAt: deterministicScenario.startAt,
+      seed: deterministicScenario.seed,
+      factory: deterministicScenario.factory,
+      id: deterministicScenario.id,
+      schemaVersion: deterministicScenario.schemaVersion,
+    } satisfies FactoryEmulatorScenario;
+
+    const canonical = await runDeterministicHistory(
+      executionFactory,
+      deterministicScenario,
+      { name: "runtime", input: "stable input" },
+    );
+    const reordered = await runDeterministicHistory(
+      reorderedFactory,
+      reorderedScenario,
+      { input: "stable input", name: "runtime" },
+    );
+
+    expect(JSON.stringify(reordered.history)).toBe(
+      JSON.stringify(canonical.history),
+    );
+  });
+});
+
+describe("Factory emulator identity inputs", () => {
+  it("changes identities for a changed seed or semantically relevant input", async () => {
+    const baseline = await runDeterministicHistory(
+      executionFactory,
+      deterministicScenario,
+      { name: "runtime", input: "stable input" },
+    );
+    const changedSeed = await runDeterministicHistory(
+      executionFactory,
+      { ...deterministicScenario, seed: "changed-seed" },
+      { name: "runtime", input: "stable input" },
+    );
+    const changedInput = await runDeterministicHistory(
+      executionFactory,
+      deterministicScenario,
+      { name: "runtime", input: "changed input" },
+    );
+    const runtimeWorkId = (history: readonly FactoryEvent[]) =>
+      history.filter(({ type }) => type === "WORK_REQUEST").at(-1)?.context
+        .workIds?.[0];
+
+    expect(changedSeed.history[0]?.id).not.toBe(baseline.history[0]?.id);
+    expect(runtimeWorkId(changedInput.history)).not.toBe(
+      runtimeWorkId(baseline.history),
+    );
+    expect(
+      changedSeed.history.every(
+        ({ context }, index) =>
+          context.eventTime === baseline.history[index]?.context.eventTime,
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("Factory emulator session start", () => {
   it("writes a recording-compatible canonical bootstrap", async () => {
     const sink = new RecordingFactoryEventSink({
