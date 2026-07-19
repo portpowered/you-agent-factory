@@ -20,6 +20,9 @@ const messages: FactoryTopologyReplayMessages = {
   inactiveDispatches: "No active Dispatch",
   imageFailed: "The annotation image could not be shown.",
   imageLoading: "Loading annotation image.",
+  legendActiveRoute: "Active route",
+  legendInactiveRoute: "Inactive route",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology at selected tick",
@@ -28,6 +31,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected by host",
+  viewportControlsLabel: "Topology viewport controls",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };
@@ -109,6 +113,27 @@ export const AnnotationVisibility: Story = {
     await expect(
       canvas.queryByRole("img", { name: "Review process diagram" }),
     ).not.toBeInTheDocument();
+  },
+};
+
+export const FullChrome: Story = {
+  args: {
+    chrome: { preset: "full" },
+    layout: annotationLayout(),
+  },
+};
+
+export const MinimalChrome: Story = {
+  args: {
+    chrome: { preset: "minimal" },
+    layout: annotationLayout(),
+  },
+};
+
+export const NoChrome: Story = {
+  args: {
+    chrome: { preset: "none" },
+    layout: annotationLayout(),
   },
 };
 

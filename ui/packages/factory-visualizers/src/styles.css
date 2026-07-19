@@ -216,6 +216,40 @@
   outline-offset: 0.25rem;
 }
 
+.factory-topology-replay__legend {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-low);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 0.5rem;
+}
+
+.factory-topology-replay__legend ul {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0;
+  margin: 0.25rem 0 0;
+  list-style: none;
+}
+
+.factory-topology-replay__legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.factory-topology-replay__legend-swatch {
+  inline-size: 1rem;
+  block-size: 0.1875rem;
+  background: var(--color-outline);
+}
+
+.factory-topology-replay__legend-swatch--active {
+  background: var(--color-warning);
+}
+
 .factory-topology-replay__node-title,
 .factory-topology-replay__node-kind,
 .factory-topology-replay__node-cue {

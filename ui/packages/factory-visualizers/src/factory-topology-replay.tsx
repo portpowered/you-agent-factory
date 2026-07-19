@@ -8,7 +8,10 @@ import type {
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
 
-import type { FactoryTopologyChromeConfiguration } from "./factory-topology-chrome";
+import {
+  type FactoryTopologyChromeConfiguration,
+  resolveFactoryTopologyChrome,
+} from "./factory-topology-chrome";
 import {
   type FactoryTopologyFlowProjection,
   projectFactoryTopologyFlow,
@@ -50,6 +53,10 @@ export interface FactoryTopologyReplayMessages {
   inactiveDispatches: string;
   imageFailed: string;
   imageLoading: string;
+  /** Optional labels retain compatibility for existing controlled consumers. */
+  legendActiveRoute?: string;
+  legendInactiveRoute?: string;
+  legendLabel?: string;
   loading: string;
   nodeLabel: (kind: FactoryTopologyNode["kind"], label: string) => string;
   regionLabel: string;
@@ -57,6 +64,7 @@ export interface FactoryTopologyReplayMessages {
   resourceOccupancyUnavailable: string;
   retry: string;
   selectedNode: string;
+  viewportControlsLabel?: string;
   workStateCount: (count: number) => string;
   workStateCountUnavailable: string;
 }
@@ -101,6 +109,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
 }
 
 function FactoryTopologyReplayContent({
+  chrome,
   messages,
   onError,
   layout,
@@ -120,6 +129,7 @@ function FactoryTopologyReplayContent({
   }
   return (
     <PreparedTopology
+      chrome={chrome}
       messages={messages}
       onError={onError}
       onRetry={onRetry}
@@ -132,6 +142,7 @@ function FactoryTopologyReplayContent({
 }
 
 function PreparedTopology({
+  chrome,
   messages,
   onError,
   layout,
@@ -143,6 +154,7 @@ function PreparedTopology({
   projection: FactoryTopologyReplayProjection;
 }) {
   const prefersReducedMotion = usePrefersReducedMotion();
+  const resolvedChrome = resolveFactoryTopologyChrome(chrome);
   const prepared = useMemo<PreparedFlow>(() => {
     try {
       const parsedLayout =
@@ -223,19 +235,26 @@ function PreparedTopology({
         resetKeys={[projection, messages, selectedNodeId, onSelectNode, layout]}
         withinRegion
       >
-        <ReactFlowCanvas flow={prepared.flow} messages={messages} />
+        <ReactFlowCanvas
+          chrome={resolvedChrome}
+          flow={prepared.flow}
+          messages={messages}
+        />
       </FactoryTopologyErrorBoundary>
     </section>
   );
 }
 
 function ReactFlowCanvas({
+  chrome,
   flow,
   messages,
 }: {
+  chrome: ReturnType<typeof resolveFactoryTopologyChrome>;
   flow: FactoryTopologyFlowProjection;
   messages: FactoryTopologyReplayMessages;
 }) {
+  const chromeMessages = resolveTopologyChromeMessages(messages);
   const [annotationsVisible, setAnnotationsVisible] = useState(true);
   const visibleNodes = annotationsVisible
     ? flow.nodes
@@ -246,7 +265,8 @@ function ReactFlowCanvas({
 
   return (
     <>
-      {hasAnnotations ? (
+      {chrome.legend ? <TopologyLegend messages={chromeMessages} /> : null}
+      {chrome.visibilityControls && hasAnnotations ? (
         <button
           aria-pressed={annotationsVisible}
           className="factory-topology-replay__annotation-toggle"
@@ -275,11 +295,59 @@ function ReactFlowCanvas({
         panOnDrag
         proOptions={{ hideAttribution: true }}
       >
-        <Background />
-        <Controls showInteractive={false} />
+        {chrome.background ? <Background /> : null}
+        {chrome.viewportControls ? (
+          <Controls
+            aria-label={chromeMessages.viewportControlsLabel}
+            showInteractive={false}
+          />
+        ) : null}
       </ReactFlow>
     </>
   );
+}
+
+function TopologyLegend({ messages }: { messages: TopologyChromeMessages }) {
+  return (
+    <fieldset className="factory-topology-replay__legend">
+      <legend>{messages.legendLabel}</legend>
+      <ul>
+        <li>
+          <span
+            aria-hidden="true"
+            className="factory-topology-replay__legend-swatch factory-topology-replay__legend-swatch--active"
+          />
+          {messages.legendActiveRoute}
+        </li>
+        <li>
+          <span
+            aria-hidden="true"
+            className="factory-topology-replay__legend-swatch"
+          />
+          {messages.legendInactiveRoute}
+        </li>
+      </ul>
+    </fieldset>
+  );
+}
+
+interface TopologyChromeMessages {
+  legendActiveRoute: string;
+  legendInactiveRoute: string;
+  legendLabel: string;
+  viewportControlsLabel: string;
+}
+
+function resolveTopologyChromeMessages(
+  messages: FactoryTopologyReplayMessages,
+): TopologyChromeMessages {
+  return {
+    legendActiveRoute: messages.legendActiveRoute ?? "Active route",
+    legendInactiveRoute: messages.legendInactiveRoute ?? "Inactive route",
+    legendLabel: messages.legendLabel ?? "Topology legend",
+    viewportControlsLabel:
+      messages.viewportControlsLabel ?? "Topology viewport controls",
+  };
 }
 
 function preserveNestedNodePointerEvents(): void {}
