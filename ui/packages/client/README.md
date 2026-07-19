@@ -66,6 +66,10 @@ inputs and write, when requested, only to
 
 ## Distribution verification
 
+Run `bun run check:package-boundary` after building to verify the compiled
+runtime has no dashboard, React, Zustand, browser-transport, or browser-storage
+dependency.
+
 Run `bun run build` to emit the ESM runtime and declarations in `dist`. Run
 `bun run check:pack` to build a registry-format tarball and verify its exact
 inventory, export targets, and declared runtime dependency boundary. Run
