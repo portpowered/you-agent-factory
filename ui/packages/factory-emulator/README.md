@@ -69,6 +69,7 @@ await session.submit({
 const dispatched = await session.advanceToNext();
 const advanced = await session.advanceBy(250);
 const current = session.state();
+const closed = await session.close();
 ```
 
 `start()` writes one atomic canonical bootstrap batch in `RUN_REQUEST`,
@@ -91,6 +92,21 @@ outcome through its requested instant. Event timestamps are always the scenario
 `startAt` plus committed virtual elapsed time; these commands use no wall-clock
 or browser timers. Receipts, state, status, and validation errors are detached
 structured-cloneable values.
+
+Every state-changing command retains its complete detached candidate state and
+canonical event batch until the caller-owned sink accepts the batch. While a
+write is pending, other state-changing commands fail with
+`FactoryEmulatorPendingCommandError`; read-only snapshots remain available.
+After rejection, status exposes the structured sink error and pending phase.
+Retry the same command with the same arguments to write the byte-identical
+batch before execution continues, or call `reset()` to explicitly discard the
+rejected transaction and restore the pre-start state.
+
+`close()` writes one canonical `SESSION_COMPLETED` terminal batch, then awaits
+the sink's optional `close()` boundary before exposing the terminal closed
+state. A terminal write or sink-close rejection remains retryable. Sink-close
+retries never duplicate an already accepted terminal event, and successful
+close rejects all later state-changing commands.
 
 ## Caller-owned event history
 

@@ -18,6 +18,7 @@ import {
   FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   type FactoryEmulatorAdvanceReceipt,
   type FactoryEmulatorBudgetUsage,
+  type FactoryEmulatorCloseReceipt,
   type FactoryEmulatorCommand,
   type FactoryEmulatorConfigurationDiagnostic,
   FactoryEmulatorConfigurationError,
@@ -25,6 +26,7 @@ import {
   FactoryEmulatorLifecycleError,
   type FactoryEmulatorLimits,
   FactoryEmulatorPendingCommandError,
+  type FactoryEmulatorResetReceipt,
   type FactoryEmulatorSession,
   type FactoryEmulatorSessionError,
   type FactoryEmulatorSessionOptions,
@@ -53,6 +55,28 @@ type StartedState = Extract<
   FactoryEmulatorSessionState,
   { lifecycle: "started" }
 >;
+
+type ClosedState = Extract<
+  FactoryEmulatorSessionState,
+  { lifecycle: "closed" }
+>;
+
+interface PendingTransaction {
+  readonly command: Exclude<FactoryEmulatorCommand, "reset">;
+  readonly retryKey: string;
+  readonly batch: readonly FactoryEvent[];
+  readonly candidate: StartedState | ClosedState;
+  phase: "sink-write" | "sink-close";
+}
+
+interface PendingAdvanceContext {
+  readonly command: "advanceBy" | "advanceToNext";
+  readonly retryKey: string;
+  readonly fromVirtualTime: string;
+  readonly target?: number;
+  readonly wasUnfinished: boolean;
+  readonly batches: (readonly FactoryEvent[])[];
+}
 
 interface ValidatedConfiguration {
   readonly factory: FactoryDefinition;
@@ -447,14 +471,15 @@ export function createFactoryEmulatorSession(
     configuration.scenario,
   );
   let committedState: FactoryEmulatorSessionState = clone(PRE_START_STATE);
-  let pendingBatch: readonly FactoryEvent[] | undefined;
+  let pendingTransaction: PendingTransaction | undefined;
+  let pendingAdvanceContext: PendingAdvanceContext | undefined;
   let commandInFlight: FactoryEmulatorCommand | undefined;
   let lastError: FactoryEmulatorSessionError | undefined;
 
   const status = (): FactoryEmulatorSessionStatus => {
     const common = {
       virtualTime:
-        committedState.lifecycle === "started"
+        committedState.lifecycle !== "pre-start"
           ? committedState.virtualTime
           : configuration.scenario.startAt,
       virtualElapsedMs: committedState.virtualElapsedMs,
@@ -464,12 +489,19 @@ export function createFactoryEmulatorSession(
       return clone({
         ...common,
         phase: "error",
-        reason: "The event sink rejected the pending transaction.",
-        pendingTransaction: {
-          command: lastError.command,
-          phase: "sink-write",
-          eventCount: pendingBatch?.length ?? 0,
-        },
+        reason:
+          lastError.operation === "close"
+            ? "The event sink rejected the pending close."
+            : "The event sink rejected the pending transaction.",
+        ...(pendingTransaction === undefined
+          ? {}
+          : {
+              pendingTransaction: {
+                command: pendingTransaction.command,
+                phase: pendingTransaction.phase,
+                eventCount: pendingTransaction.batch.length,
+              },
+            }),
         error: lastError,
       });
     }
@@ -478,13 +510,13 @@ export function createFactoryEmulatorSession(
         ...common,
         phase: "active",
         reason: `${commandInFlight} is awaiting the event sink.`,
-        ...(pendingBatch === undefined
+        ...(pendingTransaction === undefined
           ? {}
           : {
               pendingTransaction: {
-                command: commandInFlight,
-                phase: "sink-write" as const,
-                eventCount: pendingBatch.length,
+                command: pendingTransaction.command,
+                phase: pendingTransaction.phase,
+                eventCount: pendingTransaction.batch.length,
               },
             }),
       });
@@ -494,6 +526,13 @@ export function createFactoryEmulatorSession(
         ...common,
         phase: "idle",
         reason: "The session is ready to start.",
+      });
+    }
+    if (committedState.lifecycle === "closed") {
+      return clone({
+        ...common,
+        phase: "closed",
+        reason: "The session is closed.",
       });
     }
     if (committedState.works.some(({ phase }) => phase === "active")) {
@@ -523,9 +562,24 @@ export function createFactoryEmulatorSession(
     });
   };
 
-  const assertCommand = (command: FactoryEmulatorCommand): void => {
+  const assertCommand = (
+    command: FactoryEmulatorCommand,
+    retryKey: string,
+  ): PendingTransaction | undefined => {
     if (commandInFlight !== undefined) {
       throw new FactoryEmulatorPendingCommandError(command, commandInFlight);
+    }
+    if (pendingTransaction !== undefined) {
+      if (
+        command === pendingTransaction.command &&
+        retryKey === pendingTransaction.retryKey
+      ) {
+        return pendingTransaction;
+      }
+      throw new FactoryEmulatorPendingCommandError(
+        command,
+        pendingTransaction.command,
+      );
     }
     if (
       (command === "start" && committedState.lifecycle !== "pre-start") ||
@@ -536,35 +590,75 @@ export function createFactoryEmulatorSession(
         committedState.lifecycle,
       );
     }
+    return undefined;
   };
 
-  const write = async (
-    command: FactoryEmulatorCommand,
-    batch: readonly FactoryEvent[],
-    candidate: StartedState,
-  ): Promise<void> => {
-    pendingBatch = batch;
+  const acceptPendingTransaction = async (): Promise<void> => {
+    const transaction = pendingTransaction;
+    if (transaction === undefined) return;
     try {
-      await configuration.sink.write(clone(batch));
-      committedState = candidate;
-      pendingBatch = undefined;
+      if (transaction.phase === "sink-write") {
+        await configuration.sink.write(clone(transaction.batch));
+        if (transaction.command === "close") {
+          transaction.phase = "sink-close";
+        }
+      }
+      if (transaction.phase === "sink-close") {
+        await configuration.sink.close?.();
+      }
+      committedState = transaction.candidate;
+      pendingTransaction = undefined;
       lastError = undefined;
     } catch (rejection) {
-      lastError = {
-        code: "sink_write_rejected",
-        operation: "write",
-        command,
-        message: rejectionMessage(rejection),
-      };
+      lastError =
+        transaction.phase === "sink-close"
+          ? {
+              code: "sink_close_rejected",
+              operation: "close",
+              command: transaction.command,
+              message: rejectionMessage(rejection),
+            }
+          : {
+              code: "sink_write_rejected",
+              operation: "write",
+              command: transaction.command,
+              message: rejectionMessage(rejection),
+            };
       throw rejection;
     }
   };
 
+  const write = async (
+    command: Exclude<FactoryEmulatorCommand, "reset">,
+    retryKey: string,
+    batch: readonly FactoryEvent[],
+    candidate: StartedState | ClosedState,
+  ): Promise<void> => {
+    pendingTransaction = {
+      command,
+      retryKey,
+      batch: clone(batch),
+      candidate: clone(candidate),
+      phase: "sink-write",
+    };
+    await acceptPendingTransaction();
+  };
+
   const start = async (): Promise<FactoryEmulatorStartReceipt> => {
-    assertCommand("start");
+    const retryKey = "start";
+    const retry = assertCommand("start", retryKey);
     commandInFlight = "start";
-    lastError = undefined;
     try {
+      if (retry !== undefined) {
+        await acceptPendingTransaction();
+        const candidate = retry.candidate as StartedState;
+        const batches = [
+          retry.batch.slice(0, 3),
+          ...(retry.batch.length > 3 ? [retry.batch.slice(3)] : []),
+        ];
+        return clone({ status: "started", batches, state: candidate });
+      }
+      lastError = undefined;
       const bootstrap = bootstrapEvents(
         configuration.factory,
         configuration.scenario,
@@ -602,7 +696,7 @@ export function createFactoryEmulatorSession(
           counters: { ...candidate.counters, events: combined.length },
         };
       }
-      await write("start", combined, candidate);
+      await write("start", retryKey, combined, candidate);
       return clone({ status: "started", batches, state: candidate });
     } finally {
       commandInFlight = undefined;
@@ -614,7 +708,21 @@ export function createFactoryEmulatorSession(
       | FactoryEmulatorInitialSubmission
       | readonly FactoryEmulatorInitialSubmission[],
   ): Promise<FactoryEmulatorSubmitReceipt> => {
-    assertCommand("submit");
+    const retryKey = JSON.stringify(value);
+    const retry = assertCommand("submit", retryKey);
+    if (retry !== undefined) {
+      commandInFlight = "submit";
+      try {
+        await acceptPendingTransaction();
+        return clone({
+          status: "submitted",
+          batch: retry.batch,
+          state: retry.candidate as StartedState,
+        });
+      } finally {
+        commandInFlight = undefined;
+      }
+    }
     const state = committedState as StartedState;
     const submissions = validateSubmissions(configuration, state, value);
     commandInFlight = "submit";
@@ -636,7 +744,7 @@ export function createFactoryEmulatorSession(
           events: state.counters.events + 1,
         },
       };
-      await write("submit", batch, candidate);
+      await write("submit", retryKey, batch, candidate);
       return clone({ status: "submitted", batch, state: candidate });
     } finally {
       commandInFlight = undefined;
@@ -811,32 +919,58 @@ export function createFactoryEmulatorSession(
     command: "advanceBy" | "advanceToNext",
     requestedDuration?: number,
   ): Promise<FactoryEmulatorAdvanceReceipt> => {
-    assertCommand(command);
-    const original = committedState as StartedState;
     if (
       requestedDuration !== undefined &&
       (!Number.isSafeInteger(requestedDuration) || requestedDuration < 0)
     ) {
       throw new FactoryEmulatorDurationError(requestedDuration);
     }
+    const retryKey = JSON.stringify([command, requestedDuration]);
+    const retry = assertCommand(command, retryKey);
+    const original = committedState as StartedState;
     const target =
-      requestedDuration === undefined
-        ? undefined
-        : original.virtualElapsedMs + requestedDuration;
-    if (target !== undefined) virtualTimeAt(configuration.scenario, target);
+      retry === undefined
+        ? requestedDuration === undefined
+          ? undefined
+          : original.virtualElapsedMs + requestedDuration
+        : pendingAdvanceContext?.target;
+    if (retry === undefined && target !== undefined) {
+      virtualTimeAt(configuration.scenario, target);
+    }
+    const context =
+      retry === undefined
+        ? {
+            command,
+            retryKey,
+            fromVirtualTime: original.virtualTime,
+            ...(target === undefined ? {} : { target }),
+            wasUnfinished: unfinished(original),
+            batches: [],
+          }
+        : pendingAdvanceContext;
+    if (context === undefined) {
+      throw new Error("Pending advancement context is unavailable.");
+    }
+    pendingAdvanceContext = context;
     commandInFlight = command;
-    lastError = undefined;
-    const batches: (readonly FactoryEvent[])[] = [];
-    const fromVirtualTime = original.virtualTime;
-    const wasUnfinished = unfinished(original);
     try {
-      while (true) {
+      if (retry !== undefined) await acceptPendingTransaction();
+      else lastError = undefined;
+      const continueAdvancing = !(
+        retry !== undefined && command === "advanceToNext"
+      );
+      while (continueAdvancing) {
         const state = committedState as StartedState;
         if (state.works.some(({ phase }) => phase === "ready")) {
           const calculation = dispatchCalculation(state);
           if (calculation.batch.length > 0) {
-            await write(command, calculation.batch, calculation.state);
-            batches.push(calculation.batch);
+            context.batches.push(calculation.batch);
+            await write(
+              command,
+              retryKey,
+              calculation.batch,
+              calculation.state,
+            );
             if (command === "advanceToNext") break;
             continue;
           }
@@ -855,14 +989,14 @@ export function createFactoryEmulatorSession(
           committedState as StartedState,
           earliest,
         );
-        await write(command, calculation.batch, calculation.state);
-        batches.push(calculation.batch);
+        context.batches.push(calculation.batch);
+        await write(command, retryKey, calculation.batch, calculation.state);
         if (command === "advanceToNext") break;
       }
       let finalState = committedState as StartedState;
       if (
         target !== undefined &&
-        wasUnfinished &&
+        context.wasUnfinished &&
         finalState.virtualElapsedMs < target
       ) {
         finalState = {
@@ -872,7 +1006,8 @@ export function createFactoryEmulatorSession(
         };
       }
       const madeProgress =
-        batches.length > 0 || finalState.virtualTime !== fromVirtualTime;
+        context.batches.length > 0 ||
+        finalState.virtualTime !== context.fromVirtualTime;
       if (madeProgress) {
         finalState = {
           ...finalState,
@@ -883,18 +1018,78 @@ export function createFactoryEmulatorSession(
         };
         committedState = finalState;
       }
-      return clone({
+      const receipt: FactoryEmulatorAdvanceReceipt = clone({
         status: madeProgress ? "advanced" : "idle",
         command,
-        fromVirtualTime,
+        fromVirtualTime: context.fromVirtualTime,
         virtualTime: finalState.virtualTime,
         virtualElapsedMs: finalState.virtualElapsedMs,
-        batches,
+        batches: context.batches,
         state: finalState,
       });
+      pendingAdvanceContext = undefined;
+      return receipt;
     } finally {
       commandInFlight = undefined;
     }
+  };
+
+  const close = async (): Promise<FactoryEmulatorCloseReceipt> => {
+    const retryKey = "close";
+    const retry = assertCommand("close", retryKey);
+    commandInFlight = "close";
+    try {
+      if (retry !== undefined) {
+        await acceptPendingTransaction();
+        return clone({
+          status: "closed",
+          batch: retry.batch,
+          state: retry.candidate as ClosedState,
+        });
+      }
+      lastError = undefined;
+      const state = committedState as StartedState;
+      const sequence = state.counters.events;
+      const event: FactoryEvent = {
+        schemaVersion: "agent-factory.event.v1",
+        id: identity("event", state.sessionId, sequence, "SESSION_COMPLETED"),
+        type: "SESSION_COMPLETED",
+        context: eventContext(state, sequence, state.virtualTime),
+        payload: {
+          finalStatus: "TERMINATED",
+          completedAt: state.virtualTime,
+          durationMillis: state.virtualElapsedMs,
+        },
+      };
+      const candidate: ClosedState = {
+        ...state,
+        lifecycle: "closed",
+        counters: {
+          ...state.counters,
+          commands: state.counters.commands + 1,
+          events: state.counters.events + 1,
+        },
+      };
+      const batch = [event];
+      await write("close", retryKey, batch, candidate);
+      return clone({ status: "closed", batch, state: candidate });
+    } finally {
+      commandInFlight = undefined;
+    }
+  };
+
+  const reset = (): FactoryEmulatorResetReceipt => {
+    if (commandInFlight !== undefined) {
+      throw new FactoryEmulatorPendingCommandError("reset", commandInFlight);
+    }
+    if (committedState.lifecycle === "closed") {
+      throw new FactoryEmulatorLifecycleError("reset", "closed");
+    }
+    pendingTransaction = undefined;
+    pendingAdvanceContext = undefined;
+    lastError = undefined;
+    committedState = clone(PRE_START_STATE);
+    return clone({ status: "reset", state: committedState });
   };
 
   return {
@@ -902,6 +1097,8 @@ export function createFactoryEmulatorSession(
     submit,
     advanceBy: (durationMs) => runAdvance("advanceBy", durationMs),
     advanceToNext: () => runAdvance("advanceToNext"),
+    close,
+    reset,
     state: () => clone(committedState),
     status,
   };

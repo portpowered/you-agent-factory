@@ -70,7 +70,9 @@ export type FactoryEmulatorCommand =
   | "start"
   | "submit"
   | "advanceBy"
-  | "advanceToNext";
+  | "advanceToNext"
+  | "close"
+  | "reset";
 
 export class FactoryEmulatorLifecycleError extends Error {
   readonly code = "invalid_lifecycle" as const;
@@ -181,6 +183,15 @@ export type FactoryEmulatorSessionState =
       readonly works: readonly FactoryEmulatorSessionWork[];
       readonly ruleCursors: Readonly<Record<string, number>>;
       readonly counters: FactoryEmulatorSessionCounters;
+    }
+  | {
+      readonly lifecycle: "closed";
+      readonly sessionId: string;
+      readonly virtualTime: string;
+      readonly virtualElapsedMs: number;
+      readonly works: readonly FactoryEmulatorSessionWork[];
+      readonly ruleCursors: Readonly<Record<string, number>>;
+      readonly counters: FactoryEmulatorSessionCounters;
     };
 
 export interface FactoryEmulatorBudgetUsage {
@@ -194,16 +205,23 @@ export interface FactoryEmulatorBudgetUsage {
 
 export interface FactoryEmulatorPendingTransactionStatus {
   readonly command: FactoryEmulatorCommand;
-  readonly phase: "sink-write";
+  readonly phase: "sink-write" | "sink-close";
   readonly eventCount: number;
 }
 
-export interface FactoryEmulatorSessionError {
-  readonly code: "sink_write_rejected";
-  readonly operation: "write";
-  readonly command: FactoryEmulatorCommand;
-  readonly message: string;
-}
+export type FactoryEmulatorSessionError =
+  | {
+      readonly code: "sink_write_rejected";
+      readonly operation: "write";
+      readonly command: FactoryEmulatorCommand;
+      readonly message: string;
+    }
+  | {
+      readonly code: "sink_close_rejected";
+      readonly operation: "close";
+      readonly command: FactoryEmulatorCommand;
+      readonly message: string;
+    };
 
 export interface FactoryEmulatorSessionStatus {
   readonly phase: "error" | "closed" | "active" | "ready" | "waiting" | "idle";
@@ -246,6 +264,20 @@ export interface FactoryEmulatorAdvanceReceipt {
   >;
 }
 
+export interface FactoryEmulatorCloseReceipt {
+  readonly status: "closed";
+  readonly batch: readonly FactoryEvent[];
+  readonly state: Extract<FactoryEmulatorSessionState, { lifecycle: "closed" }>;
+}
+
+export interface FactoryEmulatorResetReceipt {
+  readonly status: "reset";
+  readonly state: Extract<
+    FactoryEmulatorSessionState,
+    { lifecycle: "pre-start" }
+  >;
+}
+
 export interface FactoryEmulatorSession {
   start(): Promise<FactoryEmulatorStartReceipt>;
   submit(
@@ -255,6 +287,8 @@ export interface FactoryEmulatorSession {
   ): Promise<FactoryEmulatorSubmitReceipt>;
   advanceBy(durationMs: number): Promise<FactoryEmulatorAdvanceReceipt>;
   advanceToNext(): Promise<FactoryEmulatorAdvanceReceipt>;
+  close(): Promise<FactoryEmulatorCloseReceipt>;
+  reset(): FactoryEmulatorResetReceipt;
   state(): FactoryEmulatorSessionState;
   status(): FactoryEmulatorSessionStatus;
 }

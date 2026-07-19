@@ -24,6 +24,8 @@ export class FactoryEventSinkError extends Error {
 /** Caller-owned destination for one ordered, atomic Factory Event batch. */
 export interface FactoryEventSink {
   write(events: readonly FactoryEvent[]): Promise<void>;
+  /** Optional lifecycle boundary used when an emulator session closes. */
+  close?(): Promise<void>;
 }
 
 export interface MemoryFactoryEventSinkOptions {

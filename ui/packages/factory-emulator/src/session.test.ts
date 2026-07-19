@@ -526,3 +526,240 @@ describe("Factory emulator session snapshots", () => {
     });
   });
 });
+
+describe("Factory emulator atomic transaction recovery", () => {
+  it("keeps a rejected scheduler batch exact and blocks incompatible commands", async () => {
+    const attempts: FactoryEvent[][] = [];
+    let rejectNextDispatch = true;
+    const emulator = executionHarness(
+      executionScenario({
+        initialSubmissions: [
+          { name: "retry-work", workType: "task", state: "ready" },
+        ],
+      }),
+      {
+        write: async (events) => {
+          attempts.push(structuredClone(events));
+          if (
+            rejectNextDispatch &&
+            events.some(({ type }) => type === "DISPATCH_REQUEST")
+          ) {
+            rejectNextDispatch = false;
+            throw new Error("temporary recording failure");
+          }
+        },
+      },
+    );
+    await emulator.start();
+    const before = emulator.state();
+
+    await expect(emulator.advanceToNext()).rejects.toThrow(
+      "temporary recording failure",
+    );
+    expect(emulator.state()).toEqual(before);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      pendingTransaction: {
+        command: "advanceToNext",
+        phase: "sink-write",
+        eventCount: 1,
+      },
+    });
+    await expect(
+      emulator.submit({ name: "blocked", workType: "task", state: "ready" }),
+    ).rejects.toBeInstanceOf(FactoryEmulatorPendingCommandError);
+    await expect(emulator.close()).rejects.toBeInstanceOf(
+      FactoryEmulatorPendingCommandError,
+    );
+
+    const retry = await emulator.advanceToNext();
+    expect(attempts.at(-1)).toEqual(attempts.at(-2));
+    expect(retry.batches.at(-1)).toEqual(attempts.at(-1));
+    expect(retry.state.works[0]?.phase).toBe("active");
+    expect(retry.state.counters.commands).toBe(before.counters.commands + 1);
+  });
+
+  it("discards a rejected transaction on reset without consuming counters", async () => {
+    const writes: FactoryEvent[][] = [];
+    let rejectSubmission = true;
+    const emulator = executionHarness(executionScenario(), {
+      write: async (events) => {
+        writes.push(structuredClone(events));
+        if (
+          rejectSubmission &&
+          events.some(({ type }) => type === "WORK_REQUEST")
+        ) {
+          rejectSubmission = false;
+          throw new Error("submission rejected");
+        }
+      },
+    });
+    await emulator.start();
+
+    await expect(
+      emulator.submit({ name: "discarded", workType: "task", state: "ready" }),
+    ).rejects.toThrow("submission rejected");
+    const rejectedBatch = writes.at(-1);
+    const reset = emulator.reset();
+
+    expect(reset).toEqual({
+      status: "reset",
+      state: {
+        lifecycle: "pre-start",
+        virtualElapsedMs: 0,
+        counters: { commands: 0, events: 0, completedDispatches: 0 },
+      },
+    });
+    expect(emulator.status()).toMatchObject({ phase: "idle" });
+    const restarted = await emulator.start();
+    expect(restarted.state.counters).toEqual({
+      commands: 1,
+      events: 3,
+      completedDispatches: 0,
+    });
+    expect(writes.at(-1)).not.toEqual(rejectedBatch);
+  });
+});
+
+describe("Factory emulator terminal transaction", () => {
+  it("writes a recording-compatible canonical terminal lifecycle batch", async () => {
+    const sink = new RecordingFactoryEventSink({
+      recording: {
+        schemaVersion: "factory-recording/v1",
+        id: "closed-session-recording",
+        title: "Closed session recording",
+      },
+      maxEvents: 10,
+    });
+    const emulator = harness(sink);
+    await emulator.start();
+
+    const receipt = await emulator.close();
+
+    expect(sink.snapshot().events.at(-1)).toEqual(receipt.batch[0]);
+    expect(receipt.batch[0]).toMatchObject({
+      type: "SESSION_COMPLETED",
+      payload: {
+        finalStatus: "TERMINATED",
+        completedAt: scenario.startAt,
+        durationMillis: 0,
+      },
+    });
+  });
+
+  it("waits for terminal write and sink close before exposing closed state", async () => {
+    const writeGate = deferred();
+    const closeGate = deferred();
+    const closeStarted = deferred();
+    let writes = 0;
+    let closes = 0;
+    const emulator = harness({
+      write: async (events) => {
+        writes += 1;
+        if (events.some(({ type }) => type === "SESSION_COMPLETED")) {
+          await writeGate.promise;
+        }
+      },
+      close: async () => {
+        closes += 1;
+        closeStarted.resolve();
+        await closeGate.promise;
+      },
+    });
+    await emulator.start();
+
+    const closing = emulator.close();
+    expect(emulator.state().lifecycle).toBe("started");
+    expect(emulator.status()).toMatchObject({
+      phase: "active",
+      pendingTransaction: { command: "close", phase: "sink-write" },
+    });
+    await expect(emulator.advanceToNext()).rejects.toBeInstanceOf(
+      FactoryEmulatorPendingCommandError,
+    );
+    writeGate.resolve();
+    await closeStarted.promise;
+    expect(emulator.state().lifecycle).toBe("started");
+    expect(emulator.status()).toMatchObject({
+      pendingTransaction: { command: "close", phase: "sink-close" },
+    });
+    closeGate.resolve();
+
+    const receipt = await closing;
+    expect(writes).toBe(2);
+    expect(closes).toBe(1);
+    expect(receipt.batch.map(({ type }) => type)).toEqual([
+      "SESSION_COMPLETED",
+    ]);
+    expect(receipt.state.lifecycle).toBe("closed");
+    expect(emulator.status()).toMatchObject({ phase: "closed" });
+    await expect(emulator.close()).rejects.toBeInstanceOf(
+      FactoryEmulatorLifecycleError,
+    );
+    expect(() => emulator.reset()).toThrow(FactoryEmulatorLifecycleError);
+  });
+});
+
+describe("Factory emulator terminal retry", () => {
+  it("retries sink close without duplicating an accepted terminal event", async () => {
+    const writes: FactoryEvent[][] = [];
+    let closeAttempts = 0;
+    const emulator = harness({
+      write: async (events) => {
+        writes.push(structuredClone(events));
+      },
+      close: async () => {
+        closeAttempts += 1;
+        if (closeAttempts === 1) throw new Error("close unavailable");
+      },
+    });
+    await emulator.start();
+
+    await expect(emulator.close()).rejects.toThrow("close unavailable");
+    expect(emulator.state().lifecycle).toBe("started");
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      error: {
+        code: "sink_close_rejected",
+        operation: "close",
+        command: "close",
+      },
+      pendingTransaction: { phase: "sink-close" },
+    });
+    const terminalBatch = writes.at(-1);
+
+    const receipt = await emulator.close();
+    expect(receipt.batch).toEqual(terminalBatch);
+    expect(writes).toHaveLength(2);
+    expect(closeAttempts).toBe(2);
+    expect(emulator.state().lifecycle).toBe("closed");
+  });
+
+  it("retries a rejected terminal write with identical event identity", async () => {
+    const writes: FactoryEvent[][] = [];
+    let rejectTerminal = true;
+    const emulator = harness({
+      write: async (events) => {
+        writes.push(structuredClone(events));
+        if (
+          rejectTerminal &&
+          events.some(({ type }) => type === "SESSION_COMPLETED")
+        ) {
+          rejectTerminal = false;
+          throw new Error("terminal write rejected");
+        }
+      },
+      close: async () => undefined,
+    });
+    await emulator.start();
+
+    await expect(emulator.close()).rejects.toThrow("terminal write rejected");
+    const beforeRetry = emulator.state();
+    const receipt = await emulator.close();
+
+    expect(writes.at(-1)).toEqual(writes.at(-2));
+    expect(receipt.batch).toEqual(writes.at(-1));
+    expect(beforeRetry.lifecycle).toBe("started");
+    expect(receipt.state.lifecycle).toBe("closed");
+  });
+});
