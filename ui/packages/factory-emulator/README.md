@@ -39,6 +39,108 @@ The inspector treats an omitted orchestrator as the documented Petri default,
 does not mutate or retain the Factory, and reports stable codes with paths into
 the caller-supplied UI client `FactoryDefinition`.
 
+## Long-lived session lifecycle
+
+Create a framework-independent session from a compatible Factory, a parsed
+scenario, and a caller-owned event sink. Construction revalidates the inputs
+and optional safety limits before any event is written.
+
+```ts
+import {
+  createFactoryEmulatorSession,
+  MemoryFactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
+
+const sink = new MemoryFactoryEventSink({ maxEvents: 10_000 });
+const session = createFactoryEmulatorSession({
+  factory,
+  scenario: parsed,
+  sink,
+});
+
+const before = session.status();
+const started = await session.start();
+await session.submit({
+  name: "follow-up",
+  workType: "ticket",
+  state: "ready",
+  input: "Customer reply",
+});
+const dispatched = await session.advanceToNext();
+const advanced = await session.advanceBy(250);
+const current = session.state();
+const closed = await session.close();
+```
+
+`start()` writes one atomic canonical bootstrap batch in `RUN_REQUEST`,
+`INITIAL_STRUCTURE_REQUEST`, `SESSION_STARTED` order. The started state becomes
+visible only after the sink accepts the complete batch. `state()` and
+`status()` return detached, structured-cloneable snapshots; the kernel does not
+retain playback or event history. An idle session remains open for later Work.
+
+`submit()` accepts one validated scenario Work value or a non-empty batch and
+normalizes it into one canonical `WORK_REQUEST`. The complete request is
+validated before its atomic sink write, so an invalid item cannot partially
+create Work. Submissions remain available while other Work is active and after
+the session returns to idle.
+
+Virtual time advances only when the host calls `advanceBy(durationMs)` or
+`advanceToNext()`. Ready Work starts in one deterministic scheduler batch;
+`advanceToNext()` then jumps to the earliest due instant and completes every
+dispatch due there in stable Work order. `advanceBy()` processes every due
+outcome through its requested instant. Event timestamps are always the scenario
+`startAt` plus committed virtual elapsed time; these commands use no wall-clock
+or browser timers. Receipts, state, status, and validation errors are detached
+structured-cloneable values.
+
+Canonical identities and event ordering are derived from the Factory identity,
+the complete validated scenario (including its seed), normalized command
+inputs, command order, and virtual elapsed time. Object key insertion order,
+wall-clock time, and host playback speed do not participate. `reset()` restores
+the pre-start counters, rule cursors, identities, initial submissions, and
+virtual-time origin while retaining the caller-owned sink, so the host can
+clear or replace its own recording destination and reproduce the same supported
+history byte for byte.
+
+Every state-changing command retains its complete detached candidate state and
+canonical event batch until the caller-owned sink accepts the batch. While a
+write is pending, other state-changing commands fail with
+`FactoryEmulatorPendingCommandError`; read-only snapshots remain available.
+After rejection, status exposes the structured sink error and pending phase.
+Retry the same command with the same arguments to write the byte-identical
+batch before execution continues, or call `reset()` to explicitly discard the
+rejected transaction and restore the pre-start state.
+
+`close()` writes one canonical `SESSION_COMPLETED` terminal batch, then awaits
+the sink's optional `close()` boundary before exposing the terminal closed
+state. A terminal write or sink-close rejection remains retryable. Sink-close
+retries never duplicate an already accepted terminal event, and successful
+close rejects all later state-changing commands.
+
+## Execution safety and cooperative scheduling
+
+The session enforces deterministic safety budgets before a calculated batch is
+sent to the sink. Defaults allow 1,000 completed dispatches, 10,000 canonical
+events, one virtual hour, 1,000 consecutive zero-duration scheduler batches,
+100 synchronous scheduler batches, and 1,000 Work items in one synchronous
+batch. Overrides must be positive safe integers and cannot exceed the exported
+`FACTORY_EMULATOR_LIMIT_HARD_CAPS`.
+
+Crossing an event, completed-dispatch, or virtual-time budget throws
+`FactoryEmulatorExecutionPausedError` and exposes a detached
+`budget-exceeded` diagnostic through `status().error`. The diagnostic identifies
+the limit, configured and observed values, and virtual-time context. The
+calculated over-limit batch is not written or committed, and the kernel does
+not fabricate failed Work. A consecutive zero-time scheduler chain uses the
+distinct `zero-duration-cycle` diagnostic. Initial and runtime Work sets larger
+than `maxSynchronousWorkItems` fail atomically with
+`bounded-work-exceeded` before partial Work or events become visible.
+
+Hosts can provide `yieldControl` to choose their own cooperative task boundary.
+Long advancement commands await it after every `maxSynchronousBatches`
+accepted scheduler batches and then resume the same serialized deterministic
+command. The kernel itself does not create timers or Web Workers.
+
 ## Caller-owned event history
 
 `MemoryFactoryEventSink` retains ordered Factory Events up to a required
