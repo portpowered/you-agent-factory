@@ -5,9 +5,14 @@ import {
   type FactoryEmulatorControlsProps,
 } from "./factory-emulator-controls";
 import {
+  FactoryEmulatorErrorBoundary,
+  type FactoryEmulatorFailure,
+} from "./factory-emulator-error-boundary";
+import {
   FactoryTopologyReplay,
   type FactoryTopologyReplayProps,
 } from "./factory-topology-replay";
+import type { FactoryVisualizerError } from "./visualizer-error";
 import {
   WorkProgressVisualizer,
   type WorkProgressVisualizerProps,
@@ -25,8 +30,10 @@ export interface FactoryEmulatorViewVisibility {
 }
 
 export interface FactoryEmulatorViewProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children"> {
+  extends Omit<HTMLAttributes<HTMLElement>, "children" | "onError"> {
   controls: FactoryEmulatorControlsProps;
+  failure?: FactoryEmulatorFailure;
+  onError?: (error: FactoryVisualizerError) => void;
   preset?: FactoryEmulatorViewPreset;
   submission?: ReactNode;
   topology: FactoryTopologyReplayProps;
@@ -68,6 +75,8 @@ const PRESET_VISIBILITY: Record<
 export function FactoryEmulatorView({
   className,
   controls,
+  failure,
+  onError,
   preset = "full",
   submission,
   topology,
@@ -80,41 +89,66 @@ export function FactoryEmulatorView({
     regions.playbackControls || regions.speedControl || regions.runtimeStatus;
 
   return (
-    <section
-      aria-label="Factory emulator view"
-      className={["factory-emulator-view", className].filter(Boolean).join(" ")}
-      data-preset={preset}
-      {...sectionProps}
+    <FactoryEmulatorErrorBoundary
+      failure={failure}
+      onError={onError}
+      regionLabel="Factory emulator view"
     >
-      {showControls ? (
-        <FactoryEmulatorControls
-          {...controls}
-          showPlaybackControls={regions.playbackControls}
-          showRuntimeStatus={regions.runtimeStatus}
-          showSpeedControl={regions.speedControl}
-          showTimelineScrubber={regions.timelineScrubber}
+      <section
+        aria-label="Factory emulator view"
+        className={["factory-emulator-view", className]
+          .filter(Boolean)
+          .join(" ")}
+        data-preset={preset}
+        {...sectionProps}
+      >
+        {showControls ? (
+          <FactoryEmulatorControls
+            {...controls}
+            onError={combineErrorReports(controls.onError, onError)}
+            showPlaybackControls={regions.playbackControls}
+            showRuntimeStatus={regions.runtimeStatus}
+            showSpeedControl={regions.speedControl}
+            showTimelineScrubber={regions.timelineScrubber}
+          />
+        ) : regions.timelineScrubber ? (
+          <FactoryEmulatorControls
+            {...controls}
+            onError={combineErrorReports(controls.onError, onError)}
+            showPlaybackControls={false}
+            showRuntimeStatus={false}
+            showSpeedControl={false}
+            showTimelineScrubber
+          />
+        ) : null}
+        <FactoryTopologyReplay
+          {...topology}
+          onError={combineErrorReports(topology.onError, onError)}
         />
-      ) : regions.timelineScrubber ? (
-        <FactoryEmulatorControls
-          {...controls}
-          showPlaybackControls={false}
-          showRuntimeStatus={false}
-          showSpeedControl={false}
-          showTimelineScrubber
-        />
-      ) : null}
-      <FactoryTopologyReplay {...topology} />
-      {regions.workProgress ? (
-        <WorkProgressVisualizer {...workProgress} />
-      ) : null}
-      {regions.submission && submission ? (
-        <section
-          aria-label="Factory emulator submission"
-          className="factory-emulator-view__submission"
-        >
-          {submission}
-        </section>
-      ) : null}
-    </section>
+        {regions.workProgress ? (
+          <WorkProgressVisualizer {...workProgress} />
+        ) : null}
+        {regions.submission && submission ? (
+          <section
+            aria-label="Factory emulator submission"
+            className="factory-emulator-view__submission"
+          >
+            {submission}
+          </section>
+        ) : null}
+      </section>
+    </FactoryEmulatorErrorBoundary>
   );
+}
+
+function combineErrorReports(
+  primary: ((error: FactoryVisualizerError) => void) | undefined,
+  secondary: ((error: FactoryVisualizerError) => void) | undefined,
+) {
+  if (!secondary || primary === secondary) return primary;
+  if (!primary) return secondary;
+  return (error: FactoryVisualizerError) => {
+    primary(error);
+    secondary(error);
+  };
 }

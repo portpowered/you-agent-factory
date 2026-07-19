@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -101,5 +101,59 @@ describe("FactoryEmulatorControls", () => {
     expect(props.onPause).not.toHaveBeenCalled();
     expect(props.onFollowLatest).not.toHaveBeenCalled();
     expect(props.onSelectTick).not.toHaveBeenCalled();
+  });
+
+  it("presents a host-provided recovery action without owning its behavior", () => {
+    const onRecover = vi.fn();
+    renderControls({
+      failure: {
+        message: "The host could not prepare playback.",
+        recoveryAction: { label: "Reload playback", onRecover },
+      },
+    });
+    expect(screen.getByRole("alert").textContent).toContain(
+      "The host could not prepare playback.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reload playback" }));
+    expect(onRecover).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
+  });
+
+  it("contains render failures and reports a sanitized diagnostic", async () => {
+    const onError = vi.fn();
+    const brokenMessages = { ...timelineMessages };
+    Object.defineProperty(brokenMessages, "regionLabel", {
+      get() {
+        throw new Error("must-not-leak");
+      },
+    });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    renderControls({
+      onError,
+      timeline: {
+        messages: brokenMessages,
+        state: {
+          earliestTick: 0,
+          latestTick: 8,
+          mode: "current",
+          selectedTick: 8,
+          status: "available",
+        },
+      },
+    });
+    expect(
+      screen
+        .getByRole("region", { name: "Factory emulator controls" })
+        .contains(screen.getByRole("alert")),
+    ).toBe(true);
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "render", recoverable: true }),
+      ),
+    );
+    expect(JSON.stringify(onError.mock.calls)).not.toContain("must-not-leak");
+    consoleError.mockRestore();
   });
 });

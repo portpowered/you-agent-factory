@@ -115,3 +115,11 @@ export const Full: Story = {
 };
 export const Compact: Story = { args: { preset: "compact" } };
 export const DisplayOnly: Story = { args: { preset: "display-only" } };
+export const HostFailure: Story = {
+  args: {
+    failure: {
+      message: "The host could not prepare this emulator view.",
+      recoveryAction: { label: "Try again", onRecover: () => undefined },
+    },
+  },
+};

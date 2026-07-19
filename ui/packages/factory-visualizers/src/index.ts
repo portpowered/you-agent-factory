@@ -3,7 +3,7 @@ export {
   type FactoryEmulatorControlsProps,
   type FactoryEmulatorControlsTimeline,
 } from "./factory-emulator-controls.js";
-
+export type { FactoryEmulatorFailure } from "./factory-emulator-error-boundary.js";
 export {
   FactoryEmulatorView,
   type FactoryEmulatorViewPreset,

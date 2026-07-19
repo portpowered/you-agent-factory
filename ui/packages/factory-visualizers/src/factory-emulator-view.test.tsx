@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import type {
   FactoryWorkProgressCategory,
   FactoryWorkProgressProjection,
@@ -113,6 +113,10 @@ const workProgress: WorkProgressVisualizerProps = {
 };
 const submission = <button type="button">Submit Work</button>;
 
+function BrokenSubmission(): never {
+  throw new Error("must-not-leak");
+}
+
 describe("FactoryEmulatorView", () => {
   it("renders the documented full vertical composition", () => {
     render(
@@ -199,5 +203,62 @@ describe("FactoryEmulatorView", () => {
     expect(
       screen.getByRole("region", { name: "Factory emulator submission" }),
     ).toBeTruthy();
+  });
+});
+
+describe("FactoryEmulatorView failure containment", () => {
+  it("contains composition failures and forwards a safe diagnostic", async () => {
+    const onError = vi.fn();
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    render(
+      <div>
+        <button type="button">Host action</button>
+        <FactoryEmulatorView
+          controls={controls}
+          onError={onError}
+          submission={<BrokenSubmission />}
+          topology={topology}
+          workProgress={workProgress}
+        />
+      </div>,
+    );
+    expect(screen.getByRole("button", { name: "Host action" })).toBeTruthy();
+    expect(
+      screen
+        .getByRole("region", { name: "Factory emulator view" })
+        .contains(screen.getByRole("alert")),
+    ).toBe(true);
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "render", recoverable: true }),
+      ),
+    );
+    expect(JSON.stringify(onError.mock.calls)).not.toContain("must-not-leak");
+    consoleError.mockRestore();
+  });
+
+  it("renders the host-supplied recovery action as a local failure state", () => {
+    const onRecover = vi.fn();
+    render(
+      <FactoryEmulatorView
+        controls={controls}
+        failure={{
+          message: "The host could not assemble the emulator.",
+          recoveryAction: { label: "Reconnect", onRecover },
+        }}
+        topology={topology}
+        workProgress={workProgress}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toContain(
+      "The host could not assemble the emulator.",
+    );
+    screen.getByRole("button", { name: "Reconnect" }).click();
+    expect(onRecover).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("region", { name: "Factory topology" }),
+    ).toBeNull();
   });
 });

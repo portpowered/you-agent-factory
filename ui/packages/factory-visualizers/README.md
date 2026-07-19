@@ -18,6 +18,12 @@ region; `compact` omits speed and submission; `display-only` renders topology
 only. Pass `visibility` to override any individual playback, timeline, speed,
 runtime-status, progress, or submission region. Hidden regions are not rendered.
 
+Both emulator exports accept `onError` for sanitized structured render or
+composition diagnostics and an optional `failure` for a safe host-provided
+local failure message. A failure may include `recoveryAction` with a host-owned
+callback; the visualizers render that action but never assume a retry,
+transport, timer, or global error-state implementation.
+
 The host always owns transport, persistence, and canonical Factory data. It can
 either prepare controlled projections with `@you-agent-factory/factory-replay`
 or pass an unknown recording directly to `FactoryRecordingTopologyReplay`,

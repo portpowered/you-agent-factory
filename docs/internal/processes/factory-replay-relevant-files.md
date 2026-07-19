@@ -67,6 +67,11 @@ that consumes the replay kernel.
   progress, and caller-provided submission content. Presets and visibility
   overrides may decide whether a region renders, but must not create timers,
   stores, replay selections, or event-history ownership.
+- `ui/packages/factory-visualizers/src/factory-emulator-error-boundary.tsx`
+  contains local emulator render/composition failures. It emits sanitized
+  diagnostics through optional host callbacks and can render a host-supplied,
+  safe failure with a host-owned recovery action; it must not create retry,
+  transport, timer, store, or replay ownership.
 - `ui/src/features/timeline/state/timeline/factory-replay-kernel.compatibility.test.ts`
   compares the package-selected historical projection with the existing hosted
   reducer and projection.

@@ -3,18 +3,27 @@ import {
   type FactoryEmulatorControlsProps as PlaybackControlsProps,
 } from "@you-agent-factory/components";
 import type { HTMLAttributes } from "react";
-
+import {
+  FactoryEmulatorErrorBoundary,
+  type FactoryEmulatorFailure,
+} from "./factory-emulator-error-boundary";
 import {
   FactoryTimelineScrubber,
   type FactoryTimelineScrubberMessages,
   type FactoryTimelineScrubberState,
 } from "./factory-timeline-scrubber";
+import type { FactoryVisualizerError } from "./visualizer-error";
 
 export interface FactoryEmulatorControlsProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children">,
-    Omit<PlaybackControlsProps, "onPause" | "onPlay" | "onRestart" | "onStep"> {
+  extends Omit<HTMLAttributes<HTMLElement>, "children" | "onError">,
+    Omit<
+      PlaybackControlsProps,
+      "onError" | "onPause" | "onPlay" | "onRestart" | "onStep"
+    > {
   formatTick: (tick: number) => string;
+  failure?: FactoryEmulatorFailure;
   onFollowLatest: () => void;
+  onError?: (error: FactoryVisualizerError) => void;
   onPause: () => void;
   onPlay: () => void;
   onRestart: () => void;
@@ -34,8 +43,10 @@ export interface FactoryEmulatorControlsTimeline {
 /** Controlled controls that make the distinction between current and historical replay explicit. */
 export function FactoryEmulatorControls({
   className,
+  failure,
   formatTick,
   onFollowLatest,
+  onError,
   onPause,
   onPlay,
   onRestart,
@@ -64,31 +75,37 @@ export function FactoryEmulatorControls({
   }
 
   return (
-    <section
-      aria-label="Factory emulator controls"
-      className={["factory-emulator-controls", className]
-        .filter(Boolean)
-        .join(" ")}
+    <FactoryEmulatorErrorBoundary
+      failure={failure}
+      onError={onError}
+      regionLabel="Factory emulator controls"
     >
-      {showPlaybackControls ? (
-        <PlaybackControls
-          {...playbackProps}
-          onPause={onPause}
-          onPlay={() => returnToLatestBefore(onPlay)}
-          onRestart={onRestart}
-          onStep={() => returnToLatestBefore(onStep)}
-        />
-      ) : null}
-      {showTimelineScrubber ? (
-        <FactoryTimelineScrubber
-          disabled={timeline.disabled}
-          formatTick={formatTick}
-          messages={timeline.messages}
-          onFollowLatest={onFollowLatest}
-          onSelectTick={selectTick}
-          state={timeline.state}
-        />
-      ) : null}
-    </section>
+      <section
+        aria-label="Factory emulator controls"
+        className={["factory-emulator-controls", className]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {showPlaybackControls ? (
+          <PlaybackControls
+            {...playbackProps}
+            onPause={onPause}
+            onPlay={() => returnToLatestBefore(onPlay)}
+            onRestart={onRestart}
+            onStep={() => returnToLatestBefore(onStep)}
+          />
+        ) : null}
+        {showTimelineScrubber ? (
+          <FactoryTimelineScrubber
+            disabled={timeline.disabled}
+            formatTick={formatTick}
+            messages={timeline.messages}
+            onFollowLatest={onFollowLatest}
+            onSelectTick={selectTick}
+            state={timeline.state}
+          />
+        ) : null}
+      </section>
+    </FactoryEmulatorErrorBoundary>
   );
 }
