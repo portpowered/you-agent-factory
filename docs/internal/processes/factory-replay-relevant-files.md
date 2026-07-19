@@ -85,5 +85,9 @@ that consumes the replay kernel.
   layout sidecar unchanged to the controlled topology renderer. Other hosts
   should likewise supply the sidecar as an explicit presentation input rather
   than attaching it to replay state or recordings.
+- `ui/src/features/dashboard/components/topology-replay/hosted-topology-replay.tsx`
+  is the hosted replay boundary. It forwards its optional caller-owned layout
+  sidecar to the controlled renderer and must not place it in timeline or
+  stream-store state.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.
