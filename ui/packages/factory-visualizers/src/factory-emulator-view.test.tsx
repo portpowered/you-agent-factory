@@ -210,6 +210,49 @@ describe("FactoryEmulatorView", () => {
   });
 });
 
+describe("FactoryEmulatorView visibility overrides", () => {
+  it.each([
+    ["speedControl", "combobox", "Playback speed"],
+    ["runtimeStatus", "status", "Runtime status"],
+  ] as const)(
+    "renders the %s override without playback actions",
+    (region, role, name) => {
+      render(
+        <FactoryEmulatorView
+          controls={controls}
+          preset="display-only"
+          topology={topology}
+          visibility={{ [region]: true }}
+          workProgress={workProgress}
+        />,
+      );
+      expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
+      expect(screen.getByRole(role, { name })).toBeTruthy();
+    },
+  );
+
+  it("omits speed and status when their overrides are disabled", () => {
+    render(
+      <FactoryEmulatorView
+        controls={controls}
+        preset="full"
+        topology={topology}
+        visibility={{
+          playbackControls: false,
+          runtimeStatus: false,
+          speedControl: false,
+        }}
+        workProgress={workProgress}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Playback speed" }),
+    ).toBeNull();
+    expect(screen.queryByRole("status", { name: "Runtime status" })).toBeNull();
+  });
+});
+
 describe("FactoryEmulatorView failure containment", () => {
   it("forwards topology layout diagnostics through the view error callback", async () => {
     const onError = vi.fn();

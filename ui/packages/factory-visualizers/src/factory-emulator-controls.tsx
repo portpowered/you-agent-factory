@@ -86,12 +86,15 @@ export function FactoryEmulatorControls({
           .filter(Boolean)
           .join(" ")}
       >
-        {showPlaybackControls ? (
+        {showPlaybackControls ||
+        playbackProps.showRuntimeStatus !== false ||
+        playbackProps.showSpeedControl !== false ? (
           <PlaybackControls
             {...playbackProps}
             onPause={onPause}
             onPlay={() => returnToLatestBefore(onPlay)}
             onRestart={onRestart}
+            showPlaybackActions={showPlaybackControls}
             onStep={() => returnToLatestBefore(onStep)}
           />
         ) : null}

@@ -24,6 +24,7 @@ export interface FactoryEmulatorControlsProps
   onSpeedChange: (speed: FactoryEmulatorSpeed) => void;
   onStep: () => void;
   runtimeStatus: FactoryEmulatorRuntimeStatus;
+  showPlaybackActions?: boolean;
   showRuntimeStatus?: boolean;
   showSpeedControl?: boolean;
   speed: FactoryEmulatorSpeed;
@@ -53,6 +54,7 @@ export function FactoryEmulatorControls({
   onSpeedChange,
   onStep,
   runtimeStatus,
+  showPlaybackActions = true,
   showRuntimeStatus = true,
   showSpeedControl = true,
   speed,
@@ -69,20 +71,22 @@ export function FactoryEmulatorControls({
       )}
       {...props}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Button disabled={disabled.has("play")} onClick={onPlay} size="sm">
-          Play
-        </Button>
-        <Button disabled={disabled.has("pause")} onClick={onPause} size="sm" tone="secondary">
-          Pause
-        </Button>
-        <Button disabled={disabled.has("step")} onClick={onStep} size="sm" tone="outline">
-          Step
-        </Button>
-        <Button disabled={disabled.has("restart")} onClick={onRestart} size="sm" tone="ghost">
-          Restart
-        </Button>
-      </div>
+      {showPlaybackActions ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button disabled={disabled.has("play")} onClick={onPlay} size="sm">
+            Play
+          </Button>
+          <Button disabled={disabled.has("pause")} onClick={onPause} size="sm" tone="secondary">
+            Pause
+          </Button>
+          <Button disabled={disabled.has("step")} onClick={onStep} size="sm" tone="outline">
+            Step
+          </Button>
+          <Button disabled={disabled.has("restart")} onClick={onRestart} size="sm" tone="ghost">
+            Restart
+          </Button>
+        </div>
+      ) : null}
 
       {showSpeedControl ? <label className="ml-auto flex min-h-9 items-center gap-2 text-body-small font-medium text-on-surface-variant">
         <span>Speed</span>
