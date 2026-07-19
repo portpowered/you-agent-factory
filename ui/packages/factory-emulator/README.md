@@ -254,9 +254,11 @@ const detachedRecording = recordingSink.snapshot();
 
 The package is built and verified independently from the dashboard. Run
 `bun run verify` from this directory to check the generated schema module,
-types, formatting and lint rules, focused tests, compiled output, dependency
-boundary, packed inventory, and a clean installed consumer. `bun run generate`
-refreshes the committed runtime schema module after editing
+types, formatting and lint rules, focused tests, compiled frozen-reference
+conformance and determinism, dependency boundary, packed inventory, and a
+clean installed consumer. The installed consumer reruns every frozen reference
+from the packed artifact, so fixture freshness is proven without a backend or
+fixture generator. `bun run generate` refreshes the committed runtime schema module after editing
 `schema/scenario.schema.json`.
 
 `@you-agent-factory/client` is an explicit peer contract because the emulator

@@ -36,11 +36,12 @@
     "check:installed-consumer": "node scripts/verify-installed-consumer.mjs",
     "check:pack": "node scripts/verify-package-pack.mjs",
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
+    "check:runtime-reference-conformance": "node scripts/check-runtime-reference-conformance.mjs",
     "generate": "node scripts/generate-scenario-schema.mjs",
     "lint": "biome check src scripts vitest.config.ts",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit --pretty false",
-    "verify": "bun run check:generated && bun run typecheck && bun run lint && bun run test && bun run build && bun run check:package-boundary && bun run check:changed-paths && bun run check:pack && bun run check:installed-consumer"
+    "verify": "bun run check:generated && bun run typecheck && bun run lint && bun run test && bun run build && bun run check:runtime-reference-conformance && bun run check:package-boundary && bun run check:changed-paths && bun run check:pack && bun run check:installed-consumer"
   },
   "dependencies": {
     "ajv": "^8.20.0",
