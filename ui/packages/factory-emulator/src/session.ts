@@ -16,6 +16,8 @@ import type {
   FactoryEmulatorRule,
   FactoryEmulatorScenario,
   FactoryEmulatorScenarioIssue,
+  FactoryEmulatorSubmissionBatch,
+  FactoryEmulatorSubmissionRelation,
 } from "./scenario-contracts.js";
 import {
   compareFactorySchedulerCandidates,
@@ -111,6 +113,20 @@ interface DispatchCandidateValue {
   readonly execution: WorkExecution;
   readonly invocation: number;
   readonly cursorKey?: string;
+}
+
+interface ValidatedSubmissionBatch {
+  readonly works: readonly FactoryEmulatorInitialSubmission[];
+  readonly relations: readonly FactoryEmulatorSubmissionRelation[];
+}
+
+function isSubmissionArray(
+  value:
+    | FactoryEmulatorInitialSubmission
+    | readonly FactoryEmulatorInitialSubmission[]
+    | FactoryEmulatorSubmissionBatch,
+): value is readonly FactoryEmulatorInitialSubmission[] {
+  return Array.isArray(value);
 }
 
 function clone<Value>(value: Value): Value {
@@ -665,6 +681,9 @@ function routedWorksFor(
           ? {}
           : { parent: matching.parent }
         : { parent: first.workId }),
+      ...(matching?.relations === undefined
+        ? {}
+        : { relations: matching.relations }),
       queuedElapsedMs: dispatch.dueElapsedMs,
       lastDispatchElapsedMs: Math.min(
         lineageSource.lastDispatchElapsedMs ?? dispatch.dueElapsedMs,
@@ -704,7 +723,7 @@ function eventWorkFor(
 function workRequestCalculation(
   configuration: ValidatedConfiguration,
   state: StartedState,
-  submissions: readonly FactoryEmulatorInitialSubmission[],
+  submissionBatch: ValidatedSubmissionBatch,
   command: "start" | "submit",
 ): {
   readonly event: FactoryEvent;
@@ -716,7 +735,7 @@ function workRequestCalculation(
     command,
     state.counters.commands,
   );
-  const works = submissions.map((submission, ordinal) => {
+  const works = submissionBatch.works.map((submission, ordinal) => {
     const workId = identity(
       "work",
       state.sessionId,
@@ -742,22 +761,42 @@ function workRequestCalculation(
       phase: "ready" as const,
     };
   });
+  const workByName = new Map(works.map((work) => [work.submissionId, work]));
+  const resolvedWorkId = (name: string): string => {
+    const resolved = workByName.get(name);
+    if (resolved === undefined) {
+      throw new Error(`Validated submission target ${name} is missing.`);
+    }
+    return resolved.workId;
+  };
+  const normalizedWorks = works.map((work) => {
+    const relations = submissionBatch.relations
+      .filter(({ sourceWorkName }) => sourceWorkName === work.submissionId)
+      .map((relation) => ({
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: relation.sourceWorkName,
+        targetWorkName: relation.targetWorkName,
+        targetWorkId: resolvedWorkId(relation.targetWorkName),
+        requiredState: relation.requiredState ?? "complete",
+      }));
+    return relations.length === 0 ? work : { ...work, relations };
+  });
   const sequence = state.counters.events;
   return {
-    works,
+    works: normalizedWorks,
     event: {
       schemaVersion: "agent-factory.event.v1",
       id: identity("event", state.sessionId, sequence, "WORK_REQUEST"),
       type: "WORK_REQUEST",
       context: eventContext(state, sequence, state.virtualTime, {
         requestId,
-        traceIds: works.map(({ traceId }) => traceId),
-        workIds: works.map(({ workId }) => workId),
+        traceIds: normalizedWorks.map(({ traceId }) => traceId),
+        workIds: normalizedWorks.map(({ workId }) => workId),
       }),
       payload: {
         type: "FACTORY_REQUEST_BATCH",
         source: "emulator",
-        works: works.map((work) => ({
+        works: normalizedWorks.map((work) => ({
           name: work.submissionId,
           workId: work.workId,
           requestId: work.requestId,
@@ -900,11 +939,18 @@ function validateSubmissions(
   state: StartedState,
   value:
     | FactoryEmulatorInitialSubmission
-    | readonly FactoryEmulatorInitialSubmission[],
-): readonly FactoryEmulatorInitialSubmission[] {
-  const submissions = Array.isArray(value) ? value : [value];
+    | readonly FactoryEmulatorInitialSubmission[]
+    | FactoryEmulatorSubmissionBatch,
+): ValidatedSubmissionBatch {
+  const batch: FactoryEmulatorSubmissionBatch = isSubmissionArray(value)
+    ? { works: value }
+    : "works" in value
+      ? value
+      : { works: [value] };
+  const scenarioSubmissions =
+    isSubmissionArray(value) || !("works" in value) ? batch.works : batch;
   const parsed = safeParseFactoryEmulatorScenario(
-    { ...configuration.scenario, initialSubmissions: submissions },
+    { ...configuration.scenario, initialSubmissions: scenarioSubmissions },
     configuration.factory,
   );
   const issues: FactoryEmulatorScenarioIssue[] = parsed.success
@@ -914,7 +960,7 @@ function validateSubmissions(
         path: ["submissions", ...issue.path.slice(1)],
       }));
   const known = new Set(state.works.map(({ submissionId }) => submissionId));
-  submissions.forEach((submission, index) => {
+  batch.works.forEach((submission, index) => {
     if (known.has(submission?.name)) {
       issues.push({
         category: "semantic",
@@ -925,7 +971,7 @@ function validateSubmissions(
     }
   });
   if (issues.length > 0) throw new FactoryEmulatorSubmissionError(issues);
-  return clone(submissions);
+  return clone({ works: batch.works, relations: batch.relations ?? [] });
 }
 
 function rejectionMessage(rejection: unknown): string {
@@ -1246,10 +1292,16 @@ export function createFactoryEmulatorSession(
         },
       };
       const batches: (readonly FactoryEvent[])[] = [bootstrap];
-      const initial = configuration.scenario.initialSubmissions ?? [];
-      assertWorkBound("start", initial.length);
+      const initialValue = configuration.scenario.initialSubmissions ?? [];
+      const initial: ValidatedSubmissionBatch = isSubmissionArray(initialValue)
+        ? { works: initialValue, relations: [] }
+        : {
+            works: initialValue.works,
+            relations: initialValue.relations ?? [],
+          };
+      assertWorkBound("start", initial.works.length);
       let combined = bootstrap;
-      if (initial.length > 0) {
+      if (initial.works.length > 0) {
         const calculation = workRequestCalculation(
           configuration,
           { ...candidate, counters: { ...candidate.counters, commands: 0 } },
@@ -1275,7 +1327,8 @@ export function createFactoryEmulatorSession(
   const submit = async (
     value:
       | FactoryEmulatorInitialSubmission
-      | readonly FactoryEmulatorInitialSubmission[],
+      | readonly FactoryEmulatorInitialSubmission[]
+      | FactoryEmulatorSubmissionBatch,
   ): Promise<FactoryEmulatorSubmitReceipt> => {
     const retryKey = canonicalJson(Array.isArray(value) ? value : [value]);
     const retry = assertCommand("submit", retryKey);
@@ -1293,7 +1346,14 @@ export function createFactoryEmulatorSession(
       }
     }
     const state = committedState as StartedState;
-    assertWorkBound("submit", Array.isArray(value) ? value.length : 1);
+    assertWorkBound(
+      "submit",
+      isSubmissionArray(value)
+        ? value.length
+        : "works" in value
+          ? value.works.length
+          : 1,
+    );
     const submissions = validateSubmissions(configuration, state, value);
     commandInFlight = "submit";
     lastError = undefined;

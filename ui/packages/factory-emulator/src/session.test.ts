@@ -119,6 +119,7 @@ const executionFactory = {
       name: "task",
       states: [
         { name: "ready", type: "INITIAL" },
+        { name: "complete", type: "PROCESSING" },
         { name: "done", type: "TERMINAL" },
       ],
     },
@@ -168,6 +169,242 @@ function executionHarness(
     sink,
   });
 }
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: The table keeps every invalid relationship case on the same atomicity harness.
+describe("Factory emulator dependency submission", () => {
+  it("normalizes the shared scenario and runtime DEPENDS_ON batch contract", async () => {
+    const batch = {
+      works: [
+        { name: "blocked", workType: "task", state: "ready" },
+        { name: "prerequisite", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON" as const,
+          sourceWorkName: "blocked",
+          targetWorkName: "prerequisite",
+        },
+      ],
+    };
+    const initial = executionHarness(
+      executionScenario({ initialSubmissions: batch }),
+    );
+    const initialState = (await initial.start()).state;
+    const runtime = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await runtime.start();
+    const runtimeState = (await runtime.submit(batch)).state;
+
+    for (const state of [initialState, runtimeState]) {
+      const blocked = state.works.find(
+        ({ submissionId }) => submissionId === "blocked",
+      );
+      const prerequisite = state.works.find(
+        ({ submissionId }) => submissionId === "prerequisite",
+      );
+      expect(blocked?.relations).toEqual([
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "prerequisite",
+          targetWorkId: prerequisite?.workId,
+          requiredState: "complete",
+        },
+      ]);
+      expect(blocked?.workId).toBeTruthy();
+      expect(prerequisite?.workId).toBeTruthy();
+    }
+
+    const explicit = await runtime.submit({
+      works: [
+        { name: "explicit-blocked", workType: "task", state: "ready" },
+        { name: "explicit-target", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "explicit-blocked",
+          targetWorkName: "explicit-target",
+          requiredState: "done",
+        },
+      ],
+    });
+    expect(
+      explicit.state.works.find(
+        ({ submissionId }) => submissionId === "explicit-blocked",
+      )?.relations?.[0]?.requiredState,
+    ).toBe("done");
+  });
+
+  it.each([
+    [
+      "duplicate relations",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "missing source",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "missing",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "missing target",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "missing",
+        },
+      ],
+    ],
+    [
+      "self relation",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "blocked",
+        },
+      ],
+    ],
+    [
+      "cycle",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "target",
+          targetWorkName: "blocked",
+        },
+      ],
+    ],
+    [
+      "invalid required state",
+      [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+          requiredState: "missing",
+        },
+      ],
+    ],
+    [
+      "parent-child",
+      [
+        {
+          type: "PARENT_CHILD",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "spawned-by",
+      [
+        {
+          type: "SPAWNED_BY",
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+    [
+      "unknown relationship type",
+      [
+        {
+          type: "BLOCKS" as never,
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    ],
+  ] as const)(
+    "atomically rejects %s dependency batches",
+    async (_label, relations) => {
+      const writes: FactoryEvent[][] = [];
+      const emulator = executionHarness(
+        executionScenario({ initialSubmissions: [] }),
+        {
+          write: async (events) =>
+            writes.push(structuredClone(events) as FactoryEvent[]),
+        },
+      );
+      await emulator.start();
+      const before = emulator.state();
+      await expect(
+        emulator.submit({
+          works: [
+            { name: "blocked", workType: "task", state: "ready" },
+            { name: "target", workType: "task", state: "ready" },
+          ],
+          relations,
+        }),
+      ).rejects.toMatchObject({
+        name: "FactoryEmulatorSubmissionError",
+        code: "invalid_submission",
+        diagnostics: expect.arrayContaining([expect.any(Object)]),
+      } satisfies Partial<FactoryEmulatorSubmissionError>);
+      expect(emulator.state()).toEqual(before);
+      expect(writes).toHaveLength(1);
+    },
+  );
+
+  it("does not consume deterministic identity after relationship rejection", async () => {
+    const valid = {
+      works: [
+        { name: "blocked", workType: "task", state: "ready" },
+        { name: "target", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON" as const,
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    };
+    const afterRejection = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await afterRejection.start();
+    await expect(
+      afterRejection.submit({
+        ...valid,
+        relations: [{ ...valid.relations[0], targetWorkName: "missing" }],
+      }),
+    ).rejects.toBeInstanceOf(Error);
+    const retried = await afterRejection.submit(valid);
+
+    const firstTry = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    await firstTry.start();
+    const first = await firstTry.submit(valid);
+    expect(retried.state.works).toEqual(first.state.works);
+    expect(retried.batch).toEqual(first.batch);
+  });
+});
 
 describe("Factory emulator Work submission", () => {
   it("normalizes initial, active, and idle submissions into atomic Work requests", async () => {

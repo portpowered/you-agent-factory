@@ -66,6 +66,22 @@ await session.submit({
   state: "ready",
   input: "Customer reply",
 });
+
+await session.submit({
+  works: [
+    { name: "reply", workType: "ticket", state: "ready" },
+    { name: "approval", workType: "ticket", state: "ready" },
+  ],
+  relations: [
+    {
+      type: "DEPENDS_ON",
+      sourceWorkName: "reply",
+      targetWorkName: "approval",
+      // Omit only when the target Work Type declares the default "complete".
+      requiredState: "classified",
+    },
+  ],
+});
 const dispatched = await session.advanceToNext();
 const advanced = await session.advanceBy(250);
 const current = session.state();
@@ -78,11 +94,12 @@ visible only after the sink accepts the complete batch. `state()` and
 `status()` return detached, structured-cloneable snapshots; the kernel does not
 retain playback or event history. An idle session remains open for later Work.
 
-`submit()` accepts one validated scenario Work value or a non-empty batch and
-normalizes it into one canonical `WORK_REQUEST`. The complete request is
-validated before its atomic sink write, so an invalid item cannot partially
-create Work. Submissions remain available while other Work is active and after
-the session returns to idle.
+`submit()` accepts one validated scenario Work value, a relationship-free Work
+array, or a `{ works, relations }` batch. `DEPENDS_ON` is the only supported
+emulator relationship; both endpoints must be names from that batch. The
+complete request is validated before its atomic sink write, so an invalid item
+or graph cannot partially create Work. Submissions remain available while
+other Work is active and after the session returns to idle.
 
 Virtual time advances only when the host calls `advanceBy(durationMs)` or
 `advanceToNext()`. Ready Work starts in one deterministic scheduler batch;

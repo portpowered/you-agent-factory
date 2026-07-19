@@ -39,6 +39,22 @@ export interface FactoryEmulatorInitialSubmission {
   readonly parent?: string;
 }
 
+export interface FactoryEmulatorSubmissionRelation {
+  readonly type: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
+  readonly sourceWorkName: string;
+  readonly targetWorkName: string;
+  readonly requiredState?: string;
+}
+
+export interface FactoryEmulatorSubmissionBatch {
+  readonly works: readonly FactoryEmulatorInitialSubmission[];
+  readonly relations?: readonly FactoryEmulatorSubmissionRelation[];
+}
+
+export type FactoryEmulatorInitialSubmissions =
+  | readonly FactoryEmulatorInitialSubmission[]
+  | FactoryEmulatorSubmissionBatch;
+
 export interface FactoryEmulatorScenario {
   readonly schemaVersion: typeof FACTORY_EMULATOR_SCENARIO_SCHEMA_VERSION;
   readonly id: string;
@@ -52,7 +68,7 @@ export interface FactoryEmulatorScenario {
         readonly behavior: "outcome";
         readonly outcome: FactoryEmulatorOutcome;
       };
-  readonly initialSubmissions?: readonly FactoryEmulatorInitialSubmission[];
+  readonly initialSubmissions?: FactoryEmulatorInitialSubmissions;
 }
 
 export type FactoryEmulatorScenarioIssueCode =

@@ -56,10 +56,17 @@ export const generatedScenarioSchema = {
       "$ref": "#/$defs/unmatched"
     },
     "initialSubmissions": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/initialSubmission"
-      }
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/initialSubmission"
+          }
+        },
+        {
+          "$ref": "#/$defs/submissionBatch"
+        }
+      ]
     }
   },
   "$defs": {
@@ -257,6 +264,54 @@ export const generatedScenarioSchema = {
         },
         "parent": {
           "$ref": "#/$defs/stableIdentity"
+        }
+      }
+    },
+    "submissionRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "sourceWorkName",
+        "targetWorkName"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "DEPENDS_ON",
+            "PARENT_CHILD",
+            "SPAWNED_BY"
+          ]
+        },
+        "sourceWorkName": {
+          "$ref": "#/$defs/stableIdentity"
+        },
+        "targetWorkName": {
+          "$ref": "#/$defs/stableIdentity"
+        },
+        "requiredState": {
+          "$ref": "#/$defs/nonEmptyText128"
+        }
+      }
+    },
+    "submissionBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "works"
+      ],
+      "properties": {
+        "works": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/initialSubmission"
+          }
+        },
+        "relations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/submissionRelation"
+          }
         }
       }
     }

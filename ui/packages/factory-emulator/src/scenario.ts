@@ -4,6 +4,7 @@ import addFormats from "ajv-formats";
 import { generatedScenarioSchema } from "./generated/scenario-schema.js";
 import {
   type FactoryEmulatorInitialSubmission,
+  type FactoryEmulatorInitialSubmissions,
   type FactoryEmulatorOutcome,
   type FactoryEmulatorRuleSelector,
   type FactoryEmulatorScenario,
@@ -12,6 +13,7 @@ import {
   FactoryEmulatorScenarioValidationError,
   type SafeParseFactoryEmulatorScenarioResult,
 } from "./scenario-contracts.js";
+import { validateDependencyRelationships } from "./submission-validation.js";
 
 export * from "./scenario-contracts.js";
 
@@ -249,10 +251,14 @@ function validateSelectorReferences(
     }
   }
 
-  for (const [index, submission] of (
-    scenario.initialSubmissions ?? []
-  ).entries()) {
-    const path = ["initialSubmissions", index] as const;
+  const submissions = submissionWorks(scenario.initialSubmissions);
+  const workPathPrefix =
+    scenario.initialSubmissions !== undefined &&
+    isSubmissionArray(scenario.initialSubmissions)
+      ? (["initialSubmissions"] as const)
+      : (["initialSubmissions", "works"] as const);
+  for (const [index, submission] of submissions.entries()) {
+    const path = [...workPathPrefix, index] as const;
     if (!workTypes.has(submission.workType)) {
       issues.push(
         referenceIssue([...path, "workType"], "Work type", submission.workType),
@@ -263,6 +269,19 @@ function validateSelectorReferences(
       );
     }
   }
+}
+
+function submissionWorks(
+  value: FactoryEmulatorInitialSubmissions | undefined,
+): readonly FactoryEmulatorInitialSubmission[] {
+  if (value === undefined) return [];
+  return isSubmissionArray(value) ? value : value.works;
+}
+
+function isSubmissionArray(
+  value: FactoryEmulatorInitialSubmissions,
+): value is readonly FactoryEmulatorInitialSubmission[] {
+  return Array.isArray(value);
 }
 
 function referenceIssue(
@@ -280,6 +299,7 @@ function referenceIssue(
 
 function validateSubmissionRelationships(
   submissions: readonly FactoryEmulatorInitialSubmission[],
+  pathPrefix: readonly (string | number)[],
   issues: FactoryEmulatorScenarioIssue[],
 ): void {
   const names = new Set(submissions.map((submission) => submission.name));
@@ -293,6 +313,7 @@ function validateSubmissionRelationships(
     if (!names.has(submission.parent)) {
       issues.push(
         relationshipIssue(
+          pathPrefix,
           index,
           `Parent ${submission.parent} is not in this submission batch.`,
         ),
@@ -305,6 +326,7 @@ function validateSubmissionRelationships(
       if (visited.has(parent)) {
         issues.push(
           relationshipIssue(
+            pathPrefix,
             index,
             "Initial submission parent relationships must be acyclic.",
           ),
@@ -318,13 +340,14 @@ function validateSubmissionRelationships(
 }
 
 function relationshipIssue(
+  pathPrefix: readonly (string | number)[],
   index: number,
   message: string,
 ): FactoryEmulatorScenarioIssue {
   return {
     category: "semantic",
     code: "invalid_initial_submission_relationship",
-    path: ["initialSubmissions", index, "parent"],
+    path: [...pathPrefix, index, "parent"],
     message,
   };
 }
@@ -357,10 +380,15 @@ function semanticIssues(
     "Rule",
     issues,
   );
-  const submissions = scenario.initialSubmissions ?? [];
+  const submissions = submissionWorks(scenario.initialSubmissions);
+  const submissionPathPrefix =
+    scenario.initialSubmissions !== undefined &&
+    isSubmissionArray(scenario.initialSubmissions)
+      ? (["initialSubmissions"] as const)
+      : (["initialSubmissions", "works"] as const);
   addDuplicateIssues(
     submissions.map((submission) => submission.name),
-    (index) => ["initialSubmissions", index, "name"],
+    (index) => [...submissionPathPrefix, index, "name"],
     "Initial submission",
     issues,
   );
@@ -392,7 +420,17 @@ function semanticIssues(
     );
   }
   validateSelectorReferences(scenario, factory, issues);
-  validateSubmissionRelationships(submissions, issues);
+  validateSubmissionRelationships(submissions, submissionPathPrefix, issues);
+  if (
+    scenario.initialSubmissions !== undefined &&
+    !isSubmissionArray(scenario.initialSubmissions)
+  ) {
+    validateDependencyRelationships(
+      scenario.initialSubmissions,
+      factory,
+      issues,
+    );
+  }
   return issues;
 }
 
