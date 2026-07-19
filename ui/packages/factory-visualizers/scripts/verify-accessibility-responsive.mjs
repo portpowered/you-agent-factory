@@ -1,9 +1,13 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
+
+const require = createRequire(import.meta.url);
+const axePath = require.resolve("axe-core/axe.min.js");
 
 const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -38,6 +42,7 @@ try {
   browser = await chromium.launch({ headless: true });
   await verifyResponsiveViewports(browser);
   await verifyRecordingComposition(browser);
+  await verifyRecordingPresentations(browser);
   await verifyGermanFormatting(browser);
   await verifyReducedMotion(browser);
   console.log(
@@ -46,6 +51,94 @@ try {
 } finally {
   await browser?.close();
   server.kill();
+}
+
+async function verifyRecordingPresentations(browserInstance) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 1200, height: 900 },
+  });
+  const page = await context.newPage();
+  const stories = [
+    "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
+    "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
+    "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
+  ];
+  for (const storyId of stories) {
+    await openStory(page, storyId);
+    await assertNoPageOverflow(page, storyId);
+    await assertNoSeriousAccessibilityViolations(page, storyId);
+  }
+
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
+  );
+  const sameTickSlider = page.getByRole("slider", {
+    name: "Select recording tick",
+  });
+  await tabTo(page, sameTickSlider, 30);
+  await page.keyboard.press("ArrowRight");
+  await page
+    .getByRole("button", { name: "workstation: triage" })
+    .getByText("1 active Dispatch")
+    .waitFor({ state: "visible", timeout: 5_000 });
+
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
+  );
+  const denseNode = page.getByRole("button", {
+    name: "workstation: Review",
+  });
+  await tabTo(page, denseNode, 100);
+  await page.keyboard.press("Enter");
+  assert(
+    (await page.locator(".react-flow__edge").count()) >= 20,
+    "The dense recording omitted canonical topology connections.",
+  );
+
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
+  );
+  assert(
+    await page.getByText("Ausgewählter logischer Schritt 7.000").isVisible(),
+    "The localized recording does not format logical ticks through its formatter.",
+  );
+  assert(
+    await page.getByText("2 Aufträge insgesamt").isVisible(),
+    "The localized recording does not use localized plural Work copy.",
+  );
+  await context.close();
+
+  const narrowContext = await browserInstance.newContext({
+    viewport: { width: 360, height: 800 },
+  });
+  const narrowPage = await narrowContext.newPage();
+  const narrowStory =
+    "factory-visualizers-factoryrecordingtopologyreplay--narrow-viewport";
+  await openStory(narrowPage, narrowStory);
+  await narrowPage.evaluate(() => {
+    document.body.style.zoom = "200%";
+  });
+  await assertNoPageOverflow(narrowPage, `${narrowStory} at 200% zoom`);
+  await assertNoSeriousAccessibilityViolations(narrowPage, narrowStory);
+  const narrowSlider = narrowPage.getByRole("slider", {
+    name: "Select recording tick",
+  });
+  await tabTo(narrowPage, narrowSlider, 100);
+  await narrowPage.keyboard.press("ArrowLeft");
+  assert(
+    await narrowPage.getByText("Inspecting recording history").isVisible(),
+    "The narrow high-zoom timeline is not keyboard operable.",
+  );
+  assert(
+    await narrowPage
+      .getByRole("region", { name: "Recorded Work progress" })
+      .isVisible(),
+    "The narrow high-zoom Work progress region is unreachable.",
+  );
+  await narrowContext.close();
 }
 
 async function verifyRecordingComposition(browserInstance) {
@@ -282,10 +375,40 @@ async function verifyReducedMotion(browserInstance) {
 
 async function verifyLayout(page, storyId) {
   await openStory(page, storyId);
+  await assertNoPageOverflow(page, storyId);
+}
+
+async function assertNoPageOverflow(page, storyId) {
   const hasPageOverflow = await page.evaluate(
     () => document.documentElement.scrollWidth > window.innerWidth + 1,
   );
   assert(!hasPageOverflow, `${storyId} has page-level horizontal overflow.`);
+}
+
+async function assertNoSeriousAccessibilityViolations(page, storyId) {
+  await page.addScriptTag({ path: axePath });
+  const violations = await page.evaluate(async () => {
+    const result = await window.axe.run(document, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"],
+      },
+    });
+    return result.violations
+      .filter(({ impact }) => impact === "critical" || impact === "serious")
+      .map(({ id, impact, nodes }) => ({
+        id,
+        impact,
+        nodes: nodes.map(({ failureSummary, target }) => ({
+          failureSummary,
+          target,
+        })),
+      }));
+  });
+  assert(
+    violations.length === 0,
+    `${storyId} has serious accessibility violations: ${JSON.stringify(violations)}`,
+  );
 }
 
 async function openStory(page, storyId) {

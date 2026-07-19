@@ -6,6 +6,8 @@ import {
   FactoryRecordingTopologyReplay,
   type FactoryRecordingTopologyReplayMessages,
 } from "./factory-recording-topology-replay";
+import { createGermanRecordingMessages } from "./testing/factory-recording-messages";
+import { createDenseFactoryRecording } from "./testing/factory-recordings";
 
 const messages: FactoryRecordingTopologyReplayMessages = {
   progress: {
@@ -194,10 +196,75 @@ export const SameTickHistoryAndCurrent: Story = {
     await userEvent.keyboard("{ArrowRight}");
     await expect(canvas.getByText("Selected logical tick 3")).toBeVisible();
     await expect(canvas.getByText("1 completed Work")).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "workstation: triage" }),
+    ).toHaveTextContent("1 active Dispatch");
     await userEvent.click(
       canvas.getByRole("button", { name: messages.timeline.followLatest }),
     );
     await expect(canvas.getByText(messages.timeline.currentMode)).toBeVisible();
+  },
+};
+
+export const DenseRecording: Story = {
+  args: {
+    recording: createDenseFactoryRecording(),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const topology = canvas.getByRole("region", {
+      name: messages.topology.regionLabel,
+    });
+    await expect(topology).toHaveAttribute("data-endpoints-valid", "true");
+    await expect(
+      canvas.getByRole("button", { name: "workstation: Review" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("region", { name: messages.timeline.regionLabel }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("region", { name: messages.progress.regionLabel }),
+    ).toHaveAttribute("data-work-progress-total", "2");
+  },
+};
+
+export const LocalizedRecording: Story = {
+  args: {
+    formatNumber: new Intl.NumberFormat("de-DE").format,
+    messages: createGermanRecordingMessages(),
+    recording: createDenseFactoryRecording(),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("region", { name: "Aufgezeichnete Fabrikwiedergabe" }),
+    ).toHaveTextContent("Ausgewählter logischer Schritt 7.000");
+    await expect(canvas.getByText("2 Aufträge insgesamt")).toBeVisible();
+    await expect(
+      canvas.getByText("Aktuelle Aufzeichnung verfolgen"),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "Arbeitsstation: Review" }),
+    ).toBeVisible();
+  },
+};
+
+export const NarrowViewport: Story = {
+  args: {
+    recording: createDenseFactoryRecording(),
+  },
+  parameters: {
+    viewport: { defaultViewport: "mobile1" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const slider = canvas.getByRole("slider", {
+      name: messages.timeline.sliderLabel,
+    });
+    slider.focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    await expect(slider).toHaveFocus();
+    await expect(canvas.getByText(messages.timeline.historyMode)).toBeVisible();
   },
 };
 
@@ -236,6 +303,7 @@ function emptyRecording(): unknown {
 function playbackRecording(): unknown {
   const factory = {
     name: "support-playback",
+    workers: [{ name: "support-agent" }],
     workTypes: [
       {
         name: "support-request",
@@ -251,11 +319,12 @@ function playbackRecording(): unknown {
         inputs: [{ state: "queued", workType: "support-request" }],
         name: "triage",
         outputs: [{ state: "resolved", workType: "support-request" }],
-        worker: "",
+        worker: "support-agent",
       },
     ],
   };
-  const context = (sequence: number, tick: number) => ({
+  const context = (sequence: number, tick: number, dispatchId?: string) => ({
+    ...(dispatchId ? { dispatchId, workIds: ["support-1"] } : {}),
     eventTime: `2026-07-18T20:00:0${sequence}Z`,
     sequence,
     sessionId: "storybook-playback-session",
@@ -301,6 +370,17 @@ function playbackRecording(): unknown {
         },
         schemaVersion: "agent-factory.event.v1",
         type: "WORK_STATE_CHANGE",
+      },
+      {
+        context: context(5, 3, "playback-dispatch"),
+        id: "playback-dispatch",
+        payload: {
+          inputs: [{ workId: "support-1" }],
+          resources: [],
+          transitionId: "triage",
+        },
+        schemaVersion: "agent-factory.event.v1",
+        type: "DISPATCH_REQUEST",
       },
       {
         context: context(3, 3),

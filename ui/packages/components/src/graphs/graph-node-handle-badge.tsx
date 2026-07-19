@@ -11,6 +11,7 @@ export interface GraphNodeHandleBadgeProps {
 export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
   const position = handle.side === "left" ? Position.Left : Position.Right;
   const overlayHandleStyle = anchoredHandleStyle(handle.side);
+  const isButton = handle.onButtonClick !== undefined;
 
   if (handle.hidden) {
     return (
@@ -35,8 +36,10 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
       data-node-handle-tone={tone}
     >
       <Handle
+        aria-disabled={isButton && handle.buttonDisabled ? true : undefined}
         aria-invalid={handle.validationError ? true : undefined}
         aria-label={handle.buttonAriaLabel ?? handle.label}
+        aria-pressed={isButton ? handle.buttonPressed : undefined}
         className={cn(
           "pointer-events-auto absolute !top-1/2 !h-5 !w-5 !border-0 !bg-transparent",
           "before:pointer-events-none before:absolute before:top-1/2 before:h-2.5 before:w-2.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-surface before:bg-[var(--node-handle-background)] before:shadow-sm before:transition before:content-['']",
@@ -52,8 +55,18 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
         )}
         id={handle.id}
         isConnectable={handle.connectable ?? true}
-        onClick={handle.onButtonClick}
+        onClick={handle.buttonDisabled ? undefined : handle.onButtonClick}
+        onKeyDown={
+          isButton && !handle.buttonDisabled
+            ? (event) => {
+                if (event.key !== "Enter" && event.key !== " ") return;
+                event.preventDefault();
+                handle.onButtonClick?.();
+              }
+            : undefined
+        }
         position={position}
+        role={isButton ? "button" : "img"}
         style={
           {
             ...overlayHandleStyle,
@@ -62,6 +75,7 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
           } as CSSProperties
         }
         title={handle.buttonTitle ?? handle.validationMessage}
+        tabIndex={isButton && !handle.buttonDisabled ? 0 : undefined}
         type={handle.type}
       />
     </div>
@@ -91,9 +105,7 @@ function handleDotColor(tone: GraphNodeHandleTone): string {
   }
 }
 
-function anchoredHandleStyle(
-  side: GraphNodeHandle["side"],
-): CSSProperties {
+function anchoredHandleStyle(side: GraphNodeHandle["side"]): CSSProperties {
   return side === "left"
     ? {
         left: "50%",

@@ -1,16 +1,16 @@
 // @vitest-environment happy-dom
 
+import { fireEvent } from "@testing-library/react";
 import { Position, ReactFlowProvider } from "@xyflow/react";
-import type { ReactElement } from "react";
-import { describe, expect, it } from "vitest";
-
 import {
   GraphEdge,
   GraphNodeButton,
+  type GraphNodeHandle,
   GraphNodeHandleBadge,
   GraphNodeShell,
-  type GraphNodeHandle,
 } from "@you-agent-factory/components/graphs";
+import type { ReactElement } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { renderPackageComponent, screen } from "../testing/render";
 
 const sourceHandle: GraphNodeHandle = {
@@ -105,12 +105,26 @@ describe("graph edges and handles", () => {
 
     expect(screen.getByLabelText("Input connection")).toBeInTheDocument();
     expect(screen.getByLabelText("Output connection")).toBeInTheDocument();
+    expect(screen.getAllByRole("img")).toHaveLength(2);
     expect(
       document.querySelector('[data-node-handle-badge="input-target"]'),
     ).toHaveAttribute("data-node-handle-tone", "input");
     expect(
       document.querySelector('[data-node-handle-badge="output-source"]'),
     ).toHaveAttribute("data-node-handle-tone", "output");
+  });
+
+  it("makes callback-backed handles keyboard-operable buttons", () => {
+    const onButtonClick = vi.fn();
+    renderWithReactFlow(
+      <GraphNodeHandleBadge handle={{ ...sourceHandle, onButtonClick }} />,
+    );
+
+    const handle = screen.getByRole("button", { name: "Output connection" });
+    fireEvent.keyDown(handle, { key: "Enter" });
+    fireEvent.keyDown(handle, { key: " " });
+
+    expect(onButtonClick).toHaveBeenCalledTimes(2);
   });
 
   it("keeps handle badge placement stable on selected node shells", () => {
@@ -129,8 +143,12 @@ describe("graph edges and handles", () => {
     const leftRail = shell?.querySelector('[data-node-handle-rail="left"]');
     const rightRail = shell?.querySelector('[data-node-handle-rail="right"]');
 
-    expect(leftRail?.querySelector('[data-node-handle-badge="input-target"]')).toBeInTheDocument();
-    expect(rightRail?.querySelector('[data-node-handle-badge="output-source"]')).toBeInTheDocument();
+    expect(
+      leftRail?.querySelector('[data-node-handle-badge="input-target"]'),
+    ).toBeInTheDocument();
+    expect(
+      rightRail?.querySelector('[data-node-handle-badge="output-source"]'),
+    ).toBeInTheDocument();
     expect(shell).toHaveAttribute("aria-selected", "true");
     expect(screen.getByLabelText("Input connection")).toBeInTheDocument();
     expect(screen.getByLabelText("Output connection")).toBeInTheDocument();
