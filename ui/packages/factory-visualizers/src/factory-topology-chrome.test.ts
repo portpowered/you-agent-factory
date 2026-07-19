@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_FACTORY_GRAPH_CHROME_PRESET,
-  resolveFactoryGraphChrome,
-} from "./factory-graph-chrome";
+  DEFAULT_FACTORY_TOPOLOGY_CHROME_PRESET,
+  resolveFactoryTopologyChrome,
+} from "./factory-topology-chrome";
 
-describe("resolveFactoryGraphChrome", () => {
+describe("resolveFactoryTopologyChrome", () => {
   it.each([
     [
       "full",
@@ -35,19 +35,19 @@ describe("resolveFactoryGraphChrome", () => {
       },
     ],
   ] as const)("resolves the %s preset", (preset, expected) => {
-    expect(resolveFactoryGraphChrome({ preset })).toEqual(expected);
+    expect(resolveFactoryTopologyChrome({ preset })).toEqual(expected);
   });
 
   it("uses full as the established default preset", () => {
-    expect(DEFAULT_FACTORY_GRAPH_CHROME_PRESET).toBe("full");
-    expect(resolveFactoryGraphChrome()).toEqual(
-      resolveFactoryGraphChrome({ preset: "full" }),
+    expect(DEFAULT_FACTORY_TOPOLOGY_CHROME_PRESET).toBe("full");
+    expect(resolveFactoryTopologyChrome()).toEqual(
+      resolveFactoryTopologyChrome({ preset: "full" }),
     );
   });
 
   it("applies every supplied override after resolving the preset", () => {
     expect(
-      resolveFactoryGraphChrome({
+      resolveFactoryTopologyChrome({
         background: false,
         legend: true,
         preset: "minimal",
@@ -60,7 +60,7 @@ describe("resolveFactoryGraphChrome", () => {
       visibilityControls: true,
     });
     expect(
-      resolveFactoryGraphChrome({
+      resolveFactoryTopologyChrome({
         legend: true,
         preset: "none",
         viewportControls: true,
@@ -79,7 +79,7 @@ describe("resolveFactoryGraphChrome", () => {
       preset: "full" as const,
     });
 
-    expect(resolveFactoryGraphChrome(configuration)).toEqual({
+    expect(resolveFactoryTopologyChrome(configuration)).toEqual({
       background: true,
       legend: false,
       viewportControls: true,

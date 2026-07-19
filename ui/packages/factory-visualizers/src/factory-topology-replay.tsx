@@ -20,6 +20,8 @@ import type {
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
 
+import type { FactoryTopologyChromeConfiguration } from "./factory-topology-chrome";
+
 import {
   FactoryTopologyErrorBoundary,
   FactoryTopologyStateRegion,
@@ -62,6 +64,7 @@ export interface FactoryTopologyReplayMessages {
 }
 
 export interface FactoryTopologyReplayProps {
+  chrome?: FactoryTopologyChromeConfiguration;
   messages: FactoryTopologyReplayMessages;
   onError?: (error: FactoryVisualizerError) => void;
   onRetry?: () => void;

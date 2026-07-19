@@ -17,6 +17,15 @@ export {
 } from "./factory-timeline-scrubber.js";
 
 export {
+  DEFAULT_FACTORY_TOPOLOGY_CHROME_PRESET,
+  type FactoryTopologyChromeConfiguration,
+  type FactoryTopologyChromePreset,
+  type FactoryTopologyChromeRegion,
+  type ResolvedFactoryTopologyChrome,
+  resolveFactoryTopologyChrome,
+} from "./factory-topology-chrome.js";
+
+export {
   type FactoryTopologyFlowProjection,
   FactoryTopologyReplay,
   type FactoryTopologyReplayMessages,
