@@ -61,7 +61,9 @@ async function verifyRecordingPresentations(browserInstance) {
   const stories = [
     "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
     "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
+    "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
     "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
+    "factory-visualizers-factorytopologyreplay--emulator-ready-dense-annotations",
   ];
   for (const storyId of stories) {
     await openStory(page, storyId);
@@ -109,8 +111,47 @@ async function verifyRecordingPresentations(browserInstance) {
     await page.getByText("2 Aufträge insgesamt").isVisible(),
     "The localized recording does not use localized plural Work copy.",
   );
+  await verifyAnnotatedRecording(page);
   await context.close();
 
+  await verifyNarrowRecording(browserInstance);
+}
+
+async function verifyAnnotatedRecording(page) {
+  await openStory(
+    page,
+    "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
+  );
+  const showAnnotations = page.getByRole("button", {
+    name: "Show annotations",
+  });
+  const annotationsToggle = page.getByRole("button", {
+    name: /^(Show|Hide) annotations$/,
+  });
+  await annotationsToggle.waitFor({ state: "visible", timeout: 5_000 });
+  if (await page.getByRole("button", { name: "Hide annotations" }).isVisible()) {
+    await annotationsToggle.click();
+    await showAnnotations.waitFor({ state: "visible", timeout: 5_000 });
+  }
+  await showAnnotations.click();
+  await page
+    .getByRole("button", { name: "Hide annotations" })
+    .waitFor({ state: "visible", timeout: 5_000 });
+  await page
+    .getByText("Escalations are reviewed here.")
+    .waitFor({ state: "visible", timeout: 5_000 });
+  assert(
+    await page.getByText("Escalations are reviewed here.").isVisible(),
+    "The annotated recording did not render its caller-owned layout sidecar.",
+  );
+  await page.getByRole("button", { name: "Hide annotations" }).click();
+  assert(
+    !(await page.getByText("Escalations are reviewed here.").isVisible()),
+    "Hiding annotations in the recording did not remove the annotation node.",
+  );
+}
+
+async function verifyNarrowRecording(browserInstance) {
   const narrowContext = await browserInstance.newContext({
     viewport: { width: 360, height: 800 },
   });
