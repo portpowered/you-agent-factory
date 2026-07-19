@@ -35,6 +35,26 @@ describe("frozen runtime references", () => {
     });
   });
 
+  it("does not recompute frozen evidence when an executable fixture input changes", async () => {
+    const reference = structuredClone(runtimeReferenceFixtures[0]);
+    if (!Array.isArray(reference.scenario.initialSubmissions)) {
+      throw new Error("Basic reference requires direct initial submissions.");
+    }
+    reference.scenario.initialSubmissions[0].input = "changed executable input";
+    await expect(
+      compareFactoryEmulatorRuntimeReference(reference),
+    ).resolves.toMatchObject({
+      matches: false,
+      divergence: {
+        fixture: "basic-execution",
+        logicalTick: 3,
+        surface: "routes",
+        expected: ['task:done:"frozen input"'],
+        actual: ['task:done:"changed executable input"'],
+      },
+    });
+  });
+
   it("loads documented references for every first-story behavior in canonical tick order", () => {
     const references = loadFactoryEmulatorRuntimeReferences();
     expect(references.map(({ id }) => id)).toEqual([
@@ -51,7 +71,7 @@ describe("frozen runtime references", () => {
       "depends-on-terminal-failure",
     ]);
     for (const reference of references) {
-      expect(reference.provenance.source).toContain("README.md");
+      expect(reference.provenance.source).toContain("docs/reference/");
       expect(reference.orderedEventKinds).toEqual(
         reference.ticks.flatMap(({ eventKinds }) => eventKinds),
       );

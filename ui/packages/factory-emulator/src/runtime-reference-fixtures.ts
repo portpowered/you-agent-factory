@@ -4,6 +4,7 @@ import type {
   FactoryEmulatorRuntimeReference,
   FactoryEmulatorRuntimeReferenceTick,
 } from "./runtime-reference.js";
+import { frozenRuntimeReferenceEvidence } from "./runtime-reference-evidence.js";
 import type { FactoryEmulatorScenario } from "./scenario.js";
 
 const source =
@@ -687,7 +688,7 @@ contention.resources = [{ name: "agent-slot", capacity: 2 }];
 const contentionWorkstation = firstWorkstation(contention);
 contentionWorkstation.resources = [{ name: "agent-slot", capacity: 1 }];
 
-export const runtimeReferenceFixtures = [
+const runtimeReferenceInputs = [
   fixture(
     "basic-execution",
     "Basic execution",
@@ -759,3 +760,26 @@ export const runtimeReferenceFixtures = [
     "failed",
   ),
 ] satisfies readonly FactoryEmulatorRuntimeReference[];
+
+/**
+ * Factories and scenarios are executable inputs; expected evidence lives in a
+ * separate immutable declaration so changing either input cannot recompute a
+ * passing expectation.
+ */
+export const runtimeReferenceFixtures: readonly FactoryEmulatorRuntimeReference[] =
+  runtimeReferenceInputs.map(({ id, title, factory, scenario }) => {
+    const evidence = frozenRuntimeReferenceEvidence[id];
+    if (evidence === undefined) {
+      throw new Error(`Missing frozen runtime-reference evidence for ${id}.`);
+    }
+    return {
+      schemaVersion: "factory-emulator-runtime-reference/v1" as const,
+      id,
+      title,
+      provenance: evidence.provenance,
+      factory,
+      scenario,
+      ticks: evidence.ticks,
+      orderedEventKinds: evidence.orderedEventKinds,
+    };
+  }) satisfies readonly FactoryEmulatorRuntimeReference[];
