@@ -43,6 +43,9 @@ describe("frozen runtime references", () => {
       "logical-moves",
       "multi-input-output",
       "propagation",
+      "parallel-dispatch",
+      "simultaneous-completion",
+      "resource-contention",
     ]);
     for (const reference of references) {
       expect(reference.provenance.source).toContain("README.md");
@@ -107,6 +110,42 @@ describe("frozen runtime references", () => {
           path: ["ticks", 0, "semantics"],
         }),
       ]),
+    });
+  });
+});
+
+describe("concurrent frozen runtime references", () => {
+  it("keeps concurrent dispatch and completion references deterministic", async () => {
+    const concurrent = loadFactoryEmulatorRuntimeReferences().filter(({ id }) =>
+      [
+        "parallel-dispatch",
+        "simultaneous-completion",
+        "resource-contention",
+      ].includes(id),
+    );
+    for (const reference of concurrent) {
+      await expect(
+        compareFactoryEmulatorRuntimeReference(reference),
+      ).resolves.toEqual({ matches: true });
+    }
+  });
+
+  it("reports the first concurrent dispatch divergence", async () => {
+    const reference = structuredClone(
+      runtimeReferenceFixtures.find(({ id }) => id === "resource-contention"),
+    );
+    if (reference === undefined) throw new Error("Missing contention fixture.");
+    reference.ticks[2].semantics.dispatchChoices = ["execute:third"];
+    await expect(
+      compareFactoryEmulatorRuntimeReference(reference),
+    ).resolves.toMatchObject({
+      matches: false,
+      divergence: {
+        fixture: "resource-contention",
+        logicalTick: 2,
+        surface: "dispatchChoices",
+        expected: ["execute:third"],
+      },
     });
   });
 });

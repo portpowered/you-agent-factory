@@ -1,5 +1,8 @@
 import type { FactoryDefinition } from "@you-agent-factory/client";
-import type { FactoryEmulatorRuntimeReference } from "./runtime-reference.js";
+import type {
+  FactoryEmulatorRuntimeReference,
+  FactoryEmulatorRuntimeReferenceTick,
+} from "./runtime-reference.js";
 import type { FactoryEmulatorScenario } from "./scenario.js";
 
 const source =
@@ -174,6 +177,75 @@ function standardFactory(
   };
 }
 
+function concurrentFixture(
+  id: string,
+  title: string,
+  factory: FactoryDefinition,
+  submissions: readonly string[],
+  dispatchGroups: readonly (readonly string[])[],
+): FactoryEmulatorRuntimeReference {
+  const concurrentScenario: FactoryEmulatorScenario = {
+    ...scenario(id, factory.name, "execute"),
+    initialSubmissions: submissions.map((name) => ({
+      name,
+      workType: "task",
+      state: "ready",
+      input: `${name} frozen input`,
+    })),
+  };
+  const replayProjection = submissions
+    .map((name) => `${name}:task:ready`)
+    .sort();
+  const ticks: FactoryEmulatorRuntimeReferenceTick[] = [
+    {
+      logicalTick: 0,
+      eventKinds: eventKinds.slice(0, 3),
+      semantics: { ...emptySemantics, replayProjection: [] },
+    },
+    {
+      logicalTick: 1,
+      eventKinds: eventKinds.slice(3, 4),
+      semantics: { ...emptySemantics, replayProjection },
+    },
+  ];
+  const completed: string[] = [];
+  for (const group of dispatchGroups) {
+    ticks.push({
+      logicalTick: ticks.length,
+      eventKinds: group.map(() => "DISPATCH_REQUEST"),
+      semantics: {
+        ...emptySemantics,
+        dispatchChoices: group.map((name) => `execute:${name}`).sort(),
+        terminalStates: completed.map(() => "task:done"),
+        replayProjection,
+      },
+    });
+    completed.push(...group);
+    ticks.push({
+      logicalTick: ticks.length,
+      eventKinds: group.map(() => "DISPATCH_RESPONSE"),
+      semantics: {
+        ...emptySemantics,
+        consumedWork: [...group].sort(),
+        outcomes: group.map(() => "ACCEPTED"),
+        routes: group.map(() => "task:done"),
+        terminalStates: completed.map(() => "task:done"),
+        replayProjection,
+      },
+    });
+  }
+  return {
+    schemaVersion: "factory-emulator-runtime-reference/v1",
+    id,
+    title,
+    provenance: { kind: "public-documentation", source },
+    factory,
+    scenario: concurrentScenario,
+    ticks,
+    orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
+  };
+}
+
 const basic = standardFactory("runtime-reference-basic");
 const repeater = cloneFactory(standardFactory("runtime-reference-repeater"));
 firstWorkstation(repeater).behavior = "REPEATER";
@@ -228,6 +300,13 @@ logicalMoveWorkstations[0] = {
   outputs: [{ workType: "task", state: "done" }],
   guards: [{ type: "VISIT_COUNT", workstation: "move", maxVisits: 1 }],
 };
+const parallel = cloneFactory(standardFactory("runtime-reference-parallel"));
+const contention = cloneFactory(
+  standardFactory("runtime-reference-resource-contention"),
+);
+contention.resources = [{ name: "agent-slot", capacity: 2 }];
+const contentionWorkstation = firstWorkstation(contention);
+contentionWorkstation.resources = [{ name: "agent-slot", capacity: 1 }];
 
 export const runtimeReferenceFixtures = [
   fixture(
@@ -265,5 +344,26 @@ export const runtimeReferenceFixtures = [
     "Work propagation",
     propagation,
     scenario("propagation", propagation.name, "execute"),
+  ),
+  concurrentFixture(
+    "parallel-dispatch",
+    "Parallel dispatch",
+    parallel,
+    ["first", "second"],
+    [["first", "second"]],
+  ),
+  concurrentFixture(
+    "simultaneous-completion",
+    "Simultaneous completion",
+    cloneFactory(parallel),
+    ["first", "second"],
+    [["first", "second"]],
+  ),
+  concurrentFixture(
+    "resource-contention",
+    "Resource contention",
+    contention,
+    ["first", "second", "third"],
+    [["first", "third"], ["second"]],
   ),
 ] satisfies readonly FactoryEmulatorRuntimeReference[];

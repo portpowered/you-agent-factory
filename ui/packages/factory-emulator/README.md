@@ -267,6 +267,11 @@ ticks, and flattened Factory-event kind sequence before a conformance consumer
 can compare emulator semantics. These references remain frontend-only and do
 not invoke a backend, Go, or WASM fixture generator.
 
+The corpus includes resource contention, parallel dispatch, and simultaneous
+completion cases. Their frozen ticks preserve the selected Work, consumed Work,
+completion outcomes, terminal routes, and replay projection so capacity and
+same-deadline behavior remain reproducible between runs.
+
 `compareFactoryEmulatorRuntimeReference(reference)` runs a reference through a
 fresh deterministic session and compares each logical tick independently. It
 compares ordered event kinds plus normalized dispatch choices, consumed Work,
