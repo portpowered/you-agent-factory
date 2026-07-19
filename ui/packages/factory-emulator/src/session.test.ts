@@ -812,6 +812,49 @@ describe("Factory emulator multi-input binding and output routing", () => {
     expect(await dispatchOnce()).toEqual(first);
     expect(new Set(first?.flat().map(({ workId }) => workId)).size).toBe(4);
   });
+
+  it("bounds deterministic join derivation with the synchronous Work budget", async () => {
+    const initialSubmissions = ["left", "right"].flatMap((workType) =>
+      Array.from({ length: 8 }, (_, index) => ({
+        name: `${workType}-${String(7 - index).padStart(2, "0")}`,
+        workType,
+        state: "ready",
+      })),
+    );
+    const dispatchOnce = async () => {
+      const emulator = createFactoryEmulatorSession({
+        factory: joinFactory,
+        scenario: joinScenario({ initialSubmissions }),
+        sink: { write: async () => undefined },
+        limits: { maxSynchronousWorkItems: 72 },
+      });
+      await emulator.start();
+      return emulator.advanceToNext();
+    };
+
+    const first = await dispatchOnce();
+    const second = await dispatchOnce();
+    expect(second.batches).toEqual(first.batches);
+    expect(first.batches[0]?.length).toBeLessThanOrEqual(50);
+
+    const bounded = createFactoryEmulatorSession({
+      factory: joinFactory,
+      scenario: joinScenario({ initialSubmissions }),
+      sink: { write: async () => undefined },
+      limits: { maxSynchronousWorkItems: 71 },
+    });
+    await bounded.start();
+    const before = bounded.state();
+    await expect(bounded.advanceToNext()).rejects.toMatchObject({
+      diagnostic: {
+        kind: "bounded-work-exceeded",
+        limit: "synchronousWorkItems",
+        configured: 71,
+        observed: 72,
+      },
+    });
+    expect(bounded.state()).toEqual(before);
+  });
 });
 
 describe("Factory emulator multi-output routing and join cursors", () => {
@@ -1082,7 +1125,101 @@ describe("Factory emulator standard and repeater outcome routing", () => {
       expect(routedStatesFrom(response)).toEqual(expectedStates);
     },
   );
+});
 
+describe("Factory emulator failure-lane payload routing", () => {
+  it.each([
+    ["failed", "explicit failure", "review"],
+    ["failed", "implicit failure", "failed"],
+    ["rejected", "explicit rejection-to-failure", "failed"],
+    ["rejected", "implicit rejection-to-failure", "failed"],
+  ] as const)(
+    "preserves request payload for %s through %s routing",
+    async (result, routeKind, expectedState) => {
+      const factoryInput = structuredClone(
+        outcomeRoutingFactory,
+      ) as FactoryDefinition;
+      const workstation = factoryInput.workstations?.[0];
+      if (workstation === undefined) throw new Error("missing workstation");
+      if (routeKind === "implicit failure") workstation.onFailure = [];
+      if (routeKind === "explicit rejection-to-failure") {
+        workstation.onRejection = [{ workType: "task", state: "failed" }];
+      }
+      if (routeKind === "implicit rejection-to-failure") {
+        workstation.onRejection = [];
+      }
+      const outcome =
+        result === "failed"
+          ? {
+              result,
+              durationMs: 0,
+              output: "worker output",
+              error: "scripted failure",
+            }
+          : { result, durationMs: 0, output: "worker output" };
+      const scenarioInput = outcomeRoutingScenario([outcome]);
+      scenarioInput.initialSubmissions = [
+        {
+          name: "routed-task",
+          workType: "task",
+          state: "ready",
+          input: "request payload",
+        },
+      ];
+
+      const { receipt } = await completeFirstOutcome(
+        factoryInput,
+        scenarioInput,
+      );
+      const routed = receipt.state.works.at(-1);
+      expect(routed).toMatchObject({
+        state: expectedState,
+        input: "request payload",
+      });
+      expect(receipt.batches[0]?.[0]).toMatchObject({
+        payload: {
+          output: "worker output",
+          outputWork: [
+            {
+              state: { name: expectedState },
+              payload: "request payload",
+            },
+          ],
+        },
+      });
+    },
+  );
+
+  it("keeps worker output for rejection routes that are not failure states", async () => {
+    const scenarioInput = outcomeRoutingScenario([
+      { result: "rejected", durationMs: 0, output: "worker output" },
+    ]);
+    scenarioInput.initialSubmissions = [
+      {
+        name: "routed-task",
+        workType: "task",
+        state: "ready",
+        input: "request payload",
+      },
+    ];
+    const { receipt } = await completeFirstOutcome(
+      outcomeRoutingFactory,
+      scenarioInput,
+    );
+
+    expect(
+      receipt.state.works.slice(-2).map(({ state, input }) => ({
+        state,
+        input,
+      })),
+    ).toEqual([
+      { state: "review", input: "worker output" },
+      { state: "retry", input: "worker output" },
+    ]);
+  });
+});
+
+describe("Factory emulator implicit outcome routing", () => {
   it.each([
     ["failed", "STANDARD", "failed"],
     ["rejected", "STANDARD", "failed"],

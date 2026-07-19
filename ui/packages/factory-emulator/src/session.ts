@@ -18,6 +18,8 @@ import type {
   FactoryEmulatorScenarioIssue,
 } from "./scenario-contracts.js";
 import {
+  compareFactorySchedulerCandidates,
+  FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT,
   type FactorySchedulerCandidate,
   type FactorySchedulerResourceClaim,
   selectFactorySchedulerCandidates,
@@ -376,7 +378,9 @@ function submissionForWork(
 function bindingIndexesFor(
   state: StartedState,
   workstation: NonNullable<FactoryDefinition["workstations"]>[number],
-): readonly (readonly number[])[] {
+  observeExpansion: () => void,
+  visit: (indexes: readonly number[]) => void,
+): void {
   const inputs = workstation.inputs.map((input) =>
     state.works.flatMap((work, index) =>
       work.phase === "ready" &&
@@ -386,41 +390,44 @@ function bindingIndexesFor(
         : [],
     ),
   );
-  if (inputs.some((matches) => matches.length === 0)) return [];
+  if (inputs.some((matches) => matches.length === 0)) return;
 
-  const bindings: number[][] = [];
   const append = (slot: number, selected: number[]): void => {
     if (slot === inputs.length) {
-      bindings.push(selected);
+      visit(selected);
       return;
     }
     for (const index of inputs[slot] ?? []) {
-      if (!selected.includes(index)) append(slot + 1, [...selected, index]);
+      if (!selected.includes(index)) {
+        observeExpansion();
+        append(slot + 1, [...selected, index]);
+      }
     }
   };
   append(0, []);
-
-  const distinct = new Map<string, readonly number[]>();
-  for (const binding of bindings) {
-    const key = [...binding]
-      .map((index) => state.works[index]?.tokenId ?? "")
-      .sort()
-      .join("\u0000");
-    if (!distinct.has(key)) distinct.set(key, binding);
-  }
-  return [...distinct.values()];
 }
 
 function schedulerCandidatesFor(
   configuration: ValidatedConfiguration,
   state: StartedState,
   cursors: Readonly<Record<string, number>>,
+  assertBindingBudget: (observed: number) => void,
 ): {
   readonly candidates: readonly FactorySchedulerCandidate<DispatchCandidateValue>[];
   readonly executableWork: ReadonlySet<number>;
 } {
   const candidates: FactorySchedulerCandidate<DispatchCandidateValue>[] = [];
   const executableWork = new Set<number>();
+  let observedExpansions = 0;
+  const retainBoundedCandidate = (
+    candidate: FactorySchedulerCandidate<DispatchCandidateValue>,
+  ): void => {
+    candidates.push(candidate);
+    candidates.sort(compareFactorySchedulerCandidates);
+    if (candidates.length > FACTORY_EMULATOR_SCHEDULER_CANDIDATE_LIMIT) {
+      candidates.pop();
+    }
+  };
   for (const workstation of configuration.factory.workstations ?? []) {
     const potentiallyBound = state.works.flatMap((work, index) =>
       work.phase === "ready" &&
@@ -431,73 +438,90 @@ function schedulerCandidatesFor(
         ? [index]
         : [],
     );
-    const bindings = bindingIndexesFor(state, workstation);
-    if (bindings.length === 0) {
-      for (const index of potentiallyBound) executableWork.add(index);
-      continue;
-    }
-    for (const indexes of bindings) {
-      const works = indexes.flatMap((index) => {
-        const work = state.works[index];
-        return work === undefined ? [] : [work];
-      });
-      const primary = works[0];
-      if (primary === undefined || works.length !== workstation.inputs.length)
-        continue;
-      if (
-        workstation.type === "LOGICAL_MOVE" &&
-        !visitCountGuardsAllow(workstation.guards ?? [], primary.visits)
-      ) {
-        continue;
-      }
-      const submissions = works.map(submissionForWork);
-      const initial = executionFor(configuration, submissions, workstation);
-      const lineage = [
-        ...new Set(works.map(({ rootWorkId }) => rootWorkId)),
-      ].sort();
-      const cursorKey =
-        initial.rule === undefined
-          ? undefined
-          : `${initial.rule.id}:${canonicalJson(lineage)}`;
-      const invocation =
-        cursorKey === undefined ? 0 : (cursors[cursorKey] ?? 0);
-      const execution = executionFor(
-        configuration,
-        submissions,
-        workstation,
-        invocation,
-      );
-      if (execution.outcome === undefined) continue;
-      for (const index of indexes) executableWork.add(index);
-      candidates.push({
-        transitionId: workstation.name,
-        workerId: workstation.worker,
-        workstationKind:
-          workstation.type === "LOGICAL_MOVE" ? "logical" : "normal",
-        resources: (workstation.resources ?? []).map(({ name, capacity }) => ({
-          name,
-          capacity,
-        })),
-        tokens: works.map((work) => ({
-          tokenId: work.tokenId,
-          customerWork: true,
-          processing:
-            configuration.factory.workTypes
-              ?.find(({ name }) => name === work.workType)
-              ?.states.find(({ name }) => name === work.state)?.type ===
-            "PROCESSING",
-          queuedElapsedMs: work.queuedElapsedMs,
-          ...(work.lastDispatchElapsedMs === undefined
-            ? {}
-            : { lastDispatchElapsedMs: work.lastDispatchElapsedMs }),
-        })),
-        value: {
-          indexes,
-          execution,
+    let foundBinding = false;
+    const seenBindings = new Set<string>();
+    bindingIndexesFor(
+      state,
+      workstation,
+      () => {
+        observedExpansions += 1;
+        assertBindingBudget(observedExpansions);
+      },
+      (indexes) => {
+        foundBinding = true;
+        const key = [...indexes]
+          .map((index) => state.works[index]?.tokenId ?? "")
+          .sort()
+          .join("\u0000");
+        if (seenBindings.has(key)) return;
+        seenBindings.add(key);
+        const works = indexes.flatMap((index) => {
+          const work = state.works[index];
+          return work === undefined ? [] : [work];
+        });
+        const primary = works[0];
+        if (primary === undefined || works.length !== workstation.inputs.length)
+          return;
+        if (
+          workstation.type === "LOGICAL_MOVE" &&
+          !visitCountGuardsAllow(workstation.guards ?? [], primary.visits)
+        ) {
+          return;
+        }
+        const submissions = works.map(submissionForWork);
+        const initial = executionFor(configuration, submissions, workstation);
+        const lineage = [
+          ...new Set(works.map(({ rootWorkId }) => rootWorkId)),
+        ].sort();
+        const cursorKey =
+          initial.rule === undefined
+            ? undefined
+            : `${initial.rule.id}:${canonicalJson(lineage)}`;
+        const invocation =
+          cursorKey === undefined ? 0 : (cursors[cursorKey] ?? 0);
+        const execution = executionFor(
+          configuration,
+          submissions,
+          workstation,
           invocation,
-          ...(cursorKey === undefined ? {} : { cursorKey }),
-        },
-      });
+        );
+        if (execution.outcome === undefined) return;
+        for (const index of indexes) executableWork.add(index);
+        retainBoundedCandidate({
+          transitionId: workstation.name,
+          workerId: workstation.worker,
+          workstationKind:
+            workstation.type === "LOGICAL_MOVE" ? "logical" : "normal",
+          resources: (workstation.resources ?? []).map(
+            ({ name, capacity }) => ({
+              name,
+              capacity,
+            }),
+          ),
+          tokens: works.map((work) => ({
+            tokenId: work.tokenId,
+            customerWork: true,
+            processing:
+              configuration.factory.workTypes
+                ?.find(({ name }) => name === work.workType)
+                ?.states.find(({ name }) => name === work.state)?.type ===
+              "PROCESSING",
+            queuedElapsedMs: work.queuedElapsedMs,
+            ...(work.lastDispatchElapsedMs === undefined
+              ? {}
+              : { lastDispatchElapsedMs: work.lastDispatchElapsedMs }),
+          })),
+          value: {
+            indexes,
+            execution,
+            invocation,
+            ...(cursorKey === undefined ? {} : { cursorKey }),
+          },
+        });
+      },
+    );
+    if (!foundBinding) {
+      for (const index of potentiallyBound) executableWork.add(index);
     }
   }
   return { candidates, executableWork };
@@ -615,14 +639,16 @@ function routedWorksFor(
         ordinal,
         route,
       );
-    const preserveInput =
-      workstation.workPropagation?.mode === "PRESERVE_INPUT";
-    const input = preserveInput
-      ? lineageSource.input
-      : (dispatch.outcome.output ?? lineageSource.input);
     const targetStateType = configuration.factory.workTypes
       ?.find(({ name }) => name === route.workType)
       ?.states.find(({ name }) => name === route.state)?.type;
+    const preserveInput =
+      workstation.workPropagation?.mode === "PRESERVE_INPUT" ||
+      dispatch.outcome.result === "failed" ||
+      (dispatch.outcome.result === "rejected" && targetStateType === "FAILED");
+    const input = preserveInput
+      ? lineageSource.input
+      : (dispatch.outcome.output ?? lineageSource.input);
     return {
       submissionId: `${first.submissionId}/${workstation.name}/${ordinal}`,
       requestId: first.requestId,
@@ -1296,6 +1322,7 @@ export function createFactoryEmulatorSession(
   };
 
   const dispatchCalculation = (
+    command: "advanceBy" | "advanceToNext",
     state: StartedState,
   ): { batch: readonly FactoryEvent[]; state: StartedState } => {
     const replacements = [...state.works];
@@ -1305,6 +1332,7 @@ export function createFactoryEmulatorSession(
       configuration,
       state,
       cursors,
+      (observed) => assertWorkBound(command, observed),
     );
     for (const { value, resources } of selectFactorySchedulerCandidates(
       candidates,
@@ -1605,7 +1633,7 @@ export function createFactoryEmulatorSession(
       while (continueAdvancing) {
         const state = committedState as StartedState;
         if (state.works.some(({ phase }) => phase === "ready")) {
-          const calculation = dispatchCalculation(state);
+          const calculation = dispatchCalculation(command, state);
           if (calculation.batch.length > 0) {
             await acceptSchedulerBatch(calculation);
             if (command === "advanceToNext") break;
