@@ -24,6 +24,8 @@ export interface FactoryEmulatorControlsProps
   onSpeedChange: (speed: FactoryEmulatorSpeed) => void;
   onStep: () => void;
   runtimeStatus: FactoryEmulatorRuntimeStatus;
+  showRuntimeStatus?: boolean;
+  showSpeedControl?: boolean;
   speed: FactoryEmulatorSpeed;
 }
 
@@ -51,6 +53,8 @@ export function FactoryEmulatorControls({
   onSpeedChange,
   onStep,
   runtimeStatus,
+  showRuntimeStatus = true,
+  showSpeedControl = true,
   speed,
   ...props
 }: FactoryEmulatorControlsProps) {
@@ -80,7 +84,7 @@ export function FactoryEmulatorControls({
         </Button>
       </div>
 
-      <label className="ml-auto flex min-h-9 items-center gap-2 text-body-small font-medium text-on-surface-variant">
+      {showSpeedControl ? <label className="ml-auto flex min-h-9 items-center gap-2 text-body-small font-medium text-on-surface-variant">
         <span>Speed</span>
         <select
           aria-label="Playback speed"
@@ -93,15 +97,15 @@ export function FactoryEmulatorControls({
         >
           {FACTORY_EMULATOR_SPEEDS.map((option) => <option key={option} value={option}>{option}x</option>)}
         </select>
-      </label>
+      </label> : null}
 
-      <output
+      {showRuntimeStatus ? <output
         aria-label="Runtime status"
         className={cn("min-h-9 rounded-full px-3 py-2 text-body-small font-medium", STATUS_TONE_CLASS[runtimeStatus.tone ?? "neutral"])}
         data-playing={isPlaying ? "true" : "false"}
       >
         {runtimeStatus.label}
-      </output>
+      </output> : null}
     </section>
   );
 }

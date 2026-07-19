@@ -310,6 +310,11 @@ async function verifyResponsiveViewports(browserInstance) {
       page,
       "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
     );
+    await verifyLayout(page, "factory-visualizers-factoryemulatorview--full");
+    await openStory(
+      page,
+      "factory-visualizers-factorytopologyreplay--dense-prepared-projection",
+    );
     assert(
       await page.locator(".react-flow__controls").isVisible(),
       `Dense topology controls are hidden at ${viewport.width}px.`,

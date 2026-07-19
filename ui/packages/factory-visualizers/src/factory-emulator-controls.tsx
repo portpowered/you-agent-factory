@@ -20,6 +20,8 @@ export interface FactoryEmulatorControlsProps
   onRestart: () => void;
   onSelectTick: (tick: number) => void;
   onStep: () => void;
+  showPlaybackControls?: boolean;
+  showTimelineScrubber?: boolean;
   timeline: FactoryEmulatorControlsTimeline;
 }
 
@@ -39,6 +41,8 @@ export function FactoryEmulatorControls({
   onRestart,
   onSelectTick,
   onStep,
+  showPlaybackControls = true,
+  showTimelineScrubber = true,
   timeline,
   ...playbackProps
 }: FactoryEmulatorControlsProps) {
@@ -66,21 +70,25 @@ export function FactoryEmulatorControls({
         .filter(Boolean)
         .join(" ")}
     >
-      <PlaybackControls
-        {...playbackProps}
-        onPause={onPause}
-        onPlay={() => returnToLatestBefore(onPlay)}
-        onRestart={onRestart}
-        onStep={() => returnToLatestBefore(onStep)}
-      />
-      <FactoryTimelineScrubber
-        disabled={timeline.disabled}
-        formatTick={formatTick}
-        messages={timeline.messages}
-        onFollowLatest={onFollowLatest}
-        onSelectTick={selectTick}
-        state={timeline.state}
-      />
+      {showPlaybackControls ? (
+        <PlaybackControls
+          {...playbackProps}
+          onPause={onPause}
+          onPlay={() => returnToLatestBefore(onPlay)}
+          onRestart={onRestart}
+          onStep={() => returnToLatestBefore(onStep)}
+        />
+      ) : null}
+      {showTimelineScrubber ? (
+        <FactoryTimelineScrubber
+          disabled={timeline.disabled}
+          formatTick={formatTick}
+          messages={timeline.messages}
+          onFollowLatest={onFollowLatest}
+          onSelectTick={selectTick}
+          state={timeline.state}
+        />
+      ) : null}
     </section>
   );
 }

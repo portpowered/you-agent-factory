@@ -13,6 +13,18 @@
   gap: 1rem;
 }
 
+.factory-emulator-view {
+  display: grid;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  gap: 1rem;
+}
+
+.factory-emulator-view__submission {
+  min-inline-size: 0;
+}
+
 .factory-recording-topology-replay__tick {
   margin: 0;
   color: var(--color-on-surface-variant);
@@ -383,6 +395,7 @@
   .factory-topology-replay *,
   .factory-timeline-scrubber *,
   .factory-emulator-controls *,
+  .factory-emulator-view *,
   .factory-work-progress * {
     scroll-behavior: auto;
     animation-duration: 0.01ms;

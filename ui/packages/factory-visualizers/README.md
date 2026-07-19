@@ -12,6 +12,12 @@ all callbacks. Selecting an earlier tick requests pause before selection; Play
 and Step request follow-latest before their host command in history mode. It
 never creates a timer, mutates replay data, or owns emulator state.
 
+`FactoryEmulatorView` vertically composes host-supplied controls, topology,
+Work progress, and an optional submission region. Its `full` preset shows every
+region; `compact` omits speed and submission; `display-only` renders topology
+only. Pass `visibility` to override any individual playback, timeline, speed,
+runtime-status, progress, or submission region. Hidden regions are not rendered.
+
 The host always owns transport, persistence, and canonical Factory data. It can
 either prepare controlled projections with `@you-agent-factory/factory-replay`
 or pass an unknown recording directly to `FactoryRecordingTopologyReplay`,

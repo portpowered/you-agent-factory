@@ -5,6 +5,13 @@ export {
 } from "./factory-emulator-controls.js";
 
 export {
+  FactoryEmulatorView,
+  type FactoryEmulatorViewPreset,
+  type FactoryEmulatorViewProps,
+  type FactoryEmulatorViewVisibility,
+} from "./factory-emulator-view.js";
+
+export {
   FactoryRecordingTopologyReplay,
   type FactoryRecordingTopologyReplayError,
   type FactoryRecordingTopologyReplayMessages,
