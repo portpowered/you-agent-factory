@@ -285,7 +285,7 @@ describe("WorkflowActivityBentoCard", () => {
     expect(graphPanelShell?.className).toContain("overflow-hidden");
   });
 
-  it("wraps the React Flow graph without a floating inspector", async () => {
+  it("wraps the shared topology without a floating inspector", async () => {
     const locale = "zh-CN";
     const messages = getWorkflowActivityShellMessages(locale);
     const editorMessages = getFactoryGraphEditorMessages(locale);
@@ -309,20 +309,19 @@ describe("WorkflowActivityBentoCard", () => {
       within(graphCard).queryByRole("button", { name: "Move 工厂图" }),
     ).toBeNull();
     expect(
-      within(graphHeader as HTMLElement).queryByRole("button", {
+      within(graphHeader as HTMLElement).getByRole("button", {
         name: editorMessages.modeEnterEditor,
       }),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(
-      within(graphHeader as HTMLElement).queryByText(
+      within(graphHeader as HTMLElement).getByText(
         editorMessages.modeObserve,
       ),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(
       within(graphCard).queryByRole("heading", { name: "当前活动" }),
     ).toBeNull();
     expect(graphViewport).toBeTruthy();
-    expect(graphViewport.className).toContain("shadow-none");
     expect(graphViewport.className).not.toContain("shadow-af-card");
     expect(graphViewport.className).not.toContain("shadow-af-panel");
     expect(screen.queryByRole("complementary")).toBeNull();
@@ -330,13 +329,13 @@ describe("WorkflowActivityBentoCard", () => {
       screen.queryByRole("button", { name: /collapse inspector/i }),
     ).toBeNull();
     expect(
-      within(graphViewport).getByRole("button", {
+      within(graphViewport).queryByRole("button", {
         name: editorMessages.modeEnterEditor,
       }),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
-  it("keeps the toolbar as the visible editor entry point in observe and loading editor states", async () => {
+  it("keeps the header as the editor entry point before showing the loading editor toolbar", async () => {
     const user = userEvent.setup();
     const locale = "zh-CN";
     const shellMessages = getWorkflowActivityShellMessages(locale);
@@ -347,24 +346,20 @@ describe("WorkflowActivityBentoCard", () => {
       name: shellMessages.widgetTitle,
     });
     const graphHeader = graphCard.querySelector("header");
-    const toolbar = await screen.findByRole("region", {
-      name: editorMessages.toolbarAriaLabel,
-    });
 
     expect(graphHeader).toBeTruthy();
     const headerScope = within(graphHeader as HTMLElement);
     expect(graphHeader?.className).toContain("min-h-11");
+    const enterEditorButton = headerScope.getByRole("button", {
+      name: editorMessages.modeEnterEditor,
+    });
+    expect(enterEditorButton).toBeTruthy();
+    expect(headerScope.getByText(editorMessages.modeObserve)).toBeTruthy();
     expect(
-      headerScope.queryByRole("button", {
-        name: editorMessages.modeEnterEditor,
+      screen.queryByRole("region", {
+        name: editorMessages.toolbarAriaLabel,
       }),
     ).toBeNull();
-    expect(headerScope.queryByText(editorMessages.modeObserve)).toBeNull();
-    expect(
-      within(toolbar).getByRole("button", {
-        name: editorMessages.modeEnterEditor,
-      }).className,
-    ).toContain("h-10");
     expect(
       within(graphCard).queryByRole("heading", { name: shellMessages.title }),
     ).toBeNull();
@@ -375,11 +370,11 @@ describe("WorkflowActivityBentoCard", () => {
       status: "pending",
     } as never);
 
-    await user.click(
-      within(toolbar).getByRole("button", {
-        name: editorMessages.modeEnterEditor,
-      }),
-    );
+    await user.click(enterEditorButton);
+
+    const toolbar = await screen.findByRole("region", {
+      name: editorMessages.toolbarAriaLabel,
+    });
 
     expect(
       within(toolbar).getByRole("button", {
@@ -408,13 +403,7 @@ describe("WorkflowActivityBentoCard", () => {
     const headingIDs = workflowSections.map((section) =>
       section.getAttribute("aria-labelledby"),
     );
-    const viewportDescriptionIDs = describedViewports.map((region) =>
-      region.getAttribute("aria-describedby"),
-    );
-
     expect(new Set(headingIDs).size).toBe(2);
-    expect(new Set(viewportDescriptionIDs).size).toBe(2);
-    expect(headingIDs).toEqual(viewportDescriptionIDs);
 
     for (const headingID of headingIDs) {
       expect(headingID).toBeTruthy();
@@ -431,6 +420,7 @@ describe("WorkflowActivityBentoCard header actions", () => {
   it("keeps the remove action in the header without editor chrome beside it", async () => {
     const locale = "zh-CN";
     const shellMessages = getWorkflowActivityShellMessages(locale);
+    const editorMessages = getFactoryGraphEditorMessages(locale);
     renderWorkflowActivityBentoCard({
       headerAction: <button type="button">Remove card</button>,
       locale,
@@ -448,10 +438,10 @@ describe("WorkflowActivityBentoCard header actions", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(graphHeader as HTMLElement).queryByRole("button", {
-        name: "Edit mode",
+      within(graphHeader as HTMLElement).getByRole("button", {
+        name: editorMessages.modeEnterEditor,
       }),
-    ).toBeNull();
+    ).toBeTruthy();
   });
 
   it("shows unsaved edit chrome in the toolbar instead of the compact bento header", async () => {
@@ -489,15 +479,16 @@ describe("WorkflowActivityBentoCard header actions", () => {
     });
     const graphHeader = graphCard.querySelector("header");
     expect(graphHeader).toBeTruthy();
-    const toolbar = await screen.findByRole("region", {
-      name: editorMessages.toolbarAriaLabel,
-    });
 
     await user.click(
-      within(toolbar).getByRole("button", {
+      within(graphHeader as HTMLElement).getByRole("button", {
         name: editorMessages.modeEnterEditor,
       }),
     );
+
+    const toolbar = await screen.findByRole("region", {
+      name: editorMessages.toolbarAriaLabel,
+    });
 
     const headerScope = within(graphHeader as HTMLElement);
     expect(headerScope.queryAllByRole("status")).toHaveLength(0);

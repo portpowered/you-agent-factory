@@ -356,11 +356,6 @@ export function createFileDropTransfer(files: File[]): {
 }
 let restoreBrowserTestShims: (() => void) | null = null;
 
-export function reinstallDashboardBrowserTestShims(): void {
-  restoreBrowserTestShims?.();
-  restoreBrowserTestShims = installDashboardBrowserTestShims();
-}
-
 export function registerCurrentActivityCardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
