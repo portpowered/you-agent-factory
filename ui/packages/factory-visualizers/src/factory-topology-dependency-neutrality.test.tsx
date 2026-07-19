@@ -6,10 +6,10 @@ import type {
   FactoryDefinition,
   FactoryEvent,
 } from "@you-agent-factory/client";
-import { projectFactoryTopologyAtTick } from "@you-agent-factory/factory-replay";
 import type { ComponentType } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { projectFactoryTopologyAtTick } from "../../factory-replay/src/index.js";
 import {
   FactoryTopologyReplay,
   type FactoryTopologyReplayMessages,
