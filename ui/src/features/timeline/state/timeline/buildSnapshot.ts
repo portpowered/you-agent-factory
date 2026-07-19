@@ -45,7 +45,7 @@ export function reconstructFactoryReplayState(
   selectedTick: number,
 ): ReplayWorldState {
   return projectFactoryWorldAtTick({
-    events,
+    events: kernelEvents(events),
     reducer: hostedFactoryReplayReducer,
     tick: selectedTick,
   }).state;
@@ -63,7 +63,7 @@ export function advanceFactoryReplayState(
       state: checkpoint,
     },
     cloneState: cloneReplayState,
-    events,
+    events: kernelEvents(events),
     reducer: hostedFactoryReplayReducer,
     setSelectedTick,
     tick: selectedTick,
@@ -85,7 +85,7 @@ export function buildFactoryTimelineProjection(
           state: checkpoint.replayState,
         },
         cloneState: cloneReplayState,
-        events,
+        events: kernelEvents(events),
         reducer: hostedFactoryReplayReducer,
         setSelectedTick,
         tick: selectedTick,
@@ -95,6 +95,14 @@ export function buildFactoryTimelineProjection(
     replayState,
     worldState: projectSnapshot(replayState),
   };
+}
+
+function kernelEvents(
+  events: FactoryEvent[],
+): Parameters<typeof projectFactoryWorldAtTick>[0]["events"] {
+  return events as unknown as Parameters<
+    typeof projectFactoryWorldAtTick
+  >[0]["events"];
 }
 
 export function buildFactoryTimelineSnapshot(

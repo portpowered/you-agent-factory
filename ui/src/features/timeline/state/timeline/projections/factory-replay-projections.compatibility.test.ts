@@ -3,9 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   type FactoryWorkProgressProjection,
   projectFactoryActivityAtTick,
+  projectFactoryLoadAtTick,
   projectFactoryTopologyAtTick,
   projectFactoryWorkProgressAtTick,
-} from "../../../../../../../packages/factory-replay/src/index.js";
+} from "../../../../../../packages/factory-replay/src/index.js";
 import type { FactoryEvent } from "../../../../../api/events";
 import { buildFactoryTimelineSnapshot } from "../buildSnapshot";
 
@@ -162,6 +163,7 @@ describe("hosted shared Factory replay projections", () => {
     expect(hosted.activity).toEqual(
       projectFactoryActivityAtTick({ events, tick: 3 }),
     );
+    expect(hosted.load).toEqual(projectFactoryLoadAtTick({ events, tick: 3 }));
     expect(progressPartition(hosted.workProgress)).toEqual(
       progressPartition(projectFactoryWorkProgressAtTick({ events, tick: 3 })),
     );
@@ -217,7 +219,9 @@ describe("hosted shared Factory replay projections", () => {
     const active = buildFactoryTimelineSnapshot(events.slice(0, 3), 3);
     const completed = buildFactoryTimelineSnapshot(events, 3);
 
-    expect(active.factoryReplay.activity.activeDispatches).toHaveLength(1);
+    expect(active.factoryReplay.activity.activeDispatchOverlays).toHaveLength(
+      1,
+    );
     expect(active.factoryReplay.workProgress.counts.active).toBe(2);
     expect(completed.factoryReplay.activity).toEqual(
       projectFactoryActivityAtTick({ events, tick: 3 }),
@@ -225,7 +229,7 @@ describe("hosted shared Factory replay projections", () => {
     expect(progressPartition(completed.factoryReplay.workProgress)).toEqual(
       progressPartition(projectFactoryWorkProgressAtTick({ events, tick: 3 })),
     );
-    expect(completed.factoryReplay.activity.activeDispatches).toEqual([]);
+    expect(completed.factoryReplay.activity.activeDispatchOverlays).toEqual([]);
     expect(completed.factoryReplay.activity.resourceOccupancy).toEqual([
       expect.objectContaining({
         availableQuantity: 2,
