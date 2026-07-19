@@ -12,24 +12,25 @@ import {
 } from "./testing/app-shell-timeline-test-utils";
 
 function getStateNodeByLabel(label: string): HTMLElement {
-  const button = screen.getByRole("button", { name: `Select ${label} state` });
+  const displayLabel = label.split(":").at(-1) ?? label;
+  const button = screen.getByLabelText(
+    `Select ${displayLabel} work-state`,
+  );
   const node = button.closest(".react-flow__node");
 
   if (!(node instanceof HTMLElement)) {
     throw new Error(
-      `expected ${label} state to be rendered in a React Flow node`,
+      `expected ${label} work state to be rendered in a React Flow node`,
     );
   }
 
   return node;
 }
 
-function expectStateNodeDotCount(label: string, count: number): void {
+function expectStateNodeWorkCount(label: string, count: number): void {
   const stateNode = getStateNodeByLabel(label);
 
-  expect(
-    stateNode.querySelectorAll("[data-state-work-progress-dot]"),
-  ).toHaveLength(count);
+  expect(within(stateNode).getByText(new RegExp(`${count} Work$`))).toBeTruthy();
 }
 
 describe("App timeline reconstruction flows", () => {
@@ -191,7 +192,7 @@ describe("App timeline reconstruction flows", () => {
 
     await waitFor(() => {
       expect(screen.getByText("2/4")).toBeTruthy();
-      expectStateNodeDotCount("story:new", 1);
+      expectStateNodeWorkCount("story:new", 1);
     });
   });
 });

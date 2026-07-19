@@ -18,9 +18,9 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
 
 async function selectReviewRequest(dispatchID: string): Promise<void> {
   await waitForDashboardShell();
-  const reviewWorkstationButton = await screen.findByRole("button", {
-    name: "Select Review workstation",
-  });
+  const reviewWorkstationButton = await screen.findByLabelText(
+    "Select Review workstation",
+  );
   fireEvent.click(reviewWorkstationButton);
 
   const workstationSelection = await screen.findByRole("article", {

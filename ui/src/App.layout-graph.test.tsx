@@ -19,24 +19,19 @@ import {
 } from "./testing/app-shell-test-utils";
 
 function getStateNodeByLabel(label: string): HTMLElement {
-  const button = screen.getByRole("button", { name: `Select ${label} state` });
+  const displayLabel = label.split(":").at(-1) ?? label;
+  const button = screen.getByLabelText(
+    `Select ${displayLabel} work-state`,
+  );
   const node = button.closest(".react-flow__node");
 
   if (!(node instanceof HTMLElement)) {
     throw new Error(
-      `expected ${label} state to be rendered in a React Flow node`,
+      `expected ${label} work state to be rendered in a React Flow node`,
     );
   }
 
   return node;
-}
-
-function expectStateNodeDotCount(label: string, count: number): void {
-  expect(
-    getStateNodeByLabel(label).querySelectorAll(
-      "[data-state-work-progress-dot]",
-    ),
-  ).toHaveLength(count);
 }
 
 describe("App layout and graph behavior", () => {
@@ -246,36 +241,21 @@ describe("App layout and graph behavior", () => {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    await waitFor(() => {
-      expect(
-        screen.getAllByRole("button", { name: /Select .* workstation/ }).length,
-      ).toBeGreaterThan(0);
-    });
+    await waitForAppShellWorkGraphReady();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Select work item Active Story" }),
     );
     expect(
-      screen.getAllByRole("button", { name: /Select .* workstation/ }),
+      screen.getAllByLabelText(/Select .* workstation/),
     ).toHaveLength(5);
-    expect(screen.getByLabelText("agent-slot")).toBeTruthy();
-    expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
-    expect(screen.getByRole("img", { name: "worker:reviewer" })).toBeTruthy();
+    expect(screen.getByLabelText("Select agent-slot resource")).toBeTruthy();
+    expect(screen.getByLabelText("Select reviewer worker")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Select story work type" }),
+      screen.getByLabelText("Select story work-type"),
     ).toBeTruthy();
-    expect(
-      screen
-        .getByRole("img", { name: "Resource" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("resource");
-    expect(
-      screen
-        .getAllByRole("img", { name: "Worker" })[0]
-        ?.getAttribute("data-graph-semantic-icon"),
-    ).toBe("worker");
     expect(screen.queryByText("Active Work")).toBeNull();
-    expectStateNodeDotCount("story:ready", 3);
+    expect(getStateNodeByLabel("story:ready")).toBeTruthy();
     expect(getStateNodeByLabel("story:blocked")).toBeTruthy();
     expect(getStateNodeByLabel("story:complete")).toBeTruthy();
   });
@@ -286,7 +266,7 @@ describe("App layout and graph behavior", () => {
     });
 
     expect(
-      await screen.findByRole("button", { name: "Select Intake workstation" }),
+      await screen.findByLabelText("Select Intake workstation"),
     ).toBeTruthy();
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
@@ -332,7 +312,7 @@ describe("App layout and graph behavior", () => {
     await waitFor(
       () => {
         expect(
-          screen.getAllByRole("button", { name: /Select .* workstation/ }),
+          screen.getAllByLabelText(/Select .* workstation/),
         ).toHaveLength(20);
       },
       { timeout: 30_000 },

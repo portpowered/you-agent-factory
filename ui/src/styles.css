@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@you-agent-factory/components/styles.css";
+@import "@you-agent-factory/factory-visualizers/styles.css";
 @import "./styles/typography-role-utilities.css";
 
 @source "./**/*.{ts,tsx}";

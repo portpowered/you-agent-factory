@@ -5,7 +5,14 @@
     "baseUrl": ".",
     "paths": {
       "@you-agent-factory/components": ["packages/components/src/index.ts"],
-      "@you-agent-factory/components/*": ["packages/components/src/*"]
+      "@you-agent-factory/components/*": ["packages/components/src/*"],
+      "@you-agent-factory/client": ["packages/client/src/index.ts"],
+      "@you-agent-factory/factory-replay": [
+        "packages/factory-replay/src/index.ts"
+      ],
+      "@you-agent-factory/factory-visualizers": [
+        "packages/factory-visualizers/src/index.ts"
+      ]
     },
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -22,7 +29,13 @@
     "sourceMap": true,
     "skipLibCheck": true
   },
-  "include": ["src", "packages/components/src"],
+  "include": [
+    "src",
+    "packages/client/src",
+    "packages/components/src",
+    "packages/factory-replay/src",
+    "packages/factory-visualizers/src"
+  ],
   "exclude": [
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
@@ -33,6 +46,12 @@
     "packages/components/src/**/*.test.tsx",
     "packages/components/src/**/*.harness.test.ts",
     "packages/components/src/**/*.stories.tsx",
-    "packages/components/src/testing/vitest.setup.ts"
+    "packages/components/src/testing/vitest.setup.ts",
+    "packages/client/src/**/*.test.ts",
+    "packages/factory-replay/src/**/*.test.ts",
+    "packages/factory-visualizers/src/**/*.test.ts",
+    "packages/factory-visualizers/src/**/*.test.tsx",
+    "packages/factory-visualizers/src/**/*.stories.tsx",
+    "packages/factory-visualizers/src/testing/**"
   ]
 }

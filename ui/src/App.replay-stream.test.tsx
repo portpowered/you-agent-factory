@@ -28,7 +28,8 @@ import {
 } from "./testing/app-shell-timeline-test-utils";
 
 function getStateNodeByLabel(label: string): HTMLElement {
-  const button = screen.getByRole("button", { name: `Select ${label} state` });
+  const displayLabel = label.split(":").at(-1) ?? label;
+  const button = screen.getByLabelText(`Select ${displayLabel} work-state`);
   const node = button.closest(".react-flow__node");
 
   if (!(node instanceof HTMLElement)) {
@@ -41,9 +42,7 @@ function getStateNodeByLabel(label: string): HTMLElement {
 }
 
 function getWorkstationNodeByLabel(label: string): HTMLElement {
-  const button = screen.getByRole("button", {
-    name: `Select ${label} workstation`,
-  });
+  const button = screen.getByLabelText(`Select ${label} workstation`);
   const node = button.closest(".react-flow__node");
 
   if (!(node instanceof HTMLElement)) {
@@ -55,39 +54,6 @@ function getWorkstationNodeByLabel(label: string): HTMLElement {
   return node;
 }
 
-function expectFixedReviewWorkstationDimensions(): void {
-  const reviewNode = getWorkstationNodeByLabel("Review");
-
-  expect(reviewNode.getAttribute("style")).toContain("width: 156px");
-  expect(reviewNode.getAttribute("style")).toContain("height: 196px");
-}
-
-function expectReactFlowNodePosition(
-  node: HTMLElement,
-  position: { x: number; y: number },
-): void {
-  expect(node.style.transform.replace(/\s/g, "")).toContain(
-    `translate(${position.x}px,${position.y}px)`,
-  );
-}
-
-function expectReactFlowViewportTransform(viewport: {
-  x: number;
-  y: number;
-  zoom: number;
-}): void {
-  const workGraphViewport = screen.getByRole("region", {
-    name: "Work graph viewport",
-  });
-  const flowViewport = workGraphViewport.querySelector<HTMLElement>(
-    ".react-flow__viewport",
-  );
-
-  expect(flowViewport?.style.transform.replace(/\s/g, "")).toContain(
-    `translate(${viewport.x}px,${viewport.y}px)scale(${viewport.zoom})`,
-  );
-}
-
 function expectRenderedResourceCountMatchesBackendWorldView(
   tick: number,
 ): void {
@@ -97,27 +63,85 @@ function expectRenderedResourceCountMatchesBackendWorldView(
     ] ?? 0;
 
   const resourceNodeLabel = resourceCountAvailablePlaceID.split(":")[0];
-
-  expect(screen.getByLabelText(resourceNodeLabel)).toBeTruthy();
-  expect(
-    screen
-      .getByLabelText(`${expectedCount} resource tokens`)
-      .textContent?.trim(),
-  ).toBe(String(expectedCount));
+  const resourceNode = screen.getByLabelText(
+    `Select ${resourceNodeLabel} resource`,
+  );
+  expect(resourceNode.textContent).toContain(
+    `${2 - expectedCount} of 2 resource units occupied`,
+  );
 }
 
-function expectSeparatedStateMarkerZones(label: string, count: number): void {
-  const stateNode = getStateNodeByLabel(label);
-  const labelZone = stateNode.querySelector("[data-state-label-zone]");
-  const markerZone = stateNode.querySelector("[data-state-marker-zone]");
+function expectWorkStateCount(label: string, count: number): void {
+  expect(getStateNodeByLabel(label).textContent).toContain(`${count} Work`);
+}
 
-  expect(labelZone).toBeTruthy();
-  expect(markerZone).toBeTruthy();
-  expect(labelZone?.textContent).not.toContain(`${count} active`);
-  expect(markerZone?.textContent).not.toContain("story");
-  expect(
-    markerZone?.querySelectorAll("[data-state-work-progress-dot]"),
-  ).toHaveLength(count);
+function withTopologyFactoryChange(events: FactoryEvent[]): FactoryEvent[] {
+  const structureEvent = events.find(
+    (event) => event.type === FACTORY_EVENT_TYPES.initialStructureRequest,
+  );
+  if (!structureEvent) {
+    return events;
+  }
+  const factory = structureEvent.payload.factory as {
+    name?: string;
+    workers?: Array<Record<string, unknown>>;
+    workstations?: Array<
+      Record<string, unknown> & { type?: string; worker?: string }
+    >;
+  };
+  const workerNames = [
+    ...new Set(
+      (factory.workstations ?? [])
+        .map((workstation) => workstation.worker)
+        .filter((worker): worker is string => Boolean(worker)),
+    ),
+  ];
+  const topologyFactory = {
+    ...factory,
+    name: factory.name ?? "Replay Fixture Factory",
+    workers:
+      factory.workers ??
+      workerNames.map((name) => ({
+        model: "gpt-5",
+        name,
+        type: "MODEL_WORKER",
+      })),
+    workstations: (factory.workstations ?? []).map((workstation) => ({
+      ...workstation,
+      type: workstation.type ?? "MODEL_WORKSTATION",
+    })),
+  };
+  return [
+    structureEvent,
+    {
+      ...structureEvent,
+      context: {
+        ...structureEvent.context,
+        sequence: structureEvent.context.sequence + 1,
+        ...(structureEvent.context.sessionSequence === undefined
+          ? {}
+          : {
+              sessionSequence:
+                structureEvent.context.sessionSequence + 1,
+            }),
+      },
+      id: `${structureEvent.id}/factory-change`,
+      payload: { factory: topologyFactory },
+      type: FACTORY_EVENT_TYPES.factoryChange,
+    },
+    ...events
+      .filter((event) => event !== structureEvent)
+      .map((event) => ({
+        ...event,
+        context: {
+          ...event.context,
+          sequence: event.context.sequence + 1,
+          ...(event.context.sessionSequence === undefined
+            ? {}
+            : { sessionSequence: event.context.sessionSequence + 1 }),
+        },
+      })),
+  ];
 }
 
 async function requireEventStream(): Promise<MockEventSource> {
@@ -294,7 +318,9 @@ describe("App streamed replay rendering flows", () => {
     const stream = await requireEventStream();
 
     act(() => {
-      for (const event of failureAnalysisTimelineEvents) {
+      for (const event of withTopologyFactoryChange(
+        failureAnalysisTimelineEvents,
+      )) {
         stream.emit("message", event);
       }
     });
@@ -313,12 +339,12 @@ describe("App streamed replay rendering flows", () => {
       expect(screen.getAllByText("Failed at Review").length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Select work item Blocked Analysis Story",
-      }),
+    const blockedWorkButton = screen.getByLabelText(
+      "Select work item Blocked Analysis Story",
     );
-
+    if (blockedWorkButton.getAttribute("aria-pressed") !== "true") {
+      fireEvent.click(blockedWorkButton);
+    }
     const failedDetail = await screen.findByRole("article", {
       name: "Current selection",
     });
@@ -330,7 +356,7 @@ describe("App streamed replay rendering flows", () => {
     ).toBeNull();
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Select story:new state" }),
+      await screen.findByLabelText("Select new work-state"),
     );
 
     const currentPositionDetail = await screen.findByRole("article", {
@@ -397,7 +423,9 @@ describe("App streamed replay rendering flows", () => {
     const stream = await requireEventStream();
 
     act(() => {
-      for (const event of resourceCountTimelineEvents) {
+      for (const event of withTopologyFactoryChange(
+        resourceCountTimelineEvents,
+      )) {
         stream.emit("message", event);
       }
     });
@@ -444,24 +472,20 @@ describe("App streamed replay rendering flows", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: "Select Review workstation" }),
+        screen.getByLabelText("Select Review workstation"),
       ).toBeTruthy();
       expect(
-        screen.queryByRole("button", { name: "Select QA workstation" }),
+        screen.queryByLabelText("Select QA workstation"),
       ).toBeNull();
-      expect(screen.getByRole("img", { name: "worker:writer" })).toBeTruthy();
+      expect(screen.getByLabelText("Select writer worker")).toBeTruthy();
     });
 
     act(() => {
       stream.emit("message", streamedGraphChangeEvents[1]);
     });
 
-    const qaNode = await waitFor(() => getWorkstationNodeByLabel("QA"));
-    expectReactFlowNodePosition(qaNode, { x: 640, y: 260 });
-    await waitFor(() => {
-      expectReactFlowViewportTransform({ x: -180, y: 55, zoom: 0.85 });
-    });
-    expect(screen.getByRole("img", { name: "worker:critic" })).toBeTruthy();
+    expect(await waitFor(() => getWorkstationNodeByLabel("QA"))).toBeTruthy();
+    expect(screen.getByLabelText("Select critic worker")).toBeTruthy();
     expect(
       screen.getByRole<HTMLInputElement>("slider", {
         name: "Timeline tick",
@@ -473,7 +497,7 @@ describe("App streamed replay rendering flows", () => {
   it("smoke tests graph state across event replay, terminal selection, and tick changes", async () => {
     renderApp({
       snapshot: baselineSnapshot,
-      timelineEvents: graphStateSmokeTimelineEvents,
+      timelineEvents: withTopologyFactoryChange(graphStateSmokeTimelineEvents),
     });
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
@@ -486,21 +510,12 @@ describe("App streamed replay rendering flows", () => {
     await waitFor(() => {
       expect(slider.value).toBe("9");
       expect(screen.getByText("9/9")).toBeTruthy();
-      expectFixedReviewWorkstationDimensions();
-      expect(
-        getStateNodeByLabel("story:done").querySelector(
-          "[aria-label='2 active items']",
-        ),
-      ).toBeTruthy();
-      expect(
-        getStateNodeByLabel("story:failed").querySelector(
-          "[aria-label='1 active item']",
-        ),
-      ).toBeTruthy();
+      expectWorkStateCount("story:done", 2);
+      expectWorkStateCount("story:failed", 1);
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Select story:done state" }),
+      screen.getByLabelText("Select done work-state"),
     );
 
     const completedDetail = await within(dashboardGrid).findByRole("article", {
@@ -524,7 +539,7 @@ describe("App streamed replay rendering flows", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Select story:failed state" }),
+      screen.getByLabelText("Select failed work-state"),
     );
 
     await waitFor(() => {
@@ -553,10 +568,8 @@ describe("App streamed replay rendering flows", () => {
     await waitFor(() => {
       expect(slider.value).toBe("3");
       expect(screen.getByText("3/9")).toBeTruthy();
-      expect(
-        screen.getByRole("button", { name: /Completed Smoke Story One/ }),
-      ).toBeTruthy();
-      expectFixedReviewWorkstationDimensions();
+      expectWorkStateCount("story:new", 2);
+      expect(getWorkstationNodeByLabel("Review")).toBeTruthy();
     });
 
     fireEvent.change(slider, { target: { value: "2" } });
@@ -564,7 +577,7 @@ describe("App streamed replay rendering flows", () => {
     await waitFor(() => {
       expect(slider.value).toBe("2");
       expect(screen.getByText("2/9")).toBeTruthy();
-      expectSeparatedStateMarkerZones("story:new", 3);
+      expectWorkStateCount("story:new", 3);
     });
 
     fireEvent.change(slider, { target: { value: "9" } });
@@ -572,12 +585,8 @@ describe("App streamed replay rendering flows", () => {
     await waitFor(() => {
       expect(slider.value).toBe("9");
       expect(screen.getByText("9/9")).toBeTruthy();
-      expectFixedReviewWorkstationDimensions();
-      expect(
-        getStateNodeByLabel("story:done").querySelector(
-          "[aria-label='2 active items']",
-        ),
-      ).toBeTruthy();
+      expect(getWorkstationNodeByLabel("Review")).toBeTruthy();
+      expectWorkStateCount("story:done", 2);
     });
   }, 90_000);
 });

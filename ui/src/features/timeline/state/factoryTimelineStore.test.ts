@@ -1573,12 +1573,7 @@ describe("factory timeline reconstruction topology", () => {
     const projected = buildFactoryTimelineSnapshot([legacyInitialStructure], 1);
 
     expect(projected.topology.submit_work_types).toEqual([]);
-    expect(projected.topology.workstation_nodes_by_id?.ideafy).toMatchObject({
-      input_place_ids: [":init"],
-      input_work_type_ids: [],
-      output_place_ids: [":complete"],
-      output_work_type_ids: [],
-    });
+    expect(projected.topology.workstation_nodes_by_id).toEqual({});
   });
 
   it("replays the resource-count smoke fixture across idle, active, and released ticks", () => {
@@ -3928,6 +3923,7 @@ describe("factory timeline store replay", () => {
       FACTORY_EVENT_TYPES.initialStructureRequest,
       {
         factory: {
+          workers: [{ name: "refresh-worker", type: "MODEL_WORKER" }],
           workTypes: [
             {
               name: "story",

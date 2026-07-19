@@ -79,6 +79,13 @@ export const DensePreparedProjection: Story = {
   },
 };
 
+export const TouchPanePanning: Story = {
+  args: {
+    state: { projection: createProjection(true), status: "ready" },
+  },
+  render: (args) => <SelectionHost {...args} />,
+};
+
 export const Loading: Story = {
   args: { state: { status: "loading" } },
 };
@@ -122,6 +129,20 @@ function RecoveryHost(props: FactoryTopologyReplayProps) {
         setState({ projection: createProjection(), status: "ready" });
       }}
       state={state}
+    />
+  );
+}
+
+function SelectionHost(props: FactoryTopologyReplayProps) {
+  const [selectedNodeId, setSelectedNodeId] = useState<string>();
+  return (
+    <FactoryTopologyReplay
+      {...props}
+      onSelectNode={(node) => {
+        props.onSelectNode?.(node);
+        setSelectedNodeId(node.id);
+      }}
+      selectedNodeId={selectedNodeId}
     />
   );
 }

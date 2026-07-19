@@ -5,8 +5,8 @@ import { AgentBentoCard } from "../../bento/public";
 import type { DashboardSelection } from "../../current-selection/public";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { useCurrentActivityGraphState } from "../hooks/use-current-activity-graph-state";
 import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
+import { useCurrentActivityGraphState } from "../hooks/use-current-activity-graph-state";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
@@ -133,7 +133,7 @@ export function WorkflowActivityBentoCard({
           loadErrorMessage={viewModel.status.loadErrorMessage}
           locale={locale}
           onToggle={editorControls.toggleMode}
-          showModeToggle={false}
+          showModeToggle={!editorControls.isEditing}
         />
       }
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}

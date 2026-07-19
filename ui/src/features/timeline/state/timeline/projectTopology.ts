@@ -1,4 +1,4 @@
-import type { FactoryTopologyProjection } from "../../../../../../packages/factory-replay/src/index.js";
+import type { FactoryTopologyProjection } from "../../../../../packages/factory-replay/src/index.js";
 import type {
   DashboardPlaceKind,
   DashboardSnapshot,

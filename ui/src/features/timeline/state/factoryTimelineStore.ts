@@ -19,7 +19,6 @@ import {
 export { emptyHostedFactoryReplayProjection } from "./timeline/projections/projectFactoryReplay";
 export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 
-
 export type { WorldState } from "./timeline/types";
 
 import {
@@ -52,17 +51,17 @@ export function buildFactoryTimelineSnapshot(
   events: FactoryEvent[],
   selectedTick: number,
 ): WorldState {
-  return buildProjectedTimelineSnapshot(
-    events,
-    selectedTick,
-  );
+  return buildProjectedTimelineSnapshot(events, selectedTick);
 }
 
 const timelineStoreStateDeps: TimelineStoreStateDeps = {
   buildFactoryTimelineProjection: (events, selectedTick, checkpoint) =>
     buildProjectedTimelineProjection(events, selectedTick, checkpoint),
   buildFactoryTimelineSnapshot,
-  canonicalizeEvents: canonicalizeFactoryEvents,
+  canonicalizeEvents: (events) =>
+    canonicalizeFactoryEvents(
+      events as unknown as Parameters<typeof canonicalizeFactoryEvents>[0],
+    ) as unknown as FactoryEvent[],
 };
 
 function exactIdentity(

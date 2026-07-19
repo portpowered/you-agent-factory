@@ -340,6 +340,9 @@ function ReactFlowCanvas({ flow }: { flow: FactoryTopologyFlowProjection }) {
       nodesConnectable={false}
       nodesDraggable={false}
       nodeTypes={nodeTypes}
+      // XYFlow disables pointer events on otherwise non-interactive node
+      // wrappers. The nested GraphNodeButton remains the selection owner.
+      onNodeClick={preserveNestedNodePointerEvents}
       panOnDrag
       proOptions={{ hideAttribution: true }}
     >
@@ -348,6 +351,8 @@ function ReactFlowCanvas({ flow }: { flow: FactoryTopologyFlowProjection }) {
     </ReactFlow>
   );
 }
+
+function preserveNestedNodePointerEvents(): void {}
 
 function layoutNode(
   kind: FactoryTopologyNode["kind"],

@@ -1,12 +1,15 @@
 import {
   type FactoryActivityProjection,
+  type FactoryLoadProjection,
+  type FactoryWorkStateOccupancyEvidence,
   type FactoryTopologyProjection,
   type FactoryWorkProgressProjection,
   type FactoryWorkProgressStateEvidence,
   projectFactoryActivity,
+  projectFactoryLoad,
   projectFactoryTopology,
   projectFactoryWorkProgress,
-} from "../../../../../../../packages/factory-replay/src/index.js";
+} from "../../../../../../packages/factory-replay/src/index.js";
 import type {
   DashboardRuntime,
   DashboardSnapshot,
@@ -18,6 +21,7 @@ import type { ReplayWorldState, WorldDispatch } from "../types";
 
 export interface HostedFactoryReplayProjection {
   activity: FactoryActivityProjection;
+  load: FactoryLoadProjection;
   topology: FactoryTopologyProjection;
   workProgress: FactoryWorkProgressProjection;
 }
@@ -50,6 +54,9 @@ export function projectHostedFactoryReplay(
     activity: projectFactoryActivity({
       activeDispatches: activeDispatches.map((dispatch) => ({
         id: dispatch.dispatchID,
+        inputRoutes: dispatch.workItems.map((work) =>
+          dispatchInputRoute(state, dispatch, work),
+        ),
         ...(dispatch.resourceEvidenceAvailable === false
           ? {}
           : {
@@ -63,6 +70,21 @@ export function projectHostedFactoryReplay(
       })),
       factory: state.factory,
       selectedTick: state.tick_count,
+    }),
+    load: projectFactoryLoad({
+      activeDispatches: activeDispatches.map((dispatch) => ({
+        id: dispatch.dispatchID,
+        ...(dispatch.resourceEvidenceAvailable === false
+          ? {}
+          : {
+              resourceClaims: dispatch.resources.map((resource) => ({
+                resourceName: resource.resourceID,
+              })),
+            }),
+      })),
+      factory: state.factory,
+      selectedTick: state.tick_count,
+      works: hostedWorkStateEvidence(state, activeDispatches),
     }),
     topology: projectFactoryTopology({
       factory: state.factory,
@@ -89,12 +111,59 @@ export function emptyHostedFactoryReplayProjection(
       activeDispatches: [],
       selectedTick,
     }),
+    load: projectFactoryLoad({ selectedTick, works: [] }),
     topology: projectFactoryTopology({ selectedTick }),
     workProgress: projectFactoryWorkProgress({
       activeWorkIds: [],
       selectedTick,
       works: [],
     }),
+  };
+}
+
+function hostedWorkStateEvidence(
+  state: ReplayWorldState,
+  activeDispatches: WorldDispatch[],
+): FactoryWorkStateOccupancyEvidence[] {
+  const activeWorkIDs = new Set(activeDispatches.flatMap(dispatchWorkIDs));
+  return Object.values(state.workItemsByID).flatMap((work) => {
+    if (activeWorkIDs.has(work.id)) {
+      return [];
+    }
+    const place = work.place_id
+      ? state.topology.places?.find(
+          (candidate) => candidate.id === work.place_id,
+        )
+      : undefined;
+    const stateName = work.state || place?.state;
+    return [
+      {
+        id: work.id,
+        ...(stateName ? { stateName } : {}),
+        workTypeId: work.work_type_id,
+      },
+    ];
+  });
+}
+
+function dispatchInputRoute(
+  state: ReplayWorldState,
+  dispatch: WorldDispatch,
+  work: WorldDispatch["workItems"][number],
+) {
+  const consumedToken = dispatch.consumedTokens.find(
+    (token) => token.work_id === work.work_id,
+  );
+  const place = consumedToken
+    ? state.topology.places?.find(
+        (candidate) => candidate.id === consumedToken.place_id,
+      )
+    : undefined;
+  return {
+    ...(work.state || place?.state
+      ? { stateName: work.state || place?.state }
+      : {}),
+    ...(work.work_type_id ? { workTypeId: work.work_type_id } : {}),
   };
 }
 
@@ -111,15 +180,15 @@ function projectHostedRuntime(
 
   return {
     ...runtime,
-    active_dispatch_ids: projection.activity.activeDispatches.map(
-      (dispatch) => dispatch.id,
+    active_dispatch_ids: projection.activity.activeDispatchOverlays.map(
+      (dispatch) => dispatch.dispatchId,
     ),
     active_executions_by_dispatch_id: activeExecutions,
     active_workstation_node_ids: projectHostedActiveWorkstationIDs(
       state,
       projection,
     ),
-    in_flight_dispatch_count: projection.activity.activeDispatches.length,
+    in_flight_dispatch_count: projection.activity.activeDispatchOverlays.length,
     place_token_counts: projectHostedPlaceTokenCounts(
       state,
       runtime.place_token_counts ?? {},
@@ -139,12 +208,13 @@ function projectHostedActiveExecutions(
   projection: HostedFactoryReplayProjection,
 ): NonNullable<DashboardRuntime["active_executions_by_dispatch_id"]> {
   return Object.fromEntries(
-    projection.activity.activeDispatches.flatMap((dispatch) => {
-      const execution = runtime.active_executions_by_dispatch_id?.[dispatch.id];
+    projection.activity.activeDispatchOverlays.flatMap((dispatch) => {
+      const execution =
+        runtime.active_executions_by_dispatch_id?.[dispatch.dispatchId];
       return execution
         ? [
             [
-              dispatch.id,
+              dispatch.dispatchId,
               {
                 ...execution,
                 workstation_node_id:
@@ -164,31 +234,37 @@ function projectHostedWorkstationActivity(
   projection: HostedFactoryReplayProjection,
 ): NonNullable<DashboardRuntime["workstation_activity_by_node_id"]> {
   return Object.fromEntries(
-    projection.activity.activeWorkstationIds.map((workstationID) => {
+    projection.activity.activeDispatchOverlays.flatMap((dispatch) => {
+      const workstationID = dispatch.workstationId;
+      if (!workstationID) {
+        return [];
+      }
       const executions = Object.values(activeExecutions).filter(
         (execution) => execution.workstation_node_id === workstationID,
       );
       return [
-        workstationID,
-        {
-          active_dispatch_ids: executions.map(
-            (execution) => execution.dispatch_id,
-          ),
-          active_work_items: executions.flatMap(
-            (execution) => execution.work_items ?? [],
-          ),
-          trace_ids: [
-            ...new Set(
-              executions.flatMap((execution) => execution.trace_ids ?? []),
+        [
+          workstationID,
+          {
+            active_dispatch_ids: executions.map(
+              (execution) => execution.dispatch_id,
             ),
-          ],
-          workstation_node_id: workstationID,
-        },
-      ] satisfies [
-        string,
-        NonNullable<
-          DashboardRuntime["workstation_activity_by_node_id"]
-        >[string],
+            active_work_items: executions.flatMap(
+              (execution) => execution.work_items ?? [],
+            ),
+            trace_ids: [
+              ...new Set(
+                executions.flatMap((execution) => execution.trace_ids ?? []),
+              ),
+            ],
+            workstation_node_id: workstationID,
+          },
+        ] satisfies [
+          string,
+          NonNullable<
+            DashboardRuntime["workstation_activity_by_node_id"]
+          >[string],
+        ],
       ];
     }),
   );
@@ -200,7 +276,9 @@ function projectHostedActiveWorkstationIDs(
 ): string[] {
   return [
     ...new Set([
-      ...projection.activity.activeWorkstationIds,
+      ...projection.activity.activeDispatchOverlays.flatMap((dispatch) =>
+        dispatch.workstationId ? [dispatch.workstationId] : [],
+      ),
       ...Object.values(state.activeDispatches).flatMap((dispatch) =>
         dispatch.systemOnly ? [dispatch.transitionID] : [],
       ),

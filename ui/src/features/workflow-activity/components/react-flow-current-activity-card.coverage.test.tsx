@@ -415,7 +415,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     globalThis.ResizeObserver = originalResizeObserver;
   });
 
-  it("renders the empty topology fallback when no workstation nodes exist", async () => {
+  it("delegates observer loading to the shared topology surface", async () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
@@ -429,12 +429,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "The factory has not published any workstation graph yet.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Loading Factory topology...")).toBeTruthy();
     expect(screen.queryByTestId("mock-react-flow")).toBeNull();
   });
 

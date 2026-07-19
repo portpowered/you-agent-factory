@@ -15,11 +15,21 @@ const componentsPackageStylesPath = path.join(
   "src",
   "styles.css",
 );
+const factoryVisualizersPackageStylesPath = path.join(
+  uiRoot,
+  "packages",
+  "factory-visualizers",
+  "src",
+  "styles.css",
+);
 
 export function createComponentsPackageCssResolver(): Resolver {
   return async (id) => {
     if (id === "@you-agent-factory/components/styles.css") {
       return componentsPackageStylesPath;
+    }
+    if (id === "@you-agent-factory/factory-visualizers/styles.css") {
+      return factoryVisualizersPackageStylesPath;
     }
     return undefined;
   };

@@ -328,7 +328,7 @@ describe("useCurrentActivityGraphState", () => {
     hookState.saveStateIsStale = false;
   });
 
-  it("uses the versioned event factory without calling the current factory document query", () => {
+  it("leaves observer rendering to the shared topology without querying the editor document", () => {
     hookState.currentFactoryQuery = {
       data: undefined,
       status: "pending",
@@ -346,14 +346,7 @@ describe("useCurrentActivityGraphState", () => {
 
     expect(useCurrentFactoryDocument).not.toHaveBeenCalled();
     expect(result.current.status.isDefinitionLoading).toBe(false);
-    expect(
-      result.current.graphProjection.displayFactoryDefinition,
-    ).toMatchObject({
-      version: {
-        logical: "7",
-        physical: "2026-06-09T00:00:00Z",
-      },
-    });
+    expect(result.current.graphProjection.displayFactoryDefinition).toBeNull();
   });
 
   it("does not call the current factory document query when entering editor mode without a versioned event factory", () => {

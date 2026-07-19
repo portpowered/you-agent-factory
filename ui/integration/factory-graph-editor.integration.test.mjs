@@ -891,10 +891,8 @@ describe.sequential("factory graph editor browser integration", () => {
             { timeout: uiInteractionTimeoutMs },
           )
           .toBe(0);
-        await toolbar
-          .getByRole("button", {
-            name: "Show or hide",
-          })
+        await browserPage.page
+          .getByRole("region", { name: "Factory topology" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         expect(saveRequests).toHaveLength(0);
