@@ -50,7 +50,7 @@ function getCurrentSelection(): HTMLElement {
 
 function openReviewWorkstation(): void {
   fireEvent.click(
-    screen.getByRole("button", { name: "Select Review workstation" }),
+    screen.getByLabelText("Select Review workstation"),
   );
 }
 
@@ -146,7 +146,7 @@ it("rerenders current-selection request history and request-detail times when th
       },
     });
 
-    await screen.findByRole("button", { name: "Select Review workstation" });
+    await screen.findByLabelText("Select Review workstation");
     openReviewWorkstation();
 
     const englishSelection = await screen.findByRole("article", {
@@ -270,7 +270,7 @@ it("shows localized fallback copy for invalid request-detail timestamps without 
       },
     });
 
-    await screen.findByRole("button", { name: "Select Review workstation" });
+    await screen.findByLabelText("Select Review workstation");
     openReviewWorkstation();
     selectReviewRequest(invalidRequest.dispatch_id);
 

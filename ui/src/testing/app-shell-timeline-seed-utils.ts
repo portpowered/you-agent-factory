@@ -3,6 +3,7 @@ import type {
   DashboardTrace,
   DashboardWorkstationRequest,
 } from "../api/dashboard";
+import { projectFactoryTopology } from "../../packages/factory-replay/src/index.js";
 import {
   emptyHostedFactoryReplayProjection,
   useFactoryTimelineStore,
@@ -17,14 +18,53 @@ function timelineSnapshot(
     DashboardWorkstationRequest
   > = {},
 ): WorldState {
+  const factoryReplay = emptyHostedFactoryReplayProjection(snapshot.tick_count);
+  if (snapshot.factory) {
+    factoryReplay.topology = projectFactoryTopology({
+      factory: snapshot.factory,
+      selectedTick: snapshot.tick_count,
+    });
+  }
+
   return {
     ...snapshot,
-    factoryReplay: emptyHostedFactoryReplayProjection(snapshot.tick_count),
+    factoryReplay,
     relationsByWorkID: {},
     tracesByWorkID,
     workstationRequestsByDispatchID,
     workRequestsByID: {},
   };
+}
+
+function seedTimelineState(
+  timelineState: Pick<
+    ReturnType<typeof useFactoryTimelineStore.getState>,
+    | "events"
+    | "latestTick"
+    | "mode"
+    | "receivedEventIDs"
+    | "selectedTick"
+    | "worldViewCache"
+  >,
+): void {
+  useFactoryTimelineStore.setState((current) => {
+    const activeEntry = current.activeEntryKey
+      ? current.entriesByKey[current.activeEntryKey]
+      : undefined;
+    if (!current.activeEntryKey || !activeEntry) {
+      return timelineState;
+    }
+    return {
+      ...timelineState,
+      entriesByKey: {
+        ...current.entriesByKey,
+        [current.activeEntryKey]: {
+          ...activeEntry,
+          ...timelineState,
+        },
+      },
+    };
+  });
 }
 
 export function seedTimelineSnapshot(
@@ -35,7 +75,7 @@ export function seedTimelineSnapshot(
     DashboardWorkstationRequest
   > = {},
 ): void {
-  useFactoryTimelineStore.setState({
+  seedTimelineState({
     events: [],
     latestTick: snapshot.tick_count,
     mode: "current",
@@ -65,7 +105,7 @@ export function seedTimelineSnapshots(snapshots: DashboardSnapshot[]): void {
     ...snapshots.map((snapshot) => snapshot.tick_count),
   );
 
-  useFactoryTimelineStore.setState({
+  seedTimelineState({
     events: [],
     latestTick,
     mode: "current",

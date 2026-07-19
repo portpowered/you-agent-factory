@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, vi } from "vitest";
-import { App } from "../App";
 import type {
   DashboardSnapshot,
   DashboardTopology,
@@ -46,9 +46,8 @@ import {
 } from "./app-shell-session-stream-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
-  seedTimelineSnapshot,
-  seedTimelineSnapshots,
-} from "./app-shell-timeline-seed-utils";
+  AppShellSeededApp,
+} from "./app-shell-timeline-seeder";
 import {
   DashboardSessionStoreTestProvider,
   DashboardSessionTestProvider,
@@ -128,6 +127,39 @@ interface RenderAppOptions {
 
 interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
+}
+
+function resolveTimelineSessionSummary(
+  sessions: readonly FactorySessionSummary[],
+  controlledSessionID: string | null,
+): FactorySessionSummary {
+  const summary =
+    sessions.find((session) => session.id === controlledSessionID) ??
+    sessions[0];
+  if (!summary) {
+    throw new Error(
+      "expected at least one factory session summary for timeline seeding",
+    );
+  }
+  return summary;
+}
+
+function wrapAppForDashboardSession(
+  app: ReactNode,
+  sessionID: string | null | undefined,
+  controlledSessionID: string | null,
+): ReactNode {
+  return sessionID === undefined ? (
+    <DashboardSessionStoreTestProvider
+      resolvedDefaultSessionID={controlledSessionID ?? undefined}
+    >
+      {app}
+    </DashboardSessionStoreTestProvider>
+  ) : (
+    <DashboardSessionTestProvider sessionID={controlledSessionID}>
+      {app}
+    </DashboardSessionTestProvider>
+  );
 }
 
 const queryClients: QueryClient[] = [];
@@ -333,42 +365,33 @@ export function renderApp({
   vi.stubGlobal("fetch", fetchMock);
   vi.stubGlobal("EventSource", MockEventSource);
   reloadDashboardLayoutFromStorage();
-  if (timelineEvents) {
-    useFactoryTimelineStore.getState().replaceEvents(timelineEvents);
-  } else if (timelineSnapshots) {
-    seedTimelineSnapshots(timelineSnapshots);
-  } else if (seedTimelineFromSnapshot) {
-    seedTimelineSnapshot(
-      snapshot,
-      traceFixtures,
-      workstationRequestsByDispatchID,
-    );
-  }
-
+  const sessionSummary = resolveTimelineSessionSummary(
+    availableFactorySessions,
+    controlledSessionID,
+  );
   const app = (
-    <App
+    <AppShellSeededApp
       browserLanguage={browserLanguage}
       browserLanguages={browserLanguages}
+      identity={buildAppShellStreamIdentity(sessionSummary, snapshot)}
       initialLocale={initialLocale}
       locationSearch={locationSearch}
+      seedTimelineFromSnapshot={seedTimelineFromSnapshot}
+      snapshot={snapshot}
+      timelineEvents={timelineEvents}
+      timelineSnapshots={timelineSnapshots}
+      traceFixtures={traceFixtures}
+      workstationRequestsByDispatchID={workstationRequestsByDispatchID}
     />
   );
-  const scopedApp =
-    sessionID === undefined ? (
-      <DashboardSessionStoreTestProvider
-        resolvedDefaultSessionID={controlledSessionID ?? undefined}
-      >
-        {app}
-      </DashboardSessionStoreTestProvider>
-    ) : (
-      <DashboardSessionTestProvider sessionID={controlledSessionID}>
-        {app}
-      </DashboardSessionTestProvider>
-    );
+  const scopedApp = wrapAppForDashboardSession(
+    app,
+    sessionID,
+    controlledSessionID,
+  );
   const result = render(
     <QueryClientProvider client={queryClient}>{scopedApp}</QueryClientProvider>,
   );
-
   return { ...result, fetchMock };
 }
 

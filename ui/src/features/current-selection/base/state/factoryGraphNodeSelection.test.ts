@@ -31,6 +31,7 @@ const initialStructureRequest = event(
   FACTORY_EVENT_TYPES.initialStructureRequest,
   {
     factory: {
+      workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
       workTypes: [
         {
           name: "story",

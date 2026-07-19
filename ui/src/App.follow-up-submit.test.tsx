@@ -367,9 +367,7 @@ describe("App follow-up flows", () => {
       renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
 
       fireEvent.click(
-        await screen.findByRole("button", {
-          name: "Select Review workstation",
-        }),
+        await screen.findByLabelText("Select Review workstation"),
       );
 
       const workstationInfo = await screen.findByRole("article", {
@@ -402,9 +400,7 @@ describe("App follow-up flows", () => {
       });
 
       fireEvent.click(
-        await screen.findByRole("button", {
-          name: "Select Implement workstation",
-        }),
+        await screen.findByLabelText("Select Implement workstation"),
       );
       const implementInfo = await screen.findByRole("article", {
         name: "Current selection",

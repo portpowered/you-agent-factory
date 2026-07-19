@@ -40,6 +40,7 @@ function factoryEvent(
 export const selectedTickTimelineEvents: FactoryEvent[] = [
   factoryEvent("timeline-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
     factory: {
+      workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
       workTypes: [
         {
           name: "story",

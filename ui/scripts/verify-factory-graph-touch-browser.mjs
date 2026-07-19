@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 const storybookURL =
   process.env.AGENT_FACTORY_STORYBOOK_URL ?? "http://127.0.0.1:6008";
 const storyURL = new URL(
-  "/iframe.html?id=agent-factory-dashboard-react-flow-current-activity-card--touch-pane-panning&viewMode=story",
+  "/iframe.html?id=factory-visualizers-factorytopologyreplay--touch-pane-panning&viewMode=story",
   storybookURL,
 ).toString();
 
@@ -61,9 +61,7 @@ async function verifyTouchGestures(browser) {
 
   try {
     const client = await context.newCDPSession(page);
-    const nodeButtons = page.locator(
-      '.react-flow__node button[aria-label^="Select "]',
-    );
+    const nodeButtons = page.locator(".react-flow__node button");
     let station = null;
     let stationBounds = null;
     for (let index = 0; index < (await nodeButtons.count()); index += 1) {
@@ -165,7 +163,7 @@ async function verifyTouchGestures(browser) {
   }
 }
 
-async function verifyDesktopSelectionAndKeyboardPan(browser) {
+async function verifyDesktopPanePan(browser) {
   const { context, page } = await openStory(browser, {
     viewport: { height: 900, width: 1280 },
   });
@@ -173,27 +171,30 @@ async function verifyDesktopSelectionAndKeyboardPan(browser) {
   try {
     const point = await emptyPanePoint(page);
     const initialTransform = await viewportTransform(page);
+    const initialScroll = await page.evaluate(() => ({
+      x: document.documentElement.scrollLeft,
+      y: document.documentElement.scrollTop,
+    }));
     await page.mouse.move(point.x, point.y);
     await page.mouse.down();
     await page.mouse.move(point.x + 80, point.y + 60, { steps: 4 });
-    await page.locator(".react-flow__selection").waitFor({ state: "visible" });
     await page.mouse.up();
-    if ((await viewportTransform(page)) !== initialTransform) {
-      throw new Error("Primary mouse selection unexpectedly panned the graph");
-    }
-
-    await page.keyboard.down("Space");
-    await page.mouse.move(point.x, point.y);
-    await page.mouse.down();
-    await page.mouse.move(point.x + 50, point.y + 30, { steps: 3 });
-    await page.mouse.up();
-    await page.keyboard.up("Space");
     await page.waitForFunction(
       (before) =>
         document.querySelector(".react-flow__viewport")?.style.transform !==
         before,
       initialTransform,
     );
+    const finalScroll = await page.evaluate(() => ({
+      x: document.documentElement.scrollLeft,
+      y: document.documentElement.scrollTop,
+    }));
+    if (
+      finalScroll.x !== initialScroll.x ||
+      finalScroll.y !== initialScroll.y
+    ) {
+      throw new Error("Desktop graph panning scrolled the page");
+    }
   } finally {
     await context.close();
   }
@@ -202,7 +203,7 @@ async function verifyDesktopSelectionAndKeyboardPan(browser) {
 const browser = await chromium.launch({ headless: true });
 try {
   await verifyTouchGestures(browser);
-  await verifyDesktopSelectionAndKeyboardPan(browser);
+  await verifyDesktopPanePan(browser);
   console.log("Factory graph touch and desktop gesture verification passed.");
 } finally {
   await browser.close();

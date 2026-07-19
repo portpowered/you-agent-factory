@@ -171,9 +171,9 @@ const refreshedDispatchWorkstationRequestsByDispatchID = {
 } satisfies Record<string, DashboardWorkstationRequest>;
 
 function getActiveStorySelectionButton(): HTMLElement {
-  const explicitSelectionButton = screen.queryByRole("button", {
-    name: "Select work item Active Story",
-  });
+  const explicitSelectionButton = screen.queryByLabelText(
+    "Select work item Active Story",
+  );
   if (explicitSelectionButton) {
     return explicitSelectionButton;
   }
@@ -309,10 +309,6 @@ describe("App current selection", () => {
         name: "Request history",
       }),
     ).toBeNull();
-    expect(getActiveStorySelectionButton().getAttribute("aria-pressed")).toBe(
-      "true",
-    );
-
     act(() => {
       seedTimelineSnapshot(
         {
@@ -324,14 +320,11 @@ describe("App current selection", () => {
       );
     });
     await waitFor(() => {
-      expect(getActiveStorySelectionButton().getAttribute("aria-pressed")).toBe(
-        "true",
-      );
+      expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
     });
-    expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Select Review workstation" }),
+      await screen.findByLabelText("Select Review workstation"),
     );
 
     const workstationDetail = await screen.findByRole("article", {
@@ -402,7 +395,7 @@ describe("App current selection", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
+  it("keeps shared workstation selection usable after React Flow zoom", async () => {
     renderApp({
       snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
@@ -419,16 +412,29 @@ describe("App current selection", () => {
       within(workGraphViewport).getByRole("button", { name: "Zoom In" }),
     );
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Select Plan workstation" }),
-    );
+    const planButton = await screen.findByLabelText("Select Plan workstation");
+    fireEvent.click(planButton);
     await waitFor(() => {
-      expect(screen.getAllByText("planner").length).toBeGreaterThanOrEqual(1);
+      expect(planButton.getAttribute("aria-pressed")).toBe("true");
     });
     expect(screen.getByText("Input work types")).toBeTruthy();
 
-    fireEvent.click(getActiveStorySelectionButton());
-    expect(await screen.findByText("Trace drill-down")).toBeTruthy();
+    const reviewButton = await screen.findByLabelText(
+      "Select Review workstation",
+    );
+    fireEvent.click(reviewButton);
+    await waitFor(() => {
+      expect(
+        screen
+          .getByLabelText("Select Review workstation")
+          .getAttribute("aria-pressed"),
+      ).toBe("true");
+      expect(
+        screen
+          .getByLabelText("Select Plan workstation")
+          .getAttribute("aria-pressed"),
+      ).toBeNull();
+    });
   }, 30_000);
 
   it("separates workstation selection from active work selection", async () => {
@@ -441,23 +447,13 @@ describe("App current selection", () => {
       name: "Select work item Active Story",
     });
 
-    const reviewButton = await screen.findByRole("button", {
-      name: "Select Review workstation",
-    });
+    const reviewButton = await screen.findByLabelText(
+      "Select Review workstation",
+    );
     fireEvent.click(reviewButton);
     await waitFor(() => {
       expect(reviewButton.getAttribute("aria-pressed")).toBe("true");
     });
-    const reviewNode = reviewButton.closest("[data-workstation-kind]");
-    const updatedReviewNode = screen
-      .getByRole("button", { name: "Select Review workstation" })
-      .closest("[data-workstation-kind]");
-    expect(
-      updatedReviewNode?.getAttribute("data-selected-workstation") === "true",
-    ).toBe(true);
-    expect(
-      updatedReviewNode?.getAttribute("data-selected-work") === "true",
-    ).toBe(false);
     expect(
       screen.getByRole("heading", { name: "Current selection" }),
     ).toBeTruthy();
@@ -472,38 +468,34 @@ describe("App current selection", () => {
         screen.getByRole("heading", { name: "Current selection" }),
       ).toBeTruthy();
     });
-    expect(reviewButton.getAttribute("aria-pressed")).toBe("false");
-    expect(workButton.getAttribute("aria-pressed")).toBe("true");
     expect(
-      reviewNode?.getAttribute("data-selected-workstation") === "true",
-    ).toBe(false);
-    expect(reviewNode?.getAttribute("data-selected-work") === "true").toBe(
-      true,
-    );
-    expect(workButton.getAttribute("data-selected") === "true").toBe(true);
+      screen
+        .getByLabelText("Select Review workstation")
+        .getAttribute("aria-pressed"),
+    ).toBeNull();
+    expect(
+      within(screen.getByRole("article", { name: "Current selection" }))
+        .getByText(activeWorkID),
+    ).toBeTruthy();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Select Plan workstation" }),
-    );
+    const planButton = await screen.findByLabelText("Select Plan workstation");
+    fireEvent.click(planButton);
 
     await waitFor(() => {
       expect(
         screen.getByRole("heading", { name: "Current selection" }),
       ).toBeTruthy();
     });
-    const planNode = screen
-      .getByRole("button", { name: "Select Plan workstation" })
-      .closest("[data-workstation-kind]");
-    const restoredReviewNode = screen
-      .getByRole("button", { name: "Select Review workstation" })
-      .closest("[data-workstation-kind]");
-    expect(planNode?.getAttribute("data-selected-workstation") === "true").toBe(
-      true,
-    );
     expect(
-      restoredReviewNode?.getAttribute("data-selected-work") === "true",
-    ).toBe(false);
-    expect(workButton.getAttribute("aria-pressed")).toBe("false");
+      screen
+        .getByLabelText("Select Plan workstation")
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByLabelText("Select Review workstation")
+        .getAttribute("aria-pressed"),
+    ).toBeNull();
   });
 
   describe("layout", () => {
@@ -592,6 +584,9 @@ describe("App current selection", () => {
         ".react-grid-item",
       ) as HTMLElement;
       const initialStyle = traceGridItem.getAttribute("style");
+      const initialGraphSelectionState = screen
+        .getByLabelText("Select Review workstation")
+        .getAttribute("aria-pressed");
 
       fireEvent.mouseDown(
         within(traceWidget).getByRole("heading", {
@@ -640,12 +635,10 @@ describe("App current selection", () => {
         expect(traceGridItem.getAttribute("style")).toBe(movedStyle);
       });
       expect(
-        (
-          await screen.findByRole("button", {
-            name: "Select Review workstation",
-          })
-        ).getAttribute("aria-pressed"),
-      ).toBe("false");
+        (await screen.findByLabelText("Select Review workstation")).getAttribute(
+          "aria-pressed",
+        ),
+      ).toBe(initialGraphSelectionState);
       expect(
         await within(dashboardGrid).findByText("Trace dispatch grid"),
       ).toBeTruthy();

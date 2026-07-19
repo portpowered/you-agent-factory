@@ -16,6 +16,7 @@ export const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
     id: "timeline-zero-1",
     payload: {
       factory: {
+        workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
         workTypes: [
           {
             name: "story",
