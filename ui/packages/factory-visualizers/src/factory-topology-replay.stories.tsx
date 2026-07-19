@@ -265,6 +265,7 @@ function createProjection(dense = false): FactoryTopologyReplayProjection {
           id: "overlay:dispatch-1",
           resourceNodeIds: ["resource:gpu"],
           startedTick: 17,
+          workIds: ["work-4", "work-2", "work-1", "work-3"],
           workerNodeId: "worker:alice",
           workstationNodeId: "workstation:review",
         },

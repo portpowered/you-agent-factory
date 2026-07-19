@@ -7,7 +7,7 @@ import type {
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
-
+import { projectFactoryTopologyActiveWork } from "./factory-topology-active-work";
 import {
   type FactoryTopologyChromeConfiguration,
   resolveFactoryTopologyChrome,
@@ -46,6 +46,10 @@ export type FactoryTopologyReplayState =
 
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
+  /** Optional fields retain compatibility for existing controlled consumers. */
+  activeWorkDuration?: (durationTicks: number) => string;
+  activeWorkOverflow?: (count: number) => string;
+  activeWorkRegionLabel?: string;
   annotationsHidden: string;
   annotationsVisible: string;
   empty: string;
@@ -236,6 +240,7 @@ function PreparedTopology({
         withinRegion
       >
         <ReactFlowCanvas
+          activity={projection.activity}
           chrome={resolvedChrome}
           flow={prepared.flow}
           messages={messages}
@@ -246,10 +251,12 @@ function PreparedTopology({
 }
 
 function ReactFlowCanvas({
+  activity,
   chrome,
   flow,
   messages,
 }: {
+  activity: FactoryTopologyReplayProjection["activity"];
   chrome: ReturnType<typeof resolveFactoryTopologyChrome>;
   flow: FactoryTopologyFlowProjection;
   messages: FactoryTopologyReplayMessages;
@@ -265,6 +272,7 @@ function ReactFlowCanvas({
 
   return (
     <>
+      <ActiveWorkSummary activity={activity} messages={messages} />
       {chrome.legend ? <TopologyLegend messages={chromeMessages} /> : null}
       {chrome.visibilityControls && hasAnnotations ? (
         <button
@@ -304,6 +312,40 @@ function ReactFlowCanvas({
         ) : null}
       </ReactFlow>
     </>
+  );
+}
+
+function ActiveWorkSummary({
+  activity,
+  messages,
+}: {
+  activity: FactoryTopologyReplayProjection["activity"];
+  messages: FactoryTopologyReplayMessages;
+}) {
+  const activeWork = projectFactoryTopologyActiveWork(activity);
+  if (activeWork.rows.length === 0) return null;
+
+  return (
+    <fieldset className="factory-topology-replay__active-work">
+      <legend>{messages.activeWorkRegionLabel ?? "Active Work"}</legend>
+      <ul>
+        {activeWork.rows.map((work) => (
+          <li key={work.id}>
+            <span>{work.id}</span>
+            <span>
+              {messages.activeWorkDuration?.(work.durationTicks) ??
+                `Active for ${work.durationTicks} ticks`}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {activeWork.overflowCount > 0 ? (
+        <p>
+          {messages.activeWorkOverflow?.(activeWork.overflowCount) ??
+            `${activeWork.overflowCount} more active Work`}
+        </p>
+      ) : null}
+    </fieldset>
   );
 }
 
