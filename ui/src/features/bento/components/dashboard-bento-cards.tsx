@@ -41,6 +41,7 @@ export interface DashboardCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
   dashboardLayout: AgentBentoLayoutItem[];
   importController: ReturnType<typeof useCurrentActivityImportController>;
+  isCurrent: boolean;
   locale?: string;
   now: number;
   onRemoveDashboardWidget: (widgetInstanceID: string) => void;
@@ -64,6 +65,7 @@ export interface DashboardCardBuilderArgs {
 interface DashboardWidgetCardBuilderArgs {
   currentSelection: ReturnType<typeof useCurrentSelection>;
   importController: ReturnType<typeof useCurrentActivityImportController>;
+  isCurrent: boolean;
   layoutItem: AgentBentoLayoutItem;
   locale?: string;
   now: number;
@@ -88,6 +90,7 @@ export function buildDashboardCards({
   currentSelection,
   dashboardLayout,
   importController,
+  isCurrent,
   locale,
   now,
   onRemoveDashboardWidget,
@@ -131,6 +134,7 @@ export function buildDashboardCards({
       buildWidgetCard({
         currentSelection,
         importController,
+        isCurrent,
         layoutItem,
         locale,
         now,
@@ -153,6 +157,7 @@ export function buildDashboardCards({
 function buildWidgetCard({
   currentSelection,
   importController,
+  isCurrent,
   layoutItem,
   locale,
   now,
@@ -207,6 +212,7 @@ function buildWidgetCard({
   return buildSingletonWidgetCard({
     currentSelection,
     headerAction: removeAction,
+    isCurrent,
     layoutItem,
     locale,
     now,
@@ -362,6 +368,7 @@ function buildDuplicateCapableWidgetCard({
 function buildSingletonWidgetCard({
   currentSelection,
   headerAction,
+  isCurrent,
   layoutItem,
   locale,
   now,
@@ -377,6 +384,7 @@ function buildSingletonWidgetCard({
 }: Pick<
   DashboardWidgetCardBuilderArgs,
   | "currentSelection"
+  | "isCurrent"
   | "layoutItem"
   | "locale"
   | "now"
@@ -455,7 +463,9 @@ function buildSingletonWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <SubmitWorkWidget
+            factoryState={snapshot.factory_state}
             headerAction={headerAction}
+            isCurrent={isCurrent}
             locale={locale}
             submitWorkTypes={snapshot.topology.submit_work_types}
           />

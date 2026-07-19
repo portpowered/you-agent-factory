@@ -5641,8 +5641,8 @@ type SubmitWorkRequest struct {
 	// Items Ordered dashboard-authored submit-work items preserved for one submission.
 	Items *SubmitWorkItemList `json:"items,omitempty"`
 
-	// Name Required authored name for this single-work submission.
-	Name string `json:"name"`
+	// Name Optional authored name for this single-work submission. When omitted, the server assigns the single-work request's canonical identity.
+	Name *string `json:"name,omitempty"`
 
 	// Payload Opaque work payload forwarded as raw JSON.
 	Payload interface{} `json:"payload,omitempty"`

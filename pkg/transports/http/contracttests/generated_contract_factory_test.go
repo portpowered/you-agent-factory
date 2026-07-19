@@ -88,7 +88,7 @@ func generatedSubmitRequestFixture(t *testing.T) factoryapi.SubmitWorkRequest {
 	t.Helper()
 
 	var submitRequest factoryapi.SubmitWorkRequest
-	submitRequest.Name = "task-1"
+	submitRequest.Name = stringPtr("task-1")
 	submitRequest.WorkTypeName = "task"
 	submitRequest.CurrentChainingTraceId = stringPtr("chain-submit-1")
 	submitRelationState := "complete"
@@ -245,7 +245,7 @@ func assertGeneratedSubmitAndInvocationTypesUsable(
 ) {
 	t.Helper()
 
-	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" {
+	if submitRequest.Name == nil || *submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" {
 		t.Fatal("generated OpenAPI submit request and response types should be usable")
 	}
 	if invocationRequest.SourceKind == nil || *invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationRequest.Content == nil {

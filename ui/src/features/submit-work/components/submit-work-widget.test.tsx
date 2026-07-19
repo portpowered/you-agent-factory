@@ -11,7 +11,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
+import type { FactoryDefinition } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
@@ -79,6 +79,73 @@ describe("SubmitWorkWidget form behavior", () => {
     restoreBrowserShims?.();
     restoreBrowserShims = undefined;
     vi.unstubAllGlobals();
+  });
+
+  it("routes the supported default-work host through the name-free simple submission contract", async () => {
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: {
+        workTypes: [
+          { handlingBehavior: ["DEFAULT"], name: "task", states: [] },
+        ],
+      } as unknown as FactoryDefinition,
+      error: null,
+      isLoading: false,
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 201 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        factoryState="RUNNING"
+        submitWorkTypes={[{ work_type_name: "task" }]}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Submit text" }),
+      "Ship it",
+    );
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/~default/work",
+        expect.objectContaining({
+          body: JSON.stringify({
+            content: [{ text: "Ship it", type: "text" }],
+            workTypeName: "task",
+          }),
+          method: "POST",
+        }),
+      );
+    });
+  });
+
+  it("keeps the supported simple host disabled while viewing history", () => {
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: {
+        workTypes: [
+          { handlingBehavior: ["DEFAULT"], name: "task", states: [] },
+        ],
+      } as unknown as FactoryDefinition,
+      error: null,
+      isLoading: false,
+    });
+
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        factoryState="RUNNING"
+        isCurrent={false}
+        submitWorkTypes={[{ work_type_name: "task" }]}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Submit text" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Return to the latest Factory state",
+    );
   });
 
   it("keeps the submit-work card focused on the form without redundant helper copy", () => {

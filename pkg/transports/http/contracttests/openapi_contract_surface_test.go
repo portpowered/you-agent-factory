@@ -476,8 +476,8 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	if !ok {
 		t.Fatalf("components.schemas.SubmitWorkRequest.required is missing")
 	}
-	if !containsString(submitWorkRequestRequired, "name") || !containsString(submitWorkRequestRequired, "workTypeName") {
-		t.Fatalf("components.schemas.SubmitWorkRequest.required must include name and workTypeName")
+	if !containsString(submitWorkRequestRequired, "workTypeName") {
+		t.Fatalf("components.schemas.SubmitWorkRequest.required must include workTypeName")
 	}
 	submitWorkRequestProperties := schemaProperties(t, submitWorkRequestSchema, "SubmitWorkRequest")
 	assertSchemaPropertiesPresent(t, submitWorkRequestProperties, "SubmitWorkRequest", "name", "workTypeName", "currentChainingTraceId", "items")

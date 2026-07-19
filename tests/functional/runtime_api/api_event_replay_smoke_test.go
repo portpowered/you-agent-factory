@@ -23,7 +23,7 @@ func TestAPIEventReplaySmoke_BackendEventsReconstructSelectedTicksForWebsiteTime
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "Event Replay Story",
+		Name:         stringPtr("Event Replay Story"),
 		WorkTypeName: "task",
 		Payload: map[string]string{
 			"title": "event replay smoke",

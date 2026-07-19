@@ -58,7 +58,7 @@ func Submit(cfg SubmitConfig) error {
 	}
 
 	reqBody := factoryapi.SubmitWorkRequest{
-		Name:         name,
+		Name:         &name,
 		WorkTypeName: cfg.WorkTypeName,
 		Payload:      payload,
 	}

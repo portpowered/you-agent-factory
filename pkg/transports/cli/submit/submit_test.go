@@ -200,6 +200,13 @@ func TestSubmit_BlankName(t *testing.T) {
 	}
 }
 
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this CLI boundary test keeps the JSON request contract, headers, and response assertions in one flow.
 func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 	// Start a mock server that validates the request and returns success.
@@ -252,8 +259,8 @@ func TestSubmit_JSONPayloadPostsWorkTypeName(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	if receivedReq.Name != "CLI JSON submit" {
-		t.Errorf("Name = %q, want %q", receivedReq.Name, "CLI JSON submit")
+	if receivedReq.Name == nil || *receivedReq.Name != "CLI JSON submit" {
+		t.Errorf("Name = %q, want %q", stringValue(receivedReq.Name), "CLI JSON submit")
 	}
 	if receivedReq.WorkTypeName != "code-change" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "code-change")
@@ -613,8 +620,8 @@ func TestSubmit_MarkdownPayload(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 
-	if receivedReq.Name != "markdown-submit" {
-		t.Errorf("Name = %q, want %q", receivedReq.Name, "markdown-submit")
+	if receivedReq.Name == nil || *receivedReq.Name != "markdown-submit" {
+		t.Errorf("Name = %q, want %q", stringValue(receivedReq.Name), "markdown-submit")
 	}
 	if receivedReq.WorkTypeName != "prd" {
 		t.Errorf("WorkTypeName = %q, want %q", receivedReq.WorkTypeName, "prd")

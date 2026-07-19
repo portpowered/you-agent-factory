@@ -102,7 +102,7 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	assertWAVBytes(t, streamBytes, "output validation failure")
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "real-local-model-inference",
+		Name:         stringPtr("real-local-model-inference"),
 		WorkTypeName: "speech",
 		Content: &factoryapi.WorkContent{
 			mustGeneratedFunctionalTextPart(t, "hello from factory-level model invoke"),

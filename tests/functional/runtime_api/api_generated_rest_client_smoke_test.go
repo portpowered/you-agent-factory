@@ -70,7 +70,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	})
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-rest-client-success",
+		Name:         stringPtr("generated-rest-client-success"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated REST client success"},
 	})
@@ -147,7 +147,7 @@ func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
 	})
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
-		Name:         "generated-rest-client-context-bounds",
+		Name:         stringPtr("generated-rest-client-context-bounds"),
 		WorkTypeName: "task",
 		Payload:      map[string]string{"title": "generated REST client context bounds"},
 	})

@@ -109,5 +109,24 @@ that consumes the replay kernel.
   is the hosted replay boundary. It forwards its optional caller-owned layout
   sidecar to the controlled renderer and must not place it in timeline or
   stream-store state.
+- `ui/src/features/submit-work/lib/factory-simple-submission-host-adapter.ts`
+  joins the generated Factory definition's `handlingBehavior` with the replay
+  projection's submit-eligible work-type names for text-only host composers.
+  Keep this generated-contract gap normalization at the host boundary; the
+  shared composer remains transport and replay-store neutral.
+- `ui/src/features/submit-work/components/submit-work-widget.tsx` is the
+  dashboard transport adapter for the controlled composers. It forwards the
+  bento-selected Factory state and current-versus-history selection to the
+  simple composer, while its typed submit mutation maps the name-free text
+  payload to the generated `SubmitWorkRequest` contract.
+- `ui/src/features/submit-work/components/composer/factory-simple-submission-composer.tsx`
+  owns only local interaction state. When it renders labels or status text,
+  derive their IDs per instance with normalized React `useId` output so
+  multiple mounted composers preserve independent label and `aria-describedby`
+  associations; cover that behavior by rendering two unavailable instances.
+- `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
+  single-work submission. The HTTP adapter leaves canonical identity assignment
+  to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in
+  a text-only UI host.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.

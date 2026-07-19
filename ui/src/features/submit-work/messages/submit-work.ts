@@ -26,6 +26,23 @@ export interface SubmitWorkMessages {
   requestNamePlaceholder: string;
   requestPlaceholder: string;
   selectWorkTypePlaceholder: string;
+  simpleComposer: {
+    errorFallback: string;
+    formLabel: string;
+    placeholder: string;
+    submitAction: string;
+    submittingAction: string;
+    textLabel: string;
+    unavailable: {
+      "ambiguous-default": string;
+      closed: string;
+      error: string;
+      history: string;
+      invalid: string;
+      loading: string;
+      "no-default": string;
+    };
+  };
   submissionItemsLabel: string;
   submitAction: string;
   submittingAction: string;
@@ -141,6 +158,25 @@ const submitWorkMessagesByLocale = {
       "Optional: describe what you want this request to accomplish.",
     requestItemLabel: (position) => `Text item ${position}`,
     selectWorkTypePlaceholder: "Select a work type",
+    simpleComposer: {
+      errorFallback: "We couldn't submit this work. Try again.",
+      formLabel: "Simple work submission",
+      placeholder: "Describe the work to submit.",
+      submitAction: "Submit",
+      submittingAction: "Submitting...",
+      textLabel: "Submit text",
+      unavailable: {
+        "ambiguous-default":
+          "Multiple default work types are configured, so a submission cannot be routed safely.",
+        closed: "This Factory is closed and cannot accept submissions.",
+        error: "This Factory has an error and cannot accept submissions.",
+        history: "Return to the latest Factory state to submit work.",
+        invalid: "This Factory is invalid and cannot accept submissions.",
+        loading: "The Factory is still loading. Try again when it is ready.",
+        "no-default":
+          "No eligible default work type is available for text submissions.",
+      },
+    },
     submissionItemsLabel: "Submission items",
     submitAction: "Submit work",
     submittingAction: "Submitting...",
@@ -192,7 +228,8 @@ const submitWorkMessagesByLocale = {
           "We couldn't invoke this factory. Try again in a moment.",
         runtimeFailed: (status) => `Invocation finished with status ${status}.`,
         submitting: "Invoking the current factory...",
-        success: (traceId) => `Factory invocation started. Trace ID: ${traceId}.`,
+        success: (traceId) =>
+          `Factory invocation started. Trace ID: ${traceId}.`,
         validationFailed: "Fix the highlighted arguments before invoking.",
       },
       stdinBinding: "Accepts stdin input.",
@@ -250,6 +287,23 @@ const submitWorkMessagesByLocale = {
     requestPlaceholder: "可选：描述你希望这个请求完成什么。",
     requestItemLabel: (position) => `文本项 ${position}`,
     selectWorkTypePlaceholder: "选择工作类型",
+    simpleComposer: {
+      errorFallback: "无法提交此工作。请重试。",
+      formLabel: "简单工作提交",
+      placeholder: "描述要提交的工作。",
+      submitAction: "提交",
+      submittingAction: "正在提交...",
+      textLabel: "提交文本",
+      unavailable: {
+        "ambiguous-default": "配置了多个默认工作类型，因此无法安全路由提交。",
+        closed: "此工厂已关闭，无法接受提交。",
+        error: "此工厂发生错误，无法接受提交。",
+        history: "请返回最新工厂状态以提交工作。",
+        invalid: "此工厂无效，无法接受提交。",
+        loading: "工厂仍在加载。准备就绪后请重试。",
+        "no-default": "没有可用于文本提交的合格默认工作类型。",
+      },
+    },
     submissionItemsLabel: "提交项",
     submitAction: "提交工作",
     submittingAction: "正在提交...",
