@@ -23,6 +23,21 @@ import {
 const result = projectFactoryStateAtTick({ events, reducer, tick: 12 });
 ```
 
+Hosts that retain only a selected-tick domain checkpoint can use
+`projectFactoryWorldAtTick` and `advanceFactoryReplay`. Those APIs keep domain
+state cloning, tick assignment, and world projection explicit while retaining
+only accepted event IDs in the checkpoint rather than replay history.
+
+## High-volume replay evidence
+
+`ui/src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts`
+replays a deterministic 10,000-event recording through `advanceFactoryReplay`.
+It budgets the UTF-8 serialized retained event history plus checkpoint at
+2,000,000 bytes and verifies that three identical runs retain exactly the same
+amount and produce the same final hosted projection. The harness deliberately
+uses no wall-clock or process-heap assertions, which are not deterministic
+across CI runtimes.
+
 Use `projectFactoryWorkProgressAtTick` when canonical event history is the
 source for Work progress, or `projectFactoryWorkProgress` when the consumer
 already has explicit selected-tick evidence.

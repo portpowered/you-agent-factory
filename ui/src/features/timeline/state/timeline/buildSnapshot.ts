@@ -2,7 +2,7 @@ import type { FactoryEvent } from "../../../../api/events";
 import {
   advanceFactoryReplay,
   projectFactoryWorldAtTick,
-} from "../../../../../../packages/factory-replay/src/index.js";
+} from "@you-agent-factory/factory-replay";
 import { projectSnapshot } from "./projectSnapshot";
 import { applyReplayEvent } from "./replayWorldState";
 import { emptyReplayWorldState } from "./replayWorldStateSupport";

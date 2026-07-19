@@ -15,6 +15,12 @@ export interface FactoryReplayReducer<State> {
   createState(selectedTick: number): State;
 }
 
+/** A reducer that also maps its domain state into a consumer-owned view. */
+export interface FactoryReplayWorldReducer<State, World>
+  extends FactoryReplayReducer<State> {
+  projectWorld(state: State): World;
+}
+
 export interface FactoryReplayInitialization<State> {
   events: readonly FactoryEvent[];
   reducer: FactoryReplayReducer<State>;
@@ -44,6 +50,41 @@ export interface FactoryReplayResult<State>
   selectedTick: number;
   selection: FactoryReplaySelection;
   state: State;
+}
+
+export interface FactoryReplayWorldResult<State, World>
+  extends FactoryReplayResult<State> {
+  world: World;
+}
+
+export type FactoryReplayStateCloner<State> = (state: State) => State;
+
+/**
+ * A compact checkpoint for consumers that retain domain state but not replay
+ * history. Event IDs make repeated tails idempotent without retaining events.
+ */
+export interface FactoryReplayWorldCheckpoint<State> {
+  acceptedEventIDs: readonly string[];
+  selectedTick: number;
+  state: State;
+}
+
+export interface FactoryReplayWorldAdvanceInput<State, World> {
+  checkpoint: FactoryReplayWorldCheckpoint<State>;
+  cloneState: FactoryReplayStateCloner<State>;
+  events: readonly FactoryEvent[];
+  reducer: FactoryReplayWorldReducer<State, World>;
+  setSelectedTick(state: State, tick: number): State;
+  tick: number;
+}
+
+export interface FactoryReplayWorldAdvanceResult<State, World> {
+  appliedEvents: FactoryEvent[];
+  checkpoint: FactoryReplayWorldCheckpoint<State>;
+  latestTick: number;
+  selectedTick: number;
+  state: State;
+  world: World;
 }
 
 function cloneFactoryEvent(event: FactoryEvent): FactoryEvent {
@@ -182,4 +223,74 @@ export function projectFactoryStateAtTick<State>(
     reducer: input.reducer,
     selection: { mode: "fixed", tick: input.tick },
   });
+}
+
+/** Create an independent compact checkpoint from a selected-tick projection. */
+export function createFactoryReplayWorldCheckpoint<State, World>(
+  result: FactoryReplayWorldResult<State, World>,
+  cloneState: FactoryReplayStateCloner<State>,
+): FactoryReplayWorldCheckpoint<State> {
+  return {
+    acceptedEventIDs: result.appliedEvents.map((event) => event.id),
+    selectedTick: result.selectedTick,
+    state: cloneState(result.state),
+  };
+}
+
+/**
+ * Advance a compact checkpoint with an accepted tail without retaining the
+ * checkpoint's historical events. The explicit clone and tick adapters keep
+ * domain-state ownership with the consumer.
+ */
+export function advanceFactoryReplay<State, World>(
+  input: FactoryReplayWorldAdvanceInput<State, World>,
+): FactoryReplayWorldAdvanceResult<State, World> {
+  const acceptedEventIDs = new Set(input.checkpoint.acceptedEventIDs);
+  const appliedEvents = canonicalizeFactoryEvents(input.events).filter(
+    (event) => {
+      if (
+        acceptedEventIDs.has(event.id) ||
+        event.context.tick <= input.checkpoint.selectedTick ||
+        event.context.tick > input.tick
+      ) {
+        return false;
+      }
+      acceptedEventIDs.add(event.id);
+      return true;
+    },
+  );
+  let state = input.setSelectedTick(
+    input.cloneState(input.checkpoint.state),
+    input.tick,
+  );
+  for (const event of appliedEvents) {
+    state = input.reducer.applyEvent(state, event);
+  }
+
+  return {
+    appliedEvents,
+    checkpoint: {
+      acceptedEventIDs: [...acceptedEventIDs],
+      selectedTick: input.tick,
+      state: input.cloneState(state),
+    },
+    latestTick: appliedEvents.reduce(
+      (latest, event) => Math.max(latest, event.context.tick),
+      input.checkpoint.selectedTick,
+    ),
+    selectedTick: input.tick,
+    state,
+    world: input.reducer.projectWorld(state),
+  };
+}
+
+/** Reconstruct a consumer-owned world at one explicit logical tick. */
+export function projectFactoryWorldAtTick<State, World>(
+  input: Omit<FactoryReplayInitialization<State>, "selection"> & {
+    reducer: FactoryReplayWorldReducer<State, World>;
+    tick: number;
+  },
+): FactoryReplayWorldResult<State, World> {
+  const result = projectFactoryStateAtTick(input);
+  return { ...result, world: input.reducer.projectWorld(result.state) };
 }
