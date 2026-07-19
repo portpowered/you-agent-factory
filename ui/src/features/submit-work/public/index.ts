@@ -1,3 +1,4 @@
+export * from "../components/factory-simple-submission-composer";
 export * from "../components/factory-submission-composer";
 export type {
   SubmitWorkDraft as FactorySubmissionDraft,
@@ -9,3 +10,4 @@ export type {
   SubmitWorkValidationErrors as FactorySubmissionValidationErrors,
 } from "../components/submit-work-card";
 export * from "../components/submit-work-widget";
+export * from "../lib/factory-simple-submission-eligibility";
