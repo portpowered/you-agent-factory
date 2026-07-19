@@ -1,11 +1,4 @@
-import {
-  Background,
-  Controls,
-  type Edge,
-  type Node,
-  type NodeProps,
-  ReactFlow,
-} from "@xyflow/react";
+import type { Edge, Node, NodeProps } from "@xyflow/react";
 import {
   GraphNodeButton,
   type GraphNodeHandle,
@@ -20,7 +13,12 @@ import type {
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
 
-import type { FactoryTopologyChromeConfiguration } from "./factory-topology-chrome";
+import {
+  type FactoryTopologyChromeConfiguration,
+  type ResolvedFactoryTopologyChrome,
+  resolveFactoryTopologyChrome,
+} from "./factory-topology-chrome";
+import { FactoryTopologyChromeRegions } from "./factory-topology-chrome-regions";
 
 import {
   FactoryTopologyErrorBoundary,
@@ -51,7 +49,9 @@ export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
   empty: string;
   failed: string;
+  hideNodeKinds: string;
   inactiveDispatches: string;
+  legendLabel: string;
   loading: string;
   nodeLabel: (kind: FactoryTopologyNode["kind"], label: string) => string;
   regionLabel: string;
@@ -59,6 +59,7 @@ export interface FactoryTopologyReplayMessages {
   resourceOccupancyUnavailable: string;
   retry: string;
   selectedNode: string;
+  showNodeKinds: string;
   workStateCount: (count: number) => string;
   workStateCountUnavailable: string;
 }
@@ -84,6 +85,7 @@ interface TopologyNodeData extends Record<string, unknown> {
   };
   onSelectNode?: (node: FactoryTopologyNode) => void;
   selected: boolean;
+  showNodeKinds: boolean;
   workStateCount?: {
     count?: number;
     evidence: "known" | "unavailable";
@@ -108,7 +110,9 @@ interface PreparedFlowFailure {
 
 type PreparedFlow = PreparedFlowFailure | PreparedFlowSuccess;
 
-const nodeTypes = { factoryTopologyNode: FactoryTopologyNodeView };
+export const factoryTopologyNodeTypes = {
+  factoryTopologyNode: FactoryTopologyNodeView,
+};
 const columnByKind: Record<FactoryTopologyNode["kind"], number> = {
   resource: 0,
   worker: 1,
@@ -124,6 +128,7 @@ export function projectFactoryTopologyFlow(
   selectedNodeId: string | undefined,
   onSelectNode: FactoryTopologyReplayProps["onSelectNode"],
   prefersReducedMotion = false,
+  showNodeKinds = true,
 ): FactoryTopologyFlowProjection {
   let topologyNodes: FactoryTopologyNode[];
   let connections: FactoryTopologyConnection[];
@@ -175,6 +180,7 @@ export function projectFactoryTopologyFlow(
             : {}),
           onSelectNode,
           selected: selectedNodeId === node.id,
+          showNodeKinds,
           ...(workStateCount
             ? {
                 workStateCount: {
@@ -224,7 +230,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
       messages={props.messages}
       onError={props.onError}
       onRetry={props.onRetry}
-      resetKeys={[props.state, props.messages]}
+      resetKeys={[props.state, props.messages, props.chrome]}
     >
       <FactoryTopologyReplayContent {...props} />
     </FactoryTopologyErrorBoundary>
@@ -232,6 +238,7 @@ export function FactoryTopologyReplay(props: FactoryTopologyReplayProps) {
 }
 
 function FactoryTopologyReplayContent({
+  chrome,
   messages,
   onError,
   onRetry,
@@ -256,11 +263,13 @@ function FactoryTopologyReplayContent({
       onSelectNode={onSelectNode}
       projection={state.projection}
       selectedNodeId={selectedNodeId}
+      chrome={resolveFactoryTopologyChrome(chrome)}
     />
   );
 }
 
 function PreparedTopology({
+  chrome,
   messages,
   onError,
   onRetry,
@@ -268,6 +277,7 @@ function PreparedTopology({
   projection,
   selectedNodeId,
 }: Omit<FactoryTopologyReplayProps, "state"> & {
+  chrome: ResolvedFactoryTopologyChrome;
   projection: FactoryTopologyReplayProjection;
 }) {
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -326,36 +336,15 @@ function PreparedTopology({
         resetKeys={[projection, messages, selectedNodeId, onSelectNode]}
         withinRegion
       >
-        <ReactFlowCanvas flow={prepared.flow} />
+        <FactoryTopologyChromeRegions
+          chrome={chrome}
+          flow={prepared.flow}
+          messages={messages}
+        />
       </FactoryTopologyErrorBoundary>
     </section>
   );
 }
-
-function ReactFlowCanvas({ flow }: { flow: FactoryTopologyFlowProjection }) {
-  return (
-    <ReactFlow
-      edges={flow.edges}
-      edgesFocusable={false}
-      elementsSelectable={false}
-      fitView
-      nodes={flow.nodes}
-      nodesConnectable={false}
-      nodesDraggable={false}
-      nodeTypes={nodeTypes}
-      // XYFlow disables pointer events on otherwise non-interactive node
-      // wrappers. The nested GraphNodeButton remains the selection owner.
-      onNodeClick={preserveNestedNodePointerEvents}
-      panOnDrag
-      proOptions={{ hideAttribution: true }}
-    >
-      <Background />
-      <Controls showInteractive={false} />
-    </ReactFlow>
-  );
-}
-
-function preserveNestedNodePointerEvents(): void {}
 
 function layoutNode(
   kind: FactoryTopologyNode["kind"],
@@ -376,6 +365,7 @@ function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
     occupancy,
     onSelectNode,
     selected,
+    showNodeKinds,
     workStateCount,
   } = data;
   const state = selected ? "selected" : "default";
@@ -400,7 +390,9 @@ function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
       <strong className="factory-topology-replay__node-title">
         {node.label}
       </strong>
-      <span className="factory-topology-replay__node-kind">{node.kind}</span>
+      {showNodeKinds ? (
+        <span className="factory-topology-replay__node-kind">{node.kind}</span>
+      ) : null}
       <span className="factory-topology-replay__node-cue">
         {activityCount > 0 ? "●" : "○"}{" "}
         {activityCount > 0

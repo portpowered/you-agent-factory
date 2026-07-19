@@ -59,9 +59,10 @@ const timelineMessages: FactoryTimelineScrubberMessages = {
 };
 const topologyMessages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => count + " active Dispatches", empty: "No topology", failed: "Topology failed",
-  inactiveDispatches: "No active Dispatch", loading: "Loading topology", nodeLabel: (kind, label) => kind + ": " + label,
+  hideNodeKinds: "Hide node kinds", inactiveDispatches: "No active Dispatch", legendLabel: "Topology legend",
+  loading: "Loading topology", nodeLabel: (kind, label) => kind + ": " + label,
   regionLabel: "Factory topology", resourceOccupancy: (occupied, capacity) => occupied + " of " + capacity + " occupied",
-  resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected",
+  resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected", showNodeKinds: "Show node kinds",
   workStateCount: (count) => count + " Work", workStateCountUnavailable: "Work unavailable",
 };
 const recordingMessages: FactoryRecordingTopologyReplayMessages = {

@@ -14,8 +14,8 @@ import {
 import { createFactoryTopologyProjection } from "./testing/factory-topology-projection";
 
 vi.mock("@xyflow/react", () => ({
-  Background: () => <div />,
-  Controls: () => <div />,
+  Background: () => <div data-testid="flow-background" />,
+  Controls: () => <div data-testid="flow-controls" />,
   Handle: ({ id, type }: { id: string; type: string }) => (
     <span data-handle-id={id} data-handle-role={type} />
   ),
@@ -52,7 +52,9 @@ const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
+  hideNodeKinds: "Hide node kinds",
   inactiveDispatches: "No active Dispatch",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
@@ -61,6 +63,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Resource occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected",
+  showNodeKinds: "Show node kinds",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };
@@ -119,7 +122,7 @@ describe("FactoryTopologyReplay inclusive interaction", () => {
 
     for (
       let index = 0;
-      index < 4 && workstation !== document.activeElement;
+      index < 5 && workstation !== document.activeElement;
       index++
     ) {
       await user.tab();
@@ -130,6 +133,35 @@ describe("FactoryTopologyReplay inclusive interaction", () => {
     expect(onSelectNode).toHaveBeenCalledWith(
       expect.objectContaining({ id: "workstation:review" }),
     );
+  });
+
+  it("keeps disabled chrome out of the accessibility tree and lets keyboard users operate visibility controls", async () => {
+    const user = userEvent.setup();
+    render(
+      <FactoryTopologyReplay
+        chrome={{ preset: "none", visibilityControls: true }}
+        messages={messages}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByLabelText(messages.legendLabel),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("flow-background")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("flow-controls")).not.toBeInTheDocument();
+    const toggle = screen.getByRole("button", { name: messages.hideNodeKinds });
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByRole("button", { name: messages.showNodeKinds }),
+    ).toHaveFocus();
+    expect(
+      screen.queryByText("workstation", { exact: true }),
+    ).not.toBeInTheDocument();
   });
 
   it("has no automated accessibility violations in the ready state", async () => {

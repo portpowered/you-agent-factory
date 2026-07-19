@@ -55,6 +55,12 @@ that consumes the replay kernel.
   legacy-shaped dashboard topology/runtime compatibility view from those shared
   decisions. Keep this adapter free of renderer types and derive it from
   checkpoint-safe replay state rather than a hidden copy of event history.
+- `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` owns the
+  public read-only topology renderer. Optional graph chrome must be resolved
+  through `factory-topology-chrome.ts` before rendering; it may conditionally
+  mount presentation regions but must not change the caller-provided topology,
+  activity, or load projection. Keep disabled regions unmounted so they do not
+  remain in the accessibility tree.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.

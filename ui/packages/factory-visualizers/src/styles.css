@@ -25,6 +25,7 @@
 }
 
 .factory-topology-replay {
+  position: relative;
   box-sizing: border-box;
   inline-size: 100%;
   block-size: clamp(28rem, 68vh, 48rem);
@@ -34,6 +35,43 @@
   background: var(--color-surface-container-low);
   border: 1px solid var(--color-outline-variant);
   border-radius: 1rem;
+}
+
+.factory-topology-replay__legend,
+.factory-topology-replay__visibility-control {
+  position: absolute;
+  z-index: 5;
+}
+
+.factory-topology-replay__legend {
+  display: grid;
+  gap: 0.25rem;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 0.75rem;
+  padding: 0.5rem;
+  color: var(--color-on-surface);
+  font-size: 0.75rem;
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 0.5rem;
+}
+
+.factory-topology-replay__visibility-control {
+  inset-block-start: 0.75rem;
+  inset-inline-end: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-on-surface);
+  font: inherit;
+  background: var(--color-surface-container);
+  border: 1px solid var(--color-outline);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.factory-topology-replay__visibility-control:focus-visible {
+  outline: 0.1875rem solid
+    var(--color-primary, var(--color-af-foundation-accent));
+  outline-offset: 0.25rem;
 }
 
 .factory-topology-replay--state {

@@ -14,7 +14,9 @@ const messages: FactoryTopologyReplayMessages = {
     `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
   empty: "No Factory topology is available at this tick.",
   failed: "The Factory topology could not be shown.",
+  hideNodeKinds: "Hide node kinds",
   inactiveDispatches: "No active Dispatch",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology at selected tick",
@@ -23,6 +25,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected by host",
+  showNodeKinds: "Show node kinds",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };
@@ -50,6 +53,46 @@ export const SparsePreparedProjection: Story = {
     await userEvent.click(workstation);
     await expect(args.onSelectNode).toHaveBeenCalled();
     await expect(workstation).not.toHaveAttribute("aria-pressed", "true");
+  },
+};
+
+export const FullChrome: Story = {
+  args: { chrome: { preset: "full" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByLabelText(messages.legendLabel)).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: messages.hideNodeKinds }),
+    ).toBeVisible();
+  },
+};
+
+export const MinimalChrome: Story = {
+  args: { chrome: { preset: "minimal" } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByLabelText(messages.legendLabel)).toBeNull();
+    await expect(
+      canvas.queryByRole("button", { name: messages.hideNodeKinds }),
+    ).toBeNull();
+  },
+};
+
+export const NoChromeWithVisibilityOverride: Story = {
+  args: {
+    chrome: { preset: "none", visibilityControls: true },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const visibilityControl = canvas.getByRole("button", {
+      name: messages.hideNodeKinds,
+    });
+    await userEvent.click(visibilityControl);
+    await expect(visibilityControl).toHaveAttribute("aria-pressed", "false");
+    await expect(
+      canvas.getByRole("button", { name: messages.showNodeKinds }),
+    ).toHaveFocus();
+    await expect(canvas.queryByLabelText(messages.legendLabel)).toBeNull();
   },
 };
 

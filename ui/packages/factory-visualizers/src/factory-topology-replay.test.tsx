@@ -64,7 +64,9 @@ const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
+  hideNodeKinds: "Hide node kinds",
   inactiveDispatches: "No active Dispatch",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
@@ -73,6 +75,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Resource occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected",
+  showNodeKinds: "Show node kinds",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };
@@ -154,6 +157,72 @@ describe("FactoryTopologyReplay", () => {
         expect.objectContaining({ kind: "endpoint", recoverable: true }),
       ),
     );
+  });
+});
+
+describe("FactoryTopologyReplay chrome", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFlow.error = undefined;
+  });
+
+  it.each([
+    ["full", true, true, true, true],
+    ["minimal", false, true, true, false],
+    ["none", false, false, false, false],
+  ] as const)(
+    "renders only the %s preset chrome",
+    (preset, legend, background, viewportControls, visibilityControls) => {
+      render(
+        <FactoryTopologyReplay
+          chrome={{ preset }}
+          messages={messages}
+          state={{
+            projection: createFactoryTopologyProjection(),
+            status: "ready",
+          }}
+        />,
+      );
+
+      const legendRegion = screen.queryByLabelText(messages.legendLabel);
+      const flowBackground = screen.queryByTestId("flow-background");
+      const flowControls = screen.queryByTestId("flow-controls");
+      const visibilityControl = screen.queryByRole("button", {
+        name: messages.hideNodeKinds,
+      });
+      if (legend) expect(legendRegion).toBeInTheDocument();
+      else expect(legendRegion).not.toBeInTheDocument();
+      if (background) expect(flowBackground).toBeInTheDocument();
+      else expect(flowBackground).not.toBeInTheDocument();
+      if (viewportControls) expect(flowControls).toBeInTheDocument();
+      else expect(flowControls).not.toBeInTheDocument();
+      if (visibilityControls) expect(visibilityControl).toBeInTheDocument();
+      else expect(visibilityControl).not.toBeInTheDocument();
+    },
+  );
+
+  it("applies chrome overrides without changing the prepared topology", () => {
+    const projection = createFactoryTopologyProjection();
+    render(
+      <FactoryTopologyReplay
+        chrome={{
+          background: false,
+          legend: true,
+          preset: "none",
+          visibilityControls: true,
+        }}
+        messages={messages}
+        state={{ projection, status: "ready" }}
+      />,
+    );
+
+    expect(screen.getByLabelText(messages.legendLabel)).toBeVisible();
+    expect(screen.queryByTestId("flow-background")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: messages.hideNodeKinds }),
+    ).toBeVisible();
+    expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
+    expect(screen.getByText(/3 Work in this state/)).toBeVisible();
   });
 });
 

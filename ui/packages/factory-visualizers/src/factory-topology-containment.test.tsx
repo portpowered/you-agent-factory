@@ -37,7 +37,9 @@ const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
   empty: "No Factory topology is available.",
   failed: "The Factory topology could not be shown.",
+  hideNodeKinds: "Hide node kinds",
   inactiveDispatches: "No active Dispatch",
+  legendLabel: "Topology legend",
   loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
@@ -45,6 +47,7 @@ const messages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Resource occupancy unavailable",
   retry: "Try again",
   selectedNode: "Selected",
+  showNodeKinds: "Show node kinds",
   workStateCount: (count) => `${count} Work`,
   workStateCountUnavailable: "Work count unavailable",
 };
