@@ -7,6 +7,8 @@ import type {
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
+
+import type { FactoryTopologyChromeConfiguration } from "./factory-topology-chrome";
 import {
   type FactoryTopologyFlowProjection,
   projectFactoryTopologyFlow,
@@ -60,6 +62,8 @@ export interface FactoryTopologyReplayMessages {
 }
 
 export interface FactoryTopologyReplayProps {
+  /** Presentation-only optional chrome; it never changes the prepared projection. */
+  chrome?: FactoryTopologyChromeConfiguration;
   /** Presentation-only input validated against the prepared canonical topology. */
   layout?: unknown;
   messages: FactoryTopologyReplayMessages;
