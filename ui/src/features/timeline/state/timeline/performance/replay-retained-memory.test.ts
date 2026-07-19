@@ -1,7 +1,8 @@
+import { parseFactoryRecording } from "@you-agent-factory/client";
 import { advanceFactoryReplay } from "@you-agent-factory/factory-replay";
 import { describe, expect, it } from "vitest";
 
-import type { FactoryEvent } from "../../../../../api/events";
+import customerSupportRecording from "../../../../../../packages/client/examples/customer-support.factory-recording.v1.json";
 import { hostedFactoryReplayReducer } from "../buildSnapshot";
 import { projectSnapshot } from "../projectSnapshot";
 import { emptyReplayWorldState } from "../replayWorldStateSupport";
@@ -9,20 +10,29 @@ import { emptyReplayWorldState } from "../replayWorldStateSupport";
 const EVENT_COUNT = 10_000;
 const MAX_RETAINED_BYTES = 2_000_000;
 
-function factoryStateEvents(): FactoryEvent[] {
-  return Array.from({ length: EVENT_COUNT }, (_, index) => {
-    const tick = index + 1;
-    return {
-      context: {
-        eventTime: `2026-07-19T00:${String(Math.floor(tick / 60)).padStart(2, "0")}:${String(tick % 60).padStart(2, "0")}Z`,
-        sequence: tick,
-        tick,
-      },
-      id: `memory-event-${tick}`,
-      payload: { state: tick % 2 === 0 ? "RUNNING" : "PAUSED" },
-      type: "FACTORY_STATE_RESPONSE",
-    };
-  });
+function deterministicRecording() {
+  const recording = structuredClone(customerSupportRecording);
+  recording.id = "retained-memory-10k-recording";
+  recording.title = "Deterministic retained-memory recording";
+  recording.events.push(
+    ...Array.from({ length: EVENT_COUNT - 1 }, (_, index) => {
+      const tick = index + 2;
+      return {
+        context: {
+          eventTime: new Date(Date.UTC(2026, 6, 19, 0, 0, tick)).toISOString(),
+          sequence: tick,
+          sessionId: "session-customer-support-example",
+          sessionSequence: tick,
+          tick,
+        },
+        id: `memory-event-${tick}`,
+        payload: { state: tick % 2 === 0 ? "RUNNING" : "PAUSED" },
+        schemaVersion: "agent-factory.event.v1",
+        type: "FACTORY_STATE_RESPONSE",
+      };
+    }),
+  );
+  return parseFactoryRecording(recording);
 }
 
 function replayMeasurement(
@@ -45,7 +55,7 @@ function replayMeasurement(
     tick: EVENT_COUNT,
   });
   const retainedBytes = new TextEncoder().encode(
-    JSON.stringify({ events, checkpoint: result.checkpoint }),
+    JSON.stringify(result.checkpoint),
   ).byteLength;
 
   return {
@@ -58,9 +68,11 @@ function replayMeasurement(
 
 describe("hosted replay retained-state budget", () => {
   it("replays 10,000 events deterministically within the retained-state budget", () => {
-    const events = factoryStateEvents();
+    const recording = deterministicRecording();
+    expect(recording.events).toHaveLength(EVENT_COUNT);
+    const events = recording.events;
     const measurements = [];
-    let checkpoint = undefined;
+    let checkpoint: Parameters<typeof replayMeasurement>[1];
     for (let run = 0; run < 3; run += 1) {
       const measurement = replayMeasurement(events, checkpoint);
       measurements.push(measurement);
@@ -75,13 +87,13 @@ describe("hosted replay retained-state budget", () => {
     expect(measurements[0]?.retainedBytes).toBeLessThanOrEqual(
       MAX_RETAINED_BYTES,
     );
-    expect(measurements.map(({ acceptedEventIDs }) => acceptedEventIDs)).toEqual(
-      [
-        measurements[0]?.acceptedEventIDs,
-        measurements[0]?.acceptedEventIDs,
-        measurements[0]?.acceptedEventIDs,
-      ],
-    );
+    expect(
+      measurements.map(({ acceptedEventIDs }) => acceptedEventIDs),
+    ).toEqual([
+      measurements[0]?.acceptedEventIDs,
+      measurements[0]?.acceptedEventIDs,
+      measurements[0]?.acceptedEventIDs,
+    ]);
     expect(measurements[0]?.acceptedEventIDs).toHaveLength(EVENT_COUNT);
     expect(measurements.map(({ world }) => world)).toEqual([
       measurements[0]?.world,

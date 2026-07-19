@@ -25,8 +25,8 @@ import {
   WorkProgressVisualizer,
   type FactoryTimelineScrubberMessages,
   type FactoryTopologyReplayMessages,
+  type FactoryTopologyReplayError,
   type FactoryTopologyReplayProjection,
-  type FactoryVisualizerError,
   type WorkProgressVisualizerMessages,
 } from "@you-agent-factory/factory-visualizers";
 import { parseFactoryRecording } from "@you-agent-factory/client";
@@ -63,7 +63,8 @@ const timelineMessages: FactoryTimelineScrubberMessages = {
   sliderLabel: "Selected tick", title: "Replay timeline", unavailable: "Unavailable",
 };
 const topologyMessages: FactoryTopologyReplayMessages = {
-  activeDispatches: (count) => count + " active Dispatches", empty: "No topology", failed: "Topology failed",
+  activeDispatches: (count) => count + " active Dispatches", annotationsHidden: "Show annotations", annotationsVisible: "Hide annotations",
+  empty: "No topology", failed: "Topology failed", imageFailed: "Annotation image failed", imageLoading: "Loading annotation image",
   inactiveDispatches: "No active Dispatch", loading: "Loading topology", nodeLabel: (kind, label) => kind + ": " + label,
   regionLabel: "Factory topology", resourceOccupancy: (occupied, capacity) => occupied + " of " + capacity + " occupied",
   resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected",
@@ -77,7 +78,7 @@ const topology: FactoryTopologyReplayProjection = {
   load: projectFactoryLoadAtTick({ events, tick: selectedTick }),
   topology: projectFactoryTopologyAtTick({ events, tick: selectedTick }),
 };
-const reportError = (_error: FactoryVisualizerError) => {};
+const reportError = (_error: FactoryTopologyReplayError) => {};
 
 function App() {
   return <main>

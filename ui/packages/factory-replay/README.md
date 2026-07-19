@@ -32,11 +32,12 @@ only accepted event IDs in the checkpoint rather than replay history.
 
 `ui/src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts`
 replays a deterministic 10,000-event recording through `advanceFactoryReplay`.
-It budgets the UTF-8 serialized retained event history plus checkpoint at
-2,000,000 bytes and verifies that three identical runs retain exactly the same
-amount and produce the same final hosted projection. The harness deliberately
-uses no wall-clock or process-heap assertions, which are not deterministic
-across CI runtimes.
+It budgets the UTF-8 serialized retained checkpoint at 2,000,000 bytes and
+verifies that three advances of the same recording retain exactly the same
+amount and produce the same final hosted projection. The caller-owned recording
+input is deliberately excluded: `advanceFactoryReplay` retains only its compact
+checkpoint. The harness uses no wall-clock or process-heap assertions, which
+are not deterministic across CI runtimes.
 
 Use `projectFactoryWorkProgressAtTick` when canonical event history is the
 source for Work progress, or `projectFactoryWorkProgress` when the consumer
