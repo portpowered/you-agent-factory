@@ -6,13 +6,23 @@ import {
 import { Text } from "@you-agent-factory/components";
 import {
   canonicalizeFactoryEvents,
+  type FactoryActivityProjection,
+  type FactoryLoadProjection,
   type FactoryTopologyNode,
+  type FactoryTopologyProjection,
+  type FactoryWorkProgressProjection,
   projectFactoryActivityAtTick,
   projectFactoryLoadAtTick,
   projectFactoryTopologyAtTick,
   projectFactoryWorkProgressAtTick,
 } from "@you-agent-factory/factory-replay";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+import {
+  type FactoryTimelineMode,
+  FactoryTimelineScrubber,
+  type FactoryTimelineScrubberMessages,
+} from "./factory-timeline-scrubber";
 
 import {
   FactoryTopologyReplay,
@@ -45,6 +55,7 @@ export interface FactoryRecordingTopologyReplayMessages {
   progress: WorkProgressVisualizerMessages;
   regionLabel: string;
   selectedTick: (formattedTick: string) => string;
+  timeline: FactoryTimelineScrubberMessages;
   topology: FactoryTopologyReplayMessages;
   validationFailed: string;
 }
@@ -59,10 +70,14 @@ export interface FactoryRecordingTopologyReplayProps {
   selectedNodeId?: string;
 }
 
-interface PreparedRecording {
-  recording: FactoryRecording;
-  selectedTick: number;
+interface RecordingProjection {
+  activity: FactoryActivityProjection;
+  load: FactoryLoadProjection;
+  progress: FactoryWorkProgressProjection;
+  topology: FactoryTopologyProjection;
 }
+
+const MAX_CACHED_RECORDING_PROJECTIONS = 32;
 
 /** Validate and replay one caller-owned recording through the controlled visualizers. */
 export function FactoryRecordingTopologyReplay({
@@ -100,61 +115,165 @@ export function FactoryRecordingTopologyReplay({
     );
   }
 
-  const prepared = prepareRecording(parsed.data, defaultSelectedTick);
-  const events = prepared.recording.events;
-  const projection = {
-    activity: projectFactoryActivityAtTick({
-      events,
-      tick: prepared.selectedTick,
-    }),
-    load: projectFactoryLoadAtTick({ events, tick: prepared.selectedTick }),
-    topology: projectFactoryTopologyAtTick({
-      events,
-      tick: prepared.selectedTick,
-    }),
-  };
-  const progress = projectFactoryWorkProgressAtTick({
-    events,
-    tick: prepared.selectedTick,
-  });
+  return (
+    <ValidatedRecordingReplay
+      defaultSelectedTick={defaultSelectedTick}
+      formatNumber={formatNumber}
+      key={parsed.data.id}
+      messages={messages}
+      onError={onError}
+      onSelectNode={onSelectNode}
+      recording={parsed.data}
+      selectedNodeId={selectedNodeId}
+    />
+  );
+}
+
+function ValidatedRecordingReplay({
+  defaultSelectedTick,
+  formatNumber,
+  messages,
+  onError,
+  onSelectNode,
+  recording,
+  selectedNodeId,
+}: Omit<FactoryRecordingTopologyReplayProps, "recording"> & {
+  recording: FactoryRecording;
+}) {
+  const events = useMemo(
+    () => canonicalizeFactoryEvents(recording.events),
+    [recording.events],
+  );
+  const ticks = useMemo(() => recordedTicks(events), [events]);
+  const latestTick = ticks.at(-1) ?? 0;
+  const defaultTick =
+    defaultSelectedTick !== undefined && ticks.includes(defaultSelectedTick)
+      ? defaultSelectedTick
+      : latestTick;
+  const [mode, setMode] = useState<FactoryTimelineMode>(() =>
+    defaultSelectedTick !== undefined && ticks.includes(defaultSelectedTick)
+      ? "history"
+      : "current",
+  );
+  const [fixedTick, setFixedTick] = useState(defaultTick);
+  const effectiveMode =
+    mode === "history" && ticks.includes(fixedTick) ? "history" : "current";
+  const selectedTick = effectiveMode === "current" ? latestTick : fixedTick;
+  const projectionCache = useRef(new Map<string, RecordingProjection>());
+  const evidenceKey = JSON.stringify(
+    events.filter((event) => event.context.tick <= selectedTick),
+  );
+  const prepared = useMemo(
+    () =>
+      projectRecordingAtTick(
+        events,
+        selectedTick,
+        evidenceKey,
+        projectionCache.current,
+      ),
+    [events, evidenceKey, selectedTick],
+  );
+
+  function selectTick(requestedTick: number) {
+    const resolvedTick = resolveRecordedTick(
+      ticks,
+      selectedTick,
+      requestedTick,
+    );
+    setFixedTick(resolvedTick);
+    setMode("history");
+  }
+
+  function followLatest() {
+    setMode("current");
+  }
 
   return (
     <section
       aria-label={messages.regionLabel}
       className="factory-recording-topology-replay"
-      data-selected-tick={prepared.selectedTick}
+      data-selected-tick={selectedTick}
     >
       <Text as="p" className="factory-recording-topology-replay__tick">
-        {messages.selectedTick(formatNumber(prepared.selectedTick))}
+        {messages.selectedTick(formatNumber(selectedTick))}
       </Text>
+      <FactoryTimelineScrubber
+        formatTick={formatNumber}
+        messages={messages.timeline}
+        onFollowLatest={followLatest}
+        onSelectTick={selectTick}
+        state={{
+          earliestTick: ticks[0] ?? 0,
+          latestTick,
+          mode: effectiveMode,
+          selectedTick,
+          status: "available",
+        }}
+      />
       <FactoryTopologyReplay
         messages={messages.topology}
         onError={onError}
         onSelectNode={onSelectNode}
         selectedNodeId={selectedNodeId}
-        state={{ projection, status: "ready" }}
+        state={{
+          projection: {
+            activity: prepared.activity,
+            load: prepared.load,
+            topology: prepared.topology,
+          },
+          status: "ready",
+        }}
       />
       <WorkProgressVisualizer
         formatNumber={formatNumber}
         messages={messages.progress}
-        projection={progress}
+        projection={prepared.progress}
       />
     </section>
   );
 }
 
-function prepareRecording(
-  recording: FactoryRecording,
-  defaultSelectedTick: number | undefined,
-): PreparedRecording {
-  const events = canonicalizeFactoryEvents(recording.events);
-  const ticks = new Set(events.map((event) => event.context.tick));
-  const latestTick = events.at(-1)?.context.tick ?? 0;
-  const selectedTick =
-    defaultSelectedTick !== undefined && ticks.has(defaultSelectedTick)
-      ? defaultSelectedTick
-      : latestTick;
-  return { recording, selectedTick };
+function recordedTicks(events: FactoryRecording["events"]): number[] {
+  const ticks = [...new Set(events.map((event) => event.context.tick))];
+  return ticks.length > 0 ? ticks : [0];
+}
+
+function resolveRecordedTick(
+  ticks: readonly number[],
+  selectedTick: number,
+  requestedTick: number,
+): number {
+  if (ticks.includes(requestedTick)) return requestedTick;
+  if (requestedTick > selectedTick) {
+    return ticks.find((tick) => tick >= requestedTick) ?? ticks.at(-1) ?? 0;
+  }
+  return (
+    [...ticks].reverse().find((tick) => tick <= requestedTick) ?? ticks[0] ?? 0
+  );
+}
+
+function projectRecordingAtTick(
+  events: FactoryRecording["events"],
+  tick: number,
+  evidenceKey: string,
+  cache: Map<string, RecordingProjection>,
+): RecordingProjection {
+  const cacheKey = `${tick}:${evidenceKey}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const projection = {
+    activity: projectFactoryActivityAtTick({ events, tick }),
+    load: projectFactoryLoadAtTick({ events, tick }),
+    progress: projectFactoryWorkProgressAtTick({ events, tick }),
+    topology: projectFactoryTopologyAtTick({ events, tick }),
+  };
+  cache.set(cacheKey, projection);
+  if (cache.size > MAX_CACHED_RECORDING_PROJECTIONS) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) cache.delete(oldestKey);
+  }
+  return projection;
 }
 
 function toRecordingValidationDiagnostic(

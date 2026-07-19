@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import "./testing/vitest.setup";
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType, ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -67,6 +67,18 @@ const messages: FactoryRecordingTopologyReplayMessages = {
   },
   regionLabel: "Recorded Factory playback",
   selectedTick: (tick) => `Selected logical tick ${tick}`,
+  timeline: {
+    alreadyFollowingLatest: "Already current",
+    currentMode: "Following current recording",
+    disabled: "Playback disabled",
+    followLatest: "Follow latest",
+    historyMode: "Inspecting history",
+    position: (selected, latest) => `Tick ${selected} of ${latest}`,
+    regionLabel: "Recording timeline",
+    sliderLabel: "Select recording tick",
+    title: "Recording timeline",
+    unavailable: "Timeline unavailable",
+  },
   topology: {
     activeDispatches: (count) => `${count} active Dispatches`,
     empty: "No Factory topology is available.",
@@ -185,7 +197,102 @@ describe("FactoryRecordingTopologyReplay", () => {
   });
 });
 
-function activeRecording(): unknown {
+describe("FactoryRecordingTopologyReplay playback", () => {
+  it("starts in current mode, skips sparse ticks, and follows latest again", () => {
+    const recording = activeRecording() as ReturnType<typeof activeRecording>;
+    const { rerender } = render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={recording}
+      />,
+    );
+    const slider = screen.getByRole("slider", {
+      name: messages.timeline.sliderLabel,
+    });
+
+    expect(screen.getByText(messages.timeline.currentMode)).toBeVisible();
+    fireEvent.change(slider, { target: { value: "2" } });
+    expect(screen.getByText("Selected logical tick 1")).toBeVisible();
+    expect(screen.getByText(messages.timeline.historyMode)).toBeVisible();
+    expect(screen.getByText("Tick 1 of 3")).toBeVisible();
+
+    const appended = structuredClone(recording);
+    appended.events.push(workStateEvent(5, 5, "done"));
+    rerender(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={appended}
+      />,
+    );
+    expect(screen.getByText("Selected logical tick 1")).toBeVisible();
+    expect(screen.getByText("Tick 1 of 5")).toBeVisible();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.timeline.followLatest }),
+    );
+    expect(screen.getByText("Selected logical tick 5")).toBeVisible();
+    expect(screen.getByText(messages.timeline.currentMode)).toBeVisible();
+    expect(screen.getByText("1 completed Work")).toBeVisible();
+  });
+
+  it("opens a valid explicit default in history and ignores a sparse default", () => {
+    const recording = activeRecording();
+    const { rerender } = render(
+      <FactoryRecordingTopologyReplay
+        defaultSelectedTick={1}
+        formatNumber={String}
+        messages={messages}
+        recording={recording}
+      />,
+    );
+
+    expect(screen.getByText("Selected logical tick 1")).toBeVisible();
+    expect(screen.getByText(messages.timeline.historyMode)).toBeVisible();
+
+    rerender(
+      <FactoryRecordingTopologyReplay
+        defaultSelectedTick={2}
+        formatNumber={String}
+        key="sparse-default"
+        messages={messages}
+        recording={recording}
+      />,
+    );
+    expect(screen.getByText("Selected logical tick 3")).toBeVisible();
+    expect(screen.getByText(messages.timeline.currentMode)).toBeVisible();
+  });
+
+  it("recomputes current mode for accepted same-tick evidence in canonical order", () => {
+    const recording = activeRecording();
+    const { rerender } = render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={recording}
+      />,
+    );
+    expect(screen.getByText("1 active Work")).toBeVisible();
+
+    const appended = structuredClone(recording);
+    appended.events.push(workStateEvent(3, 5, "done"));
+    appended.events.push(workStateEvent(3, 4, "failed"));
+    rerender(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={appended}
+      />,
+    );
+
+    expect(screen.getByText("Selected logical tick 3")).toBeVisible();
+    expect(screen.getByText("1 completed Work")).toBeVisible();
+    expect(screen.getByText("0 active Work")).toBeVisible();
+  });
+});
+
+function activeRecording() {
   const factory = {
     name: "publishing",
     resources: [{ capacity: 2, id: "gpu-stable", name: "gpu" }],
@@ -229,7 +336,7 @@ function activeRecording(): unknown {
         type: "INITIAL_STRUCTURE_REQUEST",
       },
       {
-        context: context(2, 2),
+        context: context(2, 3),
         id: "work",
         payload: {
           type: "FACTORY_REQUEST_BATCH",
@@ -254,5 +361,29 @@ function activeRecording(): unknown {
     id: "active-recording",
     schemaVersion: "factory-recording/v1",
     title: "Active publishing",
+  };
+}
+
+function workStateEvent(tick: number, sequence: number, toState: string) {
+  return {
+    context: {
+      eventTime: `2026-07-18T23:00:${String(sequence).padStart(2, "0")}Z`,
+      sequence,
+      sessionId: "session-1",
+      sessionSequence: sequence,
+      tick,
+    },
+    id: `work-state-${tick}-${sequence}`,
+    payload: {
+      fromPlaceId: "story:ready",
+      fromState: "ready",
+      source: "api",
+      toPlaceId: `story:${toState}`,
+      toState,
+      workId: "work-1",
+      workTypeName: "story",
+    },
+    schemaVersion: "agent-factory.event.v1" as const,
+    type: "WORK_STATE_CHANGE" as const,
   };
 }

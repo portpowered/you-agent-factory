@@ -76,6 +76,31 @@ async function verifyRecordingComposition(browserInstance) {
 
   await openStory(
     page,
+    "factory-visualizers-factoryrecordingtopologyreplay--same-tick-history-and-current",
+  );
+  const slider = page.getByRole("slider", { name: "Select recording tick" });
+  await tabTo(page, slider, 20);
+  await page.keyboard.press("ArrowLeft");
+  assert(
+    await page.getByText("Tick 1 of 3").isVisible(),
+    "Keyboard scrubbing fabricated a sparse tick instead of selecting recorded history.",
+  );
+  assert(
+    await page.getByText("Inspecting recording history").isVisible(),
+    "The recording did not expose visible history status after keyboard scrubbing.",
+  );
+  assert(
+    await slider.evaluate((element) => element === document.activeElement),
+    "Keyboard scrubbing did not preserve focus on the recording timeline.",
+  );
+  await page.getByRole("button", { name: "Follow latest" }).click();
+  assert(
+    await page.getByText("Following current recording").isVisible(),
+    "Following latest did not return recording playback to current mode.",
+  );
+
+  await openStory(
+    page,
     "factory-visualizers-factoryrecordingtopologyreplay--invalid-recording",
   );
   assert(

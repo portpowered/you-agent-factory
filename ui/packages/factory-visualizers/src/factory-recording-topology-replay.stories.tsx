@@ -23,6 +23,18 @@ const messages: FactoryRecordingTopologyReplayMessages = {
   },
   regionLabel: "Recorded Factory playback",
   selectedTick: (tick) => `Selected logical tick ${tick}`,
+  timeline: {
+    alreadyFollowingLatest: "Already following the current recording",
+    currentMode: "Following current recording",
+    disabled: "Recording playback is disabled",
+    followLatest: "Follow latest",
+    historyMode: "Inspecting recording history",
+    position: (selected, latest) => `Tick ${selected} of ${latest}`,
+    regionLabel: "Recording timeline",
+    sliderLabel: "Select recording tick",
+    title: "Recording timeline",
+    unavailable: "Recording timeline unavailable",
+  },
   topology: {
     activeDispatches: (count) =>
       `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
@@ -95,9 +107,123 @@ export const InvalidRecording: Story = {
   },
 };
 
+export const SameTickHistoryAndCurrent: Story = {
+  args: {
+    defaultSelectedTick: 1,
+    recording: playbackRecording(),
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const slider = canvas.getByRole("slider", {
+      name: messages.timeline.sliderLabel,
+    });
+    await expect(canvas.getByText("Tick 1 of 3")).toBeVisible();
+    slider.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await expect(canvas.getByText("Selected logical tick 3")).toBeVisible();
+    await expect(canvas.getByText("1 completed Work")).toBeVisible();
+    await userEvent.click(
+      canvas.getByRole("button", { name: messages.timeline.followLatest }),
+    );
+    await expect(canvas.getByText(messages.timeline.currentMode)).toBeVisible();
+  },
+};
+
 function category(name: string) {
   return {
     plural: (count: string) => `${count} ${name} Work`,
     singular: (count: string) => `${count} ${name} Work`,
+  };
+}
+
+function playbackRecording(): unknown {
+  const factory = {
+    name: "support-playback",
+    workTypes: [
+      {
+        name: "support-request",
+        states: [
+          { name: "queued", type: "INITIAL" },
+          { name: "resolved", type: "TERMINAL" },
+          { name: "failed", type: "FAILED" },
+        ],
+      },
+    ],
+    workstations: [
+      {
+        inputs: [{ state: "queued", workType: "support-request" }],
+        name: "triage",
+        outputs: [{ state: "resolved", workType: "support-request" }],
+        worker: "",
+      },
+    ],
+  };
+  const context = (sequence: number, tick: number) => ({
+    eventTime: `2026-07-18T20:00:0${sequence}Z`,
+    sequence,
+    sessionId: "storybook-playback-session",
+    sessionSequence: sequence,
+    tick,
+  });
+  return {
+    events: [
+      {
+        context: context(1, 1),
+        id: "playback-topology",
+        payload: { factory },
+        schemaVersion: "agent-factory.event.v1",
+        type: "INITIAL_STRUCTURE_REQUEST",
+      },
+      {
+        context: context(2, 3),
+        id: "playback-work",
+        payload: {
+          type: "FACTORY_REQUEST_BATCH",
+          works: [
+            {
+              name: "Support request 1",
+              workId: "support-1",
+              workTypeName: "support-request",
+            },
+          ],
+        },
+        schemaVersion: "agent-factory.event.v1",
+        type: "WORK_REQUEST",
+      },
+      {
+        context: context(4, 3),
+        id: "playback-resolved",
+        payload: {
+          fromPlaceId: "support-request:failed",
+          fromState: "failed",
+          source: "api",
+          toPlaceId: "support-request:resolved",
+          toState: "resolved",
+          workId: "support-1",
+          workTypeName: "support-request",
+        },
+        schemaVersion: "agent-factory.event.v1",
+        type: "WORK_STATE_CHANGE",
+      },
+      {
+        context: context(3, 3),
+        id: "playback-failed-first",
+        payload: {
+          fromPlaceId: "support-request:queued",
+          fromState: "queued",
+          source: "api",
+          toPlaceId: "support-request:failed",
+          toState: "failed",
+          workId: "support-1",
+          workTypeName: "support-request",
+        },
+        schemaVersion: "agent-factory.event.v1",
+        type: "WORK_STATE_CHANGE",
+      },
+    ],
+    factory,
+    id: "same-tick-history-current",
+    schemaVersion: "factory-recording/v1",
+    title: "Same-tick history and current playback",
   };
 }

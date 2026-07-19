@@ -30,6 +30,13 @@ export function Topology(props: FactoryTopologyReplayProps) {
 presentation as the controlled topology component. It does not require a
 router, data provider, store, browser persistence, network request, or backend.
 
+Recording playback opens in current mode at the latest accepted logical tick.
+Pass a `defaultSelectedTick` that exists in the recording to open a fixed
+historical projection instead. The shared timeline selects only recorded ticks,
+keeps fixed history stable as later evidence arrives, and can return to current
+mode with its follow-latest action. Current mode also incorporates newly
+accepted same-tick events in canonical sequence order.
+
 Run `bun run verify` in this directory to typecheck and test the components,
 build Storybook, exercise accessibility and responsive behavior, validate the
 compiled dependency boundary and tarball inventory, and install, build, and
