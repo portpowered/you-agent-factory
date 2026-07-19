@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button, Label, Textarea } from "../../../../components/ui";
 import {
@@ -50,6 +50,9 @@ export function FactorySimpleSubmissionComposer({
   workTypes,
 }: FactorySimpleSubmissionComposerProps) {
   const messages = getSubmitWorkMessages(locale).simpleComposer;
+  const instanceID = useId().replaceAll(":", "");
+  const draftID = `factory-simple-submission-draft-${instanceID}`;
+  const statusID = `factory-simple-submission-status-${instanceID}`;
   const [localSubmissionError, setLocalSubmissionError] = useState<string>();
   const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
   const availability = resolveFactorySimpleSubmissionAvailability({
@@ -97,15 +100,13 @@ export function FactorySimpleSubmissionComposer({
       }}
     >
       <div className="grid gap-1">
-        <label htmlFor="factory-simple-submission-draft">
+        <label htmlFor={draftID}>
           <Label>{messages.textLabel}</Label>
         </label>
         <Textarea
-          aria-describedby={
-            unavailableReason ? "factory-simple-submission-status" : undefined
-          }
+          aria-describedby={unavailableReason ? statusID : undefined}
           disabled={isDisabled}
-          id="factory-simple-submission-draft"
+          id={draftID}
           onChange={(event) => {
             onDraftChange(event.target.value);
             resizeTextarea(event.target);
@@ -125,11 +126,7 @@ export function FactorySimpleSubmissionComposer({
         {isSubmitPending ? messages.submittingAction : messages.submitAction}
       </Button>
       {unavailableReason ? (
-        <p
-          className="sm:col-span-2"
-          id="factory-simple-submission-status"
-          role="status"
-        >
+        <p className="sm:col-span-2" id={statusID} role="status">
           {unavailableMessage?.(unavailableReason) ??
             messages.unavailable[unavailableReason]}
         </p>

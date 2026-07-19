@@ -105,6 +105,11 @@ that consumes the replay kernel.
   bento-selected Factory state and current-versus-history selection to the
   simple composer, while its typed submit mutation maps the name-free text
   payload to the generated `SubmitWorkRequest` contract.
+- `ui/src/features/submit-work/components/composer/factory-simple-submission-composer.tsx`
+  owns only local interaction state. When it renders labels or status text,
+  derive their IDs per instance with normalized React `useId` output so
+  multiple mounted composers preserve independent label and `aria-describedby`
+  associations; cover that behavior by rendering two unavailable instances.
 - `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
   single-work submission. The HTTP adapter leaves canonical identity assignment
   to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in

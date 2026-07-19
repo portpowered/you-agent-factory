@@ -29,6 +29,41 @@ function renderComposer(
   return props;
 }
 
+function renderUnavailableComposers() {
+  render(
+    <>
+      <FactorySimpleSubmissionComposer
+        draft="First task"
+        factoryState="active"
+        isCurrent={false}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        workTypes={[
+          {
+            handlingBehavior: ["DEFAULT"],
+            isSubmitEligible: true,
+            name: "first",
+          },
+        ]}
+      />
+      <FactorySimpleSubmissionComposer
+        draft="Second task"
+        factoryState="active"
+        isCurrent={false}
+        onDraftChange={vi.fn()}
+        onSubmit={vi.fn().mockResolvedValue(undefined)}
+        workTypes={[
+          {
+            handlingBehavior: ["DEFAULT"],
+            isSubmitEligible: true,
+            name: "second",
+          },
+        ]}
+      />
+    </>,
+  );
+}
+
 describe("FactorySimpleSubmissionComposer", () => {
   it("submits one text content item for the resolved work type without a name or relationships", async () => {
     const props = renderComposer();
@@ -85,6 +120,21 @@ describe("FactorySimpleSubmissionComposer", () => {
   it("does not disable an available composer during a live dispatch", () => {
     renderComposer();
     expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+  });
+
+  it("keeps labels and unavailable status text isolated across composer instances", () => {
+    renderUnavailableComposers();
+
+    const labels = Array.from(document.querySelectorAll("label"));
+    const textareas = screen.getAllByRole("textbox", { name: "Submit text" });
+    const statuses = screen.getAllByRole("status");
+
+    expect(new Set(textareas.map((textarea) => textarea.id)).size).toBe(2);
+    expect(new Set(statuses.map((status) => status.id)).size).toBe(2);
+    textareas.forEach((textarea, index) => {
+      expect(labels[index]).toHaveAttribute("for", textarea.id);
+      expect(textarea).toHaveAttribute("aria-describedby", statuses[index].id);
+    });
   });
 
   it("submits on Enter but preserves a newline for Shift+Enter", async () => {
