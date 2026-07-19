@@ -413,7 +413,7 @@ describe("FactoryTopologyReplay", () => {
     ).toHaveAttribute("src", "blob:diagram-one");
     rerender(
       <FactoryTopologyReplay
-        layout={imageOnlyLayout("/9j/4AAQ")}
+        layout={imageOnlyLayout("iVBORw0KGgoAAA==")}
         messages={messages}
         state={{
           projection: createFactoryTopologyProjection(),
@@ -706,6 +706,54 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
       />,
     );
     expect(await screen.findByTestId("react-flow")).toBeVisible();
+  });
+
+  it("contains malformed caller layout with field-level diagnostics", async () => {
+    const onError = vi.fn();
+    render(
+      <>
+        <FactoryTopologyReplay
+          layout={{
+            annotations: [
+              {
+                body: "Valid text, invalid geometry",
+                id: "bad-note",
+                kind: "note",
+                position: { x: Number.NaN, y: 10 },
+              },
+            ],
+            nodeEmptyStates: [
+              { content: { kind: "text", text: "Nope" }, nodeId: "unknown" },
+            ],
+            schemaVersion: "factory-visualization-layout/v1",
+          }}
+          messages={messages}
+          onError={onError}
+          state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        />
+        <p>Canonical host content survives</p>
+      </>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(messages.failed);
+    expect(screen.getByText("Canonical host content survives")).toBeVisible();
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({
+              code: "invalid_coordinate",
+              path: ["annotations", 0, "position", "x"],
+            }),
+            expect.objectContaining({
+              code: "unknown_canonical_node_id",
+              path: ["nodeEmptyStates", 0, "nodeId"],
+            }),
+          ]),
+          kind: "layout-validation",
+        }),
+      ),
+    );
   });
 });
 

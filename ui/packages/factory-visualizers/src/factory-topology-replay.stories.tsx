@@ -112,6 +112,23 @@ export const AnnotationVisibility: Story = {
   },
 };
 
+/** Emulator-ready boundary: caller-prepared projection plus sidecar only. */
+export const EmulatorReadyDenseAnnotations: Story = {
+  args: {
+    layout: annotationLayout(),
+    state: { projection: createProjection(true), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("img", { name: "Review process diagram" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "workstation: Review" }),
+    ).toBeVisible();
+  },
+};
+
 export const InactiveNodeEmptyState: Story = {
   args: {
     layout: {
@@ -130,6 +147,10 @@ export const InactiveNodeEmptyState: Story = {
       within(canvasElement).getByText("No review work is waiting."),
     ).toBeVisible();
   },
+};
+
+export const EmulatorReadyInactiveEmptyState: Story = {
+  ...InactiveNodeEmptyState,
 };
 
 export const Loading: Story = {

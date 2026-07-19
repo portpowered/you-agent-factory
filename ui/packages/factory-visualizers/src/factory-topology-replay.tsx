@@ -1,5 +1,5 @@
 import { Background, Controls, ReactFlow } from "@xyflow/react";
-import type { FactoryVisualizationLayoutV1 } from "@you-agent-factory/client";
+import { safeParseFactoryVisualizationLayout } from "@you-agent-factory/client";
 import type {
   FactoryActivityProjection,
   FactoryLoadProjection,
@@ -26,7 +26,10 @@ import { nodeTypes } from "./factory-topology-replay-nodes";
 
 export type { FactoryTopologyFlowProjection } from "./factory-topology-flow-projection";
 export { projectFactoryTopologyFlow } from "./factory-topology-flow-projection";
-import type { FactoryVisualizerError } from "./visualizer-error";
+import type {
+  FactoryTopologyReplayError,
+  FactoryVisualizerError,
+} from "./visualizer-error";
 
 export interface FactoryTopologyReplayProjection {
   activity: FactoryActivityProjection;
@@ -61,10 +64,10 @@ export interface FactoryTopologyReplayMessages {
 }
 
 export interface FactoryTopologyReplayProps {
-  /** Validated, presentation-only data owned by the visualizer host. */
-  layout?: FactoryVisualizationLayoutV1;
+  /** Presentation-only input validated against the prepared canonical topology. */
+  layout?: unknown;
   messages: FactoryTopologyReplayMessages;
-  onError?: (error: FactoryVisualizerError) => void;
+  onError?: (error: FactoryTopologyReplayError) => void;
   onRetry?: () => void;
   onSelectNode?: (node: FactoryTopologyNode) => void;
   selectedNodeId?: string;
@@ -77,7 +80,7 @@ interface PreparedFlowSuccess {
 }
 
 interface PreparedFlowFailure {
-  error: FactoryVisualizerError;
+  error: FactoryTopologyReplayError;
   status: "failed";
 }
 
@@ -142,13 +145,36 @@ function PreparedTopology({
   const prefersReducedMotion = usePrefersReducedMotion();
   const prepared = useMemo<PreparedFlow>(() => {
     try {
+      const parsedLayout =
+        layout === undefined
+          ? undefined
+          : safeParseFactoryVisualizationLayout(layout, {
+              canonicalNodeIds: new Set(
+                projection.topology.nodes.map((node) => node.id),
+              ),
+            });
+      if (parsedLayout && !parsedLayout.success) {
+        return {
+          error: {
+            issues: parsedLayout.issues.map(({ category, code, path }) => ({
+              category,
+              code,
+              path,
+            })),
+            kind: "layout-validation",
+            message: "The topology layout could not be prepared.",
+            recoverable: true,
+          },
+          status: "failed",
+        };
+      }
       const flow = projectFactoryTopologyFlow(
         projection,
         messages,
         selectedNodeId,
         onSelectNode,
         prefersReducedMotion,
-        layout,
+        parsedLayout?.data,
       );
       return flow.validEndpoints
         ? { flow, status: "ready" }

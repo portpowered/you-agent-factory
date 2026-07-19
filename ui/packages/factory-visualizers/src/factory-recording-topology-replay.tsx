@@ -1,6 +1,5 @@
 import {
   type FactoryRecording,
-  type FactoryVisualizationLayoutV1,
   type RecordingValidationIssue,
   safeParseFactoryRecording,
 } from "@you-agent-factory/client";
@@ -51,7 +50,8 @@ export interface FactoryRecordingValidationDiagnostic {
 
 export type FactoryRecordingTopologyReplayError =
   | FactoryRecordingValidationDiagnostic
-  | FactoryVisualizerError;
+  | FactoryVisualizerError
+  | import("./visualizer-error").FactoryVisualizationLayoutDiagnostic;
 
 export interface FactoryRecordingTopologyReplayMessages {
   progress: WorkProgressVisualizerMessages;
@@ -65,8 +65,8 @@ export interface FactoryRecordingTopologyReplayMessages {
 export interface FactoryRecordingTopologyReplayProps {
   defaultSelectedTick?: number;
   formatNumber: (value: number) => string;
-  /** Validated, presentation-only content shared with the controlled topology renderer. */
-  layout?: FactoryVisualizationLayoutV1;
+  /** Presentation-only content validated by the controlled topology renderer. */
+  layout?: unknown;
   messages: FactoryRecordingTopologyReplayMessages;
   onError?: (error: FactoryRecordingTopologyReplayError) => void;
   onSelectNode?: (node: FactoryTopologyNode) => void;

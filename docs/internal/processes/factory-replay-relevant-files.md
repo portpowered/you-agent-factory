@@ -81,6 +81,11 @@ that consumes the replay kernel.
   visibility is likewise derived from selected-tick Work-State counts, active
   Dispatches, and active routes; retain identity and telemetry outside its
   activity-detail region.
+- `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` validates
+  unknown caller layout input with the client parser against the prepared
+  canonical node-ID context before deriving React Flow data. Report invalid
+  layout as safe field-level diagnostics and contain it to the visualizer;
+  never rely on a TypeScript-only layout assertion at this boundary.
 - `ui/packages/factory-visualizers/src/factory-recording-topology-replay.tsx`
   validates and owns static recording replay, then forwards the caller-owned
   layout sidecar unchanged to the controlled topology renderer. Other hosts
