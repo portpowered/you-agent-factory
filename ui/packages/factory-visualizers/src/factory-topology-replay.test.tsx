@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,8 @@ import {
   type FactoryTopologyReplayProjection,
   projectFactoryTopologyFlow,
 } from "./factory-topology-replay";
+
+const mockFlow = vi.hoisted(() => ({ error: undefined as Error | undefined }));
 
 vi.mock("@xyflow/react", () => ({
   Background: () => <div data-testid="flow-background" />,
@@ -26,45 +28,58 @@ vi.mock("@xyflow/react", () => ({
     edges: Array<{ id: string; sourceHandle?: string; targetHandle?: string }>;
     nodes: Array<{ data: Record<string, unknown>; id: string; type: string }>;
     nodeTypes: Record<string, ComponentType<{ data: Record<string, unknown> }>>;
-  }) => (
-    <div data-testid="react-flow">
-      {nodes.map((node) => {
-        const NodeView = nodeTypes[node.type];
-        return NodeView ? <NodeView data={node.data} key={node.id} /> : null;
-      })}
-      {edges.map((edge) => (
-        <span
-          data-edge-id={edge.id}
-          data-source-handle={edge.sourceHandle}
-          data-target-handle={edge.targetHandle}
-          key={edge.id}
-        />
-      ))}
-      {children}
-    </div>
-  ),
+  }) => {
+    if (mockFlow.error) throw mockFlow.error;
+    return (
+      <div data-testid="react-flow">
+        {nodes.map((node) => {
+          const NodeView = nodeTypes[node.type];
+          return NodeView ? <NodeView data={node.data} key={node.id} /> : null;
+        })}
+        {edges.map((edge) => (
+          <span
+            data-edge-id={edge.id}
+            data-source-handle={edge.sourceHandle}
+            data-target-handle={edge.targetHandle}
+            key={edge.id}
+          />
+        ))}
+        {children}
+      </div>
+    );
+  },
 }));
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) => `${count} active Dispatches`,
+  empty: "No Factory topology is available.",
+  failed: "The Factory topology could not be shown.",
   inactiveDispatches: "No active Dispatch",
+  loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology replay",
   resourceOccupancy: (occupied, capacity) =>
     `${occupied} of ${capacity} resources occupied`,
   resourceOccupancyUnavailable: "Resource occupancy unavailable",
+  retry: "Try again",
   selectedNode: "Selected",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
 };
 
 describe("FactoryTopologyReplay", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFlow.error = undefined;
+  });
 
   it("renders semantic endpoints and selected-tick activity and load evidence", () => {
     const projection = createProjection();
     render(
-      <FactoryTopologyReplay messages={messages} projection={projection} />,
+      <FactoryTopologyReplay
+        messages={messages}
+        state={{ projection, status: "ready" }}
+      />,
     );
 
     expect(
@@ -94,7 +109,7 @@ describe("FactoryTopologyReplay", () => {
     ).not.toBeNull();
   });
 
-  it("fails closed without sending a partially valid edge set to React Flow", () => {
+  it("fails visibly without sending invalid endpoints to React Flow", async () => {
     const projection = createProjection();
     projection.topology.connections.push({
       ...projection.topology.connections[0],
@@ -111,10 +126,140 @@ describe("FactoryTopologyReplay", () => {
     expect(flow.validEndpoints).toBe(false);
     expect(flow.edges).toEqual([]);
 
+    const onError = vi.fn();
     render(
-      <FactoryTopologyReplay messages={messages} projection={projection} />,
+      <FactoryTopologyReplay
+        messages={messages}
+        onError={onError}
+        state={{ projection, status: "ready" }}
+      />,
     );
     expect(document.querySelector("[data-edge-id]")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(messages.failed);
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "endpoint", recoverable: true }),
+      ),
+    );
+  });
+});
+
+describe("FactoryTopologyReplay controlled states and failures", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFlow.error = undefined;
+  });
+
+  it.each([
+    ["loading", messages.loading, "status"],
+    ["empty", messages.empty, "status"],
+    ["failed", messages.failed, "alert"],
+  ] as const)("renders the explicit %s state", (status, message, role) => {
+    render(<FactoryTopologyReplay messages={messages} state={{ status }} />);
+
+    expect(
+      screen.getByRole("region", { name: messages.regionLabel }),
+    ).toBeVisible();
+    expect(screen.getByRole(role)).toHaveTextContent(message);
+    expect(screen.queryByTestId("react-flow")).not.toBeInTheDocument();
+    if (status === "loading") {
+      expect(screen.getByRole("region")).toHaveAttribute("aria-busy", "true");
+    }
+  });
+
+  it("shows retry only when supplied and emits host intent", () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <FactoryTopologyReplay
+        messages={messages}
+        state={{ status: "failed" }}
+      />,
+    );
+    expect(
+      screen.queryByRole("button", { name: messages.retry }),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <FactoryTopologyReplay
+        messages={messages}
+        onRetry={onRetry}
+        state={{ status: "failed" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: messages.retry }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("sanitizes projection failures and reports each distinct failure once", async () => {
+    const projection = createProjection();
+    Object.defineProperty(projection, "topology", {
+      get() {
+        throw Object.assign(new Error("secret projection payload"), {
+          code: "INVALID_PROJECTION",
+        });
+      },
+    });
+    const onError = vi.fn();
+    const { rerender } = render(
+      <FactoryTopologyReplay
+        messages={messages}
+        onError={onError}
+        state={{ projection, status: "ready" }}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(messages.failed);
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(onError).toHaveBeenCalledWith({
+      cause: { code: "INVALID_PROJECTION", name: "Error" },
+      kind: "projection",
+      message: "The prepared topology projection could not be read.",
+      recoverable: true,
+    });
+    expect(JSON.stringify(onError.mock.calls)).not.toContain(
+      "secret projection payload",
+    );
+
+    rerender(
+      <FactoryTopologyReplay
+        messages={messages}
+        onError={onError}
+        selectedNodeId="worker:alice"
+        state={{ projection, status: "ready" }}
+      />,
+    );
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+  });
+
+  it("classifies invalid layout input and recovers from a replacement projection", async () => {
+    const invalid = createProjection();
+    invalid.topology.nodes[0] = {
+      ...invalid.topology.nodes[0],
+      kind: "invalid-kind" as FactoryTopologyReplayProjection["topology"]["nodes"][number]["kind"],
+    };
+    const onError = vi.fn();
+    const { rerender } = render(
+      <FactoryTopologyReplay
+        messages={messages}
+        onError={onError}
+        state={{ projection: invalid, status: "ready" }}
+      />,
+    );
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: "layout" }),
+      ),
+    );
+    expect(screen.getByRole("alert")).toBeVisible();
+
+    rerender(
+      <FactoryTopologyReplay
+        messages={messages}
+        onError={onError}
+        state={{ projection: createProjection(), status: "ready" }}
+      />,
+    );
+    expect(await screen.findByTestId("react-flow")).toBeVisible();
   });
 });
 
@@ -127,7 +272,7 @@ describe("FactoryTopologyReplay controlled updates", () => {
       <FactoryTopologyReplay
         messages={messages}
         onSelectNode={onSelectNode}
-        projection={projection}
+        state={{ projection, status: "ready" }}
       />,
     );
     const workstation = screen.getByRole("button", {
@@ -145,8 +290,8 @@ describe("FactoryTopologyReplay controlled updates", () => {
       <FactoryTopologyReplay
         messages={messages}
         onSelectNode={onSelectNode}
-        projection={projection}
         selectedNodeId="workstation:review"
+        state={{ projection, status: "ready" }}
       />,
     );
     expect(screen.getByText(/Selected/)).toBeVisible();
@@ -178,13 +323,21 @@ describe("FactoryTopologyReplay controlled updates", () => {
       undefined,
     );
     const { rerender } = render(
-      <FactoryTopologyReplay messages={messages} projection={first} />,
+      <FactoryTopologyReplay
+        messages={messages}
+        state={{ projection: first, status: "ready" }}
+      />,
     );
 
     expect(screen.getAllByText(/1 active Dispatches/).length).toBeGreaterThan(
       0,
     );
-    rerender(<FactoryTopologyReplay messages={messages} projection={second} />);
+    rerender(
+      <FactoryTopologyReplay
+        messages={messages}
+        state={{ projection: second, status: "ready" }}
+      />,
+    );
 
     expect(screen.queryByText(/1 active Dispatches/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/No active Dispatch/)).toHaveLength(4);

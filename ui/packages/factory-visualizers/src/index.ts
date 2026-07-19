@@ -12,8 +12,15 @@ export {
   type FactoryTopologyReplayMessages,
   type FactoryTopologyReplayProjection,
   type FactoryTopologyReplayProps,
+  type FactoryTopologyReplayState,
   projectFactoryTopologyFlow,
 } from "./factory-topology-replay.js";
+
+export type {
+  FactoryVisualizerError,
+  FactoryVisualizerErrorCause,
+  FactoryVisualizerErrorKind,
+} from "./visualizer-error.js";
 
 export {
   type WorkProgressCategoryMessage,

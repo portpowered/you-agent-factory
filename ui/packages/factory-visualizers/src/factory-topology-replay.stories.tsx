@@ -1,21 +1,27 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 import { expect, fn, userEvent, within } from "storybook/test";
 
 import {
   FactoryTopologyReplay,
   type FactoryTopologyReplayMessages,
   type FactoryTopologyReplayProjection,
+  type FactoryTopologyReplayProps,
 } from "./factory-topology-replay";
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) =>
     `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+  empty: "No Factory topology is available at this tick.",
+  failed: "The Factory topology could not be shown.",
   inactiveDispatches: "No active Dispatch",
+  loading: "Loading Factory topology.",
   nodeLabel: (kind, label) => `${kind}: ${label}`,
   regionLabel: "Factory topology at selected tick",
   resourceOccupancy: (occupied, capacity) =>
     `${occupied} of ${capacity} capacity occupied`,
   resourceOccupancyUnavailable: "Occupancy unavailable",
+  retry: "Try again",
   selectedNode: "Selected by host",
   workStateCount: (count) => `${count} Work in this state`,
   workStateCountUnavailable: "Work count unavailable",
@@ -27,7 +33,7 @@ const meta = {
   args: {
     messages,
     onSelectNode: fn(),
-    projection: createProjection(),
+    state: { projection: createProjection(), status: "ready" },
   },
   parameters: { layout: "fullscreen" },
 } satisfies Meta<typeof FactoryTopologyReplay>;
@@ -49,10 +55,57 @@ export const SparsePreparedProjection: Story = {
 
 export const DensePreparedProjection: Story = {
   args: {
-    projection: createProjection(true),
     selectedNodeId: "workstation:review",
+    state: { projection: createProjection(true), status: "ready" },
   },
 };
+
+export const Loading: Story = {
+  args: { state: { status: "loading" } },
+};
+
+export const Empty: Story = {
+  args: { state: { status: "empty" } },
+};
+
+export const FailedWithRetry: Story = {
+  args: { onRetry: fn(), state: { status: "failed" } },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: messages.retry }));
+    await expect(args.onRetry).toHaveBeenCalled();
+  },
+};
+
+export const Recovered: Story = {
+  args: { state: { projection: createProjection(), status: "ready" } },
+};
+
+export const FailureRecovery: Story = {
+  args: { onRetry: fn(), state: { status: "failed" } },
+  render: (args) => <RecoveryHost {...args} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole("button", { name: messages.retry }));
+    await expect(
+      canvas.getByRole("region", { name: messages.regionLabel }),
+    ).toHaveAttribute("data-endpoints-valid", "true");
+  },
+};
+
+function RecoveryHost(props: FactoryTopologyReplayProps) {
+  const [state, setState] = useState(props.state);
+  return (
+    <FactoryTopologyReplay
+      {...props}
+      onRetry={() => {
+        props.onRetry?.();
+        setState({ projection: createProjection(), status: "ready" });
+      }}
+      state={state}
+    />
+  );
+}
 
 function createProjection(dense = false): FactoryTopologyReplayProjection {
   const extraWorkers = dense

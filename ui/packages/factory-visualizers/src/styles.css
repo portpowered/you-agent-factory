@@ -23,6 +23,33 @@
   border-radius: 1rem;
 }
 
+.factory-topology-replay--state {
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.factory-topology-replay__state {
+  display: grid;
+  max-inline-size: 32rem;
+  justify-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  color: var(--color-on-surface-variant);
+  text-align: center;
+  background: var(--color-surface-container);
+  border: 1px dashed var(--color-outline-variant);
+  border-radius: 0.75rem;
+}
+
+.factory-topology-replay__state[role="alert"] {
+  border-color: var(--color-error);
+}
+
+.factory-topology-replay__state > * {
+  margin: 0;
+}
+
 .factory-topology-replay .react-flow__node {
   inline-size: 13.5rem;
 }
