@@ -28,7 +28,6 @@ export type { FactoryTopologyFlowProjection } from "./factory-topology-flow-proj
 export { projectFactoryTopologyFlow } from "./factory-topology-flow-projection";
 import type {
   FactoryTopologyReplayError,
-  FactoryVisualizerError,
 } from "./visualizer-error";
 
 export interface FactoryTopologyReplayProjection {

@@ -111,6 +111,13 @@ async function verifyRecordingPresentations(browserInstance) {
     await page.getByText("2 Aufträge insgesamt").isVisible(),
     "The localized recording does not use localized plural Work copy.",
   );
+  await verifyAnnotatedRecording(page);
+  await context.close();
+
+  await verifyNarrowRecording(browserInstance);
+}
+
+async function verifyAnnotatedRecording(page) {
   await openStory(
     page,
     "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
@@ -142,8 +149,9 @@ async function verifyRecordingPresentations(browserInstance) {
     !(await page.getByText("Escalations are reviewed here.").isVisible()),
     "Hiding annotations in the recording did not remove the annotation node.",
   );
-  await context.close();
+}
 
+async function verifyNarrowRecording(browserInstance) {
   const narrowContext = await browserInstance.newContext({
     viewport: { width: 360, height: 800 },
   });
