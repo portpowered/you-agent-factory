@@ -185,9 +185,9 @@ describe("FactoryTopologyReplay", () => {
     );
 
     expect(flow.edges).toHaveLength(projection.topology.connections.length);
-    expect(flow.nodes.filter((node) => node.type === "factoryTopologyNode")).toHaveLength(
-      projection.topology.nodes.length,
-    );
+    expect(
+      flow.nodes.filter((node) => node.type === "factoryTopologyNode"),
+    ).toHaveLength(projection.topology.nodes.length);
     expect(flow.nodes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -211,20 +211,27 @@ describe("FactoryTopologyReplay", () => {
       <FactoryTopologyReplay
         layout={annotationLayout()}
         messages={messages}
-        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
 
     expect(annotationBody()).toBeVisible();
     expect(screen.getByRole("img", { name: "Review diagram" })).toBeVisible();
     expect(mockFlow.nodes).toHaveLength(6);
-    const toggle = screen.getByRole("button", { name: messages.annotationsVisible });
+    const toggle = screen.getByRole("button", {
+      name: messages.annotationsVisible,
+    });
     expect(toggle).toHaveAttribute("aria-pressed", "true");
 
     fireEvent.click(toggle);
 
     expect(screen.queryByText(annotationBodyMatcher)).not.toBeInTheDocument();
-    expect(screen.queryByRole("img", { name: "Review diagram" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "Review diagram" }),
+    ).not.toBeInTheDocument();
     expect(mockFlow.nodes).toHaveLength(4);
     expect(
       screen.getByRole("button", { name: messages.annotationsHidden }),
@@ -268,9 +275,15 @@ describe("FactoryTopologyReplay", () => {
       />,
     );
 
-    expect(screen.queryByText("No reviewers are waiting.")).not.toBeInTheDocument();
-    expect(screen.queryByText("No requests are queued.")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/1 active Dispatches/).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText("No reviewers are waiting."),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("No requests are queued."),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByText(/1 active Dispatches/).length).toBeGreaterThan(
+      0,
+    );
     expect(screen.getByText(/3 Work in this state/)).toBeVisible();
     expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
   });
@@ -278,16 +291,26 @@ describe("FactoryTopologyReplay", () => {
   it("suppresses the matching empty state for Work, Dispatch, and route evidence independently", () => {
     const layout = nodeEmptyStateLayout();
     const base = createFactoryTopologyProjection();
-    base.activity = { ...base.activity, activeDispatchOverlays: [], activeWorkstationNodeIds: [] };
+    base.activity = {
+      ...base.activity,
+      activeDispatchOverlays: [],
+      activeWorkstationNodeIds: [],
+    };
     base.load = {
       ...base.load,
-      workStateCounts: base.load.workStateCounts.map((count) => ({ ...count, count: 0 })),
+      workStateCounts: base.load.workStateCounts.map((count) => ({
+        ...count,
+        count: 0,
+      })),
     };
     const work = structuredClone(base);
     work.load.workStateCounts[0].count = 1;
     const dispatch = structuredClone(base);
     dispatch.activity.activeDispatchOverlays = [
-      { ...createFactoryTopologyProjection().activity.activeDispatchOverlays[0], connectionIds: [] },
+      {
+        ...createFactoryTopologyProjection().activity.activeDispatchOverlays[0],
+        connectionIds: [],
+      },
     ];
     const route = structuredClone(base);
     route.activity.activeDispatchOverlays = [
@@ -300,8 +323,12 @@ describe("FactoryTopologyReplay", () => {
     ];
 
     expect(emptyStateFor(base, layout, "workstation:review")).toBeDefined();
-    expect(emptyStateFor(work, layout, "work-state:task:queued")).toBeUndefined();
-    expect(emptyStateFor(dispatch, layout, "workstation:review")).toBeUndefined();
+    expect(
+      emptyStateFor(work, layout, "work-state:task:queued"),
+    ).toBeUndefined();
+    expect(
+      emptyStateFor(dispatch, layout, "workstation:review"),
+    ).toBeUndefined();
     expect(emptyStateFor(route, layout, "workstation:review")).toBeUndefined();
   });
 
@@ -320,16 +347,39 @@ describe("FactoryTopologyReplay", () => {
       activeDispatchOverlays: [],
       activeWorkstationNodeIds: [],
     };
-    const layout = nodeEmptyStateLayout({ kind: "image", altText: "Idle review illustration", source: { base64: "iVBORw0KGgo=", kind: "embedded", mediaType: "image/png" } });
+    const layout = nodeEmptyStateLayout({
+      kind: "image",
+      altText: "Idle review illustration",
+      source: {
+        base64: "iVBORw0KGgo=",
+        kind: "embedded",
+        mediaType: "image/png",
+      },
+    });
     const { rerender } = render(
-      <FactoryTopologyReplay layout={layout} messages={messages} state={{ projection: inactive, status: "ready" }} />,
+      <FactoryTopologyReplay
+        layout={layout}
+        messages={messages}
+        state={{ projection: inactive, status: "ready" }}
+      />,
     );
 
-    expect(await screen.findByRole("img", { name: "Idle review illustration" })).toHaveAttribute("src", "blob:empty-state");
+    expect(
+      await screen.findByRole("img", { name: "Idle review illustration" }),
+    ).toHaveAttribute("src", "blob:empty-state");
     rerender(
-      <FactoryTopologyReplay layout={layout} messages={messages} state={{ projection: createFactoryTopologyProjection(), status: "ready" }} />,
+      <FactoryTopologyReplay
+        layout={layout}
+        messages={messages}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
+      />,
     );
-    expect(screen.queryByRole("img", { name: "Idle review illustration" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "Idle review illustration" }),
+    ).not.toBeInTheDocument();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:empty-state");
     vi.unstubAllGlobals();
   });
@@ -351,44 +401,54 @@ describe("FactoryTopologyReplay", () => {
       <FactoryTopologyReplay
         layout={imageOnlyLayout("iVBORw0KGgo=")}
         messages={messages}
-        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
 
-    expect(await screen.findByRole("img", { name: "Review diagram" })).toHaveAttribute(
-      "src",
-      "blob:diagram-one",
-    );
+    expect(
+      await screen.findByRole("img", { name: "Review diagram" }),
+    ).toHaveAttribute("src", "blob:diagram-one");
     rerender(
       <FactoryTopologyReplay
         layout={imageOnlyLayout("/9j/4AAQ")}
         messages={messages}
-        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
     await waitFor(() =>
-      expect(screen.getByRole("img", { name: "Review diagram" })).toHaveAttribute(
-        "src",
-        "blob:diagram-two",
-      ),
+      expect(
+        screen.getByRole("img", { name: "Review diagram" }),
+      ).toHaveAttribute("src", "blob:diagram-two"),
     );
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagram-one");
 
-    fireEvent.click(screen.getByRole("button", { name: messages.annotationsVisible }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.annotationsVisible }),
+    );
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagram-two");
 
     rerender(
       <FactoryTopologyReplay
         layout={imageOnlyLayout("iVBORw0KGgo=")}
         messages={messages}
-        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: messages.annotationsHidden }));
-    expect(await screen.findByRole("img", { name: "Review diagram" })).toHaveAttribute(
-      "src",
-      "blob:diagram-three",
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.annotationsHidden }),
     );
+    expect(
+      await screen.findByRole("img", { name: "Review diagram" }),
+    ).toHaveAttribute("src", "blob:diagram-three");
     unmount();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:diagram-three");
     vi.unstubAllGlobals();
@@ -408,12 +468,16 @@ describe("FactoryTopologyReplay", () => {
       <FactoryTopologyReplay
         layout={imageOnlyLayout("iVBORw0KGgo=")}
         messages={messages}
-        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
-    expect(await screen.findByRole("alert", { name: "Review diagram" })).toHaveTextContent(
-      messages.imageFailed,
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Review diagram",
     );
+    expect(screen.getByRole("alert")).toHaveTextContent(messages.imageFailed);
     expect(screen.getAllByText(/No active Dispatch/)).not.toHaveLength(0);
 
     createObjectURL.mockReturnValue("blob:diagram");
@@ -421,14 +485,20 @@ describe("FactoryTopologyReplay", () => {
       <FactoryTopologyReplay
         layout={imageOnlyLayout("iVBORw0KGgo=")}
         messages={messages}
-        state={{ projection: createFactoryTopologyProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
-    expect(await screen.findByRole("img", { name: "Review diagram" })).toBeVisible();
+    expect(
+      await screen.findByRole("img", { name: "Review diagram" }),
+    ).toBeVisible();
     fireEvent.error(screen.getByRole("img", { name: "Review diagram" }));
-    expect(await screen.findByRole("alert", { name: "Review diagram" })).toHaveTextContent(
-      messages.imageFailed,
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Review diagram",
     );
+    expect(screen.getByRole("alert")).toHaveTextContent(messages.imageFailed);
     vi.unstubAllGlobals();
   });
 });

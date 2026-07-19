@@ -426,6 +426,52 @@
       }
     },
     {
+      "includes": [
+        "packages/factory-visualizers/scripts/verify-accessibility-responsive.mjs"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 700,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "packages/factory-visualizers/src/factory-topology-replay.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 400,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          },
+          "style": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 800,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["scripts/*-allowlist.mjs"],
       "linter": {
         "rules": {

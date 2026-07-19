@@ -114,14 +114,15 @@ async function verifyRecordingPresentations(browserInstance) {
     page,
     "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
   );
-  const annotationToggle = page.getByRole("button", {
-    name: "Hide annotations",
+  const showAnnotations = page.getByRole("button", {
+    name: "Show annotations",
   });
+  if (await showAnnotations.isVisible()) await showAnnotations.click();
   assert(
     await page.getByText("Escalations are reviewed here.").isVisible(),
     "The annotated recording did not render its caller-owned layout sidecar.",
   );
-  await annotationToggle.click();
+  await page.getByRole("button", { name: "Hide annotations" }).click();
   assert(
     !(await page.getByText("Escalations are reviewed here.").isVisible()),
     "Hiding annotations in the recording did not remove the annotation node.",
