@@ -63,6 +63,7 @@ async function verifyRecordingPresentations(browserInstance) {
     "factory-visualizers-factoryrecordingtopologyreplay--dense-recording",
     "factory-visualizers-factoryrecordingtopologyreplay--annotated-recording",
     "factory-visualizers-factoryrecordingtopologyreplay--localized-recording",
+    "factory-visualizers-factorytopologyreplay--emulator-ready-dense-annotations",
   ];
   for (const storyId of stories) {
     await openStory(page, storyId);

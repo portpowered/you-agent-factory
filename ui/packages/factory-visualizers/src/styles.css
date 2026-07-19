@@ -77,10 +77,10 @@
   inset-block-start: 1rem;
   inset-inline-end: 1rem;
   padding: 0.5rem 0.75rem;
-  color: var(--color-on-primary, #fff);
+  color: var(--color-on-surface);
   cursor: pointer;
-  background: var(--color-primary, var(--color-af-foundation-accent));
-  border: 1px solid var(--color-primary, var(--color-af-foundation-accent));
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-outline);
   border-radius: 0.5rem;
 }
 
