@@ -18,7 +18,7 @@ import type {
   FactoryTopologyNode,
   FactoryTopologyProjection,
 } from "@you-agent-factory/factory-replay";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   FactoryTopologyErrorBoundary,
@@ -120,6 +120,7 @@ export function projectFactoryTopologyFlow(
   messages: FactoryTopologyReplayMessages,
   selectedNodeId: string | undefined,
   onSelectNode: FactoryTopologyReplayProps["onSelectNode"],
+  prefersReducedMotion = false,
 ): FactoryTopologyFlowProjection {
   let topologyNodes: FactoryTopologyNode[];
   let connections: FactoryTopologyConnection[];
@@ -191,9 +192,11 @@ export function projectFactoryTopologyFlow(
     return {
       edges: endpointsValid
         ? connections.map((connection) => ({
-            animated: projection.activity.activeDispatchOverlays.some(
-              (overlay) => overlay.connectionIds.includes(connection.id),
-            ),
+            animated:
+              !prefersReducedMotion &&
+              projection.activity.activeDispatchOverlays.some((overlay) =>
+                overlay.connectionIds.includes(connection.id),
+              ),
             data: { relationship: connection.kind },
             id: connection.id,
             source: connection.source.nodeId,
@@ -264,6 +267,7 @@ function PreparedTopology({
 }: Omit<FactoryTopologyReplayProps, "state"> & {
   projection: FactoryTopologyReplayProjection;
 }) {
+  const prefersReducedMotion = usePrefersReducedMotion();
   const prepared = useMemo<PreparedFlow>(() => {
     try {
       const flow = projectFactoryTopologyFlow(
@@ -271,6 +275,7 @@ function PreparedTopology({
         messages,
         selectedNodeId,
         onSelectNode,
+        prefersReducedMotion,
       );
       return flow.validEndpoints
         ? { flow, status: "ready" }
@@ -281,7 +286,13 @@ function PreparedTopology({
         status: "failed",
       };
     }
-  }, [messages, onSelectNode, projection, selectedNodeId]);
+  }, [
+    messages,
+    onSelectNode,
+    prefersReducedMotion,
+    projection,
+    selectedNodeId,
+  ]);
   useDistinctTopologyErrorReport(
     prepared.status === "failed" ? prepared.error : undefined,
     onError,
@@ -302,6 +313,7 @@ function PreparedTopology({
       aria-label={messages.regionLabel}
       className="factory-topology-replay"
       data-endpoints-valid="true"
+      data-reduced-motion={prefersReducedMotion ? "true" : "false"}
     >
       <FactoryTopologyErrorBoundary
         errorKind="react-flow"
@@ -466,4 +478,31 @@ function activityCounts(
     }
   }
   return counts;
+}
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function usePrefersReducedMotion(): boolean {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    () => reducedMotionMediaQuery()?.matches ?? false,
+  );
+
+  useEffect(() => {
+    const mediaQuery = reducedMotionMediaQuery();
+    if (!mediaQuery) return;
+
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+    return () => mediaQuery.removeEventListener("change", updatePreference);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function reducedMotionMediaQuery(): MediaQueryList | undefined {
+  return typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+    ? undefined
+    : window.matchMedia(REDUCED_MOTION_QUERY);
 }

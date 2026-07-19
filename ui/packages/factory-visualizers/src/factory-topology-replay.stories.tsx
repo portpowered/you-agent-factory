@@ -58,6 +58,25 @@ export const DensePreparedProjection: Story = {
     selectedNodeId: "workstation:review",
     state: { projection: createProjection(true), status: "ready" },
   },
+  play: async ({ args, canvasElement }) => {
+    const canvas = within(canvasElement);
+    const workstation = canvas.getByRole("button", {
+      name: "workstation: Review",
+    });
+
+    for (
+      let index = 0;
+      index < 50 && workstation !== document.activeElement;
+      index++
+    ) {
+      await userEvent.tab();
+    }
+    await expect(workstation).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await expect(args.onSelectNode).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "workstation:review" }),
+    );
+  },
 };
 
 export const Loading: Story = {

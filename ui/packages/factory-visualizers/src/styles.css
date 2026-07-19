@@ -250,3 +250,18 @@
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .factory-topology-replay *,
+  .factory-timeline-scrubber *,
+  .factory-work-progress * {
+    scroll-behavior: auto;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
+
+  .factory-topology-replay .react-flow__edge.animated path {
+    animation: none;
+  }
+}

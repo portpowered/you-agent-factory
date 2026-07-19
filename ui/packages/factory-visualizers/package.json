@@ -21,7 +21,8 @@
     "prepare:dependencies": "bun run --cwd ../components build && bun run --cwd ../factory-replay build",
     "test": "vitest run --config vitest.config.ts",
     "typecheck": "bun run prepare:dependencies && tsc -p tsconfig.json --noEmit --pretty false",
-    "verify": "bun run typecheck && bun run test && bun run build-storybook"
+    "verify:accessibility-responsive": "node scripts/verify-accessibility-responsive.mjs",
+    "verify": "bun run typecheck && bun run test && bun run build-storybook && bun run verify:accessibility-responsive"
   },
   "dependencies": {
     "@you-agent-factory/components": "file:../components",
@@ -36,11 +37,13 @@
     "@storybook/react-vite": "^10.3.5",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react-swc": "^4.1.0",
     "@you-agent-factory/factory-replay": "file:../factory-replay",
     "happy-dom": "^20.9.0",
+    "jest-axe": "^10.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "storybook": "^10.3.5",

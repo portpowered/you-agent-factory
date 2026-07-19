@@ -8,6 +8,7 @@ import {
   type FactoryTopologyReplayProjection,
   projectFactoryTopologyFlow,
 } from "./factory-topology-replay";
+import { createFactoryTopologyProjection } from "./testing/factory-topology-projection";
 
 const mockFlow = vi.hoisted(() => ({ error: undefined as Error | undefined }));
 
@@ -25,7 +26,12 @@ vi.mock("@xyflow/react", () => ({
     nodeTypes,
   }: {
     children: React.ReactNode;
-    edges: Array<{ id: string; sourceHandle?: string; targetHandle?: string }>;
+    edges: Array<{
+      animated?: boolean;
+      id: string;
+      sourceHandle?: string;
+      targetHandle?: string;
+    }>;
     nodes: Array<{ data: Record<string, unknown>; id: string; type: string }>;
     nodeTypes: Record<string, ComponentType<{ data: Record<string, unknown> }>>;
   }) => {
@@ -38,6 +44,7 @@ vi.mock("@xyflow/react", () => ({
         })}
         {edges.map((edge) => (
           <span
+            data-animated={edge.animated ? "true" : "false"}
             data-edge-id={edge.id}
             data-source-handle={edge.sourceHandle}
             data-target-handle={edge.targetHandle}
@@ -74,7 +81,7 @@ describe("FactoryTopologyReplay", () => {
   });
 
   it("renders semantic endpoints and selected-tick activity and load evidence", () => {
-    const projection = createProjection();
+    const projection = createFactoryTopologyProjection();
     render(
       <FactoryTopologyReplay
         messages={messages}
@@ -98,6 +105,9 @@ describe("FactoryTopologyReplay", () => {
       document.querySelector('[data-edge-id="worker-assignment"]'),
     ).toHaveAttribute("data-target-handle", "worker-assignment-target");
     expect(
+      document.querySelector('[data-edge-id="worker-assignment"]'),
+    ).toHaveAttribute("data-animated", "true");
+    expect(
       document.querySelector(
         '[data-handle-id="worker-assignment-source"][data-handle-role="source"]',
       ),
@@ -110,7 +120,7 @@ describe("FactoryTopologyReplay", () => {
   });
 
   it("fails visibly without sending invalid endpoints to React Flow", async () => {
-    const projection = createProjection();
+    const projection = createFactoryTopologyProjection();
     projection.topology.connections.push({
       ...projection.topology.connections[0],
       id: "invalid-edge",
@@ -191,7 +201,7 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
   });
 
   it("sanitizes projection failures and reports each distinct failure once", async () => {
-    const projection = createProjection();
+    const projection = createFactoryTopologyProjection();
     Object.defineProperty(projection, "topology", {
       get() {
         throw Object.assign(new Error("secret projection payload"), {
@@ -232,7 +242,7 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
   });
 
   it("classifies invalid layout input and recovers from a replacement projection", async () => {
-    const invalid = createProjection();
+    const invalid = createFactoryTopologyProjection();
     invalid.topology.nodes[0] = {
       ...invalid.topology.nodes[0],
       kind: "invalid-kind" as FactoryTopologyReplayProjection["topology"]["nodes"][number]["kind"],
@@ -256,7 +266,10 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
       <FactoryTopologyReplay
         messages={messages}
         onError={onError}
-        state={{ projection: createProjection(), status: "ready" }}
+        state={{
+          projection: createFactoryTopologyProjection(),
+          status: "ready",
+        }}
       />,
     );
     expect(await screen.findByTestId("react-flow")).toBeVisible();
@@ -265,7 +278,7 @@ describe("FactoryTopologyReplay controlled states and failures", () => {
 
 describe("FactoryTopologyReplay controlled updates", () => {
   it("emits selection intent while selection styling remains host-controlled", () => {
-    const projection = createProjection();
+    const projection = createFactoryTopologyProjection();
     const original = structuredClone(projection);
     const onSelectNode = vi.fn();
     const { rerender } = render(
@@ -301,8 +314,8 @@ describe("FactoryTopologyReplay controlled updates", () => {
   });
 
   it("replaces activity overlays without changing stable topology identities", () => {
-    const first = createProjection();
-    const second = createProjection();
+    const first = createFactoryTopologyProjection();
+    const second = createFactoryTopologyProjection();
     second.activity = {
       ...second.activity,
       activeDispatchOverlays: [],
@@ -349,108 +362,3 @@ describe("FactoryTopologyReplay controlled updates", () => {
     );
   });
 });
-
-function createProjection(): FactoryTopologyReplayProjection {
-  return {
-    activity: {
-      activeDispatchOverlays: [
-        {
-          connectionIds: ["worker-assignment"],
-          dispatchId: "dispatch-1",
-          evidence: {
-            resources: "known",
-            route: "known",
-            work: "known",
-            worker: "known",
-            workstation: "known",
-          },
-          id: "overlay:dispatch-1",
-          resourceNodeIds: ["resource:gpu"],
-          startedTick: 7,
-          workerNodeId: "worker:alice",
-          workstationNodeId: "workstation:review",
-        },
-      ],
-      activeWorkstationNodeIds: ["workstation:review"],
-      issues: [],
-      resourceOccupancy: [],
-      selectedTick: 8,
-    },
-    load: {
-      issues: [],
-      resourceOccupancy: [
-        {
-          availableQuantity: 2,
-          capacity: 4,
-          capacityEvidence: "known",
-          evidence: "known",
-          occupiedQuantity: 2,
-          resourceId: "gpu",
-          resourceNodeId: "resource:gpu",
-        },
-      ],
-      selectedTick: 8,
-      workStateCounts: [
-        {
-          count: 3,
-          evidence: "known",
-          workStateId: "queued",
-          workStateNodeId: "work-state:task:queued",
-          workTypeId: "task",
-        },
-      ],
-    },
-    topology: {
-      connections: [
-        {
-          id: "worker-assignment",
-          kind: "worker-assignment",
-          source: {
-            handleId: "worker-assignment-source",
-            nodeId: "worker:alice",
-          },
-          target: {
-            handleId: "worker-assignment-target",
-            nodeId: "workstation:review",
-          },
-        },
-      ],
-      issues: [],
-      nodes: [
-        {
-          capacity: 4,
-          entityId: "gpu",
-          handles: [],
-          id: "resource:gpu",
-          kind: "resource",
-          label: "GPU",
-        },
-        {
-          entityId: "alice",
-          handles: [{ id: "worker-assignment-source", role: "source" }],
-          id: "worker:alice",
-          kind: "worker",
-          label: "Alice",
-        },
-        {
-          category: "INITIAL",
-          entityId: "task:queued",
-          handles: [],
-          id: "work-state:task:queued",
-          kind: "work-state",
-          label: "Queued",
-          workTypeId: "task",
-        },
-        {
-          entityId: "review",
-          handles: [{ id: "worker-assignment-target", role: "target" }],
-          id: "workstation:review",
-          kind: "workstation",
-          label: "Review",
-        },
-      ],
-      ok: true,
-      selectedTick: 8,
-    },
-  };
-}

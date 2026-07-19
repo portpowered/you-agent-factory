@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -83,6 +85,21 @@ describe("FactoryTimelineScrubber controlled interaction", () => {
     expect(slider).toHaveFocus();
     expect(onSelectTick).toHaveBeenCalledWith(8);
     expect(screen.getByText("Tick 7 of 12")).toBeInTheDocument();
+  });
+
+  it("is keyboard ordered and has no automated accessibility violations", async () => {
+    const user = userEvent.setup();
+    const { container } = renderTimeline();
+
+    await user.tab();
+    expect(
+      screen.getByRole("slider", { name: messages.sliderLabel }),
+    ).toHaveFocus();
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: messages.followLatest }),
+    ).toHaveFocus();
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it("reports follow-latest intent only from history mode", () => {

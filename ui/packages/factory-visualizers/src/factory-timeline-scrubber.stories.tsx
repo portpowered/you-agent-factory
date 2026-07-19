@@ -81,3 +81,37 @@ export const DisabledByHost: Story = {
     disabled: true,
   },
 };
+
+export const GermanHistory: Story = {
+  args: {
+    formatTick: new Intl.NumberFormat("de-DE").format,
+    messages: {
+      alreadyFollowingLatest: "Der neueste Fabrikschritt wird angezeigt.",
+      currentMode: "Die aktuelle Fabrik wird angezeigt.",
+      disabled: "Die Zeitleistenauswahl wurde deaktiviert.",
+      followLatest: "Neuestem Schritt folgen",
+      historyMode: "Der Fabrikverlauf wird angezeigt.",
+      position: (selected, latest) => `Schritt ${selected} von ${latest}`,
+      regionLabel: "Zeitleiste der Fabrikwiedergabe",
+      sliderLabel: "Wiedergabeschritt auswählen",
+      title: "Wiedergabezeitleiste",
+      unavailable: "Keine Wiedergabeschritte verfügbar.",
+    },
+    state: {
+      earliestTick: 0,
+      latestTick: 12000,
+      mode: "history",
+      selectedTick: 7000,
+      status: "available",
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("Schritt 7.000 von 12.000")).toBeVisible();
+    await expect(
+      canvas.getByRole("slider", {
+        name: "Wiedergabeschritt auswählen",
+      }),
+    ).toHaveAttribute("aria-valuetext", "7.000");
+  },
+};

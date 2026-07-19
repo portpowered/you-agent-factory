@@ -2,6 +2,7 @@
 
 import { render, screen } from "@testing-library/react";
 import type { FactoryWorkProgressProjection } from "@you-agent-factory/factory-replay";
+import { axe } from "jest-axe";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -120,6 +121,24 @@ describe("WorkProgressVisualizer", () => {
     );
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
     expect(screen.getByText("0 total items")).toBeInTheDocument();
+  });
+
+  it("has no automated accessibility violations with every status category", async () => {
+    const { container } = render(
+      <WorkProgressVisualizer
+        formatNumber={String}
+        messages={messages}
+        projection={projection({
+          queued: 1,
+          active: 1,
+          completed: 1,
+          failed: 1,
+          unclassified: 1,
+        })}
+      />,
+    );
+
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
 
