@@ -63,11 +63,12 @@ const timelineMessages: FactoryTimelineScrubberMessages = {
   sliderLabel: "Selected tick", title: "Replay timeline", unavailable: "Unavailable",
 };
 const topologyMessages: FactoryTopologyReplayMessages = {
-  activeDispatches: (count) => count + " active Dispatches", annotationsHidden: "Show annotations", annotationsVisible: "Hide annotations",
+  activeDispatches: (count) => count + " active Dispatches", activeWorkDuration: (ticks) => "Active for " + ticks + " ticks", activeWorkOverflow: (count) => count + " more active Work", activeWorkRegionLabel: "Active Work",
+  annotationsHidden: "Show annotations", annotationsVisible: "Hide annotations",
   empty: "No topology", failed: "Topology failed", imageFailed: "Annotation image failed", imageLoading: "Loading annotation image",
-  inactiveDispatches: "No active Dispatch", loading: "Loading topology", nodeLabel: (kind, label) => kind + ": " + label,
+  inactiveDispatches: "No active Dispatch", legendActiveRoute: "Active route", legendInactiveRoute: "Inactive route", legendLabel: "Topology legend", loading: "Loading topology", nodeLabel: (kind, label) => kind + ": " + label,
   regionLabel: "Factory topology", resourceOccupancy: (occupied, capacity) => occupied + " of " + capacity + " occupied",
-  resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected",
+  resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected", viewportControlsLabel: "Topology viewport controls",
   workStateCount: (count) => count + " Work", workStateCountUnavailable: "Work unavailable",
 };
 const recording = parseFactoryRecording(supportPlayback);

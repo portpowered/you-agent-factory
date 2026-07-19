@@ -87,10 +87,10 @@ async function verifyChromeOperationalDetail(browserInstance) {
       (await page.getByText("7 Work in this state").count()) > 0,
       `${storyId} omitted Work State evidence.`,
     );
-    assert(
-      (await page.locator(".react-flow__edge").count()) > 0,
-      `${storyId} omitted active-route evidence.`,
-    );
+    await page
+      .locator(".react-flow__edge")
+      .first()
+      .waitFor({ state: "attached", timeout: 5_000 });
   }
   await context.close();
 }
