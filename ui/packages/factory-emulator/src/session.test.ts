@@ -3,6 +3,7 @@ import type {
   FactoryDefinition,
   FactoryEvent,
 } from "@you-agent-factory/client";
+import { safeParseFactoryRecording } from "@you-agent-factory/client";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { FactoryEventSink } from "./event-sink.js";
 import { RecordingFactoryEventSink } from "./recording-sink.js";
@@ -19,6 +20,7 @@ import {
   type FactoryEmulatorSession,
   type FactoryEmulatorSubmissionError,
 } from "./session.js";
+import { replayFactoryEmulatorSubmissions } from "./submission-replay.js";
 
 const factory = {
   name: "lifecycle-factory",
@@ -403,6 +405,173 @@ describe("Factory emulator dependency submission", () => {
     const first = await firstTry.submit(valid);
     expect(retried.state.works).toEqual(first.state.works);
     expect(retried.batch).toEqual(first.batch);
+  });
+
+  it("emits canonical request and relationship evidence in stable order", async () => {
+    const emulator = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+    );
+    const started = await emulator.start();
+    const submitted = await emulator.submit({
+      works: [
+        {
+          name: "blocked",
+          workType: "task",
+          state: "ready",
+          input: "blocked payload",
+        },
+        { name: "first", workType: "task", state: "ready" },
+        { name: "second", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "second",
+          requiredState: "done",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "first",
+        },
+      ],
+    });
+
+    expect(submitted.batch.map(({ type }) => type)).toEqual([
+      "WORK_REQUEST",
+      "RELATIONSHIP_CHANGE_REQUEST",
+      "RELATIONSHIP_CHANGE_REQUEST",
+    ]);
+    expect(submitted.batch.map(({ context }) => context.sequence)).toEqual([
+      3, 4, 5,
+    ]);
+    const request = submitted.batch[0];
+    if (request?.type !== "WORK_REQUEST") throw new Error("missing request");
+    const relations = (request.payload as { relations?: unknown[] }).relations;
+    expect(relations).toEqual(
+      submitted.batch
+        .slice(1)
+        .map((event) => (event.payload as { relation: unknown }).relation),
+    );
+    expect(relations).toEqual([
+      expect.objectContaining({
+        sourceWorkName: "blocked",
+        targetWorkName: "second",
+        targetWorkId: expect.any(String),
+        requiredState: "done",
+      }),
+      expect.objectContaining({
+        sourceWorkName: "blocked",
+        targetWorkName: "first",
+        targetWorkId: expect.any(String),
+        requiredState: "complete",
+      }),
+    ]);
+    expect(
+      safeParseFactoryRecording({
+        schemaVersion: "factory-recording/v1",
+        id: "dependency-recording",
+        title: "Dependency recording",
+        factory: executionFactory,
+        events: [...started.batches.flat(), ...submitted.batch],
+      }),
+    ).toMatchObject({ success: true });
+
+    const replayed = replayFactoryEmulatorSubmissions([
+      ...started.batches.flat(),
+      ...submitted.batch,
+    ]);
+    expect(replayed).toEqual(
+      submitted.state.works.map((work) => ({
+        submissionId: work.submissionId,
+        workId: work.workId,
+        requestId: work.requestId,
+        traceId: work.traceId,
+        workType: work.workType,
+        state: work.state,
+        ...(work.input === undefined ? {} : { input: work.input }),
+        ...(work.relations === undefined ? {} : { relations: work.relations }),
+      })),
+    );
+
+    emulator.reset();
+    const rerunStart = await emulator.start();
+    const rerunSubmission = await emulator.submit({
+      works: [
+        {
+          name: "blocked",
+          workType: "task",
+          state: "ready",
+          input: "blocked payload",
+        },
+        { name: "first", workType: "task", state: "ready" },
+        { name: "second", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "second",
+          requiredState: "done",
+        },
+        {
+          type: "DEPENDS_ON",
+          sourceWorkName: "blocked",
+          targetWorkName: "first",
+        },
+      ],
+    });
+    expect(rerunStart.batches).toEqual(started.batches);
+    expect(rerunSubmission).toEqual(submitted);
+  });
+
+  it("keeps relationship state and identity uncommitted until one sink batch succeeds", async () => {
+    const attempts: FactoryEvent[][] = [];
+    let rejectSubmission = true;
+    const emulator = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+      {
+        write: async (events) => {
+          attempts.push(structuredClone(events) as FactoryEvent[]);
+          if (events[0]?.type === "WORK_REQUEST" && rejectSubmission) {
+            rejectSubmission = false;
+            throw new Error("temporary relationship write failure");
+          }
+        },
+      },
+    );
+    await emulator.start();
+    const before = emulator.state();
+    const batch = {
+      works: [
+        { name: "blocked", workType: "task", state: "ready" },
+        { name: "target", workType: "task", state: "ready" },
+      ],
+      relations: [
+        {
+          type: "DEPENDS_ON" as const,
+          sourceWorkName: "blocked",
+          targetWorkName: "target",
+        },
+      ],
+    };
+
+    await expect(emulator.submit(batch)).rejects.toThrow(
+      "temporary relationship write failure",
+    );
+    expect(emulator.state()).toEqual(before);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      pendingTransaction: { command: "submit", eventCount: 2 },
+    });
+    const retried = await emulator.submit(batch);
+    expect(attempts.slice(-2)).toEqual([retried.batch, retried.batch]);
+    expect(retried.state.counters).toEqual({
+      commands: before.counters.commands + 1,
+      events: before.counters.events + 2,
+      completedDispatches: before.counters.completedDispatches,
+    });
   });
 });
 

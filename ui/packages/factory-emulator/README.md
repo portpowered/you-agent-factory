@@ -101,6 +101,14 @@ complete request is validated before its atomic sink write, so an invalid item
 or graph cannot partially create Work. Submissions remain available while
 other Work is active and after the session returns to idle.
 
+Accepted relationship batches emit one canonical `WORK_REQUEST` carrying the
+resolved relations, followed by one `RELATIONSHIP_CHANGE_REQUEST` per relation
+in declared order. The complete event sequence is one sink batch, and state and
+identity counters commit only after that batch succeeds. Use
+`replayFactoryEmulatorSubmissions(events)` to reconstruct detached Work identity,
+initial state, payload, and outbound relationships from canonical submission
+events.
+
 Virtual time advances only when the host calls `advanceBy(durationMs)` or
 `advanceToNext()`. Ready Work starts in one deterministic scheduler batch;
 `advanceToNext()` then jumps to the earliest due instant and completes every

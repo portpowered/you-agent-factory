@@ -65,3 +65,7 @@ export {
   type FactoryEmulatorSubmitReceipt,
   type ResolvedFactoryEmulatorLimits,
 } from "./session.js";
+export {
+  type FactoryEmulatorReplayedWork,
+  replayFactoryEmulatorSubmissions,
+} from "./submission-replay.js";

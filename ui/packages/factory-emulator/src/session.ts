@@ -40,6 +40,7 @@ import {
   FactoryEmulatorExecutionPausedError,
   FactoryEmulatorLifecycleError,
   type FactoryEmulatorLimits,
+  type FactoryEmulatorNormalizedRelation,
   FactoryEmulatorPendingCommandError,
   type FactoryEmulatorResetReceipt,
   type FactoryEmulatorSession,
@@ -720,13 +721,92 @@ function eventWorkFor(
   };
 }
 
+function workRequestEvent(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  sequence: number,
+  requestId: string,
+  works: readonly FactoryEmulatorSessionWork[],
+  relations: readonly FactoryEmulatorNormalizedRelation[],
+): FactoryEvent {
+  return {
+    schemaVersion: "agent-factory.event.v1",
+    id: identity("event", state.sessionId, sequence, "WORK_REQUEST"),
+    type: "WORK_REQUEST",
+    context: eventContext(state, sequence, state.virtualTime, {
+      requestId,
+      traceIds: works.map(({ traceId }) => traceId),
+      workIds: works.map(({ workId }) => workId),
+    }),
+    payload: {
+      type: "FACTORY_REQUEST_BATCH",
+      source: "emulator",
+      works: works.map((work) => ({
+        name: work.submissionId,
+        workId: work.workId,
+        requestId: work.requestId,
+        workTypeName: work.workType,
+        state: {
+          name: work.state,
+          type:
+            configuration.factory.workTypes
+              ?.find(({ name }) => name === work.workType)
+              ?.states.find(({ name }) => name === work.state)?.type ??
+            "INITIAL",
+        },
+        currentChainingTraceId: work.traceId,
+        traceId: work.traceId,
+        ...(work.input === undefined ? {} : { payload: work.input }),
+      })),
+      ...(relations.length === 0
+        ? {}
+        : { relations: relations.map((relation) => ({ ...relation })) }),
+    },
+  };
+}
+
+function relationshipChangeEvents(
+  state: StartedState,
+  sequence: number,
+  requestId: string,
+  workByName: ReadonlyMap<string, FactoryEmulatorSessionWork>,
+  relations: readonly FactoryEmulatorNormalizedRelation[],
+): readonly FactoryEvent[] {
+  return relations.map((relation, ordinal) => {
+    const source = workByName.get(relation.sourceWorkName);
+    const target = workByName.get(relation.targetWorkName);
+    if (source === undefined || target === undefined) {
+      throw new Error("Validated submission relationship endpoint is missing.");
+    }
+    const relationshipSequence = sequence + ordinal + 1;
+    return {
+      schemaVersion: "agent-factory.event.v1",
+      id: identity(
+        "event",
+        state.sessionId,
+        relationshipSequence,
+        "RELATIONSHIP_CHANGE_REQUEST",
+        requestId,
+        ordinal,
+      ),
+      type: "RELATIONSHIP_CHANGE_REQUEST",
+      context: eventContext(state, relationshipSequence, state.virtualTime, {
+        requestId,
+        traceIds: [source.traceId, target.traceId],
+        workIds: [source.workId, target.workId],
+      }),
+      payload: { relation },
+    } satisfies FactoryEvent;
+  });
+}
+
 function workRequestCalculation(
   configuration: ValidatedConfiguration,
   state: StartedState,
   submissionBatch: ValidatedSubmissionBatch,
   command: "start" | "submit",
 ): {
-  readonly event: FactoryEvent;
+  readonly events: readonly FactoryEvent[];
   readonly works: readonly FactoryEmulatorSessionWork[];
 } {
   const requestId = identity(
@@ -781,40 +861,32 @@ function workRequestCalculation(
       }));
     return relations.length === 0 ? work : { ...work, relations };
   });
+  const normalizedRelations = submissionBatch.relations.map((relation) => ({
+    type: "DEPENDS_ON" as const,
+    sourceWorkName: relation.sourceWorkName,
+    targetWorkName: relation.targetWorkName,
+    targetWorkId: resolvedWorkId(relation.targetWorkName),
+    requiredState: relation.requiredState ?? "complete",
+  }));
   const sequence = state.counters.events;
+  const request = workRequestEvent(
+    configuration,
+    state,
+    sequence,
+    requestId,
+    normalizedWorks,
+    normalizedRelations,
+  );
+  const relationshipEvents = relationshipChangeEvents(
+    state,
+    sequence,
+    requestId,
+    workByName,
+    normalizedRelations,
+  );
   return {
     works: normalizedWorks,
-    event: {
-      schemaVersion: "agent-factory.event.v1",
-      id: identity("event", state.sessionId, sequence, "WORK_REQUEST"),
-      type: "WORK_REQUEST",
-      context: eventContext(state, sequence, state.virtualTime, {
-        requestId,
-        traceIds: normalizedWorks.map(({ traceId }) => traceId),
-        workIds: normalizedWorks.map(({ workId }) => workId),
-      }),
-      payload: {
-        type: "FACTORY_REQUEST_BATCH",
-        source: "emulator",
-        works: normalizedWorks.map((work) => ({
-          name: work.submissionId,
-          workId: work.workId,
-          requestId: work.requestId,
-          workTypeName: work.workType,
-          state: {
-            name: work.state,
-            type:
-              configuration.factory.workTypes
-                ?.find(({ name }) => name === work.workType)
-                ?.states.find(({ name }) => name === work.state)?.type ??
-              "INITIAL",
-          },
-          currentChainingTraceId: work.traceId,
-          traceId: work.traceId,
-          ...(work.input === undefined ? {} : { payload: work.input }),
-        })),
-      },
-    },
+    events: [request, ...relationshipEvents],
   };
 }
 
@@ -1308,7 +1380,7 @@ export function createFactoryEmulatorSession(
           initial,
           "start",
         );
-        const submissionBatch = [calculation.event];
+        const submissionBatch = calculation.events;
         batches.push(submissionBatch);
         combined = [...bootstrap, ...submissionBatch];
         candidate = {
@@ -1364,14 +1436,14 @@ export function createFactoryEmulatorSession(
         submissions,
         "submit",
       );
-      const batch = [calculation.event];
+      const batch = calculation.events;
       const candidate: StartedState = {
         ...state,
         works: [...state.works, ...calculation.works],
         counters: {
           ...state.counters,
           commands: state.counters.commands + 1,
-          events: state.counters.events + 1,
+          events: state.counters.events + batch.length,
         },
       };
       await write("submit", retryKey, batch, candidate);
