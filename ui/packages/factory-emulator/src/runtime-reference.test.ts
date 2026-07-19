@@ -3,9 +3,37 @@ import {
   loadFactoryEmulatorRuntimeReferences,
   safeParseFactoryEmulatorRuntimeReference,
 } from "./runtime-reference.js";
+import { compareFactoryEmulatorRuntimeReference } from "./runtime-reference-conformance.js";
 import { runtimeReferenceFixtures } from "./runtime-reference-fixtures.js";
 
 describe("frozen runtime references", () => {
+  it("compares each supported reference at every logical tick", async () => {
+    for (const reference of loadFactoryEmulatorRuntimeReferences()) {
+      await expect(
+        compareFactoryEmulatorRuntimeReference(reference),
+      ).resolves.toEqual({
+        matches: true,
+      });
+    }
+  });
+
+  it("reports the fixture, first divergent tick, surface, expected, and actual semantics", async () => {
+    const reference = structuredClone(runtimeReferenceFixtures[0]);
+    reference.ticks[2].semantics.dispatchChoices = ["wrong:input"];
+    await expect(
+      compareFactoryEmulatorRuntimeReference(reference),
+    ).resolves.toEqual({
+      matches: false,
+      divergence: {
+        fixture: "basic-execution",
+        logicalTick: 2,
+        surface: "dispatchChoices",
+        expected: ["wrong:input"],
+        actual: ["execute:input"],
+      },
+    });
+  });
+
   it("loads documented references for every first-story behavior in canonical tick order", () => {
     const references = loadFactoryEmulatorRuntimeReferences();
     expect(references.map(({ id }) => id)).toEqual([
@@ -61,6 +89,22 @@ describe("frozen runtime references", () => {
         expect.objectContaining({
           code: "unexpected_event_kind",
           path: ["ticks", 1, "eventKinds", 0],
+        }),
+      ]),
+    });
+  });
+
+  it("rejects a fixture that omits per-tick semantic evidence", () => {
+    const invalid = structuredClone(runtimeReferenceFixtures[0]) as {
+      ticks: { semantics?: unknown }[];
+    };
+    delete invalid.ticks[0]?.semantics;
+    expect(safeParseFactoryEmulatorRuntimeReference(invalid)).toMatchObject({
+      success: false,
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "missing_semantics",
+          path: ["ticks", 0, "semantics"],
         }),
       ]),
     });

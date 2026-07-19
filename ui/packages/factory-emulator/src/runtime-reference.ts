@@ -35,6 +35,17 @@ export interface FactoryEmulatorRuntimeReferenceProvenance {
 export interface FactoryEmulatorRuntimeReferenceTick {
   readonly logicalTick: number;
   readonly eventKinds: readonly FactoryEvent["type"][];
+  readonly semantics: FactoryEmulatorRuntimeReferenceSemantics;
+}
+
+/** Stable, identity- and time-normalized evidence observed after one logical tick. */
+export interface FactoryEmulatorRuntimeReferenceSemantics {
+  readonly dispatchChoices: readonly string[];
+  readonly consumedWork: readonly string[];
+  readonly outcomes: readonly string[];
+  readonly routes: readonly string[];
+  readonly terminalStates: readonly string[];
+  readonly replayProjection: readonly string[];
 }
 
 export interface FactoryEmulatorRuntimeReference {
@@ -55,6 +66,7 @@ export type FactoryEmulatorRuntimeReferenceIssueCode =
   | "invalid_tick_order"
   | "invalid_value"
   | "missing_required_data"
+  | "missing_semantics"
   | "unexpected_event_kind";
 
 export interface FactoryEmulatorRuntimeReferenceIssue {
@@ -214,6 +226,32 @@ export function safeParseFactoryEmulatorRuntimeReference(
         "Expected the ordered event kinds for this tick.",
       );
       continue;
+    }
+    if (!isRecord(tick.semantics)) {
+      issue(
+        issues,
+        "missing_semantics",
+        ["ticks", index, "semantics"],
+        "Expected normalized semantic evidence for this logical tick.",
+      );
+    } else {
+      for (const surface of [
+        "dispatchChoices",
+        "consumedWork",
+        "outcomes",
+        "routes",
+        "terminalStates",
+        "replayProjection",
+      ] as const) {
+        if (!Array.isArray(tick.semantics[surface])) {
+          issue(
+            issues,
+            "missing_semantics",
+            ["ticks", index, "semantics", surface],
+            `Expected ${surface} semantic evidence.`,
+          );
+        }
+      }
     }
     for (const [eventIndex, eventKind] of tick.eventKinds.entries()) {
       if (!factoryEventKinds.has(eventKind as FactoryEvent["type"])) {

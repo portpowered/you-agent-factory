@@ -22,11 +22,18 @@ export {
   type FactoryEmulatorRuntimeReferenceIssue,
   type FactoryEmulatorRuntimeReferenceIssueCode,
   type FactoryEmulatorRuntimeReferenceProvenance,
+  type FactoryEmulatorRuntimeReferenceSemantics,
   type FactoryEmulatorRuntimeReferenceTick,
   loadFactoryEmulatorRuntimeReferences,
   type SafeParseFactoryEmulatorRuntimeReferenceResult,
   safeParseFactoryEmulatorRuntimeReference,
 } from "./runtime-reference.js";
+export {
+  compareFactoryEmulatorRuntimeReference,
+  type FactoryEmulatorRuntimeReferenceComparisonSurface,
+  type FactoryEmulatorRuntimeReferenceConformanceResult,
+  type FactoryEmulatorRuntimeReferenceDivergence,
+} from "./runtime-reference-conformance.js";
 export {
   FACTORY_EMULATOR_SCENARIO_SCHEMA_VERSION,
   type FactoryEmulatorInitialSubmission,

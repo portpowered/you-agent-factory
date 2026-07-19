@@ -31,15 +31,6 @@ that consumes the replay kernel.
 - `packages/factory-replay/src/index.d.ts` is the public typed boundary. It
   uses `FactoryEvent` from `@you-agent-factory/client`; do not substitute a
   dashboard-local event type at this boundary.
-- `ui/packages/factory-emulator/src/runtime-reference.ts` owns validation and
-  detached loading of package-local frozen emulator references. Keep fixture
-  provenance, strictly increasing logical ticks, and the flattened ordered
-  Factory-event kind sequence validated before a semantic conformance run.
-- `ui/packages/factory-emulator/src/runtime-reference-fixtures.ts` owns the
-  frozen supported-subset corpus. Add new parity behavior there only with
-  public behavior, documentation, or recording provenance; later comparison
-  layers must consume the validated loader rather than unvalidated fixture
-  modules.
 - `packages/factory-replay/test/factory-replay.test.mjs` proves observable
   ordering, duplicate-ID acceptance, current selection, fixed historical
   projection, checkpoint-plus-tail equivalence, selected-tick topology,

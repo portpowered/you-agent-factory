@@ -13,6 +13,14 @@ const eventKinds = [
   "DISPATCH_RESPONSE",
 ] as const;
 
+const emptySemantics = {
+  dispatchChoices: [],
+  consumedWork: [],
+  outcomes: [],
+  routes: [],
+  terminalStates: [],
+} as const;
+
 function cloneFactory(factory: FactoryDefinition): FactoryDefinition {
   return JSON.parse(JSON.stringify(factory)) as FactoryDefinition;
 }
@@ -31,6 +39,66 @@ function fixture(
   factory: FactoryEmulatorRuntimeReference["factory"],
   scenario: FactoryEmulatorRuntimeReference["scenario"],
 ): FactoryEmulatorRuntimeReference {
+  const initialSubmissions = Array.isArray(scenario.initialSubmissions)
+    ? scenario.initialSubmissions
+    : scenario.initialSubmissions !== undefined &&
+        "works" in scenario.initialSubmissions
+      ? scenario.initialSubmissions.works
+      : [];
+  const replayProjection = initialSubmissions
+    .map(({ name, workType, state }) => `${name}:${workType}:${state}`)
+    .sort();
+  const terminal = `${initialSubmissions[0]?.workType}:done`;
+  const outputCount = firstWorkstation(factory).outputs?.length ?? 0;
+  const holdsAtVisitGuard = firstWorkstation(factory).type === "LOGICAL_MOVE";
+  const ticks = holdsAtVisitGuard
+    ? [
+        {
+          logicalTick: 0,
+          eventKinds: eventKinds.slice(0, 3),
+          semantics: { ...emptySemantics, replayProjection: [] },
+        },
+        {
+          logicalTick: 1,
+          eventKinds: eventKinds.slice(3, 4),
+          semantics: { ...emptySemantics, replayProjection },
+        },
+      ]
+    : [
+        {
+          logicalTick: 0,
+          eventKinds: eventKinds.slice(0, 3),
+          semantics: { ...emptySemantics, replayProjection: [] },
+        },
+        {
+          logicalTick: 1,
+          eventKinds: eventKinds.slice(3, 4),
+          semantics: { ...emptySemantics, replayProjection },
+        },
+        {
+          logicalTick: 2,
+          eventKinds: eventKinds.slice(4, 5),
+          semantics: {
+            ...emptySemantics,
+            dispatchChoices: [
+              `${firstWorkstation(factory).name}:${initialSubmissions.map(({ name }) => name).join(",")}`,
+            ],
+            replayProjection,
+          },
+        },
+        {
+          logicalTick: 3,
+          eventKinds: eventKinds.slice(5),
+          semantics: {
+            ...emptySemantics,
+            consumedWork: initialSubmissions.map(({ name }) => name).sort(),
+            outcomes: ["ACCEPTED"],
+            routes: Array.from({ length: outputCount }, () => terminal),
+            terminalStates: Array.from({ length: outputCount }, () => terminal),
+            replayProjection,
+          },
+        },
+      ];
   return {
     schemaVersion: "factory-emulator-runtime-reference/v1",
     id,
@@ -38,12 +106,8 @@ function fixture(
     provenance: { kind: "public-documentation", source },
     factory,
     scenario,
-    ticks: [
-      { logicalTick: 0, eventKinds: eventKinds.slice(0, 3) },
-      { logicalTick: 1, eventKinds: eventKinds.slice(3, 5) },
-      { logicalTick: 2, eventKinds: eventKinds.slice(5) },
-    ],
-    orderedEventKinds: eventKinds,
+    ticks,
+    orderedEventKinds: ticks.flatMap(({ eventKinds }) => eventKinds),
   };
 }
 
@@ -135,6 +199,20 @@ multiInputOutputWorkstation.outputs.push({
   workType: "task",
   state: "done",
 });
+const multiInputOutputScenario = scenario(
+  "multi-input-output",
+  multiInputOutput.name,
+  "execute",
+);
+if (!Array.isArray(multiInputOutputScenario.initialSubmissions)) {
+  throw new Error("Frozen multi-input reference requires direct submissions.");
+}
+multiInputOutputScenario.initialSubmissions.push({
+  name: "input-two",
+  workType: "task",
+  state: "ready",
+  input: "second frozen input",
+});
 const logicalMove = cloneFactory(
   standardFactory("runtime-reference-logical-move", "move"),
 );
@@ -180,7 +258,7 @@ export const runtimeReferenceFixtures = [
     "multi-input-output",
     "Multi-input and multi-output",
     multiInputOutput,
-    scenario("multi-input-output", multiInputOutput.name, "execute"),
+    multiInputOutputScenario,
   ),
   fixture(
     "propagation",

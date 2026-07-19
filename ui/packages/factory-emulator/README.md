@@ -266,3 +266,11 @@ fixture's public provenance, Factory and scenario, strictly ordered logical
 ticks, and flattened Factory-event kind sequence before a conformance consumer
 can compare emulator semantics. These references remain frontend-only and do
 not invoke a backend, Go, or WASM fixture generator.
+
+`compareFactoryEmulatorRuntimeReference(reference)` runs a reference through a
+fresh deterministic session and compares each logical tick independently. It
+compares ordered event kinds plus normalized dispatch choices, consumed Work,
+outcomes, routes, terminal states, and submission replay projection. Event
+identities and virtual timestamps are deliberately excluded; all other compared
+values are semantic evidence. A mismatch returns the fixture ID, first divergent
+logical tick, comparison surface, expected value, and actual value.
