@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
@@ -237,5 +237,145 @@ describe("hosted topology replay session restoration", () => {
     expect(screen.getByText("Loading Factory topology...")).toBeVisible();
     expect(screen.queryByText("session-a-state")).toBeNull();
     expect(screen.queryByText("session-b-state")).toBeNull();
+  });
+});
+
+describe("hosted topology replay status and accessibility", () => {
+  it("renders an intentional empty topology state with unavailable controls", () => {
+    const session = identity("session-empty");
+    const emptyEvent: FactoryEvent = {
+      context: {
+        eventTime: "2026-07-19T04:00:01.000Z",
+        sequence: 1,
+        tick: 1,
+      },
+      id: "empty-topology",
+      payload: {
+        factory: {
+          name: "Empty factory",
+          workers: [],
+          workTypes: [],
+          workstations: [],
+        },
+      },
+      type: FACTORY_EVENT_TYPES.initialStructureRequest,
+    };
+    act(() => {
+      useFactoryTimelineStore
+        .getState()
+        .appendEventForEntry(session, emptyEvent);
+      useDashboardStreamStore.setState({
+        resolvedStreamIdentity: session,
+        streamState: liveStreamState,
+      });
+    });
+
+    render(<HostedTopologyReplay />);
+
+    expect(
+      screen.getByText("No Factory topology is available at this tick."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("slider", { name: "Select Factory replay tick" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps the cached topology visible with localized reconnect status", () => {
+    const session = identity("session-a");
+    act(() => {
+      useFactoryTimelineStore.getState().appendEventForEntry(
+        session,
+        topologyEvent({
+          id: "initial",
+          sequence: 1,
+          stateName: "queued",
+          tick: 1,
+          workTypeName: "story",
+        }),
+      );
+      useDashboardStreamStore.setState({
+        resolvedStreamIdentity: session,
+        streamState: { message: "transport detail", status: "reconnecting" },
+      });
+    });
+
+    render(<HostedTopologyReplay locale="zh-CN" />);
+
+    expect(
+      screen.getByText("正在重新连接工厂更新。正在显示最后收到的状态。"),
+    ).toHaveAttribute("role", "status");
+    expect(screen.getByText("queued")).toBeInTheDocument();
+    expect(
+      screen.getByRole("slider", { name: "选择工厂重放时刻" }),
+    ).toHaveAttribute("aria-valuetext", "时刻 1");
+    expect(screen.queryByText("transport detail")).toBeNull();
+  });
+
+  it("renders a contained transport failure without an inapplicable retry", () => {
+    act(() => {
+      useDashboardStreamStore.setState({
+        resolvedStreamIdentity: null,
+        streamState: {
+          message: "sensitive transport detail",
+          status: "offline",
+        },
+      });
+    });
+
+    render(<HostedTopologyReplay />);
+
+    const topologyFailure = screen.getByText(
+      "The Factory topology could not be displayed.",
+    ).parentElement;
+    expect(topologyFailure).toHaveAttribute("role", "alert");
+    expect(
+      screen.getByText(
+        "Factory updates are unavailable. Showing the last received state.",
+      ),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.getByRole("region", { name: "Factory topology" }),
+    ).toContainElement(topologyFailure);
+    expect(screen.queryByRole("button", { name: "Retry topology" })).toBeNull();
+    expect(screen.queryByText("sensitive transport detail")).toBeNull();
+    expect(
+      screen.getByRole("slider", { name: "Select Factory replay tick" }),
+    ).toBeDisabled();
+  });
+
+});
+
+describe("hosted topology replay selection accessibility", () => {
+  it("preserves hosted selection callbacks and selected-node evidence", () => {
+    const session = identity("session-a");
+    const onSelectStateNode = vi.fn();
+    act(() => {
+      useFactoryTimelineStore.getState().appendEventForEntry(
+        session,
+        topologyEvent({
+          id: "initial",
+          sequence: 1,
+          stateName: "queued",
+          tick: 1,
+          workTypeName: "story",
+        }),
+      );
+      useDashboardStreamStore.setState({
+        resolvedStreamIdentity: session,
+        streamState: liveStreamState,
+      });
+    });
+
+    render(
+      <HostedTopologyReplay
+        onSelectStateNode={onSelectStateNode}
+        selectedNodeID="work-state:story:queued"
+      />,
+    );
+    const stateNode = screen.getByLabelText("Select queued work-state");
+    expect(stateNode).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(stateNode);
+
+    expect(onSelectStateNode).toHaveBeenCalledWith("story:queued");
   });
 });

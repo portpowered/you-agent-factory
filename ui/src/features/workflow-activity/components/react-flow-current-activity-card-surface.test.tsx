@@ -7,13 +7,13 @@ import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layou
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-const hostedTopologyMocks = vi.hoisted(() => ({
-  adapter: vi.fn(() => ({ state: { status: "not-ready" } })),
-}));
-
 vi.mock("../../dashboard/public", () => ({
-  HostedTopologyReplay: () => <div data-testid="hosted-topology-replay" />,
-  useHostedTopologyReplayAdapter: hostedTopologyMocks.adapter,
+  HostedTopologyReplay: (props: { selectedNodeID?: string }) => (
+    <div
+      data-selected-node-id={props.selectedNodeID}
+      data-testid="hosted-topology-replay"
+    />
+  ),
 }));
 
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
@@ -331,17 +331,7 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: surface coverage keeps the shared editor chrome fixtures together.
 describe("CurrentActivityGraphSurface", () => {
-  beforeEach(() => {
-    hostedTopologyMocks.adapter.mockReturnValue({
-      state: { status: "not-ready" },
-    });
-  });
-
-  it("uses the controlled hosted topology renderer for a ready exact entry", () => {
-    hostedTopologyMocks.adapter.mockReturnValue({
-      state: { status: "ready" },
-    });
-
+  it("uses the controlled hosted topology renderer for observer states", () => {
     render(
       <CurrentActivityGraphSurface
         viewModel={createViewModelStub({ editorMode: false }) as never}
@@ -355,7 +345,24 @@ describe("CurrentActivityGraphSurface", () => {
     expect(screen.queryByTestId("graph-viewport")).toBeNull();
   });
 
-  it("renders the empty state when no topology is loaded outside editor mode", () => {
+  it("maps the existing observer selection into the shared node identity", () => {
+    render(
+      <CurrentActivityGraphSurface
+        viewModel={createViewModelStub({ editorMode: false }) as never}
+        imports={{} as never}
+        selection={{ kind: "state-node", placeId: "story:queued" }}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(
+      screen
+        .getByTestId("hosted-topology-replay")
+        .getAttribute("data-selected-node-id"),
+    ).toBe("work-state:story:queued");
+  });
+
+  it("delegates the empty observer state to the controlled hosted renderer", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
@@ -369,12 +376,7 @@ describe("CurrentActivityGraphSurface", () => {
       />,
     );
 
-    expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "The factory has not published any workstation graph yet.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByTestId("hosted-topology-replay")).toBeTruthy();
     expect(screen.queryByTestId("graph-viewport")).toBeNull();
   });
 
@@ -395,7 +397,8 @@ describe("CurrentActivityGraphSurface", () => {
     expect(
       screen.queryByText("A newer factory definition is available"),
     ).toBeNull();
-    expect(screen.queryByTestId("graph-viewport")).toBeTruthy();
+    expect(screen.queryByTestId("hosted-topology-replay")).toBeTruthy();
+    expect(screen.queryByTestId("graph-viewport")).toBeNull();
   });
 
   it("renders shared-surface notices and forwards viewport editor actions", () => {

@@ -13,6 +13,7 @@ import {
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
+import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
@@ -215,6 +216,9 @@ export function useDashboardSnapshot({
   const resetTimelineEntry = useFactoryTimelineStore(
     (state) => state.resetEntry,
   );
+  const setResolvedStreamIdentity = useDashboardStreamStore(
+    (state) => state.setResolvedStreamIdentity,
+  );
   const { error, isInitialLoading, snapshot, streamState } =
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
@@ -253,6 +257,10 @@ export function useDashboardSnapshot({
     refreshToken,
     restoreCheckpoint: restoreCheckpointForEntry,
   });
+
+  useEffect(() => {
+    setResolvedStreamIdentity(streamIdentity ?? null);
+  }, [setResolvedStreamIdentity, streamIdentity]);
 
   useEffect(() => {
     if (streamIdentity) {

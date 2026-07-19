@@ -1,18 +1,15 @@
 import type { ReactFlowInstance } from "@xyflow/react";
+import { factoryTopologyNodeId } from "@you-agent-factory/factory-replay";
 import { useId, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
-  AlertPanel,
   AlertPanelText,
   ExpandablePanelTrigger,
   SurfacePanel,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import {
-  HostedTopologyReplay,
-  useHostedTopologyReplayAdapter,
-} from "../../dashboard/public";
+import { HostedTopologyReplay } from "../../dashboard/public";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { NODE_TYPES } from "../../flowchart/public";
 import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
@@ -46,13 +43,23 @@ export function CurrentActivityGraphSurface({
   headingID,
   imports,
   locale,
+  onSelectResource,
+  onSelectStateNode,
+  onSelectWorker,
+  onSelectWorkType,
+  onSelectWorkstation,
   selection,
-  snapshot,
+  snapshot: _snapshot,
 }: {
   viewModel: CurrentActivityGraphCardViewModel;
   headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
+  onSelectResource?: (resourceName: string) => void;
+  onSelectStateNode?: (placeId: string) => void;
+  onSelectWorker?: (workerName: string) => void;
+  onSelectWorkType?: (workTypeName: string) => void;
+  onSelectWorkstation?: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
 }) {
@@ -62,8 +69,12 @@ export function CurrentActivityGraphSurface({
       imports={imports}
       locale={locale}
       model={viewModel}
+      onSelectResource={onSelectResource}
+      onSelectStateNode={onSelectStateNode}
+      onSelectWorker={onSelectWorker}
+      onSelectWorkType={onSelectWorkType}
+      onSelectWorkstation={onSelectWorkstation}
       selection={selection}
-      snapshot={snapshot}
     />
   );
 }
@@ -74,18 +85,25 @@ function CurrentActivityGraphSurfaceContent({
   imports,
   locale,
   model,
+  onSelectResource,
+  onSelectStateNode,
+  onSelectWorker,
+  onSelectWorkType,
+  onSelectWorkstation,
   selection,
-  snapshot,
 }: {
   headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
   model: CurrentActivityGraphSurfaceModel;
+  onSelectResource?: (resourceName: string) => void;
+  onSelectStateNode?: (placeId: string) => void;
+  onSelectWorker?: (workerName: string) => void;
+  onSelectWorkType?: (workTypeName: string) => void;
+  onSelectWorkstation?: (nodeId: string) => void;
   selection: CurrentActivitySelection | null;
-  snapshot: DashboardSnapshot;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
-  const hostedTopologyReplay = useHostedTopologyReplayAdapter();
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const saveError = model.status.saveError;
@@ -196,15 +214,18 @@ function CurrentActivityGraphSurfaceContent({
   const layoutControls = model.layoutControls;
   const edgeWaypointControls = model.edgeWaypointControls;
 
-  if (
-    !editorControls.isEditing &&
-    hostedTopologyReplay.state.status === "ready"
-  ) {
-    return <HostedTopologyReplay locale={locale} />;
-  }
-
-  if (!snapshotHasObserverGraph(snapshot) && !editorControls.isEditing) {
-    return <EmptyCurrentActivityState locale={locale} />;
+  if (!editorControls.isEditing) {
+    return (
+      <HostedTopologyReplay
+        locale={locale}
+        onSelectResource={onSelectResource}
+        onSelectStateNode={onSelectStateNode}
+        onSelectWorker={onSelectWorker}
+        onSelectWorkType={onSelectWorkType}
+        onSelectWorkstation={onSelectWorkstation}
+        selectedNodeID={hostedTopologySelectionID(selection)}
+      />
+    );
   }
 
   return (
@@ -380,19 +401,25 @@ function CurrentActivityGraphEditorNoticePanel({
   );
 }
 
-function snapshotHasObserverGraph(snapshot: DashboardSnapshot): boolean {
-  return (
-    snapshot.topology.workstation_node_ids.length > 0 ||
-    (snapshot.factory?.workstations?.length ?? 0) > 0
-  );
-}
-
-function EmptyCurrentActivityState({ locale }: { locale?: string }) {
-  const messages = getFactoryGraphEditorMessages(locale);
-  return (
-    <AlertPanel tone="neutral" variant="empty">
-      <h3>{messages.noticeEmptyTitle}</h3>
-      <p>{messages.noticeEmptyMessage}</p>
-    </AlertPanel>
-  );
+function hostedTopologySelectionID(
+  selection: CurrentActivitySelection | null,
+): string | undefined {
+  switch (selection?.kind) {
+    case "node":
+      return selection.nodeId.startsWith(
+        factoryTopologyNodeId("workstation", ""),
+      )
+        ? selection.nodeId
+        : factoryTopologyNodeId("workstation", selection.nodeId);
+    case "resource":
+      return factoryTopologyNodeId("resource", selection.resourceName);
+    case "state-node":
+      return factoryTopologyNodeId("work-state", selection.placeId);
+    case "worker":
+      return factoryTopologyNodeId("worker", selection.workerName);
+    case "work-type":
+      return factoryTopologyNodeId("work-type", selection.workTypeName);
+    default:
+      return undefined;
+  }
 }

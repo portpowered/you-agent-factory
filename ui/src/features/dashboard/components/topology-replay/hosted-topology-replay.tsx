@@ -3,9 +3,13 @@ import {
   FactoryTimelineScrubber,
   FactoryTopologyReplay,
 } from "@you-agent-factory/factory-visualizers";
+import { useState } from "react";
 
 import { useHostedTopologyReplayAdapter } from "../../hooks/topology-replay/use-hosted-topology-replay-adapter";
-import { getHostedTopologyReplayMessages } from "../../messages/hosted-topology-replay";
+import {
+  getHostedTopologyReplayMessages,
+  type HostedTopologyReplayMessages,
+} from "../../messages/hosted-topology-replay";
 
 export interface HostedTopologyReplayProps {
   locale?: string;
@@ -28,6 +32,7 @@ export function HostedTopologyReplay({
 }: HostedTopologyReplayProps) {
   const adapter = useHostedTopologyReplayAdapter();
   const messages = getHostedTopologyReplayMessages(locale);
+  const [visualizerRetryKey, setVisualizerRetryKey] = useState(0);
   const handleSelectNode = (node: FactoryTopologyNode) => {
     switch (node.kind) {
       case "resource":
@@ -47,11 +52,35 @@ export function HostedTopologyReplay({
         break;
     }
   };
+  const streamNotice = streamNoticeForStatus(
+    adapter.state.streamState.status,
+    messages.stream,
+  );
 
   return (
     <div className="grid min-h-0 min-w-0 gap-2 overflow-hidden">
+      {streamNotice ? (
+        <p
+          className="m-0 rounded-lg border border-af-warning-border bg-warning-container px-3 py-2 text-sm text-on-warning-container"
+          role={
+            adapter.state.streamState.status === "reconnecting"
+              ? "status"
+              : "alert"
+          }
+        >
+          {streamNotice}
+        </p>
+      ) : null}
       <FactoryTopologyReplay
+        key={visualizerRetryKey}
         messages={messages.topology}
+        onRetry={
+          adapter.state.topologyState.status === "ready"
+            ? () => {
+                setVisualizerRetryKey((current) => current + 1);
+              }
+            : undefined
+        }
         onSelectNode={handleSelectNode}
         selectedNodeId={selectedNodeID}
         state={adapter.state.topologyState}
@@ -65,4 +94,25 @@ export function HostedTopologyReplay({
       />
     </div>
   );
+}
+
+function streamNoticeForStatus(
+  status:
+    | "connecting"
+    | "live"
+    | "offline"
+    | "reconnecting"
+    | "recovery_failed",
+  messages: HostedTopologyReplayMessages["stream"],
+): string | null {
+  switch (status) {
+    case "offline":
+      return messages.offline;
+    case "reconnecting":
+      return messages.reconnecting;
+    case "recovery_failed":
+      return messages.recoveryFailed;
+    default:
+      return null;
+  }
 }

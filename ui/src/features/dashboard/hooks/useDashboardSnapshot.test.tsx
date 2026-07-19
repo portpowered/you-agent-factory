@@ -409,6 +409,11 @@ describe("useDashboardSnapshot composer", () => {
     expect(replayHarness.getStreams().at(-1)?.url).toBe(
       "/factory-sessions/session-beta/events",
     );
+    await waitFor(() => {
+      expect(
+        useDashboardStreamStore.getState().resolvedStreamIdentity,
+      ).toEqual(defaultStreamIdentity("session-beta"));
+    });
   });
 
   it("routes streamed events through the composer into timeline state", async () => {
@@ -421,6 +426,9 @@ describe("useDashboardSnapshot composer", () => {
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
+    expect(useDashboardStreamStore.getState().resolvedStreamIdentity).toEqual(
+      defaultStreamIdentity(),
+    );
     const stream = replayHarness.getStreams()[0];
 
     await act(async () => {

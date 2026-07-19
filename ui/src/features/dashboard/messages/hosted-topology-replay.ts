@@ -10,6 +10,11 @@ import {
 
 export interface HostedTopologyReplayMessages {
   formatTick: (tick: number) => string;
+  stream: {
+    offline: string;
+    reconnecting: string;
+    recoveryFailed: string;
+  };
   timeline: FactoryTimelineScrubberMessages;
   topology: FactoryTopologyReplayMessages;
 }
@@ -17,6 +22,14 @@ export interface HostedTopologyReplayMessages {
 const hostedTopologyReplayMessagesByLocale = {
   en: {
     formatTick: (tick) => `Tick ${tick}`,
+    stream: {
+      offline:
+        "Factory updates are unavailable. Showing the last received state.",
+      reconnecting:
+        "Reconnecting to Factory updates. Showing the last received state.",
+      recoveryFailed:
+        "Factory replay recovery needs attention. Showing the last restored state.",
+    },
     timeline: {
       alreadyFollowingLatest: "Already following the latest Factory state.",
       currentMode: "Following live Factory updates.",
@@ -49,6 +62,11 @@ const hostedTopologyReplayMessagesByLocale = {
   },
   "zh-CN": {
     formatTick: (tick) => `时刻 ${tick}`,
+    stream: {
+      offline: "工厂更新暂时不可用。正在显示最后收到的状态。",
+      reconnecting: "正在重新连接工厂更新。正在显示最后收到的状态。",
+      recoveryFailed: "工厂重放恢复需要处理。正在显示最后恢复的状态。",
+    },
     timeline: {
       alreadyFollowingLatest: "已在跟随最新工厂状态。",
       currentMode: "正在跟随实时工厂更新。",

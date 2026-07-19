@@ -134,6 +134,11 @@ export function ReactFlowCurrentActivityCardView(
         headingID={headingID}
         imports={imports}
         locale={props.locale}
+        onSelectResource={props.onSelectResource}
+        onSelectStateNode={props.onSelectStateNode}
+        onSelectWorker={props.onSelectWorker}
+        onSelectWorkType={props.onSelectWorkType}
+        onSelectWorkstation={props.onSelectWorkstation}
         selection={props.selection}
         snapshot={props.snapshot}
       />
