@@ -14,6 +14,10 @@ import type {
   FactoryEmulatorScenarioIssue,
 } from "./scenario-contracts.js";
 import {
+  type FactorySchedulerCandidate,
+  selectFactorySchedulerCandidates,
+} from "./scheduler.js";
+import {
   DEFAULT_FACTORY_EMULATOR_LIMITS,
   FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   type FactoryEmulatorAdvanceReceipt,
@@ -93,6 +97,13 @@ interface WorkExecution {
   readonly rule?: FactoryEmulatorRule;
   readonly outcome?: FactoryEmulatorOutcome;
   readonly workstation?: NonNullable<FactoryDefinition["workstations"]>[number];
+}
+
+interface DispatchCandidateValue {
+  readonly index: number;
+  readonly execution: WorkExecution;
+  readonly invocation: number;
+  readonly cursorKey?: string;
 }
 
 function clone<Value>(value: Value): Value {
@@ -318,16 +329,9 @@ function ruleMatches(
 function executionFor(
   configuration: ValidatedConfiguration,
   submission: FactoryEmulatorInitialSubmission,
+  workstation: NonNullable<FactoryDefinition["workstations"]>[number],
   invocationIndex = 0,
 ): WorkExecution {
-  const workstation = configuration.factory.workstations?.find((candidate) =>
-    candidate.inputs.some(
-      (input) =>
-        input.workType === submission.workType &&
-        input.state === submission.state,
-    ),
-  );
-  if (workstation === undefined) return {};
   const rule = configuration.scenario.rules.find((candidate) =>
     ruleMatches(candidate, submission, workstation),
   );
@@ -340,6 +344,81 @@ function executionFor(
     rule.outcomes[invocationIndex] ??
     (rule.exhaustion === "repeat-last" ? rule.outcomes.at(-1) : undefined);
   return { rule, workstation, outcome };
+}
+
+function schedulerCandidatesFor(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  cursors: Readonly<Record<string, number>>,
+): {
+  readonly candidates: readonly FactorySchedulerCandidate<DispatchCandidateValue>[];
+  readonly executableWork: ReadonlySet<number>;
+} {
+  const candidates: FactorySchedulerCandidate<DispatchCandidateValue>[] = [];
+  const executableWork = new Set<number>();
+  for (const [index, work] of state.works.entries()) {
+    if (work.phase !== "ready") continue;
+    const submission = {
+      name: work.submissionId,
+      workType: work.workType,
+      state: work.state,
+      ...(work.input === undefined ? {} : { input: work.input }),
+      ...(work.parent === undefined ? {} : { parent: work.parent }),
+    };
+    const matchingWorkstations = (
+      configuration.factory.workstations ?? []
+    ).filter(
+      (workstation) =>
+        workstation.inputs.length === 1 &&
+        workstation.inputs[0]?.workType === work.workType &&
+        workstation.inputs[0]?.state === work.state,
+    );
+    for (const workstation of matchingWorkstations) {
+      const initial = executionFor(configuration, submission, workstation);
+      const cursorKey =
+        initial.rule === undefined
+          ? undefined
+          : `${initial.rule.id}:${work.workId}`;
+      const invocation =
+        cursorKey === undefined ? 0 : (cursors[cursorKey] ?? 0);
+      const execution = executionFor(
+        configuration,
+        submission,
+        workstation,
+        invocation,
+      );
+      if (execution.outcome === undefined) continue;
+      executableWork.add(index);
+      candidates.push({
+        transitionId: workstation.name,
+        workerId: workstation.worker,
+        workstationKind:
+          workstation.type === "LOGICAL_MOVE" ? "logical" : "normal",
+        tokens: [
+          {
+            tokenId: work.workId,
+            customerWork: true,
+            processing:
+              configuration.factory.workTypes
+                ?.find(({ name }) => name === work.workType)
+                ?.states.find(({ name }) => name === work.state)?.type ===
+              "PROCESSING",
+            queuedElapsedMs: work.queuedElapsedMs,
+            ...(work.lastDispatchElapsedMs === undefined
+              ? {}
+              : { lastDispatchElapsedMs: work.lastDispatchElapsedMs }),
+          },
+        ],
+        value: {
+          index,
+          execution,
+          invocation,
+          ...(cursorKey === undefined ? {} : { cursorKey }),
+        },
+      });
+    }
+  }
+  return { candidates, executableWork };
 }
 
 function workRequestCalculation(
@@ -376,6 +455,7 @@ function workRequestCalculation(
       state: submission.state,
       ...(submission.input === undefined ? {} : { input: submission.input }),
       ...(submission.parent === undefined ? {} : { parent: submission.parent }),
+      queuedElapsedMs: state.virtualElapsedMs,
       phase: "ready" as const,
     };
   });
@@ -848,30 +928,20 @@ export function createFactoryEmulatorSession(
     const replacements = [...state.works];
     const cursors = { ...state.ruleCursors };
     const events: FactoryEvent[] = [];
-    for (const [index, work] of state.works.entries()) {
-      if (work.phase !== "ready") continue;
-      const submission = {
-        name: work.submissionId,
-        workType: work.workType,
-        state: work.state,
-        ...(work.input === undefined ? {} : { input: work.input }),
-        ...(work.parent === undefined ? {} : { parent: work.parent }),
-      };
-      const initial = executionFor(configuration, submission);
-      const cursorKey =
-        initial.rule === undefined
-          ? undefined
-          : `${initial.rule.id}:${work.workId}`;
-      const invocation =
-        cursorKey === undefined ? 0 : (cursors[cursorKey] ?? 0);
-      const execution = executionFor(configuration, submission, invocation);
+    const { candidates, executableWork } = schedulerCandidatesFor(
+      configuration,
+      state,
+      cursors,
+    );
+    for (const { value } of selectFactorySchedulerCandidates(candidates)) {
+      const { index, execution, invocation, cursorKey } = value;
+      const work = state.works[index];
       if (
+        work === undefined ||
         execution.workstation === undefined ||
         execution.outcome === undefined
-      ) {
-        replacements[index] = { ...work, phase: "waiting" };
+      )
         continue;
-      }
       if (cursorKey !== undefined) cursors[cursorKey] = invocation + 1;
       const transitionId = execution.rule?.id ?? "emulator-unmatched";
       const dispatchId = identity(
@@ -918,6 +988,11 @@ export function createFactoryEmulatorSession(
         }),
         payload: { transitionId, inputs: [{ workId: work.workId }] },
       });
+    }
+    for (const [index, work] of state.works.entries()) {
+      if (work.phase === "ready" && !executableWork.has(index)) {
+        replacements[index] = { ...work, phase: "waiting" };
+      }
     }
     return {
       batch: events,

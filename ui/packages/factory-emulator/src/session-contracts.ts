@@ -195,6 +195,10 @@ export interface FactoryEmulatorSessionWork {
   readonly state: string;
   readonly input?: string;
   readonly parent?: string;
+  /** Virtual instant when this Work entered its current queue. */
+  readonly queuedElapsedMs: number;
+  /** Earliest completed dispatch for this Work lineage, when initialized. */
+  readonly lastDispatchElapsedMs?: number;
   readonly phase: "ready" | "waiting" | "active" | "completed";
   readonly dispatch?: {
     readonly dispatchId: string;

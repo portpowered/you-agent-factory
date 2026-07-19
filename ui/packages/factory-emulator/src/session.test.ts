@@ -268,6 +268,100 @@ describe("Factory emulator Work submission", () => {
   });
 });
 
+describe("Factory emulator scheduler dispatch", () => {
+  it("starts only the same highest-ranked 50 Work bindings per batch", async () => {
+    const boundedScenario = executionScenario({
+      initialSubmissions: Array.from({ length: 75 }, (_, index) => ({
+        name: `queued-${String(74 - index).padStart(2, "0")}`,
+        workType: "task",
+        state: "ready",
+      })),
+    });
+    const dispatchOnce = async () => {
+      const emulator = executionHarness(boundedScenario);
+      await emulator.start();
+      return emulator.advanceToNext();
+    };
+
+    const first = await dispatchOnce();
+    const second = await dispatchOnce();
+    const dispatchedWorkIds = (receipt: typeof first) =>
+      receipt.batches[0]?.map(({ context }) => context.workIds?.[0]);
+
+    expect(first.batches[0]).toHaveLength(50);
+    expect(
+      first.state.works.filter(({ phase }) => phase === "active"),
+    ).toHaveLength(50);
+    expect(
+      first.state.works.filter(({ phase }) => phase === "ready"),
+    ).toHaveLength(25);
+    expect(dispatchedWorkIds(second)).toEqual(dispatchedWorkIds(first));
+  });
+
+  it("enumerates competing bindings and gives a logical move the shared token", async () => {
+    const competingFactory = {
+      ...executionFactory,
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          name: "a-worker-run",
+        },
+        {
+          name: "z-logical-move",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "done" }],
+          guards: [
+            {
+              type: "VISIT_COUNT",
+              workstation: "a-worker-run",
+              maxVisits: 1,
+            },
+          ],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const competingScenario = executionScenario({
+      factory: { name: competingFactory.name },
+      initialSubmissions: [
+        { name: "shared", workType: "task", state: "ready" },
+      ],
+      rules: [
+        {
+          id: "worker-outcome",
+          selector: { workstation: "a-worker-run" },
+          cursor: { scope: "lineage", input: "rootWorkId" },
+          outcomes: [{ result: "accepted", durationMs: 1 }],
+          exhaustion: "repeat-last",
+        },
+        {
+          id: "logical-outcome",
+          selector: { workstation: "z-logical-move" },
+          cursor: { scope: "lineage", input: "rootWorkId" },
+          outcomes: [{ result: "accepted", durationMs: 0 }],
+          exhaustion: "repeat-last",
+        },
+      ],
+    });
+    const emulator = createFactoryEmulatorSession({
+      factory: competingFactory,
+      scenario: competingScenario,
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    const dispatched = await emulator.advanceToNext();
+
+    expect(dispatched.batches).toHaveLength(1);
+    expect(dispatched.batches[0]).toHaveLength(1);
+    expect(dispatched.state.works[0]?.dispatch).toMatchObject({
+      workstation: "z-logical-move",
+      worker: "",
+    });
+  });
+});
+
 describe("Factory emulator virtual-time advancement", () => {
   it("processes deadlines through an exact target and jumps to the next due instant", async () => {
     const emulator = executionHarness(
