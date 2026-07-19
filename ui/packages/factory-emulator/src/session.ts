@@ -766,6 +766,109 @@ function eventWorkFor(
   };
 }
 
+function stateTypeFor(
+  configuration: ValidatedConfiguration,
+  work: Pick<FactoryEmulatorSessionWork, "workType" | "state">,
+): "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED" | undefined {
+  return configuration.factory.workTypes
+    ?.find(({ name }) => name === work.workType)
+    ?.states.find(({ name }) => name === work.state)?.type;
+}
+
+function failedStateFor(
+  configuration: ValidatedConfiguration,
+  workType: string,
+): string | undefined {
+  return configuration.factory.workTypes
+    ?.find(({ name }) => name === workType)
+    ?.states.find(({ type }) => type === "FAILED")?.name;
+}
+
+function cascadeDependencyFailures(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  eventTime: string,
+  sequence: number,
+): {
+  readonly events: readonly FactoryEvent[];
+  readonly works: readonly FactoryEmulatorSessionWork[];
+} {
+  const works = [...state.works];
+  const currentIndexes = new Map<string, number>();
+  for (const [index, work] of works.entries())
+    currentIndexes.set(work.workId, index);
+  const currentWorks = [...currentIndexes.values()].flatMap((index) => {
+    const work = works[index];
+    return work === undefined ? [] : [work];
+  });
+  const dependents = new Map<string, FactoryEmulatorSessionWork[]>();
+  for (const work of currentWorks) {
+    for (const relation of work.relations ?? []) {
+      const existing = dependents.get(relation.targetWorkId) ?? [];
+      existing.push(work);
+      dependents.set(relation.targetWorkId, existing);
+    }
+  }
+
+  const queue = currentWorks
+    .filter((work) => stateTypeFor(configuration, work) === "FAILED")
+    .map(({ workId }) => workId);
+  const cascaded = new Set<string>();
+  const events: FactoryEvent[] = [];
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const triggerWorkId = queue[cursor];
+    if (triggerWorkId === undefined) continue;
+    for (const dependent of dependents.get(triggerWorkId) ?? []) {
+      if (cascaded.has(dependent.workId)) continue;
+      const index = currentIndexes.get(dependent.workId);
+      const current = index === undefined ? undefined : works[index];
+      if (index === undefined || current === undefined) continue;
+      const currentType = stateTypeFor(configuration, current);
+      if (currentType === "TERMINAL" || currentType === "FAILED") continue;
+      const failedState = failedStateFor(configuration, current.workType);
+      if (failedState === undefined) continue;
+
+      cascaded.add(current.workId);
+      queue.push(current.workId);
+      works[index] = {
+        ...current,
+        state: failedState,
+        phase: "completed",
+        dispatch: undefined,
+      };
+      const eventSequence = sequence + events.length;
+      const reason = `cascading failure: dependency ${triggerWorkId} failed`;
+      events.push({
+        schemaVersion: "agent-factory.event.v1",
+        id: identity(
+          "event",
+          state.sessionId,
+          eventSequence,
+          "WORK_STATE_CHANGE",
+          current.workId,
+        ),
+        type: "WORK_STATE_CHANGE",
+        context: eventContext(state, eventSequence, eventTime, {
+          requestId: current.requestId,
+          workIds: [current.workId],
+        }),
+        payload: {
+          workId: current.workId,
+          workTypeName: current.workType,
+          fromState: current.state,
+          toState: failedState,
+          fromPlaceId: `${current.workType}:${current.state}`,
+          toPlaceId: `${current.workType}:${failedState}`,
+          source: "cascading-failure",
+          triggerWorkId,
+          reason,
+        },
+      } satisfies FactoryEvent);
+    }
+  }
+  return { events, works };
+}
+
 function workRequestEvent(
   configuration: ValidatedConfiguration,
   state: StartedState,
@@ -1695,18 +1798,26 @@ export function createFactoryEmulatorSession(
       }
       replacements.push(...routedWorks);
     }
+    const completedDispatches = events.length;
+    const cascade = cascadeDependencyFailures(
+      configuration,
+      { ...state, works: replacements },
+      eventTime,
+      state.counters.events + events.length,
+    );
+    events.push(...cascade.events);
     return {
       batch: events,
       state: {
         ...state,
         virtualElapsedMs: dueElapsedMs,
         virtualTime: eventTime,
-        works: replacements,
+        works: cascade.works,
         counters: {
           ...state.counters,
           events: state.counters.events + events.length,
           completedDispatches:
-            state.counters.completedDispatches + events.length,
+            state.counters.completedDispatches + completedDispatches,
         },
       },
     };

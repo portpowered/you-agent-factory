@@ -181,6 +181,7 @@ const dependencyFactory = {
       states: [
         { name: "ready", type: "INITIAL" },
         { name: "complete", type: "TERMINAL" },
+        { name: "failed", type: "FAILED" },
       ],
     },
     {
@@ -857,6 +858,175 @@ describe("Factory emulator dependency-aware scheduler dispatch", () => {
         ({ workId, state }) => workId === reviewTargetId && state === "review",
       ),
     ).toHaveLength(1);
+  });
+});
+
+function dependencyFailureHarness(): FactoryEmulatorSession {
+  const initialSubmissions = {
+    works: [
+      { name: "leaf", workType: "task", state: "ready" },
+      { name: "root-a", workType: "task", state: "ready" },
+      { name: "terminal", workType: "task", state: "complete" },
+      { name: "middle", workType: "task", state: "ready" },
+      { name: "root-b", workType: "task", state: "ready" },
+      { name: "converging", workType: "task", state: "ready" },
+      { name: "unrelated", workType: "task", state: "ready" },
+      { name: "already-failed", workType: "task", state: "failed" },
+    ],
+    relations: [
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "leaf",
+        targetWorkName: "middle",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "middle",
+        targetWorkName: "root-a",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "converging",
+        targetWorkName: "root-a",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "converging",
+        targetWorkName: "root-b",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "terminal",
+        targetWorkName: "root-a",
+      },
+      {
+        type: "DEPENDS_ON" as const,
+        sourceWorkName: "already-failed",
+        targetWorkName: "root-a",
+      },
+    ],
+  };
+  const baseScenario = dependencyScenario(initialSubmissions);
+  const failureScenario: FactoryEmulatorScenario = {
+    ...baseScenario,
+    rules: [
+      {
+        id: "fail-roots",
+        selector: { input: { name: "root-a" } },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          { result: "failed", durationMs: 10, error: "root-a failed" },
+        ],
+        exhaustion: "repeat-last",
+      },
+      {
+        id: "fail-second-root",
+        selector: { input: { name: "root-b" } },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [
+          { result: "failed", durationMs: 10, error: "root-b failed" },
+        ],
+        exhaustion: "repeat-last",
+      },
+      ...baseScenario.rules,
+    ],
+  };
+  return createFactoryEmulatorSession({
+    factory: dependencyFactory,
+    scenario: failureScenario,
+    sink: { write: async () => undefined },
+  });
+}
+
+describe("Factory emulator dependency failure cascade", () => {
+  it("fails every non-terminal transitive dependent once in the completion tick", async () => {
+    const emulator = dependencyFailureHarness();
+    const started = await emulator.start();
+    const identityByName = new Map(
+      started.state.works.map(({ submissionId, workId }) => [
+        submissionId,
+        workId,
+      ]),
+    );
+    await emulator.advanceToNext();
+    const beforeFailure = emulator.state();
+    const completed = await emulator.advanceBy(10);
+
+    expect(completed.batches).toHaveLength(1);
+    const cascadeEvents = completed.batches[0]?.filter(
+      ({ type }) => type === "WORK_STATE_CHANGE",
+    );
+    expect(cascadeEvents?.map(({ context }) => context.workIds?.[0])).toEqual([
+      identityByName.get("middle"),
+      identityByName.get("converging"),
+      identityByName.get("leaf"),
+    ]);
+    expect(
+      cascadeEvents?.map(({ context, payload }) => ({
+        tick: context.tick,
+        source: (payload as { source: string }).source,
+        triggerWorkId: (payload as { triggerWorkId: string }).triggerWorkId,
+      })),
+    ).toEqual([
+      {
+        tick: cascadeEvents?.[0]?.context.tick,
+        source: "cascading-failure",
+        triggerWorkId: identityByName.get("root-a"),
+      },
+      {
+        tick: cascadeEvents?.[0]?.context.tick,
+        source: "cascading-failure",
+        triggerWorkId: identityByName.get("root-a"),
+      },
+      {
+        tick: cascadeEvents?.[0]?.context.tick,
+        source: "cascading-failure",
+        triggerWorkId: identityByName.get("middle"),
+      },
+    ]);
+    expect(
+      completed.state.works
+        .filter(({ submissionId }) =>
+          ["middle", "converging", "leaf"].includes(submissionId),
+        )
+        .map(({ submissionId, state, phase }) => ({
+          submissionId,
+          state,
+          phase,
+        })),
+    ).toEqual([
+      { submissionId: "leaf", state: "failed", phase: "completed" },
+      { submissionId: "middle", state: "failed", phase: "completed" },
+      { submissionId: "converging", state: "failed", phase: "completed" },
+    ]);
+    expect(
+      completed.state.works.find(
+        ({ submissionId }) => submissionId === "terminal",
+      ),
+    ).toEqual(
+      beforeFailure.works.find(
+        ({ submissionId }) => submissionId === "terminal",
+      ),
+    );
+    expect(
+      completed.state.works.find(
+        ({ submissionId }) => submissionId === "already-failed",
+      ),
+    ).toEqual(
+      beforeFailure.works.find(
+        ({ submissionId }) => submissionId === "already-failed",
+      ),
+    );
+    expect(
+      completed.state.works.find(
+        ({ workId, state }) =>
+          workId === identityByName.get("unrelated") && state === "complete",
+      ),
+    ).toMatchObject({ phase: "completed" });
+    expect(
+      completed.batches[0]?.filter(({ type }) => type === "DISPATCH_REQUEST"),
+    ).toHaveLength(0);
+    expect(completed.state.counters.completedDispatches).toBe(3);
   });
 });
 

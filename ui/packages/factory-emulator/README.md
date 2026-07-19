@@ -131,6 +131,11 @@ completion batch, so newly unblocked Work can dispatch in the same `advanceBy()`
 command. Worker-only resource metadata does not change mocked execution
 capacity.
 
+When a target enters a failed state, every non-terminal dependent moves to its
+own Work Type's failed state through a deterministic breadth-first closure in
+that same completion tick. Each move emits one canonical `WORK_STATE_CHANGE`
+with source `cascading-failure`; terminal and already-failed Work is unchanged.
+
 Accepted, continued, rejected, and failed outcomes preserve Work lineage while
 routing to explicit destinations in declared order. Accepted fan-out supports
 multiple outputs and both `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT` propagation.
