@@ -14,7 +14,9 @@ import {
 import type {
   FactoryVisualizationAnnotation,
   FactoryVisualizationEmbeddedImageSource,
+  FactoryVisualizationImageContent,
   FactoryVisualizationLayoutV1,
+  FactoryVisualizationNodeEmptyState,
 } from "@you-agent-factory/client";
 import type {
   FactoryActivityProjection,
@@ -83,6 +85,7 @@ export interface FactoryTopologyReplayProps {
 
 interface TopologyNodeData extends Record<string, unknown> {
   activityCount: number;
+  emptyState?: FactoryVisualizationNodeEmptyState["content"];
   messages: FactoryTopologyReplayMessages;
   node: FactoryTopologyNode;
   occupancy?: {
@@ -157,6 +160,17 @@ export function projectFactoryTopologyFlow(
       connectionHasRenderedEndpoints(connection, nodeById),
     );
     const activityCountByNode = activityCounts(projection.activity);
+    const activeDetailNodeIds = activityDetailNodeIds(
+      projection.activity,
+      connections,
+      projection.load.workStateCounts,
+    );
+    const emptyStateByNode = new Map(
+      (layout?.nodeEmptyStates ?? []).map((emptyState) => [
+        emptyState.nodeId,
+        emptyState.content,
+      ]),
+    );
     const occupancyByNode = new Map(
       projection.load.resourceOccupancy.map((occupancy) => [
         occupancy.resourceNodeId,
@@ -179,6 +193,9 @@ export function projectFactoryTopologyFlow(
       return {
         data: {
           activityCount: activityCountByNode.get(node.id) ?? 0,
+          ...(activeDetailNodeIds.has(node.id)
+            ? {}
+            : { emptyState: emptyStateByNode.get(node.id) }),
           messages,
           node,
           ...(occupancy
@@ -549,6 +566,7 @@ function layoutNode(
 function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
   const {
     activityCount,
+    emptyState,
     messages,
     node,
     occupancy,
@@ -579,12 +597,21 @@ function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
         {node.label}
       </strong>
       <span className="factory-topology-replay__node-kind">{node.kind}</span>
-      <span className="factory-topology-replay__node-cue">
-        {activityCount > 0 ? "●" : "○"}{" "}
-        {activityCount > 0
-          ? messages.activeDispatches(activityCount)
-          : messages.inactiveDispatches}
-      </span>
+      <div className="factory-topology-replay__node-activity-detail">
+        {emptyState ? (
+          <FactoryTopologyNodeEmptyStateView
+            content={emptyState}
+            messages={messages}
+          />
+        ) : (
+          <span className="factory-topology-replay__node-cue">
+            {activityCount > 0 ? "●" : "○"}{" "}
+            {activityCount > 0
+              ? messages.activeDispatches(activityCount)
+              : messages.inactiveDispatches}
+          </span>
+        )}
+      </div>
       {node.kind === "resource" ? (
         <span className="factory-topology-replay__node-cue">
           ◫{" "}
@@ -631,6 +658,49 @@ function FactoryTopologyNodeView({ data }: NodeProps<Node<TopologyNodeData>>) {
   );
 }
 
+function FactoryTopologyNodeEmptyStateView({
+  content,
+  messages,
+}: {
+  content: FactoryVisualizationNodeEmptyState["content"];
+  messages: FactoryTopologyReplayMessages;
+}) {
+  if (content.kind === "image") {
+    return <FactoryTopologyEmptyStateImage content={content} messages={messages} />;
+  }
+  return (
+    <span className="factory-topology-replay__node-empty-state">
+      {content.text}
+    </span>
+  );
+}
+
+function FactoryTopologyEmptyStateImage({
+  content,
+  messages,
+}: {
+  content: FactoryVisualizationImageContent;
+  messages: FactoryTopologyReplayMessages;
+}) {
+  const image = useEmbeddedImageUrl(content.source);
+  return image.status === "ready" ? (
+    <img
+      alt={content.altText}
+      className="factory-topology-replay__node-empty-state-image"
+      onError={image.fail}
+      src={image.url}
+    />
+  ) : (
+    <span
+      aria-label={content.altText}
+      className="factory-topology-replay__node-empty-state"
+      role={image.status === "failed" ? "alert" : "status"}
+    >
+      {image.status === "failed" ? messages.imageFailed : messages.imageLoading}
+    </span>
+  );
+}
+
 function connectionHasRenderedEndpoints(
   connection: FactoryTopologyConnection,
   nodeById: ReadonlyMap<string, FactoryTopologyNode>,
@@ -664,6 +734,43 @@ function activityCounts(
     }
   }
   return counts;
+}
+
+/** Identify selected-tick node detail that must take precedence over authored empty content. */
+function activityDetailNodeIds(
+  activity: FactoryActivityProjection,
+  connections: readonly FactoryTopologyConnection[],
+  workStateCounts: FactoryLoadProjection["workStateCounts"],
+): Set<string> {
+  const nodeIds = new Set(activity.activeWorkstationNodeIds);
+  const connectionById = new Map(connections.map((connection) => [connection.id, connection]));
+
+  for (const workState of workStateCounts) {
+    if (
+      workState.evidence === "known" &&
+      typeof workState.count === "number" &&
+      workState.count > 0
+    ) {
+      nodeIds.add(workState.workStateNodeId);
+    }
+  }
+  for (const overlay of activity.activeDispatchOverlays) {
+    for (const nodeId of [
+      overlay.workerNodeId,
+      overlay.workstationNodeId,
+      ...(overlay.resourceNodeIds ?? []),
+    ]) {
+      if (nodeId) nodeIds.add(nodeId);
+    }
+    for (const connectionId of overlay.connectionIds) {
+      const connection = connectionById.get(connectionId);
+      if (connection) {
+        nodeIds.add(connection.source.nodeId);
+        nodeIds.add(connection.target.nodeId);
+      }
+    }
+  }
+  return nodeIds;
 }
 
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";

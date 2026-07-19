@@ -193,6 +193,26 @@
   margin-block-start: 0.25rem;
 }
 
+.factory-topology-replay__node-activity-detail {
+  min-inline-size: 0;
+}
+
+.factory-topology-replay__node-empty-state {
+  display: block;
+  margin-block-start: 0.25rem;
+  color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.factory-topology-replay__node-empty-state-image {
+  display: block;
+  max-inline-size: 100%;
+  max-block-size: 8rem;
+  margin-block-start: 0.5rem;
+  object-fit: contain;
+}
+
 .factory-topology-replay__node--active {
   border-block-start: 0.25rem solid var(--color-warning);
 }

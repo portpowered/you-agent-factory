@@ -231,6 +231,109 @@ describe("FactoryTopologyReplay", () => {
     ).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("shows an empty state only until Work, Dispatch, or route evidence is selected", () => {
+    const active = createFactoryTopologyProjection();
+    const inactive = createFactoryTopologyProjection();
+    inactive.activity = {
+      ...inactive.activity,
+      activeDispatchOverlays: [],
+      activeWorkstationNodeIds: [],
+    };
+    inactive.load = {
+      ...inactive.load,
+      workStateCounts: inactive.load.workStateCounts.map((count) => ({
+        ...count,
+        count: 0,
+      })),
+    };
+    const layout = nodeEmptyStateLayout();
+    const { rerender } = render(
+      <FactoryTopologyReplay
+        layout={layout}
+        messages={messages}
+        state={{ projection: inactive, status: "ready" }}
+      />,
+    );
+
+    expect(screen.getByText("No reviewers are waiting.")).toBeVisible();
+    expect(screen.getByText("No requests are queued.")).toBeVisible();
+    expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
+    expect(screen.getByText(/0 Work in this state/)).toBeVisible();
+
+    rerender(
+      <FactoryTopologyReplay
+        layout={layout}
+        messages={messages}
+        state={{ projection: active, status: "ready" }}
+      />,
+    );
+
+    expect(screen.queryByText("No reviewers are waiting.")).not.toBeInTheDocument();
+    expect(screen.queryByText("No requests are queued.")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/1 active Dispatches/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/3 Work in this state/)).toBeVisible();
+    expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
+  });
+
+  it("suppresses the matching empty state for Work, Dispatch, and route evidence independently", () => {
+    const layout = nodeEmptyStateLayout();
+    const base = createFactoryTopologyProjection();
+    base.activity = { ...base.activity, activeDispatchOverlays: [], activeWorkstationNodeIds: [] };
+    base.load = {
+      ...base.load,
+      workStateCounts: base.load.workStateCounts.map((count) => ({ ...count, count: 0 })),
+    };
+    const work = structuredClone(base);
+    work.load.workStateCounts[0].count = 1;
+    const dispatch = structuredClone(base);
+    dispatch.activity.activeDispatchOverlays = [
+      { ...createFactoryTopologyProjection().activity.activeDispatchOverlays[0], connectionIds: [] },
+    ];
+    const route = structuredClone(base);
+    route.activity.activeDispatchOverlays = [
+      {
+        ...createFactoryTopologyProjection().activity.activeDispatchOverlays[0],
+        resourceNodeIds: [],
+        workerNodeId: undefined,
+        workstationNodeId: undefined,
+      },
+    ];
+
+    expect(emptyStateFor(base, layout, "workstation:review")).toBeDefined();
+    expect(emptyStateFor(work, layout, "work-state:task:queued")).toBeUndefined();
+    expect(emptyStateFor(dispatch, layout, "workstation:review")).toBeUndefined();
+    expect(emptyStateFor(route, layout, "workstation:review")).toBeUndefined();
+  });
+
+  it("renders an inactive image empty state through a Blob URL and revokes it on activity", async () => {
+    const createObjectURL = vi.fn(() => "blob:empty-state");
+    const revokeObjectURL = vi.fn();
+    const BrowserUrl = class extends URL {
+      static createObjectURL = createObjectURL;
+      static revokeObjectURL = revokeObjectURL;
+    };
+    vi.stubGlobal("URL", BrowserUrl);
+    vi.stubGlobal("atob", () => "\u0089PNG\r\n\u001a\n");
+    const inactive = createFactoryTopologyProjection();
+    inactive.activity = {
+      ...inactive.activity,
+      activeDispatchOverlays: [],
+      activeWorkstationNodeIds: [],
+    };
+    const layout = nodeEmptyStateLayout({ kind: "image", altText: "Idle review illustration", source: { base64: "iVBORw0KGgo=", kind: "embedded", mediaType: "image/png" } });
+    const { rerender } = render(
+      <FactoryTopologyReplay layout={layout} messages={messages} state={{ projection: inactive, status: "ready" }} />,
+    );
+
+    expect(await screen.findByRole("img", { name: "Idle review illustration" })).toHaveAttribute("src", "blob:empty-state");
+    rerender(
+      <FactoryTopologyReplay layout={layout} messages={messages} state={{ projection: createFactoryTopologyProjection(), status: "ready" }} />,
+    );
+    expect(screen.queryByRole("img", { name: "Idle review illustration" })).not.toBeInTheDocument();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:empty-state");
+    vi.unstubAllGlobals();
+  });
+
   it("creates and revokes Blob URLs as annotation images change, disappear, and unmount", async () => {
     const createObjectURL = vi
       .fn()
@@ -372,6 +475,39 @@ function imageOnlyLayout(base64: string): FactoryVisualizationLayoutV1 {
     ],
     schemaVersion: "factory-visualization-layout/v1",
   };
+}
+
+function nodeEmptyStateLayout(
+  reviewContent: FactoryVisualizationLayoutV1["nodeEmptyStates"][number]["content"] = {
+    kind: "text",
+    text: "No reviewers are waiting.",
+  },
+): FactoryVisualizationLayoutV1 {
+  return {
+    nodeEmptyStates: [
+      { content: reviewContent, nodeId: "workstation:review" },
+      {
+        content: { kind: "text", text: "No requests are queued." },
+        nodeId: "work-state:task:queued",
+      },
+    ],
+    schemaVersion: "factory-visualization-layout/v1",
+  };
+}
+
+function emptyStateFor(
+  projection: FactoryTopologyReplayProjection,
+  layout: FactoryVisualizationLayoutV1,
+  nodeId: string,
+): unknown {
+  return projectFactoryTopologyFlow(
+    projection,
+    messages,
+    undefined,
+    undefined,
+    false,
+    layout,
+  ).nodes.find((node) => node.id === nodeId)?.data.emptyState;
 }
 
 const annotationBodyMatcher = (_: string, element: Element | null) =>

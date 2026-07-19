@@ -112,6 +112,26 @@ export const AnnotationVisibility: Story = {
   },
 };
 
+export const InactiveNodeEmptyState: Story = {
+  args: {
+    layout: {
+      nodeEmptyStates: [
+        {
+          content: { kind: "text", text: "No review work is waiting." },
+          nodeId: "workstation:review",
+        },
+      ],
+      schemaVersion: "factory-visualization-layout/v1",
+    },
+    state: { projection: createInactiveProjection(), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    await expect(
+      within(canvasElement).getByText("No review work is waiting."),
+    ).toBeVisible();
+  },
+};
+
 export const Loading: Story = {
   args: { state: { status: "loading" } },
 };
@@ -286,6 +306,23 @@ function createProjection(dense = false): FactoryTopologyReplayProjection {
       selectedTick: 18,
     },
   };
+}
+
+function createInactiveProjection(): FactoryTopologyReplayProjection {
+  const projection = createProjection();
+  projection.activity = {
+    ...projection.activity,
+    activeDispatchOverlays: [],
+    activeWorkstationNodeIds: [],
+  };
+  projection.load = {
+    ...projection.load,
+    workStateCounts: projection.load.workStateCounts.map((count) => ({
+      ...count,
+      count: 0,
+    })),
+  };
+  return projection;
 }
 
 function annotationLayout(): FactoryVisualizationLayoutV1 {

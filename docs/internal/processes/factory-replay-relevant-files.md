@@ -76,6 +76,9 @@ that consumes the replay kernel.
   fit-to-view remains derived from what is currently visible. Embedded raster
   annotations must decode into Blob URLs, revoke those URLs on replacement,
   removal, image failure, and unmount, and contain preparation failures in the
-  affected annotation rather than failing the topology region.
+  affected annotation rather than failing the topology region. Node empty-state
+  visibility is likewise derived from selected-tick Work-State counts, active
+  Dispatches, and active routes; retain identity and telemetry outside its
+  activity-detail region.
 - `Makefile` targets `factory-replay-typecheck` and `factory-replay-test`
   include the package in local and CI verification lanes.
