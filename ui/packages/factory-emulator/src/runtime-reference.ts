@@ -196,7 +196,6 @@ export function safeParseFactoryEmulatorRuntimeReference(
     );
   }
   const eventKinds: FactoryEvent["type"][] = [];
-  let previousLogicalTick = -1;
   for (const [index, tick] of ticks.entries()) {
     const logicalTick = isRecord(tick) ? tick.logicalTick : undefined;
     if (
@@ -210,14 +209,14 @@ export function safeParseFactoryEmulatorRuntimeReference(
         ["ticks", index, "logicalTick"],
         "Expected a non-negative integer logical tick.",
       );
-    } else if (logicalTick <= previousLogicalTick) {
+    } else if (logicalTick !== index) {
       issue(
         issues,
         "invalid_tick_order",
         ["ticks", index, "logicalTick"],
-        "Logical ticks must be strictly increasing.",
+        "Logical ticks must be contiguous and begin at zero.",
       );
-    } else previousLogicalTick = logicalTick;
+    }
     if (!isRecord(tick) || !Array.isArray(tick.eventKinds)) {
       issue(
         issues,

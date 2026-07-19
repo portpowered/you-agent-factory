@@ -197,6 +197,25 @@ describe("frozen runtime references", () => {
     });
   });
 
+  it("does not compare a reference with renumbered logical ticks", async () => {
+    const invalid = structuredClone(runtimeReferenceFixtures[0]);
+    for (const [index, tick] of invalid.ticks.entries()) {
+      tick.logicalTick = index + 10;
+    }
+    await expect(
+      compareFactoryEmulatorRuntimeReference(invalid),
+    ).resolves.toMatchObject({
+      matches: false,
+      validationIssues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "invalid_tick_order",
+          path: ["ticks", 0, "logicalTick"],
+          message: "Logical ticks must be contiguous and begin at zero.",
+        }),
+      ]),
+    });
+  });
+
   it("rejects a fixture that omits per-tick semantic evidence", () => {
     const invalid = structuredClone(runtimeReferenceFixtures[0]) as {
       ticks: { semantics?: unknown }[];
