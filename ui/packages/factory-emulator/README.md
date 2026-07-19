@@ -93,6 +93,15 @@ outcome through its requested instant. Event timestamps are always the scenario
 or browser timers. Receipts, state, status, and validation errors are detached
 structured-cloneable values.
 
+Supported workerless `LOGICAL_MOVE` workstations do not need scenario rules.
+Their `VISIT_COUNT` guards read the inclusive transition counts carried by the
+first authored input lineage, and an eligible move routes synchronously at the
+current virtual instant without creating active worker-dispatch state. The
+resulting canonical `DISPATCH_RESPONSE` preserves lineage, propagation mode,
+and declared output order; session Work snapshots expose the carried `visits`
+map for deterministic inspection. Zero-duration logical cycles share the
+session's configured cycle and cooperative-yield boundaries.
+
 Canonical identities and event ordering are derived from the Factory identity,
 the complete validated scenario (including its seed), normalized command
 inputs, command order, and virtual elapsed time. Object key insertion order,

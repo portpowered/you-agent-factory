@@ -298,13 +298,14 @@ describe("Factory emulator scheduler dispatch", () => {
     expect(dispatchedWorkIds(second)).toEqual(dispatchedWorkIds(first));
   });
 
-  it("enumerates competing bindings and gives a logical move the shared token", async () => {
+  it("routes an eligible logical move ahead of a competing worker without an active dispatch", async () => {
     const competingFactory = {
       ...executionFactory,
       workstations: [
         {
           ...executionFactory.workstations[0],
           name: "a-worker-run",
+          outputs: [{ workType: "task", state: "ready" }],
         },
         {
           name: "z-logical-move",
@@ -335,13 +336,6 @@ describe("Factory emulator scheduler dispatch", () => {
           outcomes: [{ result: "accepted", durationMs: 1 }],
           exhaustion: "repeat-last",
         },
-        {
-          id: "logical-outcome",
-          selector: { workstation: "z-logical-move" },
-          cursor: { scope: "lineage", input: "rootWorkId" },
-          outcomes: [{ result: "accepted", durationMs: 0 }],
-          exhaustion: "repeat-last",
-        },
       ],
     });
     const emulator = createFactoryEmulatorSession({
@@ -351,14 +345,232 @@ describe("Factory emulator scheduler dispatch", () => {
     });
 
     await emulator.start();
-    const dispatched = await emulator.advanceToNext();
+    const workerDispatch = await emulator.advanceToNext();
+    const workerCompletion = await emulator.advanceToNext();
+    const moved = await emulator.advanceToNext();
 
-    expect(dispatched.batches).toHaveLength(1);
-    expect(dispatched.batches[0]).toHaveLength(1);
-    expect(dispatched.state.works[0]?.dispatch).toMatchObject({
-      workstation: "z-logical-move",
-      worker: "",
+    expect(workerDispatch.batches[0]?.[0]?.type).toBe("DISPATCH_REQUEST");
+    expect(workerCompletion.state.works.at(-1)?.visits).toEqual({
+      "a-worker-run": 1,
     });
+    expect(moved.batches[0]?.map(({ type }) => type)).toEqual([
+      "DISPATCH_RESPONSE",
+    ]);
+    expect(moved.batches[0]?.[0]).toMatchObject({
+      payload: {
+        transitionId: "z-logical-move",
+        outcome: "ACCEPTED",
+        durationMillis: 0,
+      },
+    });
+    expect(moved.batches[0]?.[0]?.context.dispatchId).toBeUndefined();
+    expect(moved.state.works.some(({ phase }) => phase === "active")).toBe(
+      false,
+    );
+    expect(moved.state.works.at(-1)).toMatchObject({
+      state: "done",
+      phase: "completed",
+      visits: { "a-worker-run": 1, "z-logical-move": 1 },
+    });
+  });
+});
+
+describe("Factory emulator guarded logical moves", () => {
+  it("preserves lineage, payload, and declared fan-out order", async () => {
+    const logicalFactory = {
+      name: "logical-routing-factory",
+      orchestrator: { kind: "PETRI" },
+      workTypes: [
+        {
+          name: "task",
+          states: [
+            { name: "ready", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+        {
+          name: "audit",
+          states: [{ name: "recorded", type: "TERMINAL" }],
+        },
+      ],
+      workers: [{ name: "worker", type: "AGENT_WORKER" }],
+      workstations: [
+        {
+          name: "execute",
+          type: "AGENT_RUN",
+          worker: "worker",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "ready" }],
+        },
+        {
+          name: "loop-breaker",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [
+            { workType: "audit", state: "recorded" },
+            { workType: "task", state: "done" },
+          ],
+          guards: [
+            { type: "VISIT_COUNT", workstation: "execute", maxVisits: 1 },
+          ],
+          workPropagation: { mode: "PRESERVE_INPUT" },
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const logicalScenario = executionScenario({
+      factory: { name: logicalFactory.name },
+      initialSubmissions: [
+        {
+          name: "logical-input",
+          workType: "task",
+          state: "ready",
+          input: "original",
+        },
+      ],
+      rules: [
+        {
+          id: "execute-outcome",
+          selector: { workstation: "execute" },
+          cursor: { scope: "lineage", input: "rootWorkId" },
+          outcomes: [
+            { result: "accepted", durationMs: 1, output: "worker-output" },
+          ],
+          exhaustion: "repeat-last",
+        },
+      ],
+    });
+    const emulator = createFactoryEmulatorSession({
+      factory: logicalFactory,
+      scenario: logicalScenario,
+      sink: { write: async () => undefined },
+    });
+
+    await emulator.start();
+    await emulator.advanceToNext();
+    await emulator.advanceToNext();
+    const moved = await emulator.advanceToNext();
+    const response = moved.batches[0]?.[0];
+    if (response?.type !== "DISPATCH_RESPONSE") {
+      throw new Error("missing logical-move response");
+    }
+    const outputWork = response.payload.outputWork ?? [];
+
+    expect(
+      outputWork.map(({ workTypeName, state, payload }) => ({
+        workTypeName,
+        state: state.name,
+        payload,
+      })),
+    ).toEqual([
+      { workTypeName: "audit", state: "recorded", payload: "worker-output" },
+      { workTypeName: "task", state: "done", payload: "worker-output" },
+    ]);
+    expect(
+      moved.state.works.slice(-2).map(({ workType, rootWorkId }) => ({
+        workType,
+        rootWorkId,
+      })),
+    ).toEqual([
+      { workType: "audit", rootWorkId: moved.state.works[0]?.rootWorkId },
+      { workType: "task", rootWorkId: moved.state.works[0]?.rootWorkId },
+    ]);
+  });
+});
+
+describe("Factory emulator logical-move cycle safety", () => {
+  it("pauses a zero-duration logical cycle at the configured cooperative boundary", async () => {
+    const cycleFactory = {
+      ...executionFactory,
+      workstations: [
+        {
+          ...executionFactory.workstations[0],
+          name: "execute",
+          outputs: [{ workType: "task", state: "ready" }],
+        },
+        {
+          name: "cycle",
+          type: "LOGICAL_MOVE",
+          worker: "",
+          inputs: [{ workType: "task", state: "ready" }],
+          outputs: [{ workType: "task", state: "ready" }],
+          guards: [
+            { type: "VISIT_COUNT", workstation: "execute", maxVisits: 1 },
+          ],
+        },
+      ],
+    } satisfies FactoryDefinition;
+    const writes: FactoryEvent[][] = [];
+    let yields = 0;
+    const emulator = createFactoryEmulatorSession({
+      factory: cycleFactory,
+      scenario: executionScenario({
+        factory: { name: cycleFactory.name },
+        initialSubmissions: [
+          { name: "cycle-input", workType: "task", state: "ready" },
+        ],
+        rules: [
+          {
+            id: "execute-outcome",
+            selector: { workstation: "execute" },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 1 }],
+            exhaustion: "repeat-last",
+          },
+        ],
+      }),
+      sink: {
+        write: async (events) => {
+          writes.push(structuredClone(events) as FactoryEvent[]);
+        },
+      },
+      limits: { maxZeroDurationBatches: 3, maxSynchronousBatches: 1 },
+      yieldControl: () => {
+        yields += 1;
+      },
+    });
+
+    await emulator.start();
+    await expect(emulator.advanceBy(1)).rejects.toMatchObject({
+      name: "FactoryEmulatorExecutionPausedError",
+      diagnostic: {
+        kind: "zero-duration-cycle",
+        configured: 3,
+        observed: 4,
+      },
+    } satisfies Partial<FactoryEmulatorExecutionPausedError>);
+
+    expect(yields).toBeGreaterThan(0);
+    expect(emulator.status()).toMatchObject({
+      phase: "error",
+      virtualElapsedMs: 1,
+      error: { diagnostic: { kind: "zero-duration-cycle" } },
+    });
+    expect(emulator.state().lifecycle).toBe("started");
+    const state = emulator.state();
+    if (state.lifecycle !== "started") throw new Error("session not started");
+    expect(state.works.at(-1)).toMatchObject({
+      state: "ready",
+      phase: "ready",
+      visits: { execute: 1, cycle: 3 },
+    });
+    const logicalEvents = writes
+      .flat()
+      .filter(
+        (event) =>
+          event.type === "DISPATCH_RESPONSE" &&
+          event.payload.transitionId === "cycle",
+      );
+    expect(logicalEvents).toHaveLength(3);
+    expect(
+      writes
+        .flat()
+        .some(
+          (event) =>
+            event.type === "DISPATCH_RESPONSE" &&
+            event.payload.outcome === "FAILED",
+        ),
+    ).toBe(false);
   });
 });
 

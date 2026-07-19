@@ -5,6 +5,10 @@ import type {
 } from "@you-agent-factory/client";
 import { inspectFactoryEmulatorCompatibility } from "./compatibility.js";
 import type { FactoryEventSink } from "./event-sink.js";
+import {
+  visitCountGuardsAllow,
+  visitsAfterTransition,
+} from "./logical-move.js";
 import { safeParseFactoryEmulatorScenario } from "./scenario.js";
 import type {
   FactoryEmulatorInitialSubmission,
@@ -337,6 +341,12 @@ function executionFor(
   workstation: NonNullable<FactoryDefinition["workstations"]>[number],
   invocationIndex = 0,
 ): WorkExecution {
+  if (workstation.type === "LOGICAL_MOVE") {
+    return {
+      workstation,
+      outcome: { result: "accepted", durationMs: 0 },
+    };
+  }
   const rule = configuration.scenario.rules.find((candidate) =>
     ruleMatches(candidate, submissions, workstation),
   );
@@ -434,6 +444,12 @@ function schedulerCandidatesFor(
       const primary = works[0];
       if (primary === undefined || works.length !== workstation.inputs.length)
         continue;
+      if (
+        workstation.type === "LOGICAL_MOVE" &&
+        !visitCountGuardsAllow(workstation.guards ?? [], primary.visits)
+      ) {
+        continue;
+      }
       const submissions = works.map(submissionForWork);
       const initial = executionFor(configuration, submissions, workstation);
       const lineage = [
@@ -581,6 +597,10 @@ function routedWorksFor(
     workstation,
     dispatch.outcome.result,
   );
+  const visits = visitsAfterTransition(
+    inputs.map((input) => input.visits),
+    workstation.name,
+  );
 
   return routes.map((route, ordinal) => {
     const matching = inputs.find(({ workType }) => workType === route.workType);
@@ -610,6 +630,7 @@ function routedWorksFor(
       tokenId: identity("token", dispatch.dispatchId, ordinal, route),
       workId,
       rootWorkId: lineageSource.rootWorkId,
+      visits,
       workType: route.workType,
       state: route.state,
       ...(input === undefined ? {} : { input }),
@@ -686,6 +707,7 @@ function workRequestCalculation(
       tokenId: identity("token", workId, submission.workType, submission.state),
       workId,
       rootWorkId: workId,
+      visits: {},
       workType: submission.workType,
       state: submission.state,
       ...(submission.input === undefined ? {} : { input: submission.input }),
@@ -727,6 +749,122 @@ function workRequestCalculation(
           ...(work.input === undefined ? {} : { payload: work.input }),
         })),
       },
+    },
+  };
+}
+
+function logicalMoveCalculation(
+  configuration: ValidatedConfiguration,
+  state: StartedState,
+  workstation: Workstation,
+  outcome: FactoryEmulatorOutcome,
+  inputs: readonly FactoryEmulatorSessionWork[],
+  resources: readonly FactorySchedulerResourceClaim[],
+  logicalMoveId: string,
+  sequence: number,
+): {
+  readonly routedWorks: readonly FactoryEmulatorSessionWork[];
+  readonly event: FactoryEvent;
+} {
+  const primary = inputs[0];
+  if (primary === undefined) throw new Error("Logical move has no input Work.");
+  const routedWorks = routedWorksFor(
+    configuration,
+    state,
+    {
+      dispatchId: logicalMoveId,
+      completionId: identity("completion", logicalMoveId),
+      transitionId: workstation.name,
+      workstation: workstation.name,
+      worker: "",
+      startedElapsedMs: state.virtualElapsedMs,
+      dueElapsedMs: state.virtualElapsedMs,
+      inputTokenIds: inputs.map(({ tokenId }) => tokenId),
+      resources,
+      outcome,
+    },
+    inputs,
+  );
+  return {
+    routedWorks,
+    event: {
+      schemaVersion: "agent-factory.event.v1",
+      id: identity(
+        "event",
+        state.sessionId,
+        sequence,
+        "DISPATCH_RESPONSE",
+        logicalMoveId,
+      ),
+      type: "DISPATCH_RESPONSE",
+      context: eventContext(state, sequence, state.virtualTime, {
+        requestId: primary.requestId,
+        traceIds: inputs.map(({ traceId }) => traceId),
+        workIds: inputs.map(({ workId }) => workId),
+        currentChainingTraceId: primary.traceId,
+        previousChainingTraceIds: inputs.slice(1).map(({ traceId }) => traceId),
+      }),
+      payload: {
+        transitionId: workstation.name,
+        outcome: "ACCEPTED",
+        durationMillis: 0,
+        ...(routedWorks.length === 0
+          ? {}
+          : {
+              outputWork: routedWorks.map((routed) =>
+                eventWorkFor(configuration, routed),
+              ),
+            }),
+      },
+    },
+  };
+}
+
+function replaceInputPhases(
+  replacements: FactoryEmulatorSessionWork[],
+  state: StartedState,
+  indexes: readonly number[],
+  phase: FactoryEmulatorSessionWork["phase"],
+): void {
+  for (const index of indexes) {
+    const consumed = state.works[index];
+    if (consumed !== undefined) replacements[index] = { ...consumed, phase };
+  }
+}
+
+function workerDispatchRequestEvent(
+  state: StartedState,
+  inputs: readonly FactoryEmulatorSessionWork[],
+  transitionId: string,
+  dispatchId: string,
+  resources: readonly { name: string; capacity: number }[],
+  sequence: number,
+): FactoryEvent {
+  const primary = inputs[0];
+  if (primary === undefined)
+    throw new Error("Worker dispatch has no input Work.");
+  return {
+    schemaVersion: "agent-factory.event.v1",
+    id: identity(
+      "event",
+      state.sessionId,
+      sequence,
+      "DISPATCH_REQUEST",
+      dispatchId,
+    ),
+    type: "DISPATCH_REQUEST",
+    context: eventContext(state, sequence, state.virtualTime, {
+      dispatchId,
+      requestId: primary.requestId,
+      traceIds: inputs.map(({ traceId }) => traceId),
+      workIds: inputs.map(({ workId }) => workId),
+      currentChainingTraceId: primary.traceId,
+      previousChainingTraceIds: inputs.slice(1).map(({ traceId }) => traceId),
+    }),
+    payload: {
+      transitionId,
+      inputs: inputs.map(({ workId }) => ({ workId })),
+      ...(resources.length === 0 ? {} : { resources: [...resources] }),
     },
   };
 }
@@ -1187,9 +1325,12 @@ export function createFactoryEmulatorSession(
       )
         continue;
       if (cursorKey !== undefined) cursors[cursorKey] = invocation + 1;
-      const transitionId = execution.rule?.id ?? "emulator-unmatched";
+      const logicalMove = execution.workstation.type === "LOGICAL_MOVE";
+      const transitionId = logicalMove
+        ? execution.workstation.name
+        : (execution.rule?.id ?? "emulator-unmatched");
       const dispatchId = identity(
-        "dispatch",
+        logicalMove ? "logical-move" : "dispatch",
         works.map(({ tokenId }) => tokenId),
         transitionId,
         invocation,
@@ -1199,11 +1340,23 @@ export function createFactoryEmulatorSession(
         state.virtualElapsedMs + execution.outcome.durationMs;
       const eventResources = eventResourcesFor(configuration, resources);
       virtualTimeAt(configuration.scenario, dueElapsedMs);
-      for (const index of indexes) {
-        const consumed = state.works[index];
-        if (consumed !== undefined)
-          replacements[index] = { ...consumed, phase: "active" };
+      if (logicalMove) {
+        const calculation = logicalMoveCalculation(
+          configuration,
+          state,
+          execution.workstation,
+          execution.outcome,
+          works,
+          resources,
+          dispatchId,
+          state.counters.events + events.length,
+        );
+        replaceInputPhases(replacements, state, indexes, "completed");
+        replacements.push(...calculation.routedWorks);
+        events.push(calculation.event);
+        continue;
       }
+      replaceInputPhases(replacements, state, indexes, "active");
       const primaryIndex = indexes[0];
       if (primaryIndex === undefined) continue;
       replacements[primaryIndex] = {
@@ -1223,32 +1376,16 @@ export function createFactoryEmulatorSession(
         },
       };
       const sequence = state.counters.events + events.length;
-      events.push({
-        schemaVersion: "agent-factory.event.v1",
-        id: identity(
-          "event",
-          state.sessionId,
-          sequence,
-          "DISPATCH_REQUEST",
-          dispatchId,
-        ),
-        type: "DISPATCH_REQUEST",
-        context: eventContext(state, sequence, state.virtualTime, {
-          dispatchId,
-          requestId: work.requestId,
-          traceIds: works.map(({ traceId }) => traceId),
-          workIds: works.map(({ workId }) => workId),
-          currentChainingTraceId: work.traceId,
-          previousChainingTraceIds: works
-            .slice(1)
-            .map(({ traceId }) => traceId),
-        }),
-        payload: {
+      events.push(
+        workerDispatchRequestEvent(
+          state,
+          works,
           transitionId,
-          inputs: works.map(({ workId }) => ({ workId })),
-          ...(eventResources.length === 0 ? {} : { resources: eventResources }),
-        },
-      });
+          dispatchId,
+          eventResources,
+          sequence,
+        ),
+      );
     }
     for (const [index, work] of state.works.entries()) {
       if (work.phase === "ready" && !executableWork.has(index)) {

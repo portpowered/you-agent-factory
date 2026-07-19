@@ -195,6 +195,8 @@ export interface FactoryEmulatorSessionWork {
   readonly workId: string;
   /** Stable root identity used by lineage-scoped scenario cursors. */
   readonly rootWorkId: string;
+  /** Deterministic transition visit counts carried by this Work lineage. */
+  readonly visits: Readonly<Record<string, number>>;
   readonly workType: string;
   readonly state: string;
   readonly input?: string;
