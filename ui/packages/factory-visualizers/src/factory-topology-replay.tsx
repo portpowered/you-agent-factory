@@ -8,6 +8,7 @@ import type {
 } from "@you-agent-factory/factory-replay";
 import { useEffect, useMemo, useState } from "react";
 
+import { projectFactoryTopologyActiveWork } from "./factory-topology-active-work";
 import {
   type FactoryTopologyChromeConfiguration,
   resolveFactoryTopologyChrome,
@@ -46,6 +47,9 @@ export type FactoryTopologyReplayState =
 
 export interface FactoryTopologyReplayMessages {
   activeDispatches: (count: number) => string;
+  activeWorkDuration: (durationTicks: number) => string;
+  activeWorkOverflow: (count: number) => string;
+  activeWorkRegionLabel: string;
   annotationsHidden: string;
   annotationsVisible: string;
   empty: string;
@@ -263,6 +267,7 @@ function ReactFlowCanvas({
 
   return (
     <>
+      <ActiveWorkSummary activity={flow.activity} messages={messages} />
       {chrome.legend ? <TopologyLegend messages={messages} /> : null}
       {chrome.visibilityControls && hasAnnotations ? (
         <button
@@ -304,6 +309,36 @@ function ReactFlowCanvas({
         ) : null}
       </ReactFlow>
     </>
+  );
+}
+
+function ActiveWorkSummary({
+  activity,
+  messages,
+}: {
+  activity: FactoryTopologyReplayProjection["activity"];
+  messages: FactoryTopologyReplayMessages;
+}) {
+  const activeWork = projectFactoryTopologyActiveWork(activity);
+  if (activeWork.rows.length === 0) return null;
+
+  return (
+    <section
+      aria-label={messages.activeWorkRegionLabel}
+      className="factory-topology-replay__active-work"
+    >
+      <ul>
+        {activeWork.rows.map((work) => (
+          <li key={work.id}>
+            <span>{work.id}</span>
+            <span>{messages.activeWorkDuration(work.durationTicks)}</span>
+          </li>
+        ))}
+      </ul>
+      {activeWork.overflowCount > 0 ? (
+        <p>{messages.activeWorkOverflow(activeWork.overflowCount)}</p>
+      ) : null}
+    </section>
   );
 }
 

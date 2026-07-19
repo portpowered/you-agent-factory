@@ -43,6 +43,7 @@ try {
   await verifyResponsiveViewports(browser);
   await verifyRecordingComposition(browser);
   await verifyRecordingPresentations(browser);
+  await verifyChromeOperationalDetail(browser);
   await verifyGermanFormatting(browser);
   await verifyReducedMotion(browser);
   console.log(
@@ -51,6 +52,47 @@ try {
 } finally {
   await browser?.close();
   server.kill();
+}
+
+async function verifyChromeOperationalDetail(browserInstance) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 360, height: 800 },
+  });
+  const page = await context.newPage();
+  const stories = [
+    "factory-visualizers-factorytopologyreplay--full-chrome",
+    "factory-visualizers-factorytopologyreplay--minimal-chrome",
+    "factory-visualizers-factorytopologyreplay--no-chrome",
+  ];
+  for (const storyId of stories) {
+    await openStory(page, storyId);
+    await assertNoPageOverflow(page, storyId);
+    assert(
+      await page.getByRole("region", { name: "Active Work" }).isVisible(),
+      `${storyId} omitted active Work evidence.`,
+    );
+    assert(
+      await page.getByText("Active for 1 ticks").first().isVisible(),
+      `${storyId} omitted active Work duration evidence.`,
+    );
+    assert(
+      await page.getByText("1 more active Work").isVisible(),
+      `${storyId} omitted active Work overflow evidence.`,
+    );
+    assert(
+      (await page.getByText("2 of 4 capacity occupied").count()) > 0,
+      `${storyId} omitted resource evidence.`,
+    );
+    assert(
+      (await page.getByText("7 Work in this state").count()) > 0,
+      `${storyId} omitted Work State evidence.`,
+    );
+    assert(
+      (await page.locator(".react-flow__edge").count()) > 0,
+      `${storyId} omitted active-route evidence.`,
+    );
+  }
+  await context.close();
 }
 
 async function verifyRecordingPresentations(browserInstance) {

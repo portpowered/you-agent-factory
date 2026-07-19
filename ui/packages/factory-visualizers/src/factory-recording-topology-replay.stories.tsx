@@ -41,6 +41,9 @@ const messages: FactoryRecordingTopologyReplayMessages = {
   topology: {
     activeDispatches: (count) =>
       `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+    activeWorkDuration: (ticks) => `Active for ${ticks} ticks`,
+    activeWorkOverflow: (count) => `${count} more active Work`,
+    activeWorkRegionLabel: "Active Work",
     annotationsHidden: "Show annotations",
     annotationsVisible: "Hide annotations",
     empty: "No Factory topology is available at this tick.",

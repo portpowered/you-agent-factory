@@ -1,5 +1,13 @@
 import type { FactoryRecordingTopologyReplayMessages } from "../factory-recording-topology-replay";
 
+export const englishTopologyActivityMessages = {
+  activeDispatches: (count: number) => `${count} active Dispatches`,
+  activeWorkDuration: (ticks: number) => `Active for ${ticks} ticks`,
+  activeWorkOverflow: (count: number) => `${count} more active Work`,
+  activeWorkRegionLabel: "Active Work",
+  inactiveDispatches: "No active Dispatch",
+};
+
 export function createGermanRecordingMessages(): FactoryRecordingTopologyReplayMessages {
   const kindNames = {
     resource: "Ressource",
@@ -57,6 +65,9 @@ export function createGermanRecordingMessages(): FactoryRecordingTopologyReplayM
     topology: {
       activeDispatches: (count) =>
         `${count} aktive ${count === 1 ? "Ausführung" : "Ausführungen"}`,
+      activeWorkDuration: (ticks) => `${ticks} Schritte aktiv`,
+      activeWorkOverflow: (count) => `${count} weitere aktive Aufträge`,
+      activeWorkRegionLabel: "Aktive Aufträge",
       annotationsHidden: "Anmerkungen anzeigen",
       annotationsVisible: "Anmerkungen ausblenden",
       empty: "Für diesen Schritt ist keine Fabriktopologie verfügbar.",

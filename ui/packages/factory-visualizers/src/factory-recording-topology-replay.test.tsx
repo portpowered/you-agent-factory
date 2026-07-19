@@ -10,6 +10,7 @@ import {
   FactoryRecordingTopologyReplay,
   type FactoryRecordingTopologyReplayMessages,
 } from "./factory-recording-topology-replay";
+import { englishTopologyActivityMessages } from "./testing/factory-recording-messages";
 
 vi.mock("@xyflow/react", () => ({
   Background: () => null,
@@ -81,10 +82,9 @@ const messages: FactoryRecordingTopologyReplayMessages = {
     unavailable: "Timeline unavailable",
   },
   topology: {
-    activeDispatches: (count) => `${count} active Dispatches`,
+    ...englishTopologyActivityMessages,
     empty: "No Factory topology is available.",
     failed: "The Factory topology could not be shown.",
-    inactiveDispatches: "No active Dispatch",
     imageFailed: "The annotation image could not be shown.",
     imageLoading: "Loading annotation image.",
     loading: "Loading Factory topology.",

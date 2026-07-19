@@ -13,6 +13,9 @@ import {
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) =>
     `${count} active ${count === 1 ? "Dispatch" : "Dispatches"}`,
+  activeWorkDuration: (ticks) => `Active for ${ticks} ticks`,
+  activeWorkOverflow: (count) => `${count} more active Work`,
+  activeWorkRegionLabel: "Active Work",
   annotationsHidden: "Show annotations",
   annotationsVisible: "Hide annotations",
   empty: "No Factory topology is available at this tick.",
@@ -288,6 +291,7 @@ function createProjection(dense = false): FactoryTopologyReplayProjection {
           id: "overlay:dispatch-1",
           resourceNodeIds: ["resource:gpu"],
           startedTick: 17,
+          workIds: ["work-4", "work-2", "work-1", "work-3"],
           workerNodeId: "worker:alice",
           workstationNodeId: "workstation:review",
         },

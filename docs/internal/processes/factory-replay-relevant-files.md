@@ -108,7 +108,9 @@ that consumes the replay kernel.
   resolved chrome only after the prepared projection succeeds. Disabled
   background, legend, viewport, and annotation-visibility regions must be
   unmounted rather than visually hidden; caller-provided messages own every
-  accessible chrome label.
+  accessible chrome label. Its bounded active-Work summary derives only from
+  selected-tick active Dispatch Work references and remains visible regardless
+  of chrome preset or override; it must not alter the prepared projection.
 - `ui/packages/factory-visualizers/src/factory-recording-topology-replay.tsx`
   validates and owns static recording replay, then forwards the caller-owned
   layout sidecar unchanged to the controlled topology renderer. Other hosts

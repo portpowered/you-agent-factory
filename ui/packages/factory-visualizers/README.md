@@ -11,6 +11,10 @@ Choose the `full`, `minimal`, or `none` preset, then override `legend`,
 `background`, `viewportControls`, or `visibilityControls` individually. The
 resolver starts from the selected preset and applies supplied overrides without
 changing the caller-provided topology, activity, or Work-progress projection.
+When active Dispatches supply Work references, the topology also presents the
+first three active Work IDs with their selected-tick durations and an overflow
+count. This operational summary is independent of optional chrome, so it stays
+available with full, minimal, and none presets.
 
 `FactoryEmulatorControls` composes the lower-level controlled playback toolbar
 with `FactoryTimelineScrubber`. Hosts provide the current/history selection and

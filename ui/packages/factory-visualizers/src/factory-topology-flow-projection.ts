@@ -18,6 +18,7 @@ import type {
 import { FactoryVisualizerInternalError } from "./visualizer-error";
 
 export interface FactoryTopologyFlowProjection {
+  activity: FactoryActivityProjection;
   edges: Edge[];
   nodes: Node<TopologyNodeData | AnnotationNodeData>[];
   validEndpoints: boolean;
@@ -48,6 +49,7 @@ export function projectFactoryTopologyFlow(
     );
     const nodeData = nodePresentationData(projection, connections, layout);
     return {
+      activity: projection.activity,
       edges: validEndpoints
         ? projectEdges(connections, projection.activity, prefersReducedMotion)
         : [],

@@ -47,6 +47,9 @@ const meta = {
     topology: {
       messages: {
         activeDispatches: (count: number) => `${count} active Dispatches`,
+        activeWorkDuration: (ticks: number) => `Active for ${ticks} ticks`,
+        activeWorkOverflow: (count: number) => `${count} more active Work`,
+        activeWorkRegionLabel: "Active Work",
         annotationsHidden: "Show annotations",
         annotationsVisible: "Hide annotations",
         empty: "No topology.",
