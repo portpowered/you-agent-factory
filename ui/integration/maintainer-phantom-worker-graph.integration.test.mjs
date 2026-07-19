@@ -138,8 +138,8 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
           timeout: uiInteractionTimeoutMs,
         });
 
-        const workerNodeLabels = await graphViewport
-          .locator("[data-worker-label-zone]")
+        const workerSelectionLabels = await graphViewport
+          .getByRole("button", { name: / worker$/ })
           .evaluateAll((elements) =>
             elements
               .map(
@@ -147,25 +147,19 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
               )
               .filter((label) => label.length > 0),
           );
-        expect(workerNodeLabels).toEqual(
+        expect(workerSelectionLabels).toEqual(
           expect.arrayContaining([
-            "worker:processor",
-            "worker:workspace-setup",
+            "Select processor worker",
+            "Select workspace-setup worker",
           ]),
         );
-        expect(workerNodeLabels).not.toContain("worker:");
-        expect(
-          await graphViewport
-            .getByRole("img", { name: "worker:", exact: true })
-            .count(),
-        ).toBe(0);
+        expect(workerSelectionLabels).not.toContain("Select  worker");
 
         await processorWorkerButton.scrollIntoViewIfNeeded();
         await processorWorkerButton.click();
         await expect
           .poll(
-            async () =>
-              processorWorkerButton.getAttribute("data-selected-worker"),
+            async () => processorWorkerButton.getAttribute("aria-pressed"),
             {
               timeout: uiInteractionTimeoutMs,
             },
@@ -177,7 +171,7 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
         await expect
           .poll(
             async () =>
-              workspaceSetupWorkerButton.getAttribute("data-selected-worker"),
+              workspaceSetupWorkerButton.getAttribute("aria-pressed"),
             {
               timeout: uiInteractionTimeoutMs,
             },
@@ -185,8 +179,7 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
           .toBe("true");
         await expect
           .poll(
-            async () =>
-              processorWorkerButton.getAttribute("data-selected-worker"),
+            async () => processorWorkerButton.getAttribute("aria-pressed"),
             {
               timeout: uiInteractionTimeoutMs,
             },
