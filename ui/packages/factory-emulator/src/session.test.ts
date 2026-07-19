@@ -1,4 +1,8 @@
-import type { FactoryDefinition } from "@you-agent-factory/client";
+// biome-ignore-all lint/style/noExcessiveLinesPerFile: Lifecycle and execution assertions share one public-session fixture.
+import type {
+  FactoryDefinition,
+  FactoryEvent,
+} from "@you-agent-factory/client";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { FactoryEventSink } from "./event-sink.js";
 import { RecordingFactoryEventSink } from "./recording-sink.js";
@@ -8,9 +12,11 @@ import {
   DEFAULT_FACTORY_EMULATOR_LIMITS,
   FACTORY_EMULATOR_LIMIT_HARD_CAPS,
   FactoryEmulatorConfigurationError,
+  FactoryEmulatorDurationError,
   FactoryEmulatorLifecycleError,
   FactoryEmulatorPendingCommandError,
   type FactoryEmulatorSession,
+  type FactoryEmulatorSubmissionError,
 } from "./session.js";
 
 const factory = {
@@ -101,6 +107,264 @@ describe("Factory emulator session lifecycle", () => {
       );
     }
     expect(writes).toBe(0);
+  });
+});
+
+const executionFactory = {
+  name: "execution-factory",
+  orchestrator: { kind: "PETRI" },
+  workTypes: [
+    {
+      name: "task",
+      states: [
+        { name: "ready", type: "INITIAL" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+  ],
+  workers: [{ name: "scripted-worker", type: "AGENT_WORKER" }],
+  workstations: [
+    {
+      name: "scripted-run",
+      type: "AGENT_RUN",
+      worker: "scripted-worker",
+      inputs: [{ workType: "task", state: "ready" }],
+      outputs: [{ workType: "task", state: "done" }],
+    },
+  ],
+} satisfies FactoryDefinition;
+
+function executionScenario(
+  overrides: Partial<FactoryEmulatorScenario> = {},
+): FactoryEmulatorScenario {
+  return {
+    schemaVersion: "factory-emulator-scenario/v1",
+    id: "execution-scenario",
+    factory: { name: "execution-factory" },
+    seed: "execution-seed",
+    startAt: "2026-07-18T16:00:00.000Z",
+    rules: [
+      {
+        id: "scripted-outcome",
+        selector: { workstation: "scripted-run" },
+        cursor: { scope: "lineage", input: "rootWorkId" },
+        outcomes: [{ result: "accepted", durationMs: 25 }],
+        exhaustion: "repeat-last",
+      },
+    ],
+    unmatched: { behavior: "error" },
+    ...overrides,
+  };
+}
+
+function executionHarness(
+  scenarioOverride = executionScenario(),
+  sink: FactoryEventSink = { write: async () => undefined },
+) {
+  return createFactoryEmulatorSession({
+    factory: executionFactory,
+    scenario: scenarioOverride,
+    sink,
+  });
+}
+
+describe("Factory emulator Work submission", () => {
+  it("normalizes initial, active, and idle submissions into atomic Work requests", async () => {
+    const sink = new RecordingFactoryEventSink({
+      recording: {
+        schemaVersion: "factory-recording/v1",
+        id: "execution-recording",
+        title: "Execution recording",
+      },
+      maxEvents: 30,
+    });
+    const emulator = executionHarness(
+      executionScenario({
+        initialSubmissions: [
+          { name: "initial", workType: "task", state: "ready" },
+        ],
+      }),
+      sink,
+    );
+
+    const started = await emulator.start();
+    expect(
+      started.batches.map((batch) => batch.map(({ type }) => type)),
+    ).toEqual([
+      ["RUN_REQUEST", "INITIAL_STRUCTURE_REQUEST", "SESSION_STARTED"],
+      ["WORK_REQUEST"],
+    ]);
+    await emulator.advanceToNext();
+    expect(emulator.status().phase).toBe("active");
+
+    const activeSubmission = await emulator.submit([
+      { name: "active-one", workType: "task", state: "ready", input: "one" },
+      { name: "active-two", workType: "task", state: "ready", input: "two" },
+    ]);
+    expect(activeSubmission.batch).toHaveLength(1);
+    const workRequest = activeSubmission.batch[0];
+    expect(workRequest?.type).toBe("WORK_REQUEST");
+    if (workRequest === undefined)
+      throw new Error("missing Work request event");
+    expect(
+      (workRequest.payload as { works: { name: string }[] }).works.map(
+        ({ name }) => name,
+      ),
+    ).toEqual(["active-one", "active-two"]);
+
+    await emulator.advanceBy(25);
+    expect(emulator.status().phase).toBe("idle");
+    await emulator.submit({
+      name: "after-idle",
+      workType: "task",
+      state: "ready",
+    });
+    expect(emulator.status().phase).toBe("ready");
+    expect(sink.snapshot().events.map(({ type }) => type)).toEqual(
+      started.batches
+        .flat()
+        .map(({ type }) => type)
+        .concat([
+          "DISPATCH_REQUEST",
+          "WORK_REQUEST",
+          "DISPATCH_REQUEST",
+          "DISPATCH_REQUEST",
+          "DISPATCH_RESPONSE",
+          "DISPATCH_RESPONSE",
+          "DISPATCH_RESPONSE",
+          "WORK_REQUEST",
+        ]),
+    );
+  });
+
+  it("rejects a malformed batch before writing or partially accepting Work", async () => {
+    const writes: FactoryEvent[][] = [];
+    const emulator = executionHarness(
+      executionScenario({ initialSubmissions: [] }),
+      {
+        write: async (events) => {
+          writes.push(structuredClone(events) as FactoryEvent[]);
+        },
+      },
+    );
+    await emulator.start();
+    const before = emulator.state();
+
+    await expect(
+      emulator.submit([
+        { name: "valid", workType: "task", state: "ready" },
+        { name: "invalid", workType: "missing", state: "ready" },
+      ]),
+    ).rejects.toMatchObject({
+      name: "FactoryEmulatorSubmissionError",
+      code: "invalid_submission",
+      diagnostics: [
+        expect.objectContaining({ path: ["submissions", 1, "workType"] }),
+      ],
+    } satisfies Partial<FactoryEmulatorSubmissionError>);
+    expect(emulator.state()).toEqual(before);
+    expect(writes).toHaveLength(1);
+  });
+});
+
+describe("Factory emulator virtual-time advancement", () => {
+  it("processes deadlines through an exact target and jumps to the next due instant", async () => {
+    const emulator = executionHarness(
+      executionScenario({
+        initialSubmissions: [
+          { name: "slow", workType: "task", state: "ready" },
+          { name: "fast", workType: "task", state: "ready" },
+        ],
+        rules: [
+          {
+            id: "slow-rule",
+            selector: { input: { name: "slow" } },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [{ result: "accepted", durationMs: 20 }],
+            exhaustion: "repeat-last",
+          },
+          {
+            id: "fast-rule",
+            selector: { input: { name: "fast" } },
+            cursor: { scope: "lineage", input: "rootWorkId" },
+            outcomes: [
+              { result: "rejected", durationMs: 10, feedback: "scripted" },
+            ],
+            exhaustion: "repeat-last",
+          },
+        ],
+      }),
+    );
+    await emulator.start();
+
+    const partial = await emulator.advanceBy(10);
+    expect(
+      partial.batches.map((batch) => batch.map(({ type }) => type)),
+    ).toEqual([
+      ["DISPATCH_REQUEST", "DISPATCH_REQUEST"],
+      ["DISPATCH_RESPONSE"],
+    ]);
+    expect(partial.virtualTime).toBe("2026-07-18T16:00:00.010Z");
+    expect(partial.state.works.map(({ phase }) => phase)).toEqual([
+      "active",
+      "completed",
+    ]);
+
+    const next = await emulator.advanceToNext();
+    expect(next.virtualElapsedMs).toBe(20);
+    expect(next.batches[0]?.[0]?.context.eventTime).toBe(
+      "2026-07-18T16:00:00.020Z",
+    );
+    expect(next.state.works.every(({ phase }) => phase === "completed")).toBe(
+      true,
+    );
+  });
+
+  it("completes simultaneous deadlines in stable Work order and idles without events", async () => {
+    const emulator = executionHarness(
+      executionScenario({
+        initialSubmissions: [
+          { name: "first", workType: "task", state: "ready" },
+          { name: "second", workType: "task", state: "ready" },
+        ],
+      }),
+    );
+    await emulator.start();
+    const dispatched = await emulator.advanceToNext();
+    const completed = await emulator.advanceToNext();
+
+    expect(
+      completed.batches[0]?.map(({ context }) => context.workIds?.[0]),
+    ).toEqual(dispatched.state.works.map(({ workId }) => workId));
+    expect(completed.virtualElapsedMs).toBe(25);
+    const before = emulator.state();
+    const idle = await emulator.advanceToNext();
+    expect(idle).toMatchObject({ status: "idle", batches: [] });
+    expect(emulator.state()).toEqual(before);
+  });
+
+  it("rejects invalid durations without changing virtual time or emitting events", async () => {
+    const writes: FactoryEvent[][] = [];
+    const emulator = executionHarness(undefined, {
+      write: async (events) => {
+        writes.push(structuredClone(events) as FactoryEvent[]);
+      },
+    });
+    await emulator.start();
+    const before = emulator.state();
+
+    for (const duration of [
+      -1,
+      0.5,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER,
+    ]) {
+      await expect(emulator.advanceBy(duration)).rejects.toBeInstanceOf(
+        FactoryEmulatorDurationError,
+      );
+    }
+    expect(emulator.state()).toEqual(before);
+    expect(writes).toHaveLength(1);
   });
 });
 

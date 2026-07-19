@@ -4,6 +4,7 @@ import type {
 } from "@you-agent-factory/client";
 import type { FactoryEventSink } from "./event-sink.js";
 import type {
+  FactoryEmulatorInitialSubmission,
   FactoryEmulatorScenario,
   FactoryEmulatorScenarioIssue,
 } from "./scenario-contracts.js";
@@ -65,7 +66,11 @@ export class FactoryEmulatorConfigurationError extends Error {
   }
 }
 
-export type FactoryEmulatorCommand = "start";
+export type FactoryEmulatorCommand =
+  | "start"
+  | "submit"
+  | "advanceBy"
+  | "advanceToNext";
 
 export class FactoryEmulatorLifecycleError extends Error {
   readonly code = "invalid_lifecycle" as const;
@@ -101,6 +106,30 @@ export class FactoryEmulatorPendingCommandError extends Error {
   }
 }
 
+export class FactoryEmulatorDurationError extends Error {
+  readonly code = "invalid_duration" as const;
+  readonly durationMs: number;
+
+  constructor(durationMs: number) {
+    super("durationMs must be a non-negative safe integer.");
+    this.name = "FactoryEmulatorDurationError";
+    this.durationMs = durationMs;
+  }
+}
+
+export class FactoryEmulatorSubmissionError extends Error {
+  readonly code = "invalid_submission" as const;
+  readonly diagnostics: readonly FactoryEmulatorScenarioIssue[];
+
+  constructor(diagnostics: readonly FactoryEmulatorScenarioIssue[]) {
+    super("Factory emulator Work submission is invalid.");
+    this.name = "FactoryEmulatorSubmissionError";
+    this.diagnostics = JSON.parse(
+      JSON.stringify(diagnostics),
+    ) as readonly FactoryEmulatorScenarioIssue[];
+  }
+}
+
 export interface FactoryEmulatorSessionOptions {
   readonly factory: FactoryDefinition;
   readonly scenario: FactoryEmulatorScenario;
@@ -116,6 +145,28 @@ export interface FactoryEmulatorSessionCounters {
   readonly completedDispatches: number;
 }
 
+export interface FactoryEmulatorSessionWork {
+  readonly submissionId: string;
+  readonly requestId: string;
+  readonly traceId: string;
+  readonly workId: string;
+  readonly workType: string;
+  readonly state: string;
+  readonly input?: string;
+  readonly parent?: string;
+  readonly phase: "ready" | "waiting" | "active" | "completed";
+  readonly dispatch?: {
+    readonly dispatchId: string;
+    readonly completionId: string;
+    readonly transitionId: string;
+    readonly workstation: string;
+    readonly worker: string;
+    readonly startedElapsedMs: number;
+    readonly dueElapsedMs: number;
+    readonly outcome: import("./scenario-contracts.js").FactoryEmulatorOutcome;
+  };
+}
+
 export type FactoryEmulatorSessionState =
   | {
       readonly lifecycle: "pre-start";
@@ -127,6 +178,8 @@ export type FactoryEmulatorSessionState =
       readonly sessionId: string;
       readonly virtualTime: string;
       readonly virtualElapsedMs: number;
+      readonly works: readonly FactoryEmulatorSessionWork[];
+      readonly ruleCursors: Readonly<Record<string, number>>;
       readonly counters: FactoryEmulatorSessionCounters;
     };
 
@@ -171,8 +224,37 @@ export interface FactoryEmulatorStartReceipt {
   >;
 }
 
+export interface FactoryEmulatorSubmitReceipt {
+  readonly status: "submitted";
+  readonly batch: readonly FactoryEvent[];
+  readonly state: Extract<
+    FactoryEmulatorSessionState,
+    { lifecycle: "started" }
+  >;
+}
+
+export interface FactoryEmulatorAdvanceReceipt {
+  readonly status: "advanced" | "idle";
+  readonly command: "advanceBy" | "advanceToNext";
+  readonly fromVirtualTime: string;
+  readonly virtualTime: string;
+  readonly virtualElapsedMs: number;
+  readonly batches: readonly (readonly FactoryEvent[])[];
+  readonly state: Extract<
+    FactoryEmulatorSessionState,
+    { lifecycle: "started" }
+  >;
+}
+
 export interface FactoryEmulatorSession {
   start(): Promise<FactoryEmulatorStartReceipt>;
+  submit(
+    submissionOrBatch:
+      | FactoryEmulatorInitialSubmission
+      | readonly FactoryEmulatorInitialSubmission[],
+  ): Promise<FactoryEmulatorSubmitReceipt>;
+  advanceBy(durationMs: number): Promise<FactoryEmulatorAdvanceReceipt>;
+  advanceToNext(): Promise<FactoryEmulatorAdvanceReceipt>;
   state(): FactoryEmulatorSessionState;
   status(): FactoryEmulatorSessionStatus;
 }

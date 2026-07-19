@@ -60,6 +60,14 @@ const session = createFactoryEmulatorSession({
 
 const before = session.status();
 const started = await session.start();
+await session.submit({
+  name: "follow-up",
+  workType: "ticket",
+  state: "ready",
+  input: "Customer reply",
+});
+const dispatched = await session.advanceToNext();
+const advanced = await session.advanceBy(250);
 const current = session.state();
 ```
 
@@ -68,6 +76,21 @@ const current = session.state();
 visible only after the sink accepts the complete batch. `state()` and
 `status()` return detached, structured-cloneable snapshots; the kernel does not
 retain playback or event history. An idle session remains open for later Work.
+
+`submit()` accepts one validated scenario Work value or a non-empty batch and
+normalizes it into one canonical `WORK_REQUEST`. The complete request is
+validated before its atomic sink write, so an invalid item cannot partially
+create Work. Submissions remain available while other Work is active and after
+the session returns to idle.
+
+Virtual time advances only when the host calls `advanceBy(durationMs)` or
+`advanceToNext()`. Ready Work starts in one deterministic scheduler batch;
+`advanceToNext()` then jumps to the earliest due instant and completes every
+dispatch due there in stable Work order. `advanceBy()` processes every due
+outcome through its requested instant. Event timestamps are always the scenario
+`startAt` plus committed virtual elapsed time; these commands use no wall-clock
+or browser timers. Receipts, state, status, and validation errors are detached
+structured-cloneable values.
 
 ## Caller-owned event history
 
