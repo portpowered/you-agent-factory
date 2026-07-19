@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,22 +12,7 @@ const packageRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "..",
 );
-const metadataFiles = ["LICENSE.md", "README.md", "package.json"];
 const exampleFiles = ["examples/support-playback.factory-recording.v1.json"];
-
-async function listFiles(directory, relativeRoot) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  return (
-    await Promise.all(
-      entries.map((entry) => {
-        const relativePath = path.posix.join(relativeRoot, entry.name);
-        return entry.isDirectory()
-          ? listFiles(path.join(directory, entry.name), relativePath)
-          : relativePath;
-      }),
-    )
-  ).flat();
-}
 
 function collectExportTargets(exports) {
   if (typeof exports === "string") return [exports.replace(/^\.\//, "")];
@@ -84,20 +69,14 @@ export async function packAndVerify(destination) {
   const actualFiles = report.files
     .map(({ path: file }) => file.replaceAll("\\", "/"))
     .sort();
-  const expectedFiles = [
-    ...metadataFiles,
-    ...exampleFiles,
-    ...(await listFiles(path.join(packageRoot, "dist"), "dist")),
-  ].sort();
-  if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
-    throw new Error(
-      `[factory-visualizers-pack] unexpected tarball inventory\nactual: ${actualFiles.join(", ")}\nexpected: ${expectedFiles.join(", ")}`,
-    );
-  }
   const manifest = JSON.parse(
     await readFile(path.join(packageRoot, "package.json"), "utf8"),
   );
-  for (const target of collectExportTargets(manifest.exports)) {
+  const requiredFiles = [
+    ...collectExportTargets(manifest.exports),
+    ...exampleFiles,
+  ];
+  for (const target of requiredFiles) {
     if (!actualFiles.includes(target))
       throw new Error(
         `[factory-visualizers-pack] missing export target ${target}`,

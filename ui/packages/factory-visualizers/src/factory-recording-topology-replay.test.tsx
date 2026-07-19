@@ -197,6 +197,40 @@ describe("FactoryRecordingTopologyReplay", () => {
   });
 });
 
+describe("FactoryRecordingTopologyReplay recording contract", () => {
+  it("rejects duplicate event IDs through the public recording contract", async () => {
+    const onError = vi.fn();
+    const recording = activeRecording();
+    recording.events.push(structuredClone(recording.events[0]));
+
+    render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        onError={onError}
+        recording={recording}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      messages.topology.failed,
+    );
+    expect(
+      screen.queryByTestId("controlled-topology-renderer"),
+    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ code: "duplicate_event_id" }),
+          ]),
+          kind: "recording-validation",
+        }),
+      ),
+    );
+  });
+});
+
 describe("FactoryRecordingTopologyReplay playback", () => {
   it("starts in current mode, skips sparse ticks, and follows latest again", () => {
     const recording = activeRecording() as ReturnType<typeof activeRecording>;
@@ -289,6 +323,36 @@ describe("FactoryRecordingTopologyReplay playback", () => {
     expect(screen.getByText("Selected logical tick 3")).toBeVisible();
     expect(screen.getByText("1 completed Work")).toBeVisible();
     expect(screen.getByText("0 active Work")).toBeVisible();
+  });
+});
+
+describe("FactoryRecordingTopologyReplay projection cache", () => {
+  it("reuses a stable historical projection when a recorded tick is revisited", () => {
+    render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={activeRecording()}
+      />,
+    );
+    const slider = screen.getByRole("slider", {
+      name: messages.timeline.sliderLabel,
+    });
+
+    fireEvent.change(slider, { target: { value: "1" } });
+    const firstProjection = screen.getByRole("region", {
+      name: messages.progress.regionLabel,
+    }).textContent;
+    expect(firstProjection).toContain("0 Work total");
+
+    fireEvent.change(slider, { target: { value: "3" } });
+    expect(screen.getByText("1 active Work")).toBeVisible();
+
+    fireEvent.change(slider, { target: { value: "1" } });
+    expect(
+      screen.getByRole("region", { name: messages.progress.regionLabel }),
+    ).toHaveTextContent(firstProjection ?? "");
+    expect(screen.getByText("Selected logical tick 1")).toBeVisible();
   });
 });
 
