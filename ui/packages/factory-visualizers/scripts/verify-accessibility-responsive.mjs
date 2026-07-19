@@ -41,6 +41,8 @@ try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
   await verifyResponsiveViewports(browser);
+  await verifyChromePresets(browser);
+  await verifyChromeOperationalDetail(browser);
   await verifyRecordingComposition(browser);
   await verifyRecordingPresentations(browser);
   await verifyGermanFormatting(browser);
@@ -51,6 +53,112 @@ try {
 } finally {
   await browser?.close();
   server.kill();
+}
+
+async function verifyChromePresets(browserInstance) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 720, height: 900 },
+  });
+  const page = await context.newPage();
+  const stories = [
+    ["full-chrome", true, true, true, true],
+    ["minimal-chrome", false, true, true, false],
+    ["no-chrome", false, false, false, false],
+  ];
+
+  for (const [story, legend, background, controls, annotations] of stories) {
+    const storyId = `factory-visualizers-factorytopologyreplay--${story}`;
+    await openStory(page, storyId);
+    await assertNoPageOverflow(page, storyId);
+    await assertNoSeriousAccessibilityViolations(page, storyId);
+    await assertChromeRegion(
+      page.getByRole("group", { name: "Topology legend" }),
+      legend,
+      storyId,
+    );
+    await assertChromeRegion(
+      page.locator(".react-flow__background"),
+      background,
+      storyId,
+    );
+    await assertChromeRegion(
+      page.locator(".react-flow__controls"),
+      controls,
+      storyId,
+    );
+    await assertChromeRegion(
+      page.getByRole("button", { name: "Hide annotations" }),
+      annotations,
+      storyId,
+    );
+  }
+
+  await openStory(
+    page,
+    "factory-visualizers-factorytopologyreplay--full-chrome",
+  );
+  const annotations = page.getByRole("button", { name: "Hide annotations" });
+  await tabTo(page, annotations, 50);
+  await page.keyboard.press("Enter");
+  await page
+    .getByRole("button", { name: "Show annotations" })
+    .waitFor({ state: "visible", timeout: 5_000 });
+  await context.close();
+}
+
+async function assertChromeRegion(locator, expected, storyId) {
+  const count = await locator.count();
+  assert(
+    expected ? count > 0 && (await locator.first().isVisible()) : count === 0,
+    `${storyId} did not ${expected ? "render" : "unmount"} expected chrome.`,
+  );
+}
+
+async function verifyChromeOperationalDetail(browserInstance) {
+  const stories = ["full-chrome", "minimal-chrome", "no-chrome"];
+  const viewports = [
+    { width: 360, height: 800 },
+    { width: 1200, height: 900 },
+  ];
+
+  for (const viewport of viewports) {
+    const context = await browserInstance.newContext({ viewport });
+    const page = await context.newPage();
+    for (const story of stories) {
+      const storyId = `factory-visualizers-factorytopologyreplay--${story}`;
+      await openStory(page, storyId);
+      await assertNoPageOverflow(page, storyId);
+      assert(
+        await page.getByRole("group", { name: "Active Work" }).isVisible(),
+        `${storyId} omitted active Work evidence at ${viewport.width}px.`,
+      );
+      assert(
+        (await page.getByText("Active for 1 ticks").count()) === 3,
+        `${storyId} did not retain bounded active Work durations at ${viewport.width}px.`,
+      );
+      assert(
+        await page.getByText("1 more active Work").isVisible(),
+        `${storyId} omitted active Work overflow evidence at ${viewport.width}px.`,
+      );
+      assert(
+        (await page.getByText("2 of 4 capacity occupied").count()) > 0,
+        `${storyId} omitted resource evidence at ${viewport.width}px.`,
+      );
+      assert(
+        (await page.getByText("7 Work in this state").count()) > 0,
+        `${storyId} omitted Work State evidence at ${viewport.width}px.`,
+      );
+      await page.waitForFunction(
+        () => document.querySelectorAll(".react-flow__edge").length > 0,
+        { timeout: 5_000 },
+      );
+      assert(
+        (await page.locator(".react-flow__edge").count()) > 0,
+        `${storyId} omitted its active route at ${viewport.width}px.`,
+      );
+    }
+    await context.close();
+  }
 }
 
 async function verifyRecordingPresentations(browserInstance) {
