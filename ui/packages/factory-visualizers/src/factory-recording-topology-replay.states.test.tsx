@@ -122,6 +122,30 @@ describe("FactoryRecordingTopologyReplay explicit states", () => {
     expect(screen.queryByTestId("controlled-topology-renderer")).toBeNull();
   });
 
+  it("invalidates cached ticks when same-identity recording evidence changes", () => {
+    const initial = recording(false);
+    const { rerender } = render(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={initial}
+      />,
+    );
+    expect(screen.queryByTestId("controlled-topology-renderer")).toBeNull();
+
+    const replaced = recording(true);
+    replaced.id = initial.id;
+    rerender(
+      <FactoryRecordingTopologyReplay
+        formatNumber={String}
+        messages={messages}
+        recording={replaced}
+      />,
+    );
+
+    expect(screen.getByTestId("controlled-topology-renderer")).toBeVisible();
+  });
+
   it("contains a controlled projection failure and removes stale ready content", async () => {
     const onError = vi.fn();
     const projectionError = {

@@ -87,6 +87,11 @@ interface RecordingProjection {
   topology: FactoryTopologyProjection;
 }
 
+interface RecordingProjectionCache {
+  events?: FactoryRecording["events"];
+  projections: Map<number, RecordingProjection>;
+}
+
 const MAX_CACHED_RECORDING_PROJECTIONS = 32;
 
 /** Validate and replay one caller-owned recording through the controlled visualizers. */
@@ -189,19 +194,12 @@ function ValidatedRecordingReplay({
   const effectiveMode =
     mode === "history" && ticks.includes(fixedTick) ? "history" : "current";
   const selectedTick = effectiveMode === "current" ? latestTick : fixedTick;
-  const projectionCache = useRef(new Map<string, RecordingProjection>());
-  const evidenceKey = JSON.stringify(
-    events.filter((event) => event.context.tick <= selectedTick),
-  );
+  const projectionCache = useRef<RecordingProjectionCache>({
+    projections: new Map(),
+  });
   const prepared = useMemo(
-    () =>
-      projectRecordingAtTick(
-        events,
-        selectedTick,
-        evidenceKey,
-        projectionCache.current,
-      ),
-    [events, evidenceKey, selectedTick],
+    () => projectRecordingAtTick(events, selectedTick, projectionCache.current),
+    [events, selectedTick],
   );
 
   function selectTick(requestedTick: number) {
@@ -290,11 +288,13 @@ function resolveRecordedTick(
 function projectRecordingAtTick(
   events: FactoryRecording["events"],
   tick: number,
-  evidenceKey: string,
-  cache: Map<string, RecordingProjection>,
+  cache: RecordingProjectionCache,
 ): RecordingProjection {
-  const cacheKey = `${tick}:${evidenceKey}`;
-  const cached = cache.get(cacheKey);
+  if (cache.events !== events) {
+    cache.events = events;
+    cache.projections.clear();
+  }
+  const cached = cache.projections.get(tick);
   if (cached) return cached;
 
   const projection = {
@@ -303,10 +303,10 @@ function projectRecordingAtTick(
     progress: projectFactoryWorkProgressAtTick({ events, tick }),
     topology: projectFactoryTopologyAtTick({ events, tick }),
   };
-  cache.set(cacheKey, projection);
-  if (cache.size > MAX_CACHED_RECORDING_PROJECTIONS) {
-    const oldestKey = cache.keys().next().value;
-    if (oldestKey !== undefined) cache.delete(oldestKey);
+  cache.projections.set(tick, projection);
+  if (cache.projections.size > MAX_CACHED_RECORDING_PROJECTIONS) {
+    const oldestTick = cache.projections.keys().next().value;
+    if (oldestTick !== undefined) cache.projections.delete(oldestTick);
   }
   return projection;
 }

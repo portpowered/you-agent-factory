@@ -99,6 +99,12 @@ that consumes the replay kernel.
 - `ui/src/features/timeline/state/timeline/factory-replay-kernel.compatibility.test.ts`
   compares the package-selected historical projection with the existing hosted
   reducer and projection.
+- `ui/src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts`
+  is the deterministic high-volume retention gate. Keep fixture construction
+  outside the serialized checkpoint measurement, assert observable final and
+  historical projections, cover duplicate and same-tick accepted tails, and
+  report actual versus allowed retained bytes rather than using elapsed time as
+  a memory proxy.
 - `ui/src/features/timeline/state/timeline/projections/factory-replay-projections.compatibility.test.ts`
   proves the hosted adapter preserves shared topology IDs and handle parity,
   Dispatch/resource occupancy, exclusive Work progress, and same-tick
@@ -128,7 +134,10 @@ that consumes the replay kernel.
   validates and owns static recording replay, then forwards the caller-owned
   layout sidecar unchanged to the controlled topology renderer. Other hosts
   should likewise supply the sidecar as an explicit presentation input rather
-  than attaching it to replay state or recordings.
+  than attaching it to replay state or recordings. Its bounded historical
+  projection cache is scoped to the canonicalized recording array and keyed by
+  tick; never embed serialized event prefixes in cache keys because that
+  retains hidden copies of canonical history.
 - `ui/src/features/dashboard/components/topology-replay/hosted-topology-replay.tsx`
   is the hosted replay boundary. It forwards its optional caller-owned layout
   sidecar to the controlled renderer and must not place it in timeline or
