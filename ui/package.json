@@ -23,6 +23,7 @@
     "format": "biome format --write .",
     "generate-api": "node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts",
     "lint": "biome lint . && bun run check:localized-copy && bun run check:semantic-colors && node scripts/check-tailwind-spacing-tokens.mjs && node scripts/check-feature-root-files.mjs && node scripts/check-feature-folder-file-count.mjs && node scripts/check-feature-boundary.mjs && node scripts/check-shared-ui-boundary.mjs && bun run check:public-package-boundaries && node scripts/check-button-usage.mjs && node scripts/check-feature-form-control-usage.mjs && node scripts/check-dashboard-expand-disclosure.mjs && bun run check:inline-component-class-usage",
+    "link:public-package-dependencies": "node scripts/link-public-package-dependencies.mjs",
     "loadtest:agent-fails-memory": "bun scripts/loadtest-agent-fails-memory.ts",
     "profile:recording-browser": "node scripts/profile-recording-browser.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4173 --strictPort",

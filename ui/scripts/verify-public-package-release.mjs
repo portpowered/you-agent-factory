@@ -21,8 +21,7 @@ const workspaceLinkStep = {
   packageName: "Public package family",
   packageDirectory: uiRoot,
   stepName: "link built workspace dependencies",
-  command: "node",
-  args: ["scripts/link-public-package-dependencies.mjs"],
+  args: ["run", "link:public-package-dependencies"],
 };
 
 const replayRetainedMemoryStep = {
