@@ -12,6 +12,10 @@ import {
 import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
+  clearTimelineCheckpointsForSession,
+  useFactoryTimelineStore,
+} from "../../timeline/public";
+import {
   classifyFactorySessionFolderValidationError,
   type FolderValidationState,
   factorySessionTargetOptionValue,
@@ -32,6 +36,9 @@ interface ValidateFolderInput {
 
 export function useDashboardSessionTabsState() {
   const queryClient = useQueryClient();
+  const removeTimelineEntriesForSession = useFactoryTimelineStore(
+    (state) => state.removeEntriesForSession,
+  );
   const sessionsQuery = useQuery({
     queryKey: FACTORY_SESSIONS_QUERY_KEY,
     queryFn: () => listFactorySessions(),
@@ -61,6 +68,11 @@ export function useDashboardSessionTabsState() {
     setCloseError(null);
     try {
       await closeSessionMutation.mutateAsync(sessionID);
+      removeTimelineEntriesForSession(sessionID);
+      await clearTimelineCheckpointsForSession(
+        typeof window === "undefined" ? undefined : window.indexedDB,
+        sessionID,
+      );
       setSessionPaused(sessionID, false);
       queryClient.setQueryData(
         FACTORY_SESSIONS_QUERY_KEY,

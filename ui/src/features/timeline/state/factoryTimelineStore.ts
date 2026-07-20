@@ -1,7 +1,6 @@
 import { create, type StateCreator } from "zustand";
-
-import type { FactoryEvent } from "../../../api/events";
 import { canonicalizeFactoryEvents } from "../../../../../packages/factory-replay/src/index.js";
+import type { FactoryEvent } from "../../../api/events";
 import {
   correlationTokenForIdentityScope,
   recordSessionPersistenceDiagnostic,
@@ -22,10 +21,15 @@ export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 export type { WorldState } from "./timeline/types";
 
 import {
+  createFactoryTimelineEntry,
+  factoryTimelineEntryKey,
+  withEntryTimelineState,
+} from "./entries/factoryTimelineEntry";
+import {
   appendTimelineEvents,
   emptyTimelineState,
-  type FactoryTimelineEntryState,
   type FactoryTimelineCheckpoint,
+  type FactoryTimelineEntryState,
   type FactoryTimelineState,
   replaceTimelineEvents,
   restoreTimelineCheckpoint,
@@ -34,11 +38,6 @@ import {
   type TimelineStoreStateDeps,
 } from "./timeline/storeState";
 import type { WorldState } from "./timeline/types";
-import {
-  createFactoryTimelineEntry,
-  factoryTimelineEntryKey,
-  withEntryTimelineState,
-} from "./entries/factoryTimelineEntry";
 
 export type {
   FactoryTimelineCheckpoint,
@@ -216,6 +215,25 @@ function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
           ),
         ),
       );
+    },
+    removeEntriesForSession: (factorySessionID) => {
+      set((current) => {
+        const entriesByKey = Object.fromEntries(
+          Object.entries(current.entriesByKey).filter(
+            ([, entry]) => entry.identity.factorySessionID !== factorySessionID,
+          ),
+        );
+        const activeEntryRemoved =
+          current.activeEntryKey !== null &&
+          !(current.activeEntryKey in entriesByKey);
+        return activeEntryRemoved
+          ? {
+              activeEntryKey: null,
+              ...emptyTimelineState(),
+              entriesByKey,
+            }
+          : { entriesByKey };
+      });
     },
     resetEntry: (identity) => {
       set((current) =>

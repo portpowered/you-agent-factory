@@ -60,6 +60,7 @@ export interface FactoryTimelineState {
     identity: StreamDerivedCacheIdentity,
     events: FactoryEvent[],
   ) => void;
+  removeEntriesForSession: (factorySessionID: string) => void;
   reset: () => void;
   resetEntry: (identity: StreamDerivedCacheIdentity) => void;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;

@@ -1,7 +1,7 @@
 import "./testing/app-shell-work-outcome-stub";
 import "./testing/app-shell-workflow-activity-stub";
 
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { requireEventStream } from "./App.session-stream.test-helpers";
 import type { DashboardSnapshot } from "./api/dashboard";
@@ -106,9 +106,10 @@ async function selectSessionTab(name: "alpha" | "beta"): Promise<void> {
 
 function expectRenderedFixture(fixture: typeof A | typeof B): void {
   const timeline = useFactoryTimelineStore.getState();
-  expect(timeline.selectedTick).toBe(fixture.checkpoint.selectedTick);
+  const exactEntry = timeline.entryForIdentity(fixture.streamIdentity);
+  expect(exactEntry?.selectedTick).toBe(fixture.checkpoint.selectedTick);
   expect(
-    timeline.currentReplayCheckpoint?.replayState.runtime.session
+    exactEntry?.currentReplayCheckpoint?.replayState.runtime.session
       .dispatched_count,
   ).toBe(fixture.eventCount);
   expect(
@@ -120,9 +121,11 @@ function expectRenderedFixture(fixture: typeof A | typeof B): void {
 describe("App multi-session timeline switching regression", () => {
   registerAppDashboardTestLifecycle();
 
-  it.fails("restores each live A to B to A timeline instead of retaining the singleton's latest contents", async () => {
+  it("restores each live A to B to A timeline instead of retaining the singleton's latest contents", async () => {
     const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
     vi.stubGlobal("indexedDB", indexedDB);
+    await persistTimelineCheckpoint(indexedDB, A.checkpoint, A.streamIdentity);
+    await persistTimelineCheckpoint(indexedDB, B.checkpoint, B.streamIdentity);
     useDashboardSessionStore.setState({
       pausedSessionIDs: [],
       selectedSessionID: A.streamIdentity.factorySessionID,
@@ -140,24 +143,12 @@ describe("App multi-session timeline switching regression", () => {
         expectedStreamURL(A),
       );
     });
-    act(() => {
-      requireEventStream(MockEventSource.instances).emit(
-        "snapshot",
-        snapshotFor(A),
-      );
-    });
     await waitFor(() => expectRenderedFixture(A));
 
     await selectSessionTab("beta");
     await waitFor(() => {
       expect(requireEventStream(MockEventSource.instances).url).toBe(
         expectedStreamURL(B),
-      );
-    });
-    act(() => {
-      requireEventStream(MockEventSource.instances).emit(
-        "snapshot",
-        snapshotFor(B),
       );
     });
     await waitFor(() => expectRenderedFixture(B));
@@ -223,7 +214,7 @@ describe("App multi-session timeline action isolation", () => {
     ).resolves.toEqual(B.checkpoint);
   });
 
-  it.fails("clears only A while B keeps its timeline, cursor, checkpoint, and live stream", async () => {
+  it("clears only A while B keeps its timeline, cursor, checkpoint, and live stream", async () => {
     const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
     vi.stubGlobal("indexedDB", indexedDB);
     await persistTimelineCheckpoint(indexedDB, A.checkpoint, A.streamIdentity);
@@ -263,5 +254,8 @@ describe("App multi-session timeline action isolation", () => {
     await expect(
       readTimelineCheckpoint(indexedDB, A.streamIdentity),
     ).resolves.toBe(null);
+    expect(
+      useFactoryTimelineStore.getState().entryForIdentity(A.streamIdentity),
+    ).toBeUndefined();
   });
 });

@@ -175,3 +175,30 @@ describe("factory timeline entry binding", () => {
     expect(entry?.selectedTick).toBe(7);
   });
 });
+
+describe("factory timeline session cleanup", () => {
+  it("removes every generation of one session without changing another session", () => {
+    const sessionA = streamIdentity("session-a-uuid", "generation-1");
+    const nextSessionAGeneration = streamIdentity(
+      "session-a-uuid",
+      "generation-2",
+    );
+    const sessionB = streamIdentity("session-b-uuid", "generation-1");
+    const store = useFactoryTimelineStore.getState();
+
+    store.appendEventForEntry(sessionA, event("event-a-1", 1));
+    store.appendEventForEntry(nextSessionAGeneration, event("event-a-2", 2));
+    store.appendEventForEntry(sessionB, event("event-b", 4));
+    store.activateEntry(sessionA);
+    store.removeEntriesForSession(sessionA.factorySessionID);
+
+    const state = useFactoryTimelineStore.getState();
+    expect(state.entryForIdentity(sessionA)).toBeUndefined();
+    expect(state.entryForIdentity(nextSessionAGeneration)).toBeUndefined();
+    expect(
+      state.entryForIdentity(sessionB)?.events.map(({ id }) => id),
+    ).toEqual(["event-b"]);
+    expect(state.activeEntryKey).toBeNull();
+    expect(state.events).toEqual([]);
+  });
+});
