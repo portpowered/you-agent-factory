@@ -58,6 +58,19 @@ that consumes the replay kernel.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.
+- `ui/src/features/factory-emulator/state/factory-emulator-instance.ts` creates
+  one vanilla Zustand store, atomic event sink, emulator session, retained
+  history, replay checkpoint, selected tick, and playback presentation state per
+  website demo. Keep its reducer supplied by the host, await caller backpressure
+  before committing a batch, and retry sink failures through the emulator's
+  pending-command contract. History selection must reproject retained events
+  without changing emulator execution, while Play, Pause, Step, speed, and
+  follow-current remain host-invoked commands with no browser persistence,
+  wall-clock scheduling, visibility policy, or hosted session/SSE ownership.
+  Restart must reset the package session before rebuilding initial events and
+  must replace only that instance's retained history, replay checkpoint,
+  selection, playback, error, and draft state; sibling adapters and the hosted
+  timeline store remain separate authorities.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but
@@ -124,6 +137,19 @@ that consumes the replay kernel.
   derive their IDs per instance with normalized React `useId` output so
   multiple mounted composers preserve independent label and `aria-describedby`
   associations; cover that behavior by rendering two unavailable instances.
+- `ui/src/features/factory-emulator/state/factory-emulator-submission.ts` owns
+  the local emulator draft, DEFAULT/INITIAL Work Type eligibility, deterministic
+  interactive Work names, and delegation to `FactoryEmulatorSession.submit`.
+  `ui/src/features/factory-emulator/components/factory-emulator-submission.tsx`
+  connects that instance state to the transport-neutral simple composer; keep
+  hosted HTTP submission and emulator submission as separate host adapters.
+- `ui/src/features/factory-emulator/components/factory-emulator-adapter.stories.tsx`
+  composes the instance adapter with controlled playback, replay inspection,
+  and text submission for browser acceptance. Its required browser check lives
+  in `ui/scripts/verify-factory-emulator-adapter-browser.mjs`, sets explicit
+  mobile and desktop browser contexts instead of Storybook viewport metadata,
+  and runs in the required UI Browser Integration lane through
+  `ui/scripts/run-storybook-ci.mjs`.
 - `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
   single-work submission. The HTTP adapter leaves canonical identity assignment
   to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in

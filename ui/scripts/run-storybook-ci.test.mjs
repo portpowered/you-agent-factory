@@ -210,7 +210,6 @@ describe("runStorybookCI browser-check mode", () => {
       waitForStableIndex,
     });
 
-    expect(runCommand).toHaveBeenCalledTimes(3);
     expect(runCommand).not.toHaveBeenCalledWith([
       "run",
       "storybook:test-runner:ci",

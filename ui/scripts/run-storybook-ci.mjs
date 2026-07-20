@@ -359,6 +359,10 @@ export async function runStorybookCI({
         serverExit,
       ]);
     }
+    await Promise.race([
+      runCommand(["run", "storybook:factory-emulator-adapter-check"]),
+      serverExit,
+    ]);
   } finally {
     shuttingDown = true;
     await stop(server);
