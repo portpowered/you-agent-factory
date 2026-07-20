@@ -21,6 +21,26 @@ components plus replay into visualizers, and finally into a consumer host. The
 emulator does not depend on replay or visualizers. Package code never imports
 the hosted dashboard to obtain state or behavior.
 
+## Verify the complete package family
+
+From a fresh checkout with Bun 1.3.12 available, run the UI-owned aggregate
+release gate from the repository root:
+
+```sh
+cd ui
+bun run verify:public-packages
+```
+
+The command installs the locked UI toolchain once, then runs each package's
+existing release gate in dependency-safe order: client, components, replay,
+emulator, then visualizers. Those package gates retain their own pack and clean
+installed-consumer checks. After building client and replay, the command links
+those workspace packages into the installed UI toolchain for downstream local
+type resolution without copying source package trees. The aggregate command
+stops at the first failed install, link, or release gate and reports the package
+family or package, step, command, and command outcome. It does not depend on a
+root Makefile release target.
+
 ## Hosted execution and browser emulation
 
 Hosted Factory Sessions executed by the Go runtime are authoritative. They own

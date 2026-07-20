@@ -49,13 +49,15 @@
     "test:coverage": "node scripts/run-ui-coverage-with-timings.mjs",
     "test:integration": "node scripts/run-ui-integration-with-timings.mjs",
     "test:integration:durable-session-real-backend": "node scripts/run-durable-session-real-backend-integration-with-timings.mjs",
+    "test:public-package-release": "vitest run scripts/verify-public-package-release.test.mjs",
     "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --maxWorkers=2 --retry=2",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
     "test-storybook:browser-checks": "bun scripts/run-storybook-ci.mjs --browser-checks-only",
     "tsc": "tsc -b --noEmit --pretty false",
     "typecheck": "tsc -b --noEmit --pretty false",
-    "verify:fresh-npm-install": "node scripts/verify-fresh-npm-install.mjs"
+    "verify:fresh-npm-install": "node scripts/verify-fresh-npm-install.mjs",
+    "verify:public-packages": "node scripts/verify-public-package-release.mjs"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
