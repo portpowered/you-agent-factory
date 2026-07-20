@@ -232,6 +232,8 @@ export default defineConfig({
     ...(!isVitestRun
       ? [
           monacoEditorPlugin({
+            customDistPath: (root, buildOutDir) =>
+              path.resolve(root, buildOutDir, "monacoeditorwork"),
             languageWorkers: ["editorWorkerService"],
           }),
         ]
