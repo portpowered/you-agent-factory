@@ -15,6 +15,7 @@ import {
 import { useStore } from "zustand";
 
 import { useAppLocale } from "../../../i18n";
+import { useCustomerDemoPlayback } from "../hooks/use-customer-demo-playback";
 import type { CustomerFactoryEmulatorDemoFixture } from "../lib/customer-demo-fixtures";
 import { customerFactoryEmulatorDemoFixtures } from "../lib/customer-demo-fixtures";
 import {
@@ -189,14 +190,6 @@ function CustomerFactoryEmulatorDemo({
     void instance.commands.start().catch(() => setSetupError(true));
   }, [instance]);
 
-  if (setupError) {
-    return (
-      <Text as="p" role="alert">
-        {messages.error}
-      </Text>
-    );
-  }
-
   const fixtureMessages = messages.fixtures[fixture.id];
   const controls = selectFactoryEmulatorControls(state);
   const timeline = selectFactoryEmulatorTimeline(state);
@@ -206,6 +199,18 @@ function CustomerFactoryEmulatorDemo({
     state.selectedTick,
     state.mode === "current",
   );
+  const playback = useCustomerDemoPlayback({
+    instance,
+    nextDelayMs: activity?.durationMs ?? 0,
+    state,
+  });
+  if (setupError) {
+    return (
+      <Text as="p" role="alert">
+        {messages.error}
+      </Text>
+    );
+  }
   const numberFormatter = new Intl.NumberFormat(locale);
   const duration = activity?.durationMs
     ? messages.duration(numberFormatter.format(activity.durationMs / 1_000))
@@ -225,6 +230,7 @@ function CustomerFactoryEmulatorDemo({
       aria-label={fixtureMessages.title}
       className="grid min-w-0 gap-4 rounded-xl border border-outline-variant bg-surface-container-lowest p-4"
       data-demo-id={fixture.id}
+      ref={playback.regionRef}
     >
       <header className="grid min-w-0 gap-2">
         <Heading as="h2">{fixtureMessages.title}</Heading>
@@ -245,12 +251,12 @@ function CustomerFactoryEmulatorDemo({
           ...controls,
           formatTick: (tick) => numberFormatter.format(tick),
           onFollowLatest: instance.commands.followCurrent,
-          onPause: instance.commands.pause,
-          onPlay: instance.commands.play,
-          onRestart: () => void instance.commands.restart(),
-          onSelectTick: instance.commands.selectTick,
+          onPause: playback.pause,
+          onPlay: playback.play,
+          onRestart: () => void playback.restart(),
+          onSelectTick: playback.selectTick,
           onSpeedChange: instance.commands.setSpeed,
-          onStep: () => void instance.commands.step(),
+          onStep: () => void playback.step(),
           runtimeStatus: runtimeStatus(state, messages),
           timeline: { messages: messages.timeline, state: timeline },
         }}

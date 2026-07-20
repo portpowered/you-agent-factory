@@ -17,6 +17,70 @@ const viewports = [
   { height: 900, width: 1440 },
 ];
 
+async function installPlaybackControls(context) {
+  await context.addInitScript(() => {
+    const observers = [];
+    let reducedMotion = false;
+    const motionListeners = new Set();
+    window.matchMedia = (query) => ({
+      addEventListener: (_type, listener) => motionListeners.add(listener),
+      addListener: (listener) => motionListeners.add(listener),
+      dispatchEvent: () => true,
+      get matches() {
+        return query === "(prefers-reduced-motion: reduce)" && reducedMotion;
+      },
+      media: query,
+      onchange: null,
+      removeEventListener: (_type, listener) =>
+        motionListeners.delete(listener),
+      removeListener: (listener) => motionListeners.delete(listener),
+    });
+    window.IntersectionObserver = class {
+      constructor(callback) {
+        this.callback = callback;
+        this.targets = new Set();
+        observers.push(this);
+      }
+      disconnect() {
+        this.targets.clear();
+      }
+      observe(target) {
+        this.targets.add(target);
+      }
+      unobserve(target) {
+        this.targets.delete(target);
+      }
+    };
+    window.__setCustomerDemoVisibility = (demoID, isIntersecting) => {
+      for (const observer of observers) {
+        for (const target of observer.targets) {
+          if (target.dataset.demoId === demoID) {
+            observer.callback([{ isIntersecting, target }], observer);
+          }
+        }
+      }
+    };
+    window.__setCustomerDemoReducedMotion = (matches) => {
+      reducedMotion = matches;
+      for (const listener of motionListeners) listener({ matches });
+    };
+  });
+}
+
+async function setVisibility(page, demoID, isIntersecting) {
+  await page.evaluate(
+    ({ id, visible }) => window.__setCustomerDemoVisibility(id, visible),
+    { id: demoID, visible: isIntersecting },
+  );
+}
+
+async function setReducedMotion(page, matches) {
+  await page.evaluate(
+    (reduced) => window.__setCustomerDemoReducedMotion(reduced),
+    matches,
+  );
+}
+
 async function openStory(page, storyID) {
   await page.goto(storyUrl(storybookUrl, storyID), {
     timeout: 30_000,
@@ -116,14 +180,73 @@ async function verifySetupErrorIsolation(page, viewport) {
   await assertResponsiveLayout(page, viewport, errorStory);
 }
 
+async function verifyMotionSafePlayback(page) {
+  await openStory(page, interactiveStory);
+  await page.clock.install();
+  const success = page.getByRole("article", {
+    name: "Straightforward success",
+  });
+  await success.getByText("1 Work total").waitFor();
+
+  await setVisibility(page, "success", true);
+  await success.getByText("Playing", { exact: true }).waitFor();
+  await setVisibility(page, "success", false);
+  await success.getByText("Ready", { exact: true }).waitFor();
+  await setVisibility(page, "success", true);
+  await success.getByText("Playing", { exact: true }).waitFor();
+
+  await success.getByRole("button", { name: "Pause" }).click();
+  await setVisibility(page, "success", false);
+  await setVisibility(page, "success", true);
+  await success.getByText("Ready", { exact: true }).waitFor();
+
+  await success.getByRole("button", { name: "Play" }).click();
+  await setReducedMotion(page, true);
+  await success.getByText("Ready", { exact: true }).waitFor();
+  await setReducedMotion(page, false);
+  await setVisibility(page, "success", false);
+  await setVisibility(page, "success", true);
+  await success.getByText("Ready", { exact: true }).waitFor();
+
+  await success.getByRole("button", { name: "Play" }).click();
+  await page.clock.fastForward(2_000);
+  await success
+    .getByRole("region", { name: "Successful completion" })
+    .waitFor();
+  const completedTick = await success
+    .getByRole("slider", { name: "Select replay tick" })
+    .getAttribute("max");
+  await page.clock.fastForward(10_000);
+  assert.equal(
+    await success
+      .getByRole("slider", { name: "Select replay tick" })
+      .getAttribute("max"),
+    completedTick,
+    "Completed autoplay looped or scheduled more work.",
+  );
+
+  await success.getByRole("button", { name: "Restart" }).click();
+  await success.getByText("1 Work total").waitFor();
+  assert.equal(
+    await success
+      .getByRole("region", { name: "Successful completion" })
+      .count(),
+    0,
+    "Restart retained the terminal projection.",
+  );
+  await success.getByText("Playing", { exact: true }).waitFor();
+}
+
 async function verifyCustomerFactoryEmulatorDemos() {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const viewport of viewports) {
       const context = await browser.newContext({ viewport });
+      await installPlaybackControls(context);
       const page = await context.newPage();
       await verifyInteractive(page, viewport);
       await verifySetupErrorIsolation(page, viewport);
+      await verifyMotionSafePlayback(page);
       await context.close();
     }
   } finally {

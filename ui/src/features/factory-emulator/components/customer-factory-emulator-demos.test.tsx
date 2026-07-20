@@ -7,10 +7,179 @@ import {
   within,
 } from "@testing-library/react";
 import type { FactoryEmulatorScenario } from "@you-agent-factory/factory-emulator";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { customerFactoryEmulatorDemoFixtures } from "../lib/customer-demo-fixtures";
 import { CustomerFactoryEmulatorDemos } from "./customer-factory-emulator-demos";
+
+function installPlaybackEnvironment(initialReducedMotion = false) {
+  let intersectionCallback: IntersectionObserverCallback | undefined;
+  const motionListeners = new Set<(event: MediaQueryListEvent) => void>();
+  let reducedMotion = initialReducedMotion;
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      public constructor(callback: IntersectionObserverCallback) {
+        intersectionCallback = callback;
+      }
+      public disconnect() {}
+      public observe() {}
+      public unobserve() {}
+      public takeRecords() {
+        return [];
+      }
+      public readonly root = null;
+      public readonly rootMargin = "0px";
+      public readonly thresholds = [0.15];
+    },
+  );
+  vi.stubGlobal("matchMedia", () => ({
+    addEventListener: (
+      _type: "change",
+      listener: (event: MediaQueryListEvent) => void,
+    ) => motionListeners.add(listener),
+    addListener: () => undefined,
+    dispatchEvent: () => true,
+    get matches() {
+      return reducedMotion;
+    },
+    media: "(prefers-reduced-motion: reduce)",
+    onchange: null,
+    removeEventListener: (
+      _type: "change",
+      listener: (event: MediaQueryListEvent) => void,
+    ) => motionListeners.delete(listener),
+    removeListener: () => undefined,
+  }));
+  return {
+    intersect(isIntersecting: boolean) {
+      intersectionCallback?.(
+        [{ isIntersecting } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+    },
+    setReducedMotion(matches: boolean) {
+      reducedMotion = matches;
+      for (const listener of motionListeners) {
+        listener({ matches } as MediaQueryListEvent);
+      }
+    },
+  };
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("CustomerFactoryEmulatorDemos playback", () => {
+  it("autoplays once in view and preserves manual pause across visibility", async () => {
+    const environment = installPlaybackEnvironment();
+    render(
+      <CustomerFactoryEmulatorDemos
+        fixtures={[customerFactoryEmulatorDemoFixtures.success]}
+        locale="en"
+      />,
+    );
+    const demo = screen.getByRole("article", {
+      name: "Straightforward success",
+    });
+    await waitFor(() =>
+      expect(within(demo).getByText("1 Work total")).toBeVisible(),
+    );
+
+    environment.intersect(true);
+    await waitFor(() =>
+      expect(within(demo).getByText("Playing", { exact: true })).toBeVisible(),
+    );
+    environment.intersect(false);
+    await waitFor(() =>
+      expect(within(demo).getByText("Ready", { exact: true })).toBeVisible(),
+    );
+    environment.intersect(true);
+    await waitFor(() =>
+      expect(within(demo).getByText("Playing", { exact: true })).toBeVisible(),
+    );
+
+    fireEvent.click(within(demo).getByRole("button", { name: "Pause" }));
+    environment.intersect(false);
+    environment.intersect(true);
+    await waitFor(() =>
+      expect(within(demo).getByText("Ready", { exact: true })).toBeVisible(),
+    );
+  });
+
+  it("requires explicit play whenever reduced motion is active", async () => {
+    const environment = installPlaybackEnvironment(true);
+    render(
+      <CustomerFactoryEmulatorDemos
+        fixtures={[customerFactoryEmulatorDemoFixtures.success]}
+        locale="en"
+      />,
+    );
+    const demo = screen.getByRole("article", {
+      name: "Straightforward success",
+    });
+    await waitFor(() =>
+      expect(within(demo).getByText("1 Work total")).toBeVisible(),
+    );
+
+    environment.intersect(true);
+    expect(within(demo).getByText("Ready", { exact: true })).toBeVisible();
+    environment.setReducedMotion(false);
+    environment.intersect(false);
+    environment.intersect(true);
+    expect(within(demo).getByText("Ready", { exact: true })).toBeVisible();
+    fireEvent.click(within(demo).getByRole("button", { name: "Play" }));
+    await waitFor(() =>
+      expect(within(demo).getByText("Playing", { exact: true })).toBeVisible(),
+    );
+
+    environment.setReducedMotion(true);
+    await waitFor(() =>
+      expect(within(demo).getByText("Ready", { exact: true })).toBeVisible(),
+    );
+    environment.setReducedMotion(false);
+    environment.intersect(false);
+    environment.intersect(true);
+    expect(within(demo).getByText("Ready", { exact: true })).toBeVisible();
+    fireEvent.click(within(demo).getByRole("button", { name: "Play" }));
+    await waitFor(() =>
+      expect(within(demo).getByText("Playing", { exact: true })).toBeVisible(),
+    );
+  });
+
+  it("does not override step or history intent on first viewport entry", async () => {
+    const environment = installPlaybackEnvironment();
+    render(
+      <CustomerFactoryEmulatorDemos
+        fixtures={[customerFactoryEmulatorDemoFixtures.success]}
+        locale="en"
+      />,
+    );
+    const demo = screen.getByRole("article", {
+      name: "Straightforward success",
+    });
+    await waitFor(() =>
+      expect(within(demo).getByText("1 Work total")).toBeVisible(),
+    );
+
+    fireEvent.click(within(demo).getByRole("button", { name: "Step" }));
+    await waitFor(() =>
+      expect(
+        within(demo).getByText(/Preparing the launch summary/),
+      ).toBeVisible(),
+    );
+    fireEvent.change(
+      within(demo).getByRole("slider", { name: "Select replay tick" }),
+      { target: { value: "0" } },
+    );
+    environment.intersect(true);
+    expect(within(demo).getByText("Viewing history")).toBeVisible();
+    expect(
+      within(demo).queryByText("Playing", { exact: true }),
+    ).not.toBeInTheDocument();
+  });
+});
 
 describe("CustomerFactoryEmulatorDemos", () => {
   it("renders independent ready demos and exposes live and terminal states", async () => {
@@ -47,6 +216,16 @@ describe("CustomerFactoryEmulatorDemos", () => {
     );
     expect(within(success).getByText("1 completed")).toBeVisible();
     expect(within(failure).queryByText("1 completed")).not.toBeInTheDocument();
+
+    fireEvent.click(within(success).getByRole("button", { name: "Restart" }));
+    await waitFor(() =>
+      expect(
+        within(success).queryByRole("region", {
+          name: "Successful completion",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(within(success).getByText("1 Work total")).toBeVisible();
   });
 
   it("falls back to canonical workstation copy during history inspection", async () => {

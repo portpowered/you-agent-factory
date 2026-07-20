@@ -24,8 +24,7 @@ export const selectFactoryEmulatorControls = <State, World>(
     state.commandState === "running" ||
     state.sessionStatus.phase === "closed" ||
     state.sessionStatus.phase === "error";
-  const restartUnavailable =
-    state.commandState === "running" || state.sessionStatus.phase === "closed";
+  const restartUnavailable = state.commandState === "running";
   return {
     disabledActions: [
       ...(executionUnavailable || state.mode === "history"

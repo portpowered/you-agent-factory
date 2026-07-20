@@ -71,6 +71,13 @@ that consumes the replay kernel.
   must replace only that instance's retained history, replay checkpoint,
   selection, playback, error, and draft state; sibling adapters and the hosted
   timeline store remain separate authorities.
+- `ui/src/features/factory-emulator/hooks/use-customer-demo-playback.ts` is the
+  customer-demo host policy for wall-clock advancement, viewport observation,
+  reduced-motion preference, and playback intent. Keep timers and observers
+  disposable per mount; visibility may resume only an explicitly retained play
+  intent, while pause, step, historical selection, and newly detected reduced
+  motion must consume autoplay intent. Restart may renew the one-time autoplay
+  opportunity only after the targeted emulator instance resets successfully.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but
