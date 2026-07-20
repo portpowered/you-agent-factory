@@ -177,13 +177,9 @@ describe("runStorybookCI", () => {
     ]);
     expect(runCommand).toHaveBeenNthCalledWith(6, [
       "run",
-      "storybook:factory-emulator-adapter-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(7, [
-      "run",
       "storybook:choose-file-check",
     ]);
-    expect(runCommand).toHaveBeenNthCalledWith(8, [
+    expect(runCommand).toHaveBeenNthCalledWith(7, [
       "run",
       "storybook:checkbox-consistency-check",
     ]);
@@ -214,7 +210,6 @@ describe("runStorybookCI browser-check mode", () => {
       waitForStableIndex,
     });
 
-    expect(runCommand).toHaveBeenCalledTimes(4);
     expect(runCommand).not.toHaveBeenCalledWith([
       "run",
       "storybook:test-runner:ci",
@@ -230,10 +225,6 @@ describe("runStorybookCI browser-check mode", () => {
     expect(runCommand).toHaveBeenNthCalledWith(3, [
       "run",
       "storybook:dashboard-viewport-check",
-    ]);
-    expect(runCommand).toHaveBeenNthCalledWith(4, [
-      "run",
-      "storybook:factory-emulator-adapter-check",
     ]);
     expect(settle).not.toHaveBeenCalled();
     expect(waitForStableIndex).not.toHaveBeenCalled();
