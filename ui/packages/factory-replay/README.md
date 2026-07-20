@@ -5,6 +5,10 @@ package deterministically orders and accepts Factory events, reconstructs
 reducer-owned state at a logical tick, advances immutable checkpoints, and
 projects customer Work into exclusive progress categories.
 
+See the [public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md)
+for the complete layer ordering, packed consumer paths, and execution support
+boundary.
+
 The package consumes Factory contracts from `@you-agent-factory/client` as
 types only. Its runtime has no React, React Flow, Zustand, dashboard, network,
 event-stream, or browser-storage dependency.

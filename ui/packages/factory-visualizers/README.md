@@ -6,6 +6,10 @@ projections. The package exports `FactoryTopologyReplay`,
 `WorkProgressVisualizer`, and `FactoryEmulatorControls` together with their
 message, formatting, status, callback, and structured error contracts.
 
+See the [public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md)
+for clean-install commands, static and interactive package examples, dependency
+direction, and the precise hosted-runtime versus emulator support boundary.
+
 `FactoryTopologyReplay` accepts a presentation-only `chrome` configuration.
 Choose the `full`, `minimal`, or `none` preset, then override `legend`,
 `background`, `viewportControls`, or `visibilityControls` individually. The

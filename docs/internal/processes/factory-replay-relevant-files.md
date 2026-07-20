@@ -3,6 +3,12 @@
 Use this map when changing deterministic Factory-event replay or a host adapter
 that consumes the replay kernel.
 
+- `ui/packages/README.md` is the public integration and support-boundary guide
+  for the client, replay, emulator, components, and visualizer family. Keep its
+  package graph, public example/style/schema subpaths, hosted-runtime authority,
+  emulator exclusions, and caller/host ownership statements aligned with the
+  package manifests and clean installed-consumer checks.
+
 - `packages/factory-replay/src/index.js` owns framework-independent canonical
   ordering, event-ID acceptance, logical-tick selection, immutable checkpoint
   advancement, reducer-driven replay orchestration, and selected-tick topology

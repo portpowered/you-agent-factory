@@ -4,6 +4,10 @@ Presentation components, shared design tokens, and small utilities for building
 factory-style UIs outside the dashboard. The package is domain-free: it does not
 ship data fetching, durable state, business workflows, or product copy.
 
+See the [public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md)
+for this presentation layer's position beneath the controlled Factory
+visualizers and for the full execution/host ownership boundary.
+
 ## Install and workspace setup
 
 Add the package to your application dependencies. In this monorepo the dashboard

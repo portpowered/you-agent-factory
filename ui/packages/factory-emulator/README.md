@@ -5,6 +5,12 @@ for deterministic Factory emulator contracts. Scenario parsing validates both
 the package-local schema and references to a caller-supplied UI client
 `FactoryDefinition`.
 
+The hosted Go runtime remains authoritative for Factory execution. This package
+implements only the deterministic browser subset documented in the
+[public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md);
+canonical-event-compatible output
+does not make it a replacement for hosted execution.
+
 ```ts
 import factory from "./factory.json" with { type: "json" };
 import scenario from "./scenario.json" with { type: "json" };
