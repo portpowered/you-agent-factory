@@ -324,6 +324,8 @@ export default defineConfig({
         "src/features/**/test-support/**",
         "src/styles.css",
         "**/index.ts",
+        // The emulator package owns its Node test lane; dashboard coverage owns only its website adapter.
+        "packages/factory-emulator/src/**",
         // Browser integration harness code is validated in the browser lane, not jsdom coverage.
         "integration/**",
       ],
