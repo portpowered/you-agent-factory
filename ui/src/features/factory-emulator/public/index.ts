@@ -18,7 +18,6 @@ export {
   selectFactoryEmulatorError,
   selectFactoryEmulatorEvents,
   selectFactoryEmulatorReplay,
-  selectFactoryEmulatorSessionStatus,
 } from "../state/factory-emulator-instance";
 export {
   type FactoryEmulatorControlState,

@@ -450,7 +450,3 @@ export const selectFactoryEmulatorReplay = <State, World>(
 export const selectFactoryEmulatorError = <State, World>(
   state: FactoryEmulatorInstanceState<State, World>,
 ) => state.error;
-
-export const selectFactoryEmulatorSessionStatus = <State, World>(
-  state: FactoryEmulatorInstanceState<State, World>,
-) => state.sessionStatus;
