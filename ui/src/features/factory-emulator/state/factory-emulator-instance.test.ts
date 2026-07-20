@@ -227,7 +227,7 @@ describe("factory emulator playback commands", () => {
       expect(instance.commands.play()).toEqual({ status: "accepted" });
       expect(instance.commands.setSpeed(4)).toEqual({ status: "accepted" });
       expect(selectFactoryEmulatorControls(instance.store.getState())).toEqual({
-        disabledActions: [],
+        disabledActions: ["play"],
         isPlaying: true,
         speed: 4,
       });
@@ -256,7 +256,7 @@ describe("factory emulator playback commands", () => {
     }
   });
 
-  it("disables execution controls in history until the host follows current", async () => {
+  it("keeps host-wrapped execution controls available in history", async () => {
     const instance = createInstance();
     await instance.sink.write([
       event("tick-one", 1, 1),
@@ -265,7 +265,7 @@ describe("factory emulator playback commands", () => {
     instance.commands.selectTick(1);
 
     expect(selectFactoryEmulatorControls(instance.store.getState())).toEqual({
-      disabledActions: ["play", "step"],
+      disabledActions: ["pause"],
       isPlaying: false,
       speed: 1,
     });

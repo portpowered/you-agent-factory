@@ -106,6 +106,34 @@ async function assertResponsiveLayout(page, viewport, storyID) {
       `${storyID} has a clipped control at ${viewport.width}px.`,
     );
   }
+  for (const demo of await page.getByRole("article").all()) {
+    const controls = demo.locator(
+      'section[aria-label="Factory emulator controls"] button, section[aria-label="Factory emulator controls"] input, section[aria-label="Factory emulator controls"] select',
+    );
+    const boxes = (
+      await Promise.all(
+        (await controls.all()).map((control) => control.boundingBox()),
+      )
+    ).filter(Boolean);
+    for (let first = 0; first < boxes.length; first += 1) {
+      for (let second = first + 1; second < boxes.length; second += 1) {
+        const horizontalIntersection =
+          Math.min(
+            boxes[first].x + boxes[first].width,
+            boxes[second].x + boxes[second].width,
+          ) - Math.max(boxes[first].x, boxes[second].x);
+        const verticalIntersection =
+          Math.min(
+            boxes[first].y + boxes[first].height,
+            boxes[second].y + boxes[second].height,
+          ) - Math.max(boxes[first].y, boxes[second].y);
+        assert.ok(
+          horizontalIntersection <= 1 || verticalIntersection <= 1,
+          `${storyID} has overlapping controls at ${viewport.width}px.`,
+        );
+      }
+    }
+  }
 }
 
 async function step(demo) {
@@ -132,7 +160,35 @@ async function verifyInteractive(page, viewport) {
       "Execute: Preparing the launch summary (1.5 seconds virtual time)",
     )
     .waitFor();
-  await step(success);
+  const successSlider = success.getByRole("slider", {
+    name: "Select replay tick",
+  });
+  await successSlider.fill("0");
+  await success.getByText("Viewing history", { exact: true }).waitFor();
+  await setVisibility(page, "success", true);
+  await success.getByRole("button", { name: "Play" }).click();
+  await success.getByText("Playing", { exact: true }).waitFor();
+  await success.getByRole("button", { name: "Pause" }).click();
+  await successSlider.fill("0");
+  await success.getByRole("button", { name: "Step" }).focus();
+  await page.keyboard.press("Enter");
+  await success
+    .getByRole("region", { name: "Successful completion" })
+    .waitFor();
+  await success
+    .getByRole("combobox", { name: "Playback speed" })
+    .selectOption("2");
+  assert.equal(
+    await success
+      .getByRole("combobox", { name: "Playback speed" })
+      .inputValue(),
+    "2",
+    "Playback speed did not expose its controlled value.",
+  );
+  await successSlider.focus();
+  await page.keyboard.press("ArrowLeft");
+  await success.getByText("Viewing history", { exact: true }).waitFor();
+  await success.getByRole("button", { name: "Follow current" }).click();
   await success
     .getByRole("region", { name: "Successful completion" })
     .waitFor();
@@ -163,6 +219,8 @@ async function verifyInteractive(page, viewport) {
     0,
     "Historical replay retained transient activity copy.",
   );
+  await failure.getByRole("button", { name: "Follow current" }).click();
+  await failure.getByRole("region", { name: "Terminal failure" }).waitFor();
   await assertResponsiveLayout(page, viewport, interactiveStory);
 }
 

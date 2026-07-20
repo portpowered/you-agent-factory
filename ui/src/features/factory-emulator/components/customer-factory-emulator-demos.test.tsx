@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { FactoryEmulatorScenario } from "@you-agent-factory/factory-emulator";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -272,6 +273,92 @@ describe("CustomerFactoryEmulatorDemos", () => {
       within(demo).queryByText(/Preparing the launch summary/),
     ).not.toBeInTheDocument();
     expect(within(demo).getByText("Viewing history")).toBeVisible();
+  });
+});
+
+describe("CustomerFactoryEmulatorDemos timeline controls", () => {
+  it.each(["Play", "Step"])(
+    "%s returns from history before advancing the canonical run",
+    async (action) => {
+      installPlaybackEnvironment(true);
+      render(
+        <CustomerFactoryEmulatorDemos
+          fixtures={[customerFactoryEmulatorDemoFixtures.success]}
+          locale="en"
+        />,
+      );
+      const demo = screen.getByRole("article", {
+        name: "Straightforward success",
+      });
+      await waitFor(() =>
+        expect(within(demo).getByText("1 Work total")).toBeVisible(),
+      );
+
+      fireEvent.click(within(demo).getByRole("button", { name: "Step" }));
+      await waitFor(() =>
+        expect(
+          within(demo).getByText(/Preparing the launch summary/),
+        ).toBeVisible(),
+      );
+      const slider = within(demo).getByRole("slider", {
+        name: "Select replay tick",
+      });
+      fireEvent.change(slider, { target: { value: "0" } });
+      expect(within(demo).getByText("Viewing history")).toBeVisible();
+      expect(within(demo).getByRole("button", { name: action })).toBeEnabled();
+
+      fireEvent.click(within(demo).getByRole("button", { name: action }));
+      await waitFor(() =>
+        expect((slider as HTMLInputElement).value).toBe(
+          (slider as HTMLInputElement).max,
+        ),
+      );
+      expect(
+        within(demo).queryByText("Viewing history"),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("exposes controlled speed and terminal ticks through keyboard controls", async () => {
+    const user = userEvent.setup();
+    installPlaybackEnvironment(true);
+    render(
+      <CustomerFactoryEmulatorDemos
+        fixtures={[customerFactoryEmulatorDemoFixtures.success]}
+        locale="en"
+      />,
+    );
+    const demo = screen.getByRole("article", {
+      name: "Straightforward success",
+    });
+    await waitFor(() =>
+      expect(within(demo).getByText("1 Work total")).toBeVisible(),
+    );
+    const speed = within(demo).getByRole("combobox", {
+      name: "Playback speed",
+    });
+    fireEvent.change(speed, { target: { value: "4" } });
+    expect(speed).toHaveValue("4");
+
+    const step = within(demo).getByRole("button", { name: "Step" });
+    step.focus();
+    await user.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(
+        within(demo).getByText(/Preparing the launch summary/),
+      ).toBeVisible(),
+    );
+    await user.click(step);
+    const terminal = await within(demo).findByRole("region", {
+      name: "Successful completion",
+    });
+    expect(terminal).toBeVisible();
+    const slider = within(demo).getByRole("slider", {
+      name: "Select replay tick",
+    });
+    expect((slider as HTMLInputElement).value).toBe(
+      (slider as HTMLInputElement).max,
+    );
   });
 });
 
