@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { Button } from "@you-agent-factory/components";
+import { useEffect, useState } from "react";
 import { expect, within } from "storybook/test";
 
 import { FactoryEmulatorView } from "./factory-emulator-view";
@@ -123,6 +125,9 @@ export const Full: Story = {
 };
 export const Compact: Story = { args: { preset: "compact" } };
 export const DisplayOnly: Story = { args: { preset: "display-only" } };
+export const AccessiblePlayback: Story = {
+  render: () => <AccessiblePlaybackHost />,
+};
 export const HostFailure: Story = {
   args: {
     failure: {
@@ -131,3 +136,120 @@ export const HostFailure: Story = {
     },
   },
 };
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function AccessiblePlaybackHost() {
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [latestTick, setLatestTick] = useState(2);
+  const [selectedTick, setSelectedTick] = useState(2);
+  const [mode, setMode] = useState<"current" | "history">("current");
+  const [isPlaying, setIsPlaying] = useState(() => !prefersReducedMotion);
+  const [submissions, setSubmissions] = useState(0);
+
+  useEffect(() => {
+    if (prefersReducedMotion) setIsPlaying(false);
+  }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+    const timer = window.setInterval(() => {
+      setLatestTick((current) => {
+        const next = current + 1;
+        setSelectedTick(next);
+        return next;
+      });
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, [isPlaying]);
+
+  function followLatest() {
+    setMode("current");
+    setSelectedTick(latestTick);
+  }
+
+  function restart() {
+    setIsPlaying(false);
+    setLatestTick(2);
+    setSelectedTick(2);
+    setMode("current");
+    setSubmissions(0);
+  }
+
+  return (
+    <FactoryEmulatorView
+      controls={{
+        ...meta.args.controls,
+        disabledActions: isPlaying ? ["play"] : ["pause"],
+        isPlaying,
+        onFollowLatest: followLatest,
+        onPause: () => setIsPlaying(false),
+        onPlay: () => {
+          followLatest();
+          setIsPlaying(true);
+        },
+        onRestart: restart,
+        onSelectTick: (tick) => {
+          setIsPlaying(false);
+          setMode("history");
+          setSelectedTick(tick);
+        },
+        onStep: () => {
+          const next = latestTick + 1;
+          setLatestTick(next);
+          setSelectedTick(next);
+          setMode("current");
+        },
+        runtimeStatus: {
+          label: isPlaying
+            ? "Playing"
+            : mode === "history"
+              ? "Viewing history"
+              : "Paused",
+          tone: isPlaying
+            ? "success"
+            : mode === "history"
+              ? "warning"
+              : "neutral",
+        },
+        timeline: {
+          ...meta.args.controls.timeline,
+          state: {
+            earliestTick: 0,
+            latestTick,
+            mode,
+            selectedTick,
+            status: "available",
+          },
+        },
+      }}
+      submission={
+        <div>
+          <Button onClick={() => setSubmissions((count) => count + 1)}>
+            Submit Work
+          </Button>
+          <output aria-live="polite">Submissions: {submissions}</output>
+        </div>
+      }
+      topology={meta.args.topology}
+      workProgress={meta.args.workProgress}
+    />
+  );
+}
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(
+    () => window.matchMedia?.(REDUCED_MOTION_QUERY).matches ?? false,
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.(REDUCED_MOTION_QUERY);
+    if (!mediaQuery) return;
+    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
+    updatePreference();
+    mediaQuery.addEventListener("change", updatePreference);
+    return () => mediaQuery.removeEventListener("change", updatePreference);
+  }, []);
+
+  return prefersReducedMotion;
+}

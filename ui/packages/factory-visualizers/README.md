@@ -18,6 +18,12 @@ all callbacks. Selecting an earlier tick requests pause before selection; Play
 and Step request follow-latest before their host command in history mode. It
 never creates a timer, mutates replay data, or owns emulator state.
 
+Hosts that autoplay should honor `prefers-reduced-motion` by starting paused and
+stopping playback when that preference changes. Explicit Play, Step, submission,
+and Restart actions can remain available. Manual Pause and historical timeline
+selection stay authoritative until the user explicitly resumes playback or
+returns to the current Factory.
+
 `FactoryEmulatorView` vertically composes host-supplied controls, topology,
 Work progress, and an optional submission region. Its `full` preset shows every
 region; `compact` omits speed and submission; `display-only` renders topology

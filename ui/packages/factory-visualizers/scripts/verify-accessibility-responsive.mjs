@@ -45,6 +45,7 @@ try {
   await verifyChromeOperationalDetail(browser);
   await verifyRecordingComposition(browser);
   await verifyRecordingPresentations(browser);
+  await verifyAccessiblePlayback(browser);
   await verifyGermanFormatting(browser);
   await verifyReducedMotion(browser);
   console.log(
@@ -399,6 +400,81 @@ async function verifyRecordingComposition(browserInstance) {
       .isVisible(),
     "The projection failure made sibling Storybook content unusable.",
   );
+  await verifyRecordingAccessibilityStates(page);
+  await context.close();
+}
+
+async function verifyRecordingAccessibilityStates(page) {
+  for (const state of [
+    "loading",
+    "empty-recording",
+    "validated-recording",
+    "invalid-recording",
+  ]) {
+    const storyId = `factory-visualizers-factoryrecordingtopologyreplay--${state}`;
+    await openStory(page, storyId);
+    await assertNoSeriousAccessibilityViolations(page, storyId);
+  }
+}
+
+async function verifyAccessiblePlayback(browserInstance) {
+  const context = await browserInstance.newContext({
+    viewport: { width: 720, height: 900 },
+  });
+  const page = await context.newPage();
+  const storyId =
+    "factory-visualizers-factoryemulatorview--accessible-playback";
+  await openStory(page, storyId);
+  await assertNoSeriousAccessibilityViolations(page, storyId);
+
+  const pause = page.getByRole("button", { name: "Pause" });
+  await tabTo(page, pause, 20);
+  assert(
+    (await pause.evaluate(
+      (element) => getComputedStyle(element).outlineWidth,
+    )) !== "0px",
+    "The playback controls do not expose visible keyboard focus.",
+  );
+  await page.keyboard.press("Enter");
+  await page
+    .getByRole("status", { name: "Runtime status" })
+    .getByText("Paused")
+    .waitFor();
+  assert(
+    await page.getByRole("button", { name: "Pause" }).isDisabled(),
+    "The paused playback state did not disable Pause.",
+  );
+
+  const slider = page.getByRole("slider", { name: "Select tick" });
+  await slider.focus();
+  await page.keyboard.press("ArrowLeft");
+  const historicalTick = await slider.inputValue();
+  await page.waitForTimeout(850);
+  assert(
+    (await slider.inputValue()) === historicalTick,
+    "Manual historical selection was overridden by autoplay.",
+  );
+  assert(
+    await page.getByText("Viewing history.").isVisible(),
+    "Historical selection did not expose its status.",
+  );
+
+  await page.getByRole("button", { name: "Follow latest" }).click();
+  assert(
+    await page.getByText("Current Factory.").isVisible(),
+    "Follow latest did not restore current mode.",
+  );
+  await page.getByRole("button", { name: "Submit Work" }).click();
+  assert(
+    await page.getByText("Submissions: 1").isVisible(),
+    "Keyboard-accessible submission did not update its live status.",
+  );
+  await page.getByRole("button", { name: "Restart" }).click();
+  assert(
+    (await slider.inputValue()) === "2" &&
+      (await page.getByText("Submissions: 0").isVisible()),
+    "Restart did not restore the deterministic initial playback state.",
+  );
   await context.close();
 }
 
@@ -525,6 +601,36 @@ async function verifyReducedMotion(browserInstance) {
   assert(
     (await page.locator(".react-flow__edge.animated").count()) === 0,
     "An active topology edge remained animated.",
+  );
+  await openStory(
+    page,
+    "factory-visualizers-factoryemulatorview--accessible-playback",
+  );
+  const slider = page.getByRole("slider", { name: "Select tick" });
+  const initialTick = await slider.inputValue();
+  await page.waitForTimeout(850);
+  assert(
+    (await slider.inputValue()) === initialTick,
+    "The reduced-motion emulator demo autoplayed unexpectedly.",
+  );
+  assert(
+    await page.getByRole("button", { name: "Pause" }).isDisabled(),
+    "The reduced-motion emulator demo did not start paused.",
+  );
+  await page.getByRole("button", { name: "Step" }).click();
+  assert(
+    Number(await slider.inputValue()) === Number(initialTick) + 1,
+    "Reduced motion prevented explicit playback advancement.",
+  );
+  await page.getByRole("button", { name: "Submit Work" }).click();
+  assert(
+    await page.getByText("Submissions: 1").isVisible(),
+    "Reduced motion prevented explicit submission.",
+  );
+  await page.getByRole("button", { name: "Restart" }).click();
+  assert(
+    (await slider.inputValue()) === initialTick,
+    "Reduced motion prevented explicit restart.",
   );
   await context.close();
 }
