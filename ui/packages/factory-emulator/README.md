@@ -199,6 +199,11 @@ not fabricate failed Work. A consecutive zero-time scheduler chain uses the
 distinct `zero-duration-cycle` diagnostic. Initial and runtime Work sets larger
 than `maxSynchronousWorkItems` fail atomically with
 `bounded-work-exceeded` before partial Work or events become visible.
+After any execution pause, `reset()` clears the structured failure and restores
+the deterministic pre-start state. The caller remains responsible for clearing
+or replacing its owned event history before rerunning the same scenario; that
+rerun emits the same canonical history and stops at the same configured
+boundary.
 
 Hosts can provide `yieldControl` to choose their own cooperative task boundary.
 Long advancement commands await it after every `maxSynchronousBatches`
