@@ -67,6 +67,10 @@ that consumes the replay kernel.
   without changing emulator execution, while Play, Pause, Step, speed, and
   follow-current remain host-invoked commands with no browser persistence,
   wall-clock scheduling, visibility policy, or hosted session/SSE ownership.
+  Restart must reset the package session before rebuilding initial events and
+  must replace only that instance's retained history, replay checkpoint,
+  selection, playback, error, and draft state; sibling adapters and the hosted
+  timeline store remain separate authorities.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but
