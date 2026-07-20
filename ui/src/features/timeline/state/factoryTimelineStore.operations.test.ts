@@ -1,13 +1,22 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: timeline store operation and session lifecycle replay cases share fixture events.
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
-import { canonicalSessionLifecycleControlReplayEvents, canonicalSessionLifecycleReplayEvents } from "../../../testing/session-lifecycle-replay-fixtures";
+import {
+  canonicalSessionLifecycleControlReplayEvents,
+  canonicalSessionLifecycleReplayEvents,
+} from "../../../testing/session-lifecycle-replay-fixtures";
 import {
   buildFactoryTimelineSnapshot,
   useFactoryTimelineStore,
 } from "./factoryTimelineStore";
 
 const eventTime = "2026-05-31T12:00:00.000Z";
+const exactIdentity = {
+  backendScopeID: "timeline-ops-backend",
+  factorySessionID: "11111111-1111-4111-8111-111111111111",
+  logicalSessionKeyID: "timeline-ops-logical-session",
+  streamGenerationID: "timeline-ops-generation",
+};
 
 function timelineEvent(
   id: string,
@@ -114,6 +123,28 @@ describe("factory timeline store operations", () => {
     expect(after.events).toEqual(before.events);
     expect(after.latestTick).toBe(before.latestTick);
     expect(after.receivedEventIDs).toEqual(before.receivedEventIDs);
+  });
+
+  it("does not replace retained live entry state with a durable checkpoint", () => {
+    const store = useFactoryTimelineStore.getState();
+    store.activateEntry(exactIdentity);
+    store.appendEventsForEntry(exactIdentity, [initialStructure]);
+    const liveEntry = useFactoryTimelineStore
+      .getState()
+      .entryForIdentity(exactIdentity);
+    const checkpoint = liveEntry?.currentReplayCheckpoint;
+    expect(checkpoint).toBeDefined();
+    if (!checkpoint) throw new Error("expected live timeline checkpoint");
+
+    store.restoreCheckpointForEntry(exactIdentity, structuredClone(checkpoint));
+
+    const retained = useFactoryTimelineStore
+      .getState()
+      .entryForIdentity(exactIdentity);
+    expect(retained?.events.map(({ id }) => id)).toEqual([
+      "timeline-ops-initial",
+    ]);
+    expect(retained?.receivedEventIDs).toEqual(["timeline-ops-initial"]);
   });
 
   it("preserves selected tick in fixed mode when appending later events", () => {

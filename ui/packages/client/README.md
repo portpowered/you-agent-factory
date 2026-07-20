@@ -2,6 +2,9 @@
 
 Transport-neutral Factory contracts and recording utilities for TypeScript
 consumers. The package has no React, browser, dashboard, or network dependency.
+See the [public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md)
+for its contract-layer role, dependency direction, supported integration paths,
+and hosted-execution boundary.
 
 ## Stable contracts
 

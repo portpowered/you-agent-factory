@@ -11,6 +11,42 @@
 @import "./styles/typography-roles.css";
 @import "./styles/layout-role-tokens.css";
 
+.factory-emulator-playback,
+.factory-emulator-playback__actions,
+.factory-emulator-playback__speed {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.factory-emulator-playback,
+.factory-emulator-playback__actions {
+  flex-wrap: wrap;
+}
+
+.factory-emulator-playback {
+  inline-size: 100%;
+}
+
+.factory-emulator-playback__action,
+.factory-emulator-playback__speed-select,
+.factory-emulator-playback__status {
+  min-block-size: 2.25rem;
+}
+
+.factory-emulator-playback__action {
+  padding: 0.5rem 0.75rem;
+}
+
+.factory-emulator-playback__speed {
+  margin-inline-start: auto;
+}
+
+.factory-emulator-playback__speed-select,
+.factory-emulator-playback__status {
+  padding: 0.5rem;
+}
+
 @keyframes overlay-collapsible-down {
   from {
     height: 0;

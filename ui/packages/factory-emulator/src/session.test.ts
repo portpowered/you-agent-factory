@@ -3198,6 +3198,58 @@ describe("Factory emulator execution safety limits", () => {
     ).toBe("active");
   });
 
+  it("resets a budget-paused run and reproduces its exact failure boundary", async () => {
+    const history: FactoryEvent[] = [];
+    const emulator = limitedHarness(
+      { maxEvents: 5, maxCompletedDispatches: 1 },
+      undefined,
+      {
+        sink: {
+          write: async (events) => history.push(...structuredClone(events)),
+        },
+      },
+    );
+
+    const runToBoundary = async () => {
+      await emulator.start();
+      await expect(emulator.advanceBy(25)).rejects.toMatchObject({
+        diagnostic: {
+          kind: "budget-exceeded",
+          limit: "events",
+          configured: 5,
+          observed: 6,
+        },
+      });
+      return {
+        history: structuredClone(history),
+        state: emulator.state(),
+        status: emulator.status(),
+      };
+    };
+
+    const first = await runToBoundary();
+    const reset = emulator.reset();
+    history.length = 0;
+
+    expect(reset.state).toEqual({
+      lifecycle: "pre-start",
+      virtualElapsedMs: 0,
+      counters: { commands: 0, events: 0, completedDispatches: 0 },
+    });
+    expect(emulator.status()).toMatchObject({ phase: "idle" });
+
+    const second = await runToBoundary();
+    expect(second).toEqual(first);
+    expect(second.history).toHaveLength(5);
+    expect(second.status).toMatchObject({
+      phase: "error",
+      error: {
+        code: "execution_paused",
+        diagnostic: { kind: "budget-exceeded", limit: "events" },
+      },
+    });
+  });
+
   it("rejects oversized initial and runtime Work batches without partial events", async () => {
     const initialWrites: FactoryEvent[][] = [];
     const oversizedInitial = limitedHarness(

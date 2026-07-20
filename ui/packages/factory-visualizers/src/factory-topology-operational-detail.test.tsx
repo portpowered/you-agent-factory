@@ -89,4 +89,30 @@ describe("FactoryTopologyReplay operational detail", () => {
       ).toHaveAttribute("data-animated", "true");
     },
   );
+
+  it("hides configured empty content wherever current runtime telemetry is available", () => {
+    const projection = createFactoryTopologyProjection();
+    projection.activity.activeDispatchOverlays[0].resourceNodeIds = [];
+    render(
+      <FactoryTopologyReplay
+        layout={{
+          nodeEmptyStates: projection.topology.nodes.map((node) => ({
+            content: {
+              kind: "text" as const,
+              text: `Configured empty content for ${node.label}`,
+            },
+            nodeId: node.id,
+          })),
+          schemaVersion: "factory-visualization-layout/v1",
+        }}
+        messages={messages}
+        state={{ projection, status: "ready" }}
+      />,
+    );
+
+    expect(screen.getByText(/2 of 4 resources occupied/)).toBeVisible();
+    expect(screen.getByText(/3 Work in this state/)).toBeVisible();
+    expect(screen.getByRole("group", { name: "Active Work" })).toBeVisible();
+    expect(document.body).not.toHaveTextContent("Configured empty content");
+  });
 });

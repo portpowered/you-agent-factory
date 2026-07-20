@@ -66,50 +66,84 @@ export function FactoryEmulatorControls({
     <section
       aria-label="Factory emulator playback controls"
       className={cn(
-        "flex w-full flex-wrap items-center gap-2 rounded-xl border border-outline bg-surface-container-low p-3",
+        "factory-emulator-playback flex w-full flex-wrap items-center gap-2 rounded-xl border border-outline bg-surface-container-low p-3",
         className,
       )}
       {...props}
     >
       {showPlaybackActions ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={disabled.has("play")} onClick={onPlay} size="sm">
+        <div className="factory-emulator-playback__actions flex flex-wrap items-center gap-2">
+          <Button
+            className="factory-emulator-playback__action"
+            disabled={disabled.has("play")}
+            onClick={onPlay}
+            size="sm"
+          >
             Play
           </Button>
-          <Button disabled={disabled.has("pause")} onClick={onPause} size="sm" tone="secondary">
+          <Button
+            className="factory-emulator-playback__action"
+            disabled={disabled.has("pause")}
+            onClick={onPause}
+            size="sm"
+            tone="secondary"
+          >
             Pause
           </Button>
-          <Button disabled={disabled.has("step")} onClick={onStep} size="sm" tone="outline">
+          <Button
+            className="factory-emulator-playback__action"
+            disabled={disabled.has("step")}
+            onClick={onStep}
+            size="sm"
+            tone="outline"
+          >
             Step
           </Button>
-          <Button disabled={disabled.has("restart")} onClick={onRestart} size="sm" tone="ghost">
+          <Button
+            className="factory-emulator-playback__action"
+            disabled={disabled.has("restart")}
+            onClick={onRestart}
+            size="sm"
+            tone="ghost"
+          >
             Restart
           </Button>
         </div>
       ) : null}
 
-      {showSpeedControl ? <label className="ml-auto flex min-h-9 items-center gap-2 text-body-small font-medium text-on-surface-variant">
-        <span>Speed</span>
-        <select
-          aria-label="Playback speed"
-          className="min-h-9 rounded-lg border border-outline bg-surface-container-high px-2 text-body-small text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
-          onChange={(event) => {
-            const nextSpeed = Number(event.target.value);
-            if (isFactoryEmulatorSpeed(nextSpeed)) onSpeedChange(nextSpeed);
-          }}
-          value={speed}
-        >
-          {FACTORY_EMULATOR_SPEEDS.map((option) => <option key={option} value={option}>{option}x</option>)}
-        </select>
-      </label> : null}
+      {showSpeedControl ? (
+        <label className="factory-emulator-playback__speed ml-auto flex min-h-9 items-center gap-2 text-body-small font-medium text-on-surface-variant">
+          <span>Speed</span>
+          <select
+            aria-label="Playback speed"
+            className="factory-emulator-playback__speed-select min-h-9 rounded-lg border border-outline bg-surface-container-high px-2 text-body-small text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
+            onChange={(event) => {
+              const nextSpeed = Number(event.target.value);
+              if (isFactoryEmulatorSpeed(nextSpeed)) onSpeedChange(nextSpeed);
+            }}
+            value={speed}
+          >
+            {FACTORY_EMULATOR_SPEEDS.map((option) => (
+              <option key={option} value={option}>
+                {option}x
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
 
-      {showRuntimeStatus ? <output
-        aria-label="Runtime status"
-        className={cn("min-h-9 rounded-full px-3 py-2 text-body-small font-medium", STATUS_TONE_CLASS[runtimeStatus.tone ?? "neutral"])}
-        data-playing={isPlaying ? "true" : "false"}
-      >
-        {runtimeStatus.label}
-      </output> : null}
+      {showRuntimeStatus ? (
+        <output
+          aria-label="Runtime status"
+          className={cn(
+            "factory-emulator-playback__status min-h-9 rounded-full px-3 py-2 text-body-small font-medium",
+            STATUS_TONE_CLASS[runtimeStatus.tone ?? "neutral"],
+          )}
+          data-playing={isPlaying ? "true" : "false"}
+        >
+          {runtimeStatus.label}
+        </output>
+      ) : null}
     </section>
   );
 }

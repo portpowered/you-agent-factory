@@ -6,6 +6,10 @@ projections. The package exports `FactoryTopologyReplay`,
 `WorkProgressVisualizer`, and `FactoryEmulatorControls` together with their
 message, formatting, status, callback, and structured error contracts.
 
+See the [public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md)
+for clean-install commands, static and interactive package examples, dependency
+direction, and the precise hosted-runtime versus emulator support boundary.
+
 `FactoryTopologyReplay` accepts a presentation-only `chrome` configuration.
 Choose the `full`, `minimal`, or `none` preset, then override `legend`,
 `background`, `viewportControls`, or `visibilityControls` individually. The
@@ -17,6 +21,12 @@ with `FactoryTimelineScrubber`. Hosts provide the current/history selection and
 all callbacks. Selecting an earlier tick requests pause before selection; Play
 and Step request follow-latest before their host command in history mode. It
 never creates a timer, mutates replay data, or owns emulator state.
+
+Hosts that autoplay should honor `prefers-reduced-motion` by starting paused and
+stopping playback when that preference changes. Explicit Play, Step, submission,
+and Restart actions can remain available. Manual Pause and historical timeline
+selection stay authoritative until the user explicitly resumes playback or
+returns to the current Factory.
 
 `FactoryEmulatorView` vertically composes host-supplied controls, topology,
 Work progress, and an optional submission region. Its `full` preset shows every

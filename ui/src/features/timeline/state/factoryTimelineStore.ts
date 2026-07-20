@@ -1,7 +1,6 @@
 import { create, type StateCreator } from "zustand";
-
-import type { FactoryEvent } from "../../../api/events";
 import { canonicalizeFactoryEvents } from "../../../../../packages/factory-replay/src/index.js";
+import type { FactoryEvent } from "../../../api/events";
 import {
   correlationTokenForIdentityScope,
   recordSessionPersistenceDiagnostic,
@@ -22,10 +21,15 @@ export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 export type { WorldState } from "./timeline/types";
 
 import {
+  createFactoryTimelineEntry,
+  factoryTimelineEntryKey,
+  withEntryTimelineState,
+} from "./entries/factoryTimelineEntry";
+import {
   appendTimelineEvents,
   emptyTimelineState,
-  type FactoryTimelineEntryState,
   type FactoryTimelineCheckpoint,
+  type FactoryTimelineEntryState,
   type FactoryTimelineState,
   replaceTimelineEvents,
   restoreTimelineCheckpoint,
@@ -34,11 +38,6 @@ import {
   type TimelineStoreStateDeps,
 } from "./timeline/storeState";
 import type { WorldState } from "./timeline/types";
-import {
-  createFactoryTimelineEntry,
-  factoryTimelineEntryKey,
-  withEntryTimelineState,
-} from "./entries/factoryTimelineEntry";
 
 export type {
   FactoryTimelineCheckpoint,
@@ -122,6 +121,20 @@ function bindUnownedActiveState(
     selectedTick: state.selectedTick,
     worldViewCache: state.worldViewCache,
   };
+}
+
+function hasNewerRetainedTimelineState(
+  entry: FactoryTimelineEntryState,
+  checkpoint: FactoryTimelineCheckpoint,
+): boolean {
+  if (entry.events.length === 0 && entry.receivedEventIDs.length === 0) {
+    return false;
+  }
+  const retainedSequence = entry.currentReplayCheckpoint?.afterSequence;
+  const restoredSequence = checkpoint.afterSequence;
+  if (retainedSequence === undefined) return restoredSequence === undefined;
+  if (restoredSequence === undefined) return true;
+  return retainedSequence >= restoredSequence;
 }
 
 function entryMutation(
@@ -217,6 +230,25 @@ function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
         ),
       );
     },
+    removeEntriesForSession: (factorySessionID) => {
+      set((current) => {
+        const entriesByKey = Object.fromEntries(
+          Object.entries(current.entriesByKey).filter(
+            ([, entry]) => entry.identity.factorySessionID !== factorySessionID,
+          ),
+        );
+        const activeEntryRemoved =
+          current.activeEntryKey !== null &&
+          !(current.activeEntryKey in entriesByKey);
+        return activeEntryRemoved
+          ? {
+              activeEntryKey: null,
+              ...emptyTimelineState(),
+              entriesByKey,
+            }
+          : { entriesByKey };
+      });
+    },
     resetEntry: (identity) => {
       set((current) =>
         entryMutation(current, identity, (entry) =>
@@ -225,6 +257,10 @@ function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
       );
     },
     restoreCheckpointForEntry: (identity, checkpoint) => {
+      const current = get();
+      const existing = current.entriesByKey[factoryTimelineEntryKey(identity)];
+      if (existing && hasNewerRetainedTimelineState(existing, checkpoint))
+        return;
       set((current) =>
         entryMutation(current, identity, (entry) =>
           withEntryTimelineState(entry, restoreTimelineCheckpoint(checkpoint)),

@@ -8,6 +8,11 @@ import {
   type FactoryRecordingTopologyReplayMessages,
 } from "./factory-recording-topology-replay";
 import { createGermanRecordingMessages } from "./testing/factory-recording-messages";
+import {
+  dependencyRecording,
+  playbackRecording,
+  terminalRecording,
+} from "./testing/factory-recording-responsive-states";
 import { createDenseFactoryRecording } from "./testing/factory-recordings";
 
 const messages: FactoryRecordingTopologyReplayMessages = {
@@ -137,6 +142,35 @@ export const ValidatedRecording: Story = {
     await expect(args.onSelectNode).toHaveBeenCalledWith(
       expect.objectContaining({ kind: "workstation", label: "triage" }),
     );
+  },
+};
+
+export const TerminalRecording: Story = {
+  args: { recording: terminalRecording() },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("1 completed Work")).toBeVisible();
+    await expect(canvas.getByText("1 Work total")).toBeVisible();
+    await expect(canvas.getByText("Following current recording")).toBeVisible();
+  },
+};
+
+export const DependencyNeutralRecording: Story = {
+  args: { recording: dependencyRecording() },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("2 Work total")).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "work-state: Ready" }),
+    ).toBeVisible();
+    await expect(
+      canvas.queryByText(/depends_on|dependency|blocked/i),
+    ).toBeNull();
+    await expect(
+      canvas.queryByRole("button", {
+        name: /relationship|dependency|connect/i,
+      }),
+    ).toBeNull();
   },
 };
 
@@ -326,111 +360,6 @@ function emptyRecording(): unknown {
     id: "empty-recording",
     schemaVersion: "factory-recording/v1",
     title: "Empty local recording",
-  };
-}
-
-function playbackRecording(): unknown {
-  const factory = {
-    name: "support-playback",
-    workers: [{ name: "support-agent" }],
-    workTypes: [
-      {
-        name: "support-request",
-        states: [
-          { name: "queued", type: "INITIAL" },
-          { name: "resolved", type: "TERMINAL" },
-          { name: "failed", type: "FAILED" },
-        ],
-      },
-    ],
-    workstations: [
-      {
-        inputs: [{ state: "queued", workType: "support-request" }],
-        name: "triage",
-        outputs: [{ state: "resolved", workType: "support-request" }],
-        worker: "support-agent",
-      },
-    ],
-  };
-  const context = (sequence: number, tick: number, dispatchId?: string) => ({
-    ...(dispatchId ? { dispatchId, workIds: ["support-1"] } : {}),
-    eventTime: `2026-07-18T20:00:0${sequence}Z`,
-    sequence,
-    sessionId: "storybook-playback-session",
-    sessionSequence: sequence,
-    tick,
-  });
-  return {
-    events: [
-      {
-        context: context(1, 1),
-        id: "playback-topology",
-        payload: { factory },
-        schemaVersion: "agent-factory.event.v1",
-        type: "INITIAL_STRUCTURE_REQUEST",
-      },
-      {
-        context: context(2, 3),
-        id: "playback-work",
-        payload: {
-          type: "FACTORY_REQUEST_BATCH",
-          works: [
-            {
-              name: "Support request 1",
-              workId: "support-1",
-              workTypeName: "support-request",
-            },
-          ],
-        },
-        schemaVersion: "agent-factory.event.v1",
-        type: "WORK_REQUEST",
-      },
-      {
-        context: context(4, 3),
-        id: "playback-resolved",
-        payload: {
-          fromPlaceId: "support-request:failed",
-          fromState: "failed",
-          source: "api",
-          toPlaceId: "support-request:resolved",
-          toState: "resolved",
-          workId: "support-1",
-          workTypeName: "support-request",
-        },
-        schemaVersion: "agent-factory.event.v1",
-        type: "WORK_STATE_CHANGE",
-      },
-      {
-        context: context(5, 3, "playback-dispatch"),
-        id: "playback-dispatch",
-        payload: {
-          inputs: [{ workId: "support-1" }],
-          resources: [],
-          transitionId: "triage",
-        },
-        schemaVersion: "agent-factory.event.v1",
-        type: "DISPATCH_REQUEST",
-      },
-      {
-        context: context(3, 3),
-        id: "playback-failed-first",
-        payload: {
-          fromPlaceId: "support-request:queued",
-          fromState: "queued",
-          source: "api",
-          toPlaceId: "support-request:failed",
-          toState: "failed",
-          workId: "support-1",
-          workTypeName: "support-request",
-        },
-        schemaVersion: "agent-factory.event.v1",
-        type: "WORK_STATE_CHANGE",
-      },
-    ],
-    factory,
-    id: "same-tick-history-current",
-    schemaVersion: "factory-recording/v1",
-    title: "Same-tick history and current playback",
   };
 }
 

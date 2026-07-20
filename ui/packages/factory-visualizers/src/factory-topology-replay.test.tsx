@@ -204,6 +204,7 @@ describe("FactoryTopologyReplay", () => {
           id: "annotation:review-note",
           position: { x: 90, y: 45 },
           selectable: false,
+          style: { width: 240 },
           type: "factoryTopologyAnnotation",
         }),
         expect.objectContaining({

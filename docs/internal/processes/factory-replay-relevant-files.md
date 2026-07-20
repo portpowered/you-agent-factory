@@ -3,6 +3,12 @@
 Use this map when changing deterministic Factory-event replay or a host adapter
 that consumes the replay kernel.
 
+- `ui/packages/README.md` is the public integration and support-boundary guide
+  for the client, replay, emulator, components, and visualizer family. Keep its
+  package graph, public example/style/schema subpaths, hosted-runtime authority,
+  emulator exclusions, and caller/host ownership statements aligned with the
+  package manifests and clean installed-consumer checks.
+
 - `packages/factory-replay/src/index.js` owns framework-independent canonical
   ordering, event-ID acceptance, logical-tick selection, immutable checkpoint
   advancement, reducer-driven replay orchestration, and selected-tick topology
@@ -99,6 +105,12 @@ that consumes the replay kernel.
 - `ui/src/features/timeline/state/timeline/factory-replay-kernel.compatibility.test.ts`
   compares the package-selected historical projection with the existing hosted
   reducer and projection.
+- `ui/src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts`
+  is the deterministic high-volume retention gate. Keep fixture construction
+  outside the serialized checkpoint measurement, assert observable final and
+  historical projections, cover duplicate and same-tick accepted tails, and
+  report actual versus allowed retained bytes rather than using elapsed time as
+  a memory proxy.
 - `ui/src/features/timeline/state/timeline/projections/factory-replay-projections.compatibility.test.ts`
   proves the hosted adapter preserves shared topology IDs and handle parity,
   Dispatch/resource occupancy, exclusive Work progress, and same-tick
@@ -116,9 +128,13 @@ that consumes the replay kernel.
   annotations must decode into Blob URLs, revoke those URLs on replacement,
   removal, image failure, and unmount, and contain preparation failures in the
   affected annotation rather than failing the topology region. Node empty-state
-  visibility is likewise derived from selected-tick Work-State counts, active
-  Dispatches, and active routes; retain identity and telemetry outside its
-  activity-detail region.
+  visibility is likewise derived from selected-tick Work-State counts, known
+  resource occupancy, active Dispatches, and active routes; current runtime
+  evidence must suppress configured empty content. Retain identity and telemetry
+  outside its activity-detail region. Responsive Storybook evidence belongs in
+  `scripts/verify-responsive-story-matrix.mjs`, which exercises lifecycle states,
+  annotation containment, keyboard reachability, and dependency-neutral output
+  at narrow, medium, and wide browser viewports.
 - `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` validates
   unknown caller layout input with the client parser against the prepared
   canonical node-ID context before deriving React Flow data. Report invalid
@@ -128,7 +144,10 @@ that consumes the replay kernel.
   validates and owns static recording replay, then forwards the caller-owned
   layout sidecar unchanged to the controlled topology renderer. Other hosts
   should likewise supply the sidecar as an explicit presentation input rather
-  than attaching it to replay state or recordings.
+  than attaching it to replay state or recordings. Its bounded historical
+  projection cache is scoped to the canonicalized recording array and keyed by
+  tick; never embed serialized event prefixes in cache keys because that
+  retains hidden copies of canonical history.
 - `ui/src/features/dashboard/components/topology-replay/hosted-topology-replay.tsx`
   is the hosted replay boundary. It forwards its optional caller-owned layout
   sidecar to the controlled renderer and must not place it in timeline or

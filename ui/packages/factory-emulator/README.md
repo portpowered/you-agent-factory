@@ -5,6 +5,12 @@ for deterministic Factory emulator contracts. Scenario parsing validates both
 the package-local schema and references to a caller-supplied UI client
 `FactoryDefinition`.
 
+The hosted Go runtime remains authoritative for Factory execution. This package
+implements only the deterministic browser subset documented in the
+[public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md);
+canonical-event-compatible output
+does not make it a replacement for hosted execution.
+
 ```ts
 import factory from "./factory.json" with { type: "json" };
 import scenario from "./scenario.json" with { type: "json" };
@@ -199,6 +205,11 @@ not fabricate failed Work. A consecutive zero-time scheduler chain uses the
 distinct `zero-duration-cycle` diagnostic. Initial and runtime Work sets larger
 than `maxSynchronousWorkItems` fail atomically with
 `bounded-work-exceeded` before partial Work or events become visible.
+After any execution pause, `reset()` clears the structured failure and restores
+the deterministic pre-start state. The caller remains responsible for clearing
+or replacing its owned event history before rerunning the same scenario; that
+rerun emits the same canonical history and stops at the same configured
+boundary.
 
 Hosts can provide `yieldControl` to choose their own cooperative task boundary.
 Long advancement commands await it after every `maxSynchronousBatches`

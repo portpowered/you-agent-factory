@@ -5,6 +5,10 @@ package deterministically orders and accepts Factory events, reconstructs
 reducer-owned state at a logical tick, advances immutable checkpoints, and
 projects customer Work into exclusive progress categories.
 
+See the [public package family guide](https://github.com/portpowered/you-agent-factory/blob/main/ui/packages/README.md)
+for the complete layer ordering, packed consumer paths, and execution support
+boundary.
+
 The package consumes Factory contracts from `@you-agent-factory/client` as
 types only. Its runtime has no React, React Flow, Zustand, dashboard, network,
 event-stream, or browser-storage dependency.
@@ -33,11 +37,15 @@ only accepted event IDs in the checkpoint rather than replay history.
 `ui/src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts`
 replays a deterministic 10,000-event recording through `advanceFactoryReplay`.
 It budgets the UTF-8 serialized retained checkpoint at 2,000,000 bytes and
-verifies that three advances of the same recording retain exactly the same
-amount and produce the same final hosted projection. The caller-owned recording
-input is deliberately excluded: `advanceFactoryReplay` retains only its compact
+verifies the final tick, Work totals, and topology state after an incremental
+same-tick tail containing duplicate input. Replaying the full recording from
+that checkpoint must retain exactly the same bytes and return the same final
+world without reapplying events; the earlier historical world must remain
+unchanged. The caller-owned recording fixture is deliberately excluded from
+the retained measurement: `advanceFactoryReplay` retains only its compact
 checkpoint. The harness uses no wall-clock or process-heap assertions, which
-are not deterministic across CI runtimes.
+are not deterministic across CI runtimes, and reports the measured and maximum
+byte counts when the retained bound is exceeded.
 
 Use `projectFactoryWorkProgressAtTick` when canonical event history is the
 source for Work progress, or `projectFactoryWorkProgress` when the consumer
