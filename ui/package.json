@@ -53,6 +53,8 @@
     "test:public-package-release": "vitest run scripts/verify-public-package-release.test.mjs",
     "test:public-package-retained-memory": "vitest run src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts",
     "test:factory-emulator-adapter-demos": "vitest run src/App.customer-factory-emulator-demos.test.tsx src/features/factory-emulator/state/factory-emulator-instance.test.ts src/features/factory-emulator/state/factory-emulator-isolation.test.ts src/features/factory-emulator/components/factory-emulator-submission.test.tsx src/features/factory-emulator/components/customer-factory-emulator-demos.test.tsx src/features/factory-emulator/components/customer-factory-emulator-demos-submission.test.tsx src/features/factory-emulator/components/customer-factory-emulator-demos-lifecycle.test.tsx",
+    "test:hosted-topology-replay": "vitest run src/features/dashboard/hooks/topology-replay/use-hosted-topology-replay-adapter.test.tsx src/features/dashboard/components/topology-replay/hosted-topology-replay.test.tsx",
+    "test:hosted-exact-session-replay-browser": "vitest run integration/hosted-exact-session-replay.integration.test.mjs --no-file-parallelism --maxWorkers 1",
     "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --maxWorkers=2 --retry=2",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",

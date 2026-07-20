@@ -56,6 +56,21 @@ const adapterAndDemoSteps = [
   },
 ];
 
+const hostedReplaySteps = [
+  {
+    packageName: "Hosted Factory topology replay",
+    packageDirectory: uiRoot,
+    stepName: "run focused exact-session state and component regressions",
+    args: ["run", "test:hosted-topology-replay"],
+  },
+  {
+    packageName: "Hosted Factory topology replay",
+    packageDirectory: uiRoot,
+    stepName: "run desktop and narrow exact-session browser regression",
+    args: ["run", "test:hosted-exact-session-replay-browser"],
+  },
+];
+
 export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
   {
     packageName: "Public package family",
@@ -78,6 +93,7 @@ export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
     ...(index === 2 ? [replayRetainedMemoryStep, workspaceLinkStep] : []),
   ]),
   ...adapterAndDemoSteps,
+  ...hostedReplaySteps,
 ]);
 
 function formatCommand(step) {
