@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button, Label, Textarea } from "../../../../components/ui";
 import {
@@ -55,6 +55,8 @@ export function FactorySimpleSubmissionComposer({
   const statusID = `factory-simple-submission-status-${instanceID}`;
   const [localSubmissionError, setLocalSubmissionError] = useState<string>();
   const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
+  const restoreFocusAfterSubmission = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const availability = resolveFactorySimpleSubmissionAvailability({
     factoryState,
     isCurrent,
@@ -68,6 +70,12 @@ export function FactorySimpleSubmissionComposer({
   const isDisabled = !isAvailable || isSubmitPending;
   const errorMessage = submissionError ?? localSubmissionError;
 
+  useEffect(() => {
+    if (isSubmitPending || !restoreFocusAfterSubmission.current) return;
+    restoreFocusAfterSubmission.current = false;
+    textareaRef.current?.focus();
+  }, [isSubmitPending]);
+
   const submit = async () => {
     if (availability.kind !== "available" || isDraftBlank || isSubmitPending) {
       return;
@@ -75,6 +83,7 @@ export function FactorySimpleSubmissionComposer({
 
     setLocalSubmissionError(undefined);
     setIsLocallySubmitting(true);
+    restoreFocusAfterSubmission.current = true;
     try {
       await onSubmit({
         content: [{ text: draft, type: "text" }],
@@ -118,6 +127,7 @@ export function FactorySimpleSubmissionComposer({
             }
           }}
           placeholder={messages.placeholder}
+          ref={textareaRef}
           className="min-h-24 max-h-48 resize-none overflow-y-auto"
           value={draft}
         />

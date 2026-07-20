@@ -333,9 +333,6 @@ function createExecutionCommands<State, World>(
       if (state.commandState === "running") {
         return disabled("restart", "An emulator command is already running.");
       }
-      if (state.sessionStatus.phase === "closed") {
-        return disabled("restart", "The emulator session is closed.");
-      }
       session.reset();
       runtime.retry = undefined;
       store.setState({

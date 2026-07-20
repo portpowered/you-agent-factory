@@ -71,6 +71,17 @@ that consumes the replay kernel.
   must replace only that instance's retained history, replay checkpoint,
   selection, playback, error, and draft state; sibling adapters and the hosted
   timeline store remain separate authorities.
+- `ui/src/features/factory-emulator/hooks/use-customer-demo-playback.ts` is the
+  customer-demo host policy for wall-clock advancement, viewport observation,
+  reduced-motion preference, and playback intent. Keep timers and observers
+  disposable per mount; visibility may resume only an explicitly retained play
+  intent, while pause, step, historical selection, and newly detected reduced
+  motion must consume autoplay intent. Restart may renew the one-time autoplay
+  opportunity only after the targeted emulator instance resets successfully.
+  For multi-demo hosts, verify disposal by removing one keyed mount while its
+  playback timer is active: its observer, motion listener, and timer must be
+  released, the sibling mount must retain its state, and re-adding the removed
+  key must construct a fresh deterministic instance.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but
@@ -143,6 +154,11 @@ that consumes the replay kernel.
   `ui/src/features/factory-emulator/components/factory-emulator-submission.tsx`
   connects that instance state to the transport-neutral simple composer; keep
   hosted HTTP submission and emulator submission as separate host adapters.
+  Customer-demo acceptance should exercise submission while a Dispatch is
+  active, history/current/closed availability, multiline keyboard input, draft
+  clearing or preservation, and sibling isolation through the mounted demo
+  composition; retain sink-rejection coverage at this adapter boundary so a
+  failed commit cannot clear controlled input or mutate accepted history.
 - `ui/src/features/factory-emulator/components/factory-emulator-adapter.stories.tsx`
   composes the instance adapter with controlled playback, replay inspection,
   and text submission for browser acceptance. Its required browser check lives
@@ -150,6 +166,15 @@ that consumes the replay kernel.
   mobile and desktop browser contexts instead of Storybook viewport metadata,
   and runs in the required UI Browser Integration lane through
   `ui/scripts/run-storybook-ci.mjs`.
+- `ui/src/App.tsx` owns the shipped `/factory-emulator-demos` website surface.
+  Keep the route composition thin and import the two instance-scoped demos
+  through the Factory emulator feature's public boundary so local playback is
+  independent from hosted dashboard session and network state.
+- `ui/scripts/verify-customer-factory-emulator-demos-browser.mjs` owns direct
+  narrow/desktop browser acceptance for the paired customer demos. Its package
+  command must remain registered in `ui/scripts/run-storybook-ci.mjs` so the
+  required UI Browser Integration lane executes that evidence rather than
+  leaving it as a manual-only check.
 - `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
   single-work submission. The HTTP adapter leaves canonical identity assignment
   to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in

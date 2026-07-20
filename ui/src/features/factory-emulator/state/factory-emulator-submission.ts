@@ -129,9 +129,11 @@ export function createFactoryEmulatorSubmissionCommands<State, World>(
 export const selectFactoryEmulatorSubmission = <State, World>(
   state: FactoryEmulatorInstanceState<State, World>,
   factory: FactoryDefinition,
+  isRunTerminal = false,
 ): FactoryEmulatorSubmissionState => ({
   draft: state.submission.draft,
   factoryState:
+    isRunTerminal ||
     state.sessionLifecycle === "closed" ||
     state.sessionStatus.phase === "closed"
       ? "closed"

@@ -4,7 +4,7 @@ import type {
 } from "./factory-emulator-instance";
 
 export interface FactoryEmulatorControlState {
-  readonly disabledActions: readonly ("play" | "restart" | "step")[];
+  readonly disabledActions: readonly ("pause" | "play" | "restart" | "step")[];
   readonly isPlaying: boolean;
   readonly speed: FactoryEmulatorPlaybackSpeed;
 }
@@ -24,19 +24,16 @@ export const selectFactoryEmulatorControls = <State, World>(
     state.commandState === "running" ||
     state.sessionStatus.phase === "closed" ||
     state.sessionStatus.phase === "error";
-  const restartUnavailable =
-    state.commandState === "running" || state.sessionStatus.phase === "closed";
+  const restartUnavailable = state.commandState === "running";
+  const isPlaying = state.playback.status === "playing";
   return {
     disabledActions: [
-      ...(executionUnavailable || state.mode === "history"
-        ? (["play"] as const)
-        : []),
+      ...(executionUnavailable || isPlaying ? (["play"] as const) : []),
+      ...(!isPlaying ? (["pause"] as const) : []),
       ...(restartUnavailable ? (["restart"] as const) : []),
-      ...(executionUnavailable || state.mode === "history"
-        ? (["step"] as const)
-        : []),
+      ...(executionUnavailable ? (["step"] as const) : []),
     ],
-    isPlaying: state.playback.status === "playing",
+    isPlaying,
     speed: state.playback.speed,
   };
 };
