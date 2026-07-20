@@ -9,12 +9,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createFactoryEmulatorInstance,
-  selectFactoryEmulatorControls,
   selectFactoryEmulatorError,
   selectFactoryEmulatorEvents,
   selectFactoryEmulatorReplay,
-  selectFactoryEmulatorTimeline,
 } from "./factory-emulator-instance";
+import {
+  selectFactoryEmulatorControls,
+  selectFactoryEmulatorTimeline,
+} from "./factory-emulator-presentation";
 
 interface EvidenceState {
   appliedEventIDs: string[];

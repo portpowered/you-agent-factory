@@ -19,9 +19,15 @@ import {
 } from "@you-agent-factory/factory-replay";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
+import {
+  createFactoryEmulatorSubmissionCommands,
+  type FactoryEmulatorSubmissionCommands,
+  type FactoryEmulatorSubmissionStoreState,
+} from "./factory-emulator-submission";
+
 export interface FactoryEmulatorAdapterError {
   readonly command?: FactoryEmulatorCommand;
-  readonly kind: "event-sink-rejected";
+  readonly kind: "event-sink-rejected" | "submission-rejected";
   readonly message: string;
   readonly recoverable: true;
 }
@@ -50,6 +56,7 @@ export type FactoryEmulatorAdapterCommand =
   | "retry"
   | "selectTick"
   | "setSpeed"
+  | "submit"
   | "step";
 
 export type FactoryEmulatorCommandOutcome =
@@ -60,20 +67,6 @@ export type FactoryEmulatorCommandOutcome =
       readonly status: "disabled";
     };
 
-export interface FactoryEmulatorControlState {
-  readonly disabledActions: readonly ("play" | "restart" | "step")[];
-  readonly isPlaying: boolean;
-  readonly speed: FactoryEmulatorPlaybackSpeed;
-}
-
-export interface FactoryEmulatorTimelineState {
-  readonly earliestTick: number;
-  readonly latestTick: number;
-  readonly mode: "current" | "history";
-  readonly selectedTick: number;
-  readonly status: "available";
-}
-
 export interface FactoryEmulatorInstanceState<State, World> {
   readonly commandState: "idle" | "running";
   readonly error?: FactoryEmulatorAdapterError;
@@ -83,13 +76,16 @@ export interface FactoryEmulatorInstanceState<State, World> {
   readonly playback: FactoryEmulatorPlaybackState;
   readonly replay: FactoryEmulatorReplayProjection<State, World>;
   readonly selectedTick: number;
+  readonly sessionLifecycle: "closed" | "pre-start" | "started";
   readonly sessionStatus: FactoryEmulatorSessionStatus;
+  readonly submission: FactoryEmulatorSubmissionStoreState;
 }
 
 export interface FactoryEmulatorInstanceOptions<State, World> {
   readonly cloneState: (state: State) => State;
   readonly factory: FactoryDefinition;
   readonly limits?: FactoryEmulatorLimits;
+  readonly locale?: string;
   /** Optional caller-owned atomic acceptance boundary, useful for backpressure. */
   readonly beforeCommit?: (events: readonly FactoryEvent[]) => Promise<void>;
   readonly reducer: FactoryReplayWorldReducer<State, World>;
@@ -97,7 +93,8 @@ export interface FactoryEmulatorInstanceOptions<State, World> {
   readonly yieldControl?: () => void | PromiseLike<void>;
 }
 
-export interface FactoryEmulatorInstanceCommands {
+export interface FactoryEmulatorInstanceCommands
+  extends FactoryEmulatorSubmissionCommands {
   followCurrent(): FactoryEmulatorCommandOutcome;
   pause(): FactoryEmulatorCommandOutcome;
   play(): FactoryEmulatorCommandOutcome;
@@ -153,14 +150,15 @@ function replayAtTick<State, World>(
   events: readonly FactoryEvent[],
   tick: number,
 ): FactoryEmulatorReplayProjection<State, World> {
+  const cloneState = options.cloneState;
   const result = projectFactoryWorldAtTick({
     events,
     reducer: options.reducer,
     tick,
   });
   return {
-    checkpoint: createFactoryReplayWorldCheckpoint(result, options.cloneState),
-    state: options.cloneState(result.state),
+    checkpoint: createFactoryReplayWorldCheckpoint(result, cloneState),
+    state: cloneState(result.state),
     world: structuredClone(result.world),
   };
 }
@@ -243,6 +241,7 @@ function createCommandRunner<State, World>(
       runtime.current = undefined;
       store.setState({
         commandState: "idle",
+        sessionLifecycle: session.state().lifecycle,
         sessionStatus: session.status(),
       });
     }
@@ -348,7 +347,9 @@ function createExecutionCommands<State, World>(
         playback: { speed: 1, status: "paused" },
         replay: replayAtTick(options, [], 0),
         selectedTick: 0,
+        sessionLifecycle: session.state().lifecycle,
         sessionStatus: session.status(),
+        submission: { draft: "", nextOrdinal: 1, status: "idle" },
       });
       await run("start", () => session.start());
       return accepted();
@@ -416,13 +417,22 @@ export function createFactoryEmulatorInstance<State, World>(
     playback: { speed: 1, status: "paused" },
     replay: replayAtTick(options, [], 0),
     selectedTick: 0,
+    sessionLifecycle: session.state().lifecycle,
     sessionStatus: session.status(),
+    submission: { draft: "", nextOrdinal: 1, status: "idle" },
   }));
   const run = createCommandRunner(session, store, runtime);
   return {
     commands: {
       ...createPresentationCommands(options, store),
       ...createExecutionCommands(options, session, store, runtime, run),
+      ...createFactoryEmulatorSubmissionCommands(
+        options.factory,
+        session,
+        store,
+        run,
+        options.locale,
+      ),
     },
     sink,
     store,
@@ -444,37 +454,3 @@ export const selectFactoryEmulatorError = <State, World>(
 export const selectFactoryEmulatorSessionStatus = <State, World>(
   state: FactoryEmulatorInstanceState<State, World>,
 ) => state.sessionStatus;
-
-export const selectFactoryEmulatorControls = <State, World>(
-  state: FactoryEmulatorInstanceState<State, World>,
-): FactoryEmulatorControlState => {
-  const executionUnavailable =
-    state.commandState === "running" ||
-    state.sessionStatus.phase === "closed" ||
-    state.sessionStatus.phase === "error";
-  const restartUnavailable =
-    state.commandState === "running" || state.sessionStatus.phase === "closed";
-  return {
-    disabledActions: [
-      ...(executionUnavailable || state.mode === "history"
-        ? (["play"] as const)
-        : []),
-      ...(restartUnavailable ? (["restart"] as const) : []),
-      ...(executionUnavailable || state.mode === "history"
-        ? (["step"] as const)
-        : []),
-    ],
-    isPlaying: state.playback.status === "playing",
-    speed: state.playback.speed,
-  };
-};
-
-export const selectFactoryEmulatorTimeline = <State, World>(
-  state: FactoryEmulatorInstanceState<State, World>,
-): FactoryEmulatorTimelineState => ({
-  earliestTick: 0,
-  latestTick: state.latestTick,
-  mode: state.mode,
-  selectedTick: state.selectedTick,
-  status: "available",
-});

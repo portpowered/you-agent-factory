@@ -133,6 +133,12 @@ that consumes the replay kernel.
   derive their IDs per instance with normalized React `useId` output so
   multiple mounted composers preserve independent label and `aria-describedby`
   associations; cover that behavior by rendering two unavailable instances.
+- `ui/src/features/factory-emulator/state/factory-emulator-submission.ts` owns
+  the local emulator draft, DEFAULT/INITIAL Work Type eligibility, deterministic
+  interactive Work names, and delegation to `FactoryEmulatorSession.submit`.
+  `ui/src/features/factory-emulator/components/factory-emulator-submission.tsx`
+  connects that instance state to the transport-neutral simple composer; keep
+  hosted HTTP submission and emulator submission as separate host adapters.
 - `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
   single-work submission. The HTTP adapter leaves canonical identity assignment
   to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in
