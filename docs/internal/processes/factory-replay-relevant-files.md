@@ -78,6 +78,10 @@ that consumes the replay kernel.
   intent, while pause, step, historical selection, and newly detected reduced
   motion must consume autoplay intent. Restart may renew the one-time autoplay
   opportunity only after the targeted emulator instance resets successfully.
+  For multi-demo hosts, verify disposal by removing one keyed mount while its
+  playback timer is active: its observer, motion listener, and timer must be
+  released, the sibling mount must retain its state, and re-adding the removed
+  key must construct a fresh deterministic instance.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but

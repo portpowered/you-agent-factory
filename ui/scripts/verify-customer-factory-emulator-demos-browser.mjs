@@ -12,6 +12,8 @@ const storybookUrl =
 const interactiveStory = "agent-factory-emulator-customer-demos--interactive";
 const errorStory =
   "agent-factory-emulator-customer-demos--setup-error-isolation";
+const lifecycleStory =
+  "agent-factory-emulator-customer-demos--lifecycle-isolation";
 const viewports = [
   { height: 844, width: 390 },
   { height: 900, width: 1440 },
@@ -64,6 +66,13 @@ async function installPlaybackControls(context) {
       reducedMotion = matches;
       for (const listener of motionListeners) listener({ matches });
     };
+    window.__customerDemoHostMetrics = () => ({
+      motionListeners: motionListeners.size,
+      observedTargets: observers.reduce(
+        (count, observer) => count + observer.targets.size,
+        0,
+      ),
+    });
   });
 }
 
@@ -289,6 +298,83 @@ async function verifySetupErrorIsolation(page, viewport) {
   await assertResponsiveLayout(page, viewport, errorStory);
 }
 
+async function verifyLifecycleIsolation(page, viewport) {
+  await openStory(page, lifecycleStory);
+  await page.clock.install();
+  const success = page.getByRole("article", {
+    name: "Straightforward success",
+  });
+  let failure = page.getByRole("article", {
+    name: "Review, rework, and failure",
+  });
+  await success.getByText("1 Work total").waitFor();
+  await failure.getByText("1 Work total").waitFor();
+  const mountedHostMetrics = await page.evaluate(() =>
+    window.__customerDemoHostMetrics(),
+  );
+  assert.equal(mountedHostMetrics.observedTargets, 2);
+  assert.ok(mountedHostMetrics.motionListeners > 0);
+
+  await setVisibility(page, "success", true);
+  await setVisibility(page, "repeat-review-failure", true);
+  await success.getByText("Playing", { exact: true }).waitFor();
+  await failure.getByText("Playing", { exact: true }).waitFor();
+  await success.getByRole("button", { name: "Pause" }).click();
+  await success
+    .getByRole("combobox", { name: "Playback speed" })
+    .selectOption("4");
+  const isolatedSubmission = success.getByRole("textbox", {
+    name: "Submit text",
+  });
+  await isolatedSubmission.fill("Isolated request");
+  await isolatedSubmission.press("Enter");
+  await success.getByText("2 Work total").waitFor();
+  await failure.getByText("1 Work total").waitFor();
+  await success.getByRole("slider", { name: "Select replay tick" }).fill("0");
+  await success.getByText("Viewing history", { exact: true }).waitFor();
+  await failure.getByText("Playing", { exact: true }).waitFor();
+  await success.getByRole("button", { name: "Restart" }).click();
+  await success.getByText("1 Work total").waitFor();
+  await failure.getByText("Playing", { exact: true }).waitFor();
+
+  await page.getByRole("button", { name: "Unmount failure demo" }).click();
+  await failure.waitFor({ state: "detached" });
+  const unmountedHostMetrics = await page.evaluate(() =>
+    window.__customerDemoHostMetrics(),
+  );
+  assert.equal(unmountedHostMetrics.observedTargets, 1);
+  assert.ok(
+    unmountedHostMetrics.motionListeners < mountedHostMetrics.motionListeners,
+    "Unmounting one demo did not release its motion-preference listener.",
+  );
+  assert.equal(
+    await success
+      .getByRole("combobox", { name: "Playback speed" })
+      .inputValue(),
+    "1",
+    "Restart did not reset the still-mounted success demo independently.",
+  );
+
+  await page.getByRole("button", { name: "Remount failure demo" }).click();
+  failure = page.getByRole("article", {
+    name: "Review, rework, and failure",
+  });
+  await failure.getByText("1 Work total").waitFor();
+  await failure.getByText("Ready", { exact: true }).waitFor();
+  assert.equal(
+    await failure
+      .getByRole("slider", { name: "Select replay tick" })
+      .inputValue(),
+    "0",
+    "Remounted failure demo retained its previous execution state.",
+  );
+  assert.deepEqual(
+    await page.evaluate(() => window.__customerDemoHostMetrics()),
+    mountedHostMetrics,
+  );
+  await assertResponsiveLayout(page, viewport, lifecycleStory);
+}
+
 async function verifyMotionSafePlayback(page) {
   await openStory(page, interactiveStory);
   await page.clock.install();
@@ -355,6 +441,7 @@ async function verifyCustomerFactoryEmulatorDemos() {
       const page = await context.newPage();
       await verifyInteractive(page, viewport);
       await verifySetupErrorIsolation(page, viewport);
+      await verifyLifecycleIsolation(page, viewport);
       await verifyMotionSafePlayback(page);
       await context.close();
     }

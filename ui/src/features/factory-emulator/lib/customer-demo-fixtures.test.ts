@@ -58,6 +58,34 @@ async function runDemo(
   return { events, state };
 }
 
+async function runDemosConcurrently(
+  fixtures: readonly CustomerFactoryEmulatorDemoFixture[],
+): Promise<readonly CompletedDemoRun[]> {
+  const runs = fixtures.map((fixture) => {
+    const events: FactoryEvent[] = [];
+    return { events, session: createDemoSession(fixture, events) };
+  });
+  await Promise.all(runs.map(({ session }) => session.start()));
+  for (let command = 0; command < 20; command += 1) {
+    const active = runs.filter(
+      ({ session }) => session.status().phase !== "idle",
+    );
+    if (active.length === 0) {
+      return runs.map(({ events, session }) => {
+        const state = session.state();
+        if (state.lifecycle !== "started") {
+          throw new Error("Completed customer demo must remain inspectable.");
+        }
+        return { events, state };
+      });
+    }
+    await Promise.all(active.map(({ session }) => session.advanceToNext()));
+  }
+  throw new Error(
+    "Concurrent customer demos did not become idle within 20 advances.",
+  );
+}
+
 function dispatchEvidence(events: readonly FactoryEvent[]) {
   return events
     .filter(({ type }) => type === "DISPATCH_RESPONSE")
@@ -199,4 +227,17 @@ describe("customer Factory emulator demo fixtures", () => {
       expect(session.state()).toEqual(firstState);
     },
   );
+
+  it("matches standalone histories and projections when both demos run concurrently", async () => {
+    const fixtures = Object.values(customerFactoryEmulatorDemoFixtures);
+    const standalone = await Promise.all(fixtures.map(runDemo));
+    const concurrent = await runDemosConcurrently(fixtures);
+
+    expect(JSON.stringify(concurrent.map(({ events }) => events))).toBe(
+      JSON.stringify(standalone.map(({ events }) => events)),
+    );
+    expect(concurrent.map(({ state }) => state)).toEqual(
+      standalone.map(({ state }) => state),
+    );
+  });
 });

@@ -1,5 +1,7 @@
 import type { FactoryEmulatorScenario } from "@you-agent-factory/factory-emulator";
+import { useState } from "react";
 
+import { Button } from "../../../components/ui";
 import { customerFactoryEmulatorDemoFixtures } from "../lib/customer-demo-fixtures";
 import { CustomerFactoryEmulatorDemos } from "./customer-factory-emulator-demos";
 
@@ -31,4 +33,32 @@ export const SetupErrorIsolation = {
       locale="en"
     />
   ),
+};
+
+function LifecycleIsolationStory() {
+  const [showFailureDemo, setShowFailureDemo] = useState(true);
+  return (
+    <div className="grid gap-4 p-4">
+      <Button
+        onClick={() => setShowFailureDemo((visible) => !visible)}
+        type="button"
+        variant="outline"
+      >
+        {showFailureDemo ? "Unmount failure demo" : "Remount failure demo"}
+      </Button>
+      <CustomerFactoryEmulatorDemos
+        fixtures={[
+          customerFactoryEmulatorDemoFixtures.success,
+          ...(showFailureDemo
+            ? [customerFactoryEmulatorDemoFixtures.repeatReviewFailure]
+            : []),
+        ]}
+        locale="en"
+      />
+    </div>
+  );
+}
+
+export const LifecycleIsolation = {
+  render: () => <LifecycleIsolationStory />,
 };
