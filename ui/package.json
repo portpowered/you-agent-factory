@@ -35,6 +35,7 @@
     "storybook:factory-graph-toolbar-jitter-check": "bun run build-storybook && node scripts/run-factory-graph-toolbar-jitter-browser-check.mjs",
     "storybook:factory-graph-touch-check": "node scripts/verify-factory-graph-touch-browser.mjs",
     "storybook:factory-emulator-adapter-check": "node scripts/verify-factory-emulator-adapter-browser.mjs",
+    "storybook:customer-factory-emulator-demos-check": "node scripts/verify-customer-factory-emulator-demos-browser.mjs",
     "storybook:header-responsive-check": "node scripts/verify-dashboard-header-responsive-browser.mjs",
     "storybook:dashboard-viewport-check": "node scripts/verify-dashboard-viewport-browser.mjs",
     "storybook:factory-graph-visual-group-save-check": "bun run build-storybook && node scripts/run-factory-graph-visual-group-save-browser-check.mjs",

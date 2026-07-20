@@ -1,4 +1,8 @@
 export {
+  CustomerFactoryEmulatorDemos,
+  type CustomerFactoryEmulatorDemosProps,
+} from "../components/customer-factory-emulator-demos";
+export {
   FactoryEmulatorSubmission,
   type FactoryEmulatorSubmissionProps,
 } from "../components/factory-emulator-submission";

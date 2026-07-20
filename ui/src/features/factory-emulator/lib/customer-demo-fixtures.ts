@@ -1,6 +1,10 @@
 import type { FactoryDefinition } from "@you-agent-factory/client";
 import type { FactoryEmulatorScenario } from "@you-agent-factory/factory-emulator";
 
+import { getFactoryEmulatorMessages } from "../messages/factory-emulator";
+
+const activityLabels = getFactoryEmulatorMessages("en").demos.activityLabels;
+
 export interface CustomerFactoryEmulatorDemoFixture {
   readonly id: "success" | "repeat-review-failure";
   readonly factory: FactoryDefinition;
@@ -56,6 +60,7 @@ const successScenario = {
       id: "execute-success",
       outcomes: [
         {
+          activityLabel: activityLabels.prepare,
           durationMs: 1_500,
           output: "Launch summary ready.",
           result: "accepted",
@@ -131,15 +136,18 @@ const repeatReviewFailureScenario = {
       id: "execute-repeat-sequence",
       outcomes: [
         {
+          activityLabel: activityLabels.draft,
           durationMs: 1_500,
           result: "continued",
         },
         {
+          activityLabel: activityLabels.revise,
           durationMs: 1_500,
           output: "First draft ready for review.",
           result: "accepted",
         },
         {
+          activityLabel: activityLabels.polish,
           durationMs: 1_500,
           output: "Revised draft ready for review.",
           result: "accepted",
@@ -153,11 +161,13 @@ const repeatReviewFailureScenario = {
       id: "review-rework-failure-sequence",
       outcomes: [
         {
+          activityLabel: activityLabels.firstReview,
           durationMs: 1_000,
           feedback: "Clarify the rollout and retry.",
           result: "rejected",
         },
         {
+          activityLabel: activityLabels.finalReview,
           durationMs: 1_000,
           error: "The revised plan did not pass final review.",
           result: "failed",
