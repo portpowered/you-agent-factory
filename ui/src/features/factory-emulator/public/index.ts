@@ -3,6 +3,10 @@ export {
   type FactoryEmulatorSubmissionProps,
 } from "../components/factory-emulator-submission";
 export {
+  type CustomerFactoryEmulatorDemoFixture,
+  customerFactoryEmulatorDemoFixtures,
+} from "../lib/customer-demo-fixtures";
+export {
   createFactoryEmulatorInstance,
   FACTORY_EMULATOR_PLAYBACK_SPEEDS,
   type FactoryEmulatorAdapterCommand,
