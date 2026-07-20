@@ -27,6 +27,7 @@ describe("verifyPublicPackageRelease", () => {
       "@you-agent-factory/client: run release gate",
       "@you-agent-factory/components: run release gate",
       "@you-agent-factory/factory-replay: run release gate",
+      "@you-agent-factory/factory-replay consumer: run 10,000-event retained-memory regression",
       "Public package family: link built workspace dependencies",
       "@you-agent-factory/factory-emulator: run release gate",
       "@you-agent-factory/factory-visualizers: run release gate",
@@ -36,6 +37,7 @@ describe("verifyPublicPackageRelease", () => {
   test.each([
     ["install locked UI prerequisites", 0],
     ["run release gate", 4],
+    ["run 10,000-event retained-memory regression", 5],
   ])(
     "stops after the first failed %s and reports its command outcome",
     async (_failureKind, failedStepIndex) => {

@@ -34,12 +34,14 @@ bun run verify:public-packages
 The command installs the locked UI toolchain once, then runs each package's
 existing release gate in dependency-safe order: client, components, replay,
 emulator, then visualizers. Those package gates retain their own pack and clean
-installed-consumer checks. After building client and replay, the command links
-those workspace packages into the installed UI toolchain for downstream local
-type resolution without copying source package trees. The aggregate command
-stops at the first failed install, link, or release gate and reports the package
-family or package, step, command, and command outcome. It does not depend on a
-root Makefile release target.
+installed-consumer checks. Immediately after the replay gate, the aggregate
+command also runs the established deterministic 10,000-event replay regression,
+including its retained-memory bound. After building client and replay, the
+command links those workspace packages into the installed UI toolchain for
+downstream local type resolution without copying source package trees. The
+aggregate command stops at the first failed install, behavioral regression,
+link, or release gate and reports the package family or package, step, command,
+and command outcome. It does not depend on a root Makefile release target.
 
 ## Hosted execution and browser emulation
 

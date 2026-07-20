@@ -50,6 +50,7 @@
     "test:integration": "node scripts/run-ui-integration-with-timings.mjs",
     "test:integration:durable-session-real-backend": "node scripts/run-durable-session-real-backend-integration-with-timings.mjs",
     "test:public-package-release": "vitest run scripts/verify-public-package-release.test.mjs",
+    "test:public-package-retained-memory": "vitest run src/features/timeline/state/timeline/performance/replay-retained-memory.test.ts",
     "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs' --maxWorkers=2 --retry=2",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",

@@ -25,6 +25,13 @@ const workspaceLinkStep = {
   args: ["scripts/link-public-package-dependencies.mjs"],
 };
 
+const replayRetainedMemoryStep = {
+  packageName: "@you-agent-factory/factory-replay consumer",
+  packageDirectory: uiRoot,
+  stepName: "run 10,000-event retained-memory regression",
+  args: ["run", "test:public-package-retained-memory"],
+};
+
 export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
   {
     packageName: "Public package family",
@@ -44,7 +51,7 @@ export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
       stepName: "run release gate",
       args: ["run", packageGate.releaseScript],
     },
-    ...(index === 2 ? [workspaceLinkStep] : []),
+    ...(index === 2 ? [replayRetainedMemoryStep, workspaceLinkStep] : []),
   ]),
 ]);
 
