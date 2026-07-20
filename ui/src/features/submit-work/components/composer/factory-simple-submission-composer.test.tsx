@@ -165,9 +165,9 @@ describe("FactorySimpleSubmissionComposer", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(failure.message);
     });
     expect(props.onDraftChange).not.toHaveBeenCalled();
-    expect(screen.getByRole("textbox", { name: "Submit text" })).toHaveValue(
-      "A new task",
-    );
+    const textarea = screen.getByRole("textbox", { name: "Submit text" });
+    expect(textarea).toHaveValue("A new task");
+    expect(textarea).toHaveFocus();
   });
 
   it("uses a bounded auto-growing multiline field and stacks safely on narrow viewports", () => {

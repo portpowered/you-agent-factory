@@ -81,7 +81,7 @@ describe("FactoryEmulatorSubmission", () => {
       expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled(),
     );
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Return to the latest Factory state",
+      "Return to the current tick before submitting.",
     );
   });
 });

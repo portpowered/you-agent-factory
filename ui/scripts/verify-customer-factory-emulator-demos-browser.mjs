@@ -142,6 +142,41 @@ async function step(demo) {
   await button.press("Enter");
 }
 
+async function verifyLiveSubmission(success, failure) {
+  await step(success);
+  await success
+    .getByText(
+      "Execute: Preparing the launch summary (1.5 seconds virtual time)",
+    )
+    .waitFor();
+  const submission = success.getByRole("textbox", { name: "Submit text" });
+  await submission.fill("Customer request");
+  await submission.press("Shift+Enter");
+  await submission.type("Second line");
+  assert.equal(
+    await submission.inputValue(),
+    "Customer request\nSecond line",
+    "Shift+Enter did not preserve a multiline customer-demo draft.",
+  );
+  await submission.press("Enter");
+  await success.getByText("2 Work total").waitFor();
+  assert.equal(
+    await submission.inputValue(),
+    "",
+    "An accepted customer-demo submission did not clear its draft.",
+  );
+  assert.equal(
+    await submission.evaluate((element) => element === document.activeElement),
+    true,
+    "An accepted customer-demo submission moved focus unexpectedly.",
+  );
+  await failure.getByText("1 Work total").waitFor();
+  await success.getByRole("button", { name: "Restart" }).click();
+  await success.getByText("1 Work total").waitFor();
+  await step(success);
+  return submission;
+}
+
 async function verifyInteractive(page, viewport) {
   await openStory(page, interactiveStory);
   const success = page.getByRole("article", {
@@ -154,20 +189,28 @@ async function verifyInteractive(page, viewport) {
   await failure.getByText("1 Work total").waitFor();
   await assertResponsiveLayout(page, viewport, interactiveStory);
 
-  await step(success);
-  await success
-    .getByText(
-      "Execute: Preparing the launch summary (1.5 seconds virtual time)",
-    )
-    .waitFor();
+  const successSubmission = await verifyLiveSubmission(success, failure);
   const successSlider = success.getByRole("slider", {
     name: "Select replay tick",
   });
   await successSlider.fill("0");
   await success.getByText("Viewing history", { exact: true }).waitFor();
+  assert.equal(
+    await successSubmission.isDisabled(),
+    true,
+    "Historical customer-demo inspection did not disable submission.",
+  );
+  await success
+    .getByText("Return to the current tick before submitting.")
+    .waitFor();
   await setVisibility(page, "success", true);
   await success.getByRole("button", { name: "Play" }).click();
   await success.getByText("Playing", { exact: true }).waitFor();
+  assert.equal(
+    await successSubmission.isEnabled(),
+    true,
+    "Returning to the live customer-demo head did not restore submission.",
+  );
   await success.getByRole("button", { name: "Pause" }).click();
   await successSlider.fill("0");
   await success.getByRole("button", { name: "Step" }).focus();
@@ -175,6 +218,14 @@ async function verifyInteractive(page, viewport) {
   await success
     .getByRole("region", { name: "Successful completion" })
     .waitFor();
+  await success
+    .getByText("Restart the completed emulator to submit more Work.")
+    .waitFor();
+  assert.equal(
+    await successSubmission.isDisabled(),
+    true,
+    "A closed customer demo still allowed text submission.",
+  );
   await success
     .getByRole("combobox", { name: "Playback speed" })
     .selectOption("2");

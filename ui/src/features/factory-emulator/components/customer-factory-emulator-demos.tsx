@@ -199,6 +199,12 @@ function CustomerFactoryEmulatorDemo({
     state.selectedTick,
     state.mode === "current",
   );
+  const terminalWorkCount =
+    state.replay.world.progress.counts.completed +
+    state.replay.world.progress.counts.failed;
+  const isRunTerminal =
+    state.replay.world.progress.total > 0 &&
+    terminalWorkCount === state.replay.world.progress.total;
   const playback = useCustomerDemoPlayback({
     instance,
     nextDelayMs: activity?.durationMs ?? 0,
@@ -264,6 +270,7 @@ function CustomerFactoryEmulatorDemo({
           <FactoryEmulatorSubmission
             factory={fixture.factory}
             instance={instance}
+            isRunTerminal={isRunTerminal}
             locale={locale}
           />
         }

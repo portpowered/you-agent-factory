@@ -150,6 +150,11 @@ that consumes the replay kernel.
   `ui/src/features/factory-emulator/components/factory-emulator-submission.tsx`
   connects that instance state to the transport-neutral simple composer; keep
   hosted HTTP submission and emulator submission as separate host adapters.
+  Customer-demo acceptance should exercise submission while a Dispatch is
+  active, history/current/closed availability, multiline keyboard input, draft
+  clearing or preservation, and sibling isolation through the mounted demo
+  composition; retain sink-rejection coverage at this adapter boundary so a
+  failed commit cannot clear controlled input or mutate accepted history.
 - `ui/src/features/factory-emulator/components/factory-emulator-adapter.stories.tsx`
   composes the instance adapter with controlled playback, replay inspection,
   and text submission for browser acceptance. Its required browser check lives
