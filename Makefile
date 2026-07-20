@@ -615,6 +615,9 @@ ui-components-boundary:
 ui-components-dependency-direction:
 	cd ui/packages/components && $(UI_SCRIPT) check:package-dependency-direction
 
+ui-public-package-boundaries:
+	cd ui && $(UI_SCRIPT) check:public-package-boundaries
+
 ui-components-build:
 	cd ui/packages/components && $(UI_SCRIPT) build
 

@@ -11,6 +11,14 @@
   tests; root `make typecheck` and `make test` compose those targets so the
   Development Package workflow exercises the same contract.
 
+- The five public frontend packages under `ui/packages/` share a family-level
+  dependency gate at `ui/scripts/check-public-package-boundaries.mjs`. Keep the
+  package graph and runtime dependency allowlists explicit there, preserve its
+  real-tree and prohibited-mutation tests, and wire the check through the UI
+  lint/check commands plus `make ui-public-package-boundaries`. Package-local
+  boundary checks still own narrower runtime restrictions and internal layer
+  direction.
+
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable
   with `make verify-build`, `make verify-lint`, and `make verify-api`. Keep
