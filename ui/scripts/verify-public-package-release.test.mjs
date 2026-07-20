@@ -31,6 +31,9 @@ describe("verifyPublicPackageRelease", () => {
       "Public package family: link built workspace dependencies",
       "@you-agent-factory/factory-emulator: run release gate",
       "@you-agent-factory/factory-visualizers: run release gate",
+      "Website Factory emulator adapter and customer demos: run focused state and component regressions",
+      "Website Factory emulator adapter and customer demos: build browser acceptance stories",
+      "Website Factory emulator adapter and customer demos: run desktop, narrow, and reduced-motion browser checks",
     ]);
   });
 
@@ -38,6 +41,9 @@ describe("verifyPublicPackageRelease", () => {
     ["install locked UI prerequisites", 0],
     ["run release gate", 4],
     ["run 10,000-event retained-memory regression", 5],
+    ["run focused state and component regressions", 9],
+    ["build browser acceptance stories", 10],
+    ["run desktop, narrow, and reduced-motion browser checks", 11],
   ])(
     "stops after the first failed %s and reports its command outcome",
     async (_failureKind, failedStepIndex) => {

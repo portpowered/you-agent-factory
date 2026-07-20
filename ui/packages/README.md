@@ -38,10 +38,14 @@ installed-consumer checks. Immediately after the replay gate, the aggregate
 command also runs the established deterministic 10,000-event replay regression,
 including its retained-memory bound. After building client and replay, the
 command links those workspace packages into the installed UI toolchain for
-downstream local type resolution without copying source package trees. The
-aggregate command stops at the first failed install, behavioral regression,
-link, or release gate and reports the package family or package, step, command,
-and command outcome. It does not depend on a root Makefile release target.
+downstream local type resolution without copying source package trees. After
+the five package gates, it runs the focused production website adapter and
+customer-demo state/component regressions, builds their browser acceptance
+stories, and verifies the adapter and both demos at desktop and narrow
+viewports, including reduced-motion behavior. The aggregate command stops at
+the first failed install, behavioral regression, build, browser check, link, or
+release gate and reports the package family or package, step, command, and
+command outcome. It does not depend on a root Makefile release target.
 
 ## Hosted execution and browser emulation
 

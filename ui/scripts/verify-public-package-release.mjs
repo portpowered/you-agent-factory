@@ -32,6 +32,30 @@ const replayRetainedMemoryStep = {
   args: ["run", "test:public-package-retained-memory"],
 };
 
+const adapterAndDemoSteps = [
+  {
+    packageName: "Website Factory emulator adapter and customer demos",
+    packageDirectory: uiRoot,
+    stepName: "run focused state and component regressions",
+    args: ["run", "test:factory-emulator-adapter-demos"],
+  },
+  {
+    packageName: "Website Factory emulator adapter and customer demos",
+    packageDirectory: uiRoot,
+    stepName: "build browser acceptance stories",
+    args: ["run", "build-storybook"],
+  },
+  {
+    packageName: "Website Factory emulator adapter and customer demos",
+    packageDirectory: uiRoot,
+    stepName: "run desktop, narrow, and reduced-motion browser checks",
+    args: ["run", "storybook:factory-emulator-acceptance-check"],
+    env: {
+      AGENT_FACTORY_STORYBOOK_PORT: "3673",
+    },
+  },
+];
+
 export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
   {
     packageName: "Public package family",
@@ -53,6 +77,7 @@ export const PUBLIC_PACKAGE_RELEASE_STEPS = Object.freeze([
     },
     ...(index === 2 ? [replayRetainedMemoryStep, workspaceLinkStep] : []),
   ]),
+  ...adapterAndDemoSteps,
 ]);
 
 function formatCommand(step) {
@@ -67,7 +92,7 @@ export function runBunStep(step) {
   return new Promise((resolve, reject) => {
     const child = spawn(step.command ?? "bun", step.args, {
       cwd: step.packageDirectory,
-      env: process.env,
+      env: { ...process.env, ...step.env },
       shell: false,
       stdio: "inherit",
     });

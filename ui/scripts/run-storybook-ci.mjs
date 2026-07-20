@@ -282,6 +282,7 @@ export async function waitForStorybookReady({
 
 export async function runStorybookCI({
   assertAvailable = () => assertPortAvailable(HOST, PORT),
+  browserChecks,
   includeInteractionSuite = true,
   runCommand = runBun,
   settle = delay,
@@ -323,6 +324,12 @@ export async function runStorybookCI({
 
   try {
     await waitForReady({ serverExit });
+    if (browserChecks !== undefined) {
+      for (const browserCheck of browserChecks) {
+        await Promise.race([runCommand(browserCheck), serverExit]);
+      }
+      return;
+    }
     if (includeInteractionSuite) {
       await Promise.race([
         runCommand(["run", "storybook:test-runner:ci"]),

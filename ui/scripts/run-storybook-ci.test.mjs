@@ -188,6 +188,34 @@ describe("runStorybookCI", () => {
 });
 
 describe("runStorybookCI browser-check mode", () => {
+  test("runs only an explicitly selected focused browser lane", async () => {
+    const server = new EventEmitter();
+    server.pid = 1234;
+    server.exitCode = null;
+    const runCommand = vi.fn().mockResolvedValue(undefined);
+    const stop = vi.fn(async () => {
+      server.exitCode = 0;
+    });
+    const browserChecks = [
+      ["run", "storybook:factory-emulator-adapter-check"],
+      ["run", "storybook:customer-factory-emulator-demos-check"],
+    ];
+
+    await runStorybookCI({
+      assertAvailable: vi.fn().mockResolvedValue(undefined),
+      browserChecks,
+      runCommand,
+      spawnServer: vi.fn(() => server),
+      stop,
+      waitForReady: vi.fn().mockResolvedValue(undefined),
+    });
+
+    expect(runCommand.mock.calls).toEqual(
+      browserChecks.map((command) => [command]),
+    );
+    expect(stop).toHaveBeenCalledWith(server);
+  });
+
   test("skips the full interaction suite", async () => {
     const server = new EventEmitter();
     server.pid = 1234;
