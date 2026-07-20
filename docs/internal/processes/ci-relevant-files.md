@@ -14,10 +14,19 @@
 - The five public frontend packages under `ui/packages/` share a family-level
   dependency gate at `ui/scripts/check-public-package-boundaries.mjs`. Keep the
   package graph and runtime dependency allowlists explicit there, preserve its
-  real-tree and prohibited-mutation tests, and wire the check through the UI
-  lint/check commands plus `make ui-public-package-boundaries`. Package-local
-  boundary checks still own narrower runtime restrictions and internal layer
-  direction.
+  real-tree scanner in the UI lint/check commands plus
+  `make ui-public-package-boundaries`. Package-local boundary checks still own
+  narrower runtime restrictions and internal layer direction; do not duplicate
+  source-scanner policy as a behavioral unit test.
+
+- `make ui-public-package-release` is the aggregate release gate for the client,
+  replay, emulator, components, and visualizers packages. It owns generation
+  freshness, package-local typecheck/tests/builds, tarball inventories, clean
+  installed consumers, and visualizer Storybook/browser evidence, and runs from
+  the required `ui-integration-test` CI-equivalent lane after Playwright is
+  installed. The emulator's `verify:release` intentionally omits only its
+  change-scope development check; the ordinary package `verify` command retains
+  that additional repository-scope guard.
 
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.
   Build, Lint, and API are independent Ubuntu jobs, respectively rerunnable

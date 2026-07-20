@@ -123,6 +123,17 @@ function bindUnownedActiveState(
   };
 }
 
+function hasRetainedTimelineState(entry: FactoryTimelineEntryState): boolean {
+  return (
+    entry.currentReplayCheckpoint !== undefined ||
+    entry.events.length > 0 ||
+    entry.latestTick !== 0 ||
+    entry.receivedEventIDs.length > 0 ||
+    entry.selectedTick !== 0 ||
+    Object.keys(entry.worldViewCache).some((tick) => tick !== "0")
+  );
+}
+
 function entryMutation(
   state: FactoryTimelineState,
   identity: StreamDerivedCacheIdentity,
@@ -243,6 +254,8 @@ function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
       );
     },
     restoreCheckpointForEntry: (identity, checkpoint) => {
+      const existing = entryStateForMutation(get(), identity).entry;
+      if (hasRetainedTimelineState(existing)) return;
       set((current) =>
         entryMutation(current, identity, (entry) =>
           withEntryTimelineState(entry, restoreTimelineCheckpoint(checkpoint)),

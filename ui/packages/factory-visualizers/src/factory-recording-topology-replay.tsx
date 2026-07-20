@@ -87,12 +87,16 @@ interface RecordingProjection {
   topology: FactoryTopologyProjection;
 }
 
-interface RecordingProjectionCache {
+export interface RecordingProjectionCache {
   events?: FactoryRecording["events"];
   projections: Map<number, RecordingProjection>;
 }
 
-const MAX_CACHED_RECORDING_PROJECTIONS = 32;
+export const MAX_CACHED_RECORDING_PROJECTIONS = 32;
+
+export function createRecordingProjectionCache(): RecordingProjectionCache {
+  return { projections: new Map() };
+}
 
 /** Validate and replay one caller-owned recording through the controlled visualizers. */
 export function FactoryRecordingTopologyReplay({
@@ -194,9 +198,9 @@ function ValidatedRecordingReplay({
   const effectiveMode =
     mode === "history" && ticks.includes(fixedTick) ? "history" : "current";
   const selectedTick = effectiveMode === "current" ? latestTick : fixedTick;
-  const projectionCache = useRef<RecordingProjectionCache>({
-    projections: new Map(),
-  });
+  const projectionCache = useRef<RecordingProjectionCache>(
+    createRecordingProjectionCache(),
+  );
   const prepared = useMemo(
     () => projectRecordingAtTick(events, selectedTick, projectionCache.current),
     [events, selectedTick],
@@ -285,7 +289,7 @@ function resolveRecordedTick(
   );
 }
 
-function projectRecordingAtTick(
+export function projectRecordingAtTick(
   events: FactoryRecording["events"],
   tick: number,
   cache: RecordingProjectionCache,

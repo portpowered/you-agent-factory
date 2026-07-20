@@ -3,13 +3,15 @@ import { advanceFactoryReplay } from "@you-agent-factory/factory-replay";
 import { describe, expect, it } from "vitest";
 
 import type { FactoryEvent } from "../../../../../api/events";
+import { useFactoryTimelineStore } from "../../factoryTimelineStore";
 import { hostedFactoryReplayReducer } from "../buildSnapshot";
 import { projectSnapshot } from "../projectSnapshot";
 import { emptyReplayWorldState } from "../replayWorldStateSupport";
+import { MAX_TIMELINE_WORLD_VIEW_CACHE_ENTRIES } from "../storeState";
 
 const EVENT_COUNT = 10_000;
 const FINAL_TICK = 10_000;
-const MAX_RETAINED_BYTES = 2_000_000;
+const MAX_RETAINED_BYTES = 12_000_000;
 
 const factory = {
   name: "retained-memory-factory",
@@ -126,17 +128,53 @@ function replayMeasurement(
     },
     tick: FINAL_TICK,
   });
-  const retainedBytes = new TextEncoder().encode(
-    JSON.stringify(result.checkpoint),
-  ).byteLength;
-  assertRetainedBudget(retainedBytes, MAX_RETAINED_BYTES);
-
   return {
     appliedEventIDs: result.appliedEvents.map((item) => item.id),
     checkpoint: result.checkpoint,
-    retainedBytes,
     world: projectSnapshot(result.state),
   };
+}
+
+function serializedBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+function retainedGraphMeasurement(
+  events: FactoryEvent[],
+  packageCheckpoint: ReturnType<typeof replayMeasurement>["checkpoint"],
+  packageWorld: ReturnType<typeof replayMeasurement>["world"],
+) {
+  const timeline = useFactoryTimelineStore.getState();
+  timeline.reset();
+  timeline.replaceEvents(events);
+  for (let selection = 1; selection <= 64; selection += 1) {
+    useFactoryTimelineStore
+      .getState()
+      .selectTick(Math.floor((FINAL_TICK * selection) / 64));
+  }
+
+  const retainedState = useFactoryTimelineStore.getState();
+  const worldViewCacheEntries = Object.keys(
+    retainedState.worldViewCache,
+  ).length;
+  const checkpointCount = retainedState.currentReplayCheckpoint ? 1 : 0;
+  const retainedGraph = {
+    canonicalEventHistory: retainedState.events,
+    checkpointCount,
+    hostedCheckpoint: retainedState.currentReplayCheckpoint,
+    hostedReceivedEventIDs: retainedState.receivedEventIDs,
+    hostedWorldViewCache: retainedState.worldViewCache,
+    packageCheckpoint,
+    packageWorld,
+  };
+
+  // The fixture parser and transient applied-event batches are outside this
+  // retained graph. Resetting the singleton proves it does not remain an
+  // additional owner after the measured consumer state is detached.
+  useFactoryTimelineStore.getState().reset();
+  const retainedBytes = serializedBytes(retainedGraph);
+  assertRetainedBudget(retainedBytes, MAX_RETAINED_BYTES);
+  return { checkpointCount, retainedBytes, worldViewCacheEntries };
 }
 
 function assertRetainedBudget(retainedBytes: number, maximumBytes: number) {
@@ -193,8 +231,18 @@ describe("hosted replay retained-state budget", () => {
 
     const repeated = replayMeasurement(recording.events, completed.checkpoint);
     expect(repeated.appliedEventIDs).toEqual([]);
-    expect(repeated.retainedBytes).toBe(completed.retainedBytes);
     expect(repeated.world).toEqual(completed.world);
+
+    const retained = retainedGraphMeasurement(
+      recording.events,
+      repeated.checkpoint,
+      repeated.world,
+    );
+    expect(retained.checkpointCount).toBe(1);
+    expect(retained.worldViewCacheEntries).toBeLessThanOrEqual(
+      MAX_TIMELINE_WORLD_VIEW_CACHE_ENTRIES,
+    );
+    expect(retained.retainedBytes).toBeGreaterThan(0);
   });
 
   it("reports the measured retained bytes when the configured bound is exceeded", () => {

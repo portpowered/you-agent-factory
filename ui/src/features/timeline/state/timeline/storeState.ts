@@ -111,6 +111,8 @@ export interface TimelineStoreStateDeps {
   canonicalizeEvents: (events: FactoryEvent[]) => FactoryEvent[];
 }
 
+export const MAX_TIMELINE_WORLD_VIEW_CACHE_ENTRIES = 32;
+
 export function emptyDashboardSnapshot(): DashboardSnapshot {
   return {
     factory_state: "UNKNOWN",
@@ -201,9 +203,27 @@ export function cacheWithSnapshot(
   tick: number,
   deps: TimelineStoreStateDeps,
 ): Record<number, WorldState> {
-  return cache[tick]
-    ? cache
-    : { ...cache, [tick]: deps.buildFactoryTimelineSnapshot(events, tick) };
+  if (cache[tick]) return cache;
+  return limitWorldViewCache(
+    { ...cache, [tick]: deps.buildFactoryTimelineSnapshot(events, tick) },
+    [tick],
+  );
+}
+
+function limitWorldViewCache(
+  cache: Record<number, WorldState>,
+  protectedTicks: readonly number[],
+): Record<number, WorldState> {
+  const ticks = Object.keys(cache).map(Number);
+  if (ticks.length <= MAX_TIMELINE_WORLD_VIEW_CACHE_ENTRIES) return cache;
+
+  const protectedSet = new Set(protectedTicks);
+  const removableTicks = ticks.filter((tick) => !protectedSet.has(tick));
+  const removeCount = ticks.length - MAX_TIMELINE_WORLD_VIEW_CACHE_ENTRIES;
+  const removed = new Set(removableTicks.slice(0, removeCount));
+  return Object.fromEntries(
+    Object.entries(cache).filter(([tick]) => !removed.has(Number(tick))),
+  );
 }
 
 function projectCurrentTick(
@@ -329,10 +349,13 @@ export function appendTimelineEvents(
     worldViewCache:
       current.mode === "current"
         ? { [selectedTick]: currentProjection.worldState }
-        : {
-            ...selectedWorldViewCache,
-            [latestTick]: currentProjection.worldState,
-          },
+        : limitWorldViewCache(
+            {
+              ...selectedWorldViewCache,
+              [latestTick]: currentProjection.worldState,
+            },
+            [selectedTick, latestTick],
+          ),
   };
 }
 
@@ -428,9 +451,12 @@ export function setTimelineCurrentMode(
     currentReplayCheckpoint: currentProjection.checkpoint,
     mode: "current",
     selectedTick: current.latestTick,
-    worldViewCache: {
-      ...current.worldViewCache,
-      [current.latestTick]: currentProjection.worldState,
-    },
+    worldViewCache: limitWorldViewCache(
+      {
+        ...current.worldViewCache,
+        [current.latestTick]: currentProjection.worldState,
+      },
+      [current.latestTick],
+    ),
   };
 }

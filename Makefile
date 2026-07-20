@@ -10,6 +10,7 @@ BUN_PACKAGE_DIRS := ui/packages/components ui
 UI_SCRIPT   := $(if $(BUN_BIN),$(BUN_BIN) run,$(NPM) run)
 UI_EXEC     := $(if $(BUN_BIN),$(BUN_BIN) x,$(NPM) exec)
 UI_INSTALL  := $(if $(BUN_BIN),$(BUN_BIN) install --frozen-lockfile,$(NPM) install --no-package-lock)
+PUBLIC_PACKAGE_INSTALL := $(if $(BUN_BIN),$(BUN_INSTALL),$(NPM) install --ignore-scripts --no-package-lock)
 FUNCTIONAL_DEFAULT_PACKAGES := ./tests/functional/...
 FUNCTIONAL_DEFAULT_JOBS ?= 2
 UNIT_DEFAULT_JOBS ?= 2
@@ -103,7 +104,7 @@ endef
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-emulator generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-contract-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 .PHONY: ui-storybook
-.PHONY: ui-components-build ui-components-pack ui-components-installed-consumer
+.PHONY: ui-components-build ui-components-pack ui-components-installed-consumer ui-public-package-release ui-public-package-release-deps
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke mcp-contract-smoke mcp-discovery-generate mcp-discovery-check cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 default:
@@ -567,6 +568,7 @@ else
 endif
 	$(MAKE) ui-storybook
 	$(MAKE) ui-test-storybook-browser-checks
+	$(MAKE) ui-public-package-release
 
 ui-durable-session-real-backend-integration-test:
 ifeq ($(BUN_BIN),)
@@ -617,6 +619,20 @@ ui-components-dependency-direction:
 
 ui-public-package-boundaries:
 	cd ui && $(UI_SCRIPT) check:public-package-boundaries
+
+ui-public-package-release-deps:
+	cd ui/packages/client && $(PUBLIC_PACKAGE_INSTALL)
+	cd ui/packages/factory-replay && $(PUBLIC_PACKAGE_INSTALL)
+	cd ui/packages/factory-emulator && $(PUBLIC_PACKAGE_INSTALL)
+	cd ui/packages/components && $(PUBLIC_PACKAGE_INSTALL)
+	cd ui/packages/factory-visualizers && $(PUBLIC_PACKAGE_INSTALL)
+
+ui-public-package-release: ui-public-package-release-deps
+	cd ui/packages/client && $(UI_SCRIPT) verify
+	cd ui/packages/factory-replay && $(UI_SCRIPT) verify
+	cd ui/packages/factory-emulator && $(UI_SCRIPT) verify:release
+	cd ui/packages/components && $(UI_SCRIPT) verify
+	cd ui/packages/factory-visualizers && $(UI_SCRIPT) verify
 
 ui-components-build:
 	cd ui/packages/components && $(UI_SCRIPT) build
