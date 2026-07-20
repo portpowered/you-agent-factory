@@ -143,6 +143,13 @@ that consumes the replay kernel.
   `ui/src/features/factory-emulator/components/factory-emulator-submission.tsx`
   connects that instance state to the transport-neutral simple composer; keep
   hosted HTTP submission and emulator submission as separate host adapters.
+- `ui/src/features/factory-emulator/components/factory-emulator-adapter.stories.tsx`
+  composes the instance adapter with controlled playback, replay inspection,
+  and text submission for browser acceptance. Its required browser check lives
+  in `ui/scripts/verify-factory-emulator-adapter-browser.mjs`, sets explicit
+  mobile and desktop browser contexts instead of Storybook viewport metadata,
+  and runs in the required UI Browser Integration lane through
+  `ui/scripts/run-storybook-ci.mjs`.
 - `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
   single-work submission. The HTTP adapter leaves canonical identity assignment
   to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in

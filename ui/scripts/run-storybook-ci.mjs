@@ -349,6 +349,10 @@ export async function runStorybookCI({
       runCommand(["run", "storybook:dashboard-viewport-check"]),
       serverExit,
     ]);
+    await Promise.race([
+      runCommand(["run", "storybook:factory-emulator-adapter-check"]),
+      serverExit,
+    ]);
     if (includeInteractionSuite) {
       await Promise.race([
         runCommand(["run", "storybook:choose-file-check"]),
