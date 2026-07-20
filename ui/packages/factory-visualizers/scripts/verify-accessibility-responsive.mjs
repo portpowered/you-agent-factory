@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
+import { verifyResponsiveStateAndAnnotationMatrix } from "./verify-responsive-story-matrix.mjs";
 
 const require = createRequire(import.meta.url);
 const axePath = require.resolve("axe-core/axe.min.js");
@@ -41,6 +42,12 @@ try {
   await waitForServer();
   browser = await chromium.launch({ headless: true });
   await verifyResponsiveViewports(browser);
+  await verifyResponsiveStateAndAnnotationMatrix(browser, {
+    assert,
+    assertNoPageOverflow,
+    openStory,
+    tabTo,
+  });
   await verifyChromePresets(browser);
   await verifyChromeOperationalDetail(browser);
   await verifyRecordingComposition(browser);

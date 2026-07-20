@@ -9,6 +9,11 @@ import {
   type FactoryTopologyReplayProjection,
   type FactoryTopologyReplayProps,
 } from "./factory-topology-replay";
+import {
+  allNodesEmptyLayout,
+  embeddedPixel,
+  responsiveLayout,
+} from "./testing/factory-topology-responsive-layouts";
 
 const messages: FactoryTopologyReplayMessages = {
   activeDispatches: (count) =>
@@ -176,6 +181,41 @@ export const InactiveNodeEmptyState: Story = {
 
 export const EmulatorReadyInactiveEmptyState: Story = {
   ...InactiveNodeEmptyState,
+};
+
+export const ResponsiveAnnotationsAndEmptyState: Story = {
+  args: {
+    layout: responsiveLayout(),
+    state: { projection: createInactiveProjection(), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByText("Long review guidance wraps inside the topology."),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("img", { name: "Review flow overview" }),
+    ).toBeVisible();
+    await expect(
+      canvas.getByRole("button", { name: "workstation: Review" }),
+    ).toHaveTextContent("No review work is waiting.");
+    await expect(
+      canvas.getByRole("button", { name: "worker: Alice" }),
+    ).toHaveTextContent("Worker availability illustration");
+  },
+};
+
+export const RuntimeTelemetryPrecedence: Story = {
+  args: {
+    layout: allNodesEmptyLayout(createTelemetryProjection()),
+    state: { projection: createTelemetryProjection(), status: "ready" },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText(/Configured empty content/)).toBeNull();
+    await expect(canvas.getByText("2 of 4 capacity occupied")).toBeVisible();
+    await expect(canvas.getByText("7 Work in this state")).toBeVisible();
+  },
 };
 
 export const Loading: Story = {
@@ -372,6 +412,12 @@ function createInactiveProjection(): FactoryTopologyReplayProjection {
   return projection;
 }
 
+function createTelemetryProjection(): FactoryTopologyReplayProjection {
+  const projection = createProjection();
+  projection.activity.activeDispatchOverlays[0].resourceNodeIds = [];
+  return projection;
+}
+
 function annotationLayout(): FactoryVisualizationLayoutV1 {
   return {
     annotations: [
@@ -388,11 +434,7 @@ function annotationLayout(): FactoryVisualizationLayoutV1 {
         kind: "image",
         position: { x: 900, y: 10 },
         size: { height: 80, width: 120 },
-        source: {
-          base64: "iVBORw0KGgo=",
-          kind: "embedded",
-          mediaType: "image/png",
-        },
+        source: embeddedPixel(),
       },
     ],
     schemaVersion: "factory-visualization-layout/v1",

@@ -30,6 +30,8 @@ const columnByKind: Record<FactoryTopologyNode["kind"], number> = {
   "work-state": 3,
   workstation: 4,
 };
+// Give unsized notes a stable measurement before React Flow computes fit-to-view.
+const DEFAULT_ANNOTATION_WIDTH = 240;
 
 /** Convert immutable replay projections into disposable React Flow view data. */
 export function projectFactoryTopologyFlow(
@@ -78,6 +80,7 @@ function nodePresentationData(
     activeDetailNodeIds: activityDetailNodeIds(
       projection.activity,
       connections,
+      projection.load.resourceOccupancy,
       projection.load.workStateCounts,
     ),
     activityCountByNode: activityCounts(projection.activity),
@@ -163,14 +166,10 @@ function projectAnnotations(
     position: annotation.position,
     selectable: false,
     type: "factoryTopologyAnnotation",
-    ...(annotation.size
-      ? {
-          style: {
-            height: annotation.size.height,
-            width: annotation.size.width,
-          },
-        }
-      : {}),
+    style: {
+      ...(annotation.size ? { height: annotation.size.height } : {}),
+      width: annotation.size?.width ?? DEFAULT_ANNOTATION_WIDTH,
+    },
   }));
 }
 
@@ -231,12 +230,15 @@ function activityCounts(
 function activityDetailNodeIds(
   activity: FactoryActivityProjection,
   connections: readonly FactoryTopologyConnection[],
+  resourceOccupancy: FactoryLoadProjection["resourceOccupancy"],
   workStateCounts: FactoryLoadProjection["workStateCounts"],
 ): Set<string> {
   const nodeIds = new Set(activity.activeWorkstationNodeIds);
   const connectionById = new Map(
     connections.map((connection) => [connection.id, connection]),
   );
+  for (const occupancy of resourceOccupancy)
+    if (occupancy.evidence === "known") nodeIds.add(occupancy.resourceNodeId);
   for (const state of workStateCounts)
     if (
       state.evidence === "known" &&

@@ -122,9 +122,13 @@ that consumes the replay kernel.
   annotations must decode into Blob URLs, revoke those URLs on replacement,
   removal, image failure, and unmount, and contain preparation failures in the
   affected annotation rather than failing the topology region. Node empty-state
-  visibility is likewise derived from selected-tick Work-State counts, active
-  Dispatches, and active routes; retain identity and telemetry outside its
-  activity-detail region.
+  visibility is likewise derived from selected-tick Work-State counts, known
+  resource occupancy, active Dispatches, and active routes; current runtime
+  evidence must suppress configured empty content. Retain identity and telemetry
+  outside its activity-detail region. Responsive Storybook evidence belongs in
+  `scripts/verify-responsive-story-matrix.mjs`, which exercises lifecycle states,
+  annotation containment, keyboard reachability, and dependency-neutral output
+  at narrow, medium, and wide browser viewports.
 - `ui/packages/factory-visualizers/src/factory-topology-replay.tsx` validates
   unknown caller layout input with the client parser against the prepared
   canonical node-ID context before deriving React Flow data. Report invalid

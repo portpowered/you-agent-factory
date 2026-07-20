@@ -123,6 +123,89 @@ export const Full: Story = {
     ).toBeVisible();
   },
 };
+export const LoadingInitial: Story = {
+  args: {
+    controls: {
+      ...meta.args.controls,
+      disabledActions: ["pause", "play", "restart", "step"],
+      runtimeStatus: { label: "Starting", tone: "neutral" },
+      timeline: {
+        ...meta.args.controls.timeline,
+        state: { status: "unavailable" },
+      },
+    },
+    submission: (
+      <button disabled type="button">
+        Submit Work
+      </button>
+    ),
+    topology: {
+      ...meta.args.topology,
+      state: { status: "loading" },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("status", { name: "Runtime status" }),
+    ).toHaveTextContent("Starting");
+    await expect(canvas.getByText("Loading topology.")).toBeVisible();
+  },
+};
+export const Empty: Story = {
+  args: {
+    topology: { ...meta.args.topology, state: { status: "empty" } },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText("No topology.")).toBeVisible();
+    await expect(
+      canvas.getByRole("region", { name: "Work progress" }),
+    ).toHaveAttribute("data-work-progress-total", "0");
+  },
+};
+export const Terminal: Story = {
+  args: {
+    controls: {
+      ...meta.args.controls,
+      disabledActions: ["pause", "play", "step"],
+      runtimeStatus: { label: "Completed", tone: "success" },
+    },
+    submission: (
+      <button disabled type="button">
+        Submit Work
+      </button>
+    ),
+    workProgress: {
+      ...meta.args.workProgress,
+      projection: {
+        active: [],
+        completed: [{ id: "work-1" }],
+        failed: [],
+        queued: [],
+        unclassified: [],
+        counts: {
+          active: 0,
+          completed: 1,
+          failed: 0,
+          queued: 0,
+          unclassified: 0,
+        },
+        selectedTick: 2,
+        total: 1,
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(
+      canvas.getByRole("status", { name: "Runtime status" }),
+    ).toHaveTextContent("Completed");
+    await expect(
+      canvas.getByRole("region", { name: "Work progress" }),
+    ).toHaveAttribute("data-work-progress-total", "1");
+  },
+};
 export const Compact: Story = { args: { preset: "compact" } };
 export const DisplayOnly: Story = { args: { preset: "display-only" } };
 export const AccessiblePlayback: Story = {
