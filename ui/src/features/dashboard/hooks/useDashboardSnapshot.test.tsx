@@ -347,7 +347,9 @@ describe("useDashboardSnapshot composer", () => {
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(17);
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(17);
+    });
   });
 
   it("surfaces a recoverable preflight recovery state when sync preflight cannot resolve the session", async () => {

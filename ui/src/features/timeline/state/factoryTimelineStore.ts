@@ -123,15 +123,18 @@ function bindUnownedActiveState(
   };
 }
 
-function hasRetainedTimelineState(entry: FactoryTimelineEntryState): boolean {
-  return (
-    entry.currentReplayCheckpoint !== undefined ||
-    entry.events.length > 0 ||
-    entry.latestTick !== 0 ||
-    entry.receivedEventIDs.length > 0 ||
-    entry.selectedTick !== 0 ||
-    Object.keys(entry.worldViewCache).some((tick) => tick !== "0")
-  );
+function hasNewerRetainedTimelineState(
+  entry: FactoryTimelineEntryState,
+  checkpoint: FactoryTimelineCheckpoint,
+): boolean {
+  if (entry.events.length === 0 && entry.receivedEventIDs.length === 0) {
+    return false;
+  }
+  const retainedSequence = entry.currentReplayCheckpoint?.afterSequence;
+  const restoredSequence = checkpoint.afterSequence;
+  if (retainedSequence === undefined) return restoredSequence === undefined;
+  if (restoredSequence === undefined) return true;
+  return retainedSequence >= restoredSequence;
 }
 
 function entryMutation(
@@ -254,8 +257,10 @@ function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
       );
     },
     restoreCheckpointForEntry: (identity, checkpoint) => {
-      const existing = entryStateForMutation(get(), identity).entry;
-      if (hasRetainedTimelineState(existing)) return;
+      const current = get();
+      const existing = current.entriesByKey[factoryTimelineEntryKey(identity)];
+      if (existing && hasNewerRetainedTimelineState(existing, checkpoint))
+        return;
       set((current) =>
         entryMutation(current, identity, (entry) =>
           withEntryTimelineState(entry, restoreTimelineCheckpoint(checkpoint)),
