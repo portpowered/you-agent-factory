@@ -859,8 +859,8 @@ export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
     SubmitWorkRequest: {
-      /** @description Required authored name for this single-work submission. */
-      name: string;
+      /** @description Optional authored name for this single-work submission. When omitted, the server assigns the single-work request's canonical identity. */
+      name?: string;
       /** @description Configured work type name from factory.json to submit to. */
       workTypeName: string;
       /** @description Explicit chaining-trace identifier for the submitted work. */
