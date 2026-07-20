@@ -42,10 +42,14 @@ downstream local type resolution without copying source package trees. After
 the five package gates, it runs the focused production website adapter and
 customer-demo state/component regressions, builds their browser acceptance
 stories, and verifies the adapter and both demos at desktop and narrow
-viewports, including reduced-motion behavior. The aggregate command stops at
-the first failed install, behavioral regression, build, browser check, link, or
-release gate and reports the package family or package, step, command, and
-command outcome. It does not depend on a root Makefile release target.
+viewports, including reduced-motion behavior. It then runs the focused hosted
+topology adapter/component regressions and verifies exact-session replay in the
+browser at desktop and narrow viewports, including same-tick event ordering,
+session switching, refresh isolation, and explicit loading, empty, error, and
+success outcomes. The aggregate command stops at the first failed install,
+behavioral regression, build, browser check, link, or release gate and reports
+the package family or package, step, command, and command outcome. It does not
+depend on a root Makefile release target.
 
 ## Hosted execution and browser emulation
 
