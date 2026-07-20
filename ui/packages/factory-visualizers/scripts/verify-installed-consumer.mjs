@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 
 import { packAndVerify as packClient } from "../../client/scripts/verify-package-pack.mjs";
 import { packAndVerify as packComponents } from "../../components/scripts/verify-package-pack.mjs";
+import { packAndVerify as packEmulator } from "../../factory-emulator/scripts/verify-package-pack.mjs";
 import { packAndVerify as packReplay } from "../../factory-replay/scripts/verify-package-pack.mjs";
 import { packAndVerify as packVisualizers } from "./verify-package-pack.mjs";
 
@@ -18,28 +19,39 @@ const packageRoot = path.resolve(
   "..",
 );
 
-const mainSource = `import { createRoot } from "react-dom/client";
+const mainSource = `import { useEffect, useMemo, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
 import {
+  FactoryEmulatorView,
   FactoryRecordingTopologyReplay,
   FactoryTimelineScrubber,
   FactoryTopologyReplay,
   WorkProgressVisualizer,
   type FactoryRecordingTopologyReplayError,
   type FactoryRecordingTopologyReplayMessages,
+  type FactoryEmulatorViewProps,
   type FactoryTimelineScrubberMessages,
   type FactoryTopologyReplayMessages,
   type FactoryTopologyReplayError,
   type FactoryTopologyReplayProjection,
   type WorkProgressVisualizerMessages,
 } from "@you-agent-factory/factory-visualizers";
-import { parseFactoryRecording } from "@you-agent-factory/client";
+import { parseFactoryRecording, type FactoryDefinition, type FactoryEvent } from "@you-agent-factory/client";
+import {
+  createFactoryEmulatorSession,
+  parseFactoryEmulatorScenario,
+  type FactoryEmulatorSession,
+  type FactoryEventSink,
+} from "@you-agent-factory/factory-emulator";
 import {
   canonicalizeFactoryEvents,
   projectFactoryActivityAtTick,
   projectFactoryLoadAtTick,
   projectFactoryTopologyAtTick,
+  projectFactoryWorkProgressAtTick,
   type FactoryWorkProgressProjection,
 } from "@you-agent-factory/factory-replay";
+import emulatorScenario from "@you-agent-factory/factory-emulator/examples/customer-support.scenario.v1.json";
 import supportPlayback from "@you-agent-factory/factory-visualizers/examples/support-playback.factory-recording.v1.json";
 import "@you-agent-factory/components/styles.css";
 import "@you-agent-factory/factory-visualizers/styles.css";
@@ -92,8 +104,147 @@ const topology: FactoryTopologyReplayProjection = {
 const reportError = (_error: FactoryTopologyReplayError) => {};
 const reportRecordingError = (_error: FactoryRecordingTopologyReplayError) => {};
 
+const emulatorFactory = {
+  name: "customer-support",
+  workTypes: [
+    { name: "ticket", states: [{ name: "new", type: "INITIAL" }, { name: "done", type: "TERMINAL" }, { name: "failed", type: "FAILED" }] },
+    { name: "audit", states: [{ name: "recorded", type: "TERMINAL" }] },
+  ],
+  resources: [{ name: "agent-slot", capacity: 1 }],
+  workers: [{ name: "support-agent", type: "AGENT_WORKER" }],
+  workstations: [{
+    name: "triage", type: "AGENT_RUN", behavior: "STANDARD", worker: "support-agent",
+    inputs: [{ workType: "ticket", state: "new" }],
+    outputs: [{ workType: "ticket", state: "done" }, { workType: "audit", state: "recorded" }],
+    onFailure: [{ workType: "ticket", state: "failed" }],
+    resources: [{ name: "agent-slot", capacity: 1 }],
+  }],
+} satisfies FactoryDefinition;
+const scenario = parseFactoryEmulatorScenario(emulatorScenario, emulatorFactory);
+
+interface InstalledEmulatorState {
+  error?: string;
+  events: readonly FactoryEvent[];
+  isPlaying: boolean;
+  latestTick: number;
+  selectedTick: number;
+  submissions: number;
+}
+
+const initialEmulatorState: InstalledEmulatorState = {
+  events: [], isPlaying: false, latestTick: 0, selectedTick: 0, submissions: 0,
+};
+
+function latestEventTick(events: readonly FactoryEvent[]): number {
+  return events.reduce((latest, event) => Math.max(latest, event.context.tick), 0);
+}
+
+function InstalledEmulator({ id }: { id: string }) {
+  const [state, setState] = useState<InstalledEmulatorState>(initialEmulatorState);
+  const history = useRef<readonly FactoryEvent[]>([]);
+  const session = useRef<FactoryEmulatorSession | undefined>(undefined);
+  if (!session.current) {
+    const sink: FactoryEventSink = {
+      write: async (batch) => {
+        const events = [...history.current, ...structuredClone(batch)];
+        history.current = events;
+        const latestTick = latestEventTick(events);
+        setState((current) => ({
+          ...current,
+          error: undefined,
+          events,
+          latestTick,
+          selectedTick: current.selectedTick === current.latestTick ? latestTick : current.selectedTick,
+        }));
+      },
+    };
+    session.current = createFactoryEmulatorSession({ factory: emulatorFactory, scenario, sink });
+  }
+  const runtime = session.current;
+
+  useEffect(() => {
+    void runtime.start().catch((error) => setState((current) => ({ ...current, error: String(error) })));
+  }, [runtime]);
+
+  const replay = useMemo<FactoryTopologyReplayProjection>(() => ({
+    activity: projectFactoryActivityAtTick({ events: state.events, tick: state.selectedTick }),
+    load: projectFactoryLoadAtTick({ events: state.events, tick: state.selectedTick }),
+    topology: projectFactoryTopologyAtTick({ events: state.events, tick: state.selectedTick }),
+  }), [state.events, state.selectedTick]);
+  const workProgress = useMemo<FactoryWorkProgressProjection>(
+    () => projectFactoryWorkProgressAtTick({ events: state.events, tick: state.selectedTick }),
+    [state.events, state.selectedTick],
+  );
+
+  const run = async (command: () => Promise<unknown>) => {
+    try {
+      await command();
+    } catch (error) {
+      setState((current) => ({ ...current, error: error instanceof Error ? error.message : String(error), isPlaying: false }));
+    }
+  };
+  const restart = async () => {
+    runtime.reset();
+    history.current = [];
+    setState(initialEmulatorState);
+    await run(() => runtime.start());
+  };
+  const submit = async () => {
+    const ordinal = state.submissions + 1;
+    await run(async () => {
+      await runtime.submit({ name: id + "-ticket-" + ordinal, workType: "ticket", state: "new", input: "Installed submission " + ordinal });
+      setState((current) => ({ ...current, submissions: ordinal }));
+    });
+  };
+  const showLocalError = () =>
+    setState((current) => ({
+      ...current,
+      error: "Caller-owned example error",
+      isPlaying: false,
+    }));
+  const controls: FactoryEmulatorViewProps["controls"] = {
+    formatTick: String,
+    isPlaying: state.isPlaying,
+    onFollowLatest: () => setState((current) => ({ ...current, selectedTick: current.latestTick })),
+    onPause: () => setState((current) => ({ ...current, isPlaying: false })),
+    onPlay: () => setState((current) => ({ ...current, isPlaying: true, selectedTick: current.latestTick })),
+    onRestart: () => void restart(),
+    onSelectTick: (selectedTick) => setState((current) => ({ ...current, isPlaying: false, selectedTick })),
+    onSpeedChange: () => {},
+    onStep: () => void run(() => runtime.advanceToNext()),
+    runtimeStatus: { label: state.error ? "Error" : state.isPlaying ? "Playing" : "Ready", tone: state.error ? "danger" : "neutral" },
+    speed: 1,
+    timeline: {
+      messages: timelineMessages,
+      state: { earliestTick: 0, latestTick: state.latestTick, mode: state.selectedTick < state.latestTick ? "history" : "current", selectedTick: state.selectedTick, status: "available" },
+    },
+  };
+
+  return <article
+    aria-label={"Emulator " + id}
+    data-consumer-emulator={id}
+    data-error={state.error ? "true" : "false"}
+    data-events={state.events.length}
+    data-history={state.events.map((event) => event.id).join(",")}
+    data-latest={state.latestTick}
+    data-playing={state.isPlaying ? "true" : "false"}
+    data-selected={state.selectedTick}
+    data-submissions={state.submissions}
+  >
+    <h2>{"Emulator " + id}</h2>
+    {state.error ? <p role="alert">{state.error}</p> : null}
+    <FactoryEmulatorView
+      controls={controls}
+      submission={<div><button onClick={() => void submit()} type="button">Submit Work</button><button onClick={showLocalError} type="button">Show local error</button><output aria-label="Submission count">{state.submissions}</output></div>}
+      topology={{ messages: topologyMessages, state: replay.topology.nodes.length === 0 ? { status: "empty" } : { projection: replay, status: "ready" } }}
+      workProgress={{ formatNumber: String, messages: progressMessages, projection: workProgress }}
+    />
+  </article>;
+}
+
 function App() {
   return <main>
+    <section aria-label="Installed emulator examples"><InstalledEmulator id="alpha" /><InstalledEmulator id="beta" /></section>
     <section aria-label="Valid packaged recording">
       <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ projection: topology, status: "ready" }} />
     </section>
@@ -152,6 +303,8 @@ async function writeConsumer(root, tarballs) {
     dependencies: {
       "@you-agent-factory/client": pathToFileURL(tarballs.client).href,
       "@you-agent-factory/components": pathToFileURL(tarballs.components).href,
+      "@you-agent-factory/factory-emulator": pathToFileURL(tarballs.emulator)
+        .href,
       "@you-agent-factory/factory-replay": pathToFileURL(tarballs.replay).href,
       "@you-agent-factory/factory-visualizers": pathToFileURL(
         tarballs.visualizers,
@@ -234,6 +387,101 @@ async function startServer(distRoot) {
   return { server, url: `http://127.0.0.1:${address.port}` };
 }
 
+async function readEmulatorState(target) {
+  return {
+    error: await target.getAttribute("data-error"),
+    events: await target.getAttribute("data-events"),
+    history: await target.getAttribute("data-history"),
+    latest: await target.getAttribute("data-latest"),
+    playing: await target.getAttribute("data-playing"),
+    selected: await target.getAttribute("data-selected"),
+    submissions: await target.getAttribute("data-submissions"),
+  };
+}
+
+async function verifyInstalledEmulators(page) {
+  const emulator = (id) => page.locator(`[data-consumer-emulator="${id}"]`);
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll("[data-consumer-emulator]")].length === 2 &&
+      [...document.querySelectorAll("[data-consumer-emulator]")].every(
+        (element) => Number(element.getAttribute("data-events")) > 0,
+      ),
+  );
+  const alpha = emulator("alpha");
+  const beta = emulator("beta");
+  const initialAlpha = await readEmulatorState(alpha);
+  const initialBeta = await readEmulatorState(beta);
+  if (JSON.stringify(initialAlpha) !== JSON.stringify(initialBeta))
+    throw new Error(
+      "installed emulator instances did not start deterministically",
+    );
+
+  await alpha.getByRole("button", { name: "Step", exact: true }).click();
+  await page.waitForFunction(
+    (count) =>
+      Number(
+        document
+          .querySelector('[data-consumer-emulator="alpha"]')
+          ?.getAttribute("data-events"),
+      ) > Number(count),
+    initialAlpha.events,
+  );
+  await alpha.getByRole("button", { name: "Play", exact: true }).click();
+  await page
+    .locator('[data-consumer-emulator="alpha"][data-playing="true"]')
+    .waitFor();
+  await alpha.getByRole("button", { name: "Submit Work", exact: true }).click();
+  await page
+    .locator('[data-consumer-emulator="alpha"][data-submissions="1"]')
+    .waitFor();
+  await alpha
+    .getByRole("button", { name: "Show local error", exact: true })
+    .click();
+  await page
+    .locator('[data-consumer-emulator="alpha"][data-error="true"]')
+    .waitFor();
+  await alpha.getByRole("slider", { name: "Selected tick" }).press("Home");
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-consumer-emulator="alpha"]')
+        ?.getAttribute("data-selected") === "0",
+  );
+  if (
+    JSON.stringify(await readEmulatorState(beta)) !==
+    JSON.stringify(initialBeta)
+  )
+    throw new Error(
+      "actions in one installed emulator changed the other instance",
+    );
+
+  await alpha.getByRole("button", { name: "Restart", exact: true }).click();
+  await page.waitForFunction((expectedHistory) => {
+    const element = document.querySelector('[data-consumer-emulator="alpha"]');
+    return (
+      element?.getAttribute("data-history") === expectedHistory &&
+      element.getAttribute("data-error") === "false" &&
+      element.getAttribute("data-playing") === "false" &&
+      element.getAttribute("data-submissions") === "0"
+    );
+  }, initialAlpha.history);
+  if (
+    JSON.stringify(await readEmulatorState(alpha)) !==
+    JSON.stringify(initialAlpha)
+  )
+    throw new Error(
+      "targeted reset did not restore the deterministic initial emulator state",
+    );
+  if (
+    JSON.stringify(await readEmulatorState(beta)) !==
+    JSON.stringify(initialBeta)
+  )
+    throw new Error(
+      "targeted reset changed the other installed emulator instance",
+    );
+}
+
 async function verifyBrowser(distRoot) {
   const { chromium } = await import(
     pathToFileURL(
@@ -260,6 +508,7 @@ async function verifyBrowser(distRoot) {
     });
     page.on("pageerror", (error) => failures.push(error.message));
     await page.goto(url, { waitUntil: "networkidle" });
+    await verifyInstalledEmulators(page);
     for (const name of ["Factory topology", "Replay timeline", "Work progress"])
       await page.getByRole("region", { name }).first().waitFor();
     const topology = page
@@ -292,9 +541,14 @@ const temporaryRoot = await mkdtemp(
 );
 try {
   const roots = Object.fromEntries(
-    ["client", "components", "replay", "visualizers", "consumer"].map(
-      (name) => [name, path.join(temporaryRoot, name)],
-    ),
+    [
+      "client",
+      "components",
+      "emulator",
+      "replay",
+      "visualizers",
+      "consumer",
+    ].map((name) => [name, path.join(temporaryRoot, name)]),
   );
   await Promise.all(Object.values(roots).map((root) => mkdir(root)));
   const client = await packClient(roots.client);
@@ -302,10 +556,12 @@ try {
   const components = await packComponents({
     packDestination: roots.components,
   });
+  const emulator = await packEmulator(roots.emulator);
   const visualizers = await packVisualizers(roots.visualizers);
   await writeConsumer(roots.consumer, {
     client: client.tarballPath,
     components: components.tarballPath,
+    emulator: emulator.tarballPath,
     replay: replay.tarballPath,
     visualizers: visualizers.tarballPath,
   });
@@ -337,7 +593,7 @@ try {
   );
   await verifyBrowser(path.join(roots.consumer, "dist"));
   process.stdout.write(
-    "[factory-visualizers-consumer] installed, typechecked, built, and rendered a client-validated replay projection from packaged APIs\n",
+    "[factory-visualizers-consumer] installed, typechecked, built, and rendered isolated static and interactive consumers from packaged APIs\n",
   );
 } finally {
   await rm(temporaryRoot, { force: true, recursive: true });
