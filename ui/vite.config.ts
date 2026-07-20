@@ -11,6 +11,10 @@ const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const uiRoot = path.dirname(fileURLToPath(import.meta.url));
 const componentsPackageRoot = path.resolve(uiRoot, "packages/components/src");
+const factoryEmulatorPackageRoot = path.resolve(
+  uiRoot,
+  "packages/factory-emulator/src",
+);
 const factoryReplayPackageRoot = path.resolve(
   uiRoot,
   "packages/factory-replay/src",
@@ -27,6 +31,10 @@ const sharedReactAliases = [
   {
     find: "@you-agent-factory/factory-visualizers",
     replacement: path.join(factoryVisualizersPackageRoot, "index.ts"),
+  },
+  {
+    find: "@you-agent-factory/factory-emulator",
+    replacement: path.join(factoryEmulatorPackageRoot, "index.ts"),
   },
   {
     find: "@you-agent-factory/factory-replay",

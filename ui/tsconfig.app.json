@@ -7,6 +7,9 @@
       "@you-agent-factory/components": ["packages/components/src/index.ts"],
       "@you-agent-factory/components/*": ["packages/components/src/*"],
       "@you-agent-factory/client": ["packages/client/src/index.ts"],
+      "@you-agent-factory/factory-emulator": [
+        "packages/factory-emulator/src/index.ts"
+      ],
       "@you-agent-factory/factory-replay": [
         "packages/factory-replay/src/index.ts"
       ],
@@ -33,6 +36,7 @@
     "src",
     "packages/client/src",
     "packages/components/src",
+    "packages/factory-emulator/src",
     "packages/factory-replay/src",
     "packages/factory-visualizers/src"
   ],
@@ -48,6 +52,8 @@
     "packages/components/src/**/*.stories.tsx",
     "packages/components/src/testing/vitest.setup.ts",
     "packages/client/src/**/*.test.ts",
+    "packages/factory-emulator/src/**/*.test.ts",
+    "packages/factory-emulator/src/**/*.test.tsx",
     "packages/factory-replay/src/**/*.test.ts",
     "packages/factory-visualizers/src/**/*.test.ts",
     "packages/factory-visualizers/src/**/*.test.tsx",

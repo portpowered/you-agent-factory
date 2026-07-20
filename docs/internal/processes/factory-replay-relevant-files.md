@@ -58,6 +58,12 @@ that consumes the replay kernel.
 - `ui/src/features/timeline/state/factoryTimelineStore.ts` retains Zustand,
   session routing, checkpoint persistence, and diagnostics ownership while it
   calls the kernel for canonical event acceptance and replay projection.
+- `ui/src/features/factory-emulator/state/factory-emulator-instance.ts` creates
+  one vanilla Zustand store, atomic event sink, emulator session, retained
+  history, and replay checkpoint per website demo. Keep its reducer supplied by
+  the host, await caller backpressure before committing a batch, and retry sink
+  failures through the emulator's pending-command contract; do not add browser
+  persistence, wall-clock scheduling, or hosted session/SSE ownership here.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but
