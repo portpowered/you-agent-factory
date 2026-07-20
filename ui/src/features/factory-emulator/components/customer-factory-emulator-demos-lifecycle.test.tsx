@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -103,7 +104,7 @@ describe("CustomerFactoryEmulatorDemos lifecycle isolation", () => {
       within(success).getByRole("combobox", { name: "Playback speed" }),
       { target: { value: "4" } },
     );
-    environment.intersect("repeat-review-failure", true);
+    act(() => environment.intersect("repeat-review-failure", true));
     fireEvent.click(within(failure).getByRole("button", { name: "Play" }));
     await waitFor(() =>
       expect(

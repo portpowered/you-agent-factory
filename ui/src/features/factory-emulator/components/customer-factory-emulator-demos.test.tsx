@@ -229,6 +229,35 @@ describe("CustomerFactoryEmulatorDemos", () => {
     expect(within(success).getByText("1 Work total")).toBeVisible();
   });
 
+  it("localizes ready, active, progress, timeline, and terminal presentation", async () => {
+    render(
+      <CustomerFactoryEmulatorDemos
+        fixtures={[customerFactoryEmulatorDemoFixtures.success]}
+        locale="zh-CN"
+      />,
+    );
+    const demo = screen.getByRole("article", { name: "直接成功" });
+    await waitFor(() =>
+      expect(within(demo).getByText("共 1 个工作")).toBeVisible(),
+    );
+    expect(within(demo).getByText("已就绪", { exact: true })).toBeVisible();
+    expect(within(demo).getByText("逻辑时点 0 / 0")).toBeVisible();
+
+    fireEvent.click(within(demo).getByRole("button", { name: "Step" }));
+    await waitFor(() =>
+      expect(
+        within(demo).getByText("Execute：正在准备发布摘要（1.5 秒虚拟时间）"),
+      ).toBeVisible(),
+    );
+    expect(within(demo).getByText("1 个进行中")).toBeVisible();
+
+    fireEvent.click(within(demo).getByRole("button", { name: "Step" }));
+    expect(
+      await within(demo).findByRole("region", { name: "成功完成" }),
+    ).toBeVisible();
+    expect(within(demo).getByText("1 个已完成")).toBeVisible();
+  });
+
   it("falls back to canonical workstation copy during history inspection", async () => {
     render(
       <CustomerFactoryEmulatorDemos
