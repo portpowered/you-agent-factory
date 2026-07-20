@@ -166,6 +166,15 @@ that consumes the replay kernel.
   mobile and desktop browser contexts instead of Storybook viewport metadata,
   and runs in the required UI Browser Integration lane through
   `ui/scripts/run-storybook-ci.mjs`.
+- `ui/src/App.tsx` owns the shipped `/factory-emulator-demos` website surface.
+  Keep the route composition thin and import the two instance-scoped demos
+  through the Factory emulator feature's public boundary so local playback is
+  independent from hosted dashboard session and network state.
+- `ui/scripts/verify-customer-factory-emulator-demos-browser.mjs` owns direct
+  narrow/desktop browser acceptance for the paired customer demos. Its package
+  command must remain registered in `ui/scripts/run-storybook-ci.mjs` so the
+  required UI Browser Integration lane executes that evidence rather than
+  leaving it as a manual-only check.
 - `api/components/schemas/api/SubmitWorkRequest.yaml` permits a name-free
   single-work submission. The HTTP adapter leaves canonical identity assignment
   to `WorkRequestFromSubmitRequests`; do not synthesize a presentation name in

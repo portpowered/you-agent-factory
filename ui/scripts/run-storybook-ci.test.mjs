@@ -183,6 +183,14 @@ describe("runStorybookCI", () => {
       "run",
       "storybook:checkbox-consistency-check",
     ]);
+    expect(runCommand).toHaveBeenNthCalledWith(8, [
+      "run",
+      "storybook:factory-emulator-adapter-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(9, [
+      "run",
+      "storybook:customer-factory-emulator-demos-check",
+    ]);
     expect(stop).toHaveBeenCalledWith(server);
   });
 });
@@ -225,6 +233,14 @@ describe("runStorybookCI browser-check mode", () => {
     expect(runCommand).toHaveBeenNthCalledWith(3, [
       "run",
       "storybook:dashboard-viewport-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(4, [
+      "run",
+      "storybook:factory-emulator-adapter-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(5, [
+      "run",
+      "storybook:customer-factory-emulator-demos-check",
     ]);
     expect(settle).not.toHaveBeenCalled();
     expect(waitForStableIndex).not.toHaveBeenCalled();
