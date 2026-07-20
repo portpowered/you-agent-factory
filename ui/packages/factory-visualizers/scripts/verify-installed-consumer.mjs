@@ -20,9 +20,12 @@ const packageRoot = path.resolve(
 
 const mainSource = `import { createRoot } from "react-dom/client";
 import {
+  FactoryRecordingTopologyReplay,
   FactoryTimelineScrubber,
   FactoryTopologyReplay,
   WorkProgressVisualizer,
+  type FactoryRecordingTopologyReplayError,
+  type FactoryRecordingTopologyReplayMessages,
   type FactoryTimelineScrubberMessages,
   type FactoryTopologyReplayMessages,
   type FactoryTopologyReplayError,
@@ -70,6 +73,14 @@ const topologyMessages: FactoryTopologyReplayMessages = {
   resourceOccupancyUnavailable: "Occupancy unavailable", retry: "Retry", selectedNode: "Selected",
   workStateCount: (count) => count + " Work", workStateCountUnavailable: "Work unavailable",
 };
+const recordingMessages: FactoryRecordingTopologyReplayMessages = {
+  progress: progressMessages,
+  regionLabel: "Recorded Factory playback",
+  selectedTick: (tick) => "Selected logical tick " + tick,
+  timeline: timelineMessages,
+  topology: topologyMessages,
+  validationFailed: "The Factory recording could not be validated.",
+};
 const recording = parseFactoryRecording(supportPlayback);
 const events = canonicalizeFactoryEvents(recording.events);
 const selectedTick = events.at(-1)?.context.tick ?? 0;
@@ -79,12 +90,19 @@ const topology: FactoryTopologyReplayProjection = {
   topology: projectFactoryTopologyAtTick({ events, tick: selectedTick }),
 };
 const reportError = (_error: FactoryTopologyReplayError) => {};
+const reportRecordingError = (_error: FactoryRecordingTopologyReplayError) => {};
 
 function App() {
   return <main>
-    <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ projection: topology, status: "ready" }} />
+    <section aria-label="Valid packaged recording">
+      <FactoryTopologyReplay messages={topologyMessages} onError={reportError} state={{ projection: topology, status: "ready" }} />
+    </section>
     <FactoryTimelineScrubber formatTick={String} messages={timelineMessages} onFollowLatest={() => {}} onSelectTick={() => {}} state={{ earliestTick: 0, latestTick: 4, mode: "history", selectedTick: 2, status: "available" }} />
     <WorkProgressVisualizer formatNumber={(value) => new Intl.NumberFormat("en").format(value)} messages={progressMessages} projection={progress} />
+    <section aria-label="Invalid packaged recording">
+      <FactoryRecordingTopologyReplay formatNumber={String} messages={recordingMessages} onError={reportRecordingError} recording={{ schemaVersion: "factory-recording/v1", id: "invalid", title: 42, events: [] }} />
+      <p>Valid packaged recording remains available</p>
+    </section>
   </main>;
 }
 
@@ -250,6 +268,16 @@ async function verifyBrowser(distRoot) {
     await topology.getByLabel("worker: support-agent").waitFor();
     await topology.getByLabel("workstation: triage").waitFor();
     await page.getByText("6 total", { exact: true }).waitFor();
+    const invalidRecording = page.getByRole("region", {
+      name: "Invalid packaged recording",
+    });
+    await invalidRecording.getByRole("alert").waitFor();
+    await invalidRecording
+      .getByText("Topology failed", { exact: true })
+      .waitFor();
+    await invalidRecording
+      .getByText("Valid packaged recording remains available", { exact: true })
+      .waitFor();
     if (failures.length > 0) throw new Error(failures.join("\n"));
   } finally {
     await browser?.close();
