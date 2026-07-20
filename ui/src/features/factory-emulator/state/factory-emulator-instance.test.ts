@@ -9,9 +9,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   createFactoryEmulatorInstance,
+  selectFactoryEmulatorControls,
   selectFactoryEmulatorError,
   selectFactoryEmulatorEvents,
   selectFactoryEmulatorReplay,
+  selectFactoryEmulatorTimeline,
 } from "./factory-emulator-instance";
 
 interface EvidenceState {
@@ -141,7 +143,145 @@ describe("createFactoryEmulatorInstance", () => {
       "later",
     ]);
   });
+});
 
+describe("factory emulator replay selection", () => {
+  it("keeps historical inspection fixed while accepted events advance the head", async () => {
+    const instance = createInstance();
+    await instance.sink.write([
+      event("tick-one", 1, 1),
+      event("tick-four", 4, 2),
+    ]);
+
+    expect(instance.commands.selectTick(1)).toEqual({ status: "accepted" });
+    expect(instance.store.getState()).toMatchObject({
+      latestTick: 4,
+      mode: "history",
+      playback: { status: "paused" },
+      selectedTick: 1,
+    });
+    expect(instance.store.getState().replay.world.appliedEventIDs).toEqual([
+      "tick-one",
+    ]);
+
+    await instance.sink.write([event("tick-nine", 9, 3)]);
+
+    const historical = instance.store.getState();
+    expect(historical.latestTick).toBe(9);
+    expect(historical.selectedTick).toBe(1);
+    expect(historical.mode).toBe("history");
+    expect(historical.replay.world.appliedEventIDs).toEqual(["tick-one"]);
+    expect(selectFactoryEmulatorTimeline(historical)).toEqual({
+      earliestTick: 0,
+      latestTick: 9,
+      mode: "history",
+      selectedTick: 1,
+      status: "available",
+    });
+  });
+
+  it("follows the latest projection again without synthesizing sparse ticks", async () => {
+    const instance = createInstance();
+    await instance.sink.write([
+      event("tick-two", 2, 1),
+      event("tick-eight", 8, 2),
+    ]);
+    instance.commands.selectTick(5);
+
+    expect(instance.store.getState().replay.world.appliedEventIDs).toEqual([
+      "tick-two",
+    ]);
+    expect(instance.commands.followCurrent()).toEqual({ status: "accepted" });
+    expect(instance.store.getState()).toMatchObject({
+      latestTick: 8,
+      mode: "current",
+      selectedTick: 8,
+    });
+    expect(instance.store.getState().replay.world.appliedEventIDs).toEqual([
+      "tick-two",
+      "tick-eight",
+    ]);
+
+    await instance.sink.write([event("tick-twelve", 12, 3)]);
+    expect(instance.store.getState()).toMatchObject({
+      latestTick: 12,
+      mode: "current",
+      selectedTick: 12,
+    });
+  });
+});
+
+describe("factory emulator playback commands", () => {
+  it("exposes controlled playback outcomes without scheduling host time", async () => {
+    vi.useFakeTimers();
+    try {
+      const instance = createInstance();
+
+      await expect(instance.commands.step()).resolves.toEqual({
+        command: "step",
+        reason: "Start the emulator before stepping.",
+        status: "disabled",
+      });
+      expect(instance.commands.play()).toEqual({ status: "accepted" });
+      expect(instance.commands.setSpeed(4)).toEqual({ status: "accepted" });
+      expect(selectFactoryEmulatorControls(instance.store.getState())).toEqual({
+        disabledActions: [],
+        isPlaying: true,
+        speed: 4,
+      });
+      expect(vi.getTimerCount()).toBe(0);
+
+      expect(instance.commands.pause()).toEqual({ status: "accepted" });
+      expect(instance.store.getState().playback.status).toBe("paused");
+      expect(instance.commands.selectTick(-1)).toEqual({
+        command: "selectTick",
+        reason: "Select a logical tick from 0 through 0.",
+        status: "disabled",
+      });
+      await expect(instance.commands.retry()).resolves.toEqual({
+        command: "retry",
+        reason: "There is no failed command to retry.",
+        status: "disabled",
+      });
+
+      await instance.commands.start();
+      await expect(instance.commands.step()).resolves.toEqual({
+        status: "accepted",
+      });
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disables execution controls in history until the host follows current", async () => {
+    const instance = createInstance();
+    await instance.sink.write([
+      event("tick-one", 1, 1),
+      event("tick-three", 3, 2),
+    ]);
+    instance.commands.selectTick(1);
+
+    expect(selectFactoryEmulatorControls(instance.store.getState())).toEqual({
+      disabledActions: ["play", "step"],
+      isPlaying: false,
+      speed: 1,
+    });
+    expect(instance.commands.play()).toMatchObject({
+      command: "play",
+      status: "disabled",
+    });
+    await expect(instance.commands.step()).resolves.toMatchObject({
+      command: "step",
+      status: "disabled",
+    });
+
+    instance.commands.followCurrent();
+    expect(instance.commands.play()).toEqual({ status: "accepted" });
+  });
+});
+
+describe("factory emulator event sink failures", () => {
   it("serializes concurrent sink writes without losing an accepted batch", async () => {
     const firstWrite = deferred();
     const observed: string[] = [];

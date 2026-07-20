@@ -60,10 +60,13 @@ that consumes the replay kernel.
   calls the kernel for canonical event acceptance and replay projection.
 - `ui/src/features/factory-emulator/state/factory-emulator-instance.ts` creates
   one vanilla Zustand store, atomic event sink, emulator session, retained
-  history, and replay checkpoint per website demo. Keep its reducer supplied by
-  the host, await caller backpressure before committing a batch, and retry sink
-  failures through the emulator's pending-command contract; do not add browser
-  persistence, wall-clock scheduling, or hosted session/SSE ownership here.
+  history, replay checkpoint, selected tick, and playback presentation state per
+  website demo. Keep its reducer supplied by the host, await caller backpressure
+  before committing a batch, and retry sink failures through the emulator's
+  pending-command contract. History selection must reproject retained events
+  without changing emulator execution, while Play, Pause, Step, speed, and
+  follow-current remain host-invoked commands with no browser persistence,
+  wall-clock scheduling, visibility policy, or hosted session/SSE ownership.
 - `ui/packages/factory-visualizers/src/factory-emulator-controls.tsx` is a
   controlled host adapter for playback and the shared scrubber. It may request
   pause before historical selection and follow-latest before Play or Step, but
