@@ -71,7 +71,12 @@ test results.
 | `workflow` | Core multi-step workflow behavior such as routing, review loops, and ordinary progression across workstations. |
 | `guards_batch` | Guard evaluation, dependency gating, fan-in or batch semantics, and request-batch behavior that should fail in one narrow behavior area. |
 | `runtime_api` | Runtime projections, HTTP API behavior, event or state queries, and other externally observable runtime read models. |
-| `providers` | Provider-backed worker execution behavior, provider retries, provider failures, and command-request shaping that remains user-visible. |
+| `providers` | Legacy aggregate provider coverage that remains runnable while scenarios migrate to the dedicated packages below. Do not add new scenarios here. |
+| `providers/contract` | Provider-neutral extension behavior shared across provider identities. |
+| `providers/agy`, `providers/claude`, `providers/codex`, `providers/cursor`, `providers/gemini`, `providers/kiro`, `providers/opencode`, `providers/pi` | Behavior owned by the named built-in model provider. |
+| `providers/script` | Script-worker behavior, which is not model-provider behavior. |
+| `providers/mock_workers` | Mock-worker behavior, which is not model-provider behavior. |
+| `providers/observability` | Provider-facing logging and diagnostics behavior, which is not model-provider behavior. |
 | `replay_contracts` | Replay, event-history, and artifact reconstruction behavior that must stay stable across recording and playback surfaces. |
 | `bootstrap_portability` | Init, bootstrap, portability, current-factory activation, and checked-in factory portability flows. |
 
