@@ -1,16 +1,12 @@
 package replayfixtures
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/definitionmapping"
-	eventsnapshot "github.com/portpowered/infinite-you/pkg/services/recordings/events/snapshot"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 // CanonicalTopologyReplacementEvents returns backend-produced topology events
@@ -28,20 +24,14 @@ func CanonicalTopologyReplacementEvents() ([]interfaces.FactoryEvent, error) {
 }
 
 func canonicalTopologyEvent(id string, eventType interfaces.FactoryEventType, tick, sequence int, factory *interfaces.FactoryConfig) (interfaces.FactoryEvent, error) {
-	mapper, err := definitionmapping.New(func() string { return "fixture-id" })
+	publicFactory, err := factorysnapshot.ObjectFromFactoryConfig(factory)
 	if err != nil {
-		return interfaces.FactoryEvent{}, fmt.Errorf("construct topology fixture mapper: %w", err)
+		return interfaces.FactoryEvent{}, fmt.Errorf("map topology fixture to public Factory: %w", err)
 	}
-	net, err := mapper.Map(context.Background(), factory)
+	factorySnapshot, err := interfaces.NewFactorySnapshot(publicFactory)
 	if err != nil {
-		return interfaces.FactoryEvent{}, fmt.Errorf("map topology fixture: %w", err)
+		return interfaces.FactoryEvent{}, fmt.Errorf("snapshot topology fixture: %w", err)
 	}
-	lookup := runtimefixtures.RuntimeDefinitionLookupFixture{
-		Factory:      factory,
-		Workers:      mapWorkers(factory.Workers),
-		Workstations: mapWorkstations(factory.Workstations),
-	}
-	factorySnapshot := eventsnapshot.FromInitialStructure(factoryruntime.ProjectInitialStructure(net, lookup))
 	var payload []byte
 	if eventType == interfaces.FactoryEventTypeFactoryChange {
 		payload, err = json.Marshal(interfaces.FactoryChangeEventPayload{Factory: factorySnapshot})
@@ -86,20 +76,4 @@ func topologyFactory(resourceName, workerName, workTypeName, initialStateName, w
 			Resources:      []interfaces.ResourceConfig{{Name: resourceName, Capacity: 1}},
 		}},
 	}
-}
-
-func mapWorkers(workers []interfaces.FactoryWorkerConfig) map[string]*interfaces.FactoryWorkerConfig {
-	result := make(map[string]*interfaces.FactoryWorkerConfig, len(workers))
-	for i := range workers {
-		result[workers[i].Name] = &workers[i]
-	}
-	return result
-}
-
-func mapWorkstations(workstations []interfaces.FactoryWorkstationConfig) map[string]*interfaces.FactoryWorkstationConfig {
-	result := make(map[string]*interfaces.FactoryWorkstationConfig, len(workstations))
-	for i := range workstations {
-		result[workstations[i].Name] = &workstations[i]
-	}
-	return result
 }

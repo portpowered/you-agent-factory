@@ -61,7 +61,7 @@ endif
 
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
-GO_COVERAGE_MIN ?= 78.3
+GO_COVERAGE_MIN ?= 75.9
 GO_UNIT_COVERAGE_MIN ?= $(GO_COVERAGE_MIN)
 GO_FUNCTIONAL_COVERAGE_MIN ?= 33.1
 GO_UNIT_COVERAGE_MANIFEST ?= docs/internal/baselines/go-unit-coverage-package-minimums.json

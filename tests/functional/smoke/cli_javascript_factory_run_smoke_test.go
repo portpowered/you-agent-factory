@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 const javascriptFactoryRunTimeout = 30 * time.Second
@@ -61,7 +60,6 @@ func TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline(t *testing.T)
 	assertJavaScriptPipelineProcessResult(t, ctx, runErr, stdout.String(), stderr.String())
 	result := decodeSingleJavaScriptFactoryRunResult(t, stdout.String())
 	assertOrderedJavaScriptPipelineResult(t, result)
-	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func assertJavaScriptPipelineProcessResult(t *testing.T, ctx context.Context, runErr error, stdout, stderr string) {

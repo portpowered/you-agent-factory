@@ -2954,11 +2954,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/snapshot",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/snapshotcapture",
       "target": "pkg/services/factory_definitions"
     },
@@ -2985,11 +2980,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_definitions/workpropagation",
-      "target": "pkg/services/factory_definitions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_definitions/workstationconfig",
       "target": "pkg/services/factory_definitions"
     },
     {
@@ -3129,11 +3119,6 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/coordinator",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/cursors",
       "target": "pkg/services/factory_sessions"
     },
@@ -3165,11 +3150,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/factory_sessions/identity",
-      "target": "pkg/services/factory_sessions"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/factory_sessions/interface",
       "target": "pkg/services/factory_sessions"
     },
     {
@@ -3304,37 +3284,7 @@
     },
     {
       "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/system_initialization/service",
-      "target": "pkg/services/system_initialization"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/content",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/graph",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/work/materialize",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/query",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/requests",
-      "target": "pkg/services/work"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/work/runtime",
       "target": "pkg/services/work"
     },
     {
@@ -3405,11 +3355,6 @@
     {
       "rule": "service-root-unexpected-directory",
       "filePath": "pkg/services/workers/provider_test",
-      "target": "pkg/services/workers"
-    },
-    {
-      "rule": "service-root-unexpected-directory",
-      "filePath": "pkg/services/workers/providerexecution",
       "target": "pkg/services/workers"
     },
     {

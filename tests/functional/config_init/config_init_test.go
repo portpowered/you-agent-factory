@@ -20,6 +20,7 @@ var packagedFactoryNames = []string{
 	"@you/fusion",
 	"@you/goal",
 	"@you/quorum",
+	"@you/review",
 	"@you/subagent",
 	"@you/tts",
 }
@@ -97,7 +98,7 @@ func TestInit_JSONEmitsStructuredSummary(t *testing.T) {
 	if payload.ConfigPath != filepath.Join(homeDir, ".you-agent-factory", "config.json") {
 		t.Fatalf("configPath = %q, want config below supplied home", payload.ConfigPath)
 	}
-	if payload.NamedFactoriesRoot != filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories") {
+	if payload.NamedFactoriesRoot != filepath.Join(homeDir, ".you-agent-factory", "factories") {
 		t.Fatalf("namedFactoriesRoot = %q, want catalog below supplied home", payload.NamedFactoriesRoot)
 	}
 	if len(payload.PackagedFactories) != len(packagedFactoryNames) {
@@ -242,7 +243,7 @@ func TestInit_ConfigCreationFailureSurfacesActionableCLIError(t *testing.T) {
 
 func TestInit_FactoryMaterializationFailureSurfacesActionableCLIError(t *testing.T) {
 	homeDir := t.TempDir()
-	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	namedFactoriesRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
 	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
 		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
 	}
