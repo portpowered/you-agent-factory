@@ -11,11 +11,29 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+type configInitResult struct {
+	ConfigPath        string                  `json:"configPath"`
+	PackagedFactories []packagedFactoryResult `json:"packagedFactories"`
+}
+
+type packagedFactoryResult struct {
+	Name       string `json:"name"`
+	FactoryDir string `json:"factoryDirectory"`
+}
+
+var packagedFactoryNames = []string{
+	factorydefinitions.PackagedDeepResearchFactoryName,
+	factorydefinitions.PackagedFusionFactoryName,
+	factorydefinitions.PackagedGoalFactoryName,
+	factorydefinitions.PackagedQuorumFactoryName,
+	factorydefinitions.PackagedReviewFactoryName,
+	factorydefinitions.PackagedSubagentFactoryName,
+	factorydefinitions.PackagedTTSFactoryName,
+}
 
 func TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome(t *testing.T) {
 	t.Parallel()
@@ -29,35 +47,41 @@ func TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome(t *testing.T) {
 	result, err := session.Run(ctx, "config", "init")
 	session.RequireSuccess(t, "fresh-install-config-init", result, err)
 
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	configPath := filepath.Join(session.HomeDir, ".you-agent-factory", "config.json")
 	if _, statErr := os.Stat(configPath); statErr != nil {
 		t.Fatalf("operator config %q: %v", configPath, statErr)
 	}
-	if _, loadErr := operatorconfig.LoadFileConfig(configPath); loadErr != nil {
-		t.Fatalf("LoadFileConfig(%q): %v", configPath, loadErr)
+	configData, readErr := os.ReadFile(configPath)
+	if readErr != nil {
+		t.Fatalf("read operator config %q: %v", configPath, readErr)
+	}
+	var configDocument map[string]any
+	if decodeErr := json.Unmarshal(configData, &configDocument); decodeErr != nil {
+		t.Fatalf("decode operator config %q: %v", configPath, decodeErr)
 	}
 
 	output := result.Stdout
 	if !strings.Contains(output, "Created system config at "+configPath) {
 		t.Fatalf("stdout = %q, want created system config message for %q", output, configPath)
 	}
-	for _, name := range factorypackages.Names() {
+	for _, name := range packagedFactoryNames {
 		if !strings.Contains(output, "Created packaged factory "+name) {
 			t.Fatalf("stdout = %q, want created packaged factory message for %q", output, name)
 		}
 	}
 
-	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(session.HomeDir)
-	for _, name := range factorypackages.Names() {
-		factoryDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, name)
-		if mapErr != nil {
-			t.Fatalf("MapNamedFactoryDir(%q): %v", name, mapErr)
+	jsonResult, jsonErr := session.Run(ctx, "--json", "config", "init")
+	session.RequireSuccess(t, "fresh-install-config-init-json", jsonResult, jsonErr)
+	initResult := decodeConfigInitResult(t, jsonResult.Stdout)
+	if len(initResult.PackagedFactories) != len(packagedFactoryNames) {
+		t.Fatalf("packaged Factories = %#v, want %d entries", initResult.PackagedFactories, len(packagedFactoryNames))
+	}
+	for _, factory := range initResult.PackagedFactories {
+		if _, statErr := os.Stat(factory.FactoryDir); statErr != nil {
+			t.Fatalf("packaged factory dir %q: %v", factory.FactoryDir, statErr)
 		}
-		if _, statErr := os.Stat(factoryDir); statErr != nil {
-			t.Fatalf("packaged factory dir %q: %v", factoryDir, statErr)
-		}
-		if _, loadErr := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil); loadErr != nil {
-			t.Fatalf("LoadRuntimeConfigFromFactoryDir(%q): %v", name, loadErr)
+		if _, loadErr := support.LoadedFactory(t, factory.FactoryDir); loadErr != nil {
+			t.Fatalf("LoadRuntimeConfigFromFactoryDir(%q): %v", factory.Name, loadErr)
 		}
 	}
 }
@@ -68,10 +92,11 @@ func TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
 
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(config parent): %v", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	initial, err := session.Run(ctx, "--json", "config", "init")
+	session.RequireSuccess(t, "migrated-install-initial-config", initial, err)
+	configPath := decodeConfigInitResult(t, initial.Stdout).ConfigPath
 	original := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -81,9 +106,6 @@ func TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite(t *testing.T) {
 	if err := os.WriteFile(configPath, original, 0o600); err != nil {
 		t.Fatalf("WriteFile(config): %v", err)
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
 
 	result, err := session.Run(ctx, "config", "init")
 	session.RequireSuccess(t, "migrated-install-existing-config", result, err)
@@ -101,39 +123,16 @@ func TestMigratedInstall_ExistingConfigIsPreservedWithoutRewrite(t *testing.T) {
 	}
 }
 
-func TestMigratedInstall_LegacyNamedFactoryMovesToCanonicalRoot(t *testing.T) {
-	t.Parallel()
-
-	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
-	session := harness.NewSession(t)
-	definition, ok := factorypackages.Lookup("@you/goal")
-	if !ok {
-		t.Fatal("expected @you/goal packaged definition")
+func decodeConfigInitResult(t *testing.T, output string) configInitResult {
+	t.Helper()
+	var result configInitResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("decode config init JSON: %v\nstdout:\n%s", err, output)
 	}
-	legacyDir, err := factoryconfig.PersistNamedFactory(defaultpaths.LegacyNamedFactoriesRoot(session.HomeDir), definition.Name, definition.JSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(legacy): %v", err)
+	if result.ConfigPath == "" {
+		t.Fatalf("config init JSON omitted configPath: %s", output)
 	}
-	markerPath := filepath.Join(legacyDir, "customer-edit.txt")
-	if err := os.WriteFile(markerPath, []byte("preserve this edit\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile(customer edit): %v", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	result, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "migrated-install-legacy-named-factory", result, err)
-
-	canonicalDir, err := factoryconfig.MapNamedFactoryDir(defaultpaths.NamedFactoriesRoot(session.HomeDir), definition.Name)
-	if err != nil {
-		t.Fatalf("MapNamedFactoryDir(canonical): %v", err)
-	}
-	if _, err := os.Stat(legacyDir); !os.IsNotExist(err) {
-		t.Fatalf("legacy factory directory still exists: %v", err)
-	}
-	if got, err := os.ReadFile(filepath.Join(canonicalDir, "customer-edit.txt")); err != nil || string(got) != "preserve this edit\n" {
-		t.Fatalf("migrated customer edit = %q, %v; want preserved content", got, err)
-	}
+	return result
 }
 
 func TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption(t *testing.T) {
@@ -145,24 +144,17 @@ func TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption(t 
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	first, err := session.Run(ctx, "config", "init")
+	first, err := session.Run(ctx, "--json", "config", "init")
 	session.RequireSuccess(t, "migrated-install-baseline", first, err)
-
-	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(session.HomeDir)
-	goalDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, "@you/goal")
-	if mapErr != nil {
-		t.Fatalf("MapNamedFactoryDir(@you/goal): %v", mapErr)
-	}
+	initial := decodeConfigInitResult(t, first.Stdout)
+	goalDir := packagedFactoryDir(t, initial, "@you/goal")
 	editedWorker := filepath.Join(goalDir, "workers", "goal-executor", "AGENTS.md")
 	editedBody := "customer edited goal worker body for migrated install\n"
 	if err := os.WriteFile(editedWorker, []byte(editedBody), 0o644); err != nil {
 		t.Fatalf("WriteFile(edited worker): %v", err)
 	}
 
-	ttsDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, "@you/tts")
-	if mapErr != nil {
-		t.Fatalf("MapNamedFactoryDir(@you/tts): %v", mapErr)
-	}
+	ttsDir := packagedFactoryDir(t, initial, "@you/tts")
 	if err := os.RemoveAll(ttsDir); err != nil {
 		t.Fatalf("RemoveAll(@you/tts): %v", err)
 	}
@@ -188,7 +180,7 @@ func TestMigratedInstall_MaterializesMissingPackagedDefaultsWithoutCorruption(t 
 	if string(gotBody) != editedBody {
 		t.Fatalf("edited worker changed:\nwant:\n%s\ngot:\n%s", editedBody, gotBody)
 	}
-	if _, loadErr := factoryconfig.LoadRuntimeConfigFromFactoryDir(ttsDir, nil); loadErr != nil {
+	if _, loadErr := support.LoadedFactory(t, ttsDir); loadErr != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir(@you/tts): %v", loadErr)
 	}
 }
@@ -202,14 +194,9 @@ func TestMigratedInstall_JSONReportsSkippedAndCreatedOutcomes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	first, err := session.Run(ctx, "config", "init")
+	first, err := session.Run(ctx, "--json", "config", "init")
 	session.RequireSuccess(t, "migrated-install-json-baseline", first, err)
-
-	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(session.HomeDir)
-	ttsDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, "@you/tts")
-	if mapErr != nil {
-		t.Fatalf("MapNamedFactoryDir(@you/tts): %v", mapErr)
-	}
+	ttsDir := packagedFactoryDir(t, decodeConfigInitResult(t, first.Stdout), "@you/tts")
 	if err := os.RemoveAll(ttsDir); err != nil {
 		t.Fatalf("RemoveAll(@you/tts): %v", err)
 	}
@@ -241,4 +228,15 @@ func TestMigratedInstall_JSONReportsSkippedAndCreatedOutcomes(t *testing.T) {
 	if outcomes["@you/goal"] != "skipped" {
 		t.Fatalf("@you/goal outcome = %q, want skipped", outcomes["@you/goal"])
 	}
+}
+
+func packagedFactoryDir(t *testing.T, result configInitResult, name string) string {
+	t.Helper()
+	for _, factory := range result.PackagedFactories {
+		if factory.Name == name {
+			return factory.FactoryDir
+		}
+	}
+	t.Fatalf("config init result omitted packaged Factory %q: %#v", name, result.PackagedFactories)
+	return ""
 }

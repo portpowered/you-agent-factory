@@ -3,14 +3,13 @@ package clicontract
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
-	"github.com/spf13/cobra"
 )
 
 const CompatibilityInventoryPath = "contracts/cli/deprecated.json"
@@ -35,9 +34,9 @@ type compatibilityInventory struct {
 	} `json:"records"`
 }
 
-// CheckProduction loads committed contracts and validates root without command execution.
-func CheckProduction(root *cobra.Command, repositoryRoot string) ([]Finding, error) {
-	input, err := loadProductionInput(root, repositoryRoot)
+// CheckProduction loads committed contracts and validates a detached production observation.
+func CheckProduction(store generatedartifacts.SourceStore, production commandidentity.Inventory, repositoryRoot string) ([]Finding, error) {
+	input, err := loadProductionInput(store, production, repositoryRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -46,8 +45,8 @@ func CheckProduction(root *cobra.Command, repositoryRoot string) ([]Finding, err
 
 // CheckProductionViolation applies one deliberate structural violation to
 // snapshots, then runs the production validator. The Cobra tree is unchanged.
-func CheckProductionViolation(root *cobra.Command, repositoryRoot string, violation DeliberateViolation) ([]Finding, error) {
-	input, err := loadProductionInput(root, repositoryRoot)
+func CheckProductionViolation(store generatedartifacts.SourceStore, production commandidentity.Inventory, repositoryRoot string, violation DeliberateViolation) ([]Finding, error) {
+	input, err := loadProductionInput(store, production, repositoryRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -57,20 +56,16 @@ func CheckProductionViolation(root *cobra.Command, repositoryRoot string, violat
 	return Validate(input), nil
 }
 
-func loadProductionInput(root *cobra.Command, repositoryRoot string) (Input, error) {
-	production, err := commandidentity.Walk(root)
-	if err != nil {
-		return Input{}, fmt.Errorf("inventory production CLI: %w", err)
-	}
-	canonical, err := climanifest.LoadProduction(filepath.Join(repositoryRoot, filepath.FromSlash(climanifest.ProductionManifestPath)))
+func loadProductionInput(store generatedartifacts.SourceStore, production commandidentity.Inventory, repositoryRoot string) (Input, error) {
+	canonical, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(climanifest.ProductionManifestPath)))
 	if err != nil {
 		return Input{}, err
 	}
-	compatibility, err := climanifest.LoadCompatibility(filepath.Join(repositoryRoot, filepath.FromSlash(climanifest.CompatibilityManifestPath)))
+	compatibility, err := climanifest.LoadCompatibility(store, filepath.Join(repositoryRoot, filepath.FromSlash(climanifest.CompatibilityManifestPath)))
 	if err != nil {
 		return Input{}, err
 	}
-	approved, err := LoadApprovedCompatibility(filepath.Join(repositoryRoot, filepath.FromSlash(CompatibilityInventoryPath)))
+	approved, err := LoadApprovedCompatibility(store, filepath.Join(repositoryRoot, filepath.FromSlash(CompatibilityInventoryPath)))
 	if err != nil {
 		return Input{}, err
 	}
@@ -109,12 +104,7 @@ func applyDeliberateViolation(input *Input, violation DeliberateViolation) error
 		}
 		return fmt.Errorf("apply %s fixture: production command %q not found", violation, "you run")
 	case ViolationAliasAsCanonical:
-		compatibility, ok := input.Compatibility.Commands["you.workflow.preview"]
-		if !ok {
-			return fmt.Errorf("apply %s fixture: compatibility command %q not found", violation, "you.workflow.preview")
-		}
-		input.Canonical = cloneManifestSnapshot(input.Canonical)
-		input.Canonical.Commands[compatibility.ID] = compatibility
+		compatibility := addSyntheticCompatibility(input)
 		manifest := cloneManifestSnapshot(input.GeneratedCanonical[0])
 		manifest.Commands[compatibility.ID] = compatibility
 		input.GeneratedCanonical = append([]climanifest.Manifest(nil), input.GeneratedCanonical...)
@@ -123,6 +113,34 @@ func applyDeliberateViolation(input *Input, violation DeliberateViolation) error
 		return fmt.Errorf("unknown deliberate CLI contract violation %q", violation)
 	}
 	return nil
+}
+
+func addSyntheticCompatibility(input *Input) climanifest.Command {
+	command := input.Canonical.Commands["you.run"]
+	command.ID = "you.compatibility-preview"
+	command.Name = "compatibility-preview"
+	command.Path = "you compatibility-preview"
+
+	input.Compatibility = cloneManifestSnapshot(input.Compatibility)
+	input.Compatibility.Commands[command.ID] = command
+	input.ApprovedCompatibility = append(input.ApprovedCompatibility, CompatibilityRecord{
+		InventoryID:    "synthetic-compatibility-preview",
+		StableID:       command.ID,
+		Path:           command.Path,
+		Classification: "compatibility",
+	})
+	input.Production.Commands = append(input.Production.Commands, commandidentity.CommandRecord{
+		IDCandidate:    command.ID,
+		Name:           command.Name,
+		Path:           command.Path,
+		Visibility:     "visible",
+		Runnable:       command.Runnable,
+		HandlerPresent: command.Handler != nil,
+	})
+	input.GeneratedCompatibility = append(input.GeneratedCompatibility, climanifest.Manifest{
+		Commands: map[string]climanifest.Command{command.ID: command},
+	})
+	return command
 }
 
 func cloneManifestSnapshot(source climanifest.Manifest) climanifest.Manifest {
@@ -135,8 +153,11 @@ func cloneManifestSnapshot(source climanifest.Manifest) climanifest.Manifest {
 }
 
 // LoadApprovedCompatibility returns callable, explicitly approved CLI inventory entries.
-func LoadApprovedCompatibility(path string) ([]CompatibilityRecord, error) {
-	payload, err := os.ReadFile(path)
+func LoadApprovedCompatibility(store generatedartifacts.SourceStore, path string) ([]CompatibilityRecord, error) {
+	if store == nil {
+		return nil, fmt.Errorf("CLI compatibility inventory source store is required")
+	}
+	payload, err := store.Read(path)
 	if err != nil {
 		return nil, fmt.Errorf("read CLI compatibility inventory %s: %w", path, err)
 	}
@@ -176,9 +197,5 @@ func loadGeneratedManifests() ([]climanifest.Manifest, []climanifest.Manifest, e
 		}
 		canonical = append(canonical, manifest)
 	}
-	compatibility, err := generated.WorkflowCompatibilityFamilyManifest()
-	if err != nil {
-		return nil, nil, err
-	}
-	return canonical, []climanifest.Manifest{compatibility}, nil
+	return canonical, nil, nil
 }

@@ -1,6 +1,0 @@
-deprecated: true
-description: >-
-  Obsolete Batch 001 compatibility alias for FactoryPreviewRequest. Prefer
-  POST /factories/preview for canonical Factory preview semantics.
-allOf:
-  - $ref: './FactoryPreviewRequest.yaml'

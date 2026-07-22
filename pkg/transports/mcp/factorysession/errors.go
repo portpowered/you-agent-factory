@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -79,7 +79,7 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 }
 
 func readErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
 		return sessionNotFoundErrorEnvelope(sessionID)
 	}
 	return executionErrorEnvelope(err)
@@ -119,7 +119,7 @@ func resultNotReadyErrorEnvelope(sessionID string, availability *factorysessione
 }
 
 func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
 		return sessionNotFoundErrorEnvelope(sessionID)
 	}
 	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
@@ -137,7 +137,7 @@ func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
 }
 
 func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
-	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) {
 		return sessionNotFoundErrorEnvelope(sessionID)
 	}
 	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
@@ -152,7 +152,7 @@ func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
-	var validationErr *factorysessionexecution.ValidationError
+	var validationErr *factorysessionexecution.ExecutionValidationError
 	if errors.As(err, &validationErr) {
 		code := errorCodeBadRequest
 		if validationErr.Field == "requestId" && strings.Contains(validationErr.Message, "unknown fake scenario") {

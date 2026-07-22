@@ -3,19 +3,13 @@
 package runtime_api
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -67,49 +61,34 @@ stopWords: ["DONE"]
 Process {{ (index .Inputs 0).WorkID }}.
 `)
 
-	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
+	artifactPath := filepath.Join(t.TempDir(), "topology-projection.replay.json")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges:      serviceedges.Edges{},
+	})
 	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	requireFunctionalEventStreamPrelude(t, stream)
 	events := server.GetFactoryEvents(t)
 	if len(events) == 0 {
 		t.Fatal("expected at least one factory event")
 	}
-	liveWorld, err := factoryeventprojection.ReconstructFactoryWorldState(events, 0)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	liveProjection := liveWorld.Topology
+	liveFactory := requireGeneratedSchemaRunStartedPayload(t, events).Factory
+	server.Stop(t)
 
-	replayProjection := projectReplayInitialStructureFromEmbeddedConfig(t, dir)
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath},
+	})
+	replayEvents := replayServer.GetFactoryEvents(t)
+	replayFactory := requireGeneratedSchemaRunStartedPayload(t, replayEvents).Factory
+	replayServer.Stop(t)
 
-	assertTopologyWorker(t, liveProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "SCRIPT_WRAP", ModelProvider: "CODEX", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
-	assertTopologyWorkstation(t, liveProjection, "process-task", "executor", []string{"task-retry:init", "task-followup:init"}, []string{"task-triage:init", "task-backlog:init"}, []string{"task-failed:failed", "task-abandoned:failed"})
-	assertTopologyResource(t, liveProjection, "executor-slot", 2)
-	assertTopologyWorker(t, replayProjection, interfaces.FactoryWorker{ID: "executor", Name: "executor", Provider: "script_wrap", ModelProvider: "codex", Model: "gpt-5.4", Config: map[string]string{"type": interfaces.WorkerTypeModel}})
-	assertTopologyWorkstation(t, replayProjection, "process-task", "executor", []string{"task-retry:init", "task-followup:init"}, []string{"task-triage:init", "task-backlog:init"}, []string{"task-failed:failed", "task-abandoned:failed"})
-	assertTopologyResource(t, replayProjection, "executor-slot", 2)
-}
-
-func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) interfaces.InitialStructurePayload {
-	t.Helper()
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
+	for _, publicFactory := range []factoryapi.Factory{liveFactory, replayFactory} {
+		assertTopologyWorker(t, publicFactory, "executor", "gpt-5.4")
+		assertTopologyWorkstation(t, publicFactory, "process-task", "executor", []string{"task-retry:init", "task-followup:init"}, []string{"task-triage:init", "task-backlog:init"}, []string{"task-failed:failed", "task-abandoned:failed"})
+		assertTopologyResource(t, publicFactory, "executor-slot", 2)
 	}
-	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(loaded, replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()))
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
-	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(factorySnapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	mapper := factoryconfig.ConfigMapper{}
-	replayNet, err := mapper.Map(context.Background(), replayRuntimeCfg.Factory)
-	if err != nil {
-		t.Fatalf("Map replay factory: %v", err)
-	}
-	return projections.ProjectInitialStructure(replayNet, replayRuntimeCfg)
 }
 
 func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) {
@@ -123,44 +102,61 @@ func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) 
 	}
 }
 
-func assertTopologyWorker(t *testing.T, payload interfaces.InitialStructurePayload, want interfaces.FactoryWorker) {
+func assertTopologyWorker(t *testing.T, factory factoryapi.Factory, name, model string) {
 	t.Helper()
-	for _, worker := range payload.Workers {
-		if reflect.DeepEqual(worker, want) {
+	if factory.Workers == nil {
+		t.Fatal("public RUN_REQUEST Factory has no workers")
+	}
+	for _, worker := range *factory.Workers {
+		if worker.Name == name && stringPointerValue(worker.Model) == model {
 			return
 		}
 	}
-	t.Fatalf("topology workers = %#v, want %#v", payload.Workers, want)
+	t.Fatalf("public RUN_REQUEST workers = %#v, want %s model %s", *factory.Workers, name, model)
 }
 
-func assertTopologyWorkstation(t *testing.T, payload interfaces.InitialStructurePayload, id, workerID string, wantContinue []string, wantRejection []string, wantFailure []string) {
+func assertTopologyWorkstation(t *testing.T, factory factoryapi.Factory, name, workerName string, wantContinue []string, wantRejection []string, wantFailure []string) {
 	t.Helper()
-	for _, workstation := range payload.Workstations {
-		if workstation.ID == id && workstation.WorkerID == workerID {
-			if workstation.Config["type"] != interfaces.WorkstationTypeModel {
-				t.Fatalf("workstation %q config = %#v, want model workstation type", id, workstation.Config)
+	if factory.Workstations == nil {
+		t.Fatal("public RUN_REQUEST Factory has no workstations")
+	}
+	for _, workstation := range *factory.Workstations {
+		if workstation.Name == name && workstation.Worker == workerName {
+			if !reflect.DeepEqual(topologyRouteIDs(workstation.OnContinue), wantContinue) {
+				t.Fatalf("workstation %q continue routes = %#v, want %#v", name, topologyRouteIDs(workstation.OnContinue), wantContinue)
 			}
-			if !reflect.DeepEqual(workstation.ContinuePlaceIDs, wantContinue) {
-				t.Fatalf("workstation %q continue routes = %#v, want %#v", id, workstation.ContinuePlaceIDs, wantContinue)
+			if !reflect.DeepEqual(topologyRouteIDs(workstation.OnRejection), wantRejection) {
+				t.Fatalf("workstation %q rejection routes = %#v, want %#v", name, topologyRouteIDs(workstation.OnRejection), wantRejection)
 			}
-			if !reflect.DeepEqual(workstation.RejectionPlaceIDs, wantRejection) {
-				t.Fatalf("workstation %q rejection routes = %#v, want %#v", id, workstation.RejectionPlaceIDs, wantRejection)
-			}
-			if !reflect.DeepEqual(workstation.FailurePlaceIDs, wantFailure) {
-				t.Fatalf("workstation %q failure routes = %#v, want %#v", id, workstation.FailurePlaceIDs, wantFailure)
+			if !reflect.DeepEqual(topologyRouteIDs(workstation.OnFailure), wantFailure) {
+				t.Fatalf("workstation %q failure routes = %#v, want %#v", name, topologyRouteIDs(workstation.OnFailure), wantFailure)
 			}
 			return
 		}
 	}
-	t.Fatalf("topology workstations = %#v, want %s with worker %s", payload.Workstations, id, workerID)
+	t.Fatalf("public RUN_REQUEST workstations = %#v, want %s with worker %s", *factory.Workstations, name, workerName)
 }
 
-func assertTopologyResource(t *testing.T, payload interfaces.InitialStructurePayload, id string, capacity int) {
+func assertTopologyResource(t *testing.T, factory factoryapi.Factory, name string, capacity int) {
 	t.Helper()
-	for _, resource := range payload.Resources {
-		if resource.ID == id && resource.Capacity == capacity {
+	if factory.Resources == nil {
+		t.Fatal("public RUN_REQUEST Factory has no resources")
+	}
+	for _, resource := range *factory.Resources {
+		if resource.Name == name && resource.Capacity == capacity {
 			return
 		}
 	}
-	t.Fatalf("topology resources = %#v, want %s capacity %d", payload.Resources, id, capacity)
+	t.Fatalf("public RUN_REQUEST resources = %#v, want %s capacity %d", *factory.Resources, name, capacity)
+}
+
+func topologyRouteIDs(routes *[]factoryapi.WorkstationIO) []string {
+	if routes == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(*routes))
+	for _, route := range *routes {
+		ids = append(ids, route.WorkType+":"+route.State)
+	}
+	return ids
 }

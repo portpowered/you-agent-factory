@@ -13,14 +13,14 @@ import (
 func TestFactorySessionSSEInitialStream_NoReconnectCursorReturnsEventStream(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
 	var accept string
-	handler := newAPITestServer(fixture.RootMockFactory()).Handler()
+	handler := newAPITestServer(fixture.WorkAPI()).Handler()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		accept = r.Header.Get("Accept")
 		handler.ServeHTTP(w, r)
 	}))
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -34,10 +34,10 @@ func TestFactorySessionSSEInitialStream_NoReconnectCursorReturnsEventStream(t *t
 
 func TestFactorySessionSSEInitialStream_DeliversRetainedHistoryAsValidFactoryEventsInOrder(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -92,10 +92,10 @@ func TestFactorySessionSSEInitialStream_DeliversRetainedHistoryAsValidFactoryEve
 
 func TestFactorySessionSSEInitialStream_ContinuesWithLiveEventWithoutRetainedReplay(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -131,10 +131,10 @@ func TestFactorySessionSSEInitialStream_ContinuesWithLiveEventWithoutRetainedRep
 
 func TestFactorySessionSSEInitialStream_WritesSessionIdentityHandshakeHeaders(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 

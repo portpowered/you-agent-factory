@@ -25,7 +25,7 @@ type CompatibilityAliasTerm struct {
 }
 
 type compatibilityInventoryDocument struct {
-	Family  string                       `json:"family"`
+	Family  string                         `json:"family"`
 	Records map[string]compatibilityRecord `json:"records"`
 }
 

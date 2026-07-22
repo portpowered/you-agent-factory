@@ -4,61 +4,58 @@
 package apisurface_test
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-const validWorkflowSource = `
-meta({ name: "review", version: 1 });
-phase("setup");
-log("starting");
-`
+var mappingWorkflows = scriptedMappingWorkflows()
 
-func TestBuildFactoryPreview_MatchesOrchestratorPreviewSeam(t *testing.T) {
+func derefTestString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func TestFactoryPreviewResultFromPreview_MapsServiceRootPreview(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := mappingWorkflows.DefaultSourceContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	req := workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	req := factory.WorkflowPreviewRequest{
+		Source: factory.WorkflowSourceRequest{
+			Kind:  factory.WorkflowSourceKindWorkflowName,
 			Value: "review",
 		},
 		Context: ctx,
 	}
 
-	viaSurface := apisurface.BuildFactoryPreview(req)
-	direct := workflowpreview.BuildPreview(req)
-	if viaSurface.Valid != direct.Valid ||
-		viaSurface.SourceResolution.SourceHash != direct.SourceResolution.SourceHash ||
-		viaSurface.PolicyPreview.PolicyHash != direct.PolicyPreview.PolicyHash {
-		t.Fatalf("surface = %#v, orchestrator = %#v, want equivalent preview", viaSurface, direct)
+	preview := mappingWorkflows.BuildPreview(req)
+	result := apisurface.FactoryPreviewResultFromPreview(preview)
+	if result.Valid != preview.Valid ||
+		derefTestString(result.SourceResolution.SourceHash) != preview.SourceResolution.SourceHash ||
+		result.PolicyPreview.PolicyHash != preview.PolicyPreview.PolicyHash {
+		t.Fatalf("result = %#v, preview = %#v, want mapped service-root preview", result, preview)
 	}
 }
 
 func TestFactoryPreviewResultFromPreview_PreservesPathAwareDiagnostics(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "unsafe.js", "require('fs');")
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := mappingWorkflows.DefaultSourceContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	preview := apisurface.BuildFactoryPreview(workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	preview := mappingWorkflows.BuildPreview(factory.WorkflowPreviewRequest{
+		Source: factory.WorkflowSourceRequest{
+			Kind:  factory.WorkflowSourceKindWorkflowName,
 			Value: "unsafe",
 		},
 		Context: ctx,
@@ -71,80 +68,66 @@ func TestFactoryPreviewResultFromPreview_PreservesPathAwareDiagnostics(t *testin
 	if len(result.SourceValidationIssues) == 0 {
 		t.Fatalf("issues = %#v, want source validation diagnostics", result.SourceValidationIssues)
 	}
-	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/unsafe.js"
+	wantPath := factory.WorkflowSourceProjectClaudeWorkflowsDir + "/unsafe.js"
 	if result.SourceValidationIssues[0].Path == nil || strings.TrimSpace(*result.SourceValidationIssues[0].Path) != wantPath {
 		t.Fatalf("issue path = %v, want %q", result.SourceValidationIssues[0].Path, wantPath)
 	}
 }
 
-func TestFactoryPreviewRequestFromAPI_MapsCanonicalPreviewInput(t *testing.T) {
+func TestFactoryPreviewInputFromAPI_ForwardsCanonicalEdgeFields(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
 	projectRootPtr := projectRoot
 	sourceValue := "review"
-	mapped, err := apisurface.FactoryPreviewRequestFromAPI(factoryapi.FactoryPreviewRequest{
+	mapped, err := apisurface.FactoryPreviewInputFromAPI(factoryapi.FactoryPreviewRequest{
 		SourceKind:  factoryapi.WORKFLOWNAME,
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
 	})
 	if err != nil {
-		t.Fatalf("FactoryPreviewRequestFromAPI: %v", err)
+		t.Fatalf("FactoryPreviewInputFromAPI: %v", err)
 	}
-	if mapped.Source.Kind != workflowsource.KindWorkflowName || mapped.Source.Value != "review" {
+	if mapped.Source.Kind != factory.WorkflowSourceKindWorkflowName || mapped.Source.Value != "review" {
 		t.Fatalf("mapped source = %#v, want workflow name review", mapped.Source)
 	}
-	if strings.TrimSpace(mapped.Context.ProjectRoot) != projectRoot {
-		t.Fatalf("project root = %q, want %q", mapped.Context.ProjectRoot, projectRoot)
+	if strings.TrimSpace(mapped.ProjectRoot) != projectRoot {
+		t.Fatalf("project root = %q, want %q", mapped.ProjectRoot, projectRoot)
 	}
 }
 
-func writeWorkflow(t *testing.T, projectRoot, name, content string) {
-	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, name), []byte(content), 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-}
-
-func TestBuildFactoryWorkflowValidation_MatchesOrchestratorPreviewSeam(t *testing.T) {
+func TestFactoryWorkflowValidationResultFromPreview_MapsServiceRootPreview(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := mappingWorkflows.DefaultSourceContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	req := workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	req := factory.WorkflowPreviewRequest{
+		Source: factory.WorkflowSourceRequest{
+			Kind:  factory.WorkflowSourceKindWorkflowName,
 			Value: "review",
 		},
 		Context: ctx,
 	}
 
-	viaSurface := apisurface.BuildFactoryWorkflowValidation(req)
-	direct := workflowpreview.BuildPreview(req)
-	if viaSurface.Valid != direct.Valid ||
-		viaSurface.SourceResolution.SourceHash != direct.SourceResolution.SourceHash {
-		t.Fatalf("surface = %#v, orchestrator = %#v, want equivalent validation preview", viaSurface, direct)
+	preview := mappingWorkflows.BuildPreview(req)
+	result := apisurface.FactoryWorkflowValidationResultFromPreview(preview)
+	if result.Valid != preview.Valid ||
+		derefTestString(result.SourceResolution.SourceHash) != preview.SourceResolution.SourceHash {
+		t.Fatalf("result = %#v, preview = %#v, want mapped service-root validation preview", result, preview)
 	}
 }
 
 func TestFactoryWorkflowValidationResultFromPreview_ValidWorkflowHasEmptyBlockingDiagnostics(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := mappingWorkflows.DefaultSourceContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	preview := apisurface.BuildFactoryWorkflowValidation(workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	preview := mappingWorkflows.BuildPreview(factory.WorkflowPreviewRequest{
+		Source: factory.WorkflowSourceRequest{
+			Kind:  factory.WorkflowSourceKindWorkflowName,
 			Value: "review",
 		},
 		Context: ctx,
@@ -163,7 +146,7 @@ func TestFactoryWorkflowValidationResultFromPreview_ValidWorkflowHasEmptyBlockin
 	if result.SourceResolution.SourceHash == nil || strings.TrimSpace(*result.SourceResolution.SourceHash) == "" {
 		t.Fatalf("source hash = %v, want non-empty hash", result.SourceResolution.SourceHash)
 	}
-	wantRef := workflowsource.ProjectClaudeWorkflowsDir + "/review.js"
+	wantRef := factory.WorkflowSourceProjectClaudeWorkflowsDir + "/review.js"
 	if result.SourceResolution.SourceRef == nil || strings.TrimSpace(*result.SourceResolution.SourceRef) != wantRef {
 		t.Fatalf("source ref = %v, want %q", result.SourceResolution.SourceRef, wantRef)
 	}
@@ -171,86 +154,81 @@ func TestFactoryWorkflowValidationResultFromPreview_ValidWorkflowHasEmptyBlockin
 
 func TestFactoryWorkflowValidationResultFromPreview_BlockingDiagnostics(t *testing.T) {
 	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := mappingWorkflows.DefaultSourceContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
 
 	cases := []struct {
 		name     string
-		request  workflowpreview.Request
+		request  factory.WorkflowPreviewRequest
 		wantCode string
 		wantLine bool
 	}{
 		{
 			name: "syntax error",
-			request: workflowpreview.Request{
-				Source: workflowsource.Request{
-					Kind:  workflowsource.KindWorkflowName,
+			request: factory.WorkflowPreviewRequest{
+				Source: factory.WorkflowSourceRequest{
+					Kind:  factory.WorkflowSourceKindWorkflowName,
 					Value: "broken",
 				},
 				Context: ctx,
 			},
-			wantCode: workflowvalidation.CodeSyntaxError,
+			wantCode: factory.WorkflowValidationCodeSyntaxError,
 			wantLine: true,
 		},
 		{
 			name: "unsupported global",
-			request: workflowpreview.Request{
-				Source: workflowsource.Request{
-					Kind:  workflowsource.KindWorkflowName,
+			request: factory.WorkflowPreviewRequest{
+				Source: factory.WorkflowSourceRequest{
+					Kind:  factory.WorkflowSourceKindWorkflowName,
 					Value: "unsafe-global",
 				},
 				Context: ctx,
 			},
-			wantCode: workflowvalidation.CodeUnsupportedGlobal,
+			wantCode: factory.WorkflowValidationCodeUnsupportedGlobal,
 		},
 		{
 			name: "forbidden host access",
-			request: workflowpreview.Request{
-				Source: workflowsource.Request{
-					Kind:  workflowsource.KindWorkflowName,
+			request: factory.WorkflowPreviewRequest{
+				Source: factory.WorkflowSourceRequest{
+					Kind:  factory.WorkflowSourceKindWorkflowName,
 					Value: "unsafe-host",
 				},
 				Context: ctx,
 			},
-			wantCode: workflowvalidation.CodeForbiddenHostAccess,
+			wantCode: factory.WorkflowValidationCodeForbiddenHostAccess,
 		},
 		{
 			name: "invalid args schema",
-			request: workflowpreview.Request{
-				Source: workflowsource.Request{
-					Kind:  workflowsource.KindWorkflowName,
+			request: factory.WorkflowPreviewRequest{
+				Source: factory.WorkflowSourceRequest{
+					Kind:  factory.WorkflowSourceKindWorkflowName,
 					Value: "review",
 				},
 				Context:    ctx,
 				ArgsSchema: []byte(`{"type":"array"}`),
 			},
-			wantCode: workflowvalidation.CodeInvalidArgsSchema,
+			wantCode: factory.WorkflowValidationCodeInvalidArgsSchema,
 		},
 		{
 			name: "policy denied host access",
-			request: workflowpreview.Request{
-				Source: workflowsource.Request{
-					Kind:  workflowsource.KindWorkflowName,
+			request: factory.WorkflowPreviewRequest{
+				Source: factory.WorkflowSourceRequest{
+					Kind:  factory.WorkflowSourceKindWorkflowName,
 					Value: "review",
 				},
 				Context:         ctx,
 				RequestedPolicy: map[string]any{"allowNetwork": true},
 			},
-			wantCode: workflowpolicy.CodeDeniedCapability,
+			wantCode: factory.JavaScriptPolicyCodeDeniedCapability,
 		},
 	}
 
-	writeWorkflow(t, projectRoot, "broken.js", `meta({ name: "broken" );`)
-	writeWorkflow(t, projectRoot, "unsafe-global.js", `console.log("unsupported global");`)
-	writeWorkflow(t, projectRoot, "unsafe-host.js", `require('fs');`)
-
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			preview := apisurface.BuildFactoryWorkflowValidation(tc.request)
+			preview := mappingWorkflows.BuildPreview(tc.request)
 			result := apisurface.FactoryWorkflowValidationResultFromPreview(preview)
 			if result.Valid {
 				t.Fatal("expected invalid validation result")
@@ -267,6 +245,83 @@ func TestFactoryWorkflowValidationResultFromPreview_BlockingDiagnostics(t *testi
 			}
 		})
 	}
+}
+
+func scriptedMappingWorkflows() factory.JavaScriptWorkflowDefinitions {
+	return testutil.ScriptedJavaScriptWorkflowDefinitions{
+		DefaultSourceContextFunc: func(root string) (factory.WorkflowSourceContext, error) {
+			return factory.WorkflowSourceContext{ProjectRoot: root}, nil
+		},
+		BuildPreviewFunc: scriptedMappingPreview,
+		ResolveSourceFunc: func(
+			request factory.WorkflowSourceRequest,
+			_ factory.WorkflowSourceContext,
+		) factory.WorkflowSourceResolution {
+			if request.Value == "missing" {
+				return factory.WorkflowSourceResolution{
+					RequestKind:  request.Kind,
+					RequestValue: request.Value,
+					Diagnostics: []factory.WorkflowSourceDiagnostic{{
+						Code:    factory.WorkflowSourceCodeNotFound,
+						Message: "scripted source was not found",
+					}},
+				}
+			}
+			return scriptedMappingPreview(factory.WorkflowPreviewRequest{Source: request}).SourceResolution
+		},
+	}
+}
+
+func scriptedMappingPreview(request factory.WorkflowPreviewRequest) factory.WorkflowPreview {
+	sourceRef := factory.WorkflowSourceProjectClaudeWorkflowsDir + "/" + request.Source.Value + ".js"
+	preview := factory.WorkflowPreview{
+		Valid: true,
+		SourceResolution: factory.WorkflowSourceResolution{
+			RequestKind:  request.Source.Kind,
+			RequestValue: request.Source.Value,
+			ResolvedKind: request.Source.Kind,
+			SourceRef:    sourceRef,
+			SourceHash:   "sha256:test-source",
+			Found:        true,
+			ArtifactRoot: factory.WorkflowSourceArtifactRootDecision{Allowed: true},
+		},
+		PolicyPreview: factory.JavaScriptPolicyPreview{PolicyHash: "sha256:test-policy"},
+	}
+
+	code := ""
+	line := 0
+	switch request.Source.Value {
+	case "unsafe":
+		code = factory.WorkflowValidationCodeForbiddenHostAccess
+	case "broken":
+		code = factory.WorkflowValidationCodeSyntaxError
+		line = 1
+	case "unsafe-global":
+		code = factory.WorkflowValidationCodeUnsupportedGlobal
+	case "unsafe-host":
+		code = factory.WorkflowValidationCodeForbiddenHostAccess
+	}
+	if len(request.ArgsSchema) > 0 {
+		code = factory.WorkflowValidationCodeInvalidArgsSchema
+	}
+	if request.RequestedPolicy != nil {
+		preview.Valid = false
+		preview.PolicyPreview.ValidationIssues = []factory.JavaScriptPolicyIssue{{
+			Code:    factory.JavaScriptPolicyCodeDeniedCapability,
+			Message: "capability denied by scripted Factory Runtime result",
+		}}
+		return preview
+	}
+	if code != "" {
+		preview.Valid = false
+		preview.SourceValidationIssues = []factory.WorkflowPreviewSourceValidationIssue{{
+			Code:    code,
+			Message: "scripted Factory Runtime validation issue",
+			Path:    sourceRef,
+			Line:    line,
+		}}
+	}
+	return preview
 }
 
 func findValidationDiagnostic(diagnostics []factoryapi.WorkflowDiagnostic, code string) *factoryapi.WorkflowDiagnostic {

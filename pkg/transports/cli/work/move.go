@@ -9,9 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
@@ -20,10 +18,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const moveRequestTimeout = 15 * time.Second
-
 // MoveConfig holds parameters for the work move command.
 type MoveConfig struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	WorkID      string
@@ -34,6 +31,11 @@ type MoveConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	HTTP        clihttp.Protocol
+}
+
+func NewMove(transport clihttp.Protocol) func(MoveConfig) error {
+	return func(cfg MoveConfig) error { cfg.HTTP = transport; return Move(cfg) }
 }
 
 // MoveSuccessResult is the stable JSON envelope for a successful operator move.
@@ -47,8 +49,14 @@ type MoveSuccessResult struct {
 
 // Move relocates one work item to another authored state via HTTP.
 func Move(cfg MoveConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
 	workID := strings.TrimSpace(cfg.WorkID)
@@ -92,28 +100,22 @@ func Move(cfg MoveConfig) error {
 		strings.TrimSpace(cfg.RequestID) != "",
 	)
 
-	client := &http.Client{Timeout: moveRequestTimeout}
-	started := time.Now()
 	var moved factoryapi.Work
-	resp, err := clihttp.PostJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.PostJSON(
+		cfg.Context,
 		moveEndpoint.String(),
 		bytes.NewReader(requestBody),
 		&moved,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: moveEndpoint.Path,
-			LogLabel:     "work move",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move response endpointPath=%s error=unreachable durationMillis=%d", moveEndpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", moveEndpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move response endpointPath=%s status=%d durationMillis=%d", moveEndpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return moveFailureError(resp.StatusCode, errResp)
 		}
@@ -127,7 +129,7 @@ func Move(cfg MoveConfig) error {
 		"work move response endpointPath=%s status=%d durationMillis=%d workId=%s previousState=%s newState=%s",
 		moveEndpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		response.Duration.Milliseconds(),
 		cfg.WorkID,
 		previousState,
 		newState,
@@ -149,40 +151,38 @@ func Move(cfg MoveConfig) error {
 
 func loadWorkStateBeforeMove(cfg MoveConfig) (string, error) {
 	showEndpoint, err := showEndpoint(ShowConfig{
+		Context:   cfg.Context,
 		Server:    cfg.Server,
 		SessionID: cfg.SessionID,
 		WorkID:    cfg.WorkID,
+		HTTP:      cfg.HTTP,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	client := &http.Client{Timeout: moveRequestTimeout}
 	var work factoryapi.Work
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		showEndpoint.String(),
 		&work,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: showEndpoint.Path,
-			LogLabel:     "work move prefetch",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move prefetch response endpointPath=%s error=unreachable durationMillis=%d", showEndpoint.Path, response.Duration.Milliseconds())
 		return "", fmt.Errorf("factory not reachable at %s: %w", showEndpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move prefetch response endpointPath=%s status=%d durationMillis=%d", showEndpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return "", fmt.Errorf("work %q not found: %s", cfg.WorkID, errResp.Message)
 		}
 		return "", fmt.Errorf("work %q not found", cfg.WorkID)
 	}
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work move prefetch response endpointPath=%s status=%d durationMillis=%d", showEndpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return "", fmt.Errorf("get work failed (%d): %s", resp.StatusCode, errResp.Message)
 		}

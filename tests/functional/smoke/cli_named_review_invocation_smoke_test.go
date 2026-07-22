@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/review"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection(t *testing.T) {
@@ -53,7 +53,7 @@ func TestNamedReviewInvocationVariants_RealCLIRequireApprovalAfterRejection(t *t
 		t.Run(tc.name, func(t *testing.T) {
 			response, invocations, err := runNamedReviewInvocationCLIJSON(t, tc.configure, tc.operatorArgs)
 			if err != nil {
-				t.Fatalf("you run --named %s: %v", review.PackagedFactoryName, err)
+				t.Fatalf("you run --named %s: %v", factorydefinitions.PackagedReviewFactoryName, err)
 			}
 			if response.Status != factoryapi.InvocationTerminalStatusCompleted {
 				t.Fatalf("status = %q, want COMPLETED", response.Status)
@@ -77,14 +77,7 @@ func runNamedReviewInvocationCLIJSON(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	factoryDir, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		review.PackagedFactoryName,
-		review.BuiltInFactoryJSON,
-	)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(%s): %v", review.PackagedFactoryName, err)
-	}
+	factoryDir := support.InstallPackagedFactory(t, homeDir, factorydefinitions.PackagedReviewFactoryName)
 	if configure != nil {
 		configure(t, factoryDir)
 	}
@@ -95,7 +88,7 @@ func runNamedReviewInvocationCLIJSON(
 		t.Fatalf("reserve port: %v", err)
 	}
 
-	args := []string{"--json", "run", "--named", review.PackagedFactoryName}
+	args := []string{"--json", "run", "--named", factorydefinitions.PackagedReviewFactoryName}
 	args = append(args, operatorArgs...)
 	args = append(args,
 		"--with-mock-workers", "--no-record",
@@ -151,9 +144,9 @@ func writePackagedReviewMockWorkers(t *testing.T) (string, string) {
 		writePackagedReviewMockWorkerPOSIX(t, scriptDir, invocationPath)
 	}
 	command, args := packagedReviewMockWorkerCommand(scriptDir)
-	cfg := factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{
-		{WorkerName: "review-work-executor", WorkstationName: review.PackagedExecuteWorkstationName, RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: command, Args: args}},
-		{WorkerName: "review-work-reviewer", WorkstationName: review.PackagedReviewWorkstationName, RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: command, Args: args}},
+	cfg := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{
+		{WorkerName: "review-work-executor", WorkstationName: factorydefinitions.PackagedReviewExecuteWorkstationName, RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: command, Args: args}},
+		{WorkerName: "review-work-reviewer", WorkstationName: factorydefinitions.PackagedReviewWorkstationName, RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: command, Args: args}},
 	}}
 	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-review.json"), invocationPath
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apifactorysession "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -19,17 +19,25 @@ type ListDispatchesInput struct {
 // ListDispatches returns deterministic dispatch summaries for one Factory Session
 // through the you.factory_session.list_dispatches MCP tool.
 func ListDispatches(
-	service factorysessionexecution.Service,
+	ctx context.Context,
+	service factorysessionexecution.ExecutionService,
 	input ListDispatchesInput,
 ) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
 	}
 
 	sessionID := input.SessionID
-	result, err := factorysessionexecution.QueryDispatches(context.Background(), service, sessionID, factorysessionexecution.DispatchFilters{
-		Phase: input.Phase, Status: factorysessionexecution.DispatchStatus(input.Status),
+	result, err := service.QueryDispatches(ctx, factorysessionexecution.DispatchQueryRequest{
+		SessionID: sessionID,
+		Filters: factorysessionexecution.DispatchFilters{
+			Phase: input.Phase, Status: factorysessionexecution.DispatchStatus(input.Status),
+		},
 	})
 	if err != nil {
 		envelope := readErrorEnvelope(sessionID, err)
@@ -47,16 +55,21 @@ type ListArtifactsInput struct {
 // ListArtifacts returns deterministic FactoryArtifact summaries for one Factory
 // Session through the you.factory_session.list_artifacts MCP tool.
 func ListArtifacts(
-	service factorysessionexecution.Service,
+	ctx context.Context,
+	service factorysessionexecution.ExecutionService,
 	input ListArtifactsInput,
 ) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
 	}
 
 	sessionID := input.SessionID
-	result, err := service.ListArtifacts(context.Background(), sessionID)
+	result, err := service.ListArtifacts(ctx, sessionID)
 	if err != nil {
 		envelope := readErrorEnvelope(sessionID, err)
 		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
@@ -81,7 +94,11 @@ type ReadEventsResult struct {
 
 // ReadEvents returns ordered Factory Session event facts for reconnect and
 // inspection through the you.factory_session.read_events MCP tool.
-func ReadEvents(service factorysessionexecution.Service, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+func ReadEvents(ctx context.Context, service factorysessionexecution.ExecutionService, prepare factorysessionexecution.RequestPreparation, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -97,13 +114,16 @@ func ReadEvents(service factorysessionexecution.Service, input ReadEventsInput) 
 		params.AfterSequence = &sequence
 	}
 	reconnect, err := apifactorysession.EventReconnectRequestFromAPI(params)
+	if err == nil {
+		reconnect, err = prepare.PrepareEventReconnect(reconnect)
+	}
 	if err != nil {
 		envelope := requestValidationErrorEnvelope(err)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
 	}
 
 	sessionID := input.SessionID
-	result, err := service.ReadEvents(context.Background(), sessionID, reconnect)
+	result, err := service.ReadEvents(ctx, sessionID, reconnect)
 	if err != nil {
 		envelope := eventReadErrorEnvelope(sessionID, err)
 		return ToolResponse[ReadEventsResult]{Error: &envelope}
@@ -130,16 +150,22 @@ type ControlInput struct {
 // Control applies one durable Factory Session lifecycle control through the
 // you.factory_session.control MCP tool.
 func Control(
-	service factorysessionexecution.Service,
+	ctx context.Context,
+	service factorysessionexecution.ExecutionService,
+	prepare factorysessionexecution.RequestPreparation,
 	input ControlInput,
 ) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
+	if ctx == nil {
+		envelope := executionErrorEnvelope(errMissingRequestContext)
+		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Error: &envelope}
+	}
 	if service == nil {
 		envelope := unavailableServiceErrorEnvelope()
 		return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Error: &envelope}
 	}
 
 	sessionID := input.SessionID
-	result, err := invokeLifecycleControl(service, input)
+	result, err := invokeLifecycleControl(ctx, service, prepare, input)
 	if err != nil {
 		var controlErr *factorysessionexecution.ControlError
 		if errors.As(err, &controlErr) {
@@ -156,71 +182,77 @@ func Control(
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this MCP control router keeps lifecycle kind dispatch on one seam.
 func invokeLifecycleControl(
-	service factorysessionexecution.Service,
+	ctx context.Context,
+	service factorysessionexecution.ExecutionService,
+	prepare factorysessionexecution.RequestPreparation,
 	input ControlInput,
 ) (factorysessionexecution.LifecycleControlResult, error) {
-	ctx := context.Background()
 	sessionID := input.SessionID
 
 	switch input.Operation {
 	case factoryapi.FactorySessionLifecycleControlKindPause:
-		control, err := normalizeControlInput(input)
+		control, err := prepareControlInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.Pause(ctx, sessionID, control)
 	case factoryapi.FactorySessionLifecycleControlKindResume:
-		control, err := normalizeControlInput(input)
+		control, err := prepareControlInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.Resume(ctx, sessionID, control)
 	case factoryapi.FactorySessionLifecycleControlKindCancel:
-		control, err := normalizeControlInput(input)
+		control, err := prepareControlInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.Cancel(ctx, sessionID, control)
 	case factoryapi.FactorySessionLifecycleControlKindTerminate:
-		control, err := normalizeControlInput(input)
+		control, err := prepareControlInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.Terminate(ctx, sessionID, control)
 	case factoryapi.FactorySessionLifecycleControlKindApprove:
-		approve, err := normalizeApproveInput(input)
+		approve, err := prepareApproveInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.Approve(ctx, sessionID, approve)
 	case factoryapi.FactorySessionLifecycleControlKindRetryDispatch:
-		retry, err := normalizeRetryDispatchInput(input)
+		retry, err := prepareRetryDispatchInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.RetryDispatch(ctx, sessionID, retry)
 	case factoryapi.FactorySessionLifecycleControlKindInterruptDispatch:
-		interrupt, err := normalizeInterruptDispatchInput(input)
+		interrupt, err := prepareInterruptDispatchInput(prepare, input)
 		if err != nil {
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.InterruptDispatch(ctx, sessionID, interrupt)
 	default:
-		return factorysessionexecution.LifecycleControlResult{}, factorysessionexecution.NewValidationError(
-			"operation",
-			"unsupported lifecycle control operation",
-		)
+		return factorysessionexecution.LifecycleControlResult{}, &factorysessionexecution.ExecutionValidationError{
+			Field: "operation", Message: "unsupported lifecycle control operation",
+		}
 	}
 }
 
-func normalizeControlInput(input ControlInput) (factorysessionexecution.ControlRequest, error) {
-	return factorysessionexecution.NormalizeControlRequest(factorysessionexecution.ControlRequest{
+func prepareControlInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.ControlRequest, error) {
+	if prepare == nil {
+		return factorysessionexecution.ControlRequest{}, errors.New("Factory Session request preparation is required")
+	}
+	return prepare.PrepareControl(factorysessionexecution.ControlRequest{
 		RequestID: derefString(input.RequestID),
 		Reason:    derefString(input.Reason),
 	})
 }
 
-func normalizeApproveInput(input ControlInput) (factorysessionexecution.ApproveRequest, error) {
+func prepareApproveInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.ApproveRequest, error) {
+	if prepare == nil {
+		return factorysessionexecution.ApproveRequest{}, errors.New("Factory Session request preparation is required")
+	}
 	approve := factorysessionexecution.ApproveRequest{
 		ControlRequest: factorysessionexecution.ControlRequest{
 			RequestID: derefString(input.RequestID),
@@ -231,10 +263,13 @@ func normalizeApproveInput(input ControlInput) (factorysessionexecution.ApproveR
 	if input.ApprovedPolicy != nil {
 		approve.ApprovedPolicy = *input.ApprovedPolicy
 	}
-	return factorysessionexecution.NormalizeApproveRequest(approve)
+	return prepare.PrepareApprove(approve)
 }
 
-func normalizeRetryDispatchInput(input ControlInput) (factorysessionexecution.RetryDispatchRequest, error) {
+func prepareRetryDispatchInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.RetryDispatchRequest, error) {
+	if prepare == nil {
+		return factorysessionexecution.RetryDispatchRequest{}, errors.New("Factory Session request preparation is required")
+	}
 	retry := factorysessionexecution.RetryDispatchRequest{
 		ControlRequest: factorysessionexecution.ControlRequest{
 			RequestID: derefString(input.RequestID),
@@ -242,10 +277,13 @@ func normalizeRetryDispatchInput(input ControlInput) (factorysessionexecution.Re
 		},
 		DispatchID: derefString(input.DispatchID),
 	}
-	return factorysessionexecution.NormalizeRetryDispatchRequest(retry)
+	return prepare.PrepareRetryDispatch(retry)
 }
 
-func normalizeInterruptDispatchInput(input ControlInput) (factorysessionexecution.InterruptDispatchRequest, error) {
+func prepareInterruptDispatchInput(prepare factorysessionexecution.RequestPreparation, input ControlInput) (factorysessionexecution.InterruptDispatchRequest, error) {
+	if prepare == nil {
+		return factorysessionexecution.InterruptDispatchRequest{}, errors.New("Factory Session request preparation is required")
+	}
 	interrupt := factorysessionexecution.InterruptDispatchRequest{
 		ControlRequest: factorysessionexecution.ControlRequest{
 			RequestID: derefString(input.RequestID),
@@ -253,7 +291,7 @@ func normalizeInterruptDispatchInput(input ControlInput) (factorysessionexecutio
 		},
 		DispatchID: derefString(input.DispatchID),
 	}
-	return factorysessionexecution.NormalizeInterruptDispatchRequest(interrupt)
+	return prepare.PrepareInterruptDispatch(interrupt)
 }
 
 func derefString(value *string) string {

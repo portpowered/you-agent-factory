@@ -14,13 +14,14 @@ import (
 	"testing"
 	"time"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	cli "github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factory "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
-	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpstdio "github.com/portpowered/infinite-you/pkg/transports/mcp/stdio"
 )
 
 const simpleValidWorkflowSource = `
@@ -31,7 +32,7 @@ log("starting");
 
 // pkgmaintcheck:ignore-cyclomatic-complexity install smoke keeps discovery, validate, async start, and polling assertions on one documented stdio path.
 func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
-	service := newContractFixtureService(t)
+	service := installSmokeExecutionScript{}
 	projectRoot := writeValidWorkflowFixture(t)
 
 	client, stdinWrite, serveErr := startRunServeSmokeServer(t, service)
@@ -45,7 +46,7 @@ func TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll(t *testing.T) {
 
 func startRunServeSmokeServer(
 	t *testing.T,
-	service *factorysessionexecution.FakeService,
+	service factorysessions.ExecutionService,
 ) (*stdioMCPClient, *os.File, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
@@ -75,35 +76,38 @@ func startRunServeSmokeServer(
 
 func executeGeneratedMCPServe(
 	ctx context.Context,
-	service factorysessionexecution.Service,
+	service factorysessions.ExecutionService,
 	stdin io.Reader,
 	stdout io.Writer,
 	wantRuntime bool,
 	wantProjectRoot string,
 ) error {
-	startup := func(ctx context.Context, request startupcli.Request) error {
-		if request.Kind != startupcli.KindMCPServe {
-			return fmt.Errorf("generated command startup kind = %q, want %q", request.Kind, startupcli.KindMCPServe)
-		}
-		if request.MCP.RuntimeBacked != wantRuntime || request.MCP.ProjectRoot != wantProjectRoot {
+	initializeStdio := func(ctx context.Context, intent startupcli.MCPIntent) error {
+		if intent.RuntimeBacked != wantRuntime || intent.ProjectRoot != wantProjectRoot {
 			return fmt.Errorf(
 				"generated command MCP intent = %#v, want runtime=%t project-root=%q",
-				request.MCP,
+				intent,
 				wantRuntime,
 				wantProjectRoot,
 			)
 		}
-		return mcpcli.RunServe(ctx, mcpcli.ServeConfig{
-			Service: service,
-			Stdin:   request.MCP.Stdin,
-			Stdout:  request.MCP.Stdout,
-		})
+		session, err := mcpstdio.Open(
+			service,
+			installSmokeRequestPreparation(),
+			installSmokeWorkflowDefinitions(),
+			intent.Stdin,
+			intent.Stdout,
+		)
+		if err != nil {
+			return err
+		}
+		return session.Run(ctx)
 	}
-	root := cli.NewRootCommandWithOptions(cli.RootCommandOptions{Startup: startup})
+	root := mcpcli.NewCommandWithStdioInitializer(initializeStdio, nil)
 	root.SetIn(stdin)
 	root.SetOut(stdout)
 	root.SetErr(io.Discard)
-	args := []string{"mcp", "serve"}
+	args := []string{"serve"}
 	if wantRuntime {
 		args = append(args, "--runtime")
 		if wantProjectRoot != "" {
@@ -112,6 +116,97 @@ func executeGeneratedMCPServe(
 	}
 	root.SetArgs(args)
 	return root.ExecuteContext(ctx)
+}
+
+func installSmokeRequestPreparation() factorysessions.RequestPreparation {
+	return installSmokeRequestPreparationCallbacks{
+		start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+			return request, nil
+		},
+		result: func(request factorysessions.ResultRequest) (factorysessions.ResultRequest, error) {
+			return request, nil
+		},
+	}
+}
+
+type installSmokeRequestPreparationCallbacks struct {
+	start  func(factorysessions.StartRequest) (factorysessions.StartRequest, error)
+	result func(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
+}
+
+func (callbacks installSmokeRequestPreparationCallbacks) PrepareStart(
+	request factorysessions.StartRequest,
+) (factorysessions.StartRequest, error) {
+	if callbacks.start == nil {
+		return factorysessions.StartRequest{}, fmt.Errorf("unexpected PrepareStart call")
+	}
+	return callbacks.start(request)
+}
+
+func (installSmokeRequestPreparationCallbacks) PrepareControl(
+	factorysessions.ControlRequest,
+) (factorysessions.ControlRequest, error) {
+	return factorysessions.ControlRequest{}, fmt.Errorf("unexpected PrepareControl call")
+}
+
+func (installSmokeRequestPreparationCallbacks) PrepareApprove(
+	factorysessions.ApproveRequest,
+) (factorysessions.ApproveRequest, error) {
+	return factorysessions.ApproveRequest{}, fmt.Errorf("unexpected PrepareApprove call")
+}
+
+func (installSmokeRequestPreparationCallbacks) PrepareRetryDispatch(
+	factorysessions.RetryDispatchRequest,
+) (factorysessions.RetryDispatchRequest, error) {
+	return factorysessions.RetryDispatchRequest{}, fmt.Errorf("unexpected PrepareRetryDispatch call")
+}
+
+func (installSmokeRequestPreparationCallbacks) PrepareInterruptDispatch(
+	factorysessions.InterruptDispatchRequest,
+) (factorysessions.InterruptDispatchRequest, error) {
+	return factorysessions.InterruptDispatchRequest{}, fmt.Errorf("unexpected PrepareInterruptDispatch call")
+}
+
+func (installSmokeRequestPreparationCallbacks) PrepareListSessions(
+	factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsRequest, error) {
+	return factorysessions.ListSessionsRequest{}, fmt.Errorf("unexpected PrepareListSessions call")
+}
+
+func (callbacks installSmokeRequestPreparationCallbacks) PrepareResult(
+	request factorysessions.ResultRequest,
+) (factorysessions.ResultRequest, error) {
+	if callbacks.result == nil {
+		return factorysessions.ResultRequest{}, fmt.Errorf("unexpected PrepareResult call")
+	}
+	return callbacks.result(request)
+}
+
+func (installSmokeRequestPreparationCallbacks) PrepareEventReconnect(
+	factorysessions.EventReconnectRequest,
+) (factorysessions.EventReconnectRequest, error) {
+	return factorysessions.EventReconnectRequest{}, fmt.Errorf("unexpected PrepareEventReconnect call")
+}
+
+func installSmokeWorkflowDefinitions() factory.WorkflowPreviewOperation {
+	return testutil.ScriptedJavaScriptWorkflowDefinitions{
+		PreviewWorkflowFunc: func(_ context.Context, input factory.WorkflowPreviewInput) (factory.WorkflowPreview, error) {
+			sourceRef := factory.WorkflowSourceProjectClaudeWorkflowsDir + "/" + input.Source.Value + ".js"
+			return factory.WorkflowPreview{
+				Valid: true,
+				SourceResolution: factory.WorkflowSourceResolution{
+					RequestKind:  input.Source.Kind,
+					RequestValue: input.Source.Value,
+					ResolvedKind: input.Source.Kind,
+					SourceRef:    sourceRef,
+					SourceHash:   "sha256:install-smoke",
+					Found:        true,
+					ArtifactRoot: factory.WorkflowSourceArtifactRootDecision{Allowed: true},
+				},
+				PolicyPreview: factory.JavaScriptPolicyPreview{PolicyHash: "sha256:install-smoke-policy"},
+			}, nil
+		},
+	}
 }
 
 func assertInstallSmokeInitialize(t *testing.T, client *stdioMCPClient) {
@@ -318,20 +413,60 @@ func decodeToolResponse[T any](t *testing.T, response mcpJSONRPCResponse) mcpfac
 	return toolResponse
 }
 
-func newContractFixtureService(t *testing.T) *factorysessionexecution.FakeService {
-	t.Helper()
-	path := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(path)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-	return service
+type installSmokeExecutionScript struct {
+	factorysessions.ExecutionService
+}
+
+func (installSmokeExecutionScript) StartAsync(
+	context.Context,
+	factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	const sessionID = "dur-sess-js-run-n-001"
+	return factorysessions.AsyncStartResult{
+		SessionID: sessionID,
+		Status:    string(factorysessions.LifecycleStatusRunning),
+		Links: factorysessions.InspectionLinks{
+			Session: "/factory-sessions/" + sessionID,
+			Status:  "/factory-sessions/" + sessionID,
+			Results: "/factory-sessions/" + sessionID + "/results",
+		},
+	}, nil
+}
+
+func (installSmokeExecutionScript) GetSession(
+	context.Context,
+	string,
+) (factorysessions.SessionReadResult, error) {
+	return factorysessions.SessionReadResult{
+		SessionID: "dur-sess-js-run-n-001",
+		Status:    factorysessions.LifecycleStatusRunning,
+		Links: factorysessions.InspectionLinks{
+			Session: "/factory-sessions/dur-sess-js-run-n-001",
+			Status:  "/factory-sessions/dur-sess-js-run-n-001",
+			Results: "/factory-sessions/dur-sess-js-run-n-001/results",
+		},
+	}, nil
+}
+
+func (installSmokeExecutionScript) GetResult(
+	context.Context,
+	string,
+	factorysessions.ResultRequest,
+) (factorysessions.ResultReadResult, error) {
+	return factorysessions.ResultReadResult{
+		SessionID:     "dur-sess-js-run-n-001",
+		SessionStatus: factorysessions.LifecycleStatusRunning,
+		ResultStatus:  factorysessions.ResultStatusNotReady,
+		Availability: &factorysessions.ResultAvailabilityDetail{
+			Retryable: true,
+		},
+	}, nil
 }
 
 func writeValidWorkflowFixture(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, factory.WorkflowSourceProjectClaudeWorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
@@ -359,34 +494,5 @@ func asyncRunningExecutionRequest() factoryapi.FactorySessionExecutionRequest {
 			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
 			FactoryId: &factoryID,
 		},
-	}
-}
-
-func TestRunServe_InstallSmoke_RejectsMissingInjectedService(t *testing.T) {
-	stdinRead, stdinWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdin pipe: %v", err)
-	}
-	stdoutRead, stdoutWrite, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("stdout pipe: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = stdinRead.Close()
-		_ = stdinWrite.Close()
-		_ = stdoutRead.Close()
-		_ = stdoutWrite.Close()
-	})
-
-	err = mcpcli.RunServe(context.Background(), mcpcli.ServeConfig{
-		FixtureCatalogPath: filepath.Join(t.TempDir(), "missing-fixtures.json"),
-		Stdout:             stdoutWrite,
-		Stdin:              stdinRead,
-	})
-	if err == nil {
-		t.Fatal("RunServe: expected fixture catalog load failure")
-	}
-	if !strings.Contains(err.Error(), "durable execution service is required") {
-		t.Fatalf("RunServe error = %q, want missing injected service failure", err)
 	}
 }

@@ -9,20 +9,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const lifecycleControlRequestTimeout = 10 * time.Second
-
 // LifecycleControlConfig holds parameters for session pause and resume commands.
 type LifecycleControlConfig struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	RequestID   string
@@ -32,6 +30,15 @@ type LifecycleControlConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	HTTP        clihttp.Protocol
+}
+
+func NewPause(transport clihttp.Protocol) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Pause(cfg) }
+}
+
+func NewResume(transport clihttp.Protocol) func(LifecycleControlConfig) error {
+	return func(cfg LifecycleControlConfig) error { cfg.HTTP = transport; return Resume(cfg) }
 }
 
 // LifecycleControlRejectedError reports a typed lifecycle-control rejection returned
@@ -67,13 +74,20 @@ func Resume(cfg LifecycleControlConfig) error {
 	return invokeLifecycleControl(cfg, factoryapi.FactorySessionLifecycleControlKindResume, "resume")
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func invokeLifecycleControl(
 	cfg LifecycleControlConfig,
 	operation factoryapi.FactorySessionLifecycleControlKind,
 	operationLabel string,
 ) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
 	endpoint, err := lifecycleControlEndpoint(cfg, operationLabel)
@@ -96,9 +110,7 @@ func invokeLifecycleControl(
 		return err
 	}
 
-	client := &http.Client{Timeout: lifecycleControlRequestTimeout}
-	started := time.Now()
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, endpoint.String(), body)
+	req, err := http.NewRequestWithContext(cfg.Context, http.MethodPost, endpoint.String(), body)
 	if err != nil {
 		return fmt.Errorf("build factory session %s request: %w", operationLabel, err)
 	}
@@ -106,7 +118,7 @@ func invokeLifecycleControl(
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := client.Do(req)
+	transportResponse, err := cfg.HTTP.Execute(req)
 	if err != nil {
 		clidiag.Printf(
 			cfg.Diagnostics,
@@ -114,9 +126,13 @@ func invokeLifecycleControl(
 			"session %s response endpointPath=%s error=unreachable durationMillis=%d",
 			operationLabel,
 			endpoint.Path,
-			time.Since(started).Milliseconds(),
+			transportResponse.Duration.Milliseconds(),
 		)
 		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
+	}
+	resp := transportResponse.HTTP
+	if resp == nil {
+		return fmt.Errorf("factory sessions endpoint returned no response")
 	}
 	defer resp.Body.Close()
 
@@ -127,7 +143,7 @@ func invokeLifecycleControl(
 		operationLabel,
 		endpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		transportResponse.Duration.Milliseconds(),
 	)
 
 	switch resp.StatusCode {

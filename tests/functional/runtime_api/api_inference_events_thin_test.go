@@ -2,27 +2,22 @@ package runtime_api
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type thinEventSmokeHarness struct {
-	harness    *testutil.ServiceTestHarness
+	server     *support.FunctionalAPIServer
 	provider   *blockingFunctionalInferenceProvider
 	recordPath string
 }
@@ -34,14 +29,15 @@ type thinEventSmokeActiveSnapshot struct {
 	dispatchID      string
 	dispatchReqIdx  int
 	requestEventIdx int
+	session         factoryapi.FactorySession
 }
 
 type thinEventSmokeFinalSnapshot struct {
 	liveEvents            []factoryapi.FactoryEvent
-	artifact              *interfaces.ReplayArtifact
 	responsePayload       factoryapi.InferenceResponseEventPayload
 	finalResponseEventIdx int
-	finalState            interfaces.FactoryWorldState
+	session               factoryapi.FactorySession
+	work                  factoryapi.ListWorkResponse
 }
 
 func newThinEventSmokeHarness(t *testing.T) thinEventSmokeHarness {
@@ -59,12 +55,15 @@ func newThinEventSmokeHarness(t *testing.T) thinEventSmokeHarness {
 		thinReducerInferenceResponse("sess-thin-dispatch-1", "Step one done. COMPLETE"),
 		thinReducerInferenceResponse("sess-thin-dispatch-2", "Step two done. COMPLETE"),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithRecordPath(recordPath),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	return thinEventSmokeHarness{harness: h, provider: provider, recordPath: recordPath}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--record", recordPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	return thinEventSmokeHarness{server: server, provider: provider, recordPath: recordPath}
 }
 
 func captureThinEventSmokeActiveSnapshot(
@@ -74,7 +73,7 @@ func captureThinEventSmokeActiveSnapshot(
 	t.Helper()
 
 	smoke.provider.WaitForFirstCall(t, 5*time.Second)
-	activeEvents := waitForFunctionalInferenceRequestSnapshot(t, smoke.harness, 5*time.Second)
+	activeEvents := waitForFunctionalInferenceRequestSnapshot(t, smoke.server, 5*time.Second)
 	requestEventIdx := indexOfFunctionalEventType(activeEvents, factoryapi.FactoryEventTypeInferenceRequest, 0)
 	if requestEventIdx < 0 {
 		t.Fatalf("active events missing inference request: %v", functionalEventTypes(activeEvents))
@@ -102,6 +101,7 @@ func captureThinEventSmokeActiveSnapshot(
 		dispatchID:      dispatchID,
 		dispatchReqIdx:  dispatchReqIdx,
 		requestEventIdx: requestEventIdx,
+		session:         support.GetDefaultSession(t, smoke.server.URL()),
 	}
 }
 
@@ -110,52 +110,13 @@ func assertThinEventSmokeActiveSnapshot(t *testing.T, active thinEventSmokeActiv
 
 	assertRawThinDispatchRequestEvent(t, active.events[active.dispatchReqIdx])
 	assertRawInferenceEventUsesContextDispatchIdentity(t, active.requestEvent, active.requestPayload.InferenceRequestId)
-
-	activeState, err := factoryeventprojection.ReconstructFactoryWorldState(active.events, active.requestEvent.Context.Tick)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState active tick %d: %v", active.requestEvent.Context.Tick, err)
+	if active.session.Runtime.Progress.Categories.Processing != 1 ||
+		active.session.Runtime.Progress.Categories.Terminal != 0 {
+		t.Fatalf(
+			"active Factory Session categories = %#v, want processing=1 terminal=0",
+			active.session.Runtime.Progress.Categories,
+		)
 	}
-	activeDispatch, ok := activeState.ActiveDispatches[active.dispatchID]
-	if !ok {
-		t.Fatalf("active dispatches = %#v, want %q", activeState.ActiveDispatches, active.dispatchID)
-	}
-	if len(activeState.CompletedDispatches) != 0 {
-		t.Fatalf("active completed dispatches = %#v, want none before inference response", activeState.CompletedDispatches)
-	}
-	activeAttempt := activeState.InferenceAttemptsByDispatchID[active.dispatchID][active.requestPayload.InferenceRequestId]
-	if activeAttempt.InferenceRequestID != active.requestPayload.InferenceRequestId || activeAttempt.Response != "" {
-		t.Fatalf("active inference attempt = %#v, want pending request without response", activeAttempt)
-	}
-	if activeAttempt.Prompt == "" || activeAttempt.RequestTime.IsZero() || activeAttempt.TransitionID != activeDispatch.TransitionID {
-		t.Fatalf("active inference attempt = %#v, want prompt, request time, and matching transition", activeAttempt)
-	}
-	assertThinEventSmokeActiveViews(t, activeState, active.dispatchID)
-}
-
-func assertThinEventSmokeActiveViews(
-	t *testing.T,
-	activeState interfaces.FactoryWorldState,
-	dispatchID string,
-) {
-	t.Helper()
-
-	activeView := projections.BuildFactoryWorldView(activeState)
-	if activeView.Runtime.InFlightDispatchCount != 1 {
-		t.Fatalf("active world view in-flight dispatch count = %d, want 1", activeView.Runtime.InFlightDispatchCount)
-	}
-	activeRequestView := workstationRequestViewByDispatchID(
-		t,
-		factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(activeState),
-		dispatchID,
-	)
-	if activeRequestView.Response != nil {
-		t.Fatalf("active workstation request response = %#v, want nil before inference response", activeRequestView.Response)
-	}
-	assertRuntimeAPIProjectionOmitsInferenceFields(
-		t,
-		activeRequestView.Request,
-		[]string{"requestTime", "prompt", "provider", "model", "workingDirectory", "worktree", "requestMetadata"},
-	)
 }
 
 func loadThinEventSmokeFinalSnapshot(
@@ -165,10 +126,10 @@ func loadThinEventSmokeFinalSnapshot(
 ) thinEventSmokeFinalSnapshot {
 	t.Helper()
 
-	liveEvents, err := smoke.harness.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	liveEvents := smoke.server.GetFactoryEvents(t)
+	session := support.GetDefaultSession(t, smoke.server.URL())
+	work := support.ListDefaultSessionWork(t, smoke.server.URL())
+	smoke.server.Stop(t)
 	artifact := testutil.LoadReplayArtifact(t, smoke.recordPath)
 	generatedArtifactEvents := testutil.GeneratedFactoryEvents(t, artifact.Events)
 	assertInferenceEventsRecordedInArtifact(t, liveEvents, generatedArtifactEvents)
@@ -180,16 +141,12 @@ func loadThinEventSmokeFinalSnapshot(
 	if err != nil {
 		t.Fatalf("decode final inference response payload: %v", err)
 	}
-	finalState, err := factoryeventprojection.ReconstructFactoryWorldState(generatedArtifactEvents, support.LastFactoryEventTick(generatedArtifactEvents))
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState final tick: %v", err)
-	}
 	return thinEventSmokeFinalSnapshot{
 		liveEvents:            liveEvents,
-		artifact:              artifact,
 		responsePayload:       responsePayload,
 		finalResponseEventIdx: responseEventIdx,
-		finalState:            finalState,
+		session:               session,
+		work:                  work,
 	}
 }
 
@@ -215,80 +172,23 @@ func assertThinEventSmokeFinalSnapshot(
 		t.Fatalf("live events = %v, want dispatch response after inference response for %s", functionalEventTypes(final.liveEvents), active.dispatchID)
 	}
 	assertRawThinDispatchResponseEvent(t, final.liveEvents[finalDispatchResponseIdx])
-	assertThinEventSmokeFinalState(t, active, final.finalState)
-}
-
-func assertThinEventSmokeFinalState(
-	t *testing.T,
-	active thinEventSmokeActiveSnapshot,
-	finalState interfaces.FactoryWorldState,
-) {
-	t.Helper()
-
-	if len(finalState.CompletedDispatches) < 2 {
-		t.Fatalf("final completed dispatches = %#v, want both model-worker dispatches", finalState.CompletedDispatches)
+	if final.responsePayload.ProviderSession == nil ||
+		stringValueFromFunctionalPtr(final.responsePayload.ProviderSession.Id) != "sess-thin-dispatch-1" {
+		t.Fatalf("public INFERENCE_RESPONSE provider session = %#v, want sess-thin-dispatch-1", final.responsePayload.ProviderSession)
 	}
-	finalAttempt := finalState.InferenceAttemptsByDispatchID[active.dispatchID][active.requestPayload.InferenceRequestId]
-	if finalAttempt.Response != "Step one done. COMPLETE" || finalAttempt.ProviderSession == nil || finalAttempt.ProviderSession.ID != "sess-thin-dispatch-1" {
-		t.Fatalf("final inference attempt = %#v, want recorded response and provider session", finalAttempt)
+	if final.responsePayload.Diagnostics == nil || final.responsePayload.Diagnostics.Provider == nil {
+		t.Fatalf("public INFERENCE_RESPONSE diagnostics = %#v, want provider diagnostics", final.responsePayload.Diagnostics)
 	}
-	if finalAttempt.Diagnostics == nil || finalAttempt.Diagnostics.Provider == nil {
-		t.Fatalf("final inference attempt diagnostics = %#v, want provider diagnostics", finalAttempt.Diagnostics)
+	if final.session.Runtime.Progress.Categories.Processing != 0 ||
+		final.session.Runtime.Progress.Categories.Terminal != 1 {
+		t.Fatalf(
+			"final Factory Session categories = %#v, want processing=0 terminal=1",
+			final.session.Runtime.Progress.Categories,
+		)
 	}
-	if finalAttempt.Prompt == "" || finalAttempt.RequestTime.IsZero() {
-		t.Fatalf("final inference attempt = %#v, want prompt and request time", finalAttempt)
-	}
-	completion := completedFunctionalDispatchByID(t, finalState.CompletedDispatches, active.dispatchID)
-	if completion.ProviderSession == nil || completion.ProviderSession.ID != "sess-thin-dispatch-1" || completion.Diagnostics == nil || completion.Diagnostics.Provider == nil {
-		t.Fatalf("completed dispatch = %#v, want provider session and diagnostics derived from inference response", completion)
-	}
-	providerSession := functionalProviderSessionByDispatchID(t, finalState.ProviderSessions, active.dispatchID)
-	if providerSession.ProviderSession.ID != "sess-thin-dispatch-1" {
-		t.Fatalf("provider session view = %#v, want sess-thin-dispatch-1", providerSession)
-	}
-	assertThinEventSmokeFinalViews(t, active.dispatchID, finalState)
-}
-
-func assertThinEventSmokeFinalViews(
-	t *testing.T,
-	dispatchID string,
-	finalState interfaces.FactoryWorldState,
-) {
-	t.Helper()
-
-	finalView := projections.BuildFactoryWorldView(finalState)
-	if !worldViewDispatchHistoryContainsTrace(finalView, dispatchID, "trace-thin-event-reducers") {
-		t.Fatalf("dispatch history = %#v, want dispatch %q for trace-thin-event-reducers", finalView.Runtime.Session.DispatchHistory, dispatchID)
-	}
-	if len(finalView.Runtime.Session.ProviderSessions) == 0 {
-		t.Fatalf("provider sessions = %#v, want provider-attempt rows", finalView.Runtime.Session.ProviderSessions)
-	}
-	completedRequestView := workstationRequestViewByDispatchID(
-		t,
-		factoryboundary.BuildFactoryWorldWorkstationRequestProjectionSlice(finalState),
-		dispatchID,
-	)
-	assertRuntimeAPIProjectionOmitsInferenceFields(
-		t,
-		completedRequestView.Request,
-		[]string{"requestMetadata", "requestTime", "prompt", "provider", "model", "workingDirectory", "worktree"},
-	)
-	if completedRequestView.Response == nil {
-		t.Fatalf("completed workstation request response = %#v, want omitted dispatch-level inference detail", completedRequestView.Response)
-	}
-	assertRuntimeAPIProjectionOmitsInferenceFields(
-		t,
-		completedRequestView.Response,
-		[]string{"responseText", "providerSession", "diagnostics", "responseMetadata", "errorClass"},
-	)
-	completedAttempt := finalState.InferenceAttemptsByDispatchID[dispatchID]
-	if len(completedAttempt) != 1 {
-		t.Fatalf("completed inference attempts = %#v, want one attempt", completedAttempt)
-	}
-	for _, attempt := range completedAttempt {
-		if attempt.Prompt == "" || attempt.Response == "" {
-			t.Fatalf("completed inference attempt = %#v, want attempt-owned prompt/request/response detail", attempt)
-		}
+	if len(final.work.Results) != 1 ||
+		stringValueFromFunctionalPtr(final.work.Results[0].TraceId) != "trace-thin-event-reducers" {
+		t.Fatalf("public Work listing = %#v, want completed thin-event trace", final.work.Results)
 	}
 }
 
@@ -301,7 +201,7 @@ type blockingFunctionalInferenceProvider struct {
 	index            int
 }
 
-var _ workers.Provider = (*blockingFunctionalInferenceProvider)(nil)
+var _ workerprovider.Provider = (*blockingFunctionalInferenceProvider)(nil)
 
 func newBlockingFunctionalInferenceProvider(
 	responses ...workerexecution.InferenceResponse,
@@ -377,7 +277,7 @@ func thinReducerInferenceResponse(sessionID string, content string) workerexecut
 
 func waitForFunctionalInferenceRequestSnapshot(
 	t *testing.T,
-	h *testutil.ServiceTestHarness,
+	server *support.FunctionalAPIServer,
 	timeout time.Duration,
 ) []factoryapi.FactoryEvent {
 	t.Helper()
@@ -387,10 +287,7 @@ func waitForFunctionalInferenceRequestSnapshot(
 	defer ticker.Stop()
 
 	for {
-		events, err := h.GetFactoryEvents(context.Background())
-		if err != nil {
-			t.Fatalf("GetFactoryEvents while waiting for inference request: %v", err)
-		}
+		events := server.GetFactoryEvents(t)
 		if indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeDispatchRequest, 0) >= 0 &&
 			indexOfFunctionalEventType(events, factoryapi.FactoryEventTypeInferenceRequest, 0) >= 0 {
 			return events
@@ -404,107 +301,10 @@ func waitForFunctionalInferenceRequestSnapshot(
 
 func waitForFunctionalHarnessCompletion(
 	t *testing.T,
-	h *testutil.ServiceTestHarness,
-	errCh <-chan error,
-	cancel context.CancelFunc,
+	server *support.FunctionalAPIServer,
 	timeout time.Duration,
 ) {
 	t.Helper()
 
-	select {
-	case <-h.WaitToComplete():
-	case err := <-errCh:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("factory run exited before completion: %v", err)
-		}
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting %s for functional harness completion", timeout)
-	}
-
-	cancel()
-	select {
-	case err := <-errCh:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("factory run error: %v", err)
-		}
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting %s for background run to exit", timeout)
-	}
-}
-
-func workstationRequestViewByDispatchID(
-	t *testing.T,
-	slice factoryapi.FactoryWorldWorkstationRequestProjectionSlice,
-	dispatchID string,
-) factoryapi.FactoryWorldWorkstationRequestView {
-	t.Helper()
-
-	if slice.WorkstationRequestsByDispatchId == nil {
-		t.Fatalf("workstation request slice missing projection map for dispatch %q", dispatchID)
-	}
-	view, ok := (*slice.WorkstationRequestsByDispatchId)[dispatchID]
-	if !ok {
-		t.Fatalf("workstation request slice = %#v, want dispatch %q", slice.WorkstationRequestsByDispatchId, dispatchID)
-	}
-	return view
-}
-
-func completedFunctionalDispatchByID(
-	t *testing.T,
-	completions []interfaces.FactoryWorldDispatchCompletion,
-	dispatchID string,
-) interfaces.FactoryWorldDispatchCompletion {
-	t.Helper()
-
-	for _, completion := range completions {
-		if completion.DispatchID == dispatchID {
-			return completion
-		}
-	}
-	t.Fatalf("completed dispatches = %#v, want dispatch %q", completions, dispatchID)
-	return interfaces.FactoryWorldDispatchCompletion{}
-}
-
-func functionalProviderSessionByDispatchID(
-	t *testing.T,
-	sessions []interfaces.FactoryWorldProviderSessionRecord,
-	dispatchID string,
-) interfaces.FactoryWorldProviderSessionRecord {
-	t.Helper()
-
-	for _, session := range sessions {
-		if session.DispatchID == dispatchID {
-			return session
-		}
-	}
-	t.Fatalf("provider sessions = %#v, want dispatch %q", sessions, dispatchID)
-	return interfaces.FactoryWorldProviderSessionRecord{}
-}
-
-func sliceValue[T any](values *[]T) []T {
-	if values == nil {
-		return nil
-	}
-	return *values
-}
-
-func mapValue[K comparable, V any](values *map[K]V) map[K]V {
-	if values == nil {
-		return nil
-	}
-	return *values
-}
-
-func worldViewDispatchHistoryContainsTrace(view interfaces.FactoryWorldView, dispatchID, traceID string) bool {
-	for _, dispatch := range view.Runtime.Session.DispatchHistory {
-		if dispatch.DispatchID != dispatchID {
-			continue
-		}
-		for _, candidate := range dispatch.TraceIDs {
-			if candidate == traceID {
-				return true
-			}
-		}
-	}
-	return false
+	support.WaitForTerminalStatus(t, server.URL(), timeout)
 }

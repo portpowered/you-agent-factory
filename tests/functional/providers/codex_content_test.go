@@ -1,15 +1,15 @@
 package providers
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -26,13 +26,8 @@ Process the input task.
 	firstImage := writeCodexContentFixtureImage(t, dir, "one.png")
 	secondImage := writeCodexContentFixtureImage(t, dir, "two.png")
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	testutil.WriteSeedBatchFile(t, dir, work.WorkRequest{
 		RequestID: "request-codex-images",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []work.Work{{
@@ -47,13 +42,10 @@ Process the input task.
 			},
 		}},
 	})
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}
@@ -77,13 +69,8 @@ stopToken: COMPLETE
 Process the input task.
 `)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
+	runner := testutil.NewProviderCommandRunner(platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	testutil.WriteSeedBatchFile(t, dir, work.WorkRequest{
 		RequestID: "request-codex-text",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []work.Work{{
@@ -95,13 +82,10 @@ Process the input task.
 			},
 		}},
 	})
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertCursorProviderCompleted(t, session)
 	if runner.CallCount() != 1 {
 		t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
 	}

@@ -1,19 +1,22 @@
 package factory
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
+
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // UpdateFromFileConfig holds parameters for replacing an existing named factory from disk.
 type UpdateFromFileConfig struct {
-	Name   string
-	From   string
-	Dir    string
-	JSON   bool
-	Output io.Writer
+	Context context.Context
+	Name    string
+	From    string
+	Dir     string
+	JSON    bool
+	Output  io.Writer
 }
 
 // UpdateFromFileResult reports a successful file-based factory update.
@@ -24,16 +27,27 @@ type UpdateFromFileResult struct {
 
 // UpdateFromFile replaces an existing named factory from a factory.json payload.
 func UpdateFromFile(cfg UpdateFromFileConfig) error {
+	return UpdateFromFileWithServices(cfg, nil, nil)
+}
+
+// UpdateFromFileWithServices validates and persists through injected Factory
+// Definitions root capabilities.
+func UpdateFromFileWithServices(
+	cfg UpdateFromFileConfig,
+	persist factorydefinitions.NamedFactoryPersistenceOperation,
+	loadSource factorydefinitions.AuthoredFactorySourceLoader,
+) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("factory update output is required")
 	}
 
 	result, err := persistFromFile(persistFromFileConfig{
-		Mode: persistFromFileModeUpdate,
-		Name: cfg.Name,
-		From: cfg.From,
-		Dir:  cfg.Dir,
-	})
+		Context: cfg.Context,
+		Mode:    persistFromFileModeUpdate,
+		Name:    cfg.Name,
+		From:    cfg.From,
+		Dir:     cfg.Dir,
+	}, persist, loadSource)
 	if err != nil {
 		return renderPersistFromFileError(persistFromFileModeUpdate, err)
 	}

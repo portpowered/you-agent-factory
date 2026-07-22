@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,24 +33,13 @@ func TestFullIdeationPipeline_HappyPath(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().HasTokenInPlace("story:complete")
-	h.Assert().
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:in-review")
-
-	for _, tok := range h.Marking().Tokens {
-		if tok.PlaceID == "story:complete" && tok.Color.TraceID != originTraceID {
-			t.Errorf("TraceID lineage broken: idea had %q, story:complete has %q", originTraceID, tok.Color.TraceID)
-		}
-	}
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 15*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"story:complete": 1, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
+	})
+	assertListedWorkStateTrace(t, listedWork, "story", "complete", originTraceID)
 
 	if provider.CallCount() != 3 {
 		t.Errorf("expected provider called 3 times, got %d", provider.CallCount())
@@ -79,24 +69,13 @@ func TestFullIdeationPipeline_RejectionLoop(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good now. ACCEPTED"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 30*time.Second)
-
-	h.Assert().HasTokenInPlace("story:complete")
-	h.Assert().
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:in-review")
-
-	for _, tok := range h.Marking().Tokens {
-		if tok.PlaceID == "story:complete" && tok.Color.TraceID != originTraceID {
-			t.Errorf("TraceID lineage broken: idea had %q, story:complete has %q", originTraceID, tok.Color.TraceID)
-		}
-	}
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 30*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"story:complete": 1, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
+	})
+	assertListedWorkStateTrace(t, listedWork, "story", "complete", originTraceID)
 
 	if provider.CallCount() != 7 {
 		t.Errorf("expected provider called 7 times, got %d", provider.CallCount())
@@ -123,29 +102,14 @@ func TestFullIdeationPipeline_CrossWorkTypeLineage(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("story:complete").
-		TokenHasTraceID("story:complete", originTraceID)
-	h.Assert().
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:in-review").
-		HasNoTokenInPlace("idea:failed").
-		HasNoTokenInPlace("prd:failed").
-		HasNoTokenInPlace("story:failed")
-
-	for _, tok := range h.Marking().Tokens {
-		if tok.PlaceID != "story:complete" {
-			t.Errorf("unexpected token in non-terminal place %q (id=%s, workType=%s)", tok.PlaceID, tok.ID, tok.Color.WorkTypeID)
-		}
-	}
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 15*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"story:complete": 1, "idea:init": 0, "prd:init": 0, "story:init": 0, "story:in-review": 0,
+		"idea:failed": 0, "prd:failed": 0, "story:failed": 0,
+	})
+	assertListedWorkStateTrace(t, listedWork, "story", "complete", originTraceID)
 
 	if provider.CallCount() != 3 {
 		t.Errorf("expected provider called 3 times, got %d", provider.CallCount())

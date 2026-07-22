@@ -1,12 +1,12 @@
 package factorysession
 
 import (
+	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -81,9 +81,9 @@ func SessionSummaryToAPI(session *factorysessions.LiveSession) factoryapi.Factor
 
 // SessionResponseToAPI maps a live session and its owner-defined runtime
 // projection to the public detail contract.
-func SessionResponseToAPI(ctx factorysessions.ProjectionContext) factoryapi.FactorySession {
-	summary := SessionSummaryToAPI(ctx.Session)
-	runtime := sessionRuntimeToAPI(ctx)
+func SessionResponseToAPI(read factorysessions.SessionProjection) factoryapi.FactorySession {
+	summary := SessionSummaryToAPI(read.Context.Session)
+	runtime := RuntimeProjectionToAPI(read.Runtime, read.Context.NormalizedTarget)
 	return factoryapi.FactorySession{
 		FactoryDir: summary.FactoryDir, FolderPath: summary.FolderPath, Id: summary.Id,
 		IsDefault: summary.IsDefault, Project: summary.Project, Target: summary.Target, Runtime: runtime,
@@ -92,9 +92,9 @@ func SessionResponseToAPI(ctx factorysessions.ProjectionContext) factoryapi.Fact
 
 // SummaryWithRuntimeToAPI maps a live session and runtime projection to the
 // public summary contract.
-func SummaryWithRuntimeToAPI(ctx factorysessions.ProjectionContext) factoryapi.FactorySessionSummary {
-	summary := SessionSummaryToAPI(ctx.Session)
-	runtime := sessionRuntimeToAPI(ctx)
+func SummaryWithRuntimeToAPI(read factorysessions.ReadProjection) factoryapi.FactorySessionSummary {
+	summary := SessionSummaryToAPI(read.Context.Session)
+	runtime := RuntimeProjectionToAPI(read.Runtime, read.Context.NormalizedTarget)
 	summary.Runtime = &runtime
 	return summary
 }
@@ -104,18 +104,12 @@ func ReadProjectionsToAPI(reads []factorysessions.ReadProjection) factoryapi.Lis
 	summaries := make([]factoryapi.FactorySessionSummary, 0, len(reads))
 	for _, read := range reads {
 		if read.RuntimeAvailable {
-			summaries = append(summaries, SummaryWithRuntimeToAPI(read.Context))
+			summaries = append(summaries, SummaryWithRuntimeToAPI(read))
 			continue
 		}
 		summaries = append(summaries, SessionSummaryToAPI(read.Context.Session))
 	}
 	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}
-}
-
-// RuntimeFromContextToAPI projects owner-defined runtime state and maps it to
-// the public contract, including transport-owned stop-summary compatibility.
-func RuntimeFromContextToAPI(ctx factorysessions.ProjectionContext) factoryapi.FactorySessionRuntime {
-	return sessionRuntimeToAPI(ctx)
 }
 
 // RuntimeProjectionToAPI maps the Factory Session-owned runtime projection to
@@ -139,18 +133,82 @@ func RuntimeProjectionToAPI(
 		status := factoryapi.FactorySessionDurableLifecycleStatus(*projection.LifecycleControlStatus)
 		runtime.LifecycleControlStatus = &status
 	}
+	runtime.StopSummary = StopSummaryToAPI(projection.StopSummary)
 	return runtime
 }
 
-func sessionRuntimeToAPI(ctx factorysessions.ProjectionContext) factoryapi.FactorySessionRuntime {
-	projection := factorysessions.ProjectRuntimeContract(ctx)
-	runtime := RuntimeProjectionToAPI(projection, ctx.NormalizedTarget)
-	sessionID := ""
-	if ctx.Session != nil {
-		sessionID = strings.TrimSpace(ctx.Session.ID)
+// StopSummaryToAPI converts the detached owner result to the generated public
+// representation without re-deriving stop policy.
+func StopSummaryToAPI(summary *factorysessions.StopSummary) *factoryapi.FactoryStopSummary {
+	if summary == nil {
+		return nil
 	}
-	runtime.StopSummary = apisurface.BuildFactorySessionStopSummary(sessionID, ctx.Snapshot, ctx.JavaScript)
-	return runtime
+	result := &factoryapi.FactoryStopSummary{
+		SessionId: summary.SessionID,
+		StopKind:  factoryapi.FactoryStopKind(summary.StopKind),
+		WorkId:    summary.WorkID, WorkName: summary.WorkName,
+		WorkTypeName: summary.WorkTypeName, WorkState: summary.WorkState,
+		LatestResultSummary:      summary.LatestResultSummary,
+		SuggestedRecoverySurface: summary.SuggestedRecoverySurface,
+		SuggestedRecoveryAction:  summary.SuggestedRecoveryAction,
+	}
+	if summary.SessionLifecycleStatus != nil {
+		status := factoryapi.FactorySessionDurableLifecycleStatus(*summary.SessionLifecycleStatus)
+		result.SessionLifecycleStatus = &status
+	}
+	if summary.LatestDispatch != nil {
+		dispatch := summary.LatestDispatch
+		result.LatestDispatch = &factoryapi.FactoryStopDispatchSummary{
+			DispatchId:      dispatch.DispatchID,
+			Status:          factoryapi.FactoryDispatchStatus(dispatch.Status),
+			DispatchKind:    factoryapi.FactoryDispatchKind(dispatch.DispatchKind),
+			WorkstationName: dispatch.WorkstationName,
+		}
+		if dispatch.FailureDetail != nil {
+			result.LatestDispatch.FailureDetail = &factoryapi.FailureDetail{
+				Reason:  factoryapi.WorkFailureType(dispatch.FailureDetail.Reason),
+				Message: dispatch.FailureDetail.Message,
+			}
+		}
+	}
+	return result
+}
+
+// StopSummaryFromAPI detaches an edge result before Work stop-state policy
+// compares it with canonical runtime state.
+func StopSummaryFromAPI(summary *factoryapi.FactoryStopSummary) *factorysessions.StopSummary {
+	if summary == nil {
+		return nil
+	}
+	result := &factorysessions.StopSummary{
+		SessionID: summary.SessionId,
+		StopKind:  factorysessions.StopKind(summary.StopKind),
+		WorkID:    summary.WorkId, WorkName: summary.WorkName,
+		WorkTypeName: summary.WorkTypeName, WorkState: summary.WorkState,
+		LatestResultSummary:      summary.LatestResultSummary,
+		SuggestedRecoverySurface: summary.SuggestedRecoverySurface,
+		SuggestedRecoveryAction:  summary.SuggestedRecoveryAction,
+	}
+	if summary.SessionLifecycleStatus != nil {
+		status := string(*summary.SessionLifecycleStatus)
+		result.SessionLifecycleStatus = &status
+	}
+	if summary.LatestDispatch != nil {
+		dispatch := summary.LatestDispatch
+		result.LatestDispatch = &factorysessions.StopDispatchSummary{
+			DispatchID:      dispatch.DispatchId,
+			Status:          factorysessions.StopDispatchStatus(dispatch.Status),
+			DispatchKind:    factorysessions.StopDispatchKind(dispatch.DispatchKind),
+			WorkstationName: dispatch.WorkstationName,
+		}
+		if dispatch.FailureDetail != nil {
+			result.LatestDispatch.FailureDetail = &factorysessions.StopFailureDetail{
+				Reason:  factorysessions.StopFailureType(dispatch.FailureDetail.Reason),
+				Message: dispatch.FailureDetail.Message,
+			}
+		}
+	}
+	return result
 }
 
 func runtimeArtifactsToAPI(artifacts *[]interfaces.FactoryArtifact) *[]factoryapi.FactoryArtifact {
@@ -236,10 +294,11 @@ func petriRuntimeProjectionToAPI(projection *factorysessions.PetriRuntimeProject
 			converted := factoryapi.StringMap(*token.Tags)
 			tags = &converted
 		}
+		history := runtimeTokenHistoryToAPI(token.History)
 		marking = append(marking, factoryapi.TokenResponse{
 			ChainingTraceDepth: token.ChainingTraceDepth, CreatedAt: token.CreatedAt,
 			CurrentChainingTraceId: token.CurrentChainingTraceID, EnteredAt: token.EnteredAt,
-			Id: token.ID, Name: token.Name, PlaceId: token.PlaceID,
+			History: history, Id: token.ID, Name: token.Name, PlaceId: token.PlaceID,
 			PreviousChainingTraceIds: token.PreviousChainingTraceIDs, Tags: tags,
 			TraceId: token.TraceID, WorkId: token.WorkID, WorkType: token.WorkType,
 		})
@@ -251,6 +310,38 @@ func petriRuntimeProjectionToAPI(projection *factorysessions.PetriRuntimeProject
 		})
 	}
 	return &factoryapi.FactorySessionPetriProjection{Marking: marking, EnabledTransitions: enabled}
+}
+
+func runtimeTokenHistoryToAPI(history *factorysessions.RuntimeTokenHistory) *factoryapi.TokenHistory {
+	if history == nil {
+		return nil
+	}
+	public := &factoryapi.TokenHistory{}
+	if len(history.ConsecutiveFailures) > 0 {
+		values := cloneIntegerMap(history.ConsecutiveFailures)
+		public.ConsecutiveFailures = &values
+	}
+	if history.LastError != "" {
+		lastError := history.LastError
+		public.LastError = &lastError
+	}
+	if len(history.PlaceVisits) > 0 {
+		values := cloneIntegerMap(history.PlaceVisits)
+		public.PlaceVisits = &values
+	}
+	if len(history.TotalVisits) > 0 {
+		values := cloneIntegerMap(history.TotalVisits)
+		public.TotalVisits = &values
+	}
+	return public
+}
+
+func cloneIntegerMap(values map[string]int) factoryapi.IntegerMap {
+	cloned := make(factoryapi.IntegerMap, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func javascriptRuntimeProjectionToAPI(projection *factorysessions.JavaScriptRuntimeProjection) *factoryapi.FactorySessionJavaScriptProjection {
@@ -314,7 +405,7 @@ func ListSessionsRequestFromAPI(params factoryapi.ListFactorySessionsParams) (fa
 	if params.Scope != nil {
 		req.Scope = factorysessionexecution.SessionListScope(*params.Scope)
 	}
-	return factorysessionexecution.NormalizeListSessionsRequest(req)
+	return req, nil
 }
 
 // ListSessionsResponseToAPI maps one scoped session list result to the public response shape.
@@ -326,6 +417,38 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 	}
 	for _, session := range result.LiveSessions {
 		response.Sessions = append(response.Sessions, LiveSessionSummaryToAPI(session))
+	}
+	if len(result.DurableSessions) > 0 {
+		durable := make([]factoryapi.FactorySessionDurableSummary, 0, len(result.DurableSessions))
+		for _, summary := range result.DurableSessions {
+			durable = append(durable, DurableSessionSummaryToAPI(summary))
+		}
+		response.DurableSessions = &durable
+	}
+	return response
+}
+
+// ScopedSessionListResponseToAPI maps the completed Factory Sessions-owned
+// live/durable listing projection without reapplying scope or merge policy.
+func ScopedSessionListResponseToAPI(result factorysessions.ScopedSessionListResult) factoryapi.ListFactorySessionsResponse {
+	scope := factoryapi.FactorySessionListScope(result.Scope)
+	response := factoryapi.ListFactorySessionsResponse{
+		Scope: &scope, Sessions: make([]factoryapi.FactorySessionSummary, 0, len(result.LiveSessions)),
+	}
+	for _, session := range result.LiveSessions {
+		summary := factoryapi.FactorySessionSummary{
+			Id: session.ID, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
+			Project: session.Project, IsDefault: session.IsDefault,
+			Target: factoryapi.FactorySessionTargetRef{
+				Kind: factoryapi.FactorySessionTargetRefKind(session.Target.Kind),
+				Name: optionalTrimmedString(session.Target.Name),
+			},
+		}
+		if session.Runtime != nil {
+			runtime := RuntimeProjectionToAPI(*session.Runtime, session.NormalizedTarget)
+			summary.Runtime = &runtime
+		}
+		response.Sessions = append(response.Sessions, summary)
 	}
 	if len(result.DurableSessions) > 0 {
 		durable := make([]factoryapi.FactorySessionDurableSummary, 0, len(result.DurableSessions))
@@ -351,16 +474,16 @@ func LiveSessionSummaryToAPI(session factorysessionexecution.LiveSessionSummary)
 
 // LogicalTargetToAPI maps one normalized Factory Session logical target to the
 // public client-safe API shape.
-func LogicalTargetToAPI(ref logicaltarget.CanonicalReference) factoryapi.FactorySessionLogicalTarget {
+func LogicalTargetToAPI(ref factorysessions.CanonicalLogicalTargetReference) factoryapi.FactorySessionLogicalTarget {
 	target := factoryapi.FactorySessionLogicalTarget{
 		Kind:       logicalTargetKindToAPI(ref.Kind),
 		FolderPath: ref.FolderPath,
 	}
-	if ref.Kind == logicaltarget.KindNamed {
+	if ref.Kind == factorysessions.LogicalTargetKindNamed {
 		namedTarget := ref.NamedTarget
 		target.NamedTarget = &namedTarget
 	}
-	if ref.Kind == logicaltarget.KindProvider && ref.Provider != nil {
+	if ref.Kind == factorysessions.LogicalTargetKindProvider && ref.Provider != nil {
 		target.ProviderBoundary = &factoryapi.FactorySessionLogicalProviderBoundary{
 			Provider: ref.Provider.Provider,
 			Kind:     ref.Provider.Kind,
@@ -373,13 +496,17 @@ func LogicalTargetToAPI(ref logicaltarget.CanonicalReference) factoryapi.Factory
 // LogicalTargetFromSession derives public normalized target metadata for one
 // live Factory Session within backendScopeID.
 func LogicalTargetFromSession(
+	normalize factorysessions.LogicalTargetReferenceNormalizer,
 	backendScopeID string,
 	session *factorysessions.LiveSession,
 ) (*factoryapi.FactorySessionLogicalTarget, error) {
 	if session == nil {
 		return nil, nil
 	}
-	ref, err := logicaltarget.NormalizeTargetRef(backendScopeID, session.FolderPath, session.Target)
+	if normalize == nil {
+		return nil, fmt.Errorf("logical target normalizer is required")
+	}
+	ref, err := normalize(backendScopeID, session.FolderPath, session.Target)
 	if err != nil {
 		return nil, err
 	}
@@ -387,11 +514,11 @@ func LogicalTargetFromSession(
 	return &target, nil
 }
 
-func logicalTargetKindToAPI(kind logicaltarget.Kind) factoryapi.FactorySessionLogicalTargetKind {
+func logicalTargetKindToAPI(kind factorysessions.LogicalTargetKind) factoryapi.FactorySessionLogicalTargetKind {
 	switch kind {
-	case logicaltarget.KindNamed:
+	case factorysessions.LogicalTargetKindNamed:
 		return factoryapi.FactorySessionLogicalTargetKindNamed
-	case logicaltarget.KindProvider:
+	case factorysessions.LogicalTargetKindProvider:
 		return factoryapi.FactorySessionLogicalTargetKindProvider
 	default:
 		return factoryapi.FactorySessionLogicalTargetKindDefault

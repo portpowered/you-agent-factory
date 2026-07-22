@@ -4,8 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
@@ -30,7 +29,7 @@ func TestCurrentFactoryPUT_PrePersistLayoutFailureRetainsStructuredPath(t *testi
 		t.Fatalf("pre-persist error = %#v, want one structured API validation target", err)
 	}
 	target := topologyErr.Targets[0]
-	if target.Code != factoryvalidation.CodeLayoutInvalidGeometry || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
+	if target.Code != "factory.layout.invalidGeometry" || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
 		t.Fatalf("pre-persist target = %#v, want field-specific invalid geometry", target)
 	}
 }

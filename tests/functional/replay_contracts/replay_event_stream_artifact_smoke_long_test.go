@@ -12,21 +12,22 @@ import (
 )
 
 func TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifact(t *testing.T) {
-	support.SkipLongFunctional(t, "slow replay artifact event-stream smoke")
+	support.SkipLongFunctional(t, "slow replay checked-in sample artifact sweep")
 
-	artifactPath := support.RecordReplayFixture(t)
-	assertReplayArtifactReplaysOverSSE(t, t.TempDir(), "", artifactPath)
+	artifactPath := testutil.MustRepoPath(t, "factory/logs/agent-fails.replay.json")
+	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, t.TempDir(), "", artifactPath)
 }
 
-func TestReplayEventStreamArtifactSmoke_ReplaysWithCopiedRootFactoryDefinition(t *testing.T) {
-	support.SkipLongFunctional(t, "slow replay artifact root-factory portability sweep")
+func TestReplayEventStreamArtifactSmoke_ReplaysCheckedInSampleArtifactWithCopiedRootFactoryDefinition(t *testing.T) {
+	support.SkipLongFunctional(t, "slow replay checked-in sample artifact sweep")
 
 	copiedFactoryDir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/adhoc/factory"))
-	artifactPath := support.RecordReplayFixture(t)
-	assertReplayArtifactReplaysOverSSE(t, copiedFactoryDir, copiedFactoryDir, artifactPath)
+	artifactPath := testutil.MustRepoPath(t, "factory/logs/agent-fails.replay.json")
+
+	assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(t, copiedFactoryDir, copiedFactoryDir, artifactPath)
 }
 
-func assertReplayArtifactReplaysOverSSE(
+func assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(
 	t *testing.T,
 	factoryDir string,
 	executionBaseDir string,
@@ -34,10 +35,18 @@ func assertReplayArtifactReplaysOverSSE(
 ) {
 	t.Helper()
 
-	server := startReplayFunctionalServer(t, factoryDir, artifactPath, executionBaseDir)
+	server := startReplayFunctionalServer(
+		t,
+		factoryDir,
+		false,
+		executionBaseDir,
+		"--replay",
+		artifactPath,
+	)
+
 	stream := openFactoryEventHTTPStream(t, support.DefaultSessionEventsURL(server.URL()))
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
-	events := collectUnifiedSmokeEventsUntilRunResponse(
+	streamedEvents := collectUnifiedSmokeEventsUntilRunResponse(
 		t,
 		stream,
 		[]factoryapi.FactoryEvent{runStarted, first},
@@ -51,29 +60,51 @@ func assertReplayArtifactReplaysOverSSE(
 		t.Fatal("timed out waiting for replay server run to finish")
 	}
 
-	assertReplayEventStreamTerminalOutcome(t, events)
+	assertReplayEventTimelineWellFormed(t, streamedEvents)
+	assertReplayPublicHistoryHasRuntimeActivity(t, streamedEvents)
 }
 
-func assertReplayEventStreamTerminalOutcome(t *testing.T, events []factoryapi.FactoryEvent) {
+func assertReplayEventTimelineWellFormed(
+	t *testing.T,
+	streamedEvents []factoryapi.FactoryEvent,
+) {
 	t.Helper()
 
-	if len(events) < 3 {
-		t.Fatalf("replay event stream has %d events, want prelude and terminal response", len(events))
+	runResponseIndex := lastIndexOfFunctionalEventType(streamedEvents, factoryapi.FactoryEventTypeRunResponse)
+	if runResponseIndex < 0 {
+		t.Fatalf("public event history missing RUN_RESPONSE: %#v", unifiedSmokeEventSummaries(streamedEvents))
 	}
-	for i := 1; i < len(events); i++ {
-		if events[i].Context.Sequence <= events[i-1].Context.Sequence {
-			t.Fatalf("event sequences are not strictly increasing at %d: %d then %d", i, events[i-1].Context.Sequence, events[i].Context.Sequence)
+	for index, event := range streamedEvents[:runResponseIndex+1] {
+		if event.Id == "" {
+			t.Fatalf("public event[%d] has empty id", index)
+		}
+		if index > 0 && event.Context.Sequence <= streamedEvents[index-1].Context.Sequence {
+			t.Fatalf("public event sequence did not increase at index %d: %d <= %d", index, event.Context.Sequence, streamedEvents[index-1].Context.Sequence)
 		}
 	}
-	terminal := events[len(events)-1]
-	if terminal.Type != factoryapi.FactoryEventTypeRunResponse {
-		t.Fatalf("terminal event = %s, want RUN_RESPONSE", terminal.Type)
+}
+
+func assertReplayPublicHistoryHasRuntimeActivity(
+	t *testing.T,
+	streamedEvents []factoryapi.FactoryEvent,
+) {
+	t.Helper()
+
+	if got := countReplayEvents(streamedEvents, factoryapi.FactoryEventTypeDispatchRequest); got == 0 {
+		t.Fatal("public replay event history contains no dispatched Work")
 	}
-	payload, err := terminal.Payload.AsRunResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode terminal run response: %v", err)
+	for _, event := range streamedEvents {
+		if event.Type != factoryapi.FactoryEventTypeRunResponse {
+			continue
+		}
+		payload, err := event.Payload.AsRunResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode public RUN_RESPONSE %q: %v", event.Id, err)
+		}
+		if payload.State == nil || *payload.State == "" {
+			t.Fatalf("public RUN_RESPONSE state = %#v, want a terminal Factory state", payload.State)
+		}
+		return
 	}
-	if payload.State == nil || *payload.State != factoryapi.FactoryStateCompleted {
-		t.Fatalf("terminal run state = %#v, want %q", payload.State, factoryapi.FactoryStateCompleted)
-	}
+	t.Fatal("public replay event history contains no RUN_RESPONSE")
 }

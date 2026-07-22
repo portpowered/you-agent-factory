@@ -41,7 +41,7 @@ func TestCreate_PerformsPOSTFactorySessions(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   serverPort(t, srv),
 		Dir:    "/workspace/fleet",
 		Output: &out,
@@ -82,7 +82,7 @@ func TestCreate_HumanOutputPrintsOpenedSession(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   serverPort(t, srv),
 		Dir:    "/workspace/fleet",
 		Output: &out,
@@ -122,7 +122,7 @@ func TestCreate_JSONModeEmitsOpenFactorySessionResponse(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   serverPort(t, srv),
 		Dir:    "/workspace/fleet",
 		JSON:   true,
@@ -154,7 +154,7 @@ func TestCreate_ValidateOnlySendsRequestField(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:         serverPort(t, srv),
 		Dir:          "/workspace/fleet",
 		ValidateOnly: true,
@@ -193,7 +193,7 @@ func TestCreate_InitNewFactorySendsRequestField(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:           serverPort(t, srv),
 		Dir:            "/workspace/new",
 		InitNewFactory: true,
@@ -225,7 +225,7 @@ func TestCreate_TargetKindAndNameMapToRequestRef(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:       serverPort(t, srv),
 		Dir:        "/workspace/fleet",
 		TargetKind: "named",
@@ -273,7 +273,7 @@ func TestCreate_MultiTargetHumanOutputExitsNonZero(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   serverPort(t, srv),
 		Dir:    "/workspace/fleet",
 		Output: &out,
@@ -312,7 +312,7 @@ func TestCreate_MultiTargetJSONEmitsResponseAndExitsNonZero(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   serverPort(t, srv),
 		Dir:    "/workspace/fleet",
 		JSON:   true,
@@ -344,7 +344,7 @@ func TestCreate_BadRequestSurfacesAPIMessage(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   serverPort(t, srv),
 		Dir:    "/workspace/missing",
 		Output: io.Discard,
@@ -359,7 +359,7 @@ func TestCreate_BadRequestSurfacesAPIMessage(t *testing.T) {
 
 func TestCreate_UnreachableServiceNamesEndpoint(t *testing.T) {
 	var out bytes.Buffer
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:   1,
 		Dir:    "/workspace/fleet",
 		JSON:   true,
@@ -378,7 +378,7 @@ func TestCreate_UnreachableServiceNamesEndpoint(t *testing.T) {
 }
 
 func TestCreate_RejectsMutuallyExclusiveFlags(t *testing.T) {
-	err := Create(CreateConfig{
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{
 		Port:           8080,
 		Dir:            "/workspace/fleet",
 		InitNewFactory: true,
@@ -393,7 +393,7 @@ func TestCreate_RejectsMutuallyExclusiveFlags(t *testing.T) {
 }
 
 func TestCreate_RejectsMissingDir(t *testing.T) {
-	err := Create(CreateConfig{Port: 8080, Dir: "   "})
+	err := NewCreate(testHTTPProtocol(t))(CreateConfig{Port: 8080, Dir: "   "})
 	if err == nil {
 		t.Fatal("expected validation error")
 	}

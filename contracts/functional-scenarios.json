@@ -246,7 +246,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/functional/smoke/cli_javascript_factory_run_smoke_test.go::TestJavaScriptFactoryRun_RealCLIProvesOrderedTwoStagePipeline",
+          "test": "tests/functional/smoke/cli_factory_prompt_run_smoke_test.go::TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText",
           "boundary": "cli"
         }
       ]
@@ -562,16 +562,6 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "rest/getEvents",
-      "name": "getEvents",
-      "interface": "rest",
-      "classification": "operation",
-      "status": "missing",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
       "stableId": "rest/getEventsBySessionId",
       "name": "getEventsBySessionId",
       "interface": "rest",
@@ -858,16 +848,6 @@
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
     },
     {
-      "stableId": "rest/previewWorkflow",
-      "name": "previewWorkflow",
-      "interface": "rest",
-      "classification": "operation",
-      "status": "missing",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
       "stableId": "rest/pullModel",
       "name": "pullModel",
       "interface": "rest",
@@ -996,21 +976,6 @@
       "lane": "short",
       "executionClass": "deterministic",
       "reviewedReason": "No qualifying repository-owned functional test currently invokes and observes this component through its customer boundary."
-    },
-    {
-      "stableId": "sse/getEvents",
-      "name": "getEvents",
-      "interface": "sse",
-      "classification": "event-stream",
-      "status": "not-applicable",
-      "lane": "short",
-      "executionClass": "deterministic",
-      "reviewedReason": "Deprecated global Factory Event compatibility stream is non-required and retained only until later removal.",
-      "sse": {
-        "required": false,
-        "disposition": "deprecated-later-removal",
-        "scope": "deprecated global Factory Event compatibility stream"
-      }
     },
     {
       "stableId": "sse/getEventsBySessionId",

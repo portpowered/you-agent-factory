@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,39 +13,29 @@ import (
 	"strings"
 	"testing"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-func TestNewWorkflowMCPHandlerRegistriesWiresClassificationSpecificStableIDs(t *testing.T) {
-	registries, err := newWorkflowMCPHandlerRegistries(&cliGlobalOptions{}, RootCommandOptions{})
-	if err != nil {
-		t.Fatalf("newWorkflowMCPHandlerRegistries() error = %v", err)
-	}
-	if _, err := registries.MCP.Lookup("you.mcp.serve"); err != nil {
-		t.Fatalf("MCP.Lookup(you.mcp.serve) error = %v", err)
-	}
-	for _, commandID := range []string{"you.workflow.preview", "you.workflow.validate"} {
-		if _, err := registries.WorkflowCompatibility.Lookup(commandID); err != nil {
-			t.Fatalf("WorkflowCompatibility.Lookup(%q) error = %v", commandID, err)
-		}
-	}
-}
-
-func TestProductionMCPServeGeneratedMetadataDelegatesExistingStartupBoundary(t *testing.T) {
-	var got startupcli.Request
-	startup := func(_ context.Context, request startupcli.Request) error {
-		got = request
+func TestProductionMCPServeGeneratedMetadataDelegatesStdioInitializer(t *testing.T) {
+	var got startupcli.MCPIntent
+	initializeStdio := func(_ context.Context, intent startupcli.MCPIntent) error {
+		got = intent
 		return nil
 	}
 	stdin := strings.NewReader("protocol input")
 	var stdout bytes.Buffer
-	root := NewRootCommandWithOptions(RootCommandOptions{Startup: startup})
+	resolveHome := factorysessions.HomeDirectoryResolver(func() (string, error) {
+		return t.TempDir(), nil
+	})
+	root := CommandFactory{ModelsCLI: legacyModelsCLIService{}}.NewCommand(resolveHome, nil, startupcli.Functions{StdioFunc: initializeStdio})
 	root.SetIn(stdin)
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
@@ -53,25 +44,13 @@ func TestProductionMCPServeGeneratedMetadataDelegatesExistingStartupBoundary(t *
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute generated mcp serve: %v", err)
 	}
-	if got.Kind != startupcli.KindMCPServe {
-		t.Fatalf("startup kind = %q, want %q", got.Kind, startupcli.KindMCPServe)
+	if !got.RuntimeBacked || got.ProjectRoot != "project" {
+		t.Fatalf("stdio intent = %#v, want generated flag values", got)
 	}
-	if !got.MCP.RuntimeBacked || got.MCP.ProjectRoot != "project" {
-		t.Fatalf("startup MCP intent = %#v, want generated flag values", got.MCP)
-	}
-	if got.MCP.Stdin != stdin || got.MCP.Stdout != &stdout {
-		t.Fatalf("startup stdio = (%T, %T), want command streams", got.MCP.Stdin, got.MCP.Stdout)
+	if got.Stdin != stdin || got.Stdout != &stdout {
+		t.Fatalf("stdio = (%T, %T), want command streams", got.Stdin, got.Stdout)
 	}
 
-	workflow, _, err := root.Find([]string{"workflow"})
-	if err != nil {
-		t.Fatalf("find workflow: %v", err)
-	}
-	for _, name := range []string{"run", "start", "status", "result", "dispatches", "artifacts", "events"} {
-		if child, _, findErr := workflow.Find([]string{name}); findErr != nil || child.Name() != name {
-			t.Fatalf("out-of-scope workflow compatibility command %q missing after cutover: child=%v err=%v", name, child, findErr)
-		}
-	}
 }
 
 var removedFactoryConfigCommandPaths = []string{
@@ -85,7 +64,7 @@ var removedFactorySaveCommandPaths = []string{
 }
 
 func TestFactorySaveCommand_NotRegistered(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 
 	factoryCmd, _, err := root.Find([]string{"factory"})
 	if err != nil {
@@ -124,7 +103,7 @@ func TestFactorySaveCommand_DoesNotInvokeOwningPersistence(t *testing.T) {
 		{"factory", "nosuch"},
 	}
 	for _, args := range cases {
-		root := NewRootCommand()
+		root := newLegacyTestRootCommand()
 		root.SetOut(io.Discard)
 		root.SetErr(io.Discard)
 		root.SetArgs(args)
@@ -145,7 +124,7 @@ func TestFactorySaveCommand_DoesNotInvokeOwningPersistence(t *testing.T) {
 }
 
 func TestFactorySaveCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	inventory, err := commandidentity.Walk(root)
 	if err != nil {
 		t.Fatalf("walk command tree: %v", err)
@@ -171,7 +150,7 @@ func TestFactorySaveCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
 }
 
 func TestFactoryConfigCommand_OldPathsNotRegistered(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	if _, _, err := root.Find([]string{"config", "init"}); err != nil {
 		t.Fatalf("find config init: %v", err)
 	}
@@ -209,7 +188,7 @@ func TestFactoryConfigCommand_OldPathsRejectAtRuntime(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)
 			root.SetArgs(tc.args)
@@ -233,7 +212,7 @@ func TestFactoryConfigCommand_DirectFactoryValidateDoesNotRun(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "validate", "./factory.json"})
@@ -255,6 +234,24 @@ func TestFactoryConfigCommand_ValidatePreservesSuccessAndFailureAtNewPath(t *tes
 	validPath := writeRootFactoryConfigFixture(t, dir, "valid.json", rootFactoryConfigValidJSON())
 	invalidPath := writeRootFactoryConfigFixture(t, dir, "invalid.json", rootFactoryConfigIncompatibleTaxonomyJSON())
 	missingPath := filepath.Join(dir, "missing-factory.json")
+
+	originalValidate := validateFactory
+	t.Cleanup(func() { validateFactory = originalValidate })
+	validateFactory = func(config factorycli.ValidateConfig) error {
+		switch config.Path {
+		case validPath:
+			_, _ = fmt.Fprintln(config.Output, "Factory validation passed.")
+			return nil
+		case invalidPath:
+			_, _ = fmt.Fprintln(
+				config.Output,
+				"Factory validation failed.\nworkstation-worker-behavior-compatibility",
+			)
+			return fmt.Errorf("factory validation found blocking issues")
+		default:
+			return fmt.Errorf("find factory config source")
+		}
+	}
 
 	cases := []struct {
 		name       string
@@ -286,7 +283,7 @@ func TestFactoryConfigCommand_ValidatePreservesSuccessAndFailureAtNewPath(t *tes
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&out)
 			root.SetErr(io.Discard)
 			root.SetArgs(tc.args)
@@ -316,6 +313,21 @@ func TestFactoryConfigCommand_FlattenPreservesSuccessAndFailureAtNewPath(t *test
 	validPath := writeRootFactoryConfigFixture(t, dir, "factory.json", rootFactoryConfigValidJSON())
 	invalidPath := writeRootFactoryConfigFixture(t, dir, "invalid.json", "{")
 	missingPath := filepath.Join(dir, "missing-factory.json")
+	originalFlatten := flattenFactoryConfig
+	t.Cleanup(func() {
+		flattenFactoryConfig = originalFlatten
+	})
+	flattenFactoryConfig = func(cfg configcli.FactoryConfigFlattenConfig) error {
+		switch cfg.Path {
+		case validPath:
+			_, err := cfg.Output.Write([]byte(`{"name":"root-factory-config-valid"}`))
+			return err
+		case invalidPath:
+			return fmt.Errorf("parse factory config: invalid JSON")
+		default:
+			return fmt.Errorf("find factory config source: %s", cfg.Path)
+		}
+	}
 
 	cases := []struct {
 		name      string
@@ -344,7 +356,7 @@ func TestFactoryConfigCommand_FlattenPreservesSuccessAndFailureAtNewPath(t *test
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&out)
 			root.SetErr(io.Discard)
 			root.SetArgs(tc.args)
@@ -377,6 +389,17 @@ func TestFactoryConfigCommand_ExpandPreservesSuccessAndFailureAtNewPath(t *testi
 	dir := t.TempDir()
 	validPath := writeRootFactoryConfigFixture(t, dir, "factory.json", rootFactoryConfigValidJSON())
 	missingPath := filepath.Join(dir, "missing-factory.json")
+	originalExpand := expandFactoryConfig
+	t.Cleanup(func() {
+		expandFactoryConfig = originalExpand
+	})
+	expandFactoryConfig = func(cfg configcli.FactoryConfigExpandConfig) error {
+		if cfg.Path != validPath {
+			return fmt.Errorf("find factory config source: %s", cfg.Path)
+		}
+		_, err := fmt.Fprintf(cfg.Output, "Expanded factory config into %s\n", dir)
+		return err
+	}
 
 	cases := []struct {
 		name       string
@@ -401,7 +424,7 @@ func TestFactoryConfigCommand_ExpandPreservesSuccessAndFailureAtNewPath(t *testi
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var out bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&out)
 			root.SetErr(io.Discard)
 			root.SetArgs(tc.args)
@@ -429,7 +452,7 @@ func TestFactoryConfigCommand_ExpandPreservesSuccessAndFailureAtNewPath(t *testi
 }
 
 func TestFactoryConfigCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	inventory, err := commandidentity.Walk(root)
 	if err != nil {
 		t.Fatalf("walk command tree: %v", err)
@@ -455,7 +478,7 @@ func TestFactoryConfigCommand_NoHiddenOrDeprecatedWrappers(t *testing.T) {
 }
 
 func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	for _, path := range [][]string{
 		{"factory", "query"},
 		{"factory", "list"},
@@ -476,7 +499,7 @@ func TestFactoryCommand_RegistersSubcommands(t *testing.T) {
 
 func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "--help"})
@@ -520,7 +543,7 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 
 func TestFactoryConfigCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "config", "--help"})
@@ -546,7 +569,7 @@ func TestFactoryConfigCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) 
 
 func TestFactoryListCommand_HelpDocumentsProjectAndGlobalRoots(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "list", "--help"})
@@ -598,7 +621,7 @@ func TestFactoryQueryCommand_ServerFlagReachesHTTPTestServer(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "query", "--server", strings.TrimSuffix(srv.URL, "/")})
@@ -683,7 +706,7 @@ func rootFactoryConfigIncompatibleTaxonomyJSON() string {
 }
 
 func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "query", "--port", "9090"})
@@ -704,10 +727,10 @@ func TestNewFactoryConfigInitHandlerRegistryWiresContractedRunnableIDs(t *testin
 		updateDir:    defaultcmd.FactoryDir,
 		deleteDir:    defaultcmd.FactoryDir,
 		initDir:      defaultcmd.FactoryDir,
-		initType:     string(initcmd.DefaultScaffoldType),
-		initExecutor: initcmd.DefaultStarterExecutor,
+		initType:     string(factorydefinitions.DefaultScaffoldType),
+		initExecutor: factorydefinitions.DefaultStarterExecutor,
 	}
-	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, RootCommandOptions{}, &state)
+	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, CommandFactory{}, &state)
 	if err != nil {
 		t.Fatalf("newFactoryConfigInitHandlerRegistry() error = %v", err)
 	}
@@ -729,75 +752,10 @@ func TestNewFactoryConfigInitHandlerRegistryWiresContractedRunnableIDs(t *testin
 		}
 	}
 }
-
-func TestNewLegacyFactoryConfigInitFamilyCommandBuildsDetachedRoots(t *testing.T) {
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	for _, path := range [][]string{
-		{"factory", "query"},
-		{"config", "init"},
-		{"init"},
-	} {
-		if _, _, err := root.Find(path); err != nil {
-			t.Fatalf("find %v: %v", path, err)
-		}
-	}
-}
-
-func TestNewLegacyFactoryConfigInitFamilyCommandsReturnsDetachedSiblings(t *testing.T) {
-	legacy := NewLegacyFactoryConfigInitFamilyCommands(RootCommandOptions{})
-	if legacy.Factory == nil || legacy.Config == nil || legacy.Init == nil {
-		t.Fatalf("legacy commands = %#v, want factory/config/init", legacy)
-	}
-	if legacy.Factory.Parent() != nil || legacy.Config.Parent() != nil || legacy.Init.Parent() != nil {
-		t.Fatal("legacy family commands must remain detached for parity wiring")
-	}
-}
-
-func TestNewGeneratedFactoryConfigInitFamilyCommandForParityBuildsDetachedRoots(t *testing.T) {
-	registry, err := newFactoryConfigInitHandlerRegistry(
-		&cliGlobalOptions{},
-		&cliDiagnosticsOptions{},
-		RootCommandOptions{},
-		nil,
-	)
-	if err != nil {
-		t.Fatalf("newFactoryConfigInitHandlerRegistry() error = %v", err)
-	}
-	state := factoryConfigInitBindingState{
-		listDir:      "factory",
-		createDir:    "factory",
-		updateDir:    "factory",
-		deleteDir:    "factory",
-		initDir:      "factory",
-		initType:     "default",
-		initExecutor: "codex",
-	}
-	bindings := factoryConfigInitFlagBindingsFromState(&state)
-	root, err := NewGeneratedFactoryConfigInitFamilyCommandForParity(registry, bindings)
-	if err != nil {
-		t.Fatalf("NewGeneratedFactoryConfigInitFamilyCommandForParity() error = %v", err)
-	}
-	for _, path := range [][]string{
-		{"factory", "query"},
-		{"config", "init"},
-		{"init"},
-	} {
-		if _, _, findErr := root.Find(path); findErr != nil {
-			t.Fatalf("find %v: %v", path, findErr)
-		}
-	}
-}
-
-func TestNewGeneratedFactoryConfigInitFamilyCommandForParityRejectsNilRegistry(t *testing.T) {
-	if _, err := NewGeneratedFactoryConfigInitFamilyCommandForParity(nil, factoryConfigInitFlagBindingsFromState(&factoryConfigInitBindingState{})); err == nil {
-		t.Fatal("NewGeneratedFactoryConfigInitFamilyCommandForParity(nil) = nil, want error")
-	}
-}
-
 func TestNewFactoryConfigInitWiringReturnsRegistryAndBindings(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
-	registry, bindings, err := newFactoryConfigInitWiring(globals, diagnostics, RootCommandOptions{})
+	registry, bindings, err := newFactoryConfigInitWiring(globals, diagnostics, CommandFactory{})
 	if err != nil {
 		t.Fatalf("newFactoryConfigInitWiring() error = %v", err)
 	}
@@ -819,164 +777,11 @@ func TestFactoryConfigInitFlagUsagesIncludesContractedKeys(t *testing.T) {
 }
 
 func TestProductionFactoryConfigInitCommandsUsesGeneratedFamily(t *testing.T) {
-	commands := productionFactoryConfigInitCommands(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, RootCommandOptions{})
+	commands := productionFactoryConfigInitCommands(&cliGlobalOptions{}, &cliDiagnosticsOptions{}, CommandFactory{})
 	if commands.Factory == nil || commands.Config == nil || commands.Init == nil {
 		t.Fatalf("production commands = %#v, want factory/config/init", commands)
 	}
 	if _, _, err := commands.Factory.Find([]string{"query"}); err != nil {
 		t.Fatalf("generated factory tree missing query: %v", err)
-	}
-}
-
-func TestLegacyFactoryDeleteCommandInvokesHandwrittenPath(t *testing.T) {
-	original := deleteFactory
-	defer func() { deleteFactory = original }()
-
-	called := false
-	deleteFactory = func(cfg factorycli.DeleteConfig) error {
-		called = true
-		if cfg.Name != "staging" {
-			t.Fatalf("delete name = %q, want staging", cfg.Name)
-		}
-		return nil
-	}
-
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "delete", "staging"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected legacy factory delete to invoke handwritten path")
-	}
-}
-
-func TestLegacyFactoryListCommandInvokesHandwrittenPath(t *testing.T) {
-	original := listFactories
-	defer func() { listFactories = original }()
-
-	called := false
-	listFactories = func(cfg factorycli.ListConfig) error {
-		called = true
-		return nil
-	}
-
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "list"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected legacy factory list to invoke handwritten path")
-	}
-}
-
-func TestLegacyFactoryCreateCommandInvokesHandwrittenPath(t *testing.T) {
-	original := createFactoryFromFile
-	defer func() { createFactoryFromFile = original }()
-
-	called := false
-	createFactoryFromFile = func(cfg factorycli.CreateFromFileConfig) error {
-		called = true
-		if cfg.Name != "staging" || cfg.From != "./factory.json" {
-			t.Fatalf("create config = %+v", cfg)
-		}
-		return nil
-	}
-
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "create", "staging", "--from", "./factory.json"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected legacy factory create to invoke handwritten path")
-	}
-}
-
-func TestLegacyFactoryGroupParentRejectsUnknownSubcommand(t *testing.T) {
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "nosuch"})
-	if err := root.Execute(); err == nil {
-		t.Fatal("legacy factory parent must reject unknown subcommands")
-	} else if !strings.Contains(err.Error(), "unknown command") {
-		t.Fatalf("Execute() error = %v, want unknown-command failure", err)
-	}
-}
-
-func TestLegacyFactoryQueryCommandInvokesHandwrittenPath(t *testing.T) {
-	original := queryFactory
-	defer func() { queryFactory = original }()
-
-	called := false
-	queryFactory = func(cfg factorycli.QueryConfig) error {
-		called = true
-		return nil
-	}
-
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "query"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected legacy factory query to invoke handwritten path")
-	}
-}
-
-func TestLegacyFactoryUpdateCommandInvokesHandwrittenPath(t *testing.T) {
-	original := updateFactoryFromFile
-	defer func() { updateFactoryFromFile = original }()
-
-	called := false
-	updateFactoryFromFile = func(cfg factorycli.UpdateFromFileConfig) error {
-		called = true
-		if cfg.Name != "staging" {
-			t.Fatalf("update name = %q, want staging", cfg.Name)
-		}
-		return nil
-	}
-
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "update", "staging", "--from", "./factory.json"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected legacy factory update to invoke handwritten path")
-	}
-}
-
-func TestLegacyFactoryReplaceCurrentCommandInvokesHandwrittenPath(t *testing.T) {
-	original := replaceFactoryCurrent
-	defer func() { replaceFactoryCurrent = original }()
-
-	called := false
-	replaceFactoryCurrent = func(cfg factorycli.ReplaceCurrentConfig) error {
-		called = true
-		return nil
-	}
-
-	root := NewLegacyFactoryConfigInitFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"factory", "replace-current"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("Execute() error = %v", err)
-	}
-	if !called {
-		t.Fatal("expected legacy factory replace-current to invoke handwritten path")
 	}
 }

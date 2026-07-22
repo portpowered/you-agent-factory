@@ -1,0 +1,3 @@
+---
+type: MODEL_WORKER
+---

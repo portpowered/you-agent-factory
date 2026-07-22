@@ -7,9 +7,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	factorysessioncursors "github.com/portpowered/infinite-you/pkg/factory/sessions/cursors"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestGeneratedOpenAPIContractsCompile(t *testing.T) {
@@ -496,8 +494,7 @@ func assertGeneratedCurrentFactoryNotFoundJSON(t *testing.T) {
 }
 
 type syncPreflightRecoveryFixtureCatalog struct {
-	Scenarios                []syncPreflightRecoveryScenario      `json:"scenarios"`
-	IdentityScopeComparisons []syncPreflightIdentityScopeScenario `json:"identityScopeComparisons"`
+	Scenarios []syncPreflightRecoveryScenario `json:"scenarios"`
 }
 
 type syncPreflightRecoveryScenario struct {
@@ -510,13 +507,6 @@ type syncPreflightRecoveryTags struct {
 	ReasonCode         string `json:"reasonCode"`
 	CheckpointReusable string `json:"checkpointReusable,omitempty"`
 	CursorValid        string `json:"cursorValid,omitempty"`
-}
-
-type syncPreflightIdentityScopeScenario struct {
-	ID                 string         `json:"id"`
-	Previous           map[string]any `json:"previous"`
-	Current            map[string]any `json:"current"`
-	WantClassification string         `json:"wantClassification"`
 }
 
 // TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip keeps
@@ -537,41 +527,6 @@ func TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip(t *te
 		if _, ok := seenReasonCodes[reasonCode]; !ok {
 			t.Fatalf("sync preflight recovery fixture coverage for %s = missing, want scenario", reasonCode)
 		}
-	}
-}
-
-func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackendAndStreamChanges(t *testing.T) {
-	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
-
-	for _, scenario := range catalog.IdentityScopeComparisons {
-		t.Run(scenario.ID, func(t *testing.T) {
-			previous := identityScopeFromFixtureMap(scenario.Previous)
-			current := identityScopeFromFixtureMap(scenario.Current)
-
-			reason, ok := factorysessioncursors.ClassifyIdentityMismatch(previous, current)
-			if !ok {
-				t.Fatal("ClassifyIdentityMismatch = false, want mismatch")
-			}
-			if string(reason) != scenario.WantClassification {
-				t.Fatalf("classification = %q, want %q", reason, scenario.WantClassification)
-			}
-
-			if previous.BackendScopeID == current.BackendScopeID &&
-				scenario.WantClassification == string(factorysessioncursors.ReasonBackendScopeChanged) {
-				t.Fatal("backend scope classification requires backendScopeId change")
-			}
-			if previous.StreamGenerationID == current.StreamGenerationID &&
-				scenario.WantClassification == string(factorysessioncursors.ReasonStreamGenerationChanged) {
-				t.Fatal("stream generation classification requires streamGenerationId change")
-			}
-			if previous.BackendScopeID != current.BackendScopeID &&
-				scenario.WantClassification == string(factorysessioncursors.ReasonStreamGenerationChanged) &&
-				previous.FactorySessionID == current.FactorySessionID {
-				if previous.BackendScopeID == current.BackendScopeID {
-					t.Fatal("stream-only classification should not change backendScopeId")
-				}
-			}
-		})
 	}
 }
 
@@ -616,19 +571,11 @@ func TestSessionPersistenceHardeningGateEvidence_RecoveryOutcomesControlCheckpoi
 		t.Fatal("stale cursor recovery outcome checkpointReusable = true, want false")
 	}
 
-	staleDiagnostic, ok := factorysessioncursors.InvalidationFromPreflight(apisurface.FactorySessionCursorPreflightResult(staleResponse))
-	if !ok {
-		t.Fatal("stale cursor recovery outcome missing invalidation diagnostic")
+	if staleResponse.ReasonCode != factoryapi.CursorStale {
+		t.Fatalf("stale recovery reason = %q, want %q", staleResponse.ReasonCode, factoryapi.CursorStale)
 	}
-	if staleDiagnostic.Reason != factorysessioncursors.ReasonCursorStale {
-		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, factorysessioncursors.ReasonCursorStale)
-	}
-	if staleDiagnostic.RecoveryAction != factorysessioncursors.RecoveryReplayWithoutCursor {
-		t.Fatalf(
-			"stale cursor diagnostic recovery = %q, want %q",
-			staleDiagnostic.RecoveryAction,
-			factorysessioncursors.RecoveryReplayWithoutCursor,
-		)
+	if staleResponse.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatal("stale recovery cursor validForStreamGeneration = true, want false")
 	}
 }
 
@@ -671,7 +618,6 @@ func assertSyncPreflightRecoveryOutcome(
 		t.Fatalf("%s reasonCode = %q, want supported recovery outcome", scenario.ID, response.ReasonCode)
 	}
 
-	assertSyncPreflightInvalidationDiagnostic(t, scenario.ID, response)
 }
 
 func assertSyncPreflightOkOutcome(
@@ -740,43 +686,6 @@ func assertSyncPreflightLogicalSessionRemapOutcome(
 	}
 }
 
-func assertSyncPreflightInvalidationDiagnostic(
-	t *testing.T,
-	scenarioID string,
-	response factoryapi.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	diagnostic, ok := factorysessioncursors.InvalidationFromPreflight(apisurface.FactorySessionCursorPreflightResult(response))
-	switch response.ReasonCode {
-	case factoryapi.Ok:
-		if ok {
-			t.Fatalf("%s invalidation diagnostic = %#v, want none for ok", scenarioID, diagnostic)
-		}
-	default:
-		if !ok {
-			t.Fatalf("%s invalidation diagnostic missing for %q", scenarioID, response.ReasonCode)
-		}
-	}
-}
-
-func identityScopeFromFixtureMap(payload map[string]any) factorysessioncursors.IdentityScope {
-	return factorysessioncursors.IdentityScope{
-		BackendScopeID:      stringFixtureValue(payload, "backendScopeId"),
-		LogicalSessionKeyID: stringFixtureValue(payload, "logicalSessionKeyId"),
-		FactorySessionID:    stringFixtureValue(payload, "factorySessionId"),
-		StreamGenerationID:  stringFixtureValue(payload, "streamGenerationId"),
-	}
-}
-
-func stringFixtureValue(payload map[string]any, key string) string {
-	value, ok := payload[key].(string)
-	if !ok {
-		return ""
-	}
-	return value
-}
-
 func loadSyncPreflightRecoveryFixtureCatalog(t *testing.T) syncPreflightRecoveryFixtureCatalog {
 	t.Helper()
 
@@ -791,9 +700,6 @@ func loadSyncPreflightRecoveryFixtureCatalog(t *testing.T) syncPreflightRecovery
 	}
 	if len(catalog.Scenarios) == 0 {
 		t.Fatal("sync preflight recovery contract fixtures contain no scenarios")
-	}
-	if len(catalog.IdentityScopeComparisons) == 0 {
-		t.Fatal("sync preflight recovery contract fixtures contain no identity scope comparisons")
 	}
 	return catalog
 }

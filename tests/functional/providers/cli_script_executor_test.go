@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,8 +8,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,66 +19,30 @@ func TestScriptExecutor_Success(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-
-	assertTokenPayload(t, h.Marking(), "task:done", "script-output-ok")
+	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("script-output-ok"), 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	assertDispatchOutput(t, server.GetFactoryEvents(t), "script-output-ok")
+	server.Stop(t)
 }
 
 func TestScriptExecutor_Failure(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(failureRunner("script broke")),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:done")
+	server, session := runScriptFactory(t, dir, failureRunner("script broke"), 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	server.Stop(t)
 }
 
 func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("original-payload"))
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("new-payload")),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init")
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:done" {
-			if got := string(tok.Color.Payload); got != "new-payload" {
-				t.Errorf("expected payload %q, got %q", "new-payload", got)
-			}
-			if tok.Color.WorkTypeID != "task" {
-				t.Errorf("expected WorkTypeID 'task', got %q", tok.Color.WorkTypeID)
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:done")
+	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("new-payload"), 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0})
+	assertDispatchOutput(t, server.GetFactoryEvents(t), "new-payload")
+	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "", "task", "", nil)
+	server.Stop(t)
 }
 
 func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
@@ -90,78 +55,23 @@ func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 		Tags:       map[string]string{"env": "test", "team": "platform"},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("success-output")),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:done" {
-			if got := string(tok.Color.Payload); got != "success-output" {
-				t.Errorf("expected payload %q, got %q", "success-output", got)
-			}
-			if tok.Color.WorkID != "work-seed-001" {
-				t.Errorf("WorkID: want 'work-seed-001', got %q", tok.Color.WorkID)
-			}
-			if tok.Color.WorkTypeID != "task" {
-				t.Errorf("WorkTypeID: want 'task', got %q", tok.Color.WorkTypeID)
-			}
-			if tok.Color.TraceID != "trace-seed-001" {
-				t.Errorf("TraceID: want 'trace-seed-001', got %q", tok.Color.TraceID)
-			}
-			if tok.Color.Tags["env"] != "test" {
-				t.Errorf("Tags[env]: want 'test', got %q", tok.Color.Tags["env"])
-			}
-			if tok.Color.Tags["team"] != "platform" {
-				t.Errorf("Tags[team]: want 'platform', got %q", tok.Color.Tags["team"])
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:done")
+	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("success-output"), 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	assertDispatchOutput(t, server.GetFactoryEvents(t), "success-output")
+	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-seed-001", "task", "trace-seed-001", map[string]string{
+		"env": "test", "team": "platform",
+	})
+	server.Stop(t)
 }
 
 func TestScriptExecutor_FailureRoutesToFailedPlace(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(failureRunner("script-error-output")),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:done")
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:failed" {
-			if strings.Contains(tok.History.LastError, "script-error-output") {
-				return
-			}
-			for _, fr := range tok.History.FailureLog {
-				if strings.Contains(fr.Error, "script-error-output") {
-					return
-				}
-			}
-			t.Errorf("expected token history to contain 'script-error-output', got LastError=%q, FailureLog=%+v",
-				tok.History.LastError, tok.History.FailureLog)
-			return
-		}
-	}
-	t.Error("no token found in task:failed")
+	server, session := runScriptFactory(t, dir, failureRunner("script-error-output"), 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	assertDispatchErrorContains(t, server.GetFactoryEvents(t), "script-error-output")
+	server.Stop(t)
 }
 
 func TestScriptExecutor_ArgTemplating(t *testing.T) {
@@ -181,19 +91,10 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 		Payload:    []byte("template-test-payload"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(&echoArgsRunner{}),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-
-	assertTokenPayload(t, h.Marking(), "task:done", "prd-my-feature\nwork-abc-123")
+	server, session := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	assertDispatchOutput(t, server.GetFactoryEvents(t), "prd-my-feature\nwork-abc-123")
+	server.Stop(t)
 }
 
 func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
@@ -206,26 +107,10 @@ func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 		Payload:    []byte("payload"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("output")),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:done" {
-			if tok.Color.WorkTypeID != "task" {
-				t.Errorf("WorkTypeID: want 'task', got %q", tok.Color.WorkTypeID)
-			}
-			if tok.Color.WorkID != "work-type-stamp" {
-				t.Errorf("WorkID: want 'work-type-stamp' (preserved for same-type), got %q", tok.Color.WorkID)
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:done")
+	server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("output"), 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1})
+	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-type-stamp", "task", "trace-type-stamp", nil)
+	server.Stop(t)
 }
 
 func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
@@ -245,22 +130,14 @@ func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
 		Tags:       map[string]string{"env": "staging", "team": "infra"},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(&echoArgsRunner{}),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1)
-
-	assertTokenPayload(t, h.Marking(), "task:done", "staging\ninfra")
+	server, session := runScriptFactory(t, dir, &echoArgsRunner{}, 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1})
+	assertDispatchOutput(t, server.GetFactoryEvents(t), "staging\ninfra")
+	server.Stop(t)
 }
 
 func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	support.SetWorkingDirectory(t, dir)
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
 		workstations := cfg["workstations"].([]any)
@@ -284,16 +161,8 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 	})
 
 	runner := &captureCommandRunner{}
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:failed")
+	server, session := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:failed": 0})
 
 	if got := runner.LastWorkDir(); got != support.ResolvedRuntimePath(dir, "/tmp/feature-script") {
 		t.Fatalf("expected script runner work dir %q, got %q", support.ResolvedRuntimePath(dir, "/tmp/feature-script"), got)
@@ -306,11 +175,11 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 	if !containsEnv(env, "BRANCH=feature-script") {
 		t.Fatalf("expected BRANCH env in %v", env)
 	}
+	server.Stop(t)
 }
 
 func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTemplates(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	support.SetWorkingDirectory(t, dir)
 
 	updateScriptFixtureFactory(t, dir, func(cfg map[string]any) {
 		cfg["workTypes"] = []any{
@@ -359,18 +228,13 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 	})
 
 	runner := &templateCaptureCommandRunner{}
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:runtime-done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:canonical-done").
-		HasNoTokenInPlace("task:failed")
+	server, session := runScriptFactory(t, dir, runner, 10*time.Second)
+	assertSessionPlaces(t, session, map[string]int{
+		"task:runtime-done":   1,
+		"task:init":           0,
+		"task:canonical-done": 0,
+		"task:failed":         0,
+	})
 
 	req := runner.LastRequest()
 	wantArgs := []string{
@@ -382,7 +246,8 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 	}
 	assertCommandArgs(t, req, wantArgs)
 	assertRuntimeMergeCommandRequest(t, dir, req)
-	assertTokenPayload(t, h.Marking(), "task:runtime-done", strings.Join(wantArgs, "\n"))
+	assertDispatchOutput(t, server.GetFactoryEvents(t), strings.Join(wantArgs, "\n"))
+	server.Stop(t)
 }
 
 func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t *testing.T) {
@@ -397,38 +262,18 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	testutil.WriteSeedFile(t, dir, "task", []byte("input-payload"))
 
 	runner := newTimeoutThenSuccessCommandRunner()
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	server, session := runScriptFactory(t, dir, runner, 5*time.Second)
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
 
 	if runner.CallCount() < 2 {
 		t.Fatalf("expected script runner to be called at least twice, got %d", runner.CallCount())
 	}
 
-	engineState, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	if len(engineState.DispatchHistory) < 2 {
-		t.Fatalf("DispatchHistory length = %d, want at least 2", len(engineState.DispatchHistory))
-	}
-	if engineState.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("first DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
-	}
-	if engineState.DispatchHistory[0].Reason != "execution timeout" {
-		t.Fatalf("first DispatchHistory reason = %q, want %q", engineState.DispatchHistory[0].Reason, "execution timeout")
-	}
-	if engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("last DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome, workerexecution.OutcomeAccepted)
-	}
+	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+		factoryapi.WorkOutcomeAccepted,
+	}, "execution timeout")
+	server.Stop(t)
 }
 
 func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
@@ -439,64 +284,127 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 		writeWorkstationPromptTemplate(t, dir, "payload: {{ (index .Inputs 0).Payload }}")
 		testutil.WriteSeedFile(t, dir, "task", []byte("template-input"))
 
-		h := testutil.NewServiceTestHarness(t, dir,
-			testutil.WithFullWorkerPoolAndScriptWrap(),
-			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("template-case-ok")),
-		)
-
-		h.RunUntilComplete(t, 10*time.Second)
-
-		h.Assert().
-			PlaceTokenCount("task:done", 1).
-			HasNoTokenInPlace("task:init").
-			HasNoTokenInPlace("task:failed")
-
-		assertTokenPayload(t, h.Marking(), "task:done", "template-case-ok")
+		server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("template-case-ok"), 10*time.Second)
+		assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		assertDispatchOutput(t, server.GetFactoryEvents(t), "template-case-ok")
+		server.Stop(t)
 	})
 
 	t.Run("NoTemplateWithPayload_Completes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 		testutil.WriteSeedFile(t, dir, "task", []byte("payload-only"))
 
-		h := testutil.NewServiceTestHarness(t, dir,
-			testutil.WithFullWorkerPoolAndScriptWrap(),
-			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("payload-only-ok")),
-		)
-
-		h.RunUntilComplete(t, 10*time.Second)
-
-		h.Assert().
-			PlaceTokenCount("task:done", 1).
-			HasNoTokenInPlace("task:init").
-			HasNoTokenInPlace("task:failed")
-
-		assertTokenPayload(t, h.Marking(), "task:done", "payload-only-ok")
+		server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("payload-only-ok"), 10*time.Second)
+		assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		assertDispatchOutput(t, server.GetFactoryEvents(t), "payload-only-ok")
+		server.Stop(t)
 	})
 
 	t.Run("NoTemplateAndNoPayload_Completes", func(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_no_template"))
-
-		h := testutil.NewServiceTestHarness(t, dir,
-			testutil.WithFullWorkerPoolAndScriptWrap(),
-			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("empty-input-ok")),
-		)
-
-		if err := h.SubmitFull(context.Background(), []work.SubmitRequest{{
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 			WorkID:     "work-no-template-no-payload",
 			WorkTypeID: "task",
 			TraceID:    "trace-no-template-no-payload",
 			Payload:    nil,
-		}}); err != nil {
-			t.Fatalf("submit nil-payload work: %v", err)
-		}
-
-		h.RunUntilComplete(t, 10*time.Second)
-
-		h.Assert().
-			PlaceTokenCount("task:done", 1).
-			HasNoTokenInPlace("task:init").
-			HasNoTokenInPlace("task:failed")
-
-		assertTokenPayload(t, h.Marking(), "task:done", "empty-input-ok")
+		})
+		server, session := runScriptFactory(t, dir, support.NewStaticSuccessCommandRunner("empty-input-ok"), 10*time.Second)
+		assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+		assertDispatchOutput(t, server.GetFactoryEvents(t), "empty-input-ok")
+		server.Stop(t)
 	})
+}
+
+func runScriptFactory(
+	t *testing.T,
+	dir string,
+	runner platformprocess.CommandRunner,
+	timeout time.Duration,
+) (*support.FunctionalAPIServer, factoryapi.FactorySession) {
+	t.Helper()
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), timeout)
+	return server, support.GetDefaultSession(t, server.URL())
+}
+
+func assertListedWorkIdentity(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	stateName, workID, workType, traceID string,
+	tags map[string]string,
+) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.State == nil || item.State.Name != stateName {
+			continue
+		}
+		if workID != "" && (item.WorkId == nil || *item.WorkId != workID) {
+			t.Errorf("listed Work ID = %#v, want %q", item.WorkId, workID)
+		}
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType {
+			t.Errorf("listed Work type = %#v, want %q", item.WorkTypeName, workType)
+		}
+		if traceID != "" && (item.TraceId == nil || *item.TraceId != traceID) {
+			t.Errorf("listed Work trace ID = %#v, want %q", item.TraceId, traceID)
+		}
+		for key, want := range tags {
+			if item.Tags == nil || (*item.Tags)[key] != want {
+				t.Errorf("listed Work tag %q = %#v, want %q", key, item.Tags, want)
+			}
+		}
+		return
+	}
+	t.Fatalf("listed Work has no item in state %q: %#v", stateName, response.Results)
+}
+
+func assertDispatchErrorContains(t *testing.T, events []factoryapi.FactoryEvent, want string) {
+	t.Helper()
+	for _, payload := range dispatchResponses(t, events) {
+		if payload.Error != nil && strings.Contains(*payload.Error, want) {
+			return
+		}
+	}
+	t.Fatalf("dispatch responses do not contain error %q", want)
+}
+
+func assertDispatchOutcomeSequence(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	wants []factoryapi.WorkOutcome,
+	firstError string,
+) {
+	t.Helper()
+	responses := dispatchResponses(t, events)
+	if len(responses) < len(wants) {
+		t.Fatalf("dispatch response count = %d, want at least %d", len(responses), len(wants))
+	}
+	for index, want := range wants {
+		if responses[index].Outcome != want {
+			t.Errorf("dispatch response %d outcome = %s, want %s", index, responses[index].Outcome, want)
+		}
+	}
+	if firstError != "" && (responses[0].Error == nil || !strings.Contains(*responses[0].Error, firstError)) {
+		t.Errorf("first dispatch error = %#v, want text %q", responses[0].Error, firstError)
+	}
+}
+
+func dispatchResponses(t *testing.T, events []factoryapi.FactoryEvent) []factoryapi.DispatchResponseEventPayload {
+	t.Helper()
+	var responses []factoryapi.DispatchResponseEventPayload
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		responses = append(responses, payload)
+	}
+	return responses
 }

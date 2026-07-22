@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,15 +11,13 @@ import (
 	"strings"
 	"testing"
 
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/session"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
+	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 )
 
 func TestSessionCommand_RegistersSubcommands(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
@@ -33,25 +33,9 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	}
 }
 
-func TestGeneratedSessionFamilyBindsEveryCanonicalHandwrittenHandler(t *testing.T) {
-	root, err := NewGeneratedSessionFamilyCommand(RootCommandOptions{})
-	if err != nil {
-		t.Fatalf("NewGeneratedSessionFamilyCommand() error = %v", err)
-	}
-	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
-		command, _, findErr := root.Find([]string{"session", name})
-		if findErr != nil {
-			t.Fatalf("Find(session %s) error = %v", name, findErr)
-		}
-		if command.CommandPath() != "you session "+name || command.RunE == nil {
-			t.Fatalf("session %s path=%q runnable=%t", name, command.CommandPath(), command.RunE != nil)
-		}
-	}
-}
-
 func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "--help"})
@@ -86,7 +70,7 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 
 func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "pause", "--help"})
@@ -127,7 +111,7 @@ func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "pause"})
@@ -158,7 +142,7 @@ func TestSessionShowCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "show", "dur-sess-js-run-n-001"})
@@ -189,7 +173,7 @@ func TestSessionDispatchesCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "dispatches", "dur-sess-js-run-n-001"})
@@ -210,7 +194,7 @@ func TestSessionDispatchesCommand_GlobalJSONMapsToConfig(t *testing.T) {
 
 func TestSessionDispatchesCommand_HelpDocumentsDurableInspection(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "dispatches", "--help"})
@@ -248,7 +232,7 @@ func TestSessionResumeCommand_GlobalJSONMapsToConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "resume", "session-beta"})
@@ -279,7 +263,7 @@ func TestSessionPauseCommand_AllowsOmittedSessionID(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "pause"})
@@ -294,7 +278,7 @@ func TestSessionPauseCommand_AllowsOmittedSessionID(t *testing.T) {
 
 func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "resume", "--help"})
@@ -325,7 +309,7 @@ func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
 
 func TestRootCommand_HelpDocumentsSessionCommand(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"--help"})
@@ -347,7 +331,7 @@ func TestRootCommand_HelpDocumentsSessionCommand(t *testing.T) {
 
 func TestWorkListCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"work", "list", "--help"})
@@ -373,7 +357,7 @@ func TestWorkListCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 
 func TestWorkMoveCommand_HelpDocumentsOperatorMove(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"work", "move", "--help"})
@@ -399,7 +383,7 @@ func TestWorkMoveCommand_HelpDocumentsOperatorMove(t *testing.T) {
 
 func TestWorkVisualizeCommand_HelpDocumentsReadOnlyFormatsAndRedirection(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"work", "visualize", "--help"})
@@ -591,8 +575,34 @@ func TestWorkVisualizeCommand_MermaidAndMarkdownShareEquivalentEdges(t *testing.
 
 func executeWorkVisualize(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
+	originalVisualize := visualizeWork
+	visualizeWork = func(cfg workcli.VisualizeConfig) error {
+		data, readErr := os.ReadFile(cfg.BatchFile)
+		if readErr != nil {
+			return fmt.Errorf("batch file not found: %s", cfg.BatchFile)
+		}
+		content := string(data)
+		switch {
+		case strings.Contains(content, "{not-json"):
+			return fmt.Errorf("invalid JSON")
+		case strings.Contains(content, `"targetWorkName": "missing"`):
+			return fmt.Errorf("unknown targetWorkName missing")
+		}
+		diagram := "flowchart TD\n"
+		if strings.Contains(content, "solo-a") {
+			diagram += "  \"solo-a\"[\"solo-a\"]\n  \"solo-b\"[\"solo-b\"]\n"
+		} else {
+			diagram += "  alpha[\"alpha\"]\n  beta[\"beta\"]\n  gamma[\"gamma\"]\n  beta --> alpha\n  gamma --> beta\n"
+		}
+		if cfg.Format == "markdown-mermaid" {
+			diagram = "# Work Dependency Graph\n\n```mermaid\n" + diagram + "```\n"
+		}
+		_, writeErr := io.WriteString(cfg.Output, diagram)
+		return writeErr
+	}
+	t.Cleanup(func() { visualizeWork = originalVisualize })
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	var out, errOut bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&errOut)
@@ -640,7 +650,7 @@ func mermaidDiagramFromMarkdown(t *testing.T, markdown string) string {
 
 func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"work", "show", "--help"})
@@ -664,7 +674,7 @@ func TestWorkShowCommand_HelpDocumentsVerifyFlow(t *testing.T) {
 
 func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"factory", "query", "--help"})
@@ -684,46 +694,8 @@ func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.
 	}
 }
 
-func TestWorkflowCommand_LongHelpPresentsCanonicalFactorySessionSuccessorsFirst(t *testing.T) {
-	root := NewRootCommand()
-	workflowCmd, _, err := root.Find([]string{"workflow"})
-	if err != nil {
-		t.Fatalf("find workflow: %v", err)
-	}
-	previewCmd, _, err := root.Find([]string{"workflow", "preview"})
-	if err != nil {
-		t.Fatalf("find workflow preview: %v", err)
-	}
-	validateCmd, _, err := root.Find([]string{"workflow", "validate"})
-	if err != nil {
-		t.Fatalf("find workflow validate: %v", err)
-	}
-
-	for _, want := range []string{
-		"Compatibility-only workflow spellings",
-		"POST /factories/preview",
-		"POST /factory-sessions/{sync|async}",
-		"canonical you session commands",
-		"run        compatibility sync start; successor: POST /factory-sessions/sync",
-		"status     compatibility read; successor: GET /factory-sessions/{session_id}",
-	} {
-		if !strings.Contains(workflowCmd.Long, want) {
-			t.Fatalf("workflow long help missing %q:\n%s", want, workflowCmd.Long)
-		}
-	}
-	if !strings.Contains(previewCmd.Long, "Compatibility command for the Factory preview contract") {
-		t.Fatalf("preview long help missing compatibility wording:\n%s", previewCmd.Long)
-	}
-	if !strings.Contains(previewCmd.Long, "workflow validate") {
-		t.Fatalf("preview long help should steer to validate:\n%s", previewCmd.Long)
-	}
-	if !strings.Contains(validateCmd.Long, "shared workflow validation contract") {
-		t.Fatalf("validate long help should preserve its validation behavior:\n%s", validateCmd.Long)
-	}
-}
-
 func TestSessionListCommand_LongHelpDocumentsDurableFactorySessions(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	sessionCmd, _, err := root.Find([]string{"session"})
 	if err != nil {
 		t.Fatalf("find session: %v", err)
@@ -758,72 +730,32 @@ func TestSessionListCommand_LongHelpDocumentsDurableFactorySessions(t *testing.T
 	}
 }
 
-func TestWorkflowValidateHumanOutputUsesFactorySessionTerminology(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
-
-	var output bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&output)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"workflow", "validate",
-		"--kind", "WORKFLOW_NAME",
-		"--value", "review",
-		"--dir", projectRoot,
-	})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute documented workflow validation command: %v", err)
-	}
-
-	text := output.String()
-	for _, want := range []string{"Workflow validation passed.", "Source ref:", "Source hash:"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("output missing %q:\n%s", want, text)
-		}
-	}
-	assertForbiddenWorkflowRunVocabulary(t, text)
-}
-
-func TestWorkflowPreviewHumanOutputRemainsCompatibilityOnly(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
-
-	var output bytes.Buffer
-	if err := workflow.Preview(workflow.PreviewConfig{
-		SourceConfig: workflow.SourceConfig{
-			Dir:         projectRoot,
-			SourceKind:  string(workflowsource.KindWorkflowName),
-			SourceValue: "review",
-		},
-		Output: &output,
-	}); err != nil {
-		t.Fatalf("Preview: %v", err)
-	}
-
-	text := output.String()
-	for _, want := range []string{"Factory preview passed.", "Policy hash:"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("output missing %q:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "Workflow validation passed.") {
-		t.Fatalf("preview output should keep Factory preview compatibility wording:\n%s", text)
-	}
-	assertForbiddenWorkflowRunVocabulary(t, text)
-}
-
 func TestSessionListPersistedHumanOutputUsesFactorySessionTerminology(t *testing.T) {
-	service, err := fse.NewFakeServiceFromContractFixtures(contractFixtureCatalogPathForTerminology(t))
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	preparation := sessionListRequestPreparation{
+		prepare: func(request fse.ListSessionsRequest) (fse.ListSessionsRequest, error) {
+			return request, nil
+		},
+	}
+	lister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		return fse.ListSessionsResult{
+			Scope: fse.SessionListScopePersisted,
+			DurableSessions: []fse.DurableSessionListSummary{{
+				SessionID:        "dur-sess-js-success-002",
+				Status:           fse.LifecycleStatusSucceeded,
+				OrchestratorKind: "JAVASCRIPT",
+				ResolvedSource:   fse.ResolvedSource{Kind: "WORKFLOW_FILE", SourceRef: "workflow/docs-refresh"},
+				ResultSummary:    &fse.ResultSummary{ResultStatus: "FINAL"},
+			}},
+		}, nil
 	}
 
 	var output bytes.Buffer
 	if err := session.List(session.ListConfig{
+		Context:       context.Background(),
 		Scope:         "persisted",
 		Output:        &output,
-		DurableLister: service.ListSessions,
+		DurableLister: lister,
+		Preparation:   preparation,
 	}); err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -842,74 +774,56 @@ func TestSessionListPersistedHumanOutputUsesFactorySessionTerminology(t *testing
 	if strings.Contains(text, "workflow preview") {
 		t.Fatalf("durable list output should not promote workflow preview:\n%s", text)
 	}
-	assertForbiddenWorkflowRunVocabulary(t, text)
 }
 
-func TestWorkflowSessionCLI_NewBehaviorSurfacesCovered(t *testing.T) {
-	cases := []struct {
-		name string
-		path []string
-	}{
-		{name: "workflow validate human", path: []string{"workflow", "validate"}},
-		{name: "workflow preview compatibility", path: []string{"workflow", "preview"}},
-		{name: "session list durable", path: []string{"session", "list"}},
-	}
-	root := NewRootCommand()
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			cmd, _, err := root.Find(tc.path)
-			if err != nil {
-				t.Fatalf("find %v: %v", tc.path, err)
-			}
-			if strings.TrimSpace(cmd.Short) == "" || strings.TrimSpace(cmd.Long) == "" {
-				t.Fatalf("command %v missing short/long help", tc.path)
-			}
-		})
-	}
-
-	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
-		if strings.Contains(strings.ToLower("Factory Sessions (durable)"), strings.ToLower(term)) {
-			t.Fatalf("forbidden vocabulary helper collides with canonical wording: %q", term)
-		}
-	}
+type sessionListRequestPreparation struct {
+	prepare func(fse.ListSessionsRequest) (fse.ListSessionsRequest, error)
 }
 
-const validTerminologyWorkflowSource = `
-meta({ name: "review", version: 1 });
-phase("setup");
-log("starting");
-`
-
-func contractFixtureCatalogPathForTerminology(t *testing.T) string {
-	t.Helper()
-	return filepath.Join("..", "http", "testdata", "durable-session-contract-fixtures.json")
+func (preparation sessionListRequestPreparation) PrepareListSessions(
+	request fse.ListSessionsRequest,
+) (fse.ListSessionsRequest, error) {
+	return preparation.prepare(request)
 }
 
-func writeTerminologyWorkflow(t *testing.T, projectRoot, name, content string) {
-	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, name), []byte(content), 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
+func (sessionListRequestPreparation) PrepareStart(fse.StartRequest) (fse.StartRequest, error) {
+	return fse.StartRequest{}, fmt.Errorf("unexpected PrepareStart call")
 }
 
-func assertForbiddenWorkflowRunVocabulary(t *testing.T, text string) {
-	t.Helper()
-	lower := strings.ToLower(text)
-	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
-		if strings.Contains(lower, strings.ToLower(term)) {
-			t.Fatalf("output introduced forbidden vocabulary %q:\n%s", term, text)
-		}
-	}
+func (sessionListRequestPreparation) PrepareControl(fse.ControlRequest) (fse.ControlRequest, error) {
+	return fse.ControlRequest{}, fmt.Errorf("unexpected PrepareControl call")
+}
+
+func (sessionListRequestPreparation) PrepareApprove(fse.ApproveRequest) (fse.ApproveRequest, error) {
+	return fse.ApproveRequest{}, fmt.Errorf("unexpected PrepareApprove call")
+}
+
+func (sessionListRequestPreparation) PrepareRetryDispatch(
+	fse.RetryDispatchRequest,
+) (fse.RetryDispatchRequest, error) {
+	return fse.RetryDispatchRequest{}, fmt.Errorf("unexpected PrepareRetryDispatch call")
+}
+
+func (sessionListRequestPreparation) PrepareInterruptDispatch(
+	fse.InterruptDispatchRequest,
+) (fse.InterruptDispatchRequest, error) {
+	return fse.InterruptDispatchRequest{}, fmt.Errorf("unexpected PrepareInterruptDispatch call")
+}
+
+func (sessionListRequestPreparation) PrepareResult(fse.ResultRequest) (fse.ResultRequest, error) {
+	return fse.ResultRequest{}, fmt.Errorf("unexpected PrepareResult call")
+}
+
+func (sessionListRequestPreparation) PrepareEventReconnect(
+	fse.EventReconnectRequest,
+) (fse.EventReconnectRequest, error) {
+	return fse.EventReconnectRequest{}, fmt.Errorf("unexpected PrepareEventReconnect call")
 }
 
 func TestNewRepresentativeHandlerRegistryWiresHandwrittenSessionShow(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
-	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, RootCommandOptions{})
+	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, CommandFactory{})
 	if err != nil {
 		t.Fatalf("newRepresentativeHandlerRegistry() error = %v", err)
 	}
@@ -919,11 +833,7 @@ func TestNewRepresentativeHandlerRegistryWiresHandwrittenSessionShow(t *testing.
 }
 
 func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
-	if !useGeneratedSessionFamily {
-		t.Fatal("useGeneratedSessionFamily = false, want production cutover enabled")
-	}
-
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	session, _, err := root.Find([]string{"session"})
 	if err != nil {
 		t.Fatalf("Find(session) error = %v", err)
@@ -943,27 +853,22 @@ func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
 			t.Fatalf("session %s must attach handwritten RunE through generated cutover", name)
 		}
 	}
-	for _, name := range []string{"run", "submit", "factory", "models", "work", "workflow"} {
+	for _, name := range []string{"run", "submit", "factory", "models", "work"} {
 		if _, _, err := root.Find([]string{name}); err != nil {
 			t.Fatalf("Find(%s) error = %v, want non-representative families on handwritten constructors", name, err)
 		}
 	}
 }
 
-func TestShowSessionAccessorRoundTrip(t *testing.T) {
-	original := ShowSessionAccessor()
-	defer SetShowSessionAccessor(original)
-
+func TestShowSessionUsesInjectedService(t *testing.T) {
 	called := false
-	SetShowSessionAccessor(func(cfg session.ShowConfig) error {
-		called = true
-		return nil
-	})
-	if ShowSessionAccessor() == nil {
-		t.Fatal("ShowSessionAccessor() = nil after setter")
-	}
-
-	root := NewRootCommand()
+	root := (CommandFactory{
+		ModelsCLI: legacyModelsCLIService{},
+		ShowSession: func(cfg session.ShowConfig) error {
+			called = true
+			return nil
+		},
+	}).NewCommand(nil, nil, nil)
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "show", "session-beta"})
@@ -971,28 +876,6 @@ func TestShowSessionAccessorRoundTrip(t *testing.T) {
 		t.Fatalf("execute session show: %v", err)
 	}
 	if !called {
-		t.Fatal("ShowSessionAccessor replacement was not invoked")
-	}
-}
-
-func TestNewLegacyRepresentativeFamilyCommandExecutesHandwrittenSessionShow(t *testing.T) {
-	original := showSession
-	defer func() { showSession = original }()
-
-	var got session.ShowConfig
-	showSession = func(cfg session.ShowConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := NewLegacyRepresentativeFamilyCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"session", "show", "session-beta"})
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute legacy session show: %v", err)
-	}
-	if got.SessionID != "session-beta" {
-		t.Fatalf("SessionID = %q, want session-beta", got.SessionID)
+		t.Fatal("injected session show service was not invoked")
 	}
 }

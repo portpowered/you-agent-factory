@@ -1,7 +1,6 @@
 package replay_contracts
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,10 +9,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -70,20 +70,13 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 		}},
 	})
 	runner := support.NewRecordingCommandRunner("script dispatch complete")
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithCommandRunner(runner),
-		testutil.WithRecordPath(artifactPath),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
 	smoke := dualDispatchSmokeFixture{
 		requestID:    dualDispatchSmokeRequestID,
 		traceID:      dualDispatchSmokeTraceID,
 		modelWorkID:  dualDispatchSmokeModelWorkID,
 		scriptWorkID: dualDispatchSmokeScriptWorkID,
 	}
-	harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
+	testutil.WriteSeedBatchFile(t, dir, work.WorkRequest{
 		RequestID: smoke.requestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []work.Work{
@@ -107,13 +100,19 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 			},
 		},
 	})
-
-	harness.RunUntilComplete(t, 10*time.Second)
-	harness.Assert().
-		PlaceTokenCount("task:complete", 1).
-		PlaceTokenCount(dualDispatchSmokeScriptWorkType+":done", 1).
-		HasNoTokenInPlace("task:failed").
-		HasNoTokenInPlace(dualDispatchSmokeScriptWorkType + ":failed")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride:    provider,
+			ScriptCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	assertThinEventSessionPlaces(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+		"task:complete": 1, dualDispatchSmokeScriptWorkType + ":done": 1,
+		"task:failed": 0, dualDispatchSmokeScriptWorkType + ":failed": 0,
+	})
 
 	if got := provider.CallCount("worker-a"); got != 1 {
 		t.Fatalf("worker-a provider calls = %d, want 1", got)
@@ -125,14 +124,20 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 		t.Fatalf("script command runner calls = %d, want 1", got)
 	}
 
-	events, err := harness.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	smoke.liveEvents = events
+	smoke.liveEvents = server.GetFactoryEvents(t)
+	server.Stop(t)
 	smoke.artifactPath = artifactPath
 	smoke.artifact = testutil.LoadReplayArtifact(t, artifactPath)
 	return smoke
+}
+
+func assertThinEventSessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 }
 
 func configureThinEventDualDispatchFixture(t *testing.T, dir string) {

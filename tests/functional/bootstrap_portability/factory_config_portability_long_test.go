@@ -3,7 +3,7 @@
 package bootstrap_portability
 
 import (
-	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,10 +13,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -29,7 +30,7 @@ func TestFactoryConfigPortability_ExpandThenFlattenPreservesSemanticConfig(t *te
 	writeFatFactoryJSON(t, dir, string(original))
 
 	assertExpandCommandOutput(t, runFactoryConfigCommand(t, "expand", factoryPath), "Expanded factory config into")
-	loadedExpanded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	loadedExpanded, err := support.LoadedFactory(t, dir)
 	if err != nil {
 		t.Fatalf("expanded factory should load through runtime config after split expansion: %v", err)
 	}
@@ -92,43 +93,35 @@ stopWords: ["DONE"]
 
 Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 
-	var flattenOut bytes.Buffer
-	flattenCmd := cli.NewRootCommand()
-	flattenCmd.SetOut(&flattenOut)
-	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"factory", "config", "flatten", splitDir})
-	if err := flattenCmd.Execute(); err != nil {
-		t.Fatalf("execute config flatten: %v", err)
-	}
+	flattened := runFactoryConfigCommand(t, "flatten", splitDir)
 
-	flattenedCfg, err := factoryconfig.NewFactoryConfigMapper().Expand(flattenOut.Bytes())
+	flattenedCfg, err := support.DecodeFactoryDefinition(flattened)
 	if err != nil {
 		t.Fatalf("flattened split config should parse: %v", err)
 	}
-	if flattenedCfg.Workers[0].ModelProvider != "claude" {
-		t.Fatalf("flattened worker definition missing split AGENTS.md fields: %#v", flattenedCfg.Workers[0])
+	if flattenedCfg.Workers == nil || len(*flattenedCfg.Workers) != 1 ||
+		(*flattenedCfg.Workers)[0].ModelProvider == nil || string(*(*flattenedCfg.Workers)[0].ModelProvider) != "CLAUDE" {
+		t.Fatalf("flattened worker definition missing split AGENTS.md fields: %#v", flattenedCfg.Workers)
 	}
-	if flattenedCfg.Workstations[0].Type == "" || flattenedCfg.Workstations[0].PromptTemplate != "Complete {{ (index .Inputs 0).WorkID }} from split config." {
-		t.Fatalf("flattened workstation runtime config missing split AGENTS.md fields: %#v", flattenedCfg.Workstations[0])
+	if flattenedCfg.Workstations == nil || len(*flattenedCfg.Workstations) != 1 ||
+		(*flattenedCfg.Workstations)[0].Type == nil ||
+		(*flattenedCfg.Workstations)[0].Body == nil || *(*flattenedCfg.Workstations)[0].Body != "Complete {{ (index .Inputs 0).WorkID }} from split config." {
+		t.Fatalf("flattened workstation runtime config missing split AGENTS.md fields: %#v", flattenedCfg.Workstations)
 	}
 
 	standaloneDir := t.TempDir()
-	writeFatFactoryJSON(t, standaloneDir, flattenOut.String())
+	writeFatFactoryJSON(t, standaloneDir, string(flattened))
 	testutil.WriteSeedFile(t, standaloneDir, "task", []byte(`{"title":"flattened split factory"}`))
 
-	provider := testutil.NewMockProvider(
-		workerexecution.InferenceResponse{Content: "Finished from flattened split config. DONE COMPLETE"},
+	runner := testutil.NewProviderCommandRunner(
+		platformprocess.CommandResult{Stdout: []byte(
+			`{"type":"result","subtype":"success","is_error":false,"result":"Finished from flattened split config. DONE COMPLETE","session_id":"portable-split"}` + "\n",
+		)},
 	)
-	h := testutil.NewServiceTestHarness(t, standaloneDir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	session := support.RunFactoryToCompletionWithEdges(t, standaloneDir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertPortableTaskCompleted(t, session)
 }
 
 func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *testing.T) {
@@ -179,18 +172,8 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "Finished from inline config. DONE COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertPortableTaskCompleted(t, session)
 
 	if provider.CallCount() != 1 {
 		t.Fatalf("expected provider called once, got %d", provider.CallCount())
@@ -242,33 +225,33 @@ func TestFatFactory_LoadOnlyStandaloneFileUsesSharedMappingPath(t *testing.T) {
   ]
 }`)
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
+	loaded, err := support.LoadedFactory(t, dir)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	if len(loaded.FactoryConfig().WorkTypes) != 1 || loaded.FactoryConfig().WorkTypes[0].Name != "task" {
-		t.Fatalf("expected mapped work type task, got %#v", loaded.FactoryConfig().WorkTypes)
+	if loaded.WorkTypes == nil || len(*loaded.WorkTypes) != 1 || (*loaded.WorkTypes)[0].Name != "task" {
+		t.Fatalf("expected mapped work type task, got %#v", loaded.WorkTypes)
 	}
 
-	worker, ok := loaded.Worker("executor")
+	worker, ok := support.FindFactoryWorker(loaded, "executor")
 	if !ok {
 		t.Fatal("expected inline worker definition to load")
 	}
-	if worker.ModelProvider != "claude" {
-		t.Fatalf("expected normalized model provider claude, got %q", worker.ModelProvider)
+	if worker.ModelProvider == nil || string(*worker.ModelProvider) != "CLAUDE" {
+		t.Fatalf("expected normalized model provider claude, got %v", worker.ModelProvider)
 	}
-	if worker.StopToken != "COMPLETE" {
-		t.Fatalf("expected normalized stop token COMPLETE, got %q", worker.StopToken)
+	if worker.StopToken == nil || *worker.StopToken != "COMPLETE" {
+		t.Fatalf("expected normalized stop token COMPLETE, got %q", stringPtrValue(worker.StopToken))
 	}
 
-	workstation, ok := loaded.Workstation("execute-task")
+	workstation, ok := support.FindFactoryWorkstation(loaded, "execute-task")
 	if !ok {
 		t.Fatal("expected inline workstation definition to load")
 	}
-	if workstation.PromptTemplate != "Complete {{ (index .Inputs 0).WorkID }}." {
-		t.Fatalf("expected normalized prompt template, got %q", workstation.PromptTemplate)
+	if workstation.Body == nil || *workstation.Body != "Complete {{ (index .Inputs 0).WorkID }}." {
+		t.Fatalf("expected normalized prompt template, got %q", stringPtrValue(workstation.Body))
 	}
-	if len(workstation.StopWords) != 1 || workstation.StopWords[0] != "DONE" {
+	if workstation.StopWords == nil || len(*workstation.StopWords) != 1 || (*workstation.StopWords)[0] != "DONE" {
 		t.Fatalf("expected normalized stop words, got %#v", workstation.StopWords)
 	}
 }
@@ -336,39 +319,32 @@ Execute the story script.
 
 func flattenFactoryDir(t *testing.T, dir string) []byte {
 	t.Helper()
-
-	var flattenOut bytes.Buffer
-	flattenCmd := cli.NewRootCommand()
-	flattenCmd.SetOut(&flattenOut)
-	flattenCmd.SetErr(&bytes.Buffer{})
-	flattenCmd.SetArgs([]string{"factory", "config", "flatten", dir})
-	if err := flattenCmd.Execute(); err != nil {
-		t.Fatalf("execute config flatten: %v", err)
-	}
-	return flattenOut.Bytes()
+	return runFactoryConfigCommand(t, "flatten", dir)
 }
 
 func assertFlattenedInlineScriptBackedConfig(t *testing.T, flattened []byte) {
 	t.Helper()
 
-	flattenedCfg, err := factoryconfig.NewFactoryConfigMapper().Expand(flattened)
+	flattenedCfg, err := support.DecodeFactoryDefinition(flattened)
 	if err != nil {
 		t.Fatalf("flattened inline script-backed config should parse: %v", err)
 	}
-	if len(flattenedCfg.Workers) != 1 || len(flattenedCfg.Workstations) != 1 {
-		t.Fatalf("expected one worker/workstation after flatten, got %d/%d", len(flattenedCfg.Workers), len(flattenedCfg.Workstations))
+	if flattenedCfg.Workers == nil || flattenedCfg.Workstations == nil || len(*flattenedCfg.Workers) != 1 || len(*flattenedCfg.Workstations) != 1 {
+		t.Fatalf("expected one worker/workstation after flatten: %#v", flattenedCfg)
 	}
-	if flattenedCfg.Workers[0].Type != interfaces.WorkerTypeScript || flattenedCfg.Workers[0].Command != "powershell" {
-		t.Fatalf("flattened worker definition = %#v", flattenedCfg.Workers[0])
+	worker := (*flattenedCfg.Workers)[0]
+	workstation := (*flattenedCfg.Workstations)[0]
+	if worker.Type == nil || string(*worker.Type) != string(interfaces.WorkerTypeScript) || worker.Command == nil || *worker.Command != "powershell" {
+		t.Fatalf("flattened worker definition = %#v", worker)
 	}
-	if len(flattenedCfg.Workers[0].Args) != 2 || flattenedCfg.Workers[0].Args[1] != "scripts/execute-story.ps1" {
-		t.Fatalf("flattened worker args = %#v", flattenedCfg.Workers[0].Args)
+	if worker.Args == nil || len(*worker.Args) != 2 || (*worker.Args)[1] != "scripts/execute-story.ps1" {
+		t.Fatalf("flattened worker args = %#v", worker.Args)
 	}
-	if flattenedCfg.Workstations[0].Type != interfaces.WorkstationTypeModel || !flattenedCfg.Workstations[0].CopyReferencedScripts {
-		t.Fatalf("flattened workstation definition = %#v", flattenedCfg.Workstations[0])
+	if workstation.Type == nil || string(*workstation.Type) != string(interfaces.WorkstationTypeScript) || workstation.CopyReferencedScripts == nil || !*workstation.CopyReferencedScripts {
+		t.Fatalf("flattened workstation definition = %#v\nflattened payload: %s", workstation, flattened)
 	}
-	if flattenedCfg.Workstations[0].WorkingDirectory != "/repo/{{ (index .Inputs 0).WorkID }}" {
-		t.Fatalf("flattened workstation working directory = %q", flattenedCfg.Workstations[0].WorkingDirectory)
+	if workstation.WorkingDirectory == nil || *workstation.WorkingDirectory != "/repo/{{ (index .Inputs 0).WorkID }}" {
+		t.Fatalf("flattened workstation working directory = %q", stringPtrValue(workstation.WorkingDirectory))
 	}
 }
 
@@ -384,24 +360,24 @@ func writeFlattenedInlineScriptStandalone(t *testing.T, flattened []byte) string
 func assertLoadedInlineScriptBackedStandalone(t *testing.T, standaloneDir string) {
 	t.Helper()
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(standaloneDir, nil)
+	loaded, err := support.LoadedFactory(t, standaloneDir)
 	if err != nil {
 		t.Fatalf("flattened standalone config should load: %v", err)
 	}
 
-	worker, ok := loaded.Worker("executor")
+	worker, ok := support.FindFactoryWorker(loaded, "executor")
 	if !ok {
 		t.Fatal("expected flattened script worker definition to load")
 	}
-	if worker.Type != interfaces.WorkerTypeScript || worker.Command != "powershell" || worker.Timeout != "45m" {
+	if worker.Type == nil || string(*worker.Type) != string(interfaces.WorkerTypeScript) || worker.Command == nil || *worker.Command != "powershell" || worker.Timeout == nil || *worker.Timeout != "45m" {
 		t.Fatalf("loaded worker = %#v", worker)
 	}
 
-	workstation, ok := loaded.Workstation("execute-story")
+	workstation, ok := support.FindFactoryWorkstation(loaded, "execute-story")
 	if !ok {
 		t.Fatal("expected flattened inline workstation definition to load")
 	}
-	if workstation.Type != interfaces.WorkstationTypeModel || workstation.WorkingDirectory != "/repo/{{ (index .Inputs 0).WorkID }}" {
+	if workstation.Type == nil || string(*workstation.Type) != string(interfaces.WorkstationTypeScript) || workstation.WorkingDirectory == nil || *workstation.WorkingDirectory != "/repo/{{ (index .Inputs 0).WorkID }}" {
 		t.Fatalf("loaded workstation = %#v", workstation)
 	}
 }
@@ -409,17 +385,23 @@ func assertLoadedInlineScriptBackedStandalone(t *testing.T, standaloneDir string
 func assertFlattenedInlineScriptStandaloneExecutes(t *testing.T, standaloneDir string) {
 	t.Helper()
 
-	h := testutil.NewServiceTestHarness(t, standaloneDir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("flattened inline script accepted")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletionWithEdges(t, standaloneDir, serviceedges.Edges{
+		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("flattened inline script accepted"),
+	}, 10*time.Second)
+	assertPortableTaskCompleted(t, session)
+}
 
-	h.RunUntilComplete(t, 10*time.Second)
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+func assertPortableTaskCompleted(t *testing.T, session factoryapi.FactorySession) {
+	t.Helper()
+	for placeID, want := range map[string]int{
+		"task:complete": 1,
+		"task:init":     0,
+		"task:failed":   0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 }
 
 func portableExpandFactoryFixtureJSON() []byte {
@@ -471,15 +453,19 @@ func portableExpandFactoryFixtureJSON() []byte {
 func runFactoryConfigCommand(t *testing.T, subcommand string, target string) []byte {
 	t.Helper()
 
-	var out bytes.Buffer
-	cmd := cli.NewRootCommand()
-	cmd.SetOut(&out)
-	cmd.SetErr(&bytes.Buffer{})
-	cmd.SetArgs([]string{"factory", "config", subcommand, target})
-	if err := cmd.Execute(); err != nil {
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(
+		context.Background(),
+		[]string{"you", "factory", "config", subcommand, target},
+	)
+	inputs.WorkingDirectory = filepath.Dir(target)
+	if info, err := os.Stat(target); err == nil && info.IsDir() {
+		inputs.WorkingDirectory = target
+	}
+	if err := process.Execute(inputs.Input); err != nil {
 		t.Fatalf("execute config %s: %v", subcommand, err)
 	}
-	return out.Bytes()
+	return []byte(inputs.Stdout())
 }
 
 func assertExpandCommandOutput(t *testing.T, output []byte, expected string) {
@@ -490,7 +476,7 @@ func assertExpandCommandOutput(t *testing.T, output []byte, expected string) {
 	}
 }
 
-func assertExpandedPortableFactoryLayout(t *testing.T, dir string, loadedExpanded *factoryconfig.LoadedFactoryConfig) {
+func assertExpandedPortableFactoryLayout(t *testing.T, dir string, loadedExpanded factoryapi.Factory) {
 	t.Helper()
 
 	if _, err := os.Stat(filepath.Join(dir, "workers", "executor", "AGENTS.md")); err != nil {
@@ -503,29 +489,29 @@ func assertExpandedPortableFactoryLayout(t *testing.T, dir string, loadedExpande
 	if err != nil {
 		t.Fatalf("read expanded worker AGENTS.md: %v", err)
 	}
-	if got := string(workerAgents); got != "You are the portable factory executor.\n" {
+	if got := string(workerAgents); got != "You are the portable factory executor." {
 		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
 	}
 
-	workerDef, ok := loadedExpanded.Worker("executor")
+	workerDef, ok := support.FindFactoryWorker(loadedExpanded, "executor")
 	if !ok {
 		t.Fatal("expected expanded fat-factory worker definition to load")
 	}
-	if workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider != "claude" || workerDef.StopToken != "COMPLETE" {
+	if workerDef.Model == nil || *workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider == nil || string(*workerDef.ModelProvider) != "CLAUDE" || workerDef.StopToken == nil || *workerDef.StopToken != "COMPLETE" {
 		t.Fatalf("expanded worker definition did not preserve canonical fields: %#v", workerDef)
 	}
-	if len(workerDef.Resources) != 1 || workerDef.Resources[0].Name != "agent-slot" || workerDef.Resources[0].Capacity != 1 {
+	if workerDef.Resources == nil || len(*workerDef.Resources) != 1 || (*workerDef.Resources)[0].Name != "agent-slot" || (*workerDef.Resources)[0].Capacity != 1 {
 		t.Fatalf("expanded worker resources = %#v, want agent-slot capacity 1", workerDef.Resources)
 	}
-	if workerDef.Body != "You are the portable factory executor." {
-		t.Fatalf("expanded worker body = %q", workerDef.Body)
+	if workerDef.Body == nil || *workerDef.Body != "You are the portable factory executor." {
+		t.Fatalf("expanded worker body = %q", stringPtrValue(workerDef.Body))
 	}
 
-	expandedWorkstation, ok := loadedExpanded.Workstation("execute-task")
+	expandedWorkstation, ok := support.FindFactoryWorkstation(loadedExpanded, "execute-task")
 	if !ok {
 		t.Fatal("expected expanded fat-factory workstation definition to load")
 	}
-	if expandedWorkstation.WorkerTypeName != "executor" || expandedWorkstation.PromptTemplate != "Complete {{ (index .Inputs 0).WorkID }}." {
+	if expandedWorkstation.Worker != "executor" || expandedWorkstation.Body == nil || *expandedWorkstation.Body != "Complete {{ (index .Inputs 0).WorkID }}." {
 		t.Fatalf("expanded workstation definition did not preserve canonical fields: %#v", expandedWorkstation)
 	}
 }
@@ -577,15 +563,9 @@ func assertExpandedPortableFactoryLayout(t *testing.T, dir string, loadedExpande
 func canonicalFactoryPayload(t *testing.T, data []byte) any {
 	t.Helper()
 
-	mapper := factoryconfig.NewFactoryConfigMapper()
-	cfg, err := mapper.Expand(data)
-	if err != nil {
-		t.Fatalf("expand canonical factory payload: %v\n%s", err, string(data))
-	}
-	flattened, err := mapper.Flatten(cfg)
-	if err != nil {
-		t.Fatalf("flatten canonical factory payload: %v", err)
-	}
+	dir := t.TempDir()
+	writeFatFactoryJSON(t, dir, string(data))
+	flattened := runFactoryConfigCommand(t, "flatten", dir)
 
 	var payload any
 	if err := json.Unmarshal(flattened, &payload); err != nil {

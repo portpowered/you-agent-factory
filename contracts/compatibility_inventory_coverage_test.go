@@ -9,27 +9,15 @@ import (
 )
 
 const (
-	mcpDeprecatedInventoryPath  = "mcp/deprecated.json"
-	cliDeprecatedInventoryPath  = "cli/deprecated.json"
-	apiDeprecatedInventoryPath  = "api/deprecated.json"
+	mcpDeprecatedInventoryPath = "mcp/deprecated.json"
+	cliDeprecatedInventoryPath = "cli/deprecated.json"
+	apiDeprecatedInventoryPath = "api/deprecated.json"
 )
 
 var supportedCompatibilityClassifications = map[string]struct{}{
 	"retain-temporarily":  {},
 	"remove-now":          {},
 	"separately-approved": {},
-}
-
-var cliCompatibilitySuccessorByIDCandidate = map[string]string{
-	"you.workflow.preview":    "api.route.post.factories.preview",
-	"you.workflow.validate":   "api.route.post.factories.preview",
-	"you.workflow.run":        "api.route.post.factory-sessions.sync",
-	"you.workflow.start":      "api.route.post.factory-sessions.async",
-	"you.workflow.status":     "api.route.get.factory-sessions.session-id",
-	"you.workflow.result":     "api.route.get.factory-sessions.session-id.results",
-	"you.workflow.dispatches": "api.route.get.factory-sessions.session-id.dispatches",
-	"you.workflow.artifacts":  "api.route.get.factory-sessions.session-id.artifacts",
-	"you.workflow.events":     "api.route.get.factory-sessions.session-id.events",
 }
 
 func TestCompatibilityInventoryBaselineCoverage(t *testing.T) {
@@ -47,73 +35,27 @@ func TestCompatibilityInventoryBaselineCoverage(t *testing.T) {
 func assertMCPCompatibilityInventoryBaselineCoverage(t *testing.T) {
 	t.Helper()
 
-	baseline := readMCPBaselineAliases(t)
 	inventory := readCompatibilityInventoryDocument(t, mcpDeprecatedInventoryPath)
 
 	if inventory.Family != "mcp" {
 		t.Fatalf("inventory family = %q, want mcp", inventory.Family)
 	}
-	if len(baseline.Aliases) == 0 {
-		t.Fatal("expected at least one baseline MCP compatibility alias")
-	}
-
-	for _, alias := range baseline.Aliases {
-		if !alias.CompatibilityOnly {
-			t.Fatalf("baseline alias %q is not marked compatibility-only", alias.Name)
-		}
-		recordKey := "mcp.alias." + alias.Name
-		record, ok := inventory.Records[recordKey]
-		if !ok {
-			t.Fatalf("missing inventory record for baseline alias %q", alias.Name)
-		}
-		assertClassifiedCompatibilityRecord(t, inventory.Family, recordKey, record, classifiedRecordExpectation{
-			publicName:           alias.Name,
-			successorTargetItemID: "mcp.tool." + alias.CanonicalName,
-		})
-	}
-
-	if len(inventory.Records) != len(baseline.Aliases) {
-		t.Fatalf("inventory record count = %d, want %d baseline aliases", len(inventory.Records), len(baseline.Aliases))
+	if len(inventory.Records) != 0 {
+		t.Fatalf("MCP workflow alias records = %#v, want none", inventory.Records)
 	}
 }
 
 func assertCLICompatibilityInventoryBaselineCoverage(t *testing.T) {
 	t.Helper()
 
-	baseline := readCLICommandIdentityBaseline(t)
 	inventory := readCompatibilityInventoryDocument(t, cliDeprecatedInventoryPath)
 
 	if inventory.Family != "cli" {
 		t.Fatalf("inventory family = %q, want cli", inventory.Family)
 	}
 
-	compatibilityCommands := baselineCompatibilityCommands(baseline)
-	if len(compatibilityCommands) == 0 {
-		t.Fatal("expected at least one baseline CLI compatibility command")
-	}
-
-	for _, command := range compatibilityCommands {
-		recordKey := cliCompatibilityRecordKey(command.IDCandidate)
-		record, ok := inventory.Records[recordKey]
-		if !ok {
-			t.Fatalf("missing inventory record for baseline command %q", command.Path)
-		}
-		wantSuccessor, ok := cliCompatibilitySuccessorByIDCandidate[command.IDCandidate]
-		if !ok {
-			t.Fatalf("missing successor mapping for baseline command idCandidate %q", command.IDCandidate)
-		}
-		assertClassifiedCompatibilityRecord(t, inventory.Family, recordKey, record, classifiedRecordExpectation{
-			publicName:            command.Path,
-			successorTargetItemID: wantSuccessor,
-		})
-	}
-
-	if len(inventory.Records) != len(compatibilityCommands) {
-		t.Fatalf(
-			"inventory record count = %d, want %d baseline compatibility commands",
-			len(inventory.Records),
-			len(compatibilityCommands),
-		)
+	if len(inventory.Records) != 0 {
+		t.Fatalf("CLI workflow alias records = %#v, want none", inventory.Records)
 	}
 }
 
@@ -233,7 +175,7 @@ func assertClassifiedCompatibilityRecord(
 }
 
 type compatibilityInventoryDocument struct {
-	Family  string                              `json:"family"`
+	Family  string                                  `json:"family"`
 	Records map[string]compatibilityInventoryRecord `json:"records"`
 }
 

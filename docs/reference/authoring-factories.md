@@ -612,7 +612,9 @@ you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "release notes" --json
 
 Use the `--output` form when you want the streamed audio body written directly
 to a file. Use `--json` when you want metadata plus canonical output content
-references.
+references. Set `INFINITE_YOU_OMNIVOICE_CACHE_DIR` on the `you` process to
+select a reusable managed-model cache root; when it is unset, the cache lives
+under the current user's default model-cache directory.
 
 ### Maintainer Validation
 

@@ -12,10 +12,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const commandRunnerCompletedLogEvent = "command_runner.completed"
 
 type fakeCommandRunner struct {
 	stdout   string
@@ -23,8 +24,8 @@ type fakeCommandRunner struct {
 	exitCode int
 }
 
-func (f *fakeCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
+func (f *fakeCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte(f.stdout), Stderr: []byte(f.stderr), ExitCode: f.exitCode}, nil
 }
 
 type captureCommandRunner struct {
@@ -33,14 +34,14 @@ type captureCommandRunner struct {
 	envs     [][]string
 }
 
-func (r *captureCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *captureCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.workDirs = append(r.workDirs, req.WorkDir)
 	copiedEnv := make([]string, len(req.Env))
 	copy(copiedEnv, req.Env)
 	r.envs = append(r.envs, copiedEnv)
 	r.mu.Unlock()
-	return workers.CommandResult{Stdout: []byte("script-output-ok")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("script-output-ok")}, nil
 }
 
 func (r *captureCommandRunner) LastWorkDir() string {
@@ -72,7 +73,7 @@ func newTimeoutThenSuccessCommandRunner() *timeoutThenSuccessCommandRunner {
 	return &timeoutThenSuccessCommandRunner{}
 }
 
-func (r *timeoutThenSuccessCommandRunner) Run(ctx context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
+func (r *timeoutThenSuccessCommandRunner) Run(ctx context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.callCount++
 	call := r.callCount
@@ -80,10 +81,10 @@ func (r *timeoutThenSuccessCommandRunner) Run(ctx context.Context, _ workers.Com
 
 	if call == 1 {
 		<-ctx.Done()
-		return workers.CommandResult{}, ctx.Err()
+		return platformprocess.CommandResult{}, ctx.Err()
 	}
 
-	return workers.CommandResult{Stdout: []byte("script-output-after-retry")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("script-output-after-retry")}, nil
 }
 
 func (r *timeoutThenSuccessCommandRunner) CallCount() int {
@@ -94,30 +95,30 @@ func (r *timeoutThenSuccessCommandRunner) CallCount() int {
 
 type echoArgsRunner struct{}
 
-func (e *echoArgsRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stdout: []byte(strings.Join(req.Args, "\n"))}, nil
+func (e *echoArgsRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stdout: []byte(strings.Join(req.Args, "\n"))}, nil
 }
 
 type templateCaptureCommandRunner struct {
 	mu      sync.Mutex
-	request workers.CommandRequest
+	request platformprocess.CommandRequest
 }
 
-func (r *templateCaptureCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+func (r *templateCaptureCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
 	r.mu.Lock()
 	r.request = req
 	r.mu.Unlock()
 
-	return workers.CommandResult{Stdout: []byte(strings.Join(req.Args, "\n"))}, nil
+	return platformprocess.CommandResult{Stdout: []byte(strings.Join(req.Args, "\n"))}, nil
 }
 
-func (r *templateCaptureCommandRunner) LastRequest() workers.CommandRequest {
+func (r *templateCaptureCommandRunner) LastRequest() platformprocess.CommandRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.request
 }
 
-func failureRunner(stderr string) workers.CommandRunner {
+func failureRunner(stderr string) platformprocess.CommandRunner {
 	return &fakeCommandRunner{stderr: stderr, exitCode: 1}
 }
 
@@ -214,7 +215,7 @@ func quoteYAMLString(value string) string {
 	return strconv.Quote(value)
 }
 
-func assertCommandArgs(t *testing.T, req workers.CommandRequest, want []string) {
+func assertCommandArgs(t *testing.T, req platformprocess.CommandRequest, want []string) {
 	t.Helper()
 
 	if !reflect.DeepEqual(req.Args, want) {
@@ -222,7 +223,7 @@ func assertCommandArgs(t *testing.T, req workers.CommandRequest, want []string) 
 	}
 }
 
-func assertProviderArgsPrompt(t *testing.T, req workers.CommandRequest, want string) {
+func assertProviderArgsPrompt(t *testing.T, req platformprocess.CommandRequest, want string) {
 	t.Helper()
 
 	if len(req.Args) == 0 {
@@ -233,7 +234,7 @@ func assertProviderArgsPrompt(t *testing.T, req workers.CommandRequest, want str
 	}
 }
 
-func assertProviderStdin(t *testing.T, req workers.CommandRequest, want string) {
+func assertProviderStdin(t *testing.T, req platformprocess.CommandRequest, want string) {
 	t.Helper()
 
 	if got := string(req.Stdin); got != want {
@@ -241,7 +242,7 @@ func assertProviderStdin(t *testing.T, req workers.CommandRequest, want string) 
 	}
 }
 
-func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req workers.CommandRequest) {
+func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req platformprocess.CommandRequest) {
 	t.Helper()
 
 	if req.Command != "echo" {
@@ -249,12 +250,6 @@ func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req workers.Comm
 	}
 	if req.WorkDir != support.ResolvedRuntimePath(dir, "/runtime/runtime-template-name/feature-runtime-config") {
 		t.Fatalf("work dir = %q, want resolved runtime working_directory", req.WorkDir)
-	}
-	if req.WorkstationName != "run-script" {
-		t.Fatalf("workstation name = %q, want run-script", req.WorkstationName)
-	}
-	if req.WorkerType != "script-worker" {
-		t.Fatalf("worker type = %q, want script-worker", req.WorkerType)
 	}
 	for _, want := range []string{
 		"INLINE_ONLY=true",
@@ -265,21 +260,6 @@ func assertRuntimeMergeCommandRequest(t *testing.T, dir string, req workers.Comm
 			t.Fatalf("script runner env missing %s in %v", want, req.Env)
 		}
 	}
-}
-
-func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want string) {
-	t.Helper()
-
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == placeID {
-			if got := string(tok.Color.Payload); got != want {
-				t.Fatalf("expected payload %q, got %q", want, got)
-			}
-			return
-		}
-	}
-
-	t.Fatalf("no token found in %s", placeID)
 }
 
 func findRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {

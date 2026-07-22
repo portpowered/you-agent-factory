@@ -2,70 +2,87 @@ package config
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
-func TestExpandFactoryConfig_CreatesDeterministicSplitLayout(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	workerAgentsPath, workstationAgentsPath := writeDeterministicExpandFixture(t, dir, factoryPath)
+type scriptedFactoryDefinitionPersistence struct {
+	factorydefinitions.Persistence
+	flatten func(string) ([]byte, error)
+	expand  func(string) (string, factorydefinitions.LayoutExpansionReport, error)
+}
 
-	var out bytes.Buffer
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out}); err != nil {
-		t.Fatalf("ExpandFactoryConfig: %v", err)
+func (s scriptedFactoryDefinitionPersistence) FlattenFactoryLayout(
+	path string,
+) ([]byte, error) {
+	if s.flatten == nil {
+		panic("unexpected FlattenFactoryLayout call for " + path)
 	}
-	if !strings.Contains(out.String(), "Expanded factory config into") {
-		t.Fatalf("expected expand result output, got %q", out.String())
-	}
+	return s.flatten(path)
+}
 
-	canonical := readCLITestFile(t, factoryPath)
-	payload := decodeConfigPayload(t, canonical, "expanded factory.json")
-	assertDeterministicExpandedPayload(t, payload)
-	assertDeterministicExpandedRuntimeConfig(t, dir)
-	assertDeterministicExpandedFlattenRoundTrip(t, dir)
-	assertDeterministicExpandIsIdempotent(t, factoryPath, canonical, workerAgentsPath, workstationAgentsPath)
+func (s scriptedFactoryDefinitionPersistence) ExpandFactoryLayout(
+	path string,
+) (string, factorydefinitions.LayoutExpansionReport, error) {
+	if s.expand == nil {
+		panic("unexpected ExpandFactoryLayout call for " + path)
+	}
+	return s.expand(path)
 }
 
 func TestExpandFactoryConfig_VerboseLogsWrittenPathCountsWithoutChangingStdout(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	writeDeterministicExpandFixture(t, dir, factoryPath)
+	inputPath := filepath.Join(t.TempDir(), "factory.json")
+	targetDir := t.TempDir()
+	persistence := scriptedFactoryDefinitionPersistence{expand: func(path string) (
+		string,
+		factorydefinitions.LayoutExpansionReport,
+		error,
+	) {
+		if path != inputPath {
+			t.Fatalf("ExpandFactoryLayout path = %q, want %q", path, inputPath)
+		}
+		return targetDir, factorydefinitions.LayoutExpansionReport{
+			FactoryConfigPaths:    1,
+			WorkerAgentPaths:      1,
+			WorkstationAgentPaths: 1,
+			PromptPaths:           1,
+		}, nil
+	}}
 
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	err := NewExpandFactoryConfig(persistence)(FactoryConfigExpandConfig{
+		Path: inputPath, Output: &out, Verbose: true, Diagnostics: &diagnostics,
+	})
+	if err != nil {
 		t.Fatalf("ExpandFactoryConfig: %v", err)
 	}
 
-	if got := out.String(); !strings.HasPrefix(got, "Expanded factory config into "+dir) {
+	if got := out.String(); !strings.HasPrefix(got, "Expanded factory config into "+targetDir) {
 		t.Fatalf("stdout = %q, want normal expand output", got)
 	}
 	got := diagnostics.String()
-	if !containsAll(
-		got,
+	for _, want := range []string{
 		"config expand request",
-		"inputPath="+factoryPath,
+		"inputPath=" + inputPath,
 		"outputMode=filesystem",
 		"config expand complete",
-		"outputDir="+dir,
+		"outputDir=" + targetDir,
 		"writtenFactoryConfigs=1",
 		"writtenWorkerAgents=1",
 		"writtenWorkstationAgents=1",
 		"writtenPromptFiles=1",
 		"replacedBundledFiles=0",
-	) {
-		t.Fatalf("diagnostics missing expected metadata:\n%s", got)
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
 	}
 	if strings.Contains(got, "Complete {{ .WorkID }} deterministically.") {
 		t.Fatalf("diagnostics should not include prompt body:\n%s", got)
@@ -73,28 +90,40 @@ func TestExpandFactoryConfig_VerboseLogsWrittenPathCountsWithoutChangingStdout(t
 }
 
 func TestFlattenFactoryConfig_VerboseLogsInputAndOutputMetadata(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	writeDeterministicExpandFixture(t, dir, factoryPath)
+	inputPath := filepath.Join(t.TempDir(), "factory.json")
+	if err := os.WriteFile(inputPath, []byte(`{"name":"fixture"}`), 0o600); err != nil {
+		t.Fatalf("write input fixture: %v", err)
+	}
+	payload := []byte(`{"name":"canonical"}`)
+	persistence := scriptedFactoryDefinitionPersistence{flatten: func(path string) ([]byte, error) {
+		if path != inputPath {
+			t.Fatalf("FlattenFactoryLayout path = %q, want %q", path, inputPath)
+		}
+		return payload, nil
+	}}
 
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
-	if err := FlattenFactoryConfig(FactoryConfigFlattenConfig{Path: factoryPath, Output: &out, Verbose: true, Diagnostics: &diagnostics}); err != nil {
+	err := NewFlattenFactoryConfig(persistence)(FactoryConfigFlattenConfig{
+		Path: inputPath, Output: &out, Verbose: true, Diagnostics: &diagnostics,
+	})
+	if err != nil {
 		t.Fatalf("FlattenFactoryConfig: %v", err)
 	}
-
-	decodeConfigPayload(t, out.Bytes(), "flatten stdout")
+	if !bytes.Equal(out.Bytes(), payload) {
+		t.Fatalf("stdout = %q, want %q", out.Bytes(), payload)
+	}
 	got := diagnostics.String()
-	if !containsAll(
-		got,
+	for _, want := range []string{
 		"config flatten request",
-		"inputPath="+factoryPath,
-		"layoutSource=file",
+		"inputPath=" + inputPath,
 		"outputMode=stdout",
 		"config flatten complete",
 		"outputBytes=",
-	) {
-		t.Fatalf("diagnostics missing expected metadata:\n%s", got)
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
+		}
 	}
 	if strings.Contains(got, "You are the expanded executor.") {
 		t.Fatalf("diagnostics should not include worker body:\n%s", got)
@@ -102,821 +131,73 @@ func TestFlattenFactoryConfig_VerboseLogsInputAndOutputMetadata(t *testing.T) {
 }
 
 func TestFlattenFactoryConfig_VerboseLogsParseFailurePhase(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	writeCLITestFile(t, factoryPath, `{`)
+	inputPath := filepath.Join(t.TempDir(), "factory.json")
+	persistence := scriptedFactoryDefinitionPersistence{flatten: func(path string) ([]byte, error) {
+		if path != inputPath {
+			t.Fatalf("FlattenFactoryLayout path = %q, want %q", path, inputPath)
+		}
+		return nil, errors.New("parse factory config: malformed JSON")
+	}}
 
 	var diagnostics bytes.Buffer
-	err := FlattenFactoryConfig(FactoryConfigFlattenConfig{Path: factoryPath, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics})
+	err := NewFlattenFactoryConfig(persistence)(FactoryConfigFlattenConfig{
+		Path: inputPath, Output: io.Discard, Verbose: true, Diagnostics: &diagnostics,
+	})
 	if err == nil {
 		t.Fatal("expected invalid config to fail")
 	}
-	if got := diagnostics.String(); !containsAll(got, "config flatten failed", "inputPath="+factoryPath, "phase=parse") {
-		t.Fatalf("diagnostics missing parse failure phase:\n%s", got)
-	}
-}
-
-func writeDeterministicExpandFixture(t *testing.T, dir, factoryPath string) (string, string) {
-	t.Helper()
-
-	writeCLITestFile(t, factoryPath, `{
-			"name":"expand-config-deterministic",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"resources": [{"name":"agent-slot","capacity":2}],
-		"workers": [{
-			"name":"executor",
-				"type":"MODEL_WORKER",
-				"model":"claude-sonnet-4-20250514",
-				"modelProvider":"CLAUDE",
-				"executorProvider":"SCRIPT_WRAP",
-				"resources":[{"name":"agent-slot","capacity":1}],
-				"timeout":"20m",
-				"stopToken":"COMPLETE",
-				"skipPermissions":true,
-				"body":"You are the expanded executor."
-		}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"complete"}],
-			"resources":[{"name":"agent-slot","capacity":2}],
-			"stopWords":["DONE"],
-			"definition":{
-				"type":"MODEL_WORKSTATION",
-				"worker":"executor",
-				"promptFile":"prompt.md",
-				"outputSchema":"schema.json",
-				"limits":{"maxRetries":2,"maxExecutionTime":"30m"},
-				"stopWords":["DONE"],
-				"body":"This body stays in AGENTS.md.",
-				"body":"Complete {{ .WorkID }} deterministically."
-			}
-		}]
-		}`)
-	return filepath.Join(dir, "workers", "executor", "AGENTS.md"), filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
-}
-
-func decodeConfigPayload(t *testing.T, data []byte, label string) map[string]any {
-	t.Helper()
-
-	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatalf("%s is not JSON: %v\n%s", label, err, string(data))
-	}
-	return payload
-}
-
-func assertDeterministicExpandedPayload(t *testing.T, payload map[string]any) {
-	t.Helper()
-
-	if _, ok := payload["workTypes"]; !ok {
-		t.Fatalf("expected canonical workTypes key in expanded factory.json")
-	}
-	if _, ok := payload["work_types"]; ok {
-		t.Fatalf("expected expanded factory.json not to include legacy work_types key")
-	}
-
-	workersPayload, ok := payload["workers"].([]any)
-	if !ok || len(workersPayload) != 1 {
-		t.Fatalf("expected one worker in expanded factory.json, got %#v", payload["workers"])
-	}
-	workerPayload, ok := workersPayload[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected worker payload object, got %#v", workersPayload[0])
-	}
-	for key, want := range map[string]any{
-		"type":             "AGENT_WORKER",
-		"model":            "claude-sonnet-4-20250514",
-		"modelProvider":    "CLAUDE",
-		"executorProvider": "SCRIPT_WRAP",
-		"stopToken":        "COMPLETE",
-		"timeout":          "20m",
-		"skipPermissions":  true,
-	} {
-		if workerPayload[key] != want {
-			t.Fatalf("expanded worker %s = %#v, want %#v", key, workerPayload[key], want)
+	got := diagnostics.String()
+	for _, want := range []string{"config flatten failed", "inputPath=" + inputPath, "phase=parse"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, got)
 		}
-	}
-	if _, ok := workerPayload["body"]; ok {
-		t.Fatalf("expected expanded factory.json worker to omit inline body, got %#v", workerPayload)
-	}
-
-	workstationsPayload, ok := payload["workstations"].([]any)
-	if !ok || len(workstationsPayload) != 1 {
-		t.Fatalf("expected one workstation in expanded factory.json, got %#v", payload["workstations"])
-	}
-	workstationPayload, ok := workstationsPayload[0].(map[string]any)
-	if !ok {
-		t.Fatalf("expected workstation payload object, got %#v", workstationsPayload[0])
-	}
-	for key, want := range map[string]any{
-		"type":         "AGENT_RUN",
-		"worker":       "executor",
-		"promptFile":   "prompt.md",
-		"outputSchema": "schema.json",
-	} {
-		if workstationPayload[key] != want {
-			t.Fatalf("expanded workstation %s = %#v, want %#v", key, workstationPayload[key], want)
-		}
-	}
-	if _, ok := workstationPayload["body"]; ok {
-		t.Fatalf("expected expanded factory.json workstation to omit inline body, got %#v", workstationPayload)
-	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this runtime-shape helper keeps the expanded config contract readable in one assertion pass.
-func assertDeterministicExpandedRuntimeConfig(t *testing.T, dir string) {
-	t.Helper()
-
-	workerAgents := readCLITestFile(t, filepath.Join(dir, "workers", "executor", "AGENTS.md"))
-	if got := string(workerAgents); got != "You are the expanded executor." {
-		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
-	}
-	workstationAgents := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "AGENTS.md"))
-	if got := string(workstationAgents); got != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation AGENTS.md = %q, want body-only workstation content", got)
-	}
-	promptContent := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "prompt.md"))
-	if string(promptContent) != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded prompt file content = %q", string(promptContent))
-	}
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	workerDef, ok := loaded.Worker("executor")
-	if !ok {
-		t.Fatal("expected runtime worker definition")
-	}
-	if workerDef.Model != "claude-sonnet-4-20250514" || workerDef.ModelProvider != "claude" || workerDef.ExecutorProvider != "script_wrap" {
-		t.Fatalf("expanded worker definition did not preserve model/provider fields: %#v", workerDef)
-	}
-	if workerDef.StopToken != "COMPLETE" || !workerDef.SkipPermissions || workerDef.Body != "You are the expanded executor." {
-		t.Fatalf("expanded worker definition did not preserve behavior fields: %#v", workerDef)
-	}
-	workstationDef, ok := loaded.Workstation("execute-story")
-	if !ok {
-		t.Fatal("expected expanded workstation definition to load")
-	}
-	if workstationDef.OutputSchema != "schema.json" || workstationDef.Limits.MaxRetries != 2 || workstationDef.Limits.MaxExecutionTime != "30m" || workstationDef.Timeout != "" {
-		t.Fatalf("expanded workstation definition did not preserve inline runtime fields: %#v", workstationDef)
-	}
-	if workstationDef.Body != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation body = %q", workstationDef.Body)
-	}
-	if workstationDef.PromptTemplate != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
-	}
-}
-
-func assertDeterministicExpandedFlattenRoundTrip(t *testing.T, dir string) {
-	t.Helper()
-
-	flattened, err := factoryconfig.FlattenFactoryConfig(dir)
-	if err != nil {
-		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
-	}
-	flattenedCfg, err := factoryconfig.NewFactoryConfigMapper().Expand(flattened)
-	if err != nil {
-		t.Fatalf("flattened expanded layout should parse: %v", err)
-	}
-	flattenedWorkstation := flattenedCfg.Workstations[0]
-	if flattenedWorkstation.PromptFile != "prompt.md" || flattenedWorkstation.PromptTemplate != "Complete {{ .WorkID }} deterministically." {
-		t.Fatalf("flattened workstation prompt file/template = %q/%q", flattenedWorkstation.PromptFile, flattenedWorkstation.PromptTemplate)
-	}
-	if flattenedWorkstation.OutputSchema != "schema.json" || flattenedWorkstation.Limits.MaxRetries != 2 || flattenedWorkstation.Limits.MaxExecutionTime != "30m" || flattenedWorkstation.Timeout != "" {
-		t.Fatalf("flattened workstation runtime fields = %#v", flattenedWorkstation)
-	}
-}
-
-func assertDeterministicExpandIsIdempotent(t *testing.T, factoryPath string, canonical []byte, workerAgentsPath, workstationAgentsPath string) {
-	t.Helper()
-
-	workerAgents := readCLITestFile(t, workerAgentsPath)
-	workstationAgents := readCLITestFile(t, workstationAgentsPath)
-	before := map[string][]byte{
-		"factory":     append([]byte(nil), canonical...),
-		"worker":      append([]byte(nil), workerAgents...),
-		"workstation": append([]byte(nil), workstationAgents...),
-	}
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: io.Discard}); err != nil {
-		t.Fatalf("ExpandFactoryConfig second run: %v", err)
-	}
-	after := map[string][]byte{
-		"factory":     readCLITestFile(t, factoryPath),
-		"worker":      readCLITestFile(t, workerAgentsPath),
-		"workstation": readCLITestFile(t, workstationAgentsPath),
-	}
-	for name, beforeBytes := range before {
-		if !bytes.Equal(beforeBytes, after[name]) {
-			t.Fatalf("%s changed after idempotent expand\nbefore:\n%s\nafter:\n%s", name, string(beforeBytes), string(after[name]))
-		}
-	}
-}
-
-func TestExpandFactoryConfig_WritesPromptFileFromBodyWhenPromptTemplateMissing(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	writeCLITestFile(t, factoryPath, `{
-		"name":"expand-config-prompt-file",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"resources": [],
-		"workers": [{
-			"name":"executor",
-			"definition":{
-				"type":"MODEL_WORKER",
-				"model":"claude-sonnet-4-20250514",
-				"body":"Execute the task."
-			}
-		}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"complete"}],
-			"resources":[],
-			"definition":{
-				"type":"MODEL_WORKSTATION",
-				"worker":"executor",
-				"promptFile":"prompts/task.md",
-				"body":"Use {{ .WorkID }} as the prompt."
-			}
-		}]
-	}`)
-
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: io.Discard}); err != nil {
-		t.Fatalf("ExpandFactoryConfig: %v", err)
-	}
-
-	promptPath := filepath.Join(dir, "workstations", "execute-story", "prompts", "task.md")
-	promptContent := readCLITestFile(t, promptPath)
-	if string(promptContent) != "Use {{ .WorkID }} as the prompt." {
-		t.Fatalf("prompt file content = %q", string(promptContent))
-	}
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	workstationDef, ok := loaded.Workstation("execute-story")
-	if !ok {
-		t.Fatal("expected expanded workstation definition to load")
-	}
-	if workstationDef.PromptTemplate != "Use {{ .WorkID }} as the prompt." {
-		t.Fatalf("expanded workstation prompt template = %q", workstationDef.PromptTemplate)
 	}
 }
 
 func TestExpandFactoryConfig_ReportsReplacedPortableBundledFiles(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
-	writeCLITestFile(t, factoryPath, `{
-		"name":"expand-config-portable-replacement",
-		"supportingFiles":{
-			"bundledFiles":[
-				{"type":"SCRIPT","targetPath":"factory/scripts/execute-story.ps1","content":{"encoding":"utf-8","inline":"Write-Output 'portable script'\n"}}
-			]
-		},
-		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"workers":[{"name":"executor","definition":{"type":"SCRIPT_WORKER","command":"powershell","args":["-File","scripts/execute-story.ps1"],"body":"Run the script."}}],
-		"workstations":[{"name":"execute-story","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}]}]
-	}`)
-	writeCLITestFile(t, filepath.Join(dir, "scripts", "execute-story.ps1"), "Write-Output 'stale script'\n")
+	inputPath := filepath.Join(t.TempDir(), "factory.json")
+	persistence := scriptedFactoryDefinitionPersistence{expand: func(path string) (
+		string,
+		factorydefinitions.LayoutExpansionReport,
+		error,
+	) {
+		if path != inputPath {
+			t.Fatalf("ExpandFactoryLayout path = %q, want %q", path, inputPath)
+		}
+		return filepath.Dir(inputPath), factorydefinitions.LayoutExpansionReport{
+			BundledReplacements: []factorydefinitions.PortableBundledFileReplacement{{
+				TargetPath: "factory/scripts/execute-story.ps1",
+			}},
+		}, nil
+	}}
 
 	var out bytes.Buffer
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out}); err != nil {
+	if err := NewExpandFactoryConfig(persistence)(FactoryConfigExpandConfig{
+		Path: inputPath, Output: &out,
+	}); err != nil {
 		t.Fatalf("ExpandFactoryConfig: %v", err)
 	}
-
 	if !strings.Contains(out.String(), "Replaced existing portable bundled file at factory/scripts/execute-story.ps1") {
 		t.Fatalf("expected portable bundled replacement report, got %q", out.String())
-	}
-	if got := string(readCLITestFile(t, filepath.Join(dir, "scripts", "execute-story.ps1"))); got != "Write-Output 'portable script'\n" {
-		t.Fatalf("expanded script file = %q, want portable content", got)
-	}
-}
-
-func TestExpandFactoryConfig_PreservesPortableResourceManifestAndMaterializesBundledFiles(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	pythonCommand := portablePythonCommand(t)
-	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolWithPurposeJSON(pythonCommand))
-
-	targetDir, _, canonical := expandPortableResourceManifestFactory(t, factoryPath)
-	assertPortableResourceManifestPayload(t, canonical, pythonCommand)
-	assertFlattenedPortableResourceManifestPreserved(t, targetDir)
-	assertPortableBundledFilesMaterialized(t, targetDir)
-	assertLoadedPortableResourceManifest(t, targetDir)
-}
-
-func TestExpandFactoryConfig_PortableResourceManifestSmoke_ValidatesRequiredToolsAndPreservesManifestAcrossExpandAndFlatten(t *testing.T) {
-	dir := t.TempDir()
-	toolsDir := t.TempDir()
-	presentCommand := writeCLIRequiredToolExecutable(t, toolsDir, "portable-helper")
-	t.Setenv("PATH", toolsDir)
-
-	factoryPath := filepath.Join(dir, "factory.json")
-	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolsJSON(presentCommand)+`, {"name":"Missing helper","command":"missing-helper"}`)
-	assertPortableResourceManifestMissingToolLoadFailure(t, dir)
-
-	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolsJSON(presentCommand))
-	targetDir, _, canonical := expandPortableResourceManifestFactory(t, factoryPath)
-	assertPortableResourceManifestPayload(t, canonical, presentCommand)
-	assertFlattenedPortableResourceManifestPreservedWithCommand(t, targetDir, presentCommand)
-	assertPortableBundledFilesMaterialized(t, targetDir)
-	assertLoadedPortableResourceManifest(t, targetDir)
-}
-
-func TestExpandFactoryConfig_PortableResourceManifestSmoke_PreservesContractAndRejectsMissingTools(t *testing.T) {
-	dir := t.TempDir()
-	toolsDir := t.TempDir()
-	presentCommand := writeCLIRequiredToolExecutable(t, toolsDir, "portable-helper")
-	t.Setenv("PATH", toolsDir)
-
-	factoryPath := filepath.Join(dir, "factory.json")
-	writePortableResourceManifestFactoryConfig(t, factoryPath, portableRequiredToolsJSON(presentCommand))
-
-	targetDir, canonicalPath, canonical := expandPortableResourceManifestFactory(t, factoryPath)
-	assertPortableResourceManifestPayload(t, canonical, presentCommand)
-	assertFlattenedPortableResourceManifestPreserved(t, targetDir)
-	assertPortableBundledFilesMaterialized(t, targetDir)
-	assertLoadedPortableResourceManifest(t, targetDir)
-
-	writePortableResourceManifestWithMissingTool(t, canonicalPath, canonical)
-	assertPortableResourceManifestMissingToolLoadFailure(t, targetDir)
-}
-
-func TestExpandFactoryConfig_RejectsMissingRequiredToolFromPortableResourceManifest(t *testing.T) {
-	dir := t.TempDir()
-	factoryPath := filepath.Join(dir, "factory.json")
-	writePortableResourceManifestFactoryConfig(t, factoryPath, `{"name":"Missing helper","command":"missing-helper"}`)
-
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: io.Discard}); err != nil {
-		t.Fatalf("expected expand to preserve external required-tool declarations, got %v", err)
-	}
-	assertPortableBundledFilesMaterialized(t, dir)
-	assertPortableResourceManifestMissingToolLoadFailureAtIndex(t, dir, 0)
-}
-
-func TestExpandFactoryConfig_RejectsInvalidBundledFileRootFromPortableResourceManifest(t *testing.T) {
-	dir := t.TempDir()
-	toolsDir := t.TempDir()
-	presentCommand := writeCLIRequiredToolExecutable(t, toolsDir, "portable-helper")
-	t.Setenv("PATH", toolsDir)
-
-	factoryPath := filepath.Join(dir, "factory.json")
-	writePortableResourceManifestFactoryConfigWithScriptTarget(t, factoryPath, portableRequiredToolWithPurposeJSON(presentCommand), "factory/docs/not-a-script.md")
-
-	err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: io.Discard})
-	if err == nil {
-		t.Fatal("expected expand to reject invalid bundled file root")
-	}
-	if !containsAll(err.Error(),
-		"validation failed: 1 errors",
-		"[bundled-file-target-root] resourceManifest.bundledFiles[0].targetPath",
-		`must stay under "factory/scripts/" for SCRIPT bundled files`,
-	) {
-		t.Fatalf("expected bundled-file root validation failure, got %v", err)
-	}
-	assertExpandDidNotWriteSplitRuntimeFiles(t, dir)
-}
-
-func portableRequiredToolsJSON(command string) string {
-	return `{
-				"name":"Portable helper",
-				"command":"` + command + `",
-				"purpose":"Runs portable helper scripts",
-				"versionArgs":["--version"]
-			}`
-}
-
-func portableRequiredToolWithPurposeJSON(command string) string {
-	return `{
-				"name":"python",
-				"command":"` + command + `",
-				"purpose":"Runs portable helper scripts",
-				"versionArgs":["--version"]
-			}`
-}
-
-func writePortableResourceManifestFactoryConfig(t *testing.T, factoryPath string, requiredToolsJSON string) {
-	t.Helper()
-
-	writePortableResourceManifestFactoryConfigWithScriptTarget(t, factoryPath, requiredToolsJSON, "factory/scripts/setup-workspace.py")
-}
-
-func writePortableResourceManifestFactoryConfigWithScriptTarget(t *testing.T, factoryPath string, requiredToolsJSON, scriptTargetPath string) {
-	t.Helper()
-
-	writeCLITestFile(t, factoryPath, `{
-		"name":"portable-resource-manifest-fixture",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"supportingFiles": {
-			"requiredTools": [`+requiredToolsJSON+`],
-			"bundledFiles": [{
-				"type":"SCRIPT",
-				"targetPath":"`+scriptTargetPath+`",
-				"content":{"encoding":"utf-8","inline":"print('portable')\n"}
-			}, {
-				"type":"ROOT_HELPER",
-				"targetPath":"Makefile",
-				"content":{"encoding":"utf-8","inline":"test:\n\tgo test ./...\n"}
-			}, {
-				"type":"DOC",
-				"targetPath":"factory/docs/usage.md",
-				"content":{"encoding":"utf-8","inline":"# Usage\n"}
-			}]
-		},
-		"workers": [{
-			"name":"executor",
-			"type":"SCRIPT_WORKER",
-			"command":"echo"
-		}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"complete"}]
-		}]
-	}`)
-}
-
-func expandPortableResourceManifestFactory(t *testing.T, factoryPath string) (string, string, map[string]any) {
-	t.Helper()
-
-	var out bytes.Buffer
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: factoryPath, Output: &out}); err != nil {
-		t.Fatalf("ExpandFactoryConfig: %v", err)
-	}
-	targetDir := strings.TrimSpace(strings.TrimPrefix(out.String(), "Expanded factory config into "))
-	if targetDir == "" {
-		t.Fatalf("expected expand output to include target directory, got %q", out.String())
-	}
-
-	canonicalPath := filepath.Join(targetDir, "factory.json")
-	return targetDir, canonicalPath, mustReadCanonicalFactoryPayload(t, canonicalPath)
-}
-
-func assertPortableResourceManifestPayload(t *testing.T, canonical map[string]any, wantCommand string) {
-	t.Helper()
-
-	resourceManifest, ok := canonical["supportingFiles"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected expanded canonical factory.json to preserve supportingFiles, got %#v", canonical["supportingFiles"])
-	}
-	requiredTools, ok := resourceManifest["requiredTools"].([]any)
-	if !ok || len(requiredTools) != 1 {
-		t.Fatalf("requiredTools = %#v, want one entry", resourceManifest["requiredTools"])
-	}
-	if got := requiredTools[0].(map[string]any)["command"]; got != wantCommand {
-		t.Fatalf("required tool command = %#v, want %q", got, wantCommand)
-	}
-	assertPortableBundledFileTargets(t, resourceManifest)
-}
-
-func assertPortableBundledFileTargets(t *testing.T, resourceManifest map[string]any) {
-	t.Helper()
-
-	bundledFiles, ok := resourceManifest["bundledFiles"].([]any)
-	if !ok || len(bundledFiles) != 3 {
-		t.Fatalf("bundledFiles = %#v, want three entries", resourceManifest["bundledFiles"])
-	}
-	if got := bundledFiles[0].(map[string]any)["targetPath"]; got != "Makefile" {
-		t.Fatalf("bundled root helper targetPath = %#v", got)
-	}
-	if got := bundledFiles[1].(map[string]any)["targetPath"]; got != "factory/docs/usage.md" {
-		t.Fatalf("bundled doc targetPath = %#v", got)
-	}
-	if got := bundledFiles[2].(map[string]any)["targetPath"]; got != "factory/scripts/setup-workspace.py" {
-		t.Fatalf("bundled script targetPath = %#v", got)
-	}
-}
-
-func assertFlattenedPortableResourceManifestPreserved(t *testing.T, targetDir string) {
-	t.Helper()
-
-	flattened, err := factoryconfig.FlattenFactoryConfig(targetDir)
-	if err != nil {
-		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
-	}
-	flattenedPayload := mustDecodeCanonicalFactoryPayload(t, flattened)
-	if _, ok := flattenedPayload["supportingFiles"].(map[string]any); !ok {
-		t.Fatalf("expected flattened expanded layout to preserve supportingFiles, got %#v", flattenedPayload["supportingFiles"])
-	}
-}
-
-func assertFlattenedPortableResourceManifestPreservedWithCommand(t *testing.T, targetDir string, wantCommand string) {
-	t.Helper()
-
-	flattened, err := factoryconfig.FlattenFactoryConfig(targetDir)
-	if err != nil {
-		t.Fatalf("FlattenFactoryConfig(expanded split layout): %v", err)
-	}
-	flattenedPayload := mustDecodeCanonicalFactoryPayload(t, flattened)
-	flattenedManifest, ok := flattenedPayload["supportingFiles"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected flattened expanded layout to preserve supportingFiles, got %#v", flattenedPayload["supportingFiles"])
-	}
-	requiredTools, ok := flattenedManifest["requiredTools"].([]any)
-	if !ok || len(requiredTools) != 1 {
-		t.Fatalf("flattened requiredTools = %#v, want one entry", flattenedManifest["requiredTools"])
-	}
-	if got := requiredTools[0].(map[string]any)["command"]; got != wantCommand {
-		t.Fatalf("flattened required tool command = %#v, want %q", got, wantCommand)
-	}
-}
-
-func assertPortableBundledFilesMaterialized(t *testing.T, targetDir string) {
-	t.Helper()
-
-	for _, file := range []struct {
-		path    string
-		content string
-	}{
-		{
-			path:    filepath.Join(targetDir, "Makefile"),
-			content: "test:\n\tgo test ./...\n",
-		},
-		{
-			path:    filepath.Join(targetDir, "docs", "usage.md"),
-			content: "# Usage\n",
-		},
-		{
-			path:    filepath.Join(targetDir, "scripts", "setup-workspace.py"),
-			content: "print('portable')\n",
-		},
-	} {
-		got, err := os.ReadFile(file.path)
-		if err != nil {
-			t.Fatalf("expected expand to materialize bundled file %s: %v", file.path, err)
-		}
-		if string(got) != file.content {
-			t.Fatalf("bundled file %s content = %q, want %q", file.path, string(got), file.content)
-		}
-	}
-}
-
-func assertLoadedPortableResourceManifest(t *testing.T, targetDir string) {
-	t.Helper()
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(targetDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(expanded split layout): %v", err)
-	}
-	if loaded.FactoryConfig().ResourceManifest == nil {
-		t.Fatal("expected expanded runtime config to retain resourceManifest")
-	}
-	if len(loaded.FactoryConfig().ResourceManifest.RequiredTools) != 1 {
-		t.Fatalf("expanded runtime manifest requiredTools = %#v", loaded.FactoryConfig().ResourceManifest.RequiredTools)
-	}
-	if len(loaded.FactoryConfig().ResourceManifest.BundledFiles) != 3 {
-		t.Fatalf("expanded runtime manifest bundledFiles = %#v", loaded.FactoryConfig().ResourceManifest.BundledFiles)
-	}
-}
-
-func writePortableResourceManifestWithMissingTool(t *testing.T, canonicalPath string, canonical map[string]any) {
-	t.Helper()
-
-	resourceManifest := canonical["supportingFiles"].(map[string]any)
-	requiredTools := resourceManifest["requiredTools"].([]any)
-	resourceManifest["requiredTools"] = append(requiredTools, map[string]any{
-		"name":    "Missing helper",
-		"command": "missing-helper",
-	})
-
-	mutatedCanonical, err := json.Marshal(canonical)
-	if err != nil {
-		t.Fatalf("Marshal(mutated canonical factory): %v", err)
-	}
-	writeCLITestFile(t, canonicalPath, string(mutatedCanonical))
-}
-
-func assertPortableResourceManifestMissingToolLoadFailure(t *testing.T, targetDir string) {
-	t.Helper()
-	assertPortableResourceManifestMissingToolLoadFailureAtIndex(t, targetDir, 1)
-}
-
-func assertPortableResourceManifestMissingToolLoadFailureAtIndex(t *testing.T, targetDir string, requiredToolIndex int) {
-	t.Helper()
-
-	_, err := factoryconfig.LoadRuntimeConfig(targetDir, nil)
-	if err == nil {
-		t.Fatal("expected missing required tool to fail runtime config load")
-	}
-	if !containsAll(err.Error(),
-		"validation failed: 1 errors",
-		fmt.Sprintf("[required-tool-missing] resourceManifest.requiredTools[%d].command", requiredToolIndex),
-		`"missing-helper" was not found on PATH`,
-	) {
-		t.Fatalf("expected required-tool load validation failure, got %v", err)
-	}
-}
-
-func assertExpandDidNotWriteSplitRuntimeFiles(t *testing.T, dir string) {
-	t.Helper()
-
-	for _, path := range []string{
-		filepath.Join(dir, "workers", "executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(dir, "workstations", "execute-story", interfaces.FactoryAgentsFileName),
-	} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("expected expand validation failure to avoid writing %s, stat err = %v", path, err)
-		}
-	}
-}
-
-func TestExpandFactoryConfig_KeepsExistingCanonicalSplitDefinitionsWhenInlineDefinitionsMissing(t *testing.T) {
-	runSplitDefinitionPreservationCases(t, "keep-existing-canonical-split-definitions", false)
-}
-
-func TestFlattenFactoryConfig_FlattensCanonicalWorkstationStopWords(t *testing.T) {
-	dir := t.TempDir()
-	writeCLITestFile(t, filepath.Join(dir, "factory.json"), `{
-		"name":"flatten-canonical-workstation-stop-words",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"resources": [],
-		"workers": [{
-			"name":"executor",
-			"type":"SCRIPT_WORKER",
-			"command":"echo"
-		}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"complete"}]
-		}]
-	}`)
-	writeCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "AGENTS.md"), `---
-type: MODEL_WORKSTATION
-worker: executor
-stopWords:
-  - DONE
----
-
-Review the output.
-`)
-
-	flattened, err := factoryconfig.FlattenFactoryConfig(dir)
-	if err != nil {
-		t.Fatalf("FlattenFactoryConfig: %v", err)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(flattened, &payload); err != nil {
-		t.Fatalf("unmarshal flattened config: %v", err)
-	}
-	workstations := payload["workstations"].([]any)
-	workstation := workstations[0].(map[string]any)
-	stopWords := workstation["stopWords"].([]any)
-	if len(stopWords) != 1 || stopWords[0] != "DONE" {
-		t.Fatalf("expected canonical stopWords [DONE], got %#v", workstation["stopWords"])
-	}
-	if _, ok := workstation["stopToken"]; ok {
-		t.Fatalf("expected canonical flattened config not to emit workstation stopToken, got %#v", workstation)
-	}
-}
-
-func TestExpandFactoryConfig_PreservesExistingSplitDefinitionsWhenInlineDefinitionsMissing(t *testing.T) {
-	runSplitDefinitionPreservationCases(t, "preserve-existing-split-definitions", true)
-}
-
-func runSplitDefinitionPreservationCases(t *testing.T, fixtureName string, includeStopWords bool) {
-	t.Helper()
-
-	tests := []struct {
-		name      string
-		inputPath func(string) string
-	}{
-		{
-			name: "directory input",
-			inputPath: func(dir string) string {
-				return dir
-			},
-		},
-		{
-			name: "factory file beside split files",
-			inputPath: func(dir string) string {
-				return filepath.Join(dir, "factory.json")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir, workerAgentsPath, workstationAgentsPath, promptPath := writeExistingSplitDefinitionsFixture(t, fixtureName, includeStopWords)
-			assertExistingSplitDefinitionsPreserved(t, dir, tt.inputPath(dir), workerAgentsPath, workstationAgentsPath, promptPath)
-		})
-	}
-}
-
-func writeExistingSplitDefinitionsFixture(t *testing.T, fixtureName string, includeStopWords bool) (string, string, string, string) {
-	t.Helper()
-
-	dir := t.TempDir()
-	workstationTail := `"resources":[]`
-	if includeStopWords {
-		workstationTail += `,
-			"stopWords":["DONE"]`
-	}
-	writeCLITestFile(t, filepath.Join(dir, "factory.json"), fmt.Sprintf(`{
-		"name":"%s",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"resources": [],
-		"workers": [{"name":"executor"}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"complete"}],
-			%s
-		}]
-	}`, fixtureName, workstationTail))
-	workerAgentsPath := filepath.Join(dir, "workers", "executor", "AGENTS.md")
-	writeCLITestFile(t, workerAgentsPath, `---
-type: SCRIPT_WORKER
-command: powershell
-args:
-  - -NoProfile
-  - -Command
-  - Write-Output preserved
-executorProvider: local
-timeout: 45m
-stopToken: DONE
----
-Existing worker body.
-`)
-	workstationAgentsPath := filepath.Join(dir, "workstations", "execute-story", "AGENTS.md")
-	writeCLITestFile(t, workstationAgentsPath, `---
-type: MODEL_WORKSTATION
-worker: executor
-promptFile: prompts/task.md
-limits:
-  maxRetries: 3
-  maxExecutionTime: 15m
-stopWords:
-  - DONE
----
-Existing workstation body.
-`)
-	promptPath := filepath.Join(dir, "workstations", "execute-story", "prompts", "task.md")
-	writeCLITestFile(t, promptPath, "Preserve {{ .WorkID }}.\n")
-	return dir, workerAgentsPath, workstationAgentsPath, promptPath
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the preserved split-definition contract inline across all authored files.
-func assertExistingSplitDefinitionsPreserved(t *testing.T, dir, inputPath, workerAgentsPath, workstationAgentsPath, promptPath string) {
-	t.Helper()
-
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: inputPath, Output: io.Discard}); err != nil {
-		t.Fatalf("ExpandFactoryConfig: %v", err)
-	}
-
-	workerAgents := string(readCLITestFile(t, workerAgentsPath))
-	if workerAgents != "Existing worker body." {
-		t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
-	}
-	workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
-	if workstationAgents != "Existing workstation body." {
-		t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
-	}
-	if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {
-		t.Fatalf("prompt file content = %q, want preserved prompt file content", got)
-	}
-
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	workerDef, ok := loaded.Worker("executor")
-	if !ok {
-		t.Fatal("expected runtime worker definition")
-	}
-	if workerDef.Type != interfaces.WorkerTypeScript || workerDef.Command != "powershell" || workerDef.Timeout != "45m" {
-		t.Fatalf("expected existing worker definition to be preserved, got %#v", workerDef)
-	}
-	workstationDef, ok := loaded.Workstation("execute-story")
-	if !ok {
-		t.Fatal("expected runtime workstation definition")
-	}
-	if workstationDef.Limits.MaxRetries != 3 || workstationDef.PromptTemplate != "Preserve {{ .WorkID }}.\n" {
-		t.Fatalf("expected existing workstation definition to be preserved, got %#v", workstationDef)
-	}
-
-	if err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: inputPath, Output: io.Discard}); err != nil {
-		t.Fatalf("ExpandFactoryConfig second run: %v", err)
-	}
-	if workerAgents != string(readCLITestFile(t, workerAgentsPath)) {
-		t.Fatalf("worker AGENTS.md changed after idempotent expand")
-	}
-	if workstationAgents != string(readCLITestFile(t, workstationAgentsPath)) {
-		t.Fatalf("workstation AGENTS.md changed after idempotent expand")
 	}
 }
 
 func TestExpandFactoryConfig_InvalidPathReturnsContext(t *testing.T) {
-	err := ExpandFactoryConfig(FactoryConfigExpandConfig{Path: filepath.Join(t.TempDir(), "missing-factory.json"), Output: io.Discard})
+	inputPath := filepath.Join(t.TempDir(), "missing-factory.json")
+	persistence := scriptedFactoryDefinitionPersistence{expand: func(path string) (
+		string,
+		factorydefinitions.LayoutExpansionReport,
+		error,
+	) {
+		if path != inputPath {
+			t.Fatalf("ExpandFactoryLayout path = %q, want %q", path, inputPath)
+		}
+		return "", factorydefinitions.LayoutExpansionReport{},
+			errors.New("find factory config source: file does not exist")
+	}}
+	err := NewExpandFactoryConfig(persistence)(FactoryConfigExpandConfig{
+		Path: inputPath, Output: io.Discard,
+	})
 	if err == nil {
 		t.Fatal("expected missing factory config path to fail")
 	}
@@ -925,75 +206,14 @@ func TestExpandFactoryConfig_InvalidPathReturnsContext(t *testing.T) {
 	}
 }
 
-func writeCLITestFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+func TestConfigLayoutOperationsRequireCobraOutput(t *testing.T) {
+	persistence := scriptedFactoryDefinitionPersistence{}
+	if err := NewFlattenFactoryConfig(persistence)(FactoryConfigFlattenConfig{}); err == nil ||
+		!strings.Contains(err.Error(), "config flatten output is required") {
+		t.Fatalf("flatten error = %v, want missing output", err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
+	if err := NewExpandFactoryConfig(persistence)(FactoryConfigExpandConfig{}); err == nil ||
+		!strings.Contains(err.Error(), "config expand output is required") {
+		t.Fatalf("expand error = %v, want missing output", err)
 	}
-}
-
-func readCLITestFile(t *testing.T, path string) []byte {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	return data
-}
-
-func portablePythonCommand(t *testing.T) string {
-	t.Helper()
-
-	for _, candidate := range []string{"python", "python3"} {
-		if _, err := exec.LookPath(candidate); err == nil {
-			return candidate
-		}
-	}
-
-	t.Skip("portable resource manifest test requires python or python3 on PATH")
-	return ""
-}
-
-func writeCLIRequiredToolExecutable(t *testing.T, dir, baseName string) string {
-	t.Helper()
-
-	commandName := baseName
-	content := "#!/bin/sh\nexit 0\n"
-	if runtime.GOOS == "windows" {
-		commandName += ".cmd"
-		content = "@echo off\r\nexit /b 0\r\n"
-	}
-
-	path := filepath.Join(dir, commandName)
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
-		t.Fatalf("write required tool %s: %v", path, err)
-	}
-	return baseName
-}
-
-func mustReadCanonicalFactoryPayload(t *testing.T, path string) map[string]any {
-	t.Helper()
-	return mustDecodeCanonicalFactoryPayload(t, readCLITestFile(t, path))
-}
-
-func mustDecodeCanonicalFactoryPayload(t *testing.T, data []byte) map[string]any {
-	t.Helper()
-
-	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatalf("unmarshal canonical factory payload: %v", err)
-	}
-	return payload
-}
-
-func containsAll(value string, substrings ...string) bool {
-	for _, substring := range substrings {
-		if !strings.Contains(value, substring) {
-			return false
-		}
-	}
-	return true
 }

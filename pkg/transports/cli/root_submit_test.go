@@ -5,19 +5,19 @@ import (
 	"context"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	"github.com/spf13/cobra"
 )
 
 func TestSubmitCommand_HelpAdvertisesRequiredFlags(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	submitCmd, _, err := root.Find([]string{"submit"})
 	if err != nil {
 		t.Fatalf("find submit: %v", err)
@@ -37,7 +37,7 @@ func TestSubmitCommand_HelpAdvertisesRequiredFlags(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	root = NewRootCommand()
+	root = newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "--help"})
@@ -77,7 +77,7 @@ func TestSubmitCommand_WorkTypeIDFlagIsRejected(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -107,10 +107,10 @@ func TestSubmitCommand_MissingWorkTypeNameReturnsLocalValidationError(t *testing
 	called := false
 	submitWork = func(cfg submitcli.SubmitConfig) error {
 		called = true
-		return submitcli.Submit(cfg)
+		return submitcli.NewSubmit(work.PayloadFileReader(os.ReadFile), rootTestHTTPProtocol())(cfg)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "--name", "request-name", "--payload", "work.json"})
@@ -136,10 +136,10 @@ func TestSubmitCommand_MissingNameReturnsLocalValidationError(t *testing.T) {
 	called := false
 	submitWork = func(cfg submitcli.SubmitConfig) error {
 		called = true
-		return submitcli.Submit(cfg)
+		return submitcli.NewSubmit(work.PayloadFileReader(os.ReadFile), rootTestHTTPProtocol())(cfg)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "--work-type-name", "tasks", "--payload", "work.json"})
@@ -165,10 +165,10 @@ func TestSubmitCommand_MissingPayloadReturnsLocalValidationError(t *testing.T) {
 	called := false
 	submitWork = func(cfg submitcli.SubmitConfig) error {
 		called = true
-		return submitcli.Submit(cfg)
+		return submitcli.NewSubmit(work.PayloadFileReader(os.ReadFile), rootTestHTTPProtocol())(cfg)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "--name", "request-name", "--work-type-name", "tasks"})
@@ -197,7 +197,7 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -226,7 +226,7 @@ func TestSubmitCommand_WorkTypeNameFlagMapsToSubmitConfig(t *testing.T) {
 }
 
 func TestSubmitCommand_PortFlagRejected(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -256,7 +256,7 @@ func TestSubmitCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -276,7 +276,7 @@ func TestSubmitCommand_DefaultServerMapsToSharedLocalURI(t *testing.T) {
 }
 
 func TestSubmitBatchCommand_HelpDocumentsBatchIngressModes(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	batchCmd, _, err := root.Find([]string{"submit", "batch"})
 	if err != nil {
 		t.Fatalf("find submit batch: %v", err)
@@ -294,7 +294,7 @@ func TestSubmitBatchCommand_HelpDocumentsBatchIngressModes(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	root = NewRootCommand()
+	root = newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "batch", "--help"})
@@ -332,7 +332,7 @@ func TestSubmitBatchCommand_HelpDocumentsBatchIngressModes(t *testing.T) {
 
 func TestSubmitCommand_HelpMentionsBatchSubcommand(t *testing.T) {
 	var out bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "--help"})
@@ -367,7 +367,7 @@ func TestSubmitBatchCommand_InvokesSubmitBatchHandler(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"submit", "batch", "batch.json"})
@@ -395,7 +395,7 @@ func TestRunCommand_DefaultServerEnablesAutoPortAndLocalBind(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run"})
@@ -426,7 +426,7 @@ func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--server", "http://127.0.0.1:9090"})
@@ -446,7 +446,7 @@ func TestRunCommand_ExplicitServerDerivesBindPortAndDisablesAutoPort(t *testing.
 }
 
 func TestRunCommand_NonLocalServerRejected(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--server", "https://remote.example.com:7443"})
@@ -459,7 +459,7 @@ func TestRunCommand_NonLocalServerRejected(t *testing.T) {
 }
 
 func TestRunCommand_PortFlagRejected(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"run", "--port", "7437"})
@@ -472,7 +472,7 @@ func TestRunCommand_PortFlagRejected(t *testing.T) {
 }
 
 func TestRunCommand_RuntimeMetricsFlags(t *testing.T) {
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	runCmd, _, err := root.Find([]string{"run"})
 	if err != nil {
 		t.Fatalf("find run: %v", err)
@@ -523,7 +523,7 @@ func TestRunCommand_RuntimeMetricsFlagsMapToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -548,32 +548,13 @@ func TestRunCommand_RuntimeMetricsFlagsMapToRunConfig(t *testing.T) {
 	}
 }
 
-func withNamedPackagedFactoryRunRoot(t *testing.T) func() {
+func withNamedPackagedFactoryRunRoot(t *testing.T, prepare ...rootInvocationInputScript) *cobra.Command {
 	t.Helper()
 
-	workingDirectory := t.TempDir()
-	homeDir := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
+	if len(prepare) > 0 {
+		return newTransportNamedFactoryRootWithInvocation(t, prepare[0], "@you/goal", "@you/tts")
 	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	t.Setenv("HOME", homeDir)
-	t.Setenv("USERPROFILE", homeDir)
-	volumeName := filepath.VolumeName(homeDir)
-	t.Setenv("HOMEDRIVE", volumeName)
-	t.Setenv("HOMEPATH", strings.TrimPrefix(homeDir, volumeName))
-	if _, err := configinit.Init(homeDir); err != nil {
-		t.Fatalf("configinit.Init: %v", err)
-	}
-
-	return func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}
+	return newTransportNamedFactoryRoot(t, "@you/goal", "@you/tts")
 }
 
 func assertNamedPackagedFactoryInvocationInput(
@@ -670,16 +651,17 @@ func TestRunCommand_NamedPackagedFactoryInvocationInputSources(t *testing.T) {
 			defer func() {
 				runCLI = originalRunCLI
 			}()
-			restore := withNamedPackagedFactoryRunRoot(t)
-			defer restore()
-
 			var got runcli.RunConfig
 			runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
 				got = cfg
 				return nil
 			}
 
-			root := NewRootCommand()
+			prepare := programmedTextInvocationInput(work.InputSourcePositionalText, tc.wantPositional)
+			if tc.wantStdin != "" {
+				prepare = programmedTextInvocationInput(work.InputSourceStdinText, tc.wantStdin)
+			}
+			root := withNamedPackagedFactoryRunRoot(t, prepare)
 			if tc.stdin != "" {
 				root.SetIn(strings.NewReader(tc.stdin))
 			}
@@ -728,16 +710,20 @@ func TestRunCommand_NamedPackagedFactoryRejectsAmbiguousInvocationInput(t *testi
 			defer func() {
 				runCLI = originalRunCLI
 			}()
-			restore := withNamedPackagedFactoryRunRoot(t)
-			defer restore()
-
 			runCalled := false
 			runCLI = func(context.Context, runcli.RunConfig) error {
 				runCalled = true
 				return nil
 			}
 
-			root := NewRootCommand()
+			root := withNamedPackagedFactoryRunRoot(t, programmedInvocationInput(
+				work.PreparedInvocationInput{},
+				&work.InputError{
+					Code:               work.InputErrorCodeSourceConflict,
+					Message:            "invocation input sources conflict: positional_text, stdin_text",
+					ConflictingSources: []work.InputSourceLabel{work.InputSourcePositionalText, work.InputSourceStdinText},
+				},
+			))
 			root.SetIn(strings.NewReader(tc.stdin))
 			root.SetOut(io.Discard)
 			root.SetErr(io.Discard)

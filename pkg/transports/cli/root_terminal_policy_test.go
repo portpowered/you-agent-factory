@@ -12,65 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 )
-
-func TestWorkflowCommandClosesRuntimeExecutionOwnerExactlyOnce(t *testing.T) {
-	service, err := fse.NewFakeServiceFromContractFixtures(contractFixtureCatalogPathForTerminology(t))
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
-	}
-
-	tests := []struct {
-		name      string
-		args      []string
-		wantError bool
-	}{
-		{name: "success", args: []string{"workflow", "run", "--request-id", "req-petri-success-001", "--factory", "customer-support-triage"}},
-		{name: "command error", args: []string{"workflow", "status", "missing-session"}, wantError: true},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			closeCount := 0
-			root := NewRootCommandWithOptions(RootCommandOptions{
-				BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (sessionexecutioncli.ServiceOwner, error) {
-					if request.Provider != string(fse.ExecutionProviderJavaScriptRuntime) {
-						t.Fatalf("provider = %q, want runtime provider", request.Provider)
-					}
-					return commandLifecycleExecutionOwner{Service: service, closeCount: &closeCount}, nil
-				},
-			})
-			root.SetOut(io.Discard)
-			root.SetErr(io.Discard)
-			root.SetArgs(append(test.args, "--execution-provider", "javascript-runtime"))
-
-			err := root.Execute()
-			if test.wantError && err == nil {
-				t.Fatal("Execute() error = nil, want command error")
-			}
-			if !test.wantError && err != nil {
-				t.Fatalf("Execute() error = %v", err)
-			}
-			if closeCount != 1 {
-				t.Fatalf("owner close count = %d, want 1", closeCount)
-			}
-		})
-	}
-}
-
-type commandLifecycleExecutionOwner struct {
-	fse.Service
-	closeCount *int
-}
-
-func (owner commandLifecycleExecutionOwner) Close() error {
-	*owner.closeCount++
-	return nil
-}
 
 const (
 	terminalPolicySecretPrompt = "SECRET_PROMPT_BODY_do-not-emit-712407"
@@ -94,7 +39,7 @@ func TestRootCommand_ResolvesTerminalPolicyForVerboseSubmit(t *testing.T) {
 		t.Fatalf("write payload: %v", err)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -129,7 +74,7 @@ func TestRootCommand_ResolvesQuietRunPolicyForDiagnosticsAndLogger(t *testing.T)
 	}
 
 	dir := t.TempDir()
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -168,7 +113,7 @@ func TestRootCommand_QuietRunOperationalFailureSuppressesTerminalOutput(t *testi
 
 	dir := t.TempDir()
 	var stdout, stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{
@@ -207,7 +152,7 @@ func TestRootCommand_ResolvesVerboseRunPolicyForDiagnostics(t *testing.T) {
 
 	dir := t.TempDir()
 	var stderr bytes.Buffer
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(&stderr)
 	root.SetArgs([]string{
@@ -248,7 +193,7 @@ func TestRootCommand_NormalModeSuppressesSubmitDiagnostics(t *testing.T) {
 		t.Fatalf("write payload: %v", err)
 	}
 
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -302,7 +247,7 @@ func TestRootCommand_NormalModeRunWiresTerminalMutedLogger(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -389,7 +334,7 @@ func TestRootCommand_SubmitDiagnosticsNeverLeakPromptOrSecretsAcrossModes(t *tes
 			}
 
 			var stdout, stderr bytes.Buffer
-			root := NewRootCommand()
+			root := newLegacyTestRootCommand()
 			root.SetOut(&stdout)
 			root.SetErr(&stderr)
 			args := append([]string{}, mode.args...)
@@ -456,12 +401,6 @@ func assertNoTerminalPolicySecrets(t *testing.T, capture string) {
 }
 
 // Work-family production cutover tests (merged from root_work_test.go for pkg-file-count/backend-size).
-func TestUseGeneratedWorkFamilyCutoverEnabled(t *testing.T) {
-	if !useGeneratedWorkFamily {
-		t.Fatal("useGeneratedWorkFamily = false, want production cutover enabled")
-	}
-}
-
 func TestProductionWorkCommandUsesGeneratedFamily(t *testing.T) {
 	work := productionWorkCommand(&cliGlobalOptions{}, &cliDiagnosticsOptions{})
 	if work == nil {
@@ -510,11 +449,7 @@ func TestProductionWorkCommandAttachesHandwrittenRunE(t *testing.T) {
 }
 
 func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
-	if !useGeneratedWorkFamily {
-		t.Fatal("useGeneratedWorkFamily = false, want production cutover enabled")
-	}
-
-	root := NewRootCommand()
+	root := newLegacyTestRootCommand()
 	work, _, err := root.Find([]string{"work"})
 	if err != nil {
 		t.Fatalf("Find(work) error = %v", err)
@@ -530,27 +465,5 @@ func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
 		if leaf.RunE == nil {
 			t.Fatalf("you work %s must attach handwritten RunE through generated cutover", path)
 		}
-	}
-}
-
-func TestLegacyWorkFamilyConstructorsRemainCallable(t *testing.T) {
-	legacy := NewLegacyWorkFamilyCommand()
-	if legacy == nil {
-		t.Fatal("NewLegacyWorkFamilyCommand() = nil")
-	}
-	if _, _, err := legacy.Find([]string{"list"}); err != nil {
-		t.Fatalf("legacy work tree missing list: %v", err)
-	}
-
-	legacyRoot := NewLegacyWorkFamilyRootForParity()
-	if legacyRoot == nil {
-		t.Fatal("NewLegacyWorkFamilyRootForParity() = nil")
-	}
-	work, _, err := legacyRoot.Find([]string{"work"})
-	if err != nil {
-		t.Fatalf("Find(work) error = %v", err)
-	}
-	if _, _, err := work.Find([]string{"visualize"}); err != nil {
-		t.Fatalf("legacy parity root missing visualize: %v", err)
 	}
 }

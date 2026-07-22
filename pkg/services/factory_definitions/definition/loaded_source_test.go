@@ -1,0 +1,5 @@
+package factorydefinition
+
+import factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
+
+type loadedFactorySource = factorydefinitions.LoadedFactorySource

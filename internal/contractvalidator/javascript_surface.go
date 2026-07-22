@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/symbolidentity"
 )
 
 func runtimeManifestSupportedSurfaceDiagnostics(document string, keys []string, pathByKey map[string]string, symbolKindByKey map[string]string) []Diagnostic {

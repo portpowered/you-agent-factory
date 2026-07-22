@@ -1,0 +1,173 @@
+{
+  "formatVersion": "global-config-topology/v1",
+  "sharedConfigFile": {
+    "relativePath": ".you-agent-factory/config.json",
+    "resolvedBy": "operator_settings.DefaultConfigPath(homeDir)"
+  },
+  "sharedFileSplit": {
+    "summary": "operator_settings owns backendScopeID identity, defaults, and workerPresets behavior; its focused loaders share one service-owned config file",
+    "owners": [
+      {
+        "package": "operator_settings",
+        "owns": [
+          "backendScopeID",
+          "defaults",
+          "defaults.workerModelProvider",
+          "defaults.workerModel",
+          "workerPresets",
+          "workerPresets[].id",
+          "workerPresets[].modelProvider",
+          "workerPresets[].model",
+          "workerPresets[].reasoningEffort"
+        ]
+      }
+    ]
+  },
+  "precedenceChain": "file \u003c env \u003c flag",
+  "unknownFieldPolicy": [
+    {
+      "package": "operator_settings",
+      "policy": "settings parsing uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
+    },
+    {
+      "package": "operator_settings",
+      "policy": "identity loading reads only backendScopeID and ignores other top-level keys; identity persistence rewrites through a raw-message map that preserves unrelated sibling keys"
+    }
+  ],
+  "fields": [
+    {
+      "id": "backendScopeID",
+      "jsonPath": "backendScopeID",
+      "jsonName": "backendScopeID",
+      "valueType": "string",
+      "defaultEmptyBehavior": "missing, whitespace-only file, or empty value triggers EnsureLocalBackendScope to generate local-\u003cuuid\u003e and persist it",
+      "strictness": "operator_settings identity tolerant load (unknown top-level keys ignored on read; preserved on persist)",
+      "persistenceOwner": "operator_settings",
+      "parseOwner": "operator_settings",
+      "notes": "operator_settings owns identity persistence; its settings parser accepts backendScopeID as a service-owned sibling"
+    },
+    {
+      "id": "defaults",
+      "jsonPath": "defaults",
+      "jsonName": "defaults",
+      "valueType": "object",
+      "defaultEmptyBehavior": "missing defaults object yields empty operator defaults",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file",
+        "env",
+        "flag"
+      ],
+      "notes": "defaults object is not persisted by operator_settings loaders; only parsed from file before env/flag resolution"
+    },
+    {
+      "id": "defaults.workerModelProvider",
+      "jsonPath": "defaults.workerModelProvider",
+      "jsonName": "workerModelProvider",
+      "valueType": "string",
+      "parentField": "defaults",
+      "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file",
+        "env",
+        "flag"
+      ],
+      "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
+      "flagName": "--default-worker-model-provider",
+      "notes": "values are trimmed and canonicalized; unsupported providers fail resolve"
+    },
+    {
+      "id": "defaults.workerModel",
+      "jsonPath": "defaults.workerModel",
+      "jsonName": "workerModel",
+      "valueType": "string",
+      "parentField": "defaults",
+      "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file",
+        "env",
+        "flag"
+      ],
+      "environmentVariable": "YOU_DEFAULT_WORKER_MODEL",
+      "flagName": "--default-worker-model"
+    },
+    {
+      "id": "workerPresets",
+      "jsonPath": "workerPresets",
+      "jsonName": "workerPresets",
+      "valueType": "array",
+      "defaultEmptyBehavior": "missing workerPresets array is backward compatible and yields an empty preset list",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file"
+      ],
+      "notes": "file-only (no env or flag layers)"
+    },
+    {
+      "id": "workerPresets[].id",
+      "jsonPath": "workerPresets[].id",
+      "jsonName": "id",
+      "valueType": "string",
+      "parentField": "workerPresets[]",
+      "defaultEmptyBehavior": "required non-empty after trim; duplicate ids are rejected",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file"
+      ]
+    },
+    {
+      "id": "workerPresets[].modelProvider",
+      "jsonPath": "workerPresets[].modelProvider",
+      "jsonName": "modelProvider",
+      "valueType": "string",
+      "parentField": "workerPresets[]",
+      "defaultEmptyBehavior": "required non-empty; canonicalized to supported providers; symbolic DEFAULT is rejected in presets",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file"
+      ]
+    },
+    {
+      "id": "workerPresets[].model",
+      "jsonPath": "workerPresets[].model",
+      "jsonName": "model",
+      "valueType": "string",
+      "parentField": "workerPresets[]",
+      "defaultEmptyBehavior": "optional; trimmed when present",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file"
+      ]
+    },
+    {
+      "id": "workerPresets[].reasoningEffort",
+      "jsonPath": "workerPresets[].reasoningEffort",
+      "jsonName": "reasoningEffort",
+      "valueType": "string",
+      "parentField": "workerPresets[]",
+      "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
+      "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+      "persistenceOwner": "none",
+      "parseOwner": "operator_settings",
+      "precedenceLayers": [
+        "file"
+      ]
+    }
+  ]
+}

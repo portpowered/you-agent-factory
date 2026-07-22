@@ -13,10 +13,10 @@ import (
 const factorySchemaB16GapsRelativePath = "docs/internal/contract/factory-schema-b16-gaps.json"
 
 type factorySchemaB16Gaps struct {
-	Profile                    string `json:"profile"`
-	Status                     string `json:"status"`
-	Summary                    string `json:"summary"`
-	BlockingCategories         []blockingCategory `json:"blockingCategories"`
+	Profile                    string                      `json:"profile"`
+	Status                     string                      `json:"status"`
+	Summary                    string                      `json:"summary"`
+	BlockingCategories         []blockingCategory          `json:"blockingCategories"`
 	ApprovedResidualExclusions []approvedResidualExclusion `json:"approvedResidualExclusions,omitempty"`
 }
 

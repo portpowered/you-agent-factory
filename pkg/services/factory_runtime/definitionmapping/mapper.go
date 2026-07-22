@@ -1,0 +1,715 @@
+// backendsizecheck:ignore-file factory config cloning and layout deep-copy helpers remain consolidated with CloneFactoryConfig until mapper seams are extracted.
+// pkgmaintcheck:ignore-file-lines factory config cloning and layout deep-copy helpers remain consolidated with CloneFactoryConfig until mapper seams are extracted.
+package definitionmapping
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/internal/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/state/validation"
+)
+
+// Mapper converts an authored Factory definition into the internal Petri
+// runtime state.
+type Mapper struct {
+	newID factoryruntime.IDGenerator
+}
+
+// New constructs the Factory Runtime definition-mapping constituent.
+func New(newID factoryruntime.IDGenerator) (*Mapper, error) {
+	if newID == nil {
+		return nil, fmt.Errorf("construct Factory Runtime definition mapper: ID generator is required")
+	}
+	return &Mapper{newID: newID}, nil
+}
+
+func (cm *Mapper) Map(ctx context.Context, cfg *interfaces.FactoryConfig) (*state.Net, error) {
+	places := cm.convertToPlaces(cfg)
+	fanoutGroups := make(map[string]string)
+	transitions := cm.convertToTransitions(cfg, places, fanoutGroups)
+	cm.addDefaultTimeExpiryTransition(cfg, transitions)
+	cm.addDependencyGuards(cfg, transitions)
+
+	n := &state.Net{
+		Places:      places,
+		Transitions: transitions,
+		WorkTypes:   cm.convertToWorkTypes(cfg),
+		Resources:   cm.convertToResources(cfg),
+		InputTypes:  cm.convertToInputTypes(cfg),
+	}
+	if len(fanoutGroups) > 0 {
+		n.FanoutGroups = fanoutGroups
+	}
+
+	var workstationKinds map[string]interfaces.WorkstationKind
+	if cfg != nil && len(cfg.Workstations) > 0 {
+		workstationKinds = make(map[string]interfaces.WorkstationKind, len(cfg.Workstations))
+		for _, workstation := range cfg.Workstations {
+			workstationKinds[workstation.Name] = workstation.Kind
+		}
+	}
+	state.NormalizeTransitionTopology(n, workstationKinds)
+	cm.applyFactoryGuards(cfg, n.Transitions)
+	if err := validateNetTopology(n); err != nil {
+		return nil, err
+	}
+
+	return n, nil
+}
+
+func validateNetTopology(n *state.Net) error {
+	validator := validation.NewCompositeValidator(
+		&validation.TypeAlignmentValidator{},
+	)
+
+	for _, violation := range validator.Validate(n) {
+		if violation.Level == validation.ViolationError {
+			return fmt.Errorf("net validation failed: %s - %s (at %s)", violation.Code, violation.Message, violation.Location)
+		}
+	}
+
+	return nil
+}
+
+func (cm *Mapper) convertToTransitions(cfg *interfaces.FactoryConfig, places map[string]*petri.Place, fanoutGroups map[string]string) map[string]*petri.Transition {
+	transitions := make(map[string]*petri.Transition)
+
+	for _, ws := range cfg.Workstations {
+		t := cm.newTransition(ws)
+		transitions[t.Name] = t
+
+		cm.appendInputArcs(t, ws.Inputs)
+		cm.appendSuccessArcs(t, ws)
+		cm.appendOutcomeArcs(&t.ContinueArcs, ws.OnContinue, t.ID, t.Name, "continue")
+		cm.appendOutcomeArcs(&t.RejectionArcs, ws.OnRejection, t.ID, t.Name, "rejection")
+		cm.appendOutcomeArcs(&t.FailureArcs, ws.OnFailure, t.ID, t.Name, "failure")
+
+		cm.applyWorkstationGuards(ws, t)
+
+		// Handle per-input guards: generate observation arcs with parent-match guards scoped to the specific input.
+		cm.applyInputGuards(ws, t, places, fanoutGroups)
+
+		cm.addCronTimeInputArc(ws, t)
+
+		cm.appendResourceArcs(t, combinedTransitionResourceUsage(cfg, ws))
+	}
+	return transitions
+}
+
+func combinedTransitionResourceUsage(cfg *interfaces.FactoryConfig, ws interfaces.FactoryWorkstationConfig) []interfaces.ResourceConfig {
+	combined := make(map[string]interfaces.ResourceConfig, len(ws.Resources))
+	order := make([]string, 0, len(ws.Resources))
+
+	appendResources := func(resources []interfaces.ResourceConfig) {
+		for _, resource := range resources {
+			if existing, ok := combined[resource.Name]; ok {
+				// Worker and workstation declarations describe the same
+				// transition requirement at two authoring scopes. Repeating a
+				// resource aligns the declarations; it does not consume the
+				// shared pool twice.
+				if resource.Capacity > existing.Capacity {
+					existing.Capacity = resource.Capacity
+				}
+				combined[resource.Name] = existing
+				continue
+			}
+			combined[resource.Name] = resource
+			order = append(order, resource.Name)
+		}
+	}
+
+	if worker, ok := factoryConfigWorker(cfg, ws.WorkerTypeName); ok && worker != nil {
+		appendResources(worker.Resources)
+	}
+	appendResources(ws.Resources)
+
+	if len(order) == 0 {
+		return nil
+	}
+	out := make([]interfaces.ResourceConfig, 0, len(order))
+	for _, name := range order {
+		out = append(out, combined[name])
+	}
+	return out
+}
+
+func (cm *Mapper) newTransition(ws interfaces.FactoryWorkstationConfig) *petri.Transition {
+	return &petri.Transition{
+		ID:         ws.Name,
+		Name:       ws.Name,
+		Type:       petri.TransitionNormal,
+		WorkerType: ws.WorkerTypeName,
+	}
+}
+
+func (cm *Mapper) appendInputArcs(t *petri.Transition, inputs []interfaces.IOConfig) {
+	for _, input := range inputs {
+		placeID := mapToID(input)
+		name := fmt.Sprintf("%s:%s:to:%s", input.WorkTypeName, input.StateName, t.Name)
+		t.InputArcs = append(t.InputArcs, petri.Arc{
+			ID:           cm.newID(),
+			Name:         name,
+			PlaceID:      placeID,
+			TransitionID: t.ID,
+		})
+	}
+}
+
+func (cm *Mapper) appendSuccessArcs(t *petri.Transition, ws interfaces.FactoryWorkstationConfig) {
+	if ws.Type == interfaces.WorkstationTypeClassify || usesGoalRoutingDecisionEnvelope(ws) {
+		for _, route := range ws.ClassificationRoutes {
+			for _, output := range route.Outputs {
+				placeID := mapToID(output)
+				name := fmt.Sprintf("%s:%s:classify:%s:%s", output.WorkTypeName, output.StateName, t.Name, route.Label)
+				t.OutputArcs = append(t.OutputArcs, petri.Arc{
+					ID:                  cm.newID(),
+					Name:                name,
+					PlaceID:             placeID,
+					TransitionID:        t.ID,
+					ClassificationLabel: route.Label,
+				})
+			}
+		}
+		return
+	}
+
+	for _, output := range ws.Outputs {
+		placeID := mapToID(output)
+		name := fmt.Sprintf("%s:%s:from:%s", output.WorkTypeName, output.StateName, t.Name)
+		t.OutputArcs = append(t.OutputArcs, petri.Arc{
+			ID:           cm.newID(),
+			Name:         name,
+			PlaceID:      placeID,
+			TransitionID: t.ID,
+		})
+	}
+}
+
+func (cm *Mapper) appendOutcomeArcs(target *[]petri.Arc, routes []interfaces.IOConfig, transitionID string, transitionName string, kind string) {
+	for _, route := range routes {
+		placeID := mapToID(route)
+		name := fmt.Sprintf("%s:%s:%s:%s", route.WorkTypeName, route.StateName, kind, transitionName)
+		*target = append(*target, petri.Arc{
+			ID:           cm.newID(),
+			Name:         name,
+			PlaceID:      placeID,
+			TransitionID: transitionID,
+		})
+	}
+}
+
+func (cm *Mapper) appendResourceArcs(t *petri.Transition, resources []interfaces.ResourceConfig) {
+	for _, ru := range resources {
+		resourcePlaceID := fmt.Sprintf("%s:%s", ru.Name, interfaces.ResourceStateAvailable)
+		t.InputArcs = append(t.InputArcs, petri.Arc{
+			ID:           cm.newID(),
+			Name:         fmt.Sprintf("%s:consume:%s", ru.Name, t.Name),
+			PlaceID:      resourcePlaceID,
+			TransitionID: t.ID,
+			Direction:    petri.ArcInput,
+			Mode:         interfaces.ArcModeConsume,
+			Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityN, Count: ru.Capacity},
+		})
+		t.OutputArcs = append(t.OutputArcs, petri.Arc{
+			ID:           cm.newID(),
+			Name:         fmt.Sprintf("%s:release:%s", ru.Name, t.Name),
+			PlaceID:      resourcePlaceID,
+			TransitionID: t.ID,
+			Direction:    petri.ArcOutput,
+			Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityN, Count: ru.Capacity},
+		})
+	}
+}
+
+func (cm *Mapper) applyWorkstationGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {
+	if len(t.InputArcs) == 0 || len(ws.Guards) == 0 {
+		return
+	}
+
+	sourceBinding := inputArcBindingName(t.InputArcs[0])
+	for _, g := range ws.Guards {
+		switch g.Type {
+		case interfaces.GuardTypeMatchesFields:
+			for i := range t.InputArcs {
+				matcher := &petri.MatchesFieldsGuard{
+					InputKey: g.MatchConfig.InputKey,
+				}
+				if i > 0 {
+					matcher.MatchBinding = sourceBinding
+				}
+				t.InputArcs[i].Guard = combineArcGuards(t.InputArcs[i].Guard, matcher)
+			}
+		default:
+			guard := cm.resolveGuard(g)
+			if guard != nil {
+				t.InputArcs[0].Guard = combineArcGuards(t.InputArcs[0].Guard, guard)
+			}
+		}
+	}
+}
+
+func (cm *Mapper) applyFactoryGuards(cfg *interfaces.FactoryConfig, transitions map[string]*petri.Transition) {
+	if cfg == nil || len(cfg.Guards) == 0 || len(transitions) == 0 {
+		return
+	}
+	for _, authoredGuard := range cfg.Guards {
+		if authoredGuard.Type != interfaces.GuardTypeInferenceThrottle {
+			continue
+		}
+		refreshWindow, err := time.ParseDuration(authoredGuard.RefreshWindow)
+		if err != nil || refreshWindow <= 0 {
+			continue
+		}
+		for _, transition := range transitions {
+			if transition == nil || len(transition.InputArcs) == 0 {
+				continue
+			}
+			if transition.WorkerType == "" {
+				continue
+			}
+			if !factoryConfigWorkerMatchesLane(cfg, transition.WorkerType, authoredGuard.ModelProvider, authoredGuard.Model) {
+				continue
+			}
+			transition.InputArcs[0].Guard = combineArcGuards(transition.InputArcs[0].Guard, &petri.InferenceThrottleGuard{
+				Provider:      authoredGuard.ModelProvider,
+				Model:         authoredGuard.Model,
+				WorkerName:    transition.WorkerType,
+				RefreshWindow: refreshWindow,
+			})
+		}
+	}
+}
+
+func factoryConfigWorker(cfg *interfaces.FactoryConfig, name string) (*interfaces.FactoryWorkerConfig, bool) {
+	if cfg == nil {
+		return nil, false
+	}
+	for i := range cfg.Workers {
+		if cfg.Workers[i].Name == name {
+			return &cfg.Workers[i], true
+		}
+	}
+	return nil, false
+}
+
+func factoryConfigWorkerMatchesLane(cfg *interfaces.FactoryConfig, workerName, provider, model string) bool {
+	worker, ok := factoryConfigWorker(cfg, workerName)
+	if !ok || worker == nil {
+		return false
+	}
+	return worker.ModelProvider == provider && worker.Model == model
+}
+
+// applyInputGuards processes per-input guard declarations on workstation inputs.
+// For each input with a Guard field, it:
+// - Finds the parent input arc (by matching parent_input work type) and names it "parent"
+// - Converts the guarded input arc to OBSERVE mode with the appropriate guard
+// - If spawned_by is set, creates a fanout count place + consume arc for dynamic count tracking
+func (cm *Mapper) applyInputGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition, netPlaces map[string]*petri.Place, fanoutGroups map[string]string) {
+	if !workstationHasInputGuards(ws) {
+		return
+	}
+
+	parentBinding := "parent"
+	countBinding := "fanout-count"
+	bindParentInputArc(ws, t, parentBinding)
+	cm.applyParentAwareInputGuards(ws, t, netPlaces, fanoutGroups, parentBinding, countBinding)
+	applyPeerInputGuards(ws, t)
+}
+
+func workstationHasInputGuards(ws interfaces.FactoryWorkstationConfig) bool {
+	for _, input := range ws.Inputs {
+		if input.Guard != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func bindParentInputArc(ws interfaces.FactoryWorkstationConfig, t *petri.Transition, parentBinding string) {
+	for _, input := range ws.Inputs {
+		if input.Guard == nil || isPeerInputGuardType(input.Guard.Type) {
+			continue
+		}
+		parentPlaceID := fmt.Sprintf("%s:", input.Guard.ParentInput)
+		for i := range t.InputArcs {
+			if len(t.InputArcs[i].PlaceID) >= len(parentPlaceID) && t.InputArcs[i].PlaceID[:len(parentPlaceID)] == parentPlaceID {
+				t.InputArcs[i].Name = parentBinding
+				return
+			}
+		}
+		return
+	}
+}
+
+func (cm *Mapper) applyParentAwareInputGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition, netPlaces map[string]*petri.Place, fanoutGroups map[string]string, parentBinding string, countBinding string) {
+	for idx, input := range ws.Inputs {
+		if input.Guard == nil || isPeerInputGuardType(input.Guard.Type) {
+			continue
+		}
+		if input.Guard.SpawnedBy != "" {
+			cm.applyDynamicFanoutInputGuard(input, idx, t, netPlaces, fanoutGroups, parentBinding, countBinding)
+			continue
+		}
+		cm.replaceStaticFanoutInputArc(input, idx, t, parentBinding)
+	}
+}
+
+func (cm *Mapper) applyDynamicFanoutInputGuard(input interfaces.IOConfig, idx int, t *petri.Transition, netPlaces map[string]*petri.Place, fanoutGroups map[string]string, parentBinding string, countBinding string) {
+	countPlaceID := fmt.Sprintf("%s:fanout-count", input.Guard.SpawnedBy)
+	netPlaces[countPlaceID] = &petri.Place{
+		ID:     countPlaceID,
+		TypeID: "fanout-count",
+		State:  "count",
+	}
+	fanoutGroups[input.Guard.SpawnedBy] = countPlaceID
+	t.InputArcs[idx] = cm.fanoutCountArc(countPlaceID, t.ID, parentBinding, countBinding)
+	childGuard, cardinality := dynamicFanoutChildGuard(input.Guard.Type, parentBinding, countBinding)
+	t.InputArcs = append(t.InputArcs, cm.observedChildInputArc(input, t.ID, t.Name, childGuard, cardinality))
+}
+
+func (cm *Mapper) fanoutCountArc(countPlaceID string, transitionID string, parentBinding string, countBinding string) petri.Arc {
+	return petri.Arc{
+		ID:           cm.newID(),
+		Name:         countBinding,
+		PlaceID:      countPlaceID,
+		TransitionID: transitionID,
+		Direction:    petri.ArcInput,
+		Mode:         interfaces.ArcModeConsume,
+		Guard: &petri.MatchColorGuard{
+			Field:        "parent_id",
+			MatchBinding: parentBinding,
+			MatchField:   "work_id",
+		},
+		Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+	}
+}
+
+func dynamicFanoutChildGuard(guardType interfaces.GuardType, parentBinding string, countBinding string) (petri.Guard, petri.ArcCardinality) {
+	if guardType == interfaces.GuardTypeAllChildrenComplete {
+		return &petri.FanoutCountGuard{
+			MatchBinding: parentBinding,
+			CountBinding: countBinding,
+		}, petri.ArcCardinality{Mode: petri.CardinalityZeroOrMore}
+	}
+	return &petri.AnyWithParentGuard{MatchBinding: parentBinding}, petri.ArcCardinality{Mode: petri.CardinalityOne}
+}
+
+func (cm *Mapper) replaceStaticFanoutInputArc(input interfaces.IOConfig, idx int, t *petri.Transition, parentBinding string) {
+	childGuard, cardinality := staticFanoutChildGuard(input.Guard.Type, parentBinding)
+	t.InputArcs[idx] = cm.observedChildInputArc(input, t.ID, t.Name, childGuard, cardinality)
+}
+
+func staticFanoutChildGuard(guardType interfaces.GuardType, parentBinding string) (petri.Guard, petri.ArcCardinality) {
+	if guardType == interfaces.GuardTypeAllChildrenComplete {
+		return &petri.AllWithParentGuard{MatchBinding: parentBinding}, petri.ArcCardinality{Mode: petri.CardinalityAll}
+	}
+	return &petri.AnyWithParentGuard{MatchBinding: parentBinding}, petri.ArcCardinality{Mode: petri.CardinalityOne}
+}
+
+func (cm *Mapper) observedChildInputArc(input interfaces.IOConfig, transitionID string, transitionName string, guard petri.Guard, cardinality petri.ArcCardinality) petri.Arc {
+	return petri.Arc{
+		ID:           cm.newID(),
+		Name:         fmt.Sprintf("%s:%s:observe:%s", input.WorkTypeName, input.StateName, transitionName),
+		PlaceID:      mapToID(input),
+		TransitionID: transitionID,
+		Direction:    petri.ArcInput,
+		Mode:         interfaces.ArcModeObserve,
+		Guard:        guard,
+		Cardinality:  cardinality,
+	}
+}
+
+func applyPeerInputGuards(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {
+	for idx, input := range ws.Inputs {
+		if input.Guard == nil || !isPeerInputGuardType(input.Guard.Type) {
+			continue
+		}
+
+		peerBinding, ok := inputGuardBindingName(ws.Inputs, t.InputArcs, input.Guard.MatchInput)
+		if !ok {
+			continue
+		}
+		switch input.Guard.Type {
+		case interfaces.GuardTypeSameName:
+			t.InputArcs[idx].Guard = &petri.SameNameGuard{MatchBinding: peerBinding}
+		case interfaces.GuardTypeSameTraceID:
+			t.InputArcs[idx].Guard = &petri.SameTraceIDGuard{MatchBinding: peerBinding}
+		}
+	}
+}
+
+func isPeerInputGuardType(guardType interfaces.GuardType) bool {
+	return guardType == interfaces.GuardTypeSameName || guardType == interfaces.GuardTypeSameTraceID
+}
+
+func inputGuardBindingName(inputs []interfaces.IOConfig, arcs []petri.Arc, workTypeName string) (string, bool) {
+	for _, input := range inputs {
+		if input.WorkTypeName != workTypeName {
+			continue
+		}
+		placeID := mapToID(input)
+		for _, arc := range arcs {
+			if arc.Direction != petri.ArcInput {
+				continue
+			}
+			if arc.PlaceID == placeID && arc.Name != "" {
+				return arc.Name, true
+			}
+		}
+	}
+	return "", false
+}
+
+func (cm *Mapper) addDefaultTimeExpiryTransition(cfg *interfaces.FactoryConfig, transitions map[string]*petri.Transition) {
+	if !hasCronWorkstation(cfg) {
+		return
+	}
+	t := &petri.Transition{
+		ID:   interfaces.SystemTimeExpiryTransitionID,
+		Name: interfaces.SystemTimeExpiryTransitionID,
+		Type: petri.TransitionExhaustion,
+		InputArcs: []petri.Arc{
+			{
+				ID:           cm.newID(),
+				Name:         fmt.Sprintf("%s:to:%s", interfaces.SystemTimePendingPlaceID, interfaces.SystemTimeExpiryTransitionID),
+				PlaceID:      interfaces.SystemTimePendingPlaceID,
+				TransitionID: interfaces.SystemTimeExpiryTransitionID,
+				Direction:    petri.ArcInput,
+				Mode:         interfaces.ArcModeConsume,
+				Guard:        &petri.ExpiredTimeWorkGuard{},
+				Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityAll},
+			},
+		},
+	}
+	transitions[t.Name] = t
+}
+
+func (cm *Mapper) convertToPlaces(cfg *interfaces.FactoryConfig) map[string]*petri.Place {
+	places := make(map[string]*petri.Place)
+
+	for _, resource := range cfg.Resources {
+		place := mapToPlace(resource)
+		places[place.ID] = place
+	}
+
+	for _, workType := range cfg.WorkTypes {
+		for _, state := range workType.States {
+			id := fmt.Sprintf("%s:%s", workType.Name, state.Name)
+			places[id] = &petri.Place{
+				ID:     id,
+				TypeID: workType.Name,
+				State:  state.Name,
+			}
+		}
+	}
+	if hasCronWorkstation(cfg) {
+		places[interfaces.SystemTimePendingPlaceID] = &petri.Place{
+			ID:     interfaces.SystemTimePendingPlaceID,
+			TypeID: interfaces.SystemTimeWorkTypeID,
+			State:  interfaces.SystemTimePendingState,
+		}
+	}
+	return places
+}
+
+func (cm *Mapper) addCronTimeInputArc(ws interfaces.FactoryWorkstationConfig, t *petri.Transition) {
+	if ws.Kind != interfaces.WorkstationKindCron {
+		return
+	}
+	t.InputArcs = append(t.InputArcs, petri.Arc{
+		ID:           cm.newID(),
+		Name:         fmt.Sprintf("%s:to:%s", interfaces.SystemTimePendingPlaceID, t.Name),
+		PlaceID:      interfaces.SystemTimePendingPlaceID,
+		TransitionID: t.ID,
+		Direction:    petri.ArcInput,
+		Mode:         interfaces.ArcModeConsume,
+		Guard:        &petri.CronTimeWindowGuard{Workstation: ws.Name},
+		Cardinality:  petri.ArcCardinality{Mode: petri.CardinalityOne},
+	})
+}
+
+// resolveGuard converts a workstation-level GuardConfig into a petri Guard.
+func (cm *Mapper) resolveGuard(g interfaces.GuardConfig) petri.Guard {
+	switch g.Type {
+	case interfaces.GuardTypeVisitCount:
+		return &petri.VisitCountGuard{
+			TransitionID: g.Workstation, // workstation name == transition ID
+			MaxVisits:    g.MaxVisits,
+		}
+	default:
+		return nil
+	}
+}
+
+func combineArcGuards(existing, next petri.Guard) petri.Guard {
+	if next == nil {
+		return existing
+	}
+	if existing == nil {
+		return next
+	}
+
+	var guards []petri.Guard
+	if chained, ok := existing.(*petri.AllGuard); ok {
+		guards = append(guards, chained.Guards...)
+	} else {
+		guards = append(guards, existing)
+	}
+	if chained, ok := next.(*petri.AllGuard); ok {
+		guards = append(guards, chained.Guards...)
+	} else {
+		guards = append(guards, next)
+	}
+	return &petri.AllGuard{Guards: guards}
+}
+
+func inputArcBindingName(arc petri.Arc) string {
+	if arc.Name != "" {
+		return arc.Name
+	}
+	return arc.ID
+}
+
+func mapToID(io interfaces.IOConfig) string {
+	return fmt.Sprintf("%s:%s", io.WorkTypeName, io.StateName)
+}
+
+func mapToPlace(resource interfaces.ResourceConfig) *petri.Place {
+	return &petri.Place{
+		ID:     fmt.Sprintf("%s:%s", resource.Name, interfaces.ResourceStateAvailable),
+		TypeID: resource.Name,
+		State:  interfaces.ResourceStateAvailable,
+	}
+}
+
+// convertToWorkTypes builds WorkType definitions from config for the Net.
+func (cm *Mapper) convertToWorkTypes(cfg *interfaces.FactoryConfig) map[string]*state.WorkType {
+	workTypes := make(map[string]*state.WorkType, len(cfg.WorkTypes)+1)
+	for _, wt := range cfg.WorkTypes {
+		states := make([]state.StateDefinition, len(wt.States))
+		for i, s := range wt.States {
+			states[i] = state.StateDefinition{
+				Value:    s.Name,
+				Category: mapStateCategory(s.Type),
+			}
+		}
+		workTypes[wt.Name] = &state.WorkType{
+			ID:     wt.Name,
+			Name:   wt.Name,
+			States: states,
+		}
+	}
+	if hasCronWorkstation(cfg) {
+		workTypes[interfaces.SystemTimeWorkTypeID] = &state.WorkType{
+			ID:   interfaces.SystemTimeWorkTypeID,
+			Name: interfaces.SystemTimeWorkTypeID,
+			States: []state.StateDefinition{
+				{Value: interfaces.SystemTimePendingState, Category: state.StateCategoryProcessing},
+			},
+		}
+	}
+	return workTypes
+}
+
+// convertToResources builds ResourceDef definitions from config for the Net.
+func (cm *Mapper) convertToResources(cfg *interfaces.FactoryConfig) map[string]*state.ResourceDef {
+	if len(cfg.Resources) == 0 {
+		return nil
+	}
+	resources := make(map[string]*state.ResourceDef, len(cfg.Resources))
+	for _, r := range cfg.Resources {
+		resources[r.Name] = &state.ResourceDef{
+			ID:       r.Name,
+			Name:     r.Name,
+			Capacity: r.Capacity,
+		}
+	}
+	return resources
+}
+
+// addDependencyGuards adds a DependencyGuard to input arcs consuming from INITIAL places
+// on NORMAL transitions that don't already have a guard. This ensures DEPENDS_ON
+// relations from canonical work request batches are enforced by the scheduler.
+func (cm *Mapper) addDependencyGuards(cfg *interfaces.FactoryConfig, transitions map[string]*petri.Transition) {
+	// Build a set of INITIAL place IDs.
+	initialPlaces := make(map[string]bool)
+	for _, wt := range cfg.WorkTypes {
+		for _, s := range wt.States {
+			if s.Type == interfaces.StateTypeInitial {
+				initialPlaces[fmt.Sprintf("%s:%s", wt.Name, s.Name)] = true
+			}
+		}
+	}
+
+	for _, t := range transitions {
+		if t.Type != petri.TransitionNormal {
+			continue
+		}
+		for i := range t.InputArcs {
+			arc := &t.InputArcs[i]
+			if arc.Guard != nil {
+				continue // don't override existing guards
+			}
+			if initialPlaces[arc.PlaceID] {
+				arc.Guard = &petri.DependencyGuard{}
+			}
+		}
+	}
+}
+
+// convertToInputTypes builds InputType definitions from config for the Net.
+// The implicit "default" input type is always included.
+func (cm *Mapper) convertToInputTypes(cfg *interfaces.FactoryConfig) map[string]*state.InputType {
+	inputTypes := make(map[string]*state.InputType, len(cfg.InputTypes)+1)
+	// Always include the implicit default input type.
+	inputTypes["default"] = &state.InputType{
+		Name: "default",
+		Kind: string(interfaces.InputKindDefault),
+	}
+	for _, it := range cfg.InputTypes {
+		inputTypes[it.Name] = &state.InputType{
+			Name: it.Name,
+			Kind: string(it.Type),
+		}
+	}
+	return inputTypes
+}
+
+func mapStateCategory(st interfaces.StateType) state.StateCategory {
+	switch st {
+	case interfaces.StateTypeInitial:
+		return state.StateCategoryInitial
+	case interfaces.StateTypeProcessing:
+		return state.StateCategoryProcessing
+	case interfaces.StateTypeTerminal:
+		return state.StateCategoryTerminal
+	case interfaces.StateTypeFailed:
+		return state.StateCategoryFailed
+	default:
+		return state.StateCategoryProcessing
+	}
+}
+
+func hasCronWorkstation(cfg *interfaces.FactoryConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	for _, ws := range cfg.Workstations {
+		if ws.Kind == interfaces.WorkstationKindCron {
+			return true
+		}
+	}
+	return false
+}
+
+func usesGoalRoutingDecisionEnvelope(ws interfaces.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(ws.OutcomeFormat) == interfaces.WorkstationOutcomeFormatDecisionEnvelope &&
+		len(ws.ClassificationRoutes) > 0
+}

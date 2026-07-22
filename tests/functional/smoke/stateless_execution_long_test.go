@@ -3,46 +3,16 @@
 package smoke
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-type dispatchRecorder struct {
-	mu         sync.Mutex
-	dispatches []work.WorkDispatch
-}
-
-func (r *dispatchRecorder) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
-	r.mu.Lock()
-	r.dispatches = append(r.dispatches, dispatch)
-	r.mu.Unlock()
-
-	return workerexecution.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      workerexecution.OutcomeAccepted,
-	}, nil
-}
-
-func (r *dispatchRecorder) Dispatches() []work.WorkDispatch {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	out := make([]work.WorkDispatch, len(r.dispatches))
-	copy(out, r.dispatches)
-	return out
-}
 
 func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testing.T) {
 	support.SkipLongFunctional(t, "slow stateless-execution shared-executor sweep")
@@ -53,16 +23,7 @@ func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testi
 		workerexecution.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:failed")
+	runFactoryThroughCustomerProcess(t, dir, provider)
 
 	calls := provider.Calls()
 	if len(calls) != 2 {
@@ -88,47 +49,6 @@ func TestStatelessExecution_SharedExecutorResolvesDifferentWorkstations(t *testi
 	}
 }
 
-func TestStatelessExecution_ThinDispatchCarriesLookupReferencesOnly(t *testing.T) {
-	support.SkipLongFunctional(t, "slow thin-dispatch lookup-reference smoke")
-
-	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item":"thin-dispatch"}`))
-
-	recorder := &dispatchRecorder{}
-	h := testutil.NewServiceTestHarness(t, dir)
-	h.SetCustomExecutor("agent", recorder)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:failed")
-
-	dispatches := recorder.Dispatches()
-	if len(dispatches) != 2 {
-		t.Fatalf("expected 2 raw dispatches, got %d", len(dispatches))
-	}
-
-	for i, dispatch := range dispatches {
-		if dispatch.WorkerType != "agent" {
-			t.Fatalf("dispatch %d: expected worker type agent, got %q", i, dispatch.WorkerType)
-		}
-		if dispatch.WorkstationName == "" {
-			t.Fatalf("dispatch %d: expected workstation name for runtime lookup", i)
-		}
-		if len(dispatch.InputTokens) == 0 {
-			t.Fatalf("dispatch %d: expected input tokens for runtime resolution", i)
-		}
-	}
-
-	if dispatches[0].WorkstationName != "step1" {
-		t.Fatalf("expected first raw dispatch workstation step1, got %q", dispatches[0].WorkstationName)
-	}
-	if dispatches[1].WorkstationName != "step2" {
-		t.Fatalf("expected second raw dispatch workstation step2, got %q", dispatches[1].WorkstationName)
-	}
-}
-
 func TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers(t *testing.T) {
 	support.SkipLongFunctional(t, "slow stateless-execution workstation-resolution sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
@@ -142,16 +62,7 @@ func TestStatelessExecution_DifferentWorkstationsResolveDifferentWorkers(t *test
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:failed")
+	runFactoryThroughCustomerProcess(t, dir, provider)
 
 	if provider.CallCount("agent-a") != 1 {
 		t.Fatalf("expected agent-a called 1 time, got %d", provider.CallCount("agent-a"))

@@ -10,8 +10,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
-	parityfixtures "github.com/portpowered/infinite-you/internal/testutil/providerparity"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
 )
 
 const (
@@ -22,10 +20,10 @@ const (
 )
 
 // PrivateNDJSONRecordTypes are retired CLI response-stream JSON recordType values.
-var PrivateNDJSONRecordTypes = ndjsoncontract.RetiredPrivateRecordTypes[:3]
+var PrivateNDJSONRecordTypes = []string{"progress", "compaction", "primary_result"}
 
 // PublicNDJSONRecordTypes are the only supported CLI response-stream recordType values.
-var PublicNDJSONRecordTypes = ndjsoncontract.SupportedRecordTypes
+var PublicNDJSONRecordTypes = []string{"response_event", "invocation_result"}
 
 var docsTopicRequiredMarkers = map[string][]string{
 	"run": {
@@ -87,13 +85,14 @@ func AssertClosure(ctx context.Context, repoRoot string) error {
 // AssertGate records Story 001 prerequisites and residual-use evidence. It fails
 // closed when S22 docs, S24 parity, or public-surface residual-use checks fail.
 func AssertGate(ctx context.Context, repoRoot string) error {
+	_ = ctx
 	if strings.TrimSpace(repoRoot) == "" {
 		return fmt.Errorf("repo root is required")
 	}
 	if err := AssertDocsPrerequisite(repoRoot); err != nil {
 		return fmt.Errorf("%s prerequisite: %w", PrerequisiteDocsStoryID, err)
 	}
-	if err := parityfixtures.AssertCrossProviderParityCatalog(ctx); err != nil {
+	if err := AssertProviderParityOwnerEvidence(repoRoot); err != nil {
 		return fmt.Errorf("%s prerequisite: %w", PrerequisiteParityStoryID, err)
 	}
 	if err := AssertNoPrivateNDJSONInProductionSurfaces(repoRoot); err != nil {
@@ -107,6 +106,55 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 	}
 	if err := AssertNoRetiredPrivateContractSymbolsInProductionSurfaces(repoRoot); err != nil {
 		return fmt.Errorf("retired private-contract symbols: %w", err)
+	}
+	return nil
+}
+
+// AssertProviderParityOwnerEvidence verifies that the cross-provider contract
+// proof remains Workers-owned and retains every required fidelity fixture. The
+// provider adapters themselves are executed by that package's tests; this
+// removal gate inspects only static source and fixture evidence.
+func AssertProviderParityOwnerEvidence(repoRoot string) error {
+	const ownerRoot = "pkg/services/workers/provider/paritytests"
+	requiredFiles := []string{
+		"catalog_test.go",
+		"harness_test.go",
+		"transport_parity_test.go",
+		"mode_parity_test.go",
+		"testdata/full_stream_claude.jsonl",
+		"testdata/partial_stream_codex.jsonl",
+		"testdata/snapshot_only_opencode.jsonl",
+		"testdata/final_only_opencode.txt",
+		"testdata/tool_lifecycle_claude.jsonl",
+		"testdata/agy_final_only.txt",
+	}
+	for _, relPath := range requiredFiles {
+		path := filepath.Join(repoRoot, filepath.FromSlash(ownerRoot), filepath.FromSlash(relPath))
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("Workers provider parity evidence %q: %w", relPath, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("Workers provider parity evidence %q is a directory", relPath)
+		}
+	}
+
+	catalogPath := filepath.Join(repoRoot, filepath.FromSlash(ownerRoot), "catalog_test.go")
+	catalog, err := os.ReadFile(catalogPath)
+	if err != nil {
+		return fmt.Errorf("read Workers provider parity catalog: %w", err)
+	}
+	for _, marker := range []string{
+		"FidelityFullStream",
+		"FidelityPartialStream",
+		"FidelitySnapshotOnly",
+		"FidelityFinalOnly",
+		"FixtureToolLifecycleClaude",
+		"FixtureAgyFinalOnly",
+	} {
+		if !strings.Contains(string(catalog), marker) {
+			return fmt.Errorf("Workers provider parity catalog missing %q", marker)
+		}
 	}
 	return nil
 }

@@ -8,10 +8,10 @@ import (
 
 // spyLogger records calls to all four logging methods.
 type spyLogger struct {
-	debugCalls []string
-	infoCalls  []string
-	warnCalls  []string
-	errorCalls []string
+	debugCalls   []string
+	infoCalls    []string
+	warnCalls    []string
+	errorCalls   []string
 	verboseCalls []verboseCall
 }
 

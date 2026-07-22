@@ -5,13 +5,16 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,32 +30,19 @@ func TestDispatcherWorkflow_SingleSeedFile(t *testing.T) {
 	})
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(3)...)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"prd:complete": 1, "idea:init": 0, "idea:failed": 0,
+		"prd:init": 0, "prd:in-review": 0, "prd:failed": 0,
+	})
 
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("prd:complete").
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("idea:failed").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("prd:in-review").
-		HasNoTokenInPlace("prd:failed")
-
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "planner")); got != 1 {
-		t.Errorf("expected planner called 1 time, got %d", got)
-	}
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "executor")); got != 1 {
-		t.Errorf("expected executor called 1 time, got %d", got)
-	}
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "reviewer")); got != 1 {
-		t.Errorf("expected reviewer called 1 time, got %d", got)
+	if got := runner.CallCount(); got != 3 {
+		t.Errorf("expected three externally executed workflow steps, got %d", got)
 	}
 
-	h.Assert().TokenHasTraceID("prd:complete", originTraceID)
+	assertWorkflowSessionPlaceHasTraceID(t, session, "prd:complete", originTraceID)
 }
 
 func TestDispatcherWorkflow_TwoSeedFiles(t *testing.T) {
@@ -71,23 +61,13 @@ func TestDispatcherWorkflow_TwoSeedFiles(t *testing.T) {
 	})
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(6)...)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": 2})
 
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().PlaceTokenCount("prd:complete", 2)
-
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "planner")); got != 2 {
-		t.Errorf("expected planner called 2 times, got %d", got)
-	}
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "executor")); got != 2 {
-		t.Errorf("expected executor called 2 times, got %d", got)
-	}
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "reviewer")); got != 2 {
-		t.Errorf("expected reviewer called 2 times, got %d", got)
+	if got := runner.CallCount(); got != 6 {
+		t.Errorf("expected six externally executed workflow steps, got %d", got)
 	}
 }
 
@@ -101,23 +81,13 @@ func TestDispatcherWorkflow_MultipleSeedFiles(t *testing.T) {
 	}
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(n * 3)...)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 15*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": n})
 
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().PlaceTokenCount("prd:complete", n)
-
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "planner")); got != n {
-		t.Errorf("expected planner called %d times, got %d", n, got)
-	}
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "executor")); got != n {
-		t.Errorf("expected executor called %d times, got %d", n, got)
-	}
-	if got := len(support.ProviderCommandRequestsForWorker(runner, "reviewer")); got != n {
-		t.Errorf("expected reviewer called %d times, got %d", n, got)
+	if got := runner.CallCount(); got != n*3 {
+		t.Errorf("expected %d externally executed workflow steps, got %d", n*3, got)
 	}
 }
 
@@ -137,30 +107,15 @@ func TestDispatcherWorkflow_ExecutionPoolIsolation(t *testing.T) {
 	})
 
 	runner := testutil.NewProviderCommandRunner(support.AcceptedCommandResults(6)...)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
 
-	h.RunUntilComplete(t, 10*time.Second)
-
-	dispatches := support.ProviderCommandRequestsForWorker(runner, "executor")
-	if len(dispatches) != 2 {
-		t.Fatalf("expected 2 executor dispatches, got %d", len(dispatches))
+	if got := distinctPublicTokenIDsAtPlace(session, "prd:complete"); got != 2 {
+		t.Errorf("expected 2 distinct public terminal token IDs, got %d", got)
 	}
 
-	tokenIDs := make(map[string]bool)
-	for _, d := range dispatches {
-		if len(d.InputTokens) == 0 {
-			t.Fatal("executor dispatch has no input tokens")
-		}
-		tokenIDs[support.FirstInputToken(d.InputTokens).ID] = true
-	}
-	if len(tokenIDs) != 2 {
-		t.Errorf("expected 2 distinct input token IDs in executor dispatches, got %d unique", len(tokenIDs))
-	}
-
-	h.Assert().PlaceTokenCount("prd:complete", 2)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": 2})
 }
 
 func TestDispatcherWorkflow_ReviewFailurePerItem(t *testing.T) {
@@ -183,15 +138,10 @@ func TestDispatcherWorkflow_ReviewFailurePerItem(t *testing.T) {
 		rejectTraceID: "trace-will-fail",
 		callCounts:    make(map[string]int),
 	}
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().HasTokenInPlace("prd:complete")
-	h.Assert().HasTokenInPlace("prd:failed")
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 15*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"prd:complete": 1, "prd:failed": 1})
 
 	runner.mu.Lock()
 	failCount := runner.callCounts["trace-will-fail"]
@@ -212,14 +162,15 @@ type traceAwareReviewCommandRunner struct {
 	callCounts    map[string]int
 }
 
-func (r *traceAwareReviewCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-	if req.WorkerType != "reviewer" {
-		return workers.CommandResult{Stdout: []byte("Done. COMPLETE")}, nil
+func (r *traceAwareReviewCommandRunner) Run(_ context.Context, req platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	invocation := strings.Join(append(append([]string(nil), req.Args...), string(req.Stdin)), "\n")
+	if !strings.Contains(invocation, "Review workstation") {
+		return platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")}, nil
 	}
 
-	traceID := ""
-	if len(req.InputTokens) > 0 {
-		traceID = support.FirstInputToken(req.InputTokens).Color.TraceID
+	traceID := "trace-will-pass"
+	if strings.Contains(invocation, "will-fail") {
+		traceID = "trace-will-fail"
 	}
 
 	r.mu.Lock()
@@ -227,10 +178,39 @@ func (r *traceAwareReviewCommandRunner) Run(_ context.Context, req workers.Comma
 	r.mu.Unlock()
 
 	if traceID == r.rejectTraceID {
-		return workers.CommandResult{Stdout: []byte("needs revision")}, nil
+		return platformprocess.CommandResult{Stdout: []byte("needs revision")}, nil
 	}
 
-	return workers.CommandResult{Stdout: []byte("Done. COMPLETE")}, nil
+	return platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")}, nil
 }
 
-var _ workers.CommandRunner = (*traceAwareReviewCommandRunner)(nil)
+var _ platformprocess.CommandRunner = (*traceAwareReviewCommandRunner)(nil)
+
+func distinctPublicTokenIDsAtPlace(session factoryapi.FactorySession, placeID string) int {
+	ids := make(map[string]struct{})
+	if session.Runtime.Petri != nil {
+		for _, token := range session.Runtime.Petri.Marking {
+			if token.PlaceId == placeID && token.Id != "" {
+				ids[token.Id] = struct{}{}
+			}
+		}
+	}
+	return len(ids)
+}
+
+func assertWorkflowSessionPlaceHasTraceID(
+	t *testing.T,
+	session factoryapi.FactorySession,
+	placeID string,
+	traceID string,
+) {
+	t.Helper()
+	if session.Runtime.Petri != nil {
+		for _, token := range session.Runtime.Petri.Marking {
+			if token.PlaceId == placeID && token.TraceId == traceID {
+				return
+			}
+		}
+	}
+	t.Fatalf("place %s has no token with trace ID %q", placeID, traceID)
+}

@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,18 +21,13 @@ func TestMockWorkers_ScriptDefaultAcceptProducesSuccessfulScriptResult(t *testin
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script accept payload"))
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithMockWorkersConfig(factoryconfig.NewEmptyMockWorkersConfig()),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-
-	assertTokenPayload(t, h.Marking(), "task:done", "mock worker accepted")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, UseMockWorkers: true,
+	})
+	defer server.Stop(t)
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	assertScriptMockPlaces(t, support.GetDefaultSession(t, server.URL()), "done")
+	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "done", "mock worker accepted")
 }
 
 func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *testing.T) {
@@ -42,46 +37,19 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 	logDir := t.TempDir()
 	exitCode := 9
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRuntimeFileLoggingEnabled(true),
-		testutil.WithRuntimeLogDir(logDir),
-		testutil.WithRuntimeInstanceID("mock-script-reject"),
-		testutil.WithMockWorkersConfig(&factoryconfig.MockWorkersConfig{
-			MockWorkers: []factoryconfig.MockWorkerConfig{{
-				WorkerName:      "script-worker",
-				WorkstationName: "run-script",
-				RunType:         factoryconfig.MockWorkerRunTypeReject,
-				RejectConfig: &factoryconfig.MockWorkerRejectConfig{
-					Stdout:   "script configured stdout",
-					Stderr:   "script configured stderr",
-					ExitCode: &exitCode,
-				},
-			}},
-		}),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
+	configPath := support.WriteMockWorkersConfig(t, rejectedScriptMockConfig(exitCode))
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args: []string{
+			"--with-mock-workers", configPath,
+			"--runtime-log-dir", logDir,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	assertScriptMockRejected(t, server)
+	server.Stop(t)
 
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:done")
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	if len(snapshot.DispatchHistory) != 1 {
-		t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
-	}
-	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
-	}
-	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "script configured stderr") {
-		t.Fatalf("dispatch reason = %q, want configured stderr detail", snapshot.DispatchHistory[0].Reason)
-	}
-
-	record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, "mock-script-reject"), workers.WorkLogEventCommandRunnerCompleted)
+	record := findRuntimeLogRecord(t, requireAnyRuntimeLogPath(t, logDir), commandRunnerCompletedLogEvent)
 	if record["exit_code"] != float64(9) {
 		t.Fatalf("logged exit_code = %#v, want 9", record["exit_code"])
 	}
@@ -99,40 +67,14 @@ func TestMockWorkers_ScriptRejectConfigWithZeroExitCodeStillRoutesFailure(t *tes
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script reject zero exit payload"))
 	exitCode := 0
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithMockWorkersConfig(&factoryconfig.MockWorkersConfig{
-			MockWorkers: []factoryconfig.MockWorkerConfig{{
-				WorkerName:      "script-worker",
-				WorkstationName: "run-script",
-				RunType:         factoryconfig.MockWorkerRunTypeReject,
-				RejectConfig: &factoryconfig.MockWorkerRejectConfig{
-					Stdout:   "script configured stdout",
-					Stderr:   "script configured stderr",
-					ExitCode: &exitCode,
-				},
-			}},
-		}),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:done")
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	if len(snapshot.DispatchHistory) != 1 {
-		t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
-	}
-	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
-	}
-	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "script configured stderr") {
-		t.Fatalf("dispatch reason = %q, want configured stderr detail", snapshot.DispatchHistory[0].Reason)
+	configPath := support.WriteMockWorkersConfig(t, rejectedScriptMockConfig(exitCode))
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--with-mock-workers", configPath, "--no-record",
+	})
+	err := process.Execute(inputs.Input)
+	if err == nil || !strings.Contains(err.Error(), "rejectConfig.exitCode must be between 1 and 255") {
+		t.Fatalf("Process.Execute() error = %v, want public exit-code validation; stderr=%q", err, inputs.Stderr())
 	}
 }
 
@@ -142,32 +84,25 @@ func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("mock script command payload"))
 	sideEffectPath := filepath.Join(t.TempDir(), "mock-script-side-effect.txt")
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithMockWorkersConfig(&factoryconfig.MockWorkersConfig{
-			MockWorkers: []factoryconfig.MockWorkerConfig{{
-				WorkerName:      "script-worker",
-				WorkstationName: "run-script",
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: os.Args[0],
-					Args: []string{
-						"-test.run=TestMockWorkers_ScriptHelper",
-						"--",
-						"write-file",
-						sideEffectPath,
-						"script side effect",
-					},
+	configPath := support.WriteMockWorkersConfig(t, &workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{{
+			WorkerName: "script-worker", WorkstationName: "run-script",
+			RunType: workers.MockWorkerRunTypeScript,
+			ScriptConfig: &workers.MockWorkerScriptConfig{
+				Command: os.Args[0],
+				Args: []string{
+					"-test.run=TestMockWorkers_ScriptHelper", "--",
+					"write-file", sideEffectPath, "script side effect",
 				},
-			}},
-		}),
-	)
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+			},
+		}},
+	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir, Args: []string{"--with-mock-workers", configPath},
+	})
+	defer server.Stop(t)
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	assertScriptMockPlaces(t, support.GetDefaultSession(t, server.URL()), "done")
 
 	raw, err := os.ReadFile(sideEffectPath)
 	if err != nil {
@@ -176,7 +111,50 @@ func TestMockWorkers_ScriptConfigExecutesCommandRunnerSideEffect(t *testing.T) {
 	if string(raw) != "script side effect" {
 		t.Fatalf("side effect content = %q, want %q", raw, "script side effect")
 	}
-	assertTokenPayload(t, h.Marking(), "task:done", "mock script helper wrote file")
+	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "done", "mock script helper wrote file")
+}
+
+func rejectedScriptMockConfig(exitCode int) *workers.MockWorkersConfig {
+	return &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		WorkerName: "script-worker", WorkstationName: "run-script",
+		RunType: workers.MockWorkerRunTypeReject,
+		RejectConfig: &workers.MockWorkerRejectConfig{
+			Stdout: "script configured stdout", Stderr: "script configured stderr", ExitCode: &exitCode,
+		},
+	}}}
+}
+
+func assertScriptMockPlaces(t *testing.T, session factoryapi.FactorySession, terminalState string) {
+	t.Helper()
+	for _, state := range []string{"init", "done", "failed"} {
+		want := 0
+		if state == terminalState {
+			want = 1
+		}
+		if got := support.SessionPlaceTokenCount(session, "task:"+state); got != want {
+			t.Errorf("task:%s token count = %d, want %d", state, got, want)
+		}
+	}
+}
+
+func assertScriptMockRejected(t *testing.T, server *support.FunctionalAPIServer) {
+	t.Helper()
+	assertScriptMockPlaces(t, support.GetDefaultSession(t, server.URL()), "failed")
+	for _, event := range server.GetFactoryEvents(t) {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Outcome != factoryapi.WorkOutcomeFailed || payload.Error == nil ||
+			!strings.Contains(*payload.Error, "script configured stderr") {
+			t.Fatalf("dispatch response = %#v, want configured script failure", payload)
+		}
+		return
+	}
+	t.Fatal("Factory Event history did not contain dispatch response")
 }
 
 func TestMockWorkers_ScriptHelper(t *testing.T) {

@@ -4,10 +4,9 @@ package config
 import (
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
@@ -29,16 +28,30 @@ type FactoryConfigExpandConfig struct {
 	Diagnostics io.Writer
 }
 
-// FlattenFactoryConfig writes the canonical single-file factory config for a
-// factory directory or an existing factory.json payload.
-func FlattenFactoryConfig(cfg FactoryConfigFlattenConfig) error {
+// NewFlattenFactoryConfig binds the Factory Definitions layout capability to
+// the CLI representation handler.
+func NewFlattenFactoryConfig(
+	persistence factorydefinitions.Persistence,
+) func(FactoryConfigFlattenConfig) error {
+	return func(cfg FactoryConfigFlattenConfig) error {
+		return flattenFactoryConfig(persistence, cfg)
+	}
+}
+
+func flattenFactoryConfig(
+	persistence factorydefinitions.Persistence,
+	cfg FactoryConfigFlattenConfig,
+) error {
 	output := cfg.Output
 	if output == nil {
-		output = os.Stdout
+		return fmt.Errorf("config flatten output is required")
+	}
+	if persistence == nil {
+		return fmt.Errorf("Factory Definitions persistence service is required")
 	}
 
-	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config flatten request inputPath=%s layoutSource=%s outputMode=stdout", cfg.Path, layoutSourceLabel(cfg.Path))
-	formatted, err := factoryconfig.FlattenFactoryConfig(cfg.Path)
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config flatten request inputPath=%s outputMode=stdout", cfg.Path)
+	formatted, err := persistence.FlattenFactoryLayout(cfg.Path)
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config flatten failed inputPath=%s phase=%s", cfg.Path, configFailurePhase(err))
 		return err
@@ -52,17 +65,30 @@ func FlattenFactoryConfig(cfg FactoryConfigFlattenConfig) error {
 	return nil
 }
 
-// ExpandFactoryConfig writes a split factory directory layout from a canonical
-// factory.json file. The target directory is the input file's parent directory,
-// or the provided directory when cfg.Path points at a directory.
-func ExpandFactoryConfig(cfg FactoryConfigExpandConfig) error {
+// NewExpandFactoryConfig binds the Factory Definitions layout capability to
+// the CLI representation handler.
+func NewExpandFactoryConfig(
+	persistence factorydefinitions.Persistence,
+) func(FactoryConfigExpandConfig) error {
+	return func(cfg FactoryConfigExpandConfig) error {
+		return expandFactoryConfig(persistence, cfg)
+	}
+}
+
+func expandFactoryConfig(
+	persistence factorydefinitions.Persistence,
+	cfg FactoryConfigExpandConfig,
+) error {
 	output := cfg.Output
 	if output == nil {
-		output = os.Stdout
+		return fmt.Errorf("config expand output is required")
+	}
+	if persistence == nil {
+		return fmt.Errorf("Factory Definitions persistence service is required")
 	}
 
 	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config expand request inputPath=%s outputMode=filesystem", cfg.Path)
-	targetDir, report, err := factoryconfig.ExpandFactoryConfigLayoutWithExpansionReport(cfg.Path)
+	targetDir, report, err := persistence.ExpandFactoryLayout(cfg.Path)
 	if err != nil {
 		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "config expand failed inputPath=%s phase=%s", cfg.Path, configFailurePhase(err))
 		return err
@@ -91,17 +117,6 @@ func ExpandFactoryConfig(cfg FactoryConfigExpandConfig) error {
 		len(report.BundledReplacements),
 	)
 	return nil
-}
-
-func layoutSourceLabel(path string) string {
-	info, err := os.Stat(path)
-	if err != nil {
-		return "unknown"
-	}
-	if info.IsDir() {
-		return "directory"
-	}
-	return "file"
 }
 
 func configFailurePhase(err error) string {

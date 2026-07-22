@@ -2,12 +2,13 @@
 package workflow
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/spf13/cobra"
@@ -16,34 +17,53 @@ import (
 // PreviewConfig holds parameters for workflow preview output.
 type PreviewConfig struct {
 	SourceConfig
-	JSON   bool
-	Output io.Writer
+	Context context.Context
+	JSON    bool
+	Output  io.Writer
 }
 
 // PreviewRunE returns the handwritten workflow preview handler used by
 // compatibility and generated command metadata wiring.
-func PreviewRunE(cfg *PreviewConfig, jsonOutput *bool) func(*cobra.Command, []string) error {
+func PreviewRunE(
+	preview factoryruntime.WorkflowPreviewOperation,
+	cfg *PreviewConfig,
+	jsonOutput *bool,
+) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, _ []string) error {
 		if jsonOutput != nil {
 			cfg.JSON = *jsonOutput
 		}
 		cfg.Output = cmd.OutOrStdout()
-		return Preview(*cfg)
+		cfg.Context = cmd.Context()
+		return Preview(preview, *cfg)
 	}
 }
 
 // Preview resolves and validates workflow source, then prints shared preview diagnostics.
-func Preview(cfg PreviewConfig) error {
+func Preview(
+	preview factoryruntime.WorkflowPreviewOperation,
+	cfg PreviewConfig,
+) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.Context == nil {
+		return fmt.Errorf("workflow preview context is required")
 	}
 
+	if preview == nil {
+		return fmt.Errorf("workflow preview operation is required")
+	}
 	input, err := previewRequestFromSourceConfig(cfg.SourceConfig)
 	if err != nil {
 		return err
 	}
 
-	result := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(input))
+	workflowPreview, err := preview.PreviewWorkflow(cfg.Context, input)
+	if err != nil {
+		return err
+	}
+	result := apisurface.FactoryPreviewResultFromPreview(workflowPreview)
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(result)
 	}

@@ -3,10 +3,9 @@ package smoke
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,19 +19,10 @@ func TestConfigDrivenExecution_HappyPath(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 1 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want one terminal work item", status.Categories)
+	}
 
 	if provider.CallCount() != 2 {
 		t.Errorf("expected provider called 2 times, got %d", provider.CallCount())
@@ -49,18 +39,13 @@ func TestConfigDrivenExecution_HappyPathFailureRouting(t *testing.T) {
 		[]error{fmt.Errorf("something went wrong")},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:failed").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:complete").
-		TokenCount(1)
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Failed != 1 || status.Categories.Terminal != 0 {
+		t.Fatalf("status categories = %+v, want one failed work item", status.Categories)
+	}
+	if provider.CallCount() != 1 {
+		t.Errorf("expected failed provider called once, got %d", provider.CallCount())
+	}
 }
 
 func TestConfigDrivenExecution_AddWorkType(t *testing.T) {
@@ -74,20 +59,10 @@ func TestConfigDrivenExecution_AddWorkType(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Review handled. COMPLETE"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("request:complete").
-		HasTokenInPlace("review:complete").
-		HasNoTokenInPlace("request:init").
-		HasNoTokenInPlace("review:init").
-		PlaceTokenCount("request:complete", 1).
-		PlaceTokenCount("review:complete", 1)
+	status := runFactoryThroughCustomerProcess(t, dir, provider)
+	if status.Categories.Terminal != 2 || status.Categories.Failed != 0 {
+		t.Fatalf("status categories = %+v, want two terminal work items", status.Categories)
+	}
 
 	if provider.CallCount() != 2 {
 		t.Errorf("expected provider called 2 times, got %d", provider.CallCount())

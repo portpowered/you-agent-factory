@@ -3,8 +3,8 @@ package workcontent
 import (
 	"encoding/json"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // PartsFromGenerated translates supported generated work content parts into the
@@ -55,7 +55,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (work.WorkContentPart, b
 		switch textPart.Type {
 		case factoryapi.WorkContentPartTypeText, factoryapi.WorkContentPartTypeTextUpper:
 			return work.WorkContentPart{
-				Type:        work.WorkContentPartType(textPart.Type).Normalized(),
+				Type:        work.WorkContentPartType(textPart.Type),
 				Text:        textPart.Text,
 				Slot:        stringValue(textPart.Slot),
 				Label:       stringValue(textPart.Label),
@@ -72,7 +72,7 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (work.WorkContentPart, b
 		switch imagePart.Type {
 		case factoryapi.WorkContentPartTypeImage, factoryapi.WorkContentPartTypeImageUpper:
 			return work.WorkContentPart{
-				Type:        work.WorkContentPartType(imagePart.Type).Normalized(),
+				Type:        work.WorkContentPartType(imagePart.Type),
 				URL:         string(imagePart.Url),
 				File:        deprecatedFileValue(imagePart.File),
 				Slot:        stringValue(imagePart.Slot),
@@ -140,10 +140,10 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (work.WorkContentPart, b
 // generated API shape.
 func GeneratedPartFromPart(part work.WorkContentPart) (factoryapi.WorkContentPart, bool) {
 	var generated factoryapi.WorkContentPart
-	switch part.Type.Normalized() {
+	switch part.Type {
 	case work.WorkContentPartTypeText:
 		if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
+			Type:        factoryapi.WorkContentPartType(part.Type),
 			Text:        part.Text,
 			Slot:        stringPtr(part.Slot),
 			Label:       stringPtr(part.Label),
@@ -156,7 +156,7 @@ func GeneratedPartFromPart(part work.WorkContentPart) (factoryapi.WorkContentPar
 		}
 	case work.WorkContentPartTypeImage:
 		if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
-			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
+			Type:        factoryapi.WorkContentPartType(part.Type),
 			Url:         factoryapi.WorkContentURLProperty(part.URL),
 			File:        deprecatedFilePtr(part.File),
 			Slot:        stringPtr(part.Slot),

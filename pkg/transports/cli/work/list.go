@@ -9,23 +9,20 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
-	"time"
 
+	workquery "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	workquery "github.com/portpowered/infinite-you/pkg/work/query"
 )
-
-const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the work list command.
 type ListConfig struct {
+	Context      context.Context
 	Server       string
 	SessionID    string
 	StateName    string
@@ -41,17 +38,47 @@ type ListConfig struct {
 	Debug        bool
 	Output       io.Writer
 	Diagnostics  io.Writer
+	HTTP         clihttp.Protocol
+}
+
+func NewList(
+	transport clihttp.Protocol,
+	prepare workquery.ListRequestPreparation,
+) func(ListConfig) error {
+	return func(cfg ListConfig) error { cfg.HTTP = transport; return List(prepare, cfg) }
 }
 
 // List requests available work from a running factory via HTTP.
-func List(cfg ListConfig) error {
+func List(prepare workquery.ListRequestPreparation, cfg ListConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
+	}
+	if prepare == nil {
+		return fmt.Errorf("Work list request preparation is required")
 	}
 
-	request, err := buildListRequest(cfg)
+	prepared, err := prepare.PrepareListRequest(cfg.Context, workquery.ListOptions{
+		StateName:    cfg.StateName,
+		StateType:    cfg.StateType,
+		Name:         cfg.Name,
+		WorkTypeName: cfg.WorkTypeName,
+		TraceID:      cfg.TraceID,
+		SortBy:       cfg.SortBy,
+		MaxResults:   cfg.MaxResults,
+		NextToken:    cfg.NextToken,
+	})
 	if err != nil {
 		return listConfigError(err)
+	}
+	request, err := buildListRequest(cfg, prepared)
+	if err != nil {
+		return err
 	}
 	endpoint := request.endpoint
 	clidiag.Printf(
@@ -63,34 +90,29 @@ func List(cfg ListConfig) error {
 		cfg.Server,
 		clidiag.SessionLabel(cfg.SessionID),
 		request.filterSummary,
-		cfg.MaxResults,
-		cfg.NextToken != "",
+		prepared.Options.MaxResults,
+		prepared.Options.NextToken != "",
 	)
 
-	client := &http.Client{Timeout: listRequestTimeout}
-	started := time.Now()
 	var result factoryapi.ListWorkResponse
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		endpoint.String(),
 		&result,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     "work list",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
+			clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 			return fmt.Errorf("list work failed (%d): %s", resp.StatusCode, errResp.Message)
 		}
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "work list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		return fmt.Errorf("list work failed (%d)", resp.StatusCode)
 	}
 	clidiag.Printf(
@@ -99,7 +121,7 @@ func List(cfg ListConfig) error {
 		"work list response endpointPath=%s status=%d durationMillis=%d resultCount=%d nextTokenPresent=%t",
 		endpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		response.Duration.Milliseconds(),
 		len(result.Results),
 		result.PaginationContext != nil && result.PaginationContext.NextToken != nil && *result.PaginationContext.NextToken != "",
 	)
@@ -130,21 +152,7 @@ type listRequest struct {
 	filterSummary string
 }
 
-func buildListRequest(cfg ListConfig) (listRequest, error) {
-	query, err := workquery.NormalizeList(workquery.ListOptions{
-		StateName:    cfg.StateName,
-		StateType:    cfg.StateType,
-		Name:         cfg.Name,
-		WorkTypeName: cfg.WorkTypeName,
-		TraceID:      cfg.TraceID,
-		SortBy:       cfg.SortBy,
-		MaxResults:   cfg.MaxResults,
-		NextToken:    cfg.NextToken,
-	})
-	if err != nil {
-		return listRequest{}, err
-	}
-
+func buildListRequest(cfg ListConfig, prepared workquery.PreparedListRequest) (listRequest, error) {
 	endpointPath := sessionpath.WorkCollectionPath(cfg.SessionID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)
 	if err != nil {
@@ -154,8 +162,8 @@ func buildListRequest(cfg ListConfig) (listRequest, error) {
 	if err != nil {
 		return listRequest{}, fmt.Errorf("parse work list endpoint: %w", err)
 	}
-	endpoint.RawQuery = listQueryValues(query.Options()).Encode()
-	return listRequest{endpoint: *endpoint, filterSummary: query.FilterSummary()}, nil
+	endpoint.RawQuery = listQueryValues(prepared.Options).Encode()
+	return listRequest{endpoint: *endpoint, filterSummary: prepared.FilterSummary}, nil
 }
 
 func listQueryValues(options workquery.ListOptions) url.Values {

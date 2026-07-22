@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	baselinePath = "docs/internal/development/deadcode-baseline.txt"
+	baselinePath = "docs/internal/baselines/deadcode-baseline.txt"
 	currentPath  = "bin/deadcode-current.txt"
 	deadcodeTool = "golang.org/x/tools/cmd/deadcode@v0.25.1"
 )
@@ -24,7 +24,7 @@ var (
 	exitFunc                     = os.Exit
 	stdout             io.Writer = os.Stdout
 	stderr             io.Writer = os.Stderr
-	positionPattern             = regexp.MustCompile(`:(\d+):(\d+):`)
+	positionPattern              = regexp.MustCompile(`:(\d+):(\d+):`)
 )
 
 func main() {

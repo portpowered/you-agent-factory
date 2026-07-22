@@ -1,6 +1,7 @@
 package retiredsurfaceguard
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -67,6 +68,12 @@ func ScanEncodedPathProductionSourceViolations(repoRoot string) ([]Violation, er
 	}
 	var violations []Violation
 	for _, scanRoot := range scanRoots {
+		if _, statErr := os.Stat(scanRoot); statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("walk %s: %w", scanRoot, statErr)
+		}
 		err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr

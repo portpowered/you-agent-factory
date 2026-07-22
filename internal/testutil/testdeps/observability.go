@@ -1,16 +1,15 @@
 package testdeps
 
 import (
-	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	"go.uber.org/zap"
 )
 
 // Observability holds injectable logging and metrics dependencies for tests.
 type Observability struct {
 	Logger         logging.Logger
-	MetricsEmitter metrics.MetricsEmitter
+	MetricsEmitter factoryruntime.MetricsEmitter
 	ZapLogger      *zap.Logger
 }
 
@@ -18,16 +17,22 @@ type Observability struct {
 func Default() Observability {
 	return Observability{
 		Logger:         logging.NoopLogger{},
-		MetricsEmitter: metrics.NoopEmitter{},
+		MetricsEmitter: factoryruntime.NoopEmitter{},
 		ZapLogger:      zap.NewNop(),
 	}
 }
 
 // QuietFactoryServiceConfig applies quiet observability defaults to cfg and
-// returns it for ordinary tests that build FactoryService directly.
-func QuietFactoryServiceConfig(cfg *service.FactoryServiceConfig) *service.FactoryServiceConfig {
+// returns it for narrowly owned runtime-component tests.
+type FactoryServiceObservabilityConfig struct {
+	Logger                   *zap.Logger
+	RuntimeFileLoggingPolicy factoryruntime.RuntimeFileLoggingPolicy
+	RuntimeMetricsPolicy     factoryruntime.RuntimeMetricsPolicy
+}
+
+func QuietFactoryServiceConfig(cfg *FactoryServiceObservabilityConfig) *FactoryServiceObservabilityConfig {
 	if cfg == nil {
-		cfg = &service.FactoryServiceConfig{}
+		cfg = &FactoryServiceObservabilityConfig{}
 	}
 	Default().ApplyFactoryServiceConfig(cfg)
 	return cfg
@@ -35,7 +40,7 @@ func QuietFactoryServiceConfig(cfg *service.FactoryServiceConfig) *service.Facto
 
 // ApplyFactoryServiceConfig applies quiet observability defaults to cfg when
 // callers have not set explicit observability dependencies.
-func (o Observability) ApplyFactoryServiceConfig(cfg *service.FactoryServiceConfig) {
+func (o Observability) ApplyFactoryServiceConfig(cfg *FactoryServiceObservabilityConfig) {
 	if cfg == nil {
 		return
 	}
@@ -43,9 +48,9 @@ func (o Observability) ApplyFactoryServiceConfig(cfg *service.FactoryServiceConf
 		cfg.Logger = o.ZapLogger
 	}
 	if cfg.RuntimeFileLoggingPolicy == "" {
-		cfg.RuntimeFileLoggingPolicy = service.RuntimeFileLoggingPolicyDisabled
+		cfg.RuntimeFileLoggingPolicy = factoryruntime.RuntimeFileLoggingPolicyDisabled
 	}
 	if cfg.RuntimeMetricsPolicy == "" {
-		cfg.RuntimeMetricsPolicy = service.RuntimeMetricsPolicyDisabled
+		cfg.RuntimeMetricsPolicy = factoryruntime.RuntimeMetricsPolicyDisabled
 	}
 }

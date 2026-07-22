@@ -3,11 +3,13 @@
 package workflow
 
 import (
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,12 +26,14 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.RejectedProviderResponse("tests still missing"),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 3 {
 		t.Errorf("expected swe called 3 times, got %d", got)
@@ -38,17 +42,11 @@ func TestReviewRetryLoopBreaker_TerminatesAfterMaxRetries(t *testing.T) {
 		t.Errorf("expected reviewer called 3 times, got %d", got)
 	}
 
-	h.Assert().
-		HasTokenInPlace("code-change:failed").
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:in-review").
-		HasNoTokenInPlace("code-change:complete")
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	assertDispatchHistoryContainsWorkstationRoute(t, snapshot.DispatchHistory, "review-exhaustion", "code-change:failed")
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:failed": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:complete": 0,
+	})
+	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "review-exhaustion", "code-change:failed")
+	server.Stop(t)
 }
 
 func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
@@ -56,41 +54,42 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "review_retry_exhaustion"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	sweMock := h.MockWorker("swe",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+	provider := testutil.NewMockProvider(
+		support.AcceptedProviderResponse(),
+		support.RejectedProviderResponse("add unit tests"),
+		support.AcceptedProviderResponse(),
+		support.RejectedProviderResponse("tests incomplete"),
+		support.AcceptedProviderResponse(),
+		support.RejectedProviderResponse("coverage too low"),
 	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	assertWorkflowSessionPlaces(t, session, map[string]int{"code-change:failed": 1})
 
-	h.MockWorker("reviewer",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "add unit tests"},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "tests incomplete"},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "coverage too low"},
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	calls := sweMock.Calls()
-	if len(calls) != 3 {
-		t.Fatalf("expected 3 swe calls, got %d", len(calls))
+	var rejectedOutputs []string
+	for _, event := range server.GetFactoryEvents(t) {
+		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
+			continue
+		}
+		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		if err != nil {
+			t.Fatalf("decode dispatch response: %v", err)
+		}
+		if payload.Outcome == factoryapi.WorkOutcomeRejected && payload.Output != nil {
+			rejectedOutputs = append(rejectedOutputs, *payload.Output)
+		}
 	}
-
-	firstColor := support.FirstInputToken(calls[0].InputTokens).Color
-	if _, ok := firstColor.Tags["_rejection_feedback"]; ok {
-		t.Error("first swe dispatch should not have _rejection_feedback tag")
+	wants := []string{"add unit tests", "tests incomplete", "coverage too low"}
+	if !slices.Equal(rejectedOutputs, wants) {
+		t.Fatalf("public rejected outputs = %q, want %q", rejectedOutputs, wants)
 	}
-
-	secondColor := support.FirstInputToken(calls[1].InputTokens).Color
-	if fb := secondColor.Tags["_rejection_feedback"]; fb != "add unit tests" {
-		t.Errorf("second dispatch: expected feedback %q, got %q", "add unit tests", fb)
-	}
-
-	thirdColor := support.FirstInputToken(calls[2].InputTokens).Color
-	if fb := thirdColor.Tags["_rejection_feedback"]; fb != "tests incomplete" {
-		t.Errorf("third dispatch: expected feedback %q, got %q", "tests incomplete", fb)
-	}
+	server.Stop(t)
 }
 
 func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
@@ -104,12 +103,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
 
 	if got := len(support.ProviderCallsForWorker(provider, "swe")); got != 2 {
 		t.Errorf("expected swe called 2 times, got %d", got)
@@ -118,8 +112,7 @@ func TestReviewRetryLoopBreaker_SucceedsBeforeLimit(t *testing.T) {
 		t.Errorf("expected reviewer called 2 times, got %d", got)
 	}
 
-	h.Assert().
-		HasTokenInPlace("code-change:complete").
-		HasNoTokenInPlace("code-change:failed").
-		HasNoTokenInPlace("code-change:init")
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:complete": 1, "code-change:failed": 0, "code-change:init": 0,
+	})
 }

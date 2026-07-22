@@ -64,12 +64,14 @@ flowchart LR
         currentRoot[[pkg/root]]
         currentWire[[pkg/wire]]
         currentInitializer[[pkg/initializer]]
-        currentGraph[(Typed application graph)]
+        currentProcess[(application.Process)]
+        currentCLISelection{CLI-selected operation}
 
         currentCmd --> currentRoot
-        currentRoot -->|selects process mode| currentWire
-        currentWire -->|constructs| currentGraph
-        currentGraph --> currentInitializer
+        currentRoot -->|BuildProcess| currentWire
+        currentWire -->|InjectBundle: complete inert graph| currentProcess
+        currentProcess -->|Execute: fresh command tree| currentCLISelection
+        currentCLISelection -->|activates injected roles| currentInitializer
     end
 
     subgraph currentTransports[Transport adapters]
@@ -86,25 +88,29 @@ flowchart LR
     end
 
     subgraph currentDefinitions[Factory definition and configuration]
-        currentConfig[[pkg/config]]
-        currentDefinition[[pkg/factory/definition]]
-        currentValidation[[pkg/factory/validation]]
+        currentLoading[[pkg/services/factory_definitions/loading]]
+        currentDefinition[[pkg/services/factory_definitions]]
+        currentValidation[[pkg/services/factory_definitions/validation]]
+        currentMappingAdapter[[pkg/transports/mapping/factoryconfig]]
         currentFactoryFiles[(Factory and system configuration files)]
 
-        currentConfig -->|loads and persists| currentFactoryFiles
+        currentLoading -->|loads| currentFactoryFiles
         currentDefinition --> currentValidation
-        currentDefinition -->|reads and saves| currentFactoryFiles
+        currentMappingAdapter -->|maps authored representations| currentDefinition
+        currentDefinition -->|persists through owned service| currentFactoryFiles
     end
 
     subgraph currentSessions[Factory Session ownership]
-        currentSessionGateway[[pkg/factory/sessions/service]]
+        currentSessionGateway[[pkg/services/factory_sessions/service]]
         currentControlPlane[[controlplane]]
         currentDataPlane[[dataplane]]
         currentExecution[[execution and durable lifecycle]]
         currentSessionRegistry[(Live session registry)]
         currentCanonicalStream[[Canonical Factory Event stream]]
         currentResponseStream[[Ephemeral response-event stream]]
-        currentProviderProjection[[Provider Session read projection]]
+        currentProviderProjection[[pkg/services/provider_sessions\nProvider Session inspection]]
+        currentCodexProviderSessions[[codex\nJSONL discovery and parsing]]
+        currentCursorProviderSessions[[cursor\nstore.db discovery and parsing]]
 
         currentSessionGateway --> currentControlPlane
         currentSessionGateway --> currentDataPlane
@@ -113,11 +119,13 @@ flowchart LR
         currentExecution --> currentCanonicalStream
         currentExecution --> currentResponseStream
         currentExecution --> currentProviderProjection
+        currentProviderProjection --> currentCodexProviderSessions
+        currentProviderProjection --> currentCursorProviderSessions
     end
 
     subgraph currentRuntime[Factory runtime]
-        currentFactoryRuntime[[pkg/factory/runtime]]
-        currentEngine[[pkg/factory/engine core tick loop]]
+        currentFactoryRuntime[[pkg/services/factory_runtime/runtime]]
+        currentEngine[[pkg/services/factory_runtime/engine core tick loop]]
         currentSubmissionBuffer[(Submission buffer)]
         currentResultBuffer[(Worker-result buffer)]
 
@@ -153,12 +161,12 @@ flowchart LR
         currentTimeWork[[cron and time-work]]
     end
 
-    subgraph currentWorkers[Worker execution and scheduler sidecars]
-        currentWorkerService[[pkg/workers/service\ncron and poller supervision]]
-        currentWorkerExecutor[[pkg/workers/executor]]
-        currentProviderAdapters[[pkg/workers/provider adapters]]
-        currentHostedWorkers[[pkg/workers/hosted]]
-        currentWorktrees[[pkg/workers/worktree]]
+    subgraph currentWorkers[Worker execution]
+        currentWorkerService[[pkg/services/workers/service\nworker invocation]]
+        currentWorkerExecutor[[pkg/services/workers/executor]]
+        currentProviderAdapters[[pkg/services/workers/provider adapters]]
+        currentHostedWorkers[[pkg/services/workers/services/hosted_logic]]
+        currentWorktrees[[pkg/services/workers/worktree]]
 
         currentWorkerService --> currentWorkerExecutor
         currentWorkerExecutor --> currentProviderAdapters
@@ -166,11 +174,16 @@ flowchart LR
         currentWorkerExecutor --> currentWorktrees
     end
 
+    subgraph currentAutomation[Automation]
+        currentAutomationService[[pkg/services/automations\ncron, poller, and watcher supervision]]
+        currentAutomationService --> currentWorkContent
+    end
+
     subgraph currentModels[Managed models]
-        currentModelService[[pkg/models/service]]
-        currentModelHost[[pkg/models/host]]
-        currentLocalModels[[pkg/models/local]]
-        currentModelAssets[[pkg/models/assets]]
+        currentModelService[[pkg/services/models/internal/service]]
+        currentModelHost[[pkg/services/models/internal/host]]
+        currentLocalModels[[pkg/services/models/internal/local]]
+        currentModelAssets[[pkg/services/models/internal/assets]]
 
         currentModelService --> currentModelHost
         currentModelHost --> currentLocalModels
@@ -184,18 +197,13 @@ flowchart LR
         currentLogs[(Runtime log files)]
         currentLogging[[pkg/logging]]
         currentReplay[[pkg/replay]]
-        currentSessionPersistence[[pkg/sessionpersistence]]
+        currentSessionPersistence[[pkg/services/factory_sessions/cursors/persistence]]
         currentInternalPlatform[[pkg/internal/metrics and cursorstorage]]
 
         currentLogging --> currentLogs
         currentReplay --> currentArtifacts
         currentSessionPersistence --> currentSessionRecordings
         currentInternalPlatform --> currentMetrics
-    end
-
-    subgraph currentCompatibility[Migration-only composition roots]
-        currentService[[pkg/service compatibility facade]]
-        currentRuntimeHost[[pkg/runtimehost]]
     end
 
     subgraph currentUI[Dashboard event projection]
@@ -282,9 +290,6 @@ flowchart LR
     currentGeneratedContracts -.-> currentGenerated
     currentGeneratedContracts -.-> currentUIAPI
 
-    currentService -.->|legacy facade and composition| currentSessionGateway
-    currentRuntimeHost -.->|legacy runtime hosting| currentFactoryRuntime
-
     classDef currentExternal fill:#f3f4f6,stroke:#4b5563,color:#111827,stroke-width:1.5px
     classDef currentClient fill:#dbeafe,stroke:#2563eb,color:#1e3a8a,stroke-width:1.5px
     classDef currentInterface fill:#cffafe,stroke:#0891b2,color:#164e63,stroke-width:1.5px
@@ -305,7 +310,6 @@ flowchart LR
     class currentConfig,currentLogging,currentReplay,currentSessionPersistence,currentInternalPlatform,currentUIAPI,currentEventHook,currentTimelineStore,currentReplayWorld,currentProjectSnapshot currentPlatform
     class currentGraph,currentFactoryFiles,currentSessionRegistry,currentSubmissionBuffer,currentResultBuffer,currentSessionRecordings,currentArtifacts,currentMetrics,currentLogs currentStore
     class currentGenerated,currentOpenAPI,currentGeneratedContracts,currentAPIPackage currentContract
-    class currentService,currentRuntimeHost currentMigration
 
     style currentStartup fill:#f5f3ff,stroke:#c4b5fd,color:#4c1d95
     style currentTransports fill:#ecfeff,stroke:#67e8f9,color:#164e63
@@ -313,7 +317,6 @@ flowchart LR
     style currentRuntime fill:#fff7ed,stroke:#fdba74,color:#7c2d12
     style currentWorkers fill:#fff7ed,stroke:#fdba74,color:#7c2d12
     style currentModels fill:#fff7ed,stroke:#fdba74,color:#7c2d12
-    style currentCompatibility fill:#fef2f2,stroke:#fca5a5,color:#7f1d1d
     style currentUI fill:#eff6ff,stroke:#93c5fd,color:#1e3a8a
 ```
 
@@ -337,6 +340,27 @@ flowchart LR
 5. websites and other interfaces operate off of a materialization of the world state, rather than a snapshot in time. 
 
 ## TARGET (WIP)
+
+The target has nine logical product services:
+
+| Service | Authoritative responsibility |
+| --- | --- |
+| Factory Definition | Definition validation, persistence, versioning, and activation |
+| Factory Session | Session identity, desired lifecycle, placement, recovery, and discovery |
+| Factory Runtime | Per-session execution, orchestration, dispatch planning, and checkpoints |
+| Work | Work Request admission, Work content, lineage, materialization, and queries |
+| Worker Execution | Executor construction, worker routing, capacity, and execution |
+| Provider Session | Provider-session lifecycle, continuation, transcripts, and response events |
+| Model Runtime | Model catalog, assets, readiness, leases, and inference |
+| Automation | Cron, pollers, watchers, listeners, cursors, and generated Work Requests |
+| Session Ledger and Projection | Canonical event ordering/replay, artifacts, response streams, and query projections |
+
+The target diagram renders Ledger and Projection as separate components because
+they have different scaling and storage characteristics. They remain one logical
+service family initially and can split into independently deployed services
+without changing the other eight boundaries. `pkg/wire` constructs these
+services and `pkg/initializer` owns process lifecycle; neither is a product
+service.
 
 ```mermaid
 flowchart LR
@@ -683,7 +707,7 @@ flowchart LR
 
 ## initialization
 
-pkg/factory
+cmd/factory
 -> pkg/root
 -> pkg/wire
 -> pkg/initializer

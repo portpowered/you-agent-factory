@@ -3,7 +3,6 @@
 package replay_contracts
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,13 +10,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -43,17 +40,18 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 			{Content: "Finalized. COMPLETE"},
 		},
 	})
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-
-	harness.RunUntilComplete(t, 15*time.Second)
-	harness.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	recordServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, recordServer.URL(), 15*time.Second)
+	assertReplaySessionPlaces(t, support.GetDefaultSession(t, recordServer.URL()), map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+	recordServer.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	runStarted := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
@@ -63,12 +61,16 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		t.Fatalf("remove original factory dir: %v", err)
 	}
 
-	assertFactoryOnlyPayloadProjectsInitialTopology(t, runStarted.Factory)
-	replayHarness := testutil.AssertReplaySucceeds(t, artifactPath, 15*time.Second)
-	replayHarness.Service.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath},
+	})
+	support.WaitForTerminalStatus(t, replayServer.URL(), 15*time.Second)
+	assertReplaySessionPlaces(t, support.GetDefaultSession(t, replayServer.URL()), map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
+	assertFactoryOnlyReplayProjectsInitialTopology(t, replayServer.GetFactoryEvents(t))
+	replayServer.Stop(t)
 }
 
 func requireFactoryOnlyRunStartedPayload(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.RunRequestEventPayload {
@@ -120,26 +122,13 @@ func assertFactoryOnlyPayloadCoversRepresentativeConfig(t *testing.T, factory fa
 	assertFactoryOnlyWorkstation(t, generatedWorkstations(factory), "finisher", "finish-worker", false)
 }
 
-func assertFactoryOnlyPayloadProjectsInitialTopology(t *testing.T, factory factoryapi.Factory) {
+func assertFactoryOnlyReplayProjectsInitialTopology(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 
-	snapshot, err := interfaces.NewFactorySnapshot(factory)
-	if err != nil {
-		t.Fatalf("capture recorded Factory: %v", err)
-	}
-	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(snapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	mapper := factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(context.Background(), runtimeCfg.Factory)
-	if err != nil {
-		t.Fatalf("map generated factory config: %v", err)
-	}
-	topology := projections.ProjectInitialStructure(net, runtimeCfg)
-	assertProjectedResource(t, topology.Resources, "slot", 1)
-	assertProjectedWorker(t, topology.Workers, "exec-worker")
-	assertProjectedWorkstation(t, topology.Workstations, "executor", "exec-worker")
+	runRequest := requireFactoryOnlyRunStartedPayload(t, events)
+	assertFactoryOnlyResource(t, generatedResources(runRequest.Factory), "slot", 1)
+	assertFactoryOnlyWorker(t, generatedWorkers(runRequest.Factory), "exec-worker")
+	assertFactoryOnlyWorkstation(t, generatedWorkstations(runRequest.Factory), "executor", "exec-worker", true)
 }
 
 func assertFactoryOnlyWorkType(t *testing.T, workTypes []factoryapi.WorkType, name string, states []string) {
@@ -174,7 +163,10 @@ func assertFactoryOnlyWorker(t *testing.T, workers []factoryapi.Worker, name str
 	t.Helper()
 
 	for _, worker := range workers {
-		if worker.Name == name && stringPointerValue(worker.Type) == interfaces.WorkerTypeModel && stringPointerValue(worker.StopToken) == "COMPLETE" {
+		if worker.Name == name {
+			if stringPointerValue(worker.Type) != interfaces.WorkerTypeAgent || stringPointerValue(worker.StopToken) != "COMPLETE" {
+				t.Fatalf("worker %q type=%q stopToken=%q, want AGENT_WORKER/COMPLETE", name, stringPointerValue(worker.Type), stringPointerValue(worker.StopToken))
+			}
 			return
 		}
 	}
@@ -188,8 +180,8 @@ func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workst
 		if workstation.Name != name || workstation.Worker != worker {
 			continue
 		}
-		if stringPointerValue(workstation.Type) != interfaces.WorkstationTypeModel {
-			t.Fatalf("workstation %q runtime type = %#v, want MODEL_WORKSTATION", name, workstation.Type)
+		if stringPointerValue(workstation.Type) != interfaces.WorkstationTypeAgent {
+			t.Fatalf("workstation %q runtime type = %#v, want AGENT_RUN", name, workstation.Type)
 		}
 		if wantResource && !factoryOnlyHasResourceUsage(workstation.Resources, "slot", 1) {
 			t.Fatalf("workstation %q resources = %#v, want slot total 1", name, workstation.Resources)
@@ -197,39 +189,6 @@ func assertFactoryOnlyWorkstation(t *testing.T, workstations []factoryapi.Workst
 		return
 	}
 	t.Fatalf("generated workstations = %#v, want %s using worker %s", workstations, name, worker)
-}
-
-func assertProjectedResource(t *testing.T, resources []interfaces.FactoryResource, name string, capacity int) {
-	t.Helper()
-
-	for _, resource := range resources {
-		if resource.Name == name && resource.Capacity == capacity {
-			return
-		}
-	}
-	t.Fatalf("projected resources = %#v, want %s capacity %d", resources, name, capacity)
-}
-
-func assertProjectedWorker(t *testing.T, workers []interfaces.FactoryWorker, id string) {
-	t.Helper()
-
-	for _, worker := range workers {
-		if worker.ID == id && worker.Config["type"] == interfaces.WorkerTypeModel {
-			return
-		}
-	}
-	t.Fatalf("projected workers = %#v, want %s", workers, id)
-}
-
-func assertProjectedWorkstation(t *testing.T, workstations []interfaces.FactoryWorkstation, name, workerID string) {
-	t.Helper()
-
-	for _, workstation := range workstations {
-		if workstation.Name == name && workstation.WorkerID == workerID {
-			return
-		}
-	}
-	t.Fatalf("projected workstations = %#v, want %s using worker %s", workstations, name, workerID)
 }
 
 func factoryOnlyForbiddenConfigKeys() []string {
@@ -295,4 +254,13 @@ func replayEventSummaries(events []factoryapi.FactoryEvent) []string {
 		out = append(out, string(event.Type)+"@"+event.Id)
 	}
 	return out
+}
+
+func assertReplaySessionPlaces(t *testing.T, session factoryapi.FactorySession, wants map[string]int) {
+	t.Helper()
+	for placeID, want := range wants {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 }

@@ -11,16 +11,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
-	agentstate "github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 type crossWorkflowFinding struct {
@@ -33,6 +27,21 @@ type recursiveScanFinding struct {
 	NeedsRescan bool   `json:"needs_rescan"`
 }
 
+func workerGeneratedBatchOutput(works []work.Work) string {
+	encoded, err := json.Marshal(struct {
+		Request work.WorkRequest `json:"request"`
+	}{
+		Request: work.WorkRequest{
+			Type:  work.WorkRequestTypeFactoryRequestBatch,
+			Works: works,
+		},
+	})
+	if err != nil {
+		panic(fmt.Sprintf("encode generated Work Request fixture: %v", err))
+	}
+	return string(encoded)
+}
+
 type multiWorkflowDef struct {
 	name         string
 	workType     string
@@ -42,7 +51,7 @@ type multiWorkflowDef struct {
 }
 
 type throughputLargeScaleResult struct {
-	snapshot            *petri.MarkingSnapshot
+	snapshot            *factoryruntime.PetriMarkingSnapshot
 	totalDuration       time.Duration
 	heapGrowthMB        float64
 	totalAllocMB        float64
@@ -50,26 +59,25 @@ type throughputLargeScaleResult struct {
 	stageLatencyTracker *latencyTracker
 }
 
-func setupCrossWorkflowCodePipelineHarness(t *testing.T) *testutil.ServiceTestHarness {
+func setupCrossWorkflowCodePipelineHarness(t *testing.T) *stressProcessHarness {
 	t.Helper()
 
 	dir := testutil.ScaffoldFactoryDir(t, codePipelineCfg())
-	return testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(
-			factory.WithWorkerExecutor("coder", testutil.NewMockExecutor()),
-			factory.WithWorkerExecutor("review-submitter", testutil.NewMockExecutor()),
-			factory.WithWorkerExecutor("reviewer", testutil.NewMockExecutor()),
-		))
+	h := startStressProcessWithWorkerMux(t, dir)
+	h.SetWorkerExecutor("coder", &acceptedCountingExecutor{})
+	h.SetWorkerExecutor("review-submitter", &acceptedCountingExecutor{})
+	h.SetWorkerExecutor("reviewer", &acceptedCountingExecutor{})
+	return h
 }
 
-func setupCrossWorkflowMetaPipelineHarness(t *testing.T) *testutil.ServiceTestHarness {
+func setupCrossWorkflowMetaPipelineHarness(t *testing.T) *stressProcessHarness {
 	t.Helper()
 
 	dir := testutil.ScaffoldFactoryDir(t, metaPipelineCfg())
-	return testutil.NewServiceTestHarness(t, dir)
+	return startStressProcessWithWorkerMux(t, dir)
 }
 
-func setupRecursiveMetaPipelineHarness(t *testing.T) *testutil.ServiceTestHarness {
+func setupRecursiveMetaPipelineHarness(t *testing.T) *stressProcessHarness {
 	t.Helper()
 
 	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
@@ -82,7 +90,7 @@ func setupRecursiveMetaPipelineHarness(t *testing.T) *testutil.ServiceTestHarnes
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "recursive-scanner"}, {Name: "recursive-submitter"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "recursive-scanner"}, {Name: "recursive-submitter"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "scan-codebase", WorkerTypeName: "recursive-scanner",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "init"}},
@@ -101,19 +109,19 @@ func setupRecursiveMetaPipelineHarness(t *testing.T) *testutil.ServiceTestHarnes
 			),
 		},
 	})
-	return testutil.NewServiceTestHarness(t, dir)
+	return startStressProcessWithWorkerMux(t, dir)
 }
 
-func installStaticFindingsExecutor(h *testutil.ServiceTestHarness, findings []crossWorkflowFinding) {
+func installStaticFindingsExecutor(h *stressProcessHarness, findings []crossWorkflowFinding) {
 	findingsJSON, _ := json.Marshal(findings)
-	h.SetCustomExecutor("scanner", &staticExecutor{
+	h.SetWorkerExecutor("scanner", &staticExecutor{
 		outcome: workerexecution.OutcomeAccepted,
-		tags:    map[string]string{"findings": string(findingsJSON)},
+		output:  string(findingsJSON),
 	})
 }
 
-func installWorkGeneratorExecutor(h *testutil.ServiceTestHarness) {
-	h.SetCustomExecutor("work-generator", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+func installWorkGeneratorExecutor(h *stressProcessHarness) {
+	h.SetWorkerExecutor("work-generator", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 		var findings []crossWorkflowFinding
 		_ = json.Unmarshal([]byte(payloadFromDispatch(dispatch)), &findings)
 
@@ -133,11 +141,11 @@ func installWorkGeneratorExecutor(h *testutil.ServiceTestHarness) {
 }
 
 func installCrossSubmitterExecutor(
-	hMeta *testutil.ServiceTestHarness,
-	hCode *testutil.ServiceTestHarness,
+	hMeta *stressProcessHarness,
+	hCode *stressProcessHarness,
 	submittedCount *atomic.Int32,
 ) {
-	hMeta.SetCustomExecutor("cross-submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	hMeta.SetWorkerExecutor("cross-submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 		var workIDs []string
 		_ = json.Unmarshal([]byte(payloadFromDispatch(dispatch)), &workIDs)
 
@@ -159,12 +167,12 @@ func installCrossSubmitterExecutor(
 }
 
 func installRecursiveExecutors(
-	hMeta *testutil.ServiceTestHarness,
-	hCode *testutil.ServiceTestHarness,
+	hMeta *stressProcessHarness,
+	hCode *stressProcessHarness,
 	scanCount *atomic.Int32,
 	submittedCount *atomic.Int32,
 ) {
-	hMeta.SetCustomExecutor("recursive-scanner", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	hMeta.SetWorkerExecutor("recursive-scanner", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 		iteration := scanCount.Add(1)
 		results := firstOrRescanFindings(iteration)
 		findingsJSON, _ := json.Marshal(results)
@@ -176,7 +184,7 @@ func installRecursiveExecutors(
 		}, nil
 	}})
 
-	hMeta.SetCustomExecutor("recursive-submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	hMeta.SetWorkerExecutor("recursive-submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 		var findings []recursiveScanFinding
 		_ = json.Unmarshal([]byte(payloadFromDispatch(dispatch)), &findings)
 
@@ -187,11 +195,12 @@ func installRecursiveExecutors(
 			Outcome:      workerexecution.OutcomeAccepted,
 		}
 		if needsRescan {
-			result.SpawnedWork = []factorytoken.Color{{
-				WorkTypeID: "analysis",
+			result.Output = workerGeneratedBatchOutput([]work.Work{{
+				Name:       "rescan",
 				WorkID:     "rescan",
+				WorkTypeID: "analysis",
 				Tags:       map[string]string{"reason": "deep-issue-found"},
-			}}
+			}})
 		}
 		return result, nil
 	}})
@@ -212,7 +221,7 @@ func firstOrRescanFindings(iteration int32) []recursiveScanFinding {
 }
 
 func submitRecursiveFindings(
-	hCode *testutil.ServiceTestHarness,
+	hCode *stressProcessHarness,
 	submittedCount *atomic.Int32,
 	findings []recursiveScanFinding,
 ) bool {
@@ -238,7 +247,7 @@ func payloadFromDispatch(dispatch work.WorkDispatch) string {
 	return string(firstInputToken(dispatch.InputTokens).Color.Payload)
 }
 
-func assertCrossWorkflowCodePipelineState(t *testing.T, h *testutil.ServiceTestHarness, expectedTerminal int) int {
+func assertCrossWorkflowCodePipelineState(t *testing.T, h *stressProcessHarness, expectedTerminal int) int {
 	t.Helper()
 
 	snap := h.Marking()
@@ -258,7 +267,7 @@ func assertCrossWorkflowCodePipelineState(t *testing.T, h *testutil.ServiceTestH
 	return complete
 }
 
-func assertNoForeignWorkTypeTokens(t *testing.T, snap *petri.MarkingSnapshot, foreignType string, workflowLabel string) {
+func assertNoForeignWorkTypeTokens(t *testing.T, snap *factoryruntime.PetriMarkingSnapshot, foreignType string, workflowLabel string) {
 	t.Helper()
 
 	for id, tok := range snap.Tokens {
@@ -268,11 +277,12 @@ func assertNoForeignWorkTypeTokens(t *testing.T, snap *petri.MarkingSnapshot, fo
 	}
 }
 
-func setupMultiWorkflowHarnesses(t *testing.T, defs []multiWorkflowDef, itemsPerWorkflow int) []*testutil.ServiceTestHarness {
+func setupMultiWorkflowHarnesses(t *testing.T, defs []multiWorkflowDef, _ int) []*stressProcessHarness {
 	t.Helper()
 
-	harnesses := make([]*testutil.ServiceTestHarness, len(defs))
+	harnesses := make([]*stressProcessHarness, len(defs))
 	for i, def := range defs {
+		resource := interfaces.ResourceConfig{Name: def.resourceName, Capacity: def.resourceCap}
 		cfg := &interfaces.FactoryConfig{
 			WorkTypes: []interfaces.WorkTypeConfig{{
 				Name: def.workType,
@@ -283,52 +293,35 @@ func setupMultiWorkflowHarnesses(t *testing.T, defs []multiWorkflowDef, itemsPer
 					{Name: "failed", Type: interfaces.StateTypeFailed},
 				},
 			}},
-			Resources: []factoryresource.Config{{Name: def.resourceName, Capacity: def.resourceCap}},
-			Workers:   []workerconfig.Config{{Name: def.workerName}, {Name: def.workerName + "-finish"}},
+			Resources: []interfaces.ResourceConfig{resource},
+			Workers:   []interfaces.FactoryWorkerConfig{{Name: def.workerName}, {Name: def.workerName + "-finish"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{
 				{
 					Name: def.name + "-process", WorkerTypeName: def.workerName,
-					Inputs: []interfaces.IOConfig{
-						{WorkTypeName: def.workType, StateName: "init"},
-						{WorkTypeName: def.resourceName, StateName: "available"},
-					},
-					Outputs: []interfaces.IOConfig{{WorkTypeName: def.workType, StateName: "processing"}},
+					Inputs:    []interfaces.IOConfig{{WorkTypeName: def.workType, StateName: "init"}},
+					Outputs:   []interfaces.IOConfig{{WorkTypeName: def.workType, StateName: "processing"}},
+					Resources: []interfaces.ResourceConfig{resource},
 				},
 				{
 					Name: def.name + "-finish", WorkerTypeName: def.workerName + "-finish",
-					Inputs: []interfaces.IOConfig{{WorkTypeName: def.workType, StateName: "processing"}},
-					Outputs: []interfaces.IOConfig{
-						{WorkTypeName: def.workType, StateName: "complete"},
-						{WorkTypeName: def.resourceName, StateName: "available"},
-					},
+					Inputs:  []interfaces.IOConfig{{WorkTypeName: def.workType, StateName: "processing"}},
+					Outputs: []interfaces.IOConfig{{WorkTypeName: def.workType, StateName: "complete"}},
 				},
 			},
 		}
 		dir := testutil.ScaffoldFactoryDir(t, cfg)
-		harnesses[i] = testutil.NewServiceTestHarness(t, dir)
-		mockWorkflowWorkers(harnesses[i], def.workerName, itemsPerWorkflow)
+		harnesses[i] = startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+			def.workerName:             &acceptedCountingExecutor{},
+			def.workerName + "-finish": &acceptedCountingExecutor{},
+		}})
+		t.Cleanup(harnesses[i].Stop)
 	}
 	return harnesses
 }
 
-func mockWorkflowWorkers(h *testutil.ServiceTestHarness, workerName string, itemsPerWorkflow int) {
-	processResults := acceptedWorkResults(itemsPerWorkflow)
-	finishResults := acceptedWorkResults(itemsPerWorkflow)
-	h.MockWorker(workerName, processResults...)
-	h.MockWorker(workerName+"-finish", finishResults...)
-}
-
-func acceptedWorkResults(count int) []workerexecution.WorkResult {
-	results := make([]workerexecution.WorkResult, count)
-	for i := range results {
-		results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	return results
-}
-
 func submitWorkflowWorkItems(
 	t *testing.T,
-	harnesses []*testutil.ServiceTestHarness,
+	harnesses []*stressProcessHarness,
 	defs []multiWorkflowDef,
 	itemsPerWorkflow int,
 ) {
@@ -336,20 +329,17 @@ func submitWorkflowWorkItems(
 
 	for i, def := range defs {
 		for j := range itemsPerWorkflow {
-			err := harnesses[i].SubmitFull(context.Background(), []work.SubmitRequest{{
+			harnesses[i].SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: def.workType,
 				WorkID:     fmt.Sprintf("%s-work-%d", def.name, j),
 				TraceID:    fmt.Sprintf("%s-trace-%d", def.name, j),
 				Payload:    fmt.Appendf(nil, `{"workflow": %q, "item": %d}`, def.name, j),
 			}})
-			if err != nil {
-				t.Fatalf("workflow %q: submit %d failed: %v", def.name, j, err)
-			}
 		}
 	}
 }
 
-func runHarnessesConcurrently(t *testing.T, harnesses []*testutil.ServiceTestHarness, timeout time.Duration) {
+func runHarnessesConcurrently(t *testing.T, harnesses []*stressProcessHarness, timeout time.Duration) {
 	t.Helper()
 
 	var wg sync.WaitGroup
@@ -357,7 +347,7 @@ func runHarnessesConcurrently(t *testing.T, harnesses []*testutil.ServiceTestHar
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			harnesses[idx].RunUntilComplete(t, timeout)
+			harnesses[idx].WaitForTerminalCount(5, timeout)
 		}(i)
 	}
 
@@ -376,20 +366,20 @@ func runHarnessesConcurrently(t *testing.T, harnesses []*testutil.ServiceTestHar
 
 func assertMultiWorkflowStates(
 	t *testing.T,
-	harnesses []*testutil.ServiceTestHarness,
+	harnesses []*stressProcessHarness,
 	defs []multiWorkflowDef,
 	itemsPerWorkflow int,
 ) {
 	t.Helper()
 
 	for i, def := range defs {
-		snap := harnesses[i].Marking()
-		completeCount := len(snap.TokensInPlace(def.workType + ":complete"))
-		initCount := len(snap.TokensInPlace(def.workType + ":init"))
-		processingCount := len(snap.TokensInPlace(def.workType + ":processing"))
+		session := harnesses[i].Session()
+		completeCount := sessionPlaceCount(session, def.workType+":complete")
+		initCount := sessionPlaceCount(session, def.workType+":init")
+		processingCount := sessionPlaceCount(session, def.workType+":processing")
 
 		if completeCount != itemsPerWorkflow {
-			failedCount := len(snap.TokensInPlace(def.workType + ":failed"))
+			failedCount := sessionPlaceCount(session, def.workType+":failed")
 			t.Errorf("workflow %q: expected %d tokens in complete, got %d (init=%d, processing=%d, failed=%d)",
 				def.name, itemsPerWorkflow, completeCount, initCount, processingCount, failedCount)
 		}
@@ -402,11 +392,11 @@ func assertMultiWorkflowStates(
 	}
 }
 
-func assertNoCrossWorkflowContamination(t *testing.T, harnesses []*testutil.ServiceTestHarness, defs []multiWorkflowDef) {
+func assertNoCrossWorkflowContamination(t *testing.T, harnesses []*stressProcessHarness, defs []multiWorkflowDef) {
 	t.Helper()
 
 	for i, def := range defs {
-		snap := harnesses[i].Marking()
+		session := harnesses[i].Session()
 		foreignTypes := make(map[string]string)
 		for j, other := range defs {
 			if j == i {
@@ -415,26 +405,23 @@ func assertNoCrossWorkflowContamination(t *testing.T, harnesses []*testutil.Serv
 			foreignTypes[other.workType] = other.name
 			foreignTypes[other.resourceName] = other.name
 		}
-		for _, tok := range snap.Tokens {
-			if owner, isForeign := foreignTypes[tok.Color.WorkTypeID]; isForeign {
+		if session.Runtime.Petri == nil {
+			continue
+		}
+		for _, token := range session.Runtime.Petri.Marking {
+			if owner, isForeign := foreignTypes[token.WorkType]; isForeign {
 				t.Errorf("workflow %q: found token with WorkTypeID %q belonging to workflow %q — cross-contamination detected",
-					def.name, tok.Color.WorkTypeID, owner)
+					def.name, token.WorkType, owner)
 			}
 		}
 	}
 }
 
-func assertWorkflowResourceIsolation(t *testing.T, harnesses []*testutil.ServiceTestHarness, defs []multiWorkflowDef) {
+func assertWorkflowResourceIsolation(t *testing.T, harnesses []*stressProcessHarness, defs []multiWorkflowDef) {
 	t.Helper()
 
 	for i, def := range defs {
-		snap := harnesses[i].Marking()
-		resourcePlace := def.resourceName + ":available"
-		resourceTokens := snap.TokensInPlace(resourcePlace)
-		if len(resourceTokens) != def.resourceCap {
-			t.Errorf("workflow %q: expected %d resource tokens in %q, got %d",
-				def.name, def.resourceCap, resourcePlace, len(resourceTokens))
-		}
+		assertPublicResourceUsage(t, harnesses[i].Session(), def.resourceName, def.resourceCap, def.resourceCap)
 	}
 }
 
@@ -450,11 +437,7 @@ func runThroughputLargeScaleScenario(
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
 	tracker := newLatencyTracker(pipelineStages)
 	executor := &throughputExecutor{delay: workerDelay, tracker: tracker}
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-	h.SetCustomExecutor("pipeline-worker", executor)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: executor})
 
 	runtimeGCAndRead := func() runtimeMemSnapshot {
 		return readRuntimeMemSnapshot()
@@ -462,18 +445,16 @@ func runThroughputLargeScaleScenario(
 
 	memBefore := runtimeGCAndRead()
 	startTime := time.Now()
-	errCh := h.RunInBackground(ctx)
 	submitThroughputWorkload(h, totalItems, 10, 10, time.Millisecond)
-	pipelineTerminalPlaces := []string{"task:complete", "task:failed"}
-	pollUntilAllTerminalH(t, h, pipelineTerminalPlaces, totalItems, timeout-2*time.Second)
+	h.WaitForTerminalCount(totalItems, timeout-2*time.Second)
 	totalDuration := time.Since(startTime)
 
-	cancel()
-	<-errCh
+	snapshot := h.Marking()
+	h.Stop()
 	memAfter := runtimeGCAndRead()
 
 	return throughputLargeScaleResult{
-		snapshot:            h.Marking(),
+		snapshot:            snapshot,
 		totalDuration:       totalDuration,
 		heapGrowthMB:        bytesGrowthMB(memAfter.heapAlloc, memBefore.heapAlloc),
 		totalAllocMB:        bytesGrowthMB(memAfter.totalAlloc, memBefore.totalAlloc),
@@ -495,7 +476,7 @@ func readRuntimeMemSnapshot() runtimeMemSnapshot {
 }
 
 func submitThroughputWorkload(
-	h *testutil.ServiceTestHarness,
+	h *stressProcessHarness,
 	totalItems int,
 	numSubmitters int,
 	yieldEvery int,
@@ -548,7 +529,7 @@ func assertThroughputLargeScaleResult(
 	}
 }
 
-func assertAllTokensTerminal(t *testing.T, snap *petri.MarkingSnapshot) {
+func assertAllTokensTerminal(t *testing.T, snap *factoryruntime.PetriMarkingSnapshot) {
 	t.Helper()
 
 	for id, tok := range snap.Tokens {
@@ -558,7 +539,7 @@ func assertAllTokensTerminal(t *testing.T, snap *petri.MarkingSnapshot) {
 	}
 }
 
-func assertNoDuplicateTokenIDs(t *testing.T, snap *petri.MarkingSnapshot) {
+func assertNoDuplicateTokenIDs(t *testing.T, snap *factoryruntime.PetriMarkingSnapshot) {
 	t.Helper()
 
 	tokenIDs := make(map[string]bool, len(snap.Tokens))
@@ -610,7 +591,7 @@ func poisonSubmitConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "w"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "w"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "process", WorkerTypeName: "w",
@@ -626,26 +607,26 @@ func poisonSubmitConfig() *interfaces.FactoryConfig {
 	}
 }
 
-func newPoisonSubmitHarness(t *testing.T) *testutil.ServiceTestHarness {
+func newPoisonSubmitHarness(t *testing.T) *stressProcessHarness {
 	t.Helper()
 
 	dir := testutil.ScaffoldFactoryDir(t, poisonSubmitConfig())
-	h := testutil.NewServiceTestHarness(t, dir)
-	h.MockWorker("w")
-	return h
+	return startStressProcess(t, dir, workerExecutorProvider{
+		executor: testutil.NewMockExecutor(),
+	})
 }
 
-func assertSingleCompletedSubmission(t *testing.T, h *testutil.ServiceTestHarness, label string) {
+func assertSingleCompletedSubmission(t *testing.T, h *stressProcessHarness, label string) {
 	t.Helper()
 
-	h.RunUntilComplete(t, 10*time.Second)
+	h.WaitForTerminalCount(1, 10*time.Second)
 	snap := h.Marking()
 	if completeCount := len(snap.TokensInPlace("task:complete")); completeCount != 1 {
 		t.Errorf("expected 1 complete token with %s, got %d", label, completeCount)
 	}
 }
 
-func assertPoisonIsolationMarking(t *testing.T, snap *petri.MarkingSnapshot, wantItems int, workflowLabel string) {
+func assertPoisonIsolationMarking(t *testing.T, snap *factoryruntime.PetriMarkingSnapshot, wantItems int, workflowLabel string) {
 	t.Helper()
 
 	if complete := len(snap.TokensInPlace("task:complete")); complete != wantItems {
@@ -656,42 +637,42 @@ func assertPoisonIsolationMarking(t *testing.T, snap *petri.MarkingSnapshot, wan
 	}
 }
 
-func buildTargetWorkflowNet(maxVisits int) (*agentstate.Net, error) {
+func buildTargetWorkflowNet(maxVisits int) (*factoryruntime.Net, error) {
 	net := newTargetWorkflowNet()
 	addTargetWorkflowPlaces(net)
 	addTargetWorkflowTransitions(net, maxVisits)
-	agentstate.NormalizeTransitionTopology(net, nil)
-	return validateTargetWorkflowNet(net)
+	factoryruntime.NormalizeTransitionTopology(net, nil)
+	return net, nil
 }
 
-func newTargetWorkflowNet() *agentstate.Net {
-	return &agentstate.Net{
+func newTargetWorkflowNet() *factoryruntime.Net {
+	return &factoryruntime.Net{
 		ID:          "target-code-factory",
-		Places:      make(map[string]*petri.Place),
-		Transitions: make(map[string]*petri.Transition),
-		WorkTypes: map[string]*agentstate.WorkType{
+		Places:      make(map[string]*factoryruntime.PetriPlace),
+		Transitions: make(map[string]*factoryruntime.PetriTransition),
+		WorkTypes: map[string]*factoryruntime.WorkType{
 			"task": {
 				ID:   "task",
 				Name: "task",
-				States: []agentstate.StateDefinition{
-					{Value: "init", Category: agentstate.StateCategoryInitial},
-					{Value: "processing", Category: agentstate.StateCategoryProcessing},
-					{Value: "complete", Category: agentstate.StateCategoryTerminal},
-					{Value: "failed", Category: agentstate.StateCategoryFailed},
+				States: []factoryruntime.StateDefinition{
+					{Value: "init", Category: factoryruntime.StateCategoryInitial},
+					{Value: "processing", Category: factoryruntime.StateCategoryProcessing},
+					{Value: "complete", Category: factoryruntime.StateCategoryTerminal},
+					{Value: "failed", Category: factoryruntime.StateCategoryFailed},
 				},
 			},
 		},
-		Resources: make(map[string]*agentstate.ResourceDef),
+		Resources: make(map[string]*factoryruntime.ResourceDef),
 	}
 }
 
-func addTargetWorkflowPlaces(net *agentstate.Net) {
+func addTargetWorkflowPlaces(net *factoryruntime.Net) {
 	for _, place := range net.WorkTypes["task"].GeneratePlaces() {
 		net.Places[place.ID] = place
 	}
 }
 
-func addTargetWorkflowTransitions(net *agentstate.Net, maxVisits int) {
+func addTargetWorkflowTransitions(net *factoryruntime.Net, maxVisits int) {
 	net.Transitions["execute-task"] = buildTargetWorkflowTransition(
 		"execute-task",
 		"executor",
@@ -713,7 +694,7 @@ func addTargetWorkflowTransitions(net *agentstate.Net, maxVisits int) {
 		"",
 		"task:init",
 		"task:failed",
-		&petri.VisitCountGuard{MaxVisits: maxVisits},
+		&factoryruntime.PetriVisitCountGuard{MaxVisits: maxVisits},
 		false,
 	)
 }
@@ -723,35 +704,35 @@ func buildTargetWorkflowTransition(
 	workerType string,
 	inputPlace string,
 	outputPlace string,
-	guard *petri.VisitCountGuard,
+	guard *factoryruntime.PetriVisitCountGuard,
 	withFailureArc bool,
-) *petri.Transition {
-	transition := &petri.Transition{
+) *factoryruntime.PetriTransition {
+	transition := &factoryruntime.PetriTransition{
 		ID:         id,
 		Name:       id,
-		Type:       petri.TransitionNormal,
+		Type:       factoryruntime.PetriTransitionNormal,
 		WorkerType: workerType,
-		InputArcs:  []petri.Arc{buildSingleInputArc(inputPlace, guard)},
-		OutputArcs: []petri.Arc{{
+		InputArcs:  []factoryruntime.PetriArc{buildSingleInputArc(inputPlace, guard)},
+		OutputArcs: []factoryruntime.PetriArc{{
 			PlaceID:     outputPlace,
-			Direction:   petri.ArcOutput,
+			Direction:   factoryruntime.PetriArcOutput,
 			Cardinality: singleArcCardinality(),
 		}},
 	}
 	if withFailureArc {
-		transition.FailureArcs = []petri.Arc{{
+		transition.FailureArcs = []factoryruntime.PetriArc{{
 			PlaceID:     "task:failed",
-			Direction:   petri.ArcOutput,
+			Direction:   factoryruntime.PetriArcOutput,
 			Cardinality: singleArcCardinality(),
 		}}
 	}
 	return transition
 }
 
-func buildSingleInputArc(placeID string, guard *petri.VisitCountGuard) petri.Arc {
-	arc := petri.Arc{
+func buildSingleInputArc(placeID string, guard *factoryruntime.PetriVisitCountGuard) factoryruntime.PetriArc {
+	arc := factoryruntime.PetriArc{
 		PlaceID:     placeID,
-		Direction:   petri.ArcInput,
+		Direction:   factoryruntime.PetriArcInput,
 		Mode:        interfaces.ArcModeConsume,
 		Guard:       guard,
 		Cardinality: singleArcCardinality(),
@@ -762,21 +743,6 @@ func buildSingleInputArc(placeID string, guard *petri.VisitCountGuard) petri.Arc
 	return arc
 }
 
-func singleArcCardinality() petri.ArcCardinality {
-	return petri.ArcCardinality{Mode: petri.CardinalityOne}
-}
-
-func validateTargetWorkflowNet(net *agentstate.Net) (*agentstate.Net, error) {
-	validator := validation.NewCompositeValidator(
-		&validation.ReachabilityValidator{},
-		&validation.CompletenessValidator{},
-		&validation.BoundednessValidator{},
-		&validation.TypeSafetyValidator{},
-	)
-	for _, violation := range validator.Validate(net) {
-		if violation.Level == validation.ViolationError {
-			return nil, fmt.Errorf("net validation failed: %s - %s (at %s)", violation.Code, violation.Message, violation.Location)
-		}
-	}
-	return net, nil
+func singleArcCardinality() factoryruntime.PetriArcCardinality {
+	return factoryruntime.PetriArcCardinality{Mode: factoryruntime.PetriCardinalityOne}
 }

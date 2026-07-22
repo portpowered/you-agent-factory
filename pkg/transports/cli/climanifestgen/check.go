@@ -1,11 +1,6 @@
 package climanifestgen
 
-import (
-	"bytes"
-	"fmt"
-	"os"
-	"path/filepath"
-)
+import "github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 
 // Drift describes byte-level differences between generated artifacts and the
 // current generator output.
@@ -22,99 +17,25 @@ func (drift Drift) Empty() bool {
 	return len(drift.Stale) == 0 && len(drift.Missing) == 0 && len(drift.Unexpected) == 0
 }
 
-// Check compares committed CLI family artifacts with freshly generated output.
-func Check(repositoryRoot string) (Drift, error) {
-	expected := map[string][]byte{
-		RepresentativeFamilyJSONPath:          nil,
-		SessionFamilyJSONPath:                 nil,
-		WorkFamilyJSONPath:                    nil,
-		FactoryConfigInitFamilyJSONPath:       nil,
-		ModelsDocsFamilyJSONPath:              nil,
-		RepresentativeFamilyCommandIDsPath:    representativeAndWorkCommandIDsSource(),
-		SessionFamilyCommandIDsPath:           sessionCommandIDsSource(),
-		FactoryConfigInitFamilyCommandIDsPath: factoryConfigInitCommandIDsSource(),
-		ModelsDocsFamilyCommandIDsPath:        modelsDocsCommandIDsSource(),
-		RunSubmitFamilyJSONPath:               nil,
-		RunSubmitFamilyCommandIDsPath:         runSubmitCommandIDsSource(),
-		MCPFamilyJSONPath:                     nil,
-		WorkflowCompatibilityFamilyJSONPath:   nil,
-		WorkflowMCPFamilyCommandIDsPath:       workflowMCPCommandIDsSource(),
+// AnnotateDrift adds CLI command identity context to policy-free artifact
+// drift computed by the command-selected Platform store.
+func AnnotateDrift(base generatedartifacts.Drift) Drift {
+	drift := Drift{
+		Stale: append([]string(nil), base.Stale...), Missing: append([]string(nil), base.Missing...),
+		Unexpected: append([]string(nil), base.Unexpected...), CommandIDs: map[string][]string{},
 	}
-
-	representativePayload, err := RepresentativeFamilyArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[RepresentativeFamilyJSONPath] = representativePayload
-
-	sessionPayload, err := SessionFamilyArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[SessionFamilyJSONPath] = sessionPayload
-
-	workPayload, err := WorkArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[WorkFamilyJSONPath] = workPayload
-
-	factoryConfigInitPayload, err := FactoryConfigInitFamilyArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[FactoryConfigInitFamilyJSONPath] = factoryConfigInitPayload
-
-	modelsDocsPayload, err := ModelsDocsArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[ModelsDocsFamilyJSONPath] = modelsDocsPayload
-
-	runSubmitPayload, err := RunSubmitArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[RunSubmitFamilyJSONPath] = runSubmitPayload
-
-	mcpPayload, err := MCPArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[MCPFamilyJSONPath] = mcpPayload
-	workflowPayload, err := WorkflowCompatibilityArtifact(repositoryRoot)
-	if err != nil {
-		return Drift{}, err
-	}
-	expected[WorkflowCompatibilityFamilyJSONPath] = workflowPayload
-
-	drift := Drift{CommandIDs: map[string][]string{}}
 	artifactIDs := map[string][]string{
-		RunSubmitFamilyJSONPath:             RunSubmitFamilyCommandIDs,
-		RunSubmitFamilyCommandIDsPath:       RunSubmitFamilyCommandIDs,
-		MCPFamilyJSONPath:                   MCPFamilyCommandIDs,
-		WorkflowCompatibilityFamilyJSONPath: WorkflowCompatibilityFamilyCommandIDs,
-		WorkflowMCPFamilyCommandIDsPath:     append(append([]string{}, MCPFamilyCommandIDs...), WorkflowCompatibilityFamilyCommandIDs...),
+		RunSubmitFamilyJSONPath:       RunSubmitFamilyCommandIDs,
+		RunSubmitFamilyCommandIDsPath: RunSubmitFamilyCommandIDs,
+		MCPFamilyJSONPath:             MCPFamilyCommandIDs,
+		MCPFamilyCommandIDsPath:       MCPFamilyCommandIDs,
 	}
-	for path, want := range expected {
-		target := filepath.Join(repositoryRoot, filepath.FromSlash(path))
-		got, err := os.ReadFile(target)
-		if err != nil {
-			if os.IsNotExist(err) {
-				drift.Missing = append(drift.Missing, path)
-				drift.CommandIDs[path] = artifactIDs[path]
-				continue
+	for _, paths := range [][]string{drift.Missing, drift.Stale} {
+		for _, path := range paths {
+			if ids := artifactIDs[path]; len(ids) > 0 {
+				drift.CommandIDs[path] = append([]string(nil), ids...)
 			}
-			return Drift{}, fmt.Errorf("read %s: %w", path, err)
-		}
-		if !bytes.Equal(normalizeGeneratedArtifactBytes(got), normalizeGeneratedArtifactBytes(want)) {
-			drift.Stale = append(drift.Stale, path)
-			drift.CommandIDs[path] = artifactIDs[path]
 		}
 	}
-	return drift, nil
-}
-
-func normalizeGeneratedArtifactBytes(payload []byte) []byte {
-	return bytes.ReplaceAll(payload, []byte("\r\n"), []byte("\n"))
+	return drift
 }

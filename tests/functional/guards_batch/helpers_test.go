@@ -2,17 +2,17 @@ package guards_batch
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"sync"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,39 +24,56 @@ type fanoutParserExecutor struct {
 	childCount int
 }
 
+func workerGeneratedBatchOutput(works []work.Work) string {
+	encoded, err := json.Marshal(struct {
+		Request work.WorkRequest `json:"request"`
+	}{
+		Request: work.WorkRequest{
+			Type:  work.WorkRequestTypeFactoryRequestBatch,
+			Works: works,
+		},
+	})
+	if err != nil {
+		panic(fmt.Sprintf("encode generated Work Request fixture: %v", err))
+	}
+	return string(encoded)
+}
+
 func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
 
-	parentWorkID := ""
 	parentTags := map[string]string{}
 	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
-		if token.Color.DataType != factorytoken.DataTypeWork {
+		if token.Color.DataType != workers.DataTypeWork {
 			continue
 		}
-		parentWorkID = token.Color.WorkID
 		if len(token.Color.Tags) > 0 {
 			parentTags = maps.Clone(token.Color.Tags)
 		}
 		break
 	}
 
-	spawned := make([]factorytoken.Color, e.childCount)
-	for i := range spawned {
-		spawned[i] = factorytoken.Color{
+	generated := make([]work.Work, e.childCount)
+	for i := range generated {
+		generated[i] = work.Work{
+			Name:       fmt.Sprintf("page-%d", i+1),
 			WorkTypeID: "page",
 			WorkID:     fmt.Sprintf("page-%d", i+1),
-			ParentID:   parentWorkID,
 			Tags:       maps.Clone(parentTags),
 		}
+	}
+	output := ""
+	if len(generated) > 0 {
+		output = workerGeneratedBatchOutput(generated)
 	}
 
 	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      workerexecution.OutcomeAccepted,
-		SpawnedWork:  spawned,
+		Output:       output,
 	}, nil
 }
 
@@ -165,19 +182,23 @@ func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch work.Wo
 		childCount = e.childCounts[call]
 	}
 
-	spawned := make([]factorytoken.Color, childCount)
-	for i := range spawned {
-		spawned[i] = factorytoken.Color{
+	generated := make([]work.Work, childCount)
+	for i := range generated {
+		generated[i] = work.Work{
+			Name:       fmt.Sprintf("%s-page-%d", parentWorkID, i+1),
 			WorkTypeID: "page",
 			WorkID:     fmt.Sprintf("%s-page-%d", parentWorkID, i+1),
-			ParentID:   parentWorkID,
 		}
+	}
+	output := ""
+	if len(generated) > 0 {
+		output = workerGeneratedBatchOutput(generated)
 	}
 
 	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      workerexecution.OutcomeAccepted,
-		SpawnedWork:  spawned,
+		Output:       output,
 	}, nil
 }

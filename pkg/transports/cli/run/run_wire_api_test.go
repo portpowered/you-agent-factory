@@ -9,14 +9,12 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestNormalizeInvocationOutputMode(t *testing.T) {
@@ -158,22 +156,11 @@ func TestValidateInvocationOutputMode_AllowsJSONResponseStream(t *testing.T) {
 }
 
 type recordingResponseStreamAttachable struct {
-	set            *responsestream.StreamSet
 	subscribeCalls []responseStreamSubscribeCall
 }
 
 func newRecordingResponseStreamAttachable() *recordingResponseStreamAttachable {
-	return &recordingResponseStreamAttachable{
-		set: responsestream.NewStreamSet(),
-	}
-}
-
-func (r *recordingResponseStreamAttachable) ensureDispatch(dispatchID string) {
-	r.set.Stream(dispatchID)
-}
-
-func (r *recordingResponseStreamAttachable) stream(dispatchID string) *factorysessions.SessionResponseStream {
-	return r.set.Stream(dispatchID)
+	return &recordingResponseStreamAttachable{}
 }
 
 type responseStreamSubscribeCall struct {
@@ -190,11 +177,11 @@ func (r *recordingResponseStreamAttachable) SubscribeSessionResponseStream(
 		sessionID:  sessionID,
 		dispatchID: dispatchID,
 	})
-	return r.set.Subscribe(dispatchID, afterSequence)
+	return nil, nil
 }
 
 func (r *recordingResponseStreamAttachable) SessionResponseStreamDispatchIDs(string) ([]string, error) {
-	return r.set.DispatchIDs(), nil
+	return []string{"dispatch-goal-1"}, nil
 }
 
 type stubResponseStreamInvocationService struct {
@@ -219,7 +206,7 @@ func TestRun_FactoryInvocationResponseStreamFallsBackWhenStreamAttachmentUnavail
 
 	text := "goal completed"
 	var output strings.Builder
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -260,8 +247,7 @@ func TestRun_FactoryInvocationHumanResponseStreamRejectsLegacyStreamFallback(t *
 	text := "goal completed"
 	var output strings.Builder
 	attachable := newRecordingResponseStreamAttachable()
-	attachable.ensureDispatch("dispatch-goal-1")
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -269,21 +255,6 @@ func TestRun_FactoryInvocationHumanResponseStreamRejectsLegacyStreamFallback(t *
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					stream := attachable.stream("dispatch-goal-1")
-					if stream != nil {
-						stream.Append(responsestream.Event{
-							Kind:       responsestream.EventKindProgressFragment,
-							Type:       responsestream.EventTypeProgress,
-							DispatchID: "dispatch-goal-1",
-							Payload:    "planning",
-						})
-						stream.Append(responsestream.Event{
-							Kind:       responsestream.EventKindResponseFragment,
-							Type:       responsestream.EventTypeTextDelta,
-							DispatchID: "dispatch-goal-1",
-							Payload:    text,
-						})
-					}
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
 						TraceID:   "trace-1",
@@ -323,7 +294,7 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 	text := "goal completed"
 	var output strings.Builder
 	attachable := newRecordingResponseEventAttachable()
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubResponseEventInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -336,7 +307,7 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 					case <-time.After(2 * time.Second):
 						t.Fatal("canonical response-event subscription was not established")
 					}
-					if err := attachable.publish(canonicalResponseEventFixture(1, responseevents.KindMessage)); err != nil {
+					if err := attachable.publish(canonicalResponseEventFixture(1, factorysessions.ResponseEventKindMessage)); err != nil {
 						t.Fatalf("publish canonical response event: %v", err)
 					}
 					return apisurface.FactoryInvocationResult{
@@ -388,6 +359,7 @@ func TestPrepareRunConfig_ResponseStreamRejectsReplay(t *testing.T) {
 		InvocationPositionalText: &text,
 		InvocationOutputMode:     InvocationOutputResponseStream,
 		ReplayPath:               "/tmp/replay.json",
+		StdinIsTTY:               func() bool { return true },
 	})
 	if err == nil {
 		t.Fatal("expected replay validation error")
@@ -525,7 +497,7 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 	text := "Plan the sprint"
 	var output strings.Builder
 	result := tc.result
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -591,9 +563,9 @@ func slowStdoutResponseEventInvoke(
 		}
 		for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
 			event := humanResponseEvent(
-				responseevents.KindProgress,
-				responseevents.PhaseUpdated,
-				responseevents.ProgressPayload{Label: "working"},
+				factorysessions.ResponseEventKindProgress,
+				factorysessions.ResponseEventPhaseUpdated,
+				factorysessions.ResponseEventProgress{Label: "working"},
 			)
 			if err := attachable.publish(event); err != nil {
 				return apisurface.FactoryInvocationResult{}, err
@@ -683,7 +655,7 @@ func runFactoryInvocationResponseStreamSlowStdoutFixture(t *testing.T, jsonMode 
 	output.block()
 	eventsFlooded := make(chan struct{}, 1)
 	attachable := newRecordingResponseEventAttachable()
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubResponseEventInvocationService{
 			stubInvocationService: stubInvocationService{
 				run: func(ctx context.Context) error {
@@ -796,8 +768,10 @@ func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *
 		progressMarker string
 	}{
 		{
-			name:        "human",
-			newRenderer: func(output io.Writer) responseStreamRenderer { return newHumanResponseStreamRenderer(output) },
+			name: "human",
+			newRenderer: func(output io.Writer) responseStreamRenderer {
+				return newHumanResponseStreamRenderer(output, testResponsePresentation(), testResponseEventValidator())
+			},
 			enqueue: func(renderer responseStreamRenderer, count int) {
 				floodCanonicalHumanProgress(renderer.(*humanResponseStreamRenderer), count)
 			},
@@ -805,14 +779,16 @@ func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *
 			progressMarker: "working",
 		},
 		{
-			name:        "json",
-			newRenderer: func(output io.Writer) responseStreamRenderer { return newJSONResponseStreamRenderer(output) },
+			name: "json",
+			newRenderer: func(output io.Writer) responseStreamRenderer {
+				return newJSONResponseStreamRenderer(output, testResponsePresentation())
+			},
 			enqueue: func(renderer responseStreamRenderer, count int) {
-				events := make([]responseevents.FactoryResponseEvent, count)
+				events := make([]factorysessions.FactoryResponseEvent, count)
 				for index := range events {
-					events[index] = canonicalResponseEventFixture(int64(index+1), responseevents.KindMessage)
+					events[index] = canonicalResponseEventFixture(int64(index+1), factorysessions.ResponseEventKindMessage)
 				}
-				renderer.(*jsonResponseStreamRenderer).onResponseEvents(events)
+				renderer.(*jsonResponseStreamRenderer).PresentResponseEvents(events)
 			},
 			finalMarker:    `"recordType":"invocation_result"`,
 			progressMarker: `"recordType":"response_event"`,

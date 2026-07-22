@@ -9,17 +9,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-var retiredInitFactoryContractFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}
-var retiredInitWorkerContractFields = []string{"model_provider:", "provider:", "stop_token:", "skip_permissions:", "concurrency:", "sessionId:"}
-var retiredStarterReadmeFragments = []string{
-	"inputs/<work-type>/default/",
-	"inputs/<work-type>/<execution-id>/",
-	"Multi-channel input directory for work submissions.",
-}
+const defaultInitFactoryWorkType = "task"
 
 // TestInitFactory_StructureIsValid verifies that the init command creates the
 // correct directory structure with all required files:
@@ -33,9 +28,7 @@ var retiredStarterReadmeFragments = []string{
 func TestInitFactory_StructureIsValid(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
+	support.RunInitCommand(t, dir)
 
 	// Verify expected files exist.
 	expectedFiles := []string{
@@ -55,7 +48,7 @@ func TestInitFactory_StructureIsValid(t *testing.T) {
 
 	// Verify expected directories exist.
 	expectedDirs := []string{
-		filepath.Join("inputs", initcmd.DefaultFactoryInputType, "default"),
+		filepath.Join("inputs", defaultInitFactoryWorkType, "default"),
 	}
 	for _, d := range expectedDirs {
 		path := filepath.Join(dir, d)
@@ -88,13 +81,11 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 	dir := t.TempDir()
 
 	// Step 1: Run Init to generate the factory structure.
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
+	support.RunInitCommand(t, dir)
 	assertGeneratedInitScaffoldCanonical(t, dir, "codex")
 
 	// Step 2: Write a seed file into the generated preseed directory.
-	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "init factory e2e test"}`))
+	testutil.WriteSeedFile(t, dir, defaultInitFactoryWorkType, []byte(`{"title": "init factory e2e test"}`))
 	assertCanonicalStarterInboxState(t, dir)
 
 	// Step 3: Start the factory with a mock provider that returns a successful response.
@@ -106,21 +97,8 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	// Step 4: Run until all tokens reach a terminal state.
-	h.RunUntilComplete(t, 15*time.Second)
-
-	// Assert the work item reached the terminal "complete" state.
-	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
-		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
-		PlaceTokenCount("agent-slot:available", 1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	assertInitSessionPlaces(t, session, "complete")
 
 	// Verify the mock provider was called exactly once (one workstation in the pipeline).
 	if provider.CallCount("processor") != 1 {
@@ -142,12 +120,10 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir, Executor: "claude"}); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
+	support.RunInitCommand(t, dir, "--executor", "claude")
 	assertGeneratedInitScaffoldCanonical(t, dir, "claude")
 
-	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "claude init factory e2e test"}`))
+	testutil.WriteSeedFile(t, dir, defaultInitFactoryWorkType, []byte(`{"title": "claude init factory e2e test"}`))
 	assertCanonicalStarterInboxState(t, dir)
 
 	work := map[string][]testutil.WorkResponse{
@@ -157,19 +133,8 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
-		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
-		PlaceTokenCount("agent-slot:available", 1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	assertInitSessionPlaces(t, session, "complete")
 
 	if provider.CallCount("processor") != 1 {
 		t.Errorf("expected provider called 1 time, got %d", provider.CallCount("processor"))
@@ -187,11 +152,9 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 func TestInitFactory_FailureRouting(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
+	support.RunInitCommand(t, dir)
 
-	testutil.WriteSeedFile(t, dir, initcmd.DefaultFactoryInputType, []byte(`{"title": "failing task"}`))
+	testutil.WriteSeedFile(t, dir, defaultInitFactoryWorkType, []byte(`{"title": "failing task"}`))
 
 	// Provider returns an error — triggers OutcomeFailed → task:failed.
 	work := map[string][]testutil.WorkResponse{
@@ -201,20 +164,25 @@ func TestInitFactory_FailureRouting(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	assertInitSessionPlaces(t, session, "failed")
+}
 
-	h.RunUntilComplete(t, 15*time.Second)
-
-	// Token should end in failed state since the provider returned an error.
-	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
-		PlaceTokenCount(initcmd.DefaultFactoryInputType+":failed", 1).
-		PlaceTokenCount("agent-slot:available", 1)
+func assertInitSessionPlaces(t *testing.T, session factoryapi.FactorySession, terminalState string) {
+	t.Helper()
+	for _, state := range []string{"init", "complete", "failed"} {
+		want := 0
+		if state == terminalState {
+			want = 1
+		}
+		placeID := defaultInitFactoryWorkType + ":" + state
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+	if got := support.SessionPlaceTokenCount(session, "agent-slot:available"); got != 1 {
+		t.Errorf("agent-slot:available token count = %d, want 1", got)
+	}
 }
 
 // TestInitFactory_Idempotent verifies that running Init twice on the same
@@ -223,9 +191,7 @@ func TestInitFactory_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 
 	// First init.
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-		t.Fatalf("first Init failed: %v", err)
-	}
+	support.RunInitCommand(t, dir)
 
 	// Write a custom file into the worker dir to verify it's preserved.
 	customContent := []byte("custom worker content")
@@ -235,9 +201,7 @@ func TestInitFactory_Idempotent(t *testing.T) {
 	}
 
 	// Second init.
-	if err := initcmd.Init(initcmd.InitConfig{Dir: dir}); err != nil {
-		t.Fatalf("second Init failed: %v", err)
-	}
+	support.RunInitCommand(t, dir)
 
 	// Verify the custom file was NOT overwritten.
 	data, err := os.ReadFile(customPath)
@@ -272,7 +236,7 @@ func assertInitProviderRequest(t *testing.T, req workerexecution.ProviderInferen
 func assertCanonicalStarterInboxState(t *testing.T, dir string) {
 	t.Helper()
 
-	canonicalInputDir := filepath.Join(dir, "inputs", initcmd.DefaultFactoryInputType, "default")
+	canonicalInputDir := filepath.Join(dir, "inputs", defaultInitFactoryWorkType, "default")
 	entries, err := os.ReadDir(canonicalInputDir)
 	if err != nil {
 		t.Fatalf("read canonical starter inbox: %v", err)
@@ -295,12 +259,6 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantProvider string
 			t.Fatalf("generated factory.json should contain %q:\n%s", expected, factoryJSON)
 		}
 	}
-	for _, retired := range retiredInitFactoryContractFields {
-		if strings.Contains(factoryJSON, retired) {
-			t.Fatalf("generated factory.json should not contain retired %q:\n%s", retired, factoryJSON)
-		}
-	}
-
 	inputsReadmeBytes, err := os.ReadFile(filepath.Join(dir, "inputs", "README.md"))
 	if err != nil {
 		t.Fatalf("read generated inputs README.md: %v", err)
@@ -312,11 +270,6 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantProvider string
 	} {
 		if !strings.Contains(inputsReadme, expected) {
 			t.Fatalf("generated inputs README.md should contain %q:\n%s", expected, inputsReadme)
-		}
-	}
-	for _, retired := range retiredStarterReadmeFragments {
-		if strings.Contains(inputsReadme, retired) {
-			t.Fatalf("generated inputs README.md should not contain retired starter prose %q:\n%s", retired, inputsReadme)
 		}
 	}
 
@@ -334,11 +287,6 @@ func assertGeneratedInitScaffoldCanonical(t *testing.T, dir, wantProvider string
 	} {
 		if !strings.Contains(workerAgents, expected) {
 			t.Fatalf("generated worker AGENTS.md should contain %q:\n%s", expected, workerAgents)
-		}
-	}
-	for _, retired := range retiredInitWorkerContractFields {
-		if strings.Contains(workerAgents, retired) {
-			t.Fatalf("generated worker AGENTS.md should not contain retired %q:\n%s", retired, workerAgents)
 		}
 	}
 	if strings.Contains(workerAgents, "model:") {

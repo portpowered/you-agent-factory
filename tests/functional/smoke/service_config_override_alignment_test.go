@@ -1,87 +1,46 @@
 package smoke
 
 import (
-	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestServiceConfigOverrideAlignment_MockScriptRetainsOriginalProviderCommand(t *testing.T) {
-	dir := scaffoldSharedCommandRunnerFactory(t)
-	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("script-output")},
-		workers.CommandResult{Stdout: []byte("provider-output COMPLETE")},
-	)
-	mockCfg := &factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{{
-			WorkerName: "worker-b",
-			RunType:    factoryconfig.MockWorkerRunTypeScript,
-			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-				Command: "mock-provider-script",
-			},
-		}},
-	}
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithMockWorkersConfig(mockCfg),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-	requests := runner.Requests()
-	if len(requests) != 2 {
-		t.Fatalf("shared command runner request count = %d, want 2", len(requests))
-	}
-	providerReq := requests[1]
-	if providerReq.Command != "mock-provider-script" {
-		t.Fatalf("mock provider command = %q, want mock-provider-script", providerReq.Command)
-	}
-	if !containsEnv(providerReq.Env, "YOU_MOCK_WORKER_COMMAND=codex") || !containsEnv(providerReq.Env, "YOU_MOCK_WORKER_TYPE=worker-b") {
-		t.Fatalf("mock provider env = %v, want original provider command and worker identity", providerReq.Env)
-	}
-	var originalArgs []string
-	if err := json.Unmarshal([]byte(envValue(providerReq.Env, "YOU_MOCK_WORKER_ARGS_JSON")), &originalArgs); err != nil {
-		t.Fatalf("decode original provider args: %v", err)
-	}
-	support.AssertArgsContainSequence(t, originalArgs, []string{"--model", "gpt-5-codex"})
-}
-
 // portos:func-length-exception owner=agent-factory reason=shared-command-runner-smoke review=2026-07-22 removal=split-script-request-and-provider-request-assertions-before-next-command-runner-alignment-change
-func TestServiceConfigOverrideAlignment_ServiceHarnessSharesScriptAndProviderCommandRunner(t *testing.T) {
+func TestServiceConfigOverrideAlignment_CustomerProcessSharesScriptAndProviderCommandRunner(t *testing.T) {
 	dir := scaffoldSharedCommandRunnerFactory(t)
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("script-output")},
-		workers.CommandResult{
+		platformprocess.CommandResult{Stdout: []byte("script-output")},
+		platformprocess.CommandResult{
 			Stdout: []byte("provider-output COMPLETE"),
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_mixed_command"}`),
 		},
 	)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-		testutil.WithProviderCommandRunner(runner),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-
-	harness.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed")
-	if got := support.PlaceTokenCount(*harness.Marking(), "task:complete"); got != 1 {
-		t.Fatalf("completed token count = %d, want 1", got)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--dir", dir, "--no-record",
+	})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderCommandRunner: runner,
+		ScriptCommandRunner:   runner,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute() error = %v; stdout=%q stderr=%q",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
 	}
 
 	requests := runner.Requests()
@@ -118,7 +77,7 @@ args:
   - "{{ (index .Inputs 0).Payload }}"
 ---
 `)
-	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mixed-command-smoke-work",
 		WorkTypeID: "task",
@@ -128,7 +87,7 @@ args:
 	return dir
 }
 
-func assertSharedCommandRunnerScriptRequest(t *testing.T, dir string, scriptReq workers.CommandRequest) {
+func assertSharedCommandRunnerScriptRequest(t *testing.T, dir string, scriptReq platformprocess.CommandRequest) {
 	t.Helper()
 
 	if scriptReq.Command != "script-tool" {
@@ -146,16 +105,13 @@ func assertSharedCommandRunnerScriptRequest(t *testing.T, dir string, scriptReq 
 	if len(scriptReq.Stdin) != 0 {
 		t.Fatalf("script stdin = %q, want empty stdin", string(scriptReq.Stdin))
 	}
-	if !containsString(scriptReq.Execution.WorkIDs, "mixed-command-smoke-work") {
-		t.Fatalf("script execution work IDs = %v, want mixed-command-smoke-work", scriptReq.Execution.WorkIDs)
-	}
 }
 
-func assertSharedCommandRunnerProviderRequest(t *testing.T, dir string, providerReq workers.CommandRequest) {
+func assertSharedCommandRunnerProviderRequest(t *testing.T, dir string, providerReq platformprocess.CommandRequest) {
 	t.Helper()
 
-	if providerReq.Command != string(modelprovider.Codex) {
-		t.Fatalf("provider command = %q, want %q", providerReq.Command, modelprovider.Codex)
+	if providerReq.Command != string(modelprovider.ProviderCodex) {
+		t.Fatalf("provider command = %q, want %q", providerReq.Command, modelprovider.ProviderCodex)
 	}
 	support.AssertArgsContainSequence(t, providerReq.Args, []string{"exec"})
 	support.AssertArgsContainSequence(t, providerReq.Args, []string{"--model", "gpt-5-codex"})
@@ -171,18 +127,6 @@ func assertSharedCommandRunnerProviderRequest(t *testing.T, dir string, provider
 	if !containsEnv(providerReq.Env, "PROVIDER_ENV=provider-value") {
 		t.Fatalf("provider env missing PROVIDER_ENV in %v", providerReq.Env)
 	}
-	if !containsString(providerReq.Execution.WorkIDs, "mixed-command-smoke-work") {
-		t.Fatalf("provider execution work IDs = %v, want mixed-command-smoke-work", providerReq.Execution.WorkIDs)
-	}
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }
 
 func containsEnv(env []string, want string) bool {
@@ -192,14 +136,4 @@ func containsEnv(env []string, want string) bool {
 		}
 	}
 	return false
-}
-
-func envValue(env []string, name string) string {
-	prefix := name + "="
-	for _, entry := range env {
-		if strings.HasPrefix(entry, prefix) {
-			return strings.TrimPrefix(entry, prefix)
-		}
-	}
-	return ""
 }

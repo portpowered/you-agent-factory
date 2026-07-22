@@ -7,18 +7,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 
-	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/work/content"
 	"go.uber.org/zap"
 )
 
@@ -103,11 +99,7 @@ func decodeStrictJSON[T any](body io.Reader) (T, error) {
 	if err != nil {
 		return zero, err
 	}
-	return decodeStrictJSONData[T](data)
-}
 
-func decodeStrictJSONData[T any](data []byte) (T, error) {
-	var zero T
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 
@@ -119,67 +111,6 @@ func decodeStrictJSONData[T any](data []byte) (T, error) {
 		return zero, err
 	}
 	return req, nil
-}
-
-func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	if json.Valid(data) {
-		if err := factoryconfig.ValidatePortableLayoutBoundaryJSON(data); err != nil {
-			return factoryapi.Factory{}, layoutRequestValidationError{err: err}
-		}
-	}
-	return decodeStrictJSONData[factoryapi.Factory](data)
-}
-
-func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySessionJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.OpenFactorySessionJSONRequestBody](body)
-}
-
-func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
-	data, err := io.ReadAll(body)
-	if err != nil {
-		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
-	}
-	var envelope map[string]json.RawMessage
-	if json.Unmarshal(data, &envelope) == nil {
-		if factoryJSON, ok := envelope["factory"]; ok {
-			if err := factoryconfig.ValidatePortableLayoutBoundaryJSON(factoryJSON); err != nil {
-				return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, layoutRequestValidationError{err: err}
-			}
-		}
-	}
-	return decodeStrictJSONData[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](data)
-}
-
-func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](body)
-}
-
-type layoutRequestValidationError struct {
-	err error
-}
-
-func (e layoutRequestValidationError) Error() string {
-	return e.err.Error()
-}
-
-func layoutRequestValidationTarget(err error) (factoryapi.FactoryValidationTarget, bool) {
-	var requestErr layoutRequestValidationError
-	if !errors.As(err, &requestErr) {
-		return factoryapi.FactoryValidationTarget{}, false
-	}
-	target, ok := factoryconfig.PortableLayoutValidationTarget(requestErr.err)
-	if !ok {
-		return factoryapi.FactoryValidationTarget{}, false
-	}
-	return apisurface.FactoryValidationTargetToAPI(target), true
-}
-
-func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
-	return factoryrequests.ValidateCanonicalWorkRequestJSON(data)
 }
 
 func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
@@ -197,36 +128,36 @@ func validateWorkContentField(fields map[string]json.RawMessage, prefix string) 
 		if err := json.Unmarshal(payload, &partFields); err != nil {
 			return requestFieldValidationError{message: fmt.Sprintf("%scontent[%d] must be an object", prefix, i)}
 		}
-		if _, err := validatedRawWorkContentPart(partFields, fmt.Sprintf("%scontent[%d].", prefix, i)); err != nil {
+		if err := validateRawWorkContentPart(partFields, fmt.Sprintf("%scontent[%d].", prefix, i)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validatedRawWorkContentPart(fields map[string]json.RawMessage, prefix string) (work.WorkContentPart, error) {
+func validateRawWorkContentPart(fields map[string]json.RawMessage, prefix string) error {
 	partType, err := requiredWorkContentPartType(fields, prefix)
 	if err != nil {
-		return work.WorkContentPart{}, err
+		return err
 	}
 
 	switch partType {
-	case work.WorkContentPartTypeText:
-		return validatedRawTextContentPart(fields, prefix)
-	case work.WorkContentPartTypeImage:
-		return validatedRawURLContentPart(fields, prefix, work.WorkContentPartTypeImage, "image content parts")
-	case work.WorkContentPartTypeAudio:
-		return validatedRawURLContentPart(fields, prefix, work.WorkContentPartTypeAudio, "audio content parts")
-	case work.WorkContentPartTypeJSON:
-		return validatedRawJSONContentPart(fields, prefix)
-	case work.WorkContentPartTypeBinary:
-		return validatedRawURLContentPart(fields, prefix, work.WorkContentPartTypeBinary, "binary content parts")
+	case "text", "TEXT":
+		return validateRawTextContentPart(fields, prefix)
+	case "image", "IMAGE":
+		return validateRawURLContentPart(fields, prefix, "image content parts")
+	case "AUDIO":
+		return validateRawURLContentPart(fields, prefix, "audio content parts")
+	case "JSON":
+		return validateRawJSONContentPart(fields, prefix)
+	case "BINARY":
+		return validateRawURLContentPart(fields, prefix, "binary content parts")
 	default:
-		return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", prefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%stype must be one of text, image, TEXT, IMAGE, AUDIO, JSON, or BINARY", prefix)}
 	}
 }
 
-func requiredWorkContentPartType(fields map[string]json.RawMessage, prefix string) (work.WorkContentPartType, error) {
+func requiredWorkContentPartType(fields map[string]json.RawMessage, prefix string) (string, error) {
 	typeRaw, ok := fields["type"]
 	if !ok {
 		return "", requestFieldValidationError{message: fmt.Sprintf("%stype is required", prefix)}
@@ -237,89 +168,63 @@ func requiredWorkContentPartType(fields map[string]json.RawMessage, prefix strin
 		return "", requestFieldValidationError{message: fmt.Sprintf("%stype must be a non-empty string", prefix)}
 	}
 
-	return work.WorkContentPartType(partType).Normalized(), nil
+	return partType, nil
 }
 
-func validatedRawTextContentPart(fields map[string]json.RawMessage, prefix string) (work.WorkContentPart, error) {
+func validateRawTextContentPart(fields map[string]json.RawMessage, prefix string) error {
 	if err := requireOnlyFields(fields, prefix, "type", "text", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
-		return work.WorkContentPart{}, err
+		return err
 	}
-	text, err := requiredStringField(fields, prefix, "text", "text content parts")
-	if err != nil {
-		return work.WorkContentPart{}, err
+	if _, err := requiredStringField(fields, prefix, "text", "text content parts"); err != nil {
+		return err
 	}
-	shared, err := validateSharedWorkContentFields(fields, prefix)
-	if err != nil {
-		return work.WorkContentPart{}, err
-	}
-	shared.Type = work.WorkContentPartTypeText
-	shared.Text = text
-	return shared, nil
+	return validateSharedWorkContentFields(fields, prefix)
 }
 
-func validatedRawURLContentPart(fields map[string]json.RawMessage, prefix string, partType work.WorkContentPartType, usage string) (work.WorkContentPart, error) {
+func validateRawURLContentPart(fields map[string]json.RawMessage, prefix string, usage string) error {
 	if err := requireOnlyFields(fields, prefix, "type", "url", "file", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
-		return work.WorkContentPart{}, err
+		return err
 	}
-	if _, hasFile := fields["file"]; hasFile {
-		if _, hasURL := fields["url"]; hasURL {
-			return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl and file cannot both be set on the same content part", prefix)}
-		}
+	if err := validateSharedWorkContentFields(fields, prefix); err != nil {
+		return err
 	}
-	shared, err := validateSharedWorkContentFields(fields, prefix)
-	if err != nil {
-		return work.WorkContentPart{}, err
-	}
-	shared.Type = partType
+	hasFile := false
 	if fileRaw, ok := fields["file"]; ok {
 		var file string
 		if err := json.Unmarshal(fileRaw, &file); err != nil || file == "" {
-			return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string when provided", prefix)}
+			return requestFieldValidationError{message: fmt.Sprintf("%sfile must be a non-empty string when provided", prefix)}
 		}
-		shared.File = file
+		hasFile = true
 	}
+	hasURL := false
 	if urlRaw, ok := fields["url"]; ok {
 		var contentURL string
 		if err := json.Unmarshal(urlRaw, &contentURL); err != nil || contentURL == "" {
-			return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl must be a non-empty string", prefix)}
+			return requestFieldValidationError{message: fmt.Sprintf("%surl must be a non-empty string", prefix)}
 		}
-		shared.URL = contentURL
+		hasURL = true
 	}
-	normalized, err := content.NormalizeFileBackedContentPart(shared)
-	if err != nil {
-		if strings.Contains(err.Error(), "url and file cannot both be set") {
-			return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
+	if !hasURL && !hasFile {
+		return requestFieldValidationError{
+			message: fmt.Sprintf("%surl is required for %s", prefix, usage),
 		}
-		if strings.Contains(err.Error(), "url must be a non-empty string") {
-			return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl is required for %s", prefix, usage)}
-		}
-		return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
 	}
-	if err := content.ValidateContentURL(normalized.URL); err != nil {
-		return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
-	}
-	return normalized, nil
+	return nil
 }
 
-func validatedRawJSONContentPart(fields map[string]json.RawMessage, prefix string) (work.WorkContentPart, error) {
+func validateRawJSONContentPart(fields map[string]json.RawMessage, prefix string) error {
 	if err := requireOnlyFields(fields, prefix, "type", "json", "label", "role", "contentType", "artifactId", "metadata"); err != nil {
-		return work.WorkContentPart{}, err
+		return err
 	}
 	jsonRaw, ok := fields["json"]
 	if !ok {
-		return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sjson is required for JSON content parts", prefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%sjson is required for JSON content parts", prefix)}
 	}
 	var value any
 	if err := json.Unmarshal(jsonRaw, &value); err != nil {
-		return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%sjson must be valid JSON", prefix)}
+		return requestFieldValidationError{message: fmt.Sprintf("%sjson must be valid JSON", prefix)}
 	}
-	shared, err := validateSharedWorkContentFields(fields, prefix)
-	if err != nil {
-		return work.WorkContentPart{}, err
-	}
-	shared.Type = work.WorkContentPartTypeJSON
-	shared.JSON = append(json.RawMessage(nil), jsonRaw...)
-	return shared, nil
+	return validateSharedWorkContentFields(fields, prefix)
 }
 
 func requiredStringField(fields map[string]json.RawMessage, prefix string, fieldName string, usage string) (string, error) {
@@ -334,39 +239,21 @@ func requiredStringField(fields map[string]json.RawMessage, prefix string, field
 	return value, nil
 }
 
-func validateSharedWorkContentFields(fields map[string]json.RawMessage, prefix string) (work.WorkContentPart, error) {
-	part := work.WorkContentPart{}
-
-	label, err := optionalStringField(fields, prefix, "label")
-	if err != nil {
-		return work.WorkContentPart{}, err
+func validateSharedWorkContentFields(fields map[string]json.RawMessage, prefix string) error {
+	for _, field := range []string{"label", "role", "contentType", "artifactId"} {
+		if _, err := optionalStringField(fields, prefix, field); err != nil {
+			return err
+		}
 	}
-	role, err := optionalStringField(fields, prefix, "role")
-	if err != nil {
-		return work.WorkContentPart{}, err
-	}
-	contentType, err := optionalStringField(fields, prefix, "contentType")
-	if err != nil {
-		return work.WorkContentPart{}, err
-	}
-	artifactID, err := optionalStringField(fields, prefix, "artifactId")
-	if err != nil {
-		return work.WorkContentPart{}, err
-	}
-	part.Label = label
-	part.Role = role
-	part.ContentType = contentType
-	part.ArtifactID = artifactID
 
 	if metadataRaw, ok := fields["metadata"]; ok {
 		var metadata map[string]any
 		if err := json.Unmarshal(metadataRaw, &metadata); err != nil || metadata == nil {
-			return work.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%smetadata must be an object", prefix)}
+			return requestFieldValidationError{message: fmt.Sprintf("%smetadata must be an object", prefix)}
 		}
-		part.Metadata = metadata
 	}
 
-	return part, nil
+	return nil
 }
 
 func requiredNonEmptyStringField(fields map[string]json.RawMessage, prefix string, field string, partLabel string) (string, error) {
@@ -456,16 +343,11 @@ func generatedStringMap(values *factoryapi.StringMap) map[string]string {
 	return optional.StringMapValue(values)
 }
 func (s *Server) requireDurableSessionLifecycleAPI(w http.ResponseWriter) (apisurface.DurableSessionLifecycleAPI, bool) {
-	if s.runtime == nil {
+	if s.durableLifecycle == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session lifecycle control is unavailable", "INTERNAL_ERROR")
 		return nil, false
 	}
-	lifecycle, ok := s.runtime.(apisurface.DurableSessionLifecycleAPI)
-	if !ok {
-		s.writeError(w, http.StatusNotImplemented, "durable factory session lifecycle control is not implemented", "INTERNAL_ERROR")
-		return nil, false
-	}
-	return lifecycle, true
+	return s.durableLifecycle, true
 }
 
 func (s *Server) writeDurableLifecycleControlError(w http.ResponseWriter, sessionID string, err error) bool {
@@ -492,7 +374,7 @@ func (s *Server) handleDurableLifecycleControl(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 	operation string,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session "+operation+" is not implemented", "INTERNAL_ERROR")
@@ -513,8 +395,16 @@ func (s *Server) handleDurableLifecycleControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	control, err := factorysession.ControlRequestFromAPI(req)
+	if err == nil {
+		control, err = s.sessionRequests.PrepareControl(control)
+	}
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
 
-	response, err := invoke(lifecycle, req)
+	response, err := invoke(lifecycle, control)
 	if err != nil {
 		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
 			return
@@ -536,7 +426,7 @@ func (s *Server) handleLiveLifecycleControl(
 	r *http.Request,
 	sessionID factoryapi.SessionID,
 	operation string,
-	invoke func(apisurface.SessionAPI, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+	invoke func(apisurface.LiveSessionAPI, factorysessionexecution.ControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -552,8 +442,16 @@ func (s *Server) handleLiveLifecycleControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	control, err := factorysession.ControlRequestFromAPI(req)
+	if err == nil {
+		control, err = s.sessionRequests.PrepareControl(control)
+	}
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
 
-	response, err := invoke(sessionRuntime, req)
+	response, err := invoke(sessionRuntime, control)
 	if err != nil {
 		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
 			return
@@ -619,7 +517,7 @@ func (s *Server) handleDurableApproveControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.ApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session approve is not implemented", "INTERNAL_ERROR")
@@ -640,8 +538,16 @@ func (s *Server) handleDurableApproveControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	approve, err := factorysession.ApproveRequestFromAPI(req)
+	if err == nil {
+		approve, err = s.sessionRequests.PrepareApprove(approve)
+	}
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
 
-	response, err := invoke(lifecycle, req)
+	response, err := invoke(lifecycle, approve)
 	if err != nil {
 		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
 			return
@@ -661,7 +567,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.RetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session retry-dispatch is not implemented", "INTERNAL_ERROR")
@@ -682,8 +588,16 @@ func (s *Server) handleDurableRetryDispatchControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	retry, err := factorysession.RetryDispatchRequestFromAPI(req)
+	if err == nil {
+		retry, err = s.sessionRequests.PrepareRetryDispatch(retry)
+	}
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
 
-	response, err := invoke(lifecycle, req)
+	response, err := invoke(lifecycle, retry)
 	if err != nil {
 		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
 			return
@@ -702,7 +616,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.handleDurableApproveControl(w, r, sessionID, func(
 		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factoryapi.FactorySessionApproveRequest,
+		req factorysessionexecution.ApproveRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return lifecycle.ApproveDurableFactorySession(r.Context(), string(sessionID), req)
 	})
@@ -712,15 +626,15 @@ func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, ses
 	if isDurableExecutionSessionID(string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
-			req factoryapi.FactorySessionLifecycleControlRequest,
+			req factorysessionexecution.ControlRequest,
 		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 			return lifecycle.PauseDurableFactorySession(r.Context(), string(sessionID), req)
 		})
 		return
 	}
 	s.handleLiveLifecycleControl(w, r, sessionID, "pause", func(
-		sessionRuntime apisurface.SessionAPI,
-		req factoryapi.FactorySessionLifecycleControlRequest,
+		sessionRuntime apisurface.LiveSessionAPI,
+		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return sessionRuntime.PauseLiveFactorySession(r.Context(), string(sessionID), req)
 	})
@@ -730,15 +644,15 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 	if isDurableExecutionSessionID(string(sessionID)) {
 		s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
 			lifecycle apisurface.DurableSessionLifecycleAPI,
-			req factoryapi.FactorySessionLifecycleControlRequest,
+			req factorysessionexecution.ControlRequest,
 		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 			return lifecycle.ResumeDurableFactorySession(r.Context(), string(sessionID), req)
 		})
 		return
 	}
 	s.handleLiveLifecycleControl(w, r, sessionID, "resume", func(
-		sessionRuntime apisurface.SessionAPI,
-		req factoryapi.FactorySessionLifecycleControlRequest,
+		sessionRuntime apisurface.LiveSessionAPI,
+		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return sessionRuntime.ResumeLiveFactorySession(r.Context(), string(sessionID), req)
 	})
@@ -747,7 +661,7 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
 		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factoryapi.FactorySessionLifecycleControlRequest,
+		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
 	})
@@ -756,7 +670,7 @@ func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, se
 func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
 		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factoryapi.FactorySessionLifecycleControlRequest,
+		req factorysessionexecution.ControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
 	})
@@ -765,7 +679,7 @@ func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request,
 func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.handleDurableRetryDispatchControl(w, r, sessionID, func(
 		lifecycle apisurface.DurableSessionLifecycleAPI,
-		req factoryapi.FactorySessionRetryDispatchRequest,
+		req factorysessionexecution.RetryDispatchRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return lifecycle.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
 	})
@@ -775,7 +689,7 @@ func (s *Server) handleDurableInterruptDispatchControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
-	invoke func(apisurface.DurableSessionLifecycleAPI, factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+	invoke func(apisurface.DurableSessionLifecycleAPI, factorysessionexecution.InterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	if !isDurableExecutionSessionID(string(sessionID)) {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session interrupt-dispatch is not implemented", "INTERNAL_ERROR")
@@ -796,8 +710,16 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
 		return
 	}
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(req)
+	if err == nil {
+		interrupt, err = s.sessionRequests.PrepareInterruptDispatch(interrupt)
+	}
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		return
+	}
 
-	response, err := invoke(lifecycle, req)
+	response, err := invoke(lifecycle, interrupt)
 	if err != nil {
 		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
 			return

@@ -3,6 +3,7 @@ package climanifestgen_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,13 +11,39 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
+type testFileSystem struct{}
+
+func (testFileSystem) ReadFile(path string) ([]byte, error) { return os.ReadFile(path) }
+func (testFileSystem) Remove(path string) error             { return os.Remove(path) }
+func (testFileSystem) MkdirAll(path string, mode fs.FileMode) error {
+	return os.MkdirAll(path, mode)
+}
+func (testFileSystem) WriteFile(path string, payload []byte, mode fs.FileMode) error {
+	return os.WriteFile(path, payload, mode)
+}
+func (testFileSystem) Stat(path string) (fs.FileInfo, error) { return os.Stat(path) }
+
+func artifactStore(t *testing.T) generatedartifacts.LocalStore {
+	t.Helper()
+	return mustArtifactStore()
+}
+
+func mustArtifactStore() generatedartifacts.LocalStore {
+	store, err := generatedartifacts.NewLocalStore(testFileSystem{})
+	if err != nil {
+		panic(err)
+	}
+	return store
+}
+
 func TestExtractFactoryConfigInitFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(artifactStore(t), filepath.Join(repoRoot, climanifest.ProductionManifestPath))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -65,7 +92,7 @@ func TestAssertFactoryConfigInitFamilyCommandIDRejectsOutOfFamily(t *testing.T) 
 
 func TestExtractRepresentativeFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(artifactStore(t), filepath.Join(repoRoot, climanifest.ProductionManifestPath))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -93,7 +120,7 @@ func TestExtractRepresentativeFamilyFromProductionManifest(t *testing.T) {
 
 func TestExtractSessionFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(artifactStore(t), filepath.Join(repoRoot, climanifest.ProductionManifestPath))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -161,7 +188,7 @@ func TestAssertWorkFamilyCommandIDRejectsOutOfFamily(t *testing.T) {
 
 func TestExtractWorkFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(artifactStore(t), filepath.Join(repoRoot, climanifest.ProductionManifestPath))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -207,7 +234,7 @@ func TestExtractWorkFamilyRejectsEmptyManifest(t *testing.T) {
 
 func TestExtractRunSubmitFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(artifactStore(t), filepath.Join(repoRoot, climanifest.ProductionManifestPath))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -243,7 +270,7 @@ func TestExtractRunSubmitFamilyRejectsMissingAndOutOfFamilyCommands(t *testing.T
 
 func TestProductionWorkFamilyArtifactsMatchGenerator(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	drift, err := climanifestgen.Check(repoRoot)
+	drift, err := checkCLIArtifacts(repoRoot)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -251,16 +278,16 @@ func TestProductionWorkFamilyArtifactsMatchGenerator(t *testing.T) {
 		t.Fatalf("production work-family artifacts drift: %#v", drift)
 	}
 
-	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.WorkFamilyJSONPath)))
+	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath)))
 	if err != nil {
-		t.Fatalf("read work family artifact: %v", err)
+		t.Fatalf("read typed family manifests artifact: %v", err)
 	}
 	if len(bytes.TrimSpace(payload)) == 0 {
-		t.Fatal("work family artifact is empty")
+		t.Fatal("typed family manifests artifact is empty")
 	}
 }
 
-func TestCheckDetectsStaleWorkFamilyArtifact(t *testing.T) {
+func TestCheckRejectsRetiredWorkFamilyJSONArtifact(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
 	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
@@ -268,7 +295,7 @@ func TestCheckDetectsStaleWorkFamilyArtifact(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -276,15 +303,15 @@ func TestCheckDetectsStaleWorkFamilyArtifact(t *testing.T) {
 	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write stale artifact: %v", err)
 	}
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if drift.Empty() {
-		t.Fatal("expected stale work-family artifact drift")
+		t.Fatal("expected retired work-family artifact drift")
 	}
-	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.WorkFamilyJSONPath {
-		t.Fatalf("stale drift = %#v, want %q stale", drift, climanifestgen.WorkFamilyJSONPath)
+	if len(drift.Unexpected) != 1 || drift.Unexpected[0] != climanifestgen.WorkFamilyJSONPath {
+		t.Fatalf("drift = %#v, want %q unexpected", drift, climanifestgen.WorkFamilyJSONPath)
 	}
 }
 
@@ -296,15 +323,15 @@ func TestCheckDetectsMissingWorkFamilyArtifacts(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.WorkFamilyJSONPath))
-	if err := os.Remove(jsonTarget); err != nil {
-		t.Fatalf("remove generated json: %v", err)
+	typedTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath))
+	if err := os.Remove(typedTarget); err != nil {
+		t.Fatalf("remove generated typed manifests: %v", err)
 	}
 
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -322,46 +349,34 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		t.Fatalf("copy production manifest: %v", err)
 	}
 
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("first Generate() error = %v", err)
 	}
 	first := fileDigests(t, root, []string{
-		climanifestgen.RepresentativeFamilyJSONPath,
-		climanifestgen.WorkFamilyJSONPath,
+		climanifestgen.RuntimeFamilyManifestsPath,
 		climanifestgen.RepresentativeFamilyCommandIDsPath,
-		climanifestgen.FactoryConfigInitFamilyJSONPath,
 		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
-		climanifestgen.ModelsDocsFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyCommandIDsPath,
-		climanifestgen.RunSubmitFamilyJSONPath,
 		climanifestgen.RunSubmitFamilyCommandIDsPath,
-		climanifestgen.MCPFamilyJSONPath,
-		climanifestgen.WorkflowCompatibilityFamilyJSONPath,
-		climanifestgen.WorkflowMCPFamilyCommandIDsPath,
+		climanifestgen.MCPFamilyCommandIDsPath,
 	})
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("second Generate() error = %v", err)
 	}
 	second := fileDigests(t, root, []string{
-		climanifestgen.RepresentativeFamilyJSONPath,
-		climanifestgen.WorkFamilyJSONPath,
+		climanifestgen.RuntimeFamilyManifestsPath,
 		climanifestgen.RepresentativeFamilyCommandIDsPath,
-		climanifestgen.FactoryConfigInitFamilyJSONPath,
 		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
-		climanifestgen.ModelsDocsFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyCommandIDsPath,
-		climanifestgen.RunSubmitFamilyJSONPath,
 		climanifestgen.RunSubmitFamilyCommandIDsPath,
-		climanifestgen.MCPFamilyJSONPath,
-		climanifestgen.WorkflowCompatibilityFamilyJSONPath,
-		climanifestgen.WorkflowMCPFamilyCommandIDsPath,
+		climanifestgen.MCPFamilyCommandIDsPath,
 	})
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("repeated generation changed artifact digests:\nfirst=%v\nsecond=%v", first, second)
 	}
 }
 
-func TestCheckDetectsStaleRepresentativeFamilyArtifact(t *testing.T) {
+func TestCheckRejectsRetiredRepresentativeFamilyJSONArtifact(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
 	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
@@ -369,7 +384,7 @@ func TestCheckDetectsStaleRepresentativeFamilyArtifact(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -377,15 +392,15 @@ func TestCheckDetectsStaleRepresentativeFamilyArtifact(t *testing.T) {
 	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write stale artifact: %v", err)
 	}
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if drift.Empty() {
-		t.Fatal("expected stale representative-family artifact drift")
+		t.Fatal("expected retired representative-family artifact drift")
 	}
-	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.RepresentativeFamilyJSONPath {
-		t.Fatalf("stale drift = %#v, want %q stale", drift, climanifestgen.RepresentativeFamilyJSONPath)
+	if len(drift.Unexpected) != 1 || drift.Unexpected[0] != climanifestgen.RepresentativeFamilyJSONPath {
+		t.Fatalf("drift = %#v, want %q unexpected", drift, climanifestgen.RepresentativeFamilyJSONPath)
 	}
 }
 
@@ -425,7 +440,7 @@ func fileDigests(t *testing.T, root string, paths []string) map[string][sha256.S
 
 func TestProductionFactoryConfigInitFamilyArtifactsMatchGenerator(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	drift, err := climanifestgen.Check(repoRoot)
+	drift, err := checkCLIArtifacts(repoRoot)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -433,18 +448,18 @@ func TestProductionFactoryConfigInitFamilyArtifactsMatchGenerator(t *testing.T) 
 		t.Fatalf("production factory/config/init artifacts drift: %#v", drift)
 	}
 
-	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.FactoryConfigInitFamilyJSONPath)))
+	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath)))
 	if err != nil {
-		t.Fatalf("read factory/config/init family artifact: %v", err)
+		t.Fatalf("read typed family manifests artifact: %v", err)
 	}
 	if len(bytes.TrimSpace(payload)) == 0 {
-		t.Fatal("factory/config/init family artifact is empty")
+		t.Fatal("typed family manifests artifact is empty")
 	}
 }
 
 func TestProductionCLIArtifactsMatchGenerator(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	drift, err := climanifestgen.Check(repoRoot)
+	drift, err := checkCLIArtifacts(repoRoot)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -453,9 +468,10 @@ func TestProductionCLIArtifactsMatchGenerator(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		climanifestgen.RepresentativeFamilyJSONPath,
-		climanifestgen.ModelsDocsFamilyJSONPath,
-		climanifestgen.RunSubmitFamilyJSONPath,
+		climanifestgen.RuntimeFamilyManifestsPath,
+		climanifestgen.RepresentativeFamilyCommandIDsPath,
+		climanifestgen.ModelsDocsFamilyCommandIDsPath,
+		climanifestgen.RunSubmitFamilyCommandIDsPath,
 	} {
 		payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(path)))
 		if err != nil {
@@ -467,7 +483,7 @@ func TestProductionCLIArtifactsMatchGenerator(t *testing.T) {
 	}
 }
 
-func TestCheckDetectsStaleRunSubmitFamilyArtifact(t *testing.T) {
+func TestCheckRejectsRetiredRunSubmitFamilyJSONArtifact(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
 	if err := copyFile(
@@ -476,25 +492,25 @@ func TestCheckDetectsStaleRunSubmitFamilyArtifact(t *testing.T) {
 	); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 	target := filepath.Join(root, filepath.FromSlash(climanifestgen.RunSubmitFamilyJSONPath))
 	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write stale artifact: %v", err)
 	}
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
-	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.RunSubmitFamilyJSONPath {
-		t.Fatalf("stale drift = %#v, want %q", drift, climanifestgen.RunSubmitFamilyJSONPath)
+	if len(drift.Unexpected) != 1 || drift.Unexpected[0] != climanifestgen.RunSubmitFamilyJSONPath {
+		t.Fatalf("drift = %#v, want %q unexpected", drift, climanifestgen.RunSubmitFamilyJSONPath)
 	}
 }
 
 func TestProductionRepresentativeFamilyArtifactsMatchGenerator(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	drift, err := climanifestgen.Check(repoRoot)
+	drift, err := checkCLIArtifacts(repoRoot)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -502,12 +518,12 @@ func TestProductionRepresentativeFamilyArtifactsMatchGenerator(t *testing.T) {
 		t.Fatalf("production representative-family artifacts drift: %#v", drift)
 	}
 
-	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.RepresentativeFamilyJSONPath)))
+	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath)))
 	if err != nil {
-		t.Fatalf("read representative family artifact: %v", err)
+		t.Fatalf("read typed family manifests artifact: %v", err)
 	}
 	if len(bytes.TrimSpace(payload)) == 0 {
-		t.Fatal("representative family artifact is empty")
+		t.Fatal("typed family manifests artifact is empty")
 	}
 }
 
@@ -525,20 +541,20 @@ func TestCheckTreatsCRLFArtifactsAsCurrent(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RepresentativeFamilyJSONPath))
-	payload, err := os.ReadFile(jsonTarget)
+	typedTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath))
+	payload, err := os.ReadFile(typedTarget)
 	if err != nil {
 		t.Fatalf("read generated json: %v", err)
 	}
-	if err := os.WriteFile(jsonTarget, bytes.ReplaceAll(payload, []byte("\n"), []byte("\r\n")), 0o644); err != nil {
+	if err := os.WriteFile(typedTarget, bytes.ReplaceAll(payload, []byte("\n"), []byte("\r\n")), 0o644); err != nil {
 		t.Fatalf("write CRLF artifact: %v", err)
 	}
 
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -567,7 +583,7 @@ func TestExtractModelsDocsFamilyRejectsEmptyManifest(t *testing.T) {
 
 func TestFactoryConfigInitFamilyArtifactFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	payload, err := climanifestgen.FactoryConfigInitFamilyArtifact(repoRoot)
+	payload, err := climanifestgen.FactoryConfigInitFamilyArtifact(artifactStore(t), repoRoot)
 	if err != nil {
 		t.Fatalf("FactoryConfigInitFamilyArtifact() error = %v", err)
 	}
@@ -578,7 +594,7 @@ func TestFactoryConfigInitFamilyArtifactFromProductionManifest(t *testing.T) {
 
 func TestExtractModelsDocsFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(artifactStore(t), filepath.Join(repoRoot, climanifest.ProductionManifestPath))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
@@ -601,7 +617,7 @@ func TestExtractModelsDocsFamilyFromProductionManifest(t *testing.T) {
 	}
 }
 
-func TestCheckDetectsStaleFactoryConfigInitFamilyArtifact(t *testing.T) {
+func TestCheckRejectsRetiredFactoryConfigInitFamilyJSONArtifact(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
 	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
@@ -609,7 +625,7 @@ func TestCheckDetectsStaleFactoryConfigInitFamilyArtifact(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -617,21 +633,21 @@ func TestCheckDetectsStaleFactoryConfigInitFamilyArtifact(t *testing.T) {
 	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write stale artifact: %v", err)
 	}
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if drift.Empty() {
-		t.Fatal("expected stale factory/config/init-family artifact drift")
+		t.Fatal("expected retired factory/config/init-family artifact drift")
 	}
-	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.FactoryConfigInitFamilyJSONPath {
-		t.Fatalf("stale drift = %#v, want %q stale", drift, climanifestgen.FactoryConfigInitFamilyJSONPath)
+	if len(drift.Unexpected) != 1 || drift.Unexpected[0] != climanifestgen.FactoryConfigInitFamilyJSONPath {
+		t.Fatalf("drift = %#v, want %q unexpected", drift, climanifestgen.FactoryConfigInitFamilyJSONPath)
 	}
 }
 
 func TestModelsDocsArtifactFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
-	payload, err := climanifestgen.ModelsDocsArtifact(repoRoot)
+	payload, err := climanifestgen.ModelsDocsArtifact(artifactStore(t), repoRoot)
 	if err != nil {
 		t.Fatalf("ModelsDocsArtifact() error = %v", err)
 	}
@@ -640,7 +656,7 @@ func TestModelsDocsArtifactFromProductionManifest(t *testing.T) {
 	}
 }
 
-func TestCheckDetectsStaleModelsDocsFamilyArtifact(t *testing.T) {
+func TestCheckRejectsRetiredModelsDocsFamilyJSONArtifact(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
 	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
@@ -648,7 +664,7 @@ func TestCheckDetectsStaleModelsDocsFamilyArtifact(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
@@ -656,15 +672,15 @@ func TestCheckDetectsStaleModelsDocsFamilyArtifact(t *testing.T) {
 	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("write stale artifact: %v", err)
 	}
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if drift.Empty() {
-		t.Fatal("expected stale models/docs-family artifact drift")
+		t.Fatal("expected retired models/docs-family artifact drift")
 	}
-	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.ModelsDocsFamilyJSONPath {
-		t.Fatalf("stale drift = %#v, want %q stale", drift, climanifestgen.ModelsDocsFamilyJSONPath)
+	if len(drift.Unexpected) != 1 || drift.Unexpected[0] != climanifestgen.ModelsDocsFamilyJSONPath {
+		t.Fatalf("drift = %#v, want %q unexpected", drift, climanifestgen.ModelsDocsFamilyJSONPath)
 	}
 }
 
@@ -694,15 +710,15 @@ func TestCheckDetectsMissingFactoryConfigInitFamilyArtifacts(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.FactoryConfigInitFamilyJSONPath))
-	if err := os.Remove(jsonTarget); err != nil {
-		t.Fatalf("remove generated factory/config/init json: %v", err)
+	typedTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath))
+	if err := os.Remove(typedTarget); err != nil {
+		t.Fatalf("remove generated typed manifests: %v", err)
 	}
 
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -728,15 +744,15 @@ func TestCheckDetectsMissingModelsDocsFamilyArtifacts(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.ModelsDocsFamilyJSONPath))
-	if err := os.Remove(jsonTarget); err != nil {
-		t.Fatalf("remove generated models/docs json: %v", err)
+	typedTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath))
+	if err := os.Remove(typedTarget); err != nil {
+		t.Fatalf("remove generated typed manifests: %v", err)
 	}
 
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
@@ -753,19 +769,41 @@ func TestCheckDetectsMissingRepresentativeFamilyArtifacts(t *testing.T) {
 	if err := copyFile(manifestSource, manifestTarget); err != nil {
 		t.Fatalf("copy production manifest: %v", err)
 	}
-	if err := climanifestgen.Generate(root); err != nil {
+	if err := writeCLIArtifacts(root); err != nil {
 		t.Fatalf("Generate() error = %v", err)
 	}
-	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RepresentativeFamilyJSONPath))
-	if err := os.Remove(jsonTarget); err != nil {
-		t.Fatalf("remove generated json: %v", err)
+	typedTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RuntimeFamilyManifestsPath))
+	if err := os.Remove(typedTarget); err != nil {
+		t.Fatalf("remove generated typed manifests: %v", err)
 	}
 
-	drift, err := climanifestgen.Check(root)
+	drift, err := checkCLIArtifacts(root)
 	if err != nil {
 		t.Fatalf("Check() error = %v", err)
 	}
 	if drift.Empty() || len(drift.Missing) == 0 {
 		t.Fatalf("missing drift = %#v, want missing generated artifacts", drift)
 	}
+}
+
+func writeCLIArtifacts(root string) error {
+	store := mustArtifactStore()
+	artifacts, err := climanifestgen.Artifacts(store, root)
+	if err != nil {
+		return err
+	}
+	return store.Write(root, artifacts)
+}
+
+func checkCLIArtifacts(root string) (climanifestgen.Drift, error) {
+	store := mustArtifactStore()
+	artifacts, err := climanifestgen.Artifacts(store, root)
+	if err != nil {
+		return climanifestgen.Drift{}, err
+	}
+	base, err := store.Check(root, artifacts)
+	if err != nil {
+		return climanifestgen.Drift{}, err
+	}
+	return climanifestgen.AnnotateDrift(base), nil
 }

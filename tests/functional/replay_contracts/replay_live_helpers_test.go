@@ -4,13 +4,11 @@ package replay_contracts
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,19 +17,26 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+type replayFunctionalServer struct {
+	*support.FunctionalAPIServer
+}
+
 func startReplayFunctionalServer(
 	t *testing.T,
 	factoryDir string,
-	replayPath string,
-	executionBaseDir string,
-) *support.FunctionalAPIServer {
+	useMockWorkers bool,
+	workingDirectory string,
+	runArgs ...string,
+) *replayFunctionalServer {
 	t.Helper()
 
-	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:       factoryDir,
-		ReplayPath:       replayPath,
-		ExecutionBaseDir: executionBaseDir,
+		WorkingDirectory: workingDirectory,
+		UseMockWorkers:   useMockWorkers,
+		Args:             runArgs,
 	})
+	return &replayFunctionalServer{FunctionalAPIServer: base}
 }
 
 type factoryEventHTTPStream struct {
@@ -225,65 +230,4 @@ func lastIndexOfFunctionalEventType(events []factoryapi.FactoryEvent, eventType 
 		}
 	}
 	return -1
-}
-
-func upsertFactoryWorkRequestOverHTTP(t *testing.T, baseURL, requestID string, request []byte) factoryapi.UpsertWorkRequestResponse {
-	t.Helper()
-
-	httpRequest, err := http.NewRequest(
-		http.MethodPut,
-		support.DefaultSessionWorkURL(baseURL, "/work-requests/"+requestID),
-		bytes.NewReader(request),
-	)
-	if err != nil {
-		t.Fatalf("build PUT /work-requests request: %v", err)
-	}
-	httpRequest.Header.Set("Content-Type", "application/json")
-	response, err := http.DefaultClient.Do(httpRequest)
-	if err != nil {
-		t.Fatalf("PUT /work-requests: %v", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusCreated {
-		t.Fatalf("PUT /work-requests status = %d, want 201", response.StatusCode)
-	}
-
-	var result factoryapi.UpsertWorkRequestResponse
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		t.Fatalf("decode PUT /work-requests response: %v", err)
-	}
-	return result
-}
-
-func waitForRecordedEvents(t *testing.T, artifactPath string, timeout time.Duration) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		data, err := os.ReadFile(artifactPath)
-		if err == nil {
-			var artifact struct {
-				Events []factoryapi.FactoryEvent `json:"events"`
-			}
-			if json.Unmarshal(data, &artifact) == nil && len(artifact.Events) > 0 {
-				return artifact.Events
-			}
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for public recording at %s", artifactPath)
-	return nil
-}
-
-func waitForCondition(t *testing.T, timeout time.Duration, condition func() bool) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for functional condition")
 }

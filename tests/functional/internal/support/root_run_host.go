@@ -12,22 +12,25 @@ import (
 	"sync"
 	"time"
 
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
 	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
-	"github.com/portpowered/infinite-you/pkg/wire"
 	"github.com/portpowered/infinite-you/tests/functional/internal/restclient"
 )
 
 const rootRunFunctionalHostStartupTimeout = 10 * time.Second
 const rootRunFunctionalHostCleanupTimeout = 5 * time.Second
 const rootRunFunctionalHostReadinessAttemptTimeout = 250 * time.Millisecond
+const rootRunExitSuccess = 0
+const rootRunExitFailure = 1
 
 // RootRunFunctionalHostConfig contains only explicit process inputs and the
 // approved deterministic edges used by production-shaped functional tests.
 type RootRunFunctionalHostConfig struct {
 	FactoryRoot     string
 	SystemRoot      string
-	FunctionalEdges wire.FunctionalEdges
+	FunctionalEdges serviceedges.Edges
 	StartupTimeout  time.Duration
 	// ListenAddress requests a specific loopback host and port. Empty reserves
 	// an ephemeral listener before root.Run starts.
@@ -97,9 +100,17 @@ func StartRootRunFunctionalHost(
 	}
 
 	edges := cfg.FunctionalEdges
-	edges.APIServerListener = listener
+	edges.APIServerStarter = rootRunHostStarter(listener, cfg.ListenAddress)
+	process, err := root.BuildProcess(context.Background(), edges)
+	if err != nil {
+		cancel()
+		if listener != nil {
+			_ = listener.Close()
+		}
+		return nil, fmt.Errorf("build root functional process: %w", err)
+	}
 	var diagnostics bytes.Buffer
-	go host.run(hostCtx, cfg, edges, &diagnostics)
+	go host.run(hostCtx, cfg, process, &diagnostics)
 
 	timeout := cfg.StartupTimeout
 	if timeout <= 0 {
@@ -118,6 +129,31 @@ func StartRootRunFunctionalHost(
 		return nil, host.startupFailure(err, time.Since(readinessStarted), cleanupCtx)
 	}
 	return host, nil
+}
+
+func rootRunHostStarter(reserved net.Listener, requestedAddress string) platformhttpserver.Starter {
+	return func(ctx context.Context, request platformhttpserver.StartRequest) error {
+		listener := reserved
+		if listener == nil {
+			var err error
+			_, port, splitErr := net.SplitHostPort(strings.TrimSpace(requestedAddress))
+			if splitErr != nil {
+				return fmt.Errorf("parse requested API listener %s: %w", requestedAddress, splitErr)
+			}
+			listener, err = net.Listen("tcp", ":"+port)
+			if err != nil {
+				return fmt.Errorf("bind requested API listener %s: %w", requestedAddress, err)
+			}
+		}
+		if request.OnBound != nil {
+			port := request.Port
+			if address, ok := listener.Addr().(*net.TCPAddr); ok {
+				port = address.Port
+			}
+			request.OnBound(platformhttpserver.Binding{Port: port})
+		}
+		return platformhttpserver.Serve(ctx, request.Handler, listener, request.Logger)
+	}
 }
 
 func prepareRootRunHostListener(requestedAddress string) (string, net.Listener, error) {
@@ -148,19 +184,26 @@ func prepareRootRunHostListener(requestedAddress string) (string, net.Listener, 
 func (host *RootRunFunctionalHost) run(
 	ctx context.Context,
 	cfg RootRunFunctionalHostConfig,
-	edges wire.FunctionalEdges,
+	process Process,
 	diagnostics *bytes.Buffer,
 ) {
-	exitCode := root.Run(root.Input{
+	stdinIsTTY, stdoutIsTTY := false, false
+	err := process.Execute(root.Input{
 		Args: []string{
 			"you", "--server", host.endpoint, "run", "--dir", cfg.FactoryRoot,
 			"--continuously", "--quiet", "--verbose", "--no-record", "--with-mock-workers",
 		},
-		Env:     rootRunHostEnvironment(cfg.SystemRoot),
-		Stderr:  diagnostics,
-		Context: ctx,
-	}, root.Dependencies{FunctionalEdges: edges})
-	if exitCode != root.ExitSuccess {
+		Env:              rootRunHostEnvironment(cfg.SystemRoot),
+		Stderr:           diagnostics,
+		Context:          ctx,
+		WorkingDirectory: cfg.FactoryRoot,
+		StdinIsTTY:       &stdinIsTTY,
+		StdoutIsTTY:      &stdoutIsTTY,
+	})
+	exitCode := rootRunExitSuccess
+	if err != nil {
+		exitCode = rootRunExitFailure
+		_, _ = fmt.Fprint(diagnostics, err)
 		captureRequestedListenerFailure(diagnostics, cfg.ListenAddress)
 	}
 	host.resultMu.Lock()
@@ -192,7 +235,7 @@ func captureRequestedListenerFailure(diagnostics *bytes.Buffer, requestedAddress
 }
 
 func rootRunProcessOutcome(exitCode int, processErr error) RootRunProcessOutcome {
-	if exitCode != root.ExitSuccess {
+	if exitCode != rootRunExitSuccess {
 		return RootRunProcessFailed
 	}
 	if processErr != nil {

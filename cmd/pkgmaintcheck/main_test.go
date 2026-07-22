@@ -253,7 +253,7 @@ func TestRunRejectsStalePackageRegistration(t *testing.T) {
 		t.Fatalf("run() error = %v, want stale budget violation", err)
 	}
 	if got := stderr.String(); !strings.Contains(got, "rule=pkgmaintcheck:ignore-function-lines target=pkg/service/service.go#Removed is stale") ||
-		!strings.Contains(got, "remove its backend-exemption-budget.json entry or restore the directive") {
+		!strings.Contains(got, "remove its docs/internal/baselines/backend-exemption-budget.json entry or restore the directive") {
 		t.Fatalf("run() stderr = %q, want stale registration remediation", got)
 	}
 }
@@ -277,7 +277,7 @@ func TestMakePkgMaintRejectsStaleEntryThenAllowsCompleteRemoval(t *testing.T) {
 	}
 	got := string(output)
 	if !strings.Contains(got, "rule=pkgmaintcheck:ignore-file-lines target=pkg/service/legacy.go is stale") ||
-		!strings.Contains(got, "remove its backend-exemption-budget.json entry or restore the directive") {
+		!strings.Contains(got, "remove its docs/internal/baselines/backend-exemption-budget.json entry or restore the directive") {
 		t.Fatalf("make pkg-maint output = %q, want stale-entry remediation", got)
 	}
 
@@ -397,7 +397,11 @@ func writeExemptionBaseline(t *testing.T, repoRoot string, entries ...exemptionb
 	if err != nil {
 		t.Fatalf("marshal exemption baseline: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(repoRoot, exemptionbudget.BaselinePath), data, 0o644); err != nil {
+	baselinePath := filepath.Join(repoRoot, exemptionbudget.BaselinePath)
+	if err := os.MkdirAll(filepath.Dir(baselinePath), 0o755); err != nil {
+		t.Fatalf("create exemption baseline directory: %v", err)
+	}
+	if err := os.WriteFile(baselinePath, data, 0o644); err != nil {
 		t.Fatalf("write exemption baseline: %v", err)
 	}
 }

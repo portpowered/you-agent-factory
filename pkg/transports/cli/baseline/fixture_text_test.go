@@ -14,7 +14,7 @@ func TestNormalizeFixtureText_StripsCRLF(t *testing.T) {
 }
 
 func TestReadFixtureText_NormalizesLineEndings(t *testing.T) {
-	got, err := ReadFixtureText("testdata/command_tree.txt")
+	got, err := ReadFixtureText(testSourceStore(), "testdata/command_tree.txt")
 	if err != nil {
 		t.Fatalf("ReadFixtureText: %v", err)
 	}

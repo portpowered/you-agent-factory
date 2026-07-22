@@ -7,58 +7,40 @@ import (
 	"io"
 	"strings"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
-// RunConfig holds CLI inputs for one durable Factory Session synchronous execution.
-type RunConfig struct {
-	StartConfig
-	ExecutionBackendConfig
-	JSON               bool
-	Output             io.Writer
-	Service            factorysessionexecution.Service
-	FixtureCatalogPath string
-}
-
-// RunSync normalizes CLI inputs, executes one synchronous durable Factory Session start
-// through the shared execution service, and renders deterministic human or JSON output.
-func RunSync(ctx context.Context, cfg RunConfig) error {
-	if cfg.Output == nil {
-		cfg.Output = defaultOutputWriter()
+// RunNormalizedSync executes and renders an already-normalized synchronous
+// Factory Session request. Wire supplies it as the presentation edge for the
+// Factory Sessions-owned direct JavaScript operation.
+func RunNormalizedSync(
+	ctx context.Context,
+	service factorysessionexecution.ExecutionService,
+	normalized factorysessionexecution.StartRequest,
+	jsonOutput bool,
+	output io.Writer,
+) error {
+	if output == nil {
+		return fmt.Errorf("workflow run output is required")
 	}
-
-	normalized, mode, err := NormalizeStartRequest(cfg.StartConfig)
-	if err != nil {
-		return writeRunError(cfg.Output, cfg.JSON, err)
+	if service == nil {
+		return writeRunError(output, jsonOutput, fmt.Errorf("durable execution service is required"))
 	}
-	if mode != ExecutionModeSync {
-		return writeRunError(cfg.Output, cfg.JSON, newExecutionError(
-			ErrorCodeUnsupportedMode,
-			"workflow run requires sync execution mode",
-			"mode",
-		))
-	}
-
-	service, err := resolveExecutionService(cfg)
-	if err != nil {
-		return err
-	}
-
 	result, err := service.StartSync(ctx, normalized)
 	if err != nil {
-		return writeRunError(cfg.Output, cfg.JSON, err)
+		return writeRunError(output, jsonOutput, err)
 	}
 
 	mapped := factorysession.SyncStartResponseToAPI(result)
-	if cfg.JSON {
+	if jsonOutput {
 		var encoded []byte
 		var marshalErr error
 		if isSyncTimeoutOutcome(mapped) {
 			availability, availabilityErr := syncResultAvailability(ctx, service, mapped.SessionId)
 			if availabilityErr != nil {
-				return writeRunError(cfg.Output, cfg.JSON, availabilityErr)
+				return writeRunError(output, jsonOutput, availabilityErr)
 			}
 			cancelOnTimeout := normalized.Wait != nil && normalized.Wait.CancelOnTimeout
 			encoded, marshalErr = marshalSyncTimeoutJSON(mapped, normalized.RequestID, cancelOnTimeout, availability)
@@ -68,26 +50,19 @@ func RunSync(ctx context.Context, cfg RunConfig) error {
 		if marshalErr != nil {
 			return fmt.Errorf("marshal sync run response: %w", marshalErr)
 		}
-		_, err = fmt.Fprintln(cfg.Output, string(encoded))
+		_, err = fmt.Fprintln(output, string(encoded))
 		return err
 	}
 	cancelOnTimeout := normalized.Wait != nil && normalized.Wait.CancelOnTimeout
-	return renderSyncRunHuman(cfg.Output, mapped, cancelOnTimeout)
+	return renderSyncRunHuman(output, mapped, cancelOnTimeout)
 }
 
 func writeRunError(output io.Writer, jsonOutput bool, err error) error {
-	if WriteExecutionError(output, err, jsonOutput) {
+	if writeExecutionError(output, err, jsonOutput) {
 		return err
 	}
 	_, _ = fmt.Fprintln(output, err.Error())
 	return err
-}
-
-func resolveExecutionService(cfg RunConfig) (factorysessionexecution.Service, error) {
-	if cfg.Service == nil {
-		return nil, fmt.Errorf("durable execution service is required")
-	}
-	return cfg.Service, nil
 }
 
 type syncTimeoutCLIResponse struct {
@@ -104,7 +79,7 @@ func isSyncTimeoutOutcome(result factoryapi.FactorySessionSyncExecutionResponse)
 
 func syncResultAvailability(
 	ctx context.Context,
-	service factorysessionexecution.Service,
+	service factorysessionexecution.ExecutionService,
 	sessionID string,
 ) (factoryapi.FactorySessionResultStatus, error) {
 	result, err := service.GetResult(ctx, sessionID, factorysessionexecution.ResultRequest{
@@ -166,7 +141,7 @@ func renderSyncRunHuman(
 	if isSyncTimeoutOutcome(result) {
 		if _, err := fmt.Fprintf(
 			output,
-			"Follow-up: you workflow status %s\n",
+			"Follow-up: you session show %s\n",
 			result.SessionId,
 		); err != nil {
 			return err

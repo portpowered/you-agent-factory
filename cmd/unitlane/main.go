@@ -1,24 +1,20 @@
 package main
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
-const modulePath = "github.com/portpowered/infinite-you"
-
-var excludedSuiteRoots = []string{
-	modulePath + "/tests/functional",
-	modulePath + "/tests/stress",
-	modulePath + "/tests/release",
-}
+const modulePath = testlanes.ModulePath
 
 type config struct {
 	count   int
@@ -26,10 +22,12 @@ type config struct {
 	root    string
 	short   bool
 	timeout time.Duration
+	vet     bool
 }
 
 var executeUnitLane = run
 var execCommand = exec.Command
+var discoverUnitPackages = discoverPackages
 var stderrWriter io.Writer = os.Stderr
 var exitFunc = os.Exit
 
@@ -42,7 +40,7 @@ func main() {
 
 func run() error {
 	cfg := parseConfig()
-	packages, err := discoverPackages(cfg.root)
+	packages, err := discoverUnitPackages(cfg.root)
 	if err != nil {
 		return fmt.Errorf("discover unit packages: %w", err)
 	}
@@ -57,11 +55,12 @@ func run() error {
 
 func parseConfig() config {
 	var cfg config
-	flag.IntVar(&cfg.count, "count", 1, "go test -count value")
-	flag.IntVar(&cfg.jobs, "jobs", 2, "go test -p value")
-	flag.StringVar(&cfg.root, "root", "./...", "go list package pattern for unit test discovery")
+	flag.IntVar(&cfg.count, "count", 0, "go test -count value; zero preserves Go's content-addressed test cache")
+	flag.IntVar(&cfg.jobs, "jobs", 32, "go test -p value")
+	flag.StringVar(&cfg.root, "root", "./pkg/...", "go list package pattern for unit test discovery")
 	flag.BoolVar(&cfg.short, "short", true, "run with go test -short")
 	flag.DurationVar(&cfg.timeout, "timeout", 5*time.Minute, "go test timeout")
+	flag.BoolVar(&cfg.vet, "vet", false, "run go test's implicit vet pass")
 	flag.Parse()
 	if cfg.jobs < 1 {
 		cfg.jobs = 1
@@ -70,43 +69,67 @@ func parseConfig() config {
 }
 
 func discoverPackages(root string) ([]string, error) {
-	cmd := execCommand("go", "list", root)
-	cmd.Env = os.Environ()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, commandError(err, stderr.String())
+	rootPath := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(root)), "/...")
+	rootPath = strings.TrimPrefix(rootPath, "./")
+	if rootPath == "" || rootPath == "." {
+		return nil, fmt.Errorf("unit package root must name a repository directory")
 	}
-
-	packages := make([]string, 0)
-	for _, line := range strings.Split(strings.ReplaceAll(stdout.String(), "\r\n", "\n"), "\n") {
-		pkg := strings.TrimSpace(line)
-		if pkg != "" && isUnitPackage(pkg) {
-			packages = append(packages, pkg)
-		}
-	}
-	slices.Sort(packages)
-	return slices.Compact(packages), nil
+	return discoverPackagesUnder(filepath.FromSlash(rootPath), modulePath+"/"+rootPath)
 }
 
-func isUnitPackage(importPath string) bool {
-	for _, root := range excludedSuiteRoots {
-		if importPath == root || strings.HasPrefix(importPath, root+"/") {
-			return false
+func discoverPackagesUnder(rootDir, importPrefix string) ([]string, error) {
+	packageSet := make(map[string]struct{})
+	err := filepath.WalkDir(rootDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
+		if entry.IsDir() {
+			if path != rootDir && (entry.Name() == "testdata" || entry.Name() == "vendor" || strings.HasPrefix(entry.Name(), ".")) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(entry.Name(), "_test.go") {
+			return nil
+		}
+		relativeDir, err := filepath.Rel(rootDir, filepath.Dir(path))
+		if err != nil {
+			return err
+		}
+		pkg := importPrefix
+		if relativeDir != "." {
+			pkg += "/" + filepath.ToSlash(relativeDir)
+		}
+		if testlanes.IsUnitPackage(pkg) {
+			packageSet[pkg] = struct{}{}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return true
+
+	packages := make([]string, 0, len(packageSet))
+	for pkg := range packageSet {
+		packages = append(packages, pkg)
+	}
+	slices.Sort(packages)
+	return packages, nil
 }
 
 func runUnitTests(cfg config, packages []string) error {
 	args := []string{"test", fmt.Sprintf("-p=%d", cfg.jobs)}
+	if !cfg.vet {
+		args = append(args, "-vet=off")
+	}
 	if cfg.short {
 		args = append(args, "-short")
 	}
 	args = append(args, packages...)
-	args = append(args, fmt.Sprintf("-count=%d", cfg.count), fmt.Sprintf("-timeout=%s", cfg.timeout))
+	if cfg.count > 0 {
+		args = append(args, fmt.Sprintf("-count=%d", cfg.count))
+	}
+	args = append(args, fmt.Sprintf("-timeout=%s", cfg.timeout))
 
 	cmd := execCommand("go", args...)
 	cmd.Env = os.Environ()

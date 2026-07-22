@@ -4,14 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"go.uber.org/zap"
@@ -21,8 +19,8 @@ import (
 const (
 	legacyRuntimeLogDirName  = ".agent-factory"
 	runtimeLogSubdirName     = "logs"
-	runtimeLogExtension      = defaultpaths.RuntimeArtifactExtension
-	runtimeLogTimeLayout     = defaultpaths.RuntimeArtifactTimeLayout
+	runtimeLogExtension      = internalartifact.RuntimeArtifactExtension
+	runtimeLogTimeLayout     = internalartifact.RuntimeArtifactTimeLayout
 	defaultRuntimeLogMaxSize = 100
 	defaultRuntimeLogBackups = 20
 	defaultRuntimeLogMaxAge  = 30
@@ -150,6 +148,23 @@ func (s *RuntimeLogSink) Config() RuntimeLogConfig {
 	return s.config
 }
 
+// Artifact returns the sink metadata without exposing its writer.
+func (s *RuntimeLogSink) Artifact() RuntimeLogArtifact {
+	if s == nil {
+		return RuntimeLogArtifact{}
+	}
+	return RuntimeLogArtifact{
+		Path: s.path, RootDir: s.rootDir, StartTimeUTC: s.startTimeUTC, Config: s.config,
+	}
+}
+
+type RuntimeLogArtifact struct {
+	Path         string
+	RootDir      string
+	StartTimeUTC time.Time
+	Config       RuntimeLogConfig
+}
+
 // Close releases the runtime log writer.
 func (s *RuntimeLogSink) Close() error {
 	if s == nil || s.writer == nil {
@@ -210,34 +225,56 @@ func mapZapFields(keysAndValues ...any) []zap.Field {
 	return kv
 }
 
-// BuildRuntimeLogger creates a zap logger that writes runtime records to a
-// bounded rolling JSON log file.
-func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir string, config RuntimeLogConfig) (*RuntimeLogSink, error) {
-	if base == nil {
-		base = zap.NewNop()
+type RuntimeLogOpeningRequest struct {
+	BaseLogger        *zap.Logger
+	RuntimeInstanceID string
+	RootDirectory     string
+	StartTimeUTC      time.Time
+	CollisionID       string
+	Config            RuntimeLogConfig
+}
+
+type RuntimeLogOpener struct{ paths platformartifact.Reserver }
+
+func NewRuntimeLogOpener(paths platformartifact.Reserver) (*RuntimeLogOpener, error) {
+	if paths == nil {
+		return nil, fmt.Errorf("runtime log path reserver is required")
 	}
-	if runtimeInstanceID == "" {
+	return &RuntimeLogOpener{paths: paths}, nil
+}
+
+// Open creates a rolling runtime log sink from fully selected inputs.
+func (opener *RuntimeLogOpener) Open(request RuntimeLogOpeningRequest) (*RuntimeLogSink, error) {
+	if opener == nil || opener.paths == nil {
+		return nil, fmt.Errorf("runtime log opener is required")
+	}
+	if request.BaseLogger == nil {
+		return nil, fmt.Errorf("base logger is required")
+	}
+	if request.RuntimeInstanceID == "" {
 		return nil, fmt.Errorf("runtime instance ID is required")
 	}
-	if runtimeLogDir == "" {
-		dir, err := defaultRuntimeLogDir()
-		if err != nil {
-			return nil, err
-		}
-		runtimeLogDir = dir
+	if request.RootDirectory == "" {
+		return nil, fmt.Errorf("runtime log root is required")
 	}
-	startTimeUTC := time.Now().UTC()
-	path, err := runtimeartifact.ReserveAvailablePath(
-		runtimeLogDir,
+	if request.StartTimeUTC.IsZero() {
+		return nil, fmt.Errorf("runtime log start time is required")
+	}
+	if request.CollisionID == "" {
+		return nil, fmt.Errorf("runtime log collision ID is required")
+	}
+	startTimeUTC := request.StartTimeUTC.UTC()
+	path, err := opener.paths.Reserve(
+		request.RootDirectory,
 		startTimeUTC,
-		defaultpaths.RuntimeArtifactKindLog,
-		defaultpaths.RuntimeArtifactPathComponents(runtimeInstanceID, uuid.NewString()),
+		string(internalartifact.RuntimeArtifactKindLog),
+		internalartifact.RuntimeArtifactPathComponents(request.RuntimeInstanceID, request.CollisionID),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	runtimeLogConfig := normalizeRuntimeLogConfig(config)
+	runtimeLogConfig := normalizeRuntimeLogConfig(request.Config)
 	rollingWriter := &lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    runtimeLogConfig.MaxSize,
@@ -254,15 +291,15 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 		zapcore.AddSync(writer),
 		zapcore.InfoLevel,
 	)
-	logger := base.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+	logger := request.BaseLogger.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
 		return zapcore.NewTee(core, fileCore)
-	})).With(zap.String("runtime_instance_id", runtimeInstanceID))
+	})).With(zap.String("runtime_instance_id", request.RuntimeInstanceID))
 
 	return &RuntimeLogSink{
 		logger:       logger,
 		writer:       writer,
 		path:         path,
-		rootDir:      runtimeLogDir,
+		rootDir:      request.RootDirectory,
 		startTimeUTC: startTimeUTC,
 		config:       runtimeLogConfig,
 	}, nil
@@ -285,58 +322,15 @@ func normalizeRuntimeLogConfig(config RuntimeLogConfig) RuntimeLogConfig {
 	return config
 }
 
-func defaultRuntimeLogDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home for runtime logs: %w", err)
-	}
-	runtimeLogDir := canonicalRuntimeLogDir(home)
-	if err := migrateLegacyRuntimeLogDir(home, runtimeLogDir); err != nil {
-		return "", err
-	}
-	return runtimeLogDir, nil
+func canonicalRuntimeLogDir(home string) string {
+	return RuntimeLogsRoot(home)
 }
 
-func canonicalRuntimeLogDir(home string) string {
-	return defaultpaths.RuntimeLogsRoot(home)
+// RuntimeLogsRoot returns the Logging-owned default runtime log root.
+func RuntimeLogsRoot(home string) string {
+	return filepath.Join(home, ".you-agent-factory", runtimeLogSubdirName)
 }
 
 func legacyRuntimeLogDir(home string) string {
 	return filepath.Join(home, legacyRuntimeLogDirName, runtimeLogSubdirName)
-}
-
-func migrateLegacyRuntimeLogDir(home, runtimeLogDir string) error {
-	legacyLogDir := legacyRuntimeLogDir(home)
-	shouldMigrate, err := shouldMigrateLegacyRuntimeLogDir(legacyLogDir, runtimeLogDir)
-	if err != nil {
-		return err
-	}
-	if !shouldMigrate {
-		return nil
-	}
-
-	if err := os.MkdirAll(filepath.Dir(runtimeLogDir), 0o755); err != nil {
-		return fmt.Errorf("create canonical runtime log parent %s: %w", filepath.Dir(runtimeLogDir), err)
-	}
-	if err := os.Rename(legacyLogDir, runtimeLogDir); err != nil {
-		return fmt.Errorf("migrate legacy runtime logs from %s to %s: %w", legacyLogDir, runtimeLogDir, err)
-	}
-	return nil
-}
-
-func shouldMigrateLegacyRuntimeLogDir(legacyLogDir, runtimeLogDir string) (bool, error) {
-	if _, err := os.Stat(legacyLogDir); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, fmt.Errorf("stat legacy runtime log dir %s: %w", legacyLogDir, err)
-	}
-
-	if _, err := os.Stat(runtimeLogDir); err == nil {
-		return false, nil
-	} else if !os.IsNotExist(err) {
-		return false, fmt.Errorf("stat runtime log dir %s: %w", runtimeLogDir, err)
-	}
-
-	return true, nil
 }

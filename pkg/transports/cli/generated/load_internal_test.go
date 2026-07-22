@@ -1,109 +1,96 @@
 package generated
 
 import (
+	"os"
+	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 )
 
-func TestParseFamilyManifestRejectsInvalidPayload(t *testing.T) {
-	cases := []struct {
-		name    string
-		payload []byte
+func TestGeneratedFamilyAccessorsReturnFreshValues(t *testing.T) {
+	t.Parallel()
+	accessors := []struct {
+		name string
+		load func() (climanifest.Manifest, error)
 	}{
-		{name: "invalid json", payload: []byte("{")},
-		{name: "missing rootPath", payload: []byte(`{"commands":{"you.work":{"id":"you.work"}}}`)},
-		{name: "missing commands", payload: []byte(`{"rootPath":"you","commands":{}}`)},
+		{name: "representative", load: RepresentativeFamilyManifest},
+		{name: "session", load: SessionFamilyManifest},
+		{name: "work", load: WorkFamilyManifest},
+		{name: "factory config init", load: FactoryConfigInitFamilyManifest},
+		{name: "models docs", load: ModelsDocsFamilyManifest},
+		{name: "run submit", load: RunSubmitFamilyManifest},
+		{name: "mcp", load: MCPFamilyManifest},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := parseFamilyManifest(tc.payload, "work"); err == nil {
-				t.Fatal("parseFamilyManifest(work) = nil, want error")
+	for _, accessor := range accessors {
+		accessor := accessor
+		t.Run(accessor.name, func(t *testing.T) {
+			t.Parallel()
+			first, err := accessor.load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			second, err := accessor.load()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for id := range first.Commands {
+				delete(first.Commands, id)
+				if _, ok := second.Commands[id]; !ok {
+					t.Fatalf("second manifest lost command %q after first was mutated", id)
+				}
+				break
 			}
 		})
 	}
 }
 
-func TestParseWorkFamilyManifestAcceptsMinimalFamily(t *testing.T) {
-	payload := []byte(`{
-		"rootPath":"you",
-		"commands":{
-			"you.work":{"id":"you.work","path":"you work"},
-			"you.work.list":{"id":"you.work.list","path":"you work list"}
-		}
-	}`)
-	manifest, err := parseFamilyManifest(payload, "work")
+func TestGeneratedManifestNestedCollectionsAndPointersAreIndependent(t *testing.T) {
+	first, err := RepresentativeFamilyManifest()
 	if err != nil {
-		t.Fatalf("parseFamilyManifest(work) error = %v", err)
+		t.Fatal(err)
 	}
-	if manifest.RootPath != "you" || len(manifest.Commands) != 2 {
-		t.Fatalf("manifest = %#v, want rooted two-command family", manifest)
+	second, err := RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := manifest.CommandByID("you.work.list"); err != nil {
-		t.Fatalf("CommandByID(you.work.list) error = %v", err)
-	}
-}
 
-func TestWorkCommandByIDPropagatesManifestDecodeErrors(t *testing.T) {
-	original := workFamilyJSON
-	t.Cleanup(func() { workFamilyJSON = original })
-	workFamilyJSON = []byte("{")
-	if _, err := WorkCommandByID("you.work"); err == nil {
-		t.Fatal("WorkCommandByID() invalid embed = nil, want error")
-	}
-}
-
-func TestParseRepresentativeFamilyManifestRejectsInvalidPayload(t *testing.T) {
-	cases := []struct {
-		name    string
-		payload []byte
-	}{
-		{name: "invalid json", payload: []byte("{")},
-		{name: "missing rootPath", payload: []byte(`{"commands":{"you":{"id":"you"}}}`)},
-		{name: "missing commands", payload: []byte(`{"rootPath":"you","commands":{}}`)},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := parseFamilyManifest(tc.payload, "representative"); err == nil {
-				t.Fatal("parseFamilyManifest(representative) = nil, want error")
+	for id, command := range first.Commands {
+		original := second.Commands[id]
+		if len(command.Aliases) > 0 {
+			command.Aliases[0] = "mutated"
+			if original.Aliases[0] == "mutated" {
+				t.Fatalf("command %q aliases share storage", id)
 			}
-		})
-	}
-}
-
-func TestParseRepresentativeFamilyManifestAcceptsMinimalFamily(t *testing.T) {
-	payload := []byte(`{
-		"rootPath":"you",
-		"commands":{
-			"you":{"id":"you","path":"you"},
-			"you.session":{"id":"you.session","path":"you session"},
-			"you.session.show":{"id":"you.session.show","path":"you session show"}
 		}
-	}`)
-	manifest, err := parseFamilyManifest(payload, "representative")
+		if len(command.Flags) > 0 {
+			for flagID := range command.Flags {
+				delete(command.Flags, flagID)
+				if _, ok := original.Flags[flagID]; !ok {
+					t.Fatalf("command %q flags share storage", id)
+				}
+				break
+			}
+		}
+		if command.Handler != nil {
+			command.Handler.ID = "mutated"
+			if original.Handler != nil && original.Handler.ID == "mutated" {
+				t.Fatalf("command %q handler pointer is shared", id)
+			}
+		}
+		first.Commands[id] = command
+	}
+}
+
+func TestRuntimeGeneratedManifestAccessHasNoSourceLoadingPolicy(t *testing.T) {
+	t.Parallel()
+	payload, err := os.ReadFile("load.go")
 	if err != nil {
-		t.Fatalf("parseFamilyManifest(representative) error = %v", err)
+		t.Fatal(err)
 	}
-	if manifest.RootPath != "you" || len(manifest.Commands) != 3 {
-		t.Fatalf("manifest = %#v, want rooted three-command family", manifest)
-	}
-	if _, err := manifest.CommandByID("you.session.show"); err != nil {
-		t.Fatalf("CommandByID(you.session.show) error = %v", err)
-	}
-}
-
-func TestFactoryConfigInitCommandByIDPropagatesManifestDecodeErrors(t *testing.T) {
-	original := factoryConfigInitFamilyJSON
-	t.Cleanup(func() { factoryConfigInitFamilyJSON = original })
-	factoryConfigInitFamilyJSON = []byte("{")
-	if _, err := FactoryConfigInitCommandByID("you.factory"); err == nil {
-		t.Fatal("FactoryConfigInitCommandByID() invalid embed = nil, want error")
-	}
-}
-
-func TestCommandByIDPropagatesManifestDecodeErrors(t *testing.T) {
-	original := representativeFamilyJSON
-	t.Cleanup(func() { representativeFamilyJSON = original })
-	representativeFamilyJSON = []byte("{")
-	if _, err := CommandByID("you"); err == nil {
-		t.Fatal("CommandByID() invalid embed = nil, want error")
+	for _, forbidden := range []string{"embed", "encoding/json", "json.Unmarshal", "SourceStore", "ReadFile", "parseFamilyManifest"} {
+		if strings.Contains(string(payload), forbidden) {
+			t.Errorf("load.go contains runtime source-loading seam %q", forbidden)
+		}
 	}
 }

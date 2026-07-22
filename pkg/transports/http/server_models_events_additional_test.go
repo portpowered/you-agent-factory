@@ -8,22 +8,84 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
-	"github.com/portpowered/infinite-you/pkg/service"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	factoryevents "github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
+
+type strictModelsServiceFake struct {
+	modelinference.Service
+	list   func(context.Context) (modelinference.List, error)
+	get    func(context.Context, string) (modelinference.Detail, error)
+	invoke func(context.Context, string, modelinference.Request) (modelinference.Result, error)
+	pull   func(context.Context, string) (modelinference.PullResult, error)
+}
+
+func (fake strictModelsServiceFake) ListModels(ctx context.Context) (modelinference.List, error) {
+	if fake.list == nil {
+		panic("unexpected models.Service.ListModels call")
+	}
+	return fake.list(ctx)
+}
+
+func (fake strictModelsServiceFake) GetModel(ctx context.Context, name string) (modelinference.Detail, error) {
+	if fake.get == nil {
+		panic("unexpected models.Service.GetModel call")
+	}
+	return fake.get(ctx, name)
+}
+
+func (fake strictModelsServiceFake) InvokeModel(ctx context.Context, name string, request modelinference.Request) (modelinference.Result, error) {
+	if fake.invoke == nil {
+		panic("unexpected models.Service.InvokeModel call")
+	}
+	return fake.invoke(ctx, name, request)
+}
+
+func (fake strictModelsServiceFake) PullModel(ctx context.Context, name string) (modelinference.PullResult, error) {
+	if fake.pull == nil {
+		panic("unexpected models.Service.PullModel call")
+	}
+	return fake.pull(ctx, name)
+}
+
+func newStrictModelTestServer(models strictModelsServiceFake) *Server {
+	logger := zap.NewNop()
+	return NewServer(
+		nil, nil, nil, nil, nil, nil,
+		modelshttp.NewHandler(modelshttp.NewAdapter(models, models, modelHTTPContentPreparation{}), logger),
+		nil, httpFactoryValidator{}, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
+	)
+}
+
+type modelHTTPContentPreparation struct{}
+
+func (modelHTTPContentPreparation) PrepareWorkContent(_ context.Context, content []work.WorkContentPart) ([]work.WorkContentPart, error) {
+	return content, nil
+}
+
+func newEventStreamTestServer() *Server {
+	return &Server{logger: zap.NewNop()}
+}
+
+func canonicalFactoryEventForHTTPTest(t *testing.T, event factoryapi.FactoryEvent) interfaces.FactoryEvent {
+	t.Helper()
+	canonical, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		t.Fatalf("create canonical Factory Event: %v", err)
+	}
+	return canonical
+}
 
 func TestReconnectCursorFromParams(t *testing.T) {
 	afterEventID := factoryapi.AfterEventId("event-2")
@@ -45,18 +107,17 @@ func TestReconnectCursorFromParams(t *testing.T) {
 	}
 }
 
-// TestCompatibilityGetEvents_* exercises handler regressions for compatibility-only GET /events.
-func TestCompatibilityGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+func TestSessionScopedGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
+	srv := newEventStreamTestServer()
 	liveEvents := make(chan interfaces.FactoryEvent, 1)
-	liveEvents <- testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest})
+	liveEvents <- canonicalFactoryEventForHTTPTest(t, factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest})
 	close(liveEvents)
 
-	req := httptest.NewRequest(http.MethodGet, "/events", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-a/events", nil)
 	rec := httptest.NewRecorder()
-	srv.getEvents(rec, req, false, func(context.Context) (*interfaces.FactoryEventStream, error) {
+	srv.getEvents(rec, req, true, func(context.Context) (*interfaces.FactoryEventStream, error) {
 		return &interfaces.FactoryEventStream{
-			History: []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest})},
+			History: []interfaces.FactoryEvent{canonicalFactoryEventForHTTPTest(t, factoryapi.FactoryEvent{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest})},
 			Events:  liveEvents,
 		}, nil
 	})
@@ -82,14 +143,13 @@ func TestCompatibilityGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	}
 }
 
-func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+func TestSessionScopedGetEvents_ErrorResponses(t *testing.T) {
+	srv := newEventStreamTestServer()
 
 	tests := []struct {
 		name       string
 		writer     http.ResponseWriter
 		subscribe  func(context.Context) (*interfaces.FactoryEventStream, error)
-		session    bool
 		wantStatus int
 		wantCode   string
 		wantMsg    string
@@ -101,7 +161,6 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 				t.Fatal("subscribe should not be called when streaming is unsupported")
 				return nil, nil
 			},
-			session:    false,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
 			wantMsg:    "streaming unsupported",
@@ -112,7 +171,6 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, apisurface.ErrFactorySessionNotFound
 			},
-			session:    false,
 			wantStatus: http.StatusNotFound,
 			wantCode:   "NOT_FOUND",
 			wantMsg:    "factory session not found",
@@ -123,7 +181,6 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, factoryevents.ErrReconnectCursorNotFound
 			},
-			session:    false,
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
 			wantMsg:    "invalid event reconnect cursor",
@@ -134,7 +191,6 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, errors.New("boom")
 			},
-			session:    false,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
 			wantMsg:    "failed to subscribe to factory events",
@@ -143,8 +199,8 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/events", nil)
-			srv.getEvents(tt.writer, req, tt.session, tt.subscribe)
+			req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-a/events", nil)
+			srv.getEvents(tt.writer, req, true, tt.subscribe)
 
 			switch writer := tt.writer.(type) {
 			case *httptest.ResponseRecorder:
@@ -159,7 +215,7 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 }
 
 func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newEventStreamTestServer()
 	liveEvents := make(chan interfaces.FactoryEvent)
 	close(liveEvents)
 
@@ -190,7 +246,9 @@ func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t 
 }
 
 func TestListModels_ReturnsInternalErrorWhenRuntimeFails(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{ListModelsErr: errors.New("list failed")})
+	srv := newStrictModelTestServer(strictModelsServiceFake{list: func(context.Context) (modelinference.List, error) {
+		return modelinference.List{}, errors.New("list failed")
+	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/models", nil)
 	rec := httptest.NewRecorder()
@@ -200,7 +258,9 @@ func TestListModels_ReturnsInternalErrorWhenRuntimeFails(t *testing.T) {
 }
 
 func TestGetModel_ReturnsInternalErrorWhenRuntimeFails(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{GetModelErr: errors.New("detail failed")})
+	srv := newStrictModelTestServer(strictModelsServiceFake{get: func(context.Context, string) (modelinference.Detail, error) {
+		return modelinference.Detail{}, errors.New("detail failed")
+	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/models/OMNIVOICE_Q4_K_M", nil)
 	rec := httptest.NewRecorder()
@@ -262,7 +322,7 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name:       "model_not_found",
 			body:       validBody,
-			invokeErr:  apisurface.ErrModelNotFound,
+			invokeErr:  modelinference.ErrNotFound,
 			wantStatus: http.StatusNotFound,
 			wantCode:   "NOT_FOUND",
 			wantMsg:    "model not found",
@@ -270,7 +330,7 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name:       "runtime_loading",
 			body:       validBody,
-			invokeErr:  fmt.Errorf("%w: download in progress", apisurface.ErrManagedRuntimeLoading),
+			invokeErr:  fmt.Errorf("%w: download in progress", modelinference.ErrLoading),
 			wantStatus: http.StatusConflict,
 			wantCode:   "MODEL_RUNTIME_LOADING",
 			wantMsg:    "managed runtime loading: download in progress",
@@ -278,7 +338,7 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name:       "runtime_failed",
 			body:       validBody,
-			invokeErr:  fmt.Errorf("%w: crash loop", apisurface.ErrManagedRuntimeFailed),
+			invokeErr:  fmt.Errorf("%w: crash loop", modelinference.ErrFailed),
 			wantStatus: http.StatusServiceUnavailable,
 			wantCode:   "MODEL_RUNTIME_FAILED",
 			wantMsg:    "managed runtime failed: crash loop",
@@ -286,7 +346,7 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name:       "runtime_unsupported",
 			body:       validBody,
-			invokeErr:  fmt.Errorf("%w: unsupported accelerator", apisurface.ErrManagedRuntimeUnsupported),
+			invokeErr:  fmt.Errorf("%w: unsupported accelerator", modelinference.ErrUnsupported),
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "MODEL_RUNTIME_UNSUPPORTED",
 			wantMsg:    "managed runtime unsupported: unsupported accelerator",
@@ -294,7 +354,7 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name:       "unsupported_operation",
 			body:       validBody,
-			invokeErr:  apisurface.ErrModelInvocationUnsupportedOperation,
+			invokeErr:  modelinference.ErrUnsupportedOperation,
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
 			wantMsg:    "model invocation operation is not supported",
@@ -302,8 +362,8 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 		{
 			name: "provider_execution_timeout",
 			body: validBody,
-			invokeErr: &apisurface.InferenceFailure{
-				Class:   apisurface.InferenceFailureClassTimeout,
+			invokeErr: &workers.InferenceFailure{
+				Class:   workers.InferenceFailureClassTimeout,
 				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
 			},
 			wantStatus: http.StatusGatewayTimeout,
@@ -328,7 +388,9 @@ func assertInvokeModelErrors(t *testing.T, tests []invokeModelErrorCase) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newTestServer(&testutil.MockFactory{InvokeModelErr: tt.invokeErr})
+			srv := newStrictModelTestServer(strictModelsServiceFake{invoke: func(context.Context, string, modelinference.Request) (modelinference.Result, error) {
+				return modelinference.Result{}, tt.invokeErr
+			}})
 
 			req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/invocations", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
@@ -352,24 +414,24 @@ func TestPullModel_ErrorMappings(t *testing.T) {
 	}{
 		{
 			name:       "model_not_found",
-			pullErr:    apisurface.ErrModelNotFound,
+			pullErr:    modelinference.ErrNotFound,
 			wantStatus: http.StatusNotFound,
 			wantCode:   "NOT_FOUND",
 			wantMsg:    "model not found",
 		},
 		{
 			name:       "pull_unsupported",
-			pullErr:    apisurface.ErrModelPullUnsupported,
+			pullErr:    modelinference.ErrPullUnsupported,
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
 			wantMsg:    "model pull is not supported",
 		},
 		{
 			name: "managed_runtime_timeout",
-			pullErr: &apisurface.ManagedRuntimePullError{
-				Result: apisurface.ModelPullResult{
+			pullErr: &modelinference.PullError{
+				Result: modelinference.PullResult{
 					ModelName:          "OMNIVOICE_Q4_K_M",
-					ProviderLocality:   workerconfig.ModelLocalityLocal,
+					ProviderLocality:   interfaces.ModelLocalityLocal,
 					ManagedPullOutcome: "TIMED_OUT",
 					ReadinessState:     "FAILED",
 				},
@@ -390,7 +452,9 @@ func TestPullModel_ErrorMappings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newTestServer(&testutil.MockFactory{PullModelErr: tt.pullErr})
+			srv := newStrictModelTestServer(strictModelsServiceFake{pull: func(context.Context, string) (modelinference.PullResult, error) {
+				return modelinference.PullResult{}, tt.pullErr
+			}})
 
 			req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
 			rec := httptest.NewRecorder()
@@ -456,30 +520,12 @@ func assertJSONErrorResponse(t *testing.T, gotStatus int, header http.Header, bo
 	assertJSONError(t, rec, wantStatus, wantCode, wantMessage)
 }
 
-type listModelsAPI struct{ apisurface.ModelAPI }
-
-func (listModelsAPI) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
-	return factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "OMNIVOICE_Q4_K_M"}}}, nil
-}
-
-func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, modelWiringFactoryConfig(true))
-
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:                      dir,
-		MockWorkersConfig:        factoryconfig.NewEmptyMockWorkersConfig(),
-		Logger:                   zap.NewNop(),
-		SystemConfigHomeDir:      dir,
-		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
-		RuntimeMetricsPolicy:     service.RuntimeMetricsPolicyDisabled,
-		ModelAPI:                 listModelsAPI{},
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	srv := NewServer(svc, 0, zap.NewNop())
+func TestServer_ListModels_RoutesThroughInjectedModelsService(t *testing.T) {
+	srv := newStrictModelTestServer(strictModelsServiceFake{list: func(context.Context) (modelinference.List, error) {
+		return modelinference.List{
+			Results: []modelinference.Summary{{Name: "OMNIVOICE_Q4_K_M"}},
+		}, nil
+	}})
 	req := httptest.NewRequest(http.MethodGet, "/models", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -493,36 +539,23 @@ func TestServer_ListModels_RoutesThroughWiredModelService(t *testing.T) {
 	}
 }
 
-func TestServerCompositionRejectsInvalidFactoryBeforeServing(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	cfg := &service.FactoryServiceConfig{Dir: t.TempDir()}
-
-	_, errService := service.BuildFactoryService(ctx, cfg)
-
-	if errService == nil {
-		t.Fatal("expected server dependency construction to fail without factory.json")
-	}
-}
-
 func modelWiringFactoryConfig(includeResource bool) map[string]any {
 	worker := map[string]any{
 		"name":          "voice-local",
 		"type":          interfaces.WorkerTypeModel,
 		"modelProvider": "CODEX",
 		"model":         "OMNIVOICE_Q4_K_M",
-		"modelLocality": workerconfig.ModelLocalityLocal,
+		"modelLocality": interfaces.ModelLocalityLocal,
 		"operations": []map[string]any{{
 			"name": "TTS",
 			"inputs": []map[string]any{{
 				"name":         "text",
-				"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
+				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
 				"required":     true,
 			}},
 			"outputs": []map[string]any{{
 				"name":         "audio",
-				"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
+				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -534,7 +567,7 @@ func modelWiringFactoryConfig(includeResource bool) map[string]any {
 		worker["resources"] = []map[string]any{{"name": "omnivoice-cache", "capacity": 1}}
 		cfg["resources"] = []map[string]any{{
 			"name":       "omnivoice-cache",
-			"type":       factoryresource.TypeModel,
+			"type":       interfaces.ResourceTypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
 			"backend":    "LLAMACPP",
@@ -542,28 +575,4 @@ func modelWiringFactoryConfig(includeResource bool) map[string]any {
 		}}
 	}
 	return cfg
-}
-
-func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {
-	longPart := strings.Repeat("skill description ", 90) + "final-visible-tail"
-	session := strings.Join([]string{
-		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"permissions block"},{"type":"input_text","text":` + strconv.Quote(longPart) + `}]}}`,
-	}, "\n")
-
-	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session details: %v", err)
-	}
-
-	if len(parsed.Transcript) != 1 {
-		t.Fatalf("transcript = %#v, want one developer message transcript entry", parsed.Transcript)
-	}
-	got := stringValue(parsed.Transcript[0].Text)
-	if !strings.Contains(got, "permissions block") || !strings.Contains(got, "final-visible-tail") {
-		t.Fatalf("transcript text length = %d, want full joined message content with tail; text=%q", len(got), got)
-	}
-	if strings.HasSuffix(got, "...") {
-		t.Fatalf("transcript text = %q, want no backend truncation suffix", got)
-	}
 }

@@ -6,8 +6,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+)
+
+// Factory validation codes are part of the generated HTTP response contract.
+// Functional tests assert the serialized customer-facing values instead of
+// importing the validation implementation that produces them.
+const (
+	factoryValidationCodeDanglingPlaceReference         = "factory.route.danglingPlaceReference"
+	factoryValidationCodeDanglingWorkerReference        = "factory.worker.danglingReference"
+	factoryValidationCodeDuplicateIdentifier            = "factory.duplicateIdentifier"
+	factoryValidationCodeLayoutUnknownNodeReference     = "factory.layout.unknownNodeReference"
+	factoryValidationCodeWorkstationMissingFailureRoute = "factory.workstation.missingFailureRoute"
 )
 
 func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {
@@ -31,11 +42,11 @@ func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {
 		t.Fatalf("expected plan-task AGENTS.md at %s: %v", workstationPath, err)
 	}
 
-	loaded, err := config.LoadRuntimeConfig(rootDir, nil)
+	loaded, err := support.LoadedCurrentFactory(t, rootDir)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	if loaded.FactoryConfig().Project != project {
-		t.Fatalf("project = %q, want %q", loaded.FactoryConfig().Project, project)
+	if loaded.Id == nil || *loaded.Id != project {
+		t.Fatalf("factory id = %v, want %q", loaded.Id, project)
 	}
 }

@@ -4,11 +4,10 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestLivelockInfiniteLoop validates that a simple infinite loop
@@ -35,7 +34,7 @@ func TestLivelockInfiniteLoop(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "worker-a"}, {Name: "worker-b"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "worker-a", StopToken: "COMPLETE"}, {Name: "worker-b", StopToken: "COMPLETE"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "step-a", WorkerTypeName: "worker-a",
@@ -58,25 +57,15 @@ func TestLivelockInfiniteLoop(t *testing.T) {
 			),
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	// worker-a always accepts (moves init → processing).
-	workerAResults := make([]workerexecution.WorkResult, 20)
-	for i := range workerAResults {
-		workerAResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	workerA := h.MockWorker("worker-a", workerAResults...)
-
-	// worker-b always rejects (moves processing → init, creating the loop).
-	workerBResults := make([]workerexecution.WorkResult, 20)
-	for i := range workerBResults {
-		workerBResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "loop back"}
-	}
-	workerB := h.MockWorker("worker-b", workerBResults...)
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"worker-a": repeatedInferenceResponses("COMPLETE", 20),
+		"worker-b": repeatedInferenceResponses("loop back", 20),
+	})
+	h := startStressProcess(t, dir, provider)
 
 	h.SubmitWork("task", []byte(`{"task": "infinite loop test"}`))
 
-	h.RunUntilComplete(t, 10*time.Second)
+	h.WaitForTerminalCount(1, 10*time.Second)
 
 	// Assert: token ends in task:failed (guarded loop-breaker route).
 	h.Assert().
@@ -87,13 +76,13 @@ func TestLivelockInfiniteLoop(t *testing.T) {
 		TokenCount(1)
 
 	// Assert: step-a called exactly 10 times (loop breaker fires on 11th arrival at init).
-	if workerA.CallCount() != 10 {
-		t.Errorf("expected worker-a called 10 times, got %d", workerA.CallCount())
+	if provider.CallCount("worker-a") != 10 {
+		t.Errorf("expected worker-a called 10 times, got %d", provider.CallCount("worker-a"))
 	}
 
 	// Assert: step-b called exactly 10 times (each cycle: a→b→reject→a).
-	if workerB.CallCount() != 10 {
-		t.Errorf("expected worker-b called 10 times, got %d", workerB.CallCount())
+	if provider.CallCount("worker-b") != 10 {
+		t.Errorf("expected worker-b called 10 times, got %d", provider.CallCount("worker-b"))
 	}
 }
 
@@ -123,7 +112,7 @@ func TestLivelockTriangleLoop(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "worker-1"}, {Name: "worker-2"}, {Name: "worker-3"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "worker-1", StopToken: "COMPLETE"}, {Name: "worker-2", StopToken: "COMPLETE"}, {Name: "worker-3", StopToken: "COMPLETE"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "step-1", WorkerTypeName: "worker-1",
@@ -151,30 +140,16 @@ func TestLivelockTriangleLoop(t *testing.T) {
 			),
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	// All workers accept, but step-3 always rejects → loops back to init.
-	w1Results := make([]workerexecution.WorkResult, 20)
-	for i := range w1Results {
-		w1Results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	w1 := h.MockWorker("worker-1", w1Results...)
-
-	w2Results := make([]workerexecution.WorkResult, 20)
-	for i := range w2Results {
-		w2Results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	w2 := h.MockWorker("worker-2", w2Results...)
-
-	w3Results := make([]workerexecution.WorkResult, 20)
-	for i := range w3Results {
-		w3Results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "cycle back"}
-	}
-	w3 := h.MockWorker("worker-3", w3Results...)
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"worker-1": repeatedInferenceResponses("COMPLETE", 20),
+		"worker-2": repeatedInferenceResponses("COMPLETE", 20),
+		"worker-3": repeatedInferenceResponses("cycle back", 20),
+	})
+	h := startStressProcess(t, dir, provider)
 
 	h.SubmitWork("task", []byte(`{"task": "triangle livelock test"}`))
 
-	h.RunUntilComplete(t, 10*time.Second)
+	h.WaitForTerminalCount(1, 10*time.Second)
 
 	// Assert: token ends in task:failed.
 	h.Assert().
@@ -186,14 +161,14 @@ func TestLivelockTriangleLoop(t *testing.T) {
 		TokenCount(1)
 
 	// Assert: each worker called exactly 5 times (5 full cycles).
-	if w1.CallCount() != 5 {
-		t.Errorf("expected worker-1 called 5 times, got %d", w1.CallCount())
+	if provider.CallCount("worker-1") != 5 {
+		t.Errorf("expected worker-1 called 5 times, got %d", provider.CallCount("worker-1"))
 	}
-	if w2.CallCount() != 5 {
-		t.Errorf("expected worker-2 called 5 times, got %d", w2.CallCount())
+	if provider.CallCount("worker-2") != 5 {
+		t.Errorf("expected worker-2 called 5 times, got %d", provider.CallCount("worker-2"))
 	}
-	if w3.CallCount() != 5 {
-		t.Errorf("expected worker-3 called 5 times, got %d", w3.CallCount())
+	if provider.CallCount("worker-3") != 5 {
+		t.Errorf("expected worker-3 called 5 times, got %d", provider.CallCount("worker-3"))
 	}
 }
 
@@ -210,14 +185,14 @@ func TestLivelockExecutionTimeout(t *testing.T) {
 	t.Run("InfiniteLoop", func(t *testing.T) {
 		h := newInfiniteLoopTimeoutHarness(t)
 		h.SubmitWork("task", []byte(`{}`))
-		h.RunUntilComplete(t, 10*time.Second)
+		h.WaitForTerminalCount(1, 10*time.Second)
 		h.Assert().HasTokenInPlace("task:failed").TokenCount(1)
 	})
 
 	t.Run("TriangleLoop", func(t *testing.T) {
 		h := newTriangleLoopTimeoutHarness(t)
 		h.SubmitWork("task", []byte(`{}`))
-		h.RunUntilComplete(t, 10*time.Second)
+		h.WaitForTerminalCount(1, 10*time.Second)
 		h.Assert().HasTokenInPlace("task:failed").TokenCount(1)
 	})
 
@@ -228,7 +203,7 @@ func TestLivelockExecutionTimeout(t *testing.T) {
 	t.Logf("all livelock variants completed in %v", elapsed)
 }
 
-func newInfiniteLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
+func newInfiniteLoopTimeoutHarness(t *testing.T) *stressProcessHarness {
 	t.Helper()
 
 	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
@@ -241,20 +216,22 @@ func newInfiniteLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "wa"}, {Name: "wb"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "wa", StopToken: "COMPLETE"}, {Name: "wb", StopToken: "COMPLETE"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "step-a", WorkerTypeName: "wa", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}},
 			{Name: "step-b", WorkerTypeName: "wb", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}, OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}},
 			guardedLoopBreakerWorkstation("exhausted", "step-a", 10, interfaces.IOConfig{WorkTypeName: "task", StateName: "init"}, interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"}),
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir)
-	h.MockWorker("wa", acceptedWorkResults(20)...)
-	h.MockWorker("wb", rejectedWorkResults(20, "")...)
-	return h
+	return startStressProcess(t, dir, testutil.NewMockWorkerMapProvider(
+		map[string][]workerexecution.InferenceResponse{
+			"wa": repeatedInferenceResponses("COMPLETE", 20),
+			"wb": repeatedInferenceResponses("loop back", 20),
+		},
+	))
 }
 
-func newTriangleLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
+func newTriangleLoopTimeoutHarness(t *testing.T) *stressProcessHarness {
 	t.Helper()
 
 	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
@@ -268,7 +245,7 @@ func newTriangleLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "w1"}, {Name: "w2"}, {Name: "w3"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "w1", StopToken: "COMPLETE"}, {Name: "w2", StopToken: "COMPLETE"}, {Name: "w3", StopToken: "COMPLETE"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "s1", WorkerTypeName: "w1", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}},
 			{Name: "s2", WorkerTypeName: "w2", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "mid"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "end"}}},
@@ -276,17 +253,19 @@ func newTriangleLoopTimeoutHarness(t *testing.T) *testutil.ServiceTestHarness {
 			guardedLoopBreakerWorkstation("ex", "s1", 5, interfaces.IOConfig{WorkTypeName: "task", StateName: "init"}, interfaces.IOConfig{WorkTypeName: "task", StateName: "failed"}),
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir)
-	h.MockWorker("w1", acceptedWorkResults(20)...)
-	h.MockWorker("w2", acceptedWorkResults(20)...)
-	h.MockWorker("w3", rejectedWorkResults(20, "")...)
-	return h
+	return startStressProcess(t, dir, testutil.NewMockWorkerMapProvider(
+		map[string][]workerexecution.InferenceResponse{
+			"w1": repeatedInferenceResponses("COMPLETE", 20),
+			"w2": repeatedInferenceResponses("COMPLETE", 20),
+			"w3": repeatedInferenceResponses("loop back", 20),
+		},
+	))
 }
 
-func rejectedWorkResults(count int, feedback string) []workerexecution.WorkResult {
-	results := make([]workerexecution.WorkResult, count)
-	for i := range results {
-		results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: feedback}
+func repeatedInferenceResponses(content string, count int) []workerexecution.InferenceResponse {
+	responses := make([]workerexecution.InferenceResponse, count)
+	for i := range responses {
+		responses[i] = workerexecution.InferenceResponse{Content: content}
 	}
-	return results
+	return responses
 }

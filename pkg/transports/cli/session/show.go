@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -19,10 +18,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const showRequestTimeout = 10 * time.Second
-
 // ShowConfig holds parameters for the session show command.
 type ShowConfig struct {
+	Context     context.Context
 	Server      string
 	SessionID   string
 	JSON        bool
@@ -30,12 +28,23 @@ type ShowConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	HTTP        clihttp.Protocol
+}
+
+func NewShow(transport clihttp.Protocol) func(ShowConfig) error {
+	return func(cfg ShowConfig) error { cfg.HTTP = transport; return Show(cfg) }
 }
 
 // Show requests one live factory session projection from a running host via HTTP.
 func Show(cfg ShowConfig) error {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 	if isDurableExecutionSessionID(cfg.SessionID) {
 		return showDurableSession(cfg)
@@ -55,33 +64,28 @@ func Show(cfg ShowConfig) error {
 		clidiag.SessionLabel(cfg.SessionID),
 	)
 
-	client := &http.Client{Timeout: showRequestTimeout}
-	started := time.Now()
 	var result factoryapi.FactorySession
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		endpoint.String(),
 		&result,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     "session show",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message)
 		}
 		return fmt.Errorf("factory session %q not found", resolvedSessionID(cfg.SessionID))
 	}
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message)
 		}
@@ -93,7 +97,7 @@ func Show(cfg ShowConfig) error {
 		"session show response endpointPath=%s status=%d durationMillis=%d sessionId=%s orchestratorKind=%s",
 		endpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		response.Duration.Milliseconds(),
 		result.Id,
 		result.Runtime.OrchestratorKind,
 	)
@@ -134,30 +138,27 @@ func fetchSessionResultProjections(
 	if err != nil {
 		return nil, nil, err
 	}
-	client := &http.Client{Timeout: showRequestTimeout}
 	var partialResult *factoryapi.FactorySessionPartialResult
 	var liveResult *factoryapi.FactorySessionLiveResult
 	var decodedPartial factoryapi.FactorySessionPartialResult
-	if resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	if response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		partialEndpoint,
 		&decodedPartial,
-		clihttp.RequestOptions{EndpointPath: partialPath},
 	); err == nil {
+		resp := response.HTTP
 		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
 			partialResult = &decodedPartial
 		}
 	}
 	var decodedResult factoryapi.FactorySessionLiveResult
-	if resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	if response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		resultEndpoint,
 		&decodedResult,
-		clihttp.RequestOptions{EndpointPath: resultPath},
 	); err == nil {
+		resp := response.HTTP
 		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
 			liveResult = &decodedResult
@@ -493,32 +494,28 @@ func showDurableSession(cfg ShowConfig) error {
 		return err
 	}
 
-	client := &http.Client{Timeout: showRequestTimeout}
 	var durable factoryapi.FactorySessionDurableReadModel
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		endpoint.String(),
 		&durable,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     "session show durable",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("factory session %q not found: %s", resolvedSessionID(cfg.SessionID), errResp.Message)
 		}
 		return fmt.Errorf("factory session %q not found", resolvedSessionID(cfg.SessionID))
 	}
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session show durable response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return fmt.Errorf("get factory session failed (%d): %s", resp.StatusCode, errResp.Message)
 		}

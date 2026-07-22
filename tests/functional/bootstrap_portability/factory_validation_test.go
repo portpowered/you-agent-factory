@@ -1,27 +1,39 @@
 package bootstrap_portability
 
 import (
-	"context"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/root"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 // TestFactoryValidation rejects factories whose workstation wiring references
 // undeclared workers before runtime bootstrap succeeds.
 func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T) {
+	// Arrange
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "invalid_worker_reference"))
 
-	cfg := &service.FactoryServiceConfig{
-		Dir: dir,
-	}
+	support.SetWorkingDirectory(t, dir)
 
-	_, err := service.BuildFactoryService(context.Background(), cfg)
+	fakeEnv := support.FakeInputs(t.Context(), []string{"you", "run", "--factory", "./factory.json"})
+
+	// Act
+
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		Clock: clock.Ensure(nil),
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	err = process.Execute(fakeEnv.Input)
+
 	if err == nil {
-		t.Fatal("expected BuildFactoryService to fail for workstation referencing non-existent worker")
+		t.Fatal("expected Wire graph construction to fail for workstation referencing non-existent worker")
 	}
 
 	if !strings.Contains(err.Error(), "invalid named factory") {
@@ -30,7 +42,13 @@ func TestFactoryValidation_RejectsWorkstationWithNonexistentWorker(t *testing.T)
 	if !strings.Contains(err.Error(), "invalid graph references") {
 		t.Errorf("expected blocking structural validation summary, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "blocking validation targets") {
-		t.Errorf("expected blocking validation target count in error, got: %v", err)
+	if !strings.Contains(err.Error(), "factory.worker.danglingReference") {
+		t.Errorf("expected dangling worker reference diagnostic, got: %v", err)
+	}
+	if fakeEnv.Stdout() != "" {
+		t.Errorf("expected no stdout before validation failed, got: %q", fakeEnv.Stdout())
+	}
+	if !strings.Contains(fakeEnv.Stderr(), "factory.worker.danglingReference") {
+		t.Errorf("expected validation diagnostic on stderr, got: %q", fakeEnv.Stderr())
 	}
 }

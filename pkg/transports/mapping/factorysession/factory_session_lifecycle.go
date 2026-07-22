@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -14,20 +14,17 @@ import (
 // ControlRequestFromAPI maps one public lifecycle control request into the shared
 // service contract.
 func ControlRequestFromAPI(req factoryapi.FactorySessionLifecycleControlRequest) (factorysessionexecution.ControlRequest, error) {
-	return factorysessionexecution.NormalizeControlRequest(factorysessionexecution.ControlRequest{
+	return factorysessionexecution.ControlRequest{
 		RequestID: derefString(req.RequestId),
 		Reason:    derefString(req.Reason),
-	})
+	}, nil
 }
 
 // ApproveRequestFromAPI maps one public approval request into the shared service contract.
 func ApproveRequestFromAPI(req factoryapi.FactorySessionApproveRequest) (factorysessionexecution.ApproveRequest, error) {
-	control, err := factorysessionexecution.NormalizeControlRequest(factorysessionexecution.ControlRequest{
+	control := factorysessionexecution.ControlRequest{
 		RequestID: derefString(req.RequestId),
 		Reason:    derefString(req.Reason),
-	})
-	if err != nil {
-		return factorysessionexecution.ApproveRequest{}, err
 	}
 	approve := factorysessionexecution.ApproveRequest{
 		ControlRequest:    control,
@@ -36,7 +33,7 @@ func ApproveRequestFromAPI(req factoryapi.FactorySessionApproveRequest) (factory
 	if req.ApprovedPolicy != nil {
 		approve.ApprovedPolicy = policyMapFromAPI(*req.ApprovedPolicy)
 	}
-	return factorysessionexecution.NormalizeApproveRequest(approve)
+	return approve, nil
 }
 
 // RetryDispatchRequestFromAPI maps one public retry-dispatch request into the shared service contract.
@@ -54,7 +51,7 @@ func RetryDispatchRequestFromAPI(req factoryapi.FactorySessionRetryDispatchReque
 	if req.ResetAttemptCount != nil {
 		retry.ResetAttemptCount = *req.ResetAttemptCount
 	}
-	return factorysessionexecution.NormalizeRetryDispatchRequest(retry)
+	return retry, nil
 }
 
 // InterruptDispatchRequestFromAPI maps one public interrupt-dispatch request into the shared service contract.
@@ -66,7 +63,7 @@ func InterruptDispatchRequestFromAPI(req factoryapi.FactorySessionInterruptDispa
 		},
 		DispatchID: req.DispatchId,
 	}
-	return factorysessionexecution.NormalizeInterruptDispatchRequest(interrupt)
+	return interrupt, nil
 }
 
 // SessionReadResponseToAPI maps one durable session read projection to the public response shape.
@@ -469,7 +466,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusConflict, ControlErrorToAPI(sessionID, controlErr), true
 	}
 
-	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) ||
+	if errors.Is(err, factorysessionexecution.ErrDurableSessionNotFound) ||
 		errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "factory session not found",
@@ -486,7 +483,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		}, true
 	}
 
-	var validationErr *factorysessionexecution.ValidationError
+	var validationErr *factorysessionexecution.ExecutionValidationError
 	if errors.As(err, &validationErr) {
 		return http.StatusBadRequest, factoryapi.ErrorResponse{
 			Message: validationErr.Message,
@@ -496,36 +493,4 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 	}
 
 	return 0, nil, false
-}
-
-// FactoryStateToLifecycleStatus maps one live factory runtime state to the durable
-// lifecycle vocabulary used by lifecycle-control responses.
-func FactoryStateToLifecycleStatus(state interfaces.FactoryState) factorysessionexecution.LifecycleStatus {
-	switch state {
-	case interfaces.FactoryStatePaused:
-		return factorysessionexecution.LifecycleStatusPaused
-	case interfaces.FactoryStateCompleted:
-		return factorysessionexecution.LifecycleStatusSucceeded
-	case interfaces.FactoryStateFailed:
-		return factorysessionexecution.LifecycleStatusFailed
-	default:
-		return factorysessionexecution.LifecycleStatusRunning
-	}
-}
-
-// LiveLifecycleControlResponse builds the public lifecycle-control response for one
-// live factory session control result.
-func LiveLifecycleControlResponse(
-	sessionID string,
-	operation factorysessionexecution.LifecycleControlKind,
-	outcome factorysessionexecution.LifecycleControlOutcome,
-	status factorysessionexecution.LifecycleStatus,
-) factoryapi.FactorySessionLifecycleControlResponse {
-	return LifecycleControlResponseToAPI(factorysessionexecution.LifecycleControlResult{
-		SessionID: sessionID,
-		Operation: operation,
-		Outcome:   outcome,
-		Status:    status,
-		Links:     factorysessionexecution.LiveLifecycleControlLinksForSession(sessionID),
-	})
 }

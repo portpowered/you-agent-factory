@@ -15,22 +15,58 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
+	"github.com/portpowered/infinite-you/internal/testutil/factorysessionfixtures"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
+type orchestratorLiveSessionAPI struct {
+	apisurface.LiveSessionAPI
+	factorySession factoryapi.FactorySession
+	syncPreflight  factoryapi.FactorySessionSyncPreflightResponse
+	result         factoryapi.FactorySessionLiveResult
+	resultErr      error
+	partialResult  factoryapi.FactorySessionPartialResult
+	subscribe      func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
+}
+
+func (role orchestratorLiveSessionAPI) GetFactorySession(context.Context, string) (factoryapi.FactorySession, error) {
+	return role.factorySession, nil
+}
+
+func (role orchestratorLiveSessionAPI) GetFactorySessionSyncPreflight(context.Context, string, factorydefinitions.FactorySessionSyncPreflightOptions) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	return role.syncPreflight, nil
+}
+
+func (role orchestratorLiveSessionAPI) GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error) {
+	return role.result, role.resultErr
+}
+
+func (role orchestratorLiveSessionAPI) GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error) {
+	return role.partialResult, nil
+}
+
+func (role orchestratorLiveSessionAPI) SubscribeFactoryResponseEventsForSession(ctx context.Context, request factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error) {
+	return role.subscribe(ctx, request)
+}
+
 func TestFactorySessionsAPI_ResponseEventsRouteStreamsGeneratedContractEnvelope(t *testing.T) {
-	store := responseeventstore.NewSessionResponseEventStore("session-beta")
-	want := publishIntegrationResponseProgress(t, store, "integration-retained")
-	store.Complete()
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	want := integrationResponseProgress(t, 1, "integration-retained")
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	subscription.Batches <- integrationResponseEventRecords(t, want)
+	close(subscription.Batches)
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		subscribe: func(
+			context.Context,
+			factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			return subscription, nil
+		},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
 	rec := httptest.NewRecorder()
@@ -54,34 +90,33 @@ func TestFactorySessionsAPI_ResponseEventsRouteStreamsGeneratedContractEnvelope(
 	if strings.TrimSpace(idLine) != "id: 1" || strings.TrimSpace(separator) != "" || !strings.HasPrefix(dataLine, "data: ") {
 		t.Fatalf("SSE framing = %q%q%q, want one id and one data line", idLine, dataLine, separator)
 	}
-	var got responseevents.FactoryResponseEvent
+	var got factorysessions.FactoryResponseEvent
 	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(dataLine, "data: "))), &got); err != nil {
 		t.Fatalf("decode response-event SSE data: %v", err)
 	}
 	if got.EventID != want.EventID || got.FactorySessionID != "session-beta" {
 		t.Fatalf("response event = %#v, want event %q for session-beta", got, want.EventID)
 	}
-	if err := responseevents.ValidateEvent(got); err != nil {
-		t.Fatalf("response event violates public schema semantics: %v", err)
-	}
 }
 
 func TestFactorySessionsAPI_ResponseEventsRouteSignalsStaleReconnectFirst(t *testing.T) {
-	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
-		"session-beta",
-		responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20},
-	)
-	if err != nil {
-		t.Fatalf("new response-event store: %v", err)
-	}
-	publishIntegrationResponseProgress(t, store, "dropped-1")
-	publishIntegrationResponseProgress(t, store, "dropped-2")
-	wantFirst := publishIntegrationResponseProgress(t, store, "retained-3")
-	wantSecond := publishIntegrationResponseProgress(t, store, "retained-4")
-	store.Complete()
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	gapEvent := integrationResponseGap(t, 2, 2, 3)
+	wantFirst := integrationResponseProgress(t, 3, "retained-3")
+	wantSecond := integrationResponseProgress(t, 4, "retained-4")
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	subscription.Batches <- integrationResponseEventRecords(t, gapEvent, wantFirst, wantSecond)
+	close(subscription.Batches)
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			if request.AfterSequence != 1 {
+				t.Fatalf("after sequence = %d, want 1", request.AfterSequence)
+			}
+			return subscription, nil
+		},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events?after_sequence=1", nil)
 	rec := httptest.NewRecorder()
@@ -91,10 +126,10 @@ func TestFactorySessionsAPI_ResponseEventsRouteSignalsStaleReconnectFirst(t *tes
 	}
 	reader := bufio.NewReader(rec.Body)
 	gap := readIntegrationResponseEvent(t, reader)
-	if gap.Kind != responseevents.KindStreamGap {
+	if gap.Kind != factorysessions.ResponseEventKindStreamGap {
 		t.Fatalf("first stale response event kind = %q, want STREAM_GAP", gap.Kind)
 	}
-	var gapPayload responseevents.StreamGapPayload
+	var gapPayload factorysessions.ResponseEventStreamGap
 	if err := json.Unmarshal(gap.Payload, &gapPayload); err != nil {
 		t.Fatalf("decode STREAM_GAP payload: %v", err)
 	}
@@ -108,24 +143,15 @@ func TestFactorySessionsAPI_ResponseEventsRouteSignalsStaleReconnectFirst(t *tes
 	}
 }
 
-type integrationResponseEventClock struct {
-	now time.Time
-}
-
-func (c *integrationResponseEventClock) Now() time.Time {
-	return c.now
-}
-
 func TestFactorySessionsAPI_ResponseEventsRouteReturnsTypedExpiredOutcome(t *testing.T) {
-	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	clock := &integrationResponseEventClock{now: start}
-	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
-	publishIntegrationResponseProgress(t, store, "completed")
-	store.Complete()
-	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		subscribe: func(
+			context.Context,
+			factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			return nil, apisurface.ErrFactoryResponseEventStreamExpired
+		},
+	})
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
 	rec := httptest.NewRecorder()
@@ -145,37 +171,91 @@ func TestFactorySessionsAPI_ResponseEventsRouteReturnsTypedExpiredOutcome(t *tes
 	}
 }
 
-func publishIntegrationResponseProgress(
+func integrationResponseProgress(
 	t *testing.T,
-	store *responseeventstore.SessionResponseEventStore,
+	sequence int64,
 	label string,
-) responseevents.FactoryResponseEvent {
+) factorysessions.FactoryResponseEvent {
 	t.Helper()
-	payload, err := json.Marshal(responseevents.ProgressPayload{Label: label})
+	payload, err := json.Marshal(factorysessions.ResponseEventProgress{Label: label})
 	if err != nil {
 		t.Fatalf("marshal response-event payload: %v", err)
 	}
-	event, err := store.Publish(responseevents.FactoryResponseEvent{
-		FactorySessionID: store.FactorySessionID(),
-		Kind:             responseevents.KindProgress,
-		Phase:            responseevents.PhaseUpdated,
-		Provenance: responseevents.Provenance{
+	return factorysessions.FactoryResponseEvent{
+		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
+		Sequence:         sequence,
+		EventID:          fmt.Sprintf("integration-response-event/%d", sequence),
+		FactorySessionID: "session-beta",
+		Kind:             factorysessions.ResponseEventKindProgress,
+		Phase:            factorysessions.ResponseEventPhaseUpdated,
+		Provenance: factorysessions.ResponseEventProvenance{
 			Provider:        "test-provider",
 			NativeEventType: "progress",
-			Delivery:        responseevents.DeliveryNativeStream,
-			Representation:  responseevents.RepresentationNotification,
-			Fidelity:        responseevents.FidelityLossless,
+			Delivery:        factorysessions.ResponseEventDeliveryNativeStream,
+			Representation:  factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:        factorysessions.ResponseEventFidelityLossless,
 		},
-		RunID:   "run-integration",
-		Payload: payload,
-	})
-	if err != nil {
-		t.Fatalf("publish response event: %v", err)
+		RunID:      "run-integration",
+		RecordedAt: time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
+		Payload:    payload,
 	}
-	return event
 }
 
-func readIntegrationResponseEvent(t *testing.T, reader *bufio.Reader) responseevents.FactoryResponseEvent {
+func integrationResponseGap(
+	t *testing.T,
+	fromSequence int64,
+	toSequence int64,
+	firstAvailableSequence int64,
+) factorysessions.FactoryResponseEvent {
+	t.Helper()
+	payload, err := json.Marshal(factorysessions.ResponseEventStreamGap{
+		FromSequence:           fromSequence,
+		ToSequence:             toSequence,
+		FirstAvailableSequence: firstAvailableSequence,
+		Reason:                 "retention_limit",
+	})
+	if err != nil {
+		t.Fatalf("marshal integration response gap: %v", err)
+	}
+	return factorysessions.FactoryResponseEvent{
+		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
+		EventID:          fmt.Sprintf("integration-response-gap/%d/%d", fromSequence, toSequence),
+		FactorySessionID: "session-beta",
+		Kind:             factorysessions.ResponseEventKindStreamGap,
+		Phase:            factorysessions.ResponseEventPhaseUpdated,
+		Provenance: factorysessions.ResponseEventProvenance{
+			Provider:        "you-agent-factory",
+			NativeEventType: "response.retention_gap",
+			Delivery:        factorysessions.ResponseEventDeliverySynthesized,
+			Representation:  factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:        factorysessions.ResponseEventFidelityLossy,
+		},
+		RecordedAt: time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
+		Payload:    payload,
+	}
+}
+
+func integrationResponseEventRecords(
+	t *testing.T,
+	events ...factorysessions.FactoryResponseEvent,
+) []apisurface.FactoryResponseEventRecord {
+	t.Helper()
+	records := make([]apisurface.FactoryResponseEventRecord, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal integration response event: %v", err)
+		}
+		records = append(records, apisurface.FactoryResponseEventRecord{
+			Sequence: event.Sequence,
+			Kind:     string(event.Kind),
+			Data:     data,
+		})
+	}
+	return records
+}
+
+func readIntegrationResponseEvent(t *testing.T, reader *bufio.Reader) factorysessions.FactoryResponseEvent {
 	t.Helper()
 	if _, err := reader.ReadString('\n'); err != nil {
 		t.Fatalf("read SSE id: %v", err)
@@ -187,19 +267,19 @@ func readIntegrationResponseEvent(t *testing.T, reader *bufio.Reader) responseev
 	if _, err := reader.ReadString('\n'); err != nil {
 		t.Fatalf("read SSE separator: %v", err)
 	}
-	var event responseevents.FactoryResponseEvent
+	var event factorysessions.FactoryResponseEvent
 	if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(dataLine, "data: "))), &event); err != nil {
 		t.Fatalf("decode response-event SSE data: %v", err)
-	}
-	if err := responseevents.ValidateEvent(event); err != nil {
-		t.Fatalf("response event violates public schema semantics: %v", err)
 	}
 	return event
 }
 
-func newMockFactorySessionTestServer(f *testutil.MockFactory) *api.Server {
+func newFactorySessionTestServer(live apisurface.LiveSessionAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
-	return api.NewServer(f, 8080, logger)
+	return api.NewServer(
+		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
+	)
 }
 
 func stringPointerForFactorySessionTest(value string) *string {
@@ -211,8 +291,8 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	backendScopeID := "backend-scope-live"
 	logicalSessionKeyID := "/workspace/root::named::beta"
 	streamGenerationID := "stream-gen-live-001"
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySession: factoryapi.FactorySession{
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		factorySession: factoryapi.FactorySession{
 			Id:         "session-beta",
 			FactoryDir: "/workspace/root/beta",
 			FolderPath: "/workspace/root",
@@ -288,8 +368,8 @@ func TestFactorySessionsAPI_GetFactorySessionSyncPreflight(t *testing.T) {
 	factorySessionID := "~default"
 	streamGenerationID := "backend-scope-test::~default"
 	afterEventID := "factory-event/initial-structure/0"
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		syncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
 			RequestedSessionId:  "~default",
 			ReasonCode:          factoryapi.Ok,
 			CheckpointReusable:  true,
@@ -333,8 +413,8 @@ func TestFactorySessionsAPI_GetFactorySessionSyncPreflight_StaleCursorReturnsTyp
 	factorySessionID := "~default"
 	streamGenerationID := "backend-scope-test::~default"
 	afterEventID := "factory-event/missing-preflight-cursor"
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		syncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
 			RequestedSessionId:  "~default",
 			ReasonCode:          factoryapi.CursorStale,
 			CheckpointReusable:  false,
@@ -370,8 +450,8 @@ func TestFactorySessionsAPI_GetFactorySessionSyncPreflight_StaleCursorReturnsTyp
 }
 
 func TestFactorySessionsAPI_GetFactorySessionSyncPreflight_MissingSessionReturnsTypedOutcome(t *testing.T) {
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		syncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
 			RequestedSessionId: "~default",
 			ReasonCode:         factoryapi.SessionNotFound,
 			CheckpointReusable: false,
@@ -418,8 +498,8 @@ func TestFactorySessionsAPI_GetFactorySessionResult_OmitsRawCheckpointBody(t *te
 			SizeBytes:   &size,
 		},
 	}}
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySessionLiveResult: factoryapi.FactorySessionLiveResult{
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		result: factoryapi.FactorySessionLiveResult{
 			SessionId: "session-js",
 			Status:    factoryapi.FactorySessionStatusIDLE,
 			ResultArtifactRef: &factoryapi.FactoryArtifactRef{
@@ -464,8 +544,8 @@ func TestFactorySessionsAPI_GetFactorySessionPartialResult_ReturnsCheckpointRefs
 			ContentHash: &hash,
 		},
 	}}
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySessionPartialResult: factoryapi.FactorySessionPartialResult{
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		partialResult: factoryapi.FactorySessionPartialResult{
 			SessionId: "session-js",
 			Phase:     phase,
 			PartialResultArtifactRef: &factoryapi.FactoryArtifactRef{
@@ -496,8 +576,8 @@ func TestFactorySessionsAPI_GetFactorySessionPartialResult_ReturnsCheckpointRefs
 }
 
 func TestFactorySessionsAPI_GetFactorySessionResult_NotFoundForUnavailableSession(t *testing.T) {
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		GetFactorySessionResultErr: apisurface.ErrFactorySessionResultUnavailable,
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		resultErr: apisurface.ErrFactorySessionResultUnavailable,
 	})
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-petri/result", nil)
 	rec := httptest.NewRecorder()
@@ -550,26 +630,24 @@ func (r *gatedSSEResponseReader) Read(p []byte) (int, error) {
 }
 
 // TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublication
-// proves the public SSE response-event surface keeps store publication
-// non-blocking while a client deliberately stops draining.
+// proves the public SSE response-event surface does not backpressure the
+// injected Factory Sessions cursor producer while a client stops draining.
 func TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublication(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping response-event SSE slow-consumer fixture in short mode")
 	}
 
-	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
-		"session-beta",
-		responseeventstore.RetentionLimits{MaxEvents: 16, MaxBytes: 64 * 1024},
-	)
-	if err != nil {
-		t.Fatalf("new response-event store: %v", err)
-	}
-
-	publishIntegrationResponseProgress(t, store, "seed")
-
-	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(2)
+	seed := integrationResponseProgress(t, 1, "seed")
+	subscription.Batches <- integrationResponseEventRecords(t, seed)
+	srv := newFactorySessionTestServer(orchestratorLiveSessionAPI{
+		subscribe: func(
+			context.Context,
+			factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			return subscription, nil
+		},
+	})
 	httpServer := httptest.NewServer(srv.Handler())
 	defer httpServer.Close()
 
@@ -598,23 +676,32 @@ func TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublicati
 	gated.block()
 
 	floodDone := make(chan error, 1)
+	wantFinalRun := recordedIntegrationResponseEvent(
+		t,
+		responseEventRunCompletedInput("run-completed"),
+		2,
+	)
+	events := make([]factorysessions.FactoryResponseEvent, 0, responseEventSlowConsumerFloodCount+1)
+	events = append(events, wantFinalRun)
+	for i := 0; i < responseEventSlowConsumerFloodCount; i++ {
+		events = append(
+			events,
+			recordedIntegrationResponseEvent(
+				t,
+				responseEventDeltaPublishInput(i),
+				int64(i+3),
+			),
+		)
+	}
+	records := integrationResponseEventRecords(t, events...)
 	go func() {
 		publishStarted := time.Now()
-		if _, err := store.Publish(responseEventRunCompletedInput("run-completed")); err != nil {
-			floodDone <- err
-			return
-		}
-		for i := 0; i < responseEventSlowConsumerFloodCount; i++ {
-			if _, err := store.Publish(responseEventDeltaPublishInput(i)); err != nil {
-				floodDone <- err
-				return
-			}
-		}
+		subscription.Batches <- records
+		close(subscription.Batches)
 		if elapsed := time.Since(publishStarted); elapsed > responseEventSlowConsumerPublishBudget {
 			floodDone <- fmt.Errorf("publish elapsed = %v, want <= %v", elapsed, responseEventSlowConsumerPublishBudget)
 			return
 		}
-		store.Complete()
 		floodDone <- nil
 	}()
 
@@ -627,11 +714,6 @@ func TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublicati
 		t.Fatalf("timed out waiting for publish flood within %v while SSE consumer was blocked", responseEventSlowConsumerPublishBudget)
 	}
 
-	wantFinalRun, ok := retainedResponseRunCompleted(t, store)
-	if !ok {
-		t.Fatal("terminal RUN completed event evicted under flood pressure")
-	}
-
 	gated.release()
 	reader := bufio.NewReader(gated)
 	drainCtx, cancelDrain := context.WithTimeout(scenarioCtx, 3*time.Second)
@@ -639,19 +721,6 @@ func TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublicati
 	if err := drainResponseEventSSEUntilClosed(drainCtx, reader, wantFinalRun.EventID); err != nil {
 		t.Fatalf("drain SSE after releasing slow consumer: %v", err)
 	}
-}
-
-func retainedResponseRunCompleted(
-	t *testing.T,
-	store *responseeventstore.SessionResponseEventStore,
-) (responseevents.FactoryResponseEvent, bool) {
-	t.Helper()
-	for _, event := range store.Events() {
-		if event.Kind == responseevents.KindRun && event.Phase == responseevents.PhaseCompleted {
-			return event, true
-		}
-	}
-	return responseevents.FactoryResponseEvent{}, false
 }
 
 func drainResponseEventSSEUntilClosed(ctx context.Context, reader *bufio.Reader, wantFinalRunEventID string) error {
@@ -679,12 +748,12 @@ func drainResponseEventSSEUntilClosed(ctx context.Context, reader *bufio.Reader,
 	}
 }
 
-func tryReadSSEFactoryResponseEvent(reader *bufio.Reader) (responseevents.FactoryResponseEvent, error) {
+func tryReadSSEFactoryResponseEvent(reader *bufio.Reader) (factorysessions.FactoryResponseEvent, error) {
 	var idLine, dataLine string
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			return responseevents.FactoryResponseEvent{}, err
+			return factorysessions.FactoryResponseEvent{}, err
 		}
 		line = trimSSELine(line)
 		if line == "" {
@@ -696,21 +765,18 @@ func tryReadSSEFactoryResponseEvent(reader *bufio.Reader) (responseevents.Factor
 		case hasSSEPrefix(line, "data: "):
 			dataLine = trimSSEPrefix(line, "data: ")
 		default:
-			return responseevents.FactoryResponseEvent{}, fmt.Errorf("unexpected response-event SSE line %q", line)
+			return factorysessions.FactoryResponseEvent{}, fmt.Errorf("unexpected response-event SSE line %q", line)
 		}
 	}
 	if idLine == "" || dataLine == "" {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE message id=%q data=%q, want exactly one of each", idLine, dataLine)
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("SSE message id=%q data=%q, want exactly one of each", idLine, dataLine)
 	}
-	var event responseevents.FactoryResponseEvent
+	var event factorysessions.FactoryResponseEvent
 	if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("decode response-event SSE data: %w", err)
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("decode response-event SSE data: %w", err)
 	}
 	if idLine != fmt.Sprint(event.Sequence) {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE id = %q, want event sequence %d", idLine, event.Sequence)
-	}
-	if err := responseevents.ValidateEvent(event); err != nil {
-		return responseevents.FactoryResponseEvent{}, fmt.Errorf("SSE response event is schema-invalid: %w", err)
+		return factorysessions.FactoryResponseEvent{}, fmt.Errorf("SSE id = %q, want event sequence %d", idLine, event.Sequence)
 	}
 	return event, nil
 }
@@ -733,42 +799,55 @@ func trimSSEPrefix(line, prefix string) string {
 	return line[len(prefix):]
 }
 
-func responseEventRunCompletedInput(status string) responseevents.FactoryResponseEvent {
-	payload, _ := json.Marshal(responseevents.RunPayload{Status: status})
-	return responseevents.FactoryResponseEvent{
+func responseEventRunCompletedInput(status string) factorysessions.FactoryResponseEvent {
+	payload, _ := json.Marshal(factorysessions.ResponseEventRun{Status: status})
+	return factorysessions.FactoryResponseEvent{
 		FactorySessionID: "session-beta",
-		Kind:             responseevents.KindRun,
-		Phase:            responseevents.PhaseCompleted,
-		Provenance: responseevents.Provenance{
+		Kind:             factorysessions.ResponseEventKindRun,
+		Phase:            factorysessions.ResponseEventPhaseCompleted,
+		Provenance: factorysessions.ResponseEventProvenance{
 			Provider:        "test-provider",
 			NativeEventType: "run",
-			Delivery:        responseevents.DeliveryNativeStream,
-			Representation:  responseevents.RepresentationNotification,
-			Fidelity:        responseevents.FidelityLossless,
+			Delivery:        factorysessions.ResponseEventDeliveryNativeStream,
+			Representation:  factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:        factorysessions.ResponseEventFidelityLossless,
 		},
 		RunID:   "run-test",
 		Payload: payload,
 	}
 }
 
-func responseEventDeltaPublishInput(index int) responseevents.FactoryResponseEvent {
-	payload, _ := json.Marshal(responseevents.MessageDeltaPayload{
+func responseEventDeltaPublishInput(index int) factorysessions.FactoryResponseEvent {
+	payload, _ := json.Marshal(factorysessions.ResponseEventMessageDelta{
 		ContentBlockIndex: 0,
-		ContentBlockKind:  responseevents.ContentBlockText,
+		ContentBlockKind:  factorysessions.ResponseEventContentBlockText,
 		TextDelta:         "delta-" + strconv.Itoa(index),
 	})
-	return responseevents.FactoryResponseEvent{
+	return factorysessions.FactoryResponseEvent{
 		FactorySessionID: "session-beta",
-		Kind:             responseevents.KindMessage,
-		Phase:            responseevents.PhaseDelta,
-		Provenance: responseevents.Provenance{
+		Kind:             factorysessions.ResponseEventKindMessage,
+		Phase:            factorysessions.ResponseEventPhaseDelta,
+		Provenance: factorysessions.ResponseEventProvenance{
 			Provider:        "test-provider",
 			NativeEventType: "message.delta",
-			Delivery:        responseevents.DeliveryNativeStream,
-			Representation:  responseevents.RepresentationNotification,
-			Fidelity:        responseevents.FidelityLossless,
+			Delivery:        factorysessions.ResponseEventDeliveryNativeStream,
+			Representation:  factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:        factorysessions.ResponseEventFidelityLossless,
 		},
 		RunID:   "run-test",
 		Payload: payload,
 	}
+}
+
+func recordedIntegrationResponseEvent(
+	t *testing.T,
+	event factorysessions.FactoryResponseEvent,
+	sequence int64,
+) factorysessions.FactoryResponseEvent {
+	t.Helper()
+	event.SchemaVersion = factorysessions.ResponseEventSchemaVersionV1
+	event.Sequence = sequence
+	event.EventID = fmt.Sprintf("integration-response-event/%d", sequence)
+	event.RecordedAt = time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	return event
 }

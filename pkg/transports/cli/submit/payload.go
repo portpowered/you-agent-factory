@@ -3,15 +3,18 @@ package submit
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
+	workdomain "github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 )
 
-func readSubmitPayload(payloadPath string) (payload json.RawMessage, raw []byte, payloadType string, err error) {
-	raw, err = os.ReadFile(payloadPath)
+func readSubmitPayload(read workdomain.PayloadFileReader, payloadPath string) (payload json.RawMessage, raw []byte, payloadType string, err error) {
+	if read == nil {
+		return nil, nil, "", fmt.Errorf("Work payload file reader is required")
+	}
+	raw, err = read(payloadPath)
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("read payload file: %w", err)
+		return nil, nil, "", err
 	}
 
 	payloadType = clidiag.PayloadType(payloadPath)

@@ -4,17 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const (
@@ -242,15 +240,15 @@ type namedGoalResponseStreamJSONInvocationResultRecord struct {
 }
 
 type namedGoalResponseStreamJSONResponseEventRecord struct {
-	RecordType string                              `json:"recordType"`
-	Event      responseevents.FactoryResponseEvent `json:"event"`
+	RecordType string                               `json:"recordType"`
+	Event      factorysessions.FactoryResponseEvent `json:"event"`
 }
 
 type namedGoalResponseStreamParsedRecord struct {
 	RecordType string
 	Raw        json.RawMessage
 	Invocation factoryapi.InvocationResponse
-	Event      responseevents.FactoryResponseEvent
+	Event      factorysessions.FactoryResponseEvent
 }
 
 func runNamedGoalPrimaryOnlyInvocationCLI(
@@ -261,13 +259,7 @@ func runNamedGoalPrimaryOnlyInvocationCLI(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		goal.PackagedFactoryName,
-		goal.BuiltInFactoryJSON,
-	); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
-	}
+	support.InstallPackagedFactory(t, homeDir, publicGoal.PackagedFactoryName)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {
@@ -284,7 +276,7 @@ func runNamedGoalPrimaryOnlyInvocationCLI(
 		binaryPath,
 		"--json",
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", publicGoal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -293,7 +285,7 @@ func runNamedGoalPrimaryOnlyInvocationCLI(
 		goalText,
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
@@ -311,13 +303,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		goal.PackagedFactoryName,
-		goal.BuiltInFactoryJSON,
-	); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
-	}
+	support.InstallPackagedFactory(t, homeDir, publicGoal.PackagedFactoryName)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {
@@ -331,7 +317,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 
 	args := []string{
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", publicGoal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -346,7 +332,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 
 	cmd := exec.CommandContext(ctx, binaryPath, args...)
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdoutBuf, stderrBuf strings.Builder
 	cmd.Stdout = &stdoutBuf
@@ -389,10 +375,8 @@ func parseNamedGoalResponseStreamNDJSONRecords(stdout string) ([]namedGoalRespon
 			return nil, fmt.Errorf("decode line %q: %w", line, err)
 		}
 		recordType := strings.TrimSpace(envelope.RecordType)
-		if err := ndjsoncontract.RejectRetiredPrivateRecordType(recordType); err != nil {
-			return nil, err
-		}
-		if !ndjsoncontract.IsSupportedRecordType(recordType) {
+		if recordType != namedGoalResponseStreamJSONRecordInvocation &&
+			recordType != namedGoalResponseStreamJSONRecordResponseEvent {
 			return nil, fmt.Errorf("unsupported recordType %q in line %q", recordType, line)
 		}
 		record := namedGoalResponseStreamParsedRecord{
@@ -411,7 +395,7 @@ func parseNamedGoalResponseStreamNDJSONRecords(stdout string) ([]namedGoalRespon
 			if err := json.Unmarshal([]byte(line), &responseEvent); err != nil {
 				return nil, fmt.Errorf("decode response_event line %q: %w", line, err)
 			}
-			if err := responseevents.ValidateEvent(responseEvent.Event); err != nil {
+			if err := factorysessions.ValidateFactoryResponseEvent(responseEvent.Event); err != nil {
 				return nil, fmt.Errorf("validate response_event line %q: %w", line, err)
 			}
 			record.Event = responseEvent.Event

@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ func TestShow_PerformsGETFactorySession(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    &out,
@@ -36,7 +37,7 @@ func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "session-beta",
 		Output:    &out,
@@ -82,7 +83,7 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "~default",
 		Output:    &out,
@@ -111,7 +112,7 @@ func TestShow_JSONModeEmitsFactorySession(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "session-beta",
 		JSON:      true,
@@ -138,7 +139,7 @@ func TestShow_NotFoundReportsSessionID(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "missing",
 		Output:    &bytes.Buffer{},
@@ -290,7 +291,7 @@ func TestShow_DurableSessionJSONUsesDurableReadModel(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := Show(ShowConfig{
+	if err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-js-interrupted-001",
 		JSON:      true,
@@ -362,7 +363,7 @@ func TestShow_DurableSessionHumanOutputRendersLifecycleContinuity(t *testing.T) 
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := Show(ShowConfig{
+	if err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-js-interrupted-001",
 		Output:    &out,
@@ -419,7 +420,7 @@ func TestDispatches_DurableSessionJSONUsesListFactorySessionDispatchesResponse(t
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := Dispatches(DispatchesConfig{
+	if err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-js-interrupted-001",
 		JSON:      true,
@@ -473,7 +474,7 @@ func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing
 	defer srv.Close()
 
 	var out bytes.Buffer
-	if err := Dispatches(DispatchesConfig{
+	if err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background(),
 		Server:    srv.URL,
 		SessionID: "dur-sess-js-interrupted-001",
 		Output:    &out,
@@ -503,7 +504,7 @@ func TestDispatches_DurableSessionHumanOutputRendersDispatchSummaries(t *testing
 }
 
 func TestDispatches_RejectsNonDurableSessionID(t *testing.T) {
-	err := Dispatches(DispatchesConfig{
+	err := NewDispatches(testHTTPProtocol(t))(DispatchesConfig{Context: context.Background(),
 		Server:    "http://127.0.0.1:1",
 		SessionID: "session-beta",
 		Output:    ioDiscard{},
@@ -517,7 +518,7 @@ func TestDispatches_RejectsNonDurableSessionID(t *testing.T) {
 }
 
 func TestDispatchesEndpoint_ForwardsCanonicalFilters(t *testing.T) {
-	endpoint, err := dispatchesEndpoint(DispatchesConfig{
+	endpoint, err := dispatchesEndpoint(DispatchesConfig{Context: context.Background(),
 		Server: "http://127.0.0.1:3456", SessionID: "dur-sess-filter-001",
 		Phase: "build", Status: "FAILED",
 	})

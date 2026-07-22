@@ -1,12 +1,17 @@
 package climanifestgen
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
+	"go/format"
 	"path/filepath"
+	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 )
 
@@ -48,15 +53,15 @@ const (
 	// ModelsDocsFamilyCommandIDsPath is the generated models/docs stable command ID list.
 	ModelsDocsFamilyCommandIDsPath = "pkg/transports/cli/generated/models_docs_command_ids_gen.go"
 
-	MCPFamilyJSONPath                   = "pkg/transports/cli/generated/mcp_family.json"
-	WorkflowCompatibilityFamilyJSONPath = "pkg/transports/cli/generated/workflow_compatibility_family.json"
-	WorkflowMCPFamilyCommandIDsPath     = "pkg/transports/cli/generated/workflow_mcp_command_ids_gen.go"
+	MCPFamilyJSONPath          = "pkg/transports/cli/generated/mcp_family.json"
+	MCPFamilyCommandIDsPath    = "pkg/transports/cli/generated/mcp_command_ids_gen.go"
+	RuntimeFamilyManifestsPath = "pkg/transports/cli/generated/family_manifests_gen.go"
 )
 
 // RepresentativeFamilyArtifact returns deterministic generated representative-family metadata bytes.
-func RepresentativeFamilyArtifact(repositoryRoot string) ([]byte, error) {
+func RepresentativeFamilyArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
-	manifest, err := climanifest.LoadProduction(manifestPath)
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -68,9 +73,9 @@ func RepresentativeFamilyArtifact(repositoryRoot string) ([]byte, error) {
 }
 
 // SessionFamilyArtifact returns deterministic generated session-family metadata bytes.
-func SessionFamilyArtifact(repositoryRoot string) ([]byte, error) {
+func SessionFamilyArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
-	manifest, err := climanifest.LoadProduction(manifestPath)
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -82,9 +87,9 @@ func SessionFamilyArtifact(repositoryRoot string) ([]byte, error) {
 }
 
 // WorkArtifact returns the deterministic generated work-family metadata bytes.
-func WorkArtifact(repositoryRoot string) ([]byte, error) {
+func WorkArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
-	manifest, err := climanifest.LoadProduction(manifestPath)
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +101,9 @@ func WorkArtifact(repositoryRoot string) ([]byte, error) {
 }
 
 // RunSubmitArtifact returns deterministic generated run/submit-family metadata bytes.
-func RunSubmitArtifact(repositoryRoot string) ([]byte, error) {
+func RunSubmitArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
-	manifest, err := climanifest.LoadProduction(manifestPath)
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -110,9 +115,9 @@ func RunSubmitArtifact(repositoryRoot string) ([]byte, error) {
 }
 
 // FactoryConfigInitFamilyArtifact returns deterministic generated factory/config/init metadata bytes.
-func FactoryConfigInitFamilyArtifact(repositoryRoot string) ([]byte, error) {
+func FactoryConfigInitFamilyArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
-	manifest, err := climanifest.LoadProduction(manifestPath)
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +129,9 @@ func FactoryConfigInitFamilyArtifact(repositoryRoot string) ([]byte, error) {
 }
 
 // ModelsDocsArtifact returns the deterministic generated models/docs-family metadata bytes.
-func ModelsDocsArtifact(repositoryRoot string) ([]byte, error) {
+func ModelsDocsArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
-	manifest, err := climanifest.LoadProduction(manifestPath)
+	manifest, err := climanifest.LoadProduction(store, manifestPath)
 	if err != nil {
 		return nil, err
 	}
@@ -138,12 +143,9 @@ func ModelsDocsArtifact(repositoryRoot string) ([]byte, error) {
 }
 
 // MCPArtifact returns canonical MCP family metadata and enforces source classification.
-func MCPArtifact(repositoryRoot string) ([]byte, error) {
-	production, compatibility, err := loadWorkflowMCPManifests(repositoryRoot)
+func MCPArtifact(store generatedartifacts.SourceStore, repositoryRoot string) ([]byte, error) {
+	production, err := climanifest.LoadProduction(store, filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
 	if err != nil {
-		return nil, err
-	}
-	if err := validateWorkflowMCPClassification(production, compatibility); err != nil {
 		return nil, err
 	}
 	family, err := ExtractMCPFamily(production)
@@ -153,117 +155,171 @@ func MCPArtifact(repositoryRoot string) ([]byte, error) {
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
-// WorkflowCompatibilityArtifact returns workflow metadata without promoting it
-// into any canonical generated family.
-func WorkflowCompatibilityArtifact(repositoryRoot string) ([]byte, error) {
-	production, compatibility, err := loadWorkflowMCPManifests(repositoryRoot)
-	if err != nil {
-		return nil, err
+// Artifacts returns the complete deterministic CLI family output set.
+// Filesystem persistence and drift inspection belong to the command-selected
+// Platform artifact store.
+func Artifacts(store generatedartifacts.SourceStore, repositoryRoot string) ([]generatedartifacts.Artifact, error) {
+	producers := []struct {
+		path     string
+		producer func(generatedartifacts.SourceStore, string) ([]byte, error)
+	}{
+		{RepresentativeFamilyJSONPath, RepresentativeFamilyArtifact},
+		{WorkFamilyJSONPath, WorkArtifact},
+		{SessionFamilyJSONPath, SessionFamilyArtifact},
+		{RunSubmitFamilyJSONPath, RunSubmitArtifact},
+		{FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact},
+		{ModelsDocsFamilyJSONPath, ModelsDocsArtifact},
+		{MCPFamilyJSONPath, MCPArtifact},
 	}
-	if err := validateWorkflowMCPClassification(production, compatibility); err != nil {
-		return nil, err
-	}
-	family, err := ExtractWorkflowCompatibilityFamily(compatibility)
-	if err != nil {
-		return nil, err
-	}
-	return contractjoiner.MarshalCanonicalJSON(family)
-}
-
-func loadWorkflowMCPManifests(repositoryRoot string) (climanifest.Manifest, climanifest.Manifest, error) {
-	production, err := climanifest.LoadProduction(filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath)))
-	if err != nil {
-		return climanifest.Manifest{}, climanifest.Manifest{}, err
-	}
-	compatibility, err := climanifest.LoadCompatibility(filepath.Join(repositoryRoot, filepath.FromSlash(CompatibilityManifestPath)))
-	if err != nil {
-		return climanifest.Manifest{}, climanifest.Manifest{}, err
-	}
-	return production, compatibility, nil
-}
-
-func validateWorkflowMCPClassification(production, compatibility climanifest.Manifest) error {
-	for _, id := range WorkflowCompatibilityFamilyCommandIDs {
-		if _, exists := production.Commands[id]; exists {
-			return fmt.Errorf("classification mismatch for command %q: compatibility-only workflow command is present in %s", id, ProductionManifestPath)
+	payloads := make(map[string][]byte, len(producers))
+	for _, item := range producers {
+		payload, err := item.producer(store, repositoryRoot)
+		if err != nil {
+			return nil, err
 		}
+		payloads[item.path] = payload
 	}
-	for _, id := range MCPFamilyCommandIDs {
-		if _, exists := compatibility.Commands[id]; exists {
-			return fmt.Errorf("classification mismatch for command %q: canonical MCP command is present in %s", id, CompatibilityManifestPath)
-		}
-	}
-	return nil
-}
-
-// Generate writes CLI family metadata artifacts for review and drift checks.
-func Generate(repositoryRoot string) error {
-	if err := writeArtifact(repositoryRoot, RepresentativeFamilyJSONPath, RepresentativeFamilyArtifact); err != nil {
-		return err
-	}
-	if err := writeArtifact(repositoryRoot, WorkFamilyJSONPath, WorkArtifact); err != nil {
-		return err
-	}
-	if err := writeArtifact(repositoryRoot, SessionFamilyJSONPath, SessionFamilyArtifact); err != nil {
-		return err
-	}
-	sessionIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(SessionFamilyCommandIDsPath))
-	if err := os.WriteFile(sessionIDsTarget, sessionCommandIDsSource(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", SessionFamilyCommandIDsPath, err)
-	}
-	idsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(RepresentativeFamilyCommandIDsPath))
-	if err := os.WriteFile(idsTarget, representativeAndWorkCommandIDsSource(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", RepresentativeFamilyCommandIDsPath, err)
-	}
-	if err := writeArtifact(repositoryRoot, RunSubmitFamilyJSONPath, RunSubmitArtifact); err != nil {
-		return err
-	}
-	runSubmitIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(RunSubmitFamilyCommandIDsPath))
-	if err := os.WriteFile(runSubmitIDsTarget, runSubmitCommandIDsSource(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", RunSubmitFamilyCommandIDsPath, err)
-	}
-
-	if err := writeArtifact(repositoryRoot, FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact); err != nil {
-		return err
-	}
-	factoryConfigInitIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(FactoryConfigInitFamilyCommandIDsPath))
-	if err := os.WriteFile(factoryConfigInitIDsTarget, factoryConfigInitCommandIDsSource(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", FactoryConfigInitFamilyCommandIDsPath, err)
-	}
-
-	if err := writeArtifact(repositoryRoot, ModelsDocsFamilyJSONPath, ModelsDocsArtifact); err != nil {
-		return err
-	}
-	modelsDocsIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(ModelsDocsFamilyCommandIDsPath))
-	if err := os.WriteFile(modelsDocsIDsTarget, modelsDocsCommandIDsSource(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", ModelsDocsFamilyCommandIDsPath, err)
-	}
-	if err := writeArtifact(repositoryRoot, MCPFamilyJSONPath, MCPArtifact); err != nil {
-		return err
-	}
-	if err := writeArtifact(repositoryRoot, WorkflowCompatibilityFamilyJSONPath, WorkflowCompatibilityArtifact); err != nil {
-		return err
-	}
-	workflowMCPIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(WorkflowMCPFamilyCommandIDsPath))
-	if err := os.WriteFile(workflowMCPIDsTarget, workflowMCPCommandIDsSource(), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", WorkflowMCPFamilyCommandIDsPath, err)
-	}
-	return nil
-}
-
-func writeArtifact(repositoryRoot, path string, producer func(string) ([]byte, error)) error {
-	payload, err := producer(repositoryRoot)
+	runtimeSource, err := runtimeFamilyManifestsSource(payloads)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	target := filepath.Join(repositoryRoot, filepath.FromSlash(path))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
+	// Preserve the established output order so path diagnostics remain stable
+	// when an output location is unavailable.
+	return []generatedartifacts.Artifact{
+		{Path: RepresentativeFamilyJSONPath, Absent: true},
+		{Path: WorkFamilyJSONPath, Absent: true},
+		{Path: SessionFamilyJSONPath, Absent: true},
+		{Path: SessionFamilyCommandIDsPath, Payload: sessionCommandIDsSource()},
+		{Path: RepresentativeFamilyCommandIDsPath, Payload: representativeAndWorkCommandIDsSource()},
+		{Path: RunSubmitFamilyJSONPath, Absent: true},
+		{Path: RunSubmitFamilyCommandIDsPath, Payload: runSubmitCommandIDsSource()},
+		{Path: FactoryConfigInitFamilyJSONPath, Absent: true},
+		{Path: FactoryConfigInitFamilyCommandIDsPath, Payload: factoryConfigInitCommandIDsSource()},
+		{Path: ModelsDocsFamilyJSONPath, Absent: true},
+		{Path: ModelsDocsFamilyCommandIDsPath, Payload: modelsDocsCommandIDsSource()},
+		{Path: MCPFamilyJSONPath, Absent: true},
+		{Path: MCPFamilyCommandIDsPath, Payload: mcpCommandIDsSource()},
+		{Path: RuntimeFamilyManifestsPath, Payload: runtimeSource},
+	}, nil
+}
+
+func runtimeFamilyManifestsSource(payloads map[string][]byte) ([]byte, error) {
+	families := []struct {
+		functionName string
+		path         string
+	}{
+		{functionName: "representativeFamilyManifestValue", path: RepresentativeFamilyJSONPath},
+		{functionName: "sessionFamilyManifestValue", path: SessionFamilyJSONPath},
+		{functionName: "workFamilyManifestValue", path: WorkFamilyJSONPath},
+		{functionName: "factoryConfigInitFamilyManifestValue", path: FactoryConfigInitFamilyJSONPath},
+		{functionName: "modelsDocsFamilyManifestValue", path: ModelsDocsFamilyJSONPath},
+		{functionName: "runSubmitFamilyManifestValue", path: RunSubmitFamilyJSONPath},
+		{functionName: "mcpFamilyManifestValue", path: MCPFamilyJSONPath},
 	}
-	if err := os.WriteFile(target, payload, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+
+	var builder strings.Builder
+	builder.WriteString("// Code generated by climanifestgen. DO NOT EDIT.\n\n")
+	builder.WriteString("package generated\n\n")
+	builder.WriteString("import \"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest\"\n\n")
+	for _, family := range families {
+		var manifest climanifest.Manifest
+		if err := json.Unmarshal(payloads[family.path], &manifest); err != nil {
+			return nil, fmt.Errorf("decode generated family %s for Go source: %w", family.path, err)
+		}
+		fmt.Fprintf(&builder, "func %s() climanifest.Manifest {\n\treturn %s\n}\n\n", family.functionName, renderManifestGoValue(reflect.ValueOf(manifest)))
 	}
-	return nil
+	formatted, err := format.Source([]byte(builder.String()))
+	if err != nil {
+		return nil, fmt.Errorf("format generated runtime CLI manifests: %w", err)
+	}
+	return formatted, nil
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
+func renderManifestGoValue(value reflect.Value) string {
+	if value.Kind() == reflect.Pointer {
+		if value.IsNil() {
+			return "nil"
+		}
+		return "&" + renderManifestGoValue(value.Elem())
+	}
+	switch value.Kind() {
+	case reflect.Struct:
+		var builder strings.Builder
+		builder.WriteString(renderManifestGoType(value.Type()))
+		builder.WriteByte('{')
+		for index := 0; index < value.NumField(); index++ {
+			if index > 0 {
+				builder.WriteByte(',')
+			}
+			builder.WriteString(value.Type().Field(index).Name)
+			builder.WriteByte(':')
+			builder.WriteString(renderManifestGoValue(value.Field(index)))
+		}
+		builder.WriteByte('}')
+		return builder.String()
+	case reflect.Map:
+		if value.IsNil() {
+			return "nil"
+		}
+		keys := value.MapKeys()
+		sort.Slice(keys, func(left, right int) bool { return keys[left].String() < keys[right].String() })
+		var builder strings.Builder
+		builder.WriteString(renderManifestGoType(value.Type()))
+		builder.WriteByte('{')
+		for index, key := range keys {
+			if index > 0 {
+				builder.WriteByte(',')
+			}
+			builder.WriteString(strconv.Quote(key.String()))
+			builder.WriteByte(':')
+			builder.WriteString(renderManifestGoValue(value.MapIndex(key)))
+		}
+		builder.WriteByte('}')
+		return builder.String()
+	case reflect.Slice:
+		if value.IsNil() {
+			return "nil"
+		}
+		var builder strings.Builder
+		builder.WriteString(renderManifestGoType(value.Type()))
+		builder.WriteByte('{')
+		for index := 0; index < value.Len(); index++ {
+			if index > 0 {
+				builder.WriteByte(',')
+			}
+			builder.WriteString(renderManifestGoValue(value.Index(index)))
+		}
+		builder.WriteByte('}')
+		return builder.String()
+	case reflect.String:
+		return strconv.Quote(value.String())
+	case reflect.Bool:
+		return strconv.FormatBool(value.Bool())
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return strconv.FormatInt(value.Int(), 10)
+	default:
+		panic(fmt.Sprintf("unsupported CLI manifest Go value kind %s", value.Kind()))
+	}
+}
+
+func renderManifestGoType(valueType reflect.Type) string {
+	if valueType.Name() != "" {
+		if valueType.PkgPath() == "github.com/portpowered/infinite-you/pkg/transports/cli/climanifest" {
+			return "climanifest." + valueType.Name()
+		}
+		return valueType.Name()
+	}
+	switch valueType.Kind() {
+	case reflect.Map:
+		return "map[" + renderManifestGoType(valueType.Key()) + "]" + renderManifestGoType(valueType.Elem())
+	case reflect.Slice:
+		return "[]" + renderManifestGoType(valueType.Elem())
+	case reflect.Pointer:
+		return "*" + renderManifestGoType(valueType.Elem())
+	default:
+		return valueType.String()
+	}
 }
 
 func representativeAndWorkCommandIDsSource() []byte {
@@ -303,12 +359,10 @@ func runSubmitCommandIDsSource() []byte {
 	)
 }
 
-func workflowMCPCommandIDsSource() []byte {
+func mcpCommandIDsSource() []byte {
 	var builder strings.Builder
 	builder.WriteString("// Code generated by climanifestgen. DO NOT EDIT.\n\npackage generated\n\n")
 	writeCommandIDVar(&builder, "MCPFamilyCommandIDs", ProductionManifestPath, "canonical MCP family", MCPFamilyCommandIDs)
-	builder.WriteString("\n")
-	writeCommandIDVar(&builder, "WorkflowCompatibilityFamilyCommandIDs", CompatibilityManifestPath, "separately classified workflow compatibility family", WorkflowCompatibilityFamilyCommandIDs)
 	return []byte(builder.String())
 }
 

@@ -29,6 +29,7 @@ func commandManifestSchema(t *testing.T) *jsonschema.Schema {
 }
 
 func TestCommandManifestSchemaValidIdentityFixture(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 	instance := readJSON(t, filepath.Join("testdata", "cli", "valid-identity.json"))
 	if err := schema.Validate(instance); err != nil {
@@ -37,6 +38,7 @@ func TestCommandManifestSchemaValidIdentityFixture(t *testing.T) {
 }
 
 func TestCommandManifestSchemaArgumentFixtures(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 
 	tests := []struct {
@@ -55,7 +57,9 @@ func TestCommandManifestSchemaArgumentFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -75,6 +79,7 @@ func TestCommandManifestSchemaArgumentFixtures(t *testing.T) {
 }
 
 func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 
 	tests := []struct {
@@ -100,7 +105,9 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -120,6 +127,7 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 }
 
 func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 
 	tests := []struct {
@@ -139,7 +147,9 @@ func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -159,6 +169,7 @@ func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
 }
 
 func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 
 	tests := []struct {
@@ -180,7 +191,9 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
@@ -190,6 +203,7 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 }
 
 func TestCommandManifestSchemaProductionRootManifest(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 	instance := readJSON(t, filepath.Join("cli", "commands.json"))
 	if err := schema.Validate(instance); err != nil {
@@ -198,6 +212,7 @@ func TestCommandManifestSchemaProductionRootManifest(t *testing.T) {
 }
 
 func TestCommandManifestSchemaProductionSessionFamily(t *testing.T) {
+	t.Parallel()
 	instance := readJSON(t, filepath.Join("cli", "commands.json"))
 	commands, ok := instance.(map[string]any)["commands"].(map[string]any)
 	if !ok {
@@ -283,6 +298,7 @@ func TestCommandManifestSchemaProductionSessionFamily(t *testing.T) {
 }
 
 func TestCommandManifestSchemaProductionModelsFamily(t *testing.T) {
+	t.Parallel()
 	instance := readJSON(t, filepath.Join("cli", "commands.json"))
 	commands, ok := instance.(map[string]any)["commands"].(map[string]any)
 	if !ok {
@@ -393,6 +409,7 @@ func TestCommandManifestSchemaProductionModelsFamily(t *testing.T) {
 }
 
 func TestCommandManifestSchemaProductionDocsFamily(t *testing.T) {
+	t.Parallel()
 	instance := readJSON(t, filepath.Join("cli", "commands.json"))
 	commands, ok := instance.(map[string]any)["commands"].(map[string]any)
 	if !ok {
@@ -496,6 +513,7 @@ func TestCommandManifestSchemaProductionDocsFamily(t *testing.T) {
 }
 
 func TestCommandManifestSchemaInvalidFixtureMatrix(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 
 	tests := []struct {
@@ -531,7 +549,9 @@ func TestCommandManifestSchemaInvalidFixtureMatrix(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
 			err := schema.Validate(instance)
 			if err == nil {
@@ -545,6 +565,7 @@ func TestCommandManifestSchemaInvalidFixtureMatrix(t *testing.T) {
 }
 
 func TestCommandManifestSchemaExecutionMetadataFixtures(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
 
 	tests := []struct {
@@ -563,7 +584,9 @@ func TestCommandManifestSchemaExecutionMetadataFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
 			err := schema.Validate(instance)
 			if test.valid {
@@ -583,8 +606,9 @@ func TestCommandManifestSchemaExecutionMetadataFixtures(t *testing.T) {
 }
 
 func TestCommandManifestSchemaRejectsIncompleteAuthoritativeRecord(t *testing.T) {
+	t.Parallel()
 	schema := commandManifestSchema(t)
-	instance := readJSON(t, filepath.Join("testdata", "cli", "valid-handler-binding.json"))
+	instance := cloneJSON(t, readJSON(t, filepath.Join("testdata", "cli", "valid-handler-binding.json")).(map[string]any))
 	commands := instance.(map[string]any)["commands"].(map[string]any)
 	command := commands["example.factory.invoke"].(map[string]any)
 	command["completeness"] = "authoritative"
@@ -597,4 +621,17 @@ func TestCommandManifestSchemaRejectsIncompleteAuthoritativeRecord(t *testing.T)
 	if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
 		t.Fatalf("validation paths = %v, want %q", paths, wantPath)
 	}
+}
+
+func cloneJSON(t *testing.T, value any) any {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal json copy: %v", err)
+	}
+	var copied any
+	if err := json.Unmarshal(payload, &copied); err != nil {
+		t.Fatalf("unmarshal json copy: %v", err)
+	}
+	return copied
 }

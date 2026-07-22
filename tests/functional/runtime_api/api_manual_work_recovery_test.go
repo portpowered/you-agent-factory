@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -43,14 +40,12 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 		},
 	})
 
-	server := startFunctionalServerWithConfig(
+	server := startFunctionalServerWithArgs(
 		t,
 		dir,
 		false,
-		func(cfg *service.FactoryServiceConfig) {
-			cfg.ProviderOverride = provider
-		},
-		factory.WithServiceMode(),
+		nil,
+		withProvider(provider),
 	)
 
 	requiredState := "complete"
@@ -106,12 +101,12 @@ func TestManualWorkRecovery_CascadeFailureThenAPIMovesResumeProgress(t *testing.
 		t.Fatalf("parent after recovery = %#v, want complete", parent)
 	}
 
-	snapshot := server.GetEngineStateSnapshot(t)
-	if !markingContainsWorkAtPlace(&snapshot.Marking, childWorkID, "task:complete") {
-		t.Fatalf("marking = %#v, want child at task:complete", snapshot.Marking.Tokens)
+	session := support.GetDefaultSession(t, server.URL())
+	if !support.SessionHasWorkAtPlace(session, childWorkID, "task:complete") {
+		t.Fatalf("session marking = %#v, want child at task:complete", session.Runtime.Petri)
 	}
-	if !markingContainsWorkAtPlace(&snapshot.Marking, parentWorkID, "task:complete") {
-		t.Fatalf("marking = %#v, want parent at task:complete", snapshot.Marking.Tokens)
+	if !support.SessionHasWorkAtPlace(session, parentWorkID, "task:complete") {
+		t.Fatalf("session marking = %#v, want parent at task:complete", session.Runtime.Petri)
 	}
 	functionalevidence.Covers(t, "rest/moveWorkBySessionId")
 }
@@ -212,13 +207,4 @@ func assertManualRecoveryWorkStateChangeEvents(t *testing.T, server *functionalA
 	if !childSeen {
 		t.Fatalf("events missing child WORK_STATE_CHANGE failed->init: %#v", events)
 	}
-}
-
-func markingContainsWorkAtPlace(marking *petri.MarkingSnapshot, workID, placeID string) bool {
-	for _, token := range marking.TokensInPlace(placeID) {
-		if token.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
 }

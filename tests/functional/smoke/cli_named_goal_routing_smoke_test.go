@@ -16,14 +16,8 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -133,11 +127,11 @@ func TestNamedGoalRouting_InterruptedSuppressesSuccessPrimaryResult(t *testing.T
 		t.Fatalf("work state = %#v, want interrupted", interrupted.State)
 	}
 
-	snapshot := server.GetEngineStateSnapshot(t)
-	if markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:complete") {
+	session := support.GetDefaultSession(t, server.URL())
+	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
 		t.Fatalf("interrupted routing reached goal:complete for work %q", workID)
 	}
-	if !markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:interrupted") {
+	if !markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:interrupted") {
 		t.Fatalf("marking missing goal:interrupted token for work %q", workID)
 	}
 }
@@ -188,21 +182,21 @@ func TestNamedGoalRouting_ReworkLoopsBackThenCompletesWithGoalContext(t *testing
 		t.Fatalf("primaryResult = %q, want %q", got, packagedGoalMockWorkerAcceptedSummary)
 	}
 
-	reviewDispatches := countNamedGoalRoutingDispatchesOnServer(t, server, goal.PackagedReviewWorkstationName)
+	reviewDispatches := countNamedGoalRoutingDispatchesOnServer(t, server, publicGoal.PackagedReviewWorkstationName)
 	if reviewDispatches < 2 {
 		t.Fatalf("review dispatch count = %d, want at least 2 for needs_changes rework loop", reviewDispatches)
 	}
 	if !namedGoalRoutingDispatchHistoryIncludesLabel(
 		t,
 		server,
-		goal.PackagedReviewWorkstationName,
+		publicGoal.PackagedReviewWorkstationName,
 		"needs_changes",
 	) {
 		t.Fatal("dispatch history missing needs_changes review classification before accepted completion")
 	}
 
 	work := findNamedGoalRoutingWorkAtCompleteState(t, server)
-	if !markingContainsNamedGoalRoutingWorkAtPlace(server.GetEngineStateSnapshot(t), stringPointerValue(work.WorkId), "goal:complete") {
+	if !markingContainsNamedGoalRoutingWorkAtPlace(support.GetDefaultSession(t, server.URL()), stringPointerValue(work.WorkId), "goal:complete") {
 		t.Fatalf("completed work %q missing goal:complete token after rework", stringPointerValue(work.WorkId))
 	}
 }
@@ -213,11 +207,11 @@ func TestNamedGoalRouting_StructuredUnknownDecisionRoutesToFailed(t *testing.T) 
 	}
 
 	dir := materializeNamedGoalFactoryForRoutingSmoke(t)
-	writePackagedGoalCheckWorkstationReviewModeForSmoke(t, dir, goal.PackagedReviewModeStructuredLabel)
+	writePackagedGoalCheckWorkstationReviewModeForSmoke(t, dir, publicGoal.PackagedReviewModeStructuredLabel)
 	envelope := `{"decision":"MAYBE","feedback":"unknown structured decision"}`
 	mockWorkersPath := writePackagedGoalBuiltinTopologyMockWorkers(t, packagedGoalTopologyMockOptions{
 		checkerOutput:       "structured",
-		reviewerWorkstation: goal.PackagedStructuredReviewWorkstationName,
+		reviewerWorkstation: publicGoal.PackagedStructuredReviewWorkstationName,
 		reviewerOutput:      envelope,
 	})
 	goalText := fmt.Sprintf("functional-smoke-goal-routing-structured-unknown-%d", time.Now().UnixNano())
@@ -247,20 +241,16 @@ type packagedGoalTopologyMockOptions struct {
 func materializeNamedGoalFactoryForRoutingSmoke(t *testing.T) string {
 	t.Helper()
 
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
-	}
-	return dir
+	return support.InstallPackagedFactory(t, t.TempDir(), publicGoal.PackagedFactoryName)
 }
 
 func writePackagedGoalCheckWorkstationReviewModeForSmoke(t *testing.T, dir, reviewMode string) {
 	t.Helper()
 
-	support.WriteWorkstationConfig(t, dir, goal.PackagedCheckWorkstationName, `---
+	support.WriteWorkstationConfig(t, dir, publicGoal.PackagedCheckWorkstationName, `---
 type: CLASSIFIER_WORKSTATION
 env:
-  `+goal.PackagedCheckReviewModeEnvVar+`: "`+reviewMode+`"
+  `+publicGoal.PackagedCheckReviewModeEnvVar+`: "`+reviewMode+`"
 ---
 Review packaged goal work.
 `)
@@ -275,7 +265,7 @@ func writePackagedGoalBuiltinTopologyMockWorkers(t *testing.T, opts packagedGoal
 	}
 	reviewerWorkstation := strings.TrimSpace(opts.reviewerWorkstation)
 	if reviewerWorkstation == "" {
-		reviewerWorkstation = goal.PackagedReviewWorkstationName
+		reviewerWorkstation = publicGoal.PackagedReviewWorkstationName
 	}
 	reviewerOutput := strings.TrimSpace(opts.reviewerOutput)
 	if reviewerOutput == "" {
@@ -284,24 +274,24 @@ func writePackagedGoalBuiltinTopologyMockWorkers(t *testing.T, opts packagedGoal
 	checkerCommand, checkerArgs := mockWorkerEchoCommand(checkerOutput)
 	reviewerCommand, reviewerArgs := mockWorkerEchoCommand(reviewerOutput)
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-planner",
-				WorkstationName: goal.PackagedPlanWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkstationName: publicGoal.PackagedPlanWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-executor",
-				WorkstationName: goal.PackagedExecuteWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkstationName: publicGoal.PackagedExecuteWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-checker",
-				WorkstationName: goal.PackagedCheckWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				WorkstationName: publicGoal.PackagedCheckWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: checkerCommand,
 					Args:    checkerArgs,
 				},
@@ -309,8 +299,8 @@ func writePackagedGoalBuiltinTopologyMockWorkers(t *testing.T, opts packagedGoal
 			{
 				WorkerName:      "goal-reviewer",
 				WorkstationName: reviewerWorkstation,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: reviewerCommand,
 					Args:    reviewerArgs,
 				},
@@ -363,33 +353,33 @@ func writePackagedGoalBuiltinTopologySequencedReviewerMockWorkers(t *testing.T, 
 		t.Fatalf("write sequenced goal reviewer script: %v", err)
 	}
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-planner",
-				WorkstationName: goal.PackagedPlanWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkstationName: publicGoal.PackagedPlanWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-executor",
-				WorkstationName: goal.PackagedExecuteWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkstationName: publicGoal.PackagedExecuteWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-checker",
-				WorkstationName: goal.PackagedCheckWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				WorkstationName: publicGoal.PackagedCheckWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{"plain"},
 				},
 			},
 			{
 				WorkerName:      "goal-reviewer",
-				WorkstationName: goal.PackagedReviewWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				WorkstationName: publicGoal.PackagedReviewWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: scriptPath,
 				},
 			},
@@ -398,7 +388,7 @@ func writePackagedGoalBuiltinTopologySequencedReviewerMockWorkers(t *testing.T, 
 	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-goal-routing-sequenced.json")
 }
 
-func writeMockWorkersConfigFile(t *testing.T, cfg factoryconfig.MockWorkersConfig, fileName string) string {
+func writeMockWorkersConfigFile(t *testing.T, cfg workers.MockWorkersConfig, fileName string) string {
 	t.Helper()
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -420,13 +410,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 	t.Helper()
 
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(
-		defaultpaths.NamedFactoriesRoot(homeDir),
-		goal.PackagedFactoryName,
-		goal.BuiltInFactoryJSON,
-	); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
-	}
+	support.InstallPackagedFactory(t, homeDir, publicGoal.PackagedFactoryName)
 
 	port, err := reserveLocalTCPPort()
 	if err != nil {
@@ -443,7 +427,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 		binaryPath,
 		"--json",
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", publicGoal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -452,7 +436,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 		goalText,
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -509,17 +493,18 @@ func postNamedGoalRoutingInvocationOnServer(
 func startNamedGoalRoutingAPIServer(t *testing.T, factoryDir, mockWorkersPath string) *support.FunctionalAPIServer {
 	t.Helper()
 
-	mockWorkersConfig, err := factoryconfig.LoadMockWorkersConfig(mockWorkersPath)
+	payload, err := os.ReadFile(mockWorkersPath)
 	if err != nil {
-		t.Fatalf("LoadMockWorkersConfig: %v", err)
+		t.Fatalf("read customer mock-workers config: %v", err)
+	}
+	var mockWorkersConfig workers.MockWorkersConfig
+	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
+		t.Fatalf("decode customer mock-workers config: %v", err)
 	}
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.MockWorkersConfig = mockWorkersConfig
-		},
+		MockWorkersConfig:         &mockWorkersConfig,
 	})
 }
 
@@ -553,10 +538,9 @@ func countNamedGoalRoutingDispatchesOnServer(
 ) int {
 	t.Helper()
 
-	snapshot := server.GetEngineStateSnapshot(t)
 	count := 0
-	for _, dispatch := range snapshot.DispatchHistory {
-		if dispatch.WorkstationName == workstationName {
+	for _, dispatch := range support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)) {
+		if dispatch.Request.TransitionId == workstationName {
 			count++
 		}
 	}
@@ -569,12 +553,12 @@ func namedGoalRoutingDispatchHistoryIncludesLabel(
 	workstationName string,
 	label string,
 ) bool {
-	snapshot := server.GetEngineStateSnapshot(t)
-	for _, dispatch := range snapshot.DispatchHistory {
-		if dispatch.WorkstationName != workstationName {
+	for _, dispatch := range support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)) {
+		if dispatch.Request.TransitionId != workstationName || dispatch.Response == nil {
 			continue
 		}
-		if dispatch.SelectedClassificationLabel == label {
+		if dispatch.Response.SelectedClassificationLabel != nil &&
+			*dispatch.Response.SelectedClassificationLabel == label {
 			return true
 		}
 	}
@@ -591,7 +575,7 @@ func submitNamedGoalRoutingWork(
 
 	body, err := json.Marshal(map[string]any{
 		"name":         name,
-		"workTypeName": goal.PackagedGoalWorkTypeName,
+		"workTypeName": publicGoal.PackagedGoalWorkTypeName,
 		"items": []map[string]any{{
 			"type": "text",
 			"text": text,
@@ -698,20 +682,9 @@ func generatedWorkStateName(state *factoryapi.WorkState) string {
 }
 
 func markingContainsNamedGoalRoutingWorkAtPlace(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	session factoryapi.FactorySession,
 	workID string,
 	placeID string,
 ) bool {
-	if snapshot == nil {
-		return false
-	}
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.PlaceID != placeID {
-			continue
-		}
-		if token.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
+	return support.SessionHasWorkAtPlace(session, workID, placeID)
 }

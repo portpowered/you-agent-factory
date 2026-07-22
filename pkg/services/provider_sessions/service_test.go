@@ -1,0 +1,194 @@
+package providersessions_test
+
+import (
+	"database/sql"
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
+	providercursor "github.com/portpowered/infinite-you/pkg/services/provider_sessions/cursor"
+	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
+)
+
+func TestDetailsLoadsCodexSessionThroughService(t *testing.T) {
+	root := t.TempDir()
+	sessionDir := filepath.Join(root, "2026", "07", "16")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("mkdir session fixture: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(sessionDir, "rollout-session-123.jsonl"),
+		[]byte("{\"type\":\"session_meta\"}\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write session fixture: %v", err)
+	}
+
+	detail, err := newServiceForRoots(t, root, "").Details("codex", "session_id", "session-123")
+	if err != nil {
+		t.Fatalf("Details: %v", err)
+	}
+	if detail.ProviderSession.Provider != providersessions.ProviderCodex ||
+		detail.ProviderSession.ID != "session-123" {
+		t.Fatalf("provider session = %#v, want codex session-123", detail.ProviderSession)
+	}
+}
+
+func TestDetailsNormalizesCursorAliasesAndWrapsLookupContext(t *testing.T) {
+	root := providercursor.AgentStorageRoot(t.TempDir())
+	for _, provider := range []string{"cursor", "agent", "cursor-agent"} {
+		t.Run(provider, func(t *testing.T) {
+			_, err := newServiceForRoots(t, t.TempDir(), string(root)).Details(provider, "session_id", "missing-session")
+			if !errors.Is(err, providersessions.ErrSessionNotFound) {
+				t.Fatalf("err = %v, want ErrSessionNotFound", err)
+			}
+			var lookupErr *providersessions.LookupError
+			if !errors.As(err, &lookupErr) {
+				t.Fatalf("err = %T, want LookupError", err)
+			}
+			if lookupErr.Provider != providersessions.ProviderCursor || lookupErr.Root != string(root) {
+				t.Fatalf("lookup error = %#v, want normalized cursor root context", lookupErr)
+			}
+		})
+	}
+}
+
+func TestDetailsRejectsUnsupportedProviderAndKind(t *testing.T) {
+	svc := newServiceForRoots(t, t.TempDir(), "")
+	if _, err := svc.Details("openai", "session_id", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("provider err = %v, want ErrUnsupportedProvider", err)
+	}
+	if _, err := svc.Details("codex", "path", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedKind) {
+		t.Fatalf("kind err = %v, want ErrUnsupportedKind", err)
+	}
+}
+
+func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t *testing.T) {
+	root := t.TempDir()
+	_, err := newServiceForRoots(t, t.TempDir(), root).Details("agent", "session_id", "missing-session")
+	assertCursorLookupContext(t, err, root)
+}
+
+func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t *testing.T) {
+	service := newServiceForRoots(t, t.TempDir(), t.TempDir())
+	if _, err := service.Details("openai", "session_id", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedProvider) {
+		t.Fatalf("provider error = %v, want ErrUnsupportedProvider", err)
+	}
+	if _, err := service.Details("codex", "path", "session-123"); !errors.Is(err, providersessions.ErrUnsupportedKind) {
+		t.Fatalf("kind error = %v, want ErrUnsupportedKind", err)
+	}
+}
+
+func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRoot(t *testing.T) {
+	root := t.TempDir()
+	_, err := newServiceForRoots(t, t.TempDir(), root).Details("agent", "session_id", "missing-session")
+	assertCursorLookupContext(t, err, root)
+}
+
+func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRoots(t *testing.T) {
+	codexRoot, cursorRoot := t.TempDir(), t.TempDir()
+	service := newServiceForRoots(t, codexRoot, cursorRoot)
+	_, codexErr := service.Details("codex", "session_id", "missing-session")
+	assertLookupContext(t, codexErr, providersessions.ProviderCodex, codexRoot)
+	_, cursorErr := service.Details("cursor", "session_id", "missing-session")
+	assertCursorLookupContext(t, cursorErr, cursorRoot)
+}
+
+func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testing.T) {
+	codexRoot, cursorRoot := t.TempDir(), t.TempDir()
+	service := newServiceForRoots(t, codexRoot, cursorRoot)
+	for _, test := range []struct {
+		provider string
+		want     providersessions.Provider
+		root     string
+	}{
+		{"codex", providersessions.ProviderCodex, codexRoot},
+		{"cursor", providersessions.ProviderCursor, cursorRoot},
+		{"agent", providersessions.ProviderCursor, cursorRoot},
+	} {
+		_, err := service.Details(test.provider, "session_id", "missing-session")
+		assertLookupContext(t, err, test.want, test.root)
+	}
+}
+
+func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
+	root := t.TempDir()
+	_, err := newServiceForRoots(t, t.TempDir(), root).Details("cursor", "session_id", "missing-session")
+	assertCursorLookupContext(t, err, root)
+}
+
+func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigured(t *testing.T) {
+	_, err := newServiceForRoots(t, t.TempDir(), "").Details("cursor", "session_id", "missing-session")
+	assertCursorLookupContext(t, err, "")
+}
+
+func assertCursorLookupContext(t *testing.T, err error, root string) {
+	t.Helper()
+	assertLookupContext(t, err, providersessions.ProviderCursor, root)
+}
+
+func assertLookupContext(t *testing.T, err error, provider providersessions.Provider, root string) {
+	t.Helper()
+	if !errors.Is(err, providersessions.ErrSessionNotFound) {
+		t.Fatalf("error = %v, want ErrSessionNotFound", err)
+	}
+	var lookupErr *providersessions.LookupError
+	if !errors.As(err, &lookupErr) || lookupErr.Provider != provider || lookupErr.Root != root {
+		t.Fatalf("lookup error = %#v, want provider=%q root=%q", lookupErr, provider, root)
+	}
+}
+
+func TestNewRejectsMissingProcessEdges(t *testing.T) {
+	resolveHome := providersessions.ResolveHomeDirectory(func() (string, error) { return t.TempDir(), nil })
+	tests := []struct {
+		name                  string
+		files                 providersessions.FileSystem
+		home                  providersessions.ResolveHomeDirectory
+		codexWalk             providersessions.CodexWalkDirectory
+		codexSymlinks         providersessions.CodexResolveSymlinks
+		cursorWalk            providersessions.CursorWalkDirectory
+		cursorSymlinks        providersessions.CursorResolveSymlinks
+		cursorDatabase        providersessions.CursorOpenSQLDatabase
+		cursorOperatingSystem providersessions.OperatingSystem
+	}{
+		{name: "filesystem", home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "home resolver", files: platformfilesystem.Local{}, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "Codex walker", files: platformfilesystem.Local{}, home: resolveHome, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "Codex symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor walker", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor symlink resolver", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorDatabase: sql.Open, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "Cursor database opener", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorOperatingSystem: providersessions.OperatingSystem(runtime.GOOS)},
+		{name: "operating system", files: platformfilesystem.Local{}, home: resolveHome, codexWalk: filepath.WalkDir, codexSymlinks: filepath.EvalSymlinks, cursorWalk: filepath.WalkDir, cursorSymlinks: filepath.EvalSymlinks, cursorDatabase: sql.Open},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := providersessionsservice.New(test.files, test.home, test.codexWalk, test.codexSymlinks, test.cursorWalk, test.cursorSymlinks, test.cursorDatabase, test.cursorOperatingSystem)
+			if err == nil {
+				t.Fatalf("New() error = nil, want missing %s dependency", test.name)
+			}
+		})
+	}
+}
+
+func newServiceForRoots(t *testing.T, codexRoot, cursorRoot string) providersessions.Service {
+	t.Helper()
+	service, err := providersessionsservice.NewForRoots(
+		platformfilesystem.Local{},
+		providersessions.CodexWalkDirectory(filepath.WalkDir),
+		providersessions.CodexResolveSymlinks(filepath.EvalSymlinks),
+		providersessions.CursorWalkDirectory(filepath.WalkDir),
+		providersessions.CursorResolveSymlinks(filepath.EvalSymlinks),
+		providersessions.CursorOpenSQLDatabase(sql.Open),
+		codexRoot,
+		cursorRoot,
+	)
+	if err != nil {
+		t.Fatalf("NewForRoots: %v", err)
+	}
+	return service
+}

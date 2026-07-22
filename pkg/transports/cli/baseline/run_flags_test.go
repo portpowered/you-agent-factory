@@ -5,18 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/baseline"
-	"github.com/spf13/cobra"
 )
 
 const runFlagsFixture = "testdata/run_flags.txt"
 
 func TestRunFlagsBaseline_MatchesFixture(t *testing.T) {
-	runCmd := productionRunCommand(t)
-	got := baseline.SerializeRunFlags(runCmd)
+	got := productionRunFlags(t)
 
-	want, err := baseline.ReadFixtureText(runFlagsFixture)
+	want, err := baseline.ReadFixtureText(fixtureSourceStore(), runFlagsFixture)
 	if err != nil {
 		t.Fatalf("read run flags baseline fixture: %v", err)
 	}
@@ -33,24 +30,20 @@ func TestRunFlagsBaseline_MatchesFixture(t *testing.T) {
 }
 
 func TestRunFlagsBaseline_IsStableAcrossRuns(t *testing.T) {
-	runCmd := productionRunCommand(t)
-
-	first := baseline.SerializeRunFlags(runCmd)
-	second := baseline.SerializeRunFlags(runCmd)
+	first := productionRunFlags(t)
+	second := productionRunFlags(t)
 	if first != second {
 		t.Fatalf("run flags serialization is not stable across repeated runs\n%s", formatLineDiff(first, second))
 	}
 }
 
-func productionRunCommand(t *testing.T) *cobra.Command {
+func productionRunFlags(t *testing.T) string {
 	t.Helper()
-
-	root := cli.NewRootCommand()
-	runCmd, _, err := root.Find([]string{"run"})
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("find run command: %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
-	return runCmd
+	return observation.Snapshot.RunFlags
 }
 
 func formatLineDiff(want, got string) string {

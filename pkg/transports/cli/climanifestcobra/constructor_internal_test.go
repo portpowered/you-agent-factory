@@ -120,72 +120,20 @@ func TestPositionalArgsFromManifestCoversCardinalityModes(t *testing.T) {
 	}
 }
 
-func TestBuildModelsDocsCommandFromRecordRejectsOutOfFamilyID(t *testing.T) {
-	if _, err := buildModelsDocsCommandFromRecord(climanifest.Command{
-		ID:    "you.run",
-		Usage: climanifest.Usage{Line: "run"},
-	}); err == nil {
-		t.Fatal("buildModelsDocsCommandFromRecord() out-of-family = nil, want error")
-	}
-}
-
-func TestRegisterStringLocalFlagAppliesHiddenVisibility(t *testing.T) {
-	cmd := &cobra.Command{Use: "invoke"}
-	target := "TTS"
-	if err := registerStringLocalFlag(cmd, climanifest.Flag{
-		Long:       "operation",
-		Default:    "TTS",
-		Visibility: "hidden",
-	}, &target, "operation usage"); err != nil {
-		t.Fatalf("registerStringLocalFlag() error = %v", err)
-	}
-	flag := cmd.Flags().Lookup("operation")
-	if flag == nil || !flag.Hidden {
-		t.Fatalf("flag = %#v, want hidden invoke local flag", flag)
-	}
-}
-
-func TestBuildModelsDocsCommandFromRecordAppliesHiddenVisibility(t *testing.T) {
-	cmd, err := buildModelsDocsCommandFromRecord(climanifest.Command{
-		ID:         "you.models.list",
-		Usage:      climanifest.Usage{Line: "list"},
-		Visibility: "hidden",
-		Documentation: climanifest.Documentation{
-			Documentation: climanifest.DocumentationCopy{
-				Title: climanifest.DocumentationField{CanonicalEnglish: "title"},
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildModelsDocsCommandFromRecord() error = %v", err)
-	}
-	if !cmd.Hidden {
-		t.Fatal("hidden models/docs command must set cmd.Hidden")
-	}
-}
-
-func TestRegisterModelsLocalFlagsRejectsUnsupportedFlag(t *testing.T) {
+func TestRegisterManifestLocalFlagsRejectsUnsupportedValueType(t *testing.T) {
 	cmd := &cobra.Command{Use: "list"}
-	err := registerModelsLocalFlags(cmd, climanifest.Command{
+	err := registerManifestLocalFlags(cmd, climanifest.Command{
 		ID: "you.models.list",
 		Flags: map[string]climanifest.Flag{
 			"you.models.list.flag.foo": {
 				Long:      "foo",
 				Scope:     "local",
-				ValueType: "string",
+				ValueType: "duration",
 			},
 		},
-	}, ModelsInvokeFlagBindings{}, false)
+	})
 	if err == nil {
-		t.Fatal("registerModelsLocalFlags() unsupported flag = nil, want error")
-	}
-}
-
-func TestRegisterInvokeStringLocalFlagRejectsMissingBindingOnInvoke(t *testing.T) {
-	cmd := &cobra.Command{Use: "invoke"}
-	err := registerInvokeStringLocalFlag(cmd, climanifest.Flag{Long: "operation"}, ModelsInvokeFlagBindings{}, true, nil, "operation")
-	if err == nil {
-		t.Fatal("registerInvokeStringLocalFlag() missing binding = nil, want error")
+		t.Fatal("registerManifestLocalFlags() unsupported type = nil, want error")
 	}
 }
 
@@ -231,10 +179,10 @@ func TestRegisterLocalFlagsRegistersDeprecatedPort(t *testing.T) {
 		ID: "you.session.show",
 		Flags: map[string]climanifest.Flag{
 			"you.session.show.flag.port": {
-				Long:      "port",
-				Scope:     "local",
-				ValueType: "int",
-				Default:   "0",
+				Long:       "port",
+				Scope:      "local",
+				ValueType:  "int",
+				Default:    "0",
 				Visibility: "hidden",
 			},
 		},
@@ -332,7 +280,7 @@ func TestNewRepresentativeFamilyComponentsLoadsEmbeddedManifest(t *testing.T) {
 		t.Fatalf("NewRepresentativeFamilyComponents() error = %v", err)
 	}
 	if components.Show == nil {
-		t.Fatal("expected show component from embedded manifest")
+		t.Fatal("expected show component from generated manifest")
 	}
 }
 

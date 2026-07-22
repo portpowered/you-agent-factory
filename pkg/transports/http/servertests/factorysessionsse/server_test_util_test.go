@@ -1,18 +1,110 @@
 package factorysessionsse
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
-func newAPITestServer(f *testutil.MockFactory) *api.Server {
+type factorySessionEventProgram struct {
+	replay func(
+		[]interfaces.FactoryEvent,
+		interfaces.FactoryEventReconnectCursor,
+		interfaces.FactoryEventReconnectScope,
+	) ([]interfaces.FactoryEvent, error)
+	stream interfaces.FactoryEventStream
+}
+
+// programmedFactorySessionEvents is a strict transport test implementation of
+// the public WorkAPI role. Only Factory Session event subscription and probing
+// are programmable; every unrelated Work operation fails loudly.
+type programmedFactorySessionEvents struct {
+	mu       sync.RWMutex
+	sessions map[string]factorySessionEventProgram
+}
+
+func newProgrammedFactorySessionEvents() *programmedFactorySessionEvents {
+	return &programmedFactorySessionEvents{sessions: make(map[string]factorySessionEventProgram)}
+}
+
+func (service *programmedFactorySessionEvents) SetSession(sessionID string, program factorySessionEventProgram) {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	service.sessions[sessionID] = program
+}
+
+func (service *programmedFactorySessionEvents) SubscribeFactoryEventsForSession(
+	ctx context.Context,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) (*interfaces.FactoryEventStream, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	service.mu.RLock()
+	program, ok := service.sessions[sessionID]
+	service.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+
+	history := append([]interfaces.FactoryEvent(nil), program.stream.History...)
+	if reconnect != nil {
+		if program.replay == nil {
+			return nil, fmt.Errorf("factory event reconnect program is unavailable")
+		}
+		var err error
+		history, err = program.replay(
+			history,
+			*reconnect,
+			interfaces.FactoryEventReconnectScope{SessionID: sessionID},
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	stream := program.stream
+	stream.History = history
+	return &stream, nil
+}
+
+func (service *programmedFactorySessionEvents) ProbeFactoryEventsForSession(
+	ctx context.Context,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) error {
+	_, err := service.SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+	return err
+}
+
+func (*programmedFactorySessionEvents) SubmitWorkRequestForSession(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	panic("unexpected WorkAPI.SubmitWorkRequestForSession call")
+}
+
+func (*programmedFactorySessionEvents) MoveWorkForSession(context.Context, string, string, string, string) (work.OperatorMoveResult, error) {
+	panic("unexpected WorkAPI.MoveWorkForSession call")
+}
+
+func (*programmedFactorySessionEvents) GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[factoryruntime.PetriMarkingSnapshot, *factoryruntime.Net], error) {
+	panic("unexpected WorkAPI.GetEngineStateSnapshotForSession call")
+}
+
+func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
-	return api.NewServer(f, 8080, logger)
+	return api.NewServer(
+		nil, nil, nil, workAPI, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
+	)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

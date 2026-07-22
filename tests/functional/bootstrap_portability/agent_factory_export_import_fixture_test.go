@@ -7,9 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type agentFactoryExportImportFixture struct {
@@ -47,11 +49,11 @@ func newAgentFactoryExportImportFixture(
 	authoredDir := t.TempDir()
 	writeAgentFactoryExportImportAuthoredLayout(t, authoredDir, name, options.workType, options.terminalState)
 
-	canonicalPayload, err := factoryconfig.FlattenFactoryConfig(authoredDir)
+	canonicalPayload, err := support.FlattenFactoryConfig(t, authoredDir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(%s): %v", name, err)
 	}
-	if _, err := factoryconfig.LoadRuntimeConfig(authoredDir, nil); err != nil {
+	if _, err := support.LoadedFactory(t, authoredDir); err != nil {
 		t.Fatalf("LoadRuntimeConfig(authored fixture %s): %v", name, err)
 	}
 
@@ -168,7 +170,7 @@ func TestAgentFactoryExportImportFixture_FlattenedPayloadKeepsCanonicalArrayRout
 
 	assertAgentFactoryExportImportCanonicalRouteArraysJSON(t, fixture.CanonicalPayload)
 
-	generated, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(fixture.CanonicalPayload)
+	generated, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(fixture.CanonicalPayload)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(%s): %v", fixture.Name, err)
 	}

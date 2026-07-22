@@ -15,8 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/service"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -43,10 +42,18 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	dir := support.ScaffoldFactory(t, realLocalInferenceFactoryConfig(command))
 	writeRealLocalInferenceWorkstationConfig(t, dir)
 
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.ModelCacheDir = cacheDir
-		cfg.SkipBuiltInRunnerPrerequisiteValidation = true
-	}, factory.WithServiceMode())
+	environment := append(
+		os.Environ(),
+		runcli.ModelCacheDirEnvironment+"="+cacheDir,
+	)
+	unexpectedProvider := support.NewRecordingCommandRunner("unexpected cloud-provider invocation")
+	server := startFunctionalServer(
+		t,
+		dir,
+		false,
+		withEnvironment(environment),
+		withWorkerCommands(unexpectedProvider, nil),
+	)
 
 	pull := postJSON[factoryapi.ModelPullResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/pull", nil, "asset pull failure")
 	if pull.ModelName != "OMNIVOICE_Q4_K_M" || pull.CachePath == "" || pull.Revision == "" || len(pull.DownloadedFiles) == 0 {

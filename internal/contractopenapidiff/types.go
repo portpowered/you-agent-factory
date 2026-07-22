@@ -69,13 +69,13 @@ const (
 
 // Stable removal and narrowing change codes.
 const (
-	CodeOperationRemoved        = "openapi.remove.operation"
-	CodeParameterRemoved        = "openapi.remove.parameter"
-	CodeSchemaRemoved           = "openapi.remove.schema"
-	CodeSchemaPropertyRemoved   = "openapi.remove.schema.property"
-	CodeEnumValueRemoved        = "openapi.remove.enum.value"
-	CodeSchemaTypeNarrowed      = "openapi.narrow.schema.type"
-	CodeSchemaRequiredNarrowed  = "openapi.narrow.schema.required"
+	CodeOperationRemoved          = "openapi.remove.operation"
+	CodeParameterRemoved          = "openapi.remove.parameter"
+	CodeSchemaRemoved             = "openapi.remove.schema"
+	CodeSchemaPropertyRemoved     = "openapi.remove.schema.property"
+	CodeEnumValueRemoved          = "openapi.remove.enum.value"
+	CodeSchemaTypeNarrowed        = "openapi.narrow.schema.type"
+	CodeSchemaRequiredNarrowed    = "openapi.narrow.schema.required"
 	CodeParameterRequiredNarrowed = "openapi.narrow.parameter.required"
 )
 

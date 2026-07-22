@@ -3,7 +3,7 @@ package support
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
 // DefaultSessionWorkAPIPrefix is the HTTP prefix for work routes on the default factory session.

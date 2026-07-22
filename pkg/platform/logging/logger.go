@@ -35,6 +35,10 @@ func EnsureLogger(l Logger) Logger {
 	return l
 }
 
+func NewDefaultLogger() (*zap.Logger, error) {
+	return BuildLogger(false, false)
+}
+
 // BuildLogger creates a zap.Logger with the appropriate verbosity level.
 //   - debug=true: Debug+ (implies verbose; development-style output)
 //   - verbose=true: Info+ (development-style output)
@@ -55,7 +59,7 @@ func BuildLogger(verbose, debug bool) (*zap.Logger, error) {
 
 // BuildTerminalMutedLogger returns a warn-level zap logger that discards all
 // terminal output. Normal CLI mode uses this so structured records stay off
-// stdout/stderr while BuildRuntimeLogger can still tee into rolling file sinks.
+// stdout/stderr while the injected runtime-log opener can tee into rolling file sinks.
 func BuildTerminalMutedLogger() (*zap.Logger, error) {
 	cfg := zap.NewProductionConfig()
 	core := zapcore.NewCore(
@@ -64,4 +68,17 @@ func BuildTerminalMutedLogger() (*zap.Logger, error) {
 		zapcore.WarnLevel,
 	)
 	return zap.New(core), nil
+}
+
+// BuildTerminalLogger selects a process terminal logger for the resolved CLI
+// mode without leaking platform construction into transport packages.
+func BuildTerminalLogger(mode string, debug bool) (*zap.Logger, error) {
+	switch mode {
+	case "quiet":
+		return zap.NewNop(), nil
+	case "normal":
+		return BuildTerminalMutedLogger()
+	default:
+		return BuildLogger(true, debug)
+	}
 }

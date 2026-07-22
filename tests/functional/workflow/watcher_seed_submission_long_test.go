@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,17 +28,8 @@ func TestFileWatcherFlowSingle(t *testing.T) {
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		TokenCount(1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:processing": 0})
 }
 
 // TestFileWatcherFlowSequential drops 3 seed files and verifies all 3
@@ -58,17 +50,8 @@ func TestFileWatcherFlowSequential(t *testing.T) {
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		PlaceTokenCount("task:complete", 3).
-		TokenCount(3)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 3})
 }
 
 // TestFileWatcherFlowConcurrent drops 5 seed files simultaneously and verifies
@@ -91,17 +74,8 @@ func TestFileWatcherFlowConcurrent(t *testing.T) {
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		PlaceTokenCount("task:complete", 5).
-		TokenCount(5)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:init": 0, "task:processing": 0, "task:complete": 5})
 }
 
 // TestFileWatcherFlowNoTokenLeaks verifies that after processing a mix
@@ -117,28 +91,16 @@ func TestFileWatcherFlowNoTokenLeaks(t *testing.T) {
 
 	// Pre-load results: succeed, succeed, fail, succeed, fail.
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
-		workers.CommandResult{Stderr: []byte("error"), ExitCode: 1},
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
-		workers.CommandResult{Stderr: []byte("error"), ExitCode: 1},
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
+		platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stderr: []byte("error"), ExitCode: 1},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 3).
-		PlaceTokenCount("task:failed", 2).
-		TokenCount(5)
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID != "task:complete" && tok.PlaceID != "task:failed" {
-			t.Errorf("token leak: token %s stuck in non-terminal place %s", tok.ID, tok.PlaceID)
-		}
-	}
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"task:complete": 3, "task:failed": 2, "task:init": 0, "task:processing": 0,
+	})
 }

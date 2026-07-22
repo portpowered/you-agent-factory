@@ -40,31 +40,11 @@ primary-result behavior.
   leaf; `commandregistry.NewRunSubmitRegistry` attaches retained `PreRunE` and
   `RunE` lifecycles by stable command ID. Production execution bindings are
   assembled by `newRunSubmitHandlerRegistry` in `root_work.go`.
-  `productionRunSubmitCommands` selects the generated family by default while
-  retaining the handwritten constructors behind the localized
-  `useGeneratedRunSubmitFamily` rollback constant.
+  `productionRunSubmitCommands` always selects the generated family.
   `NewGeneratedRunSubmitFamilyCommandForParity` exposes the isolated generated
-  tree for focused verification.
-  `NewRunSubmitFamilyParityRoots` builds independent legacy and generated roots
-  with injected `RootCommandOptions`; use it for observable parser, resolved
-  `RunConfig`, service-call, stdout/stderr, and error parity without sharing
-  mutable Cobra flag state. Inject unary submit through `RootCommandOptions.SubmitWork`
-  and call the real submit transport against an `httptest` server when parity
-  must prove request path/body, default or explicit session selection, and
-  human/JSON output. Manifest-required submit inputs remain validated by the
-  retained handwritten handler so generated construction does not preempt its
-  stable diagnostics or validation ordering. Batch positional cardinality is
-  likewise retained in `submit.resolveBatchInput`; inject the real batch
-  transport through `RootCommandOptions.SubmitBatch` so parity roots receive
-  independent Cobra stdin/stdout/stderr streams while proving `--file`,
-  positional file, inline JSON, explicit or implicit stdin, dry-run, session
-  routing, request, output, diagnostic, and failure behavior. When both parity
-  roots share a migrated execution helper, also assert fixed pre-migration
-  outcomes (including nil optional sinks and exact stdout/stderr) so changing
-  that helper cannot redefine the legacy oracle. Run-specific
-  coverage lives in `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`;
-  unary and batch submit coverage lives in the sibling `submitparity` and
-  `submitbatchparity` packages.
+  tree for focused generated-constructor verification. Runtime behavior is
+  tested through the production root with injected `RunServices` and
+  `SubmitServices`; no handwritten command-tree oracle is retained.
 
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 
@@ -182,7 +162,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   enum values at the JSON boundary. Keep ordinary non-placeholder values on the
   existing strict enum normalization path so packaged and customer-authored
   factories can use the same interpolation-enabled authored fields.
-- `pkg/config/operatordefaultsruntime/operator_defaults_runtime.go` is the
+- `pkg/initializer/runtimeconstruction/operatordefaults/operator_defaults_runtime.go`
+  is the
   startup-time runtime-validation seam for operator-defaulted model workers.
   When a model-worker `modelProvider` uses exact `${parameter}` invocation
   interpolation, validate that it references a declared signature parameter
@@ -245,7 +226,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
-  `pkg/config/operatorconfig` and `pkg/transports/cli/run` should keep only precedence,
+  `pkg/services/operator_settings` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
 - When global named-factory guidance changes, update the handwritten CLI help in
   `pkg/transports/cli/root_factory.go` and `root_work.go`, the authored
@@ -255,25 +236,26 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   CLI baselines and run `make docs-reference-smoke`.
 - Persisted local `backendScopeID` values live in the same
   `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
-  logic in `pkg/config/systemconfig`, resolve it during `service.BuildFactoryCore`
-  before session identity is exposed, and keep `pkg/config/operatorconfig` tolerant
+  logic in `pkg/services/operator_settings`, resolve it during `service.BuildFactoryCore`
+  before session identity is exposed, and keep `pkg/services/operator_settings` tolerant
   of the top-level `backendScopeID` field so operator-default parsing still works.
   Local backend scope policy: blank values generate `local-<uuid>` once and persist
   it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
   restarts; values starting with `local-` that are not valid `local-<uuid>` fail
   startup with a config error instead of being silently replaced.
 - Canonical `you config init` system bootstrap belongs in
-  `pkg/config/configinit` (`Init`, `SystemConfigOutcome`) and
+  `pkg/initializer/configinit` (`Init`, `SystemConfigOutcome`) and
   `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in
   `pkg/transports/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
   Fresh homes create `~/.you-agent-factory/config.json` through
-  `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
+  `pkg/services/operator_settings.EnsureLocalBackendScope`; existing config files are
   validated with `operatorconfig.LoadFileConfig` and left byte-identical on
-  re-run. `pkg/config/configinit` enumerates `pkg/factory/packages` and persists
-  only missing catalog entries through `factoryconfig.PersistNamedFactory`;
+  re-run. `pkg/initializer/configinit` receives the Factory Definitions packaged
+  catalog and root persistence capability from Wire and persists only missing
+  catalog entries through that capability;
   valid installed directories are loaded and skipped without rewriting
   customer-owned files. Isolated-home rerun coverage lives in
-  `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
+  `pkg/initializer/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
   `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
   `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
   `pkg/transports/cli/configinit/init_test.go` / `pkg/transports/cli/root_config_init_test.go`. Keep
@@ -347,10 +329,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   manifests, bind both metadata and handlers to the same local flag state, then
   attach only the generated validate/preview leaves to the existing handwritten
   workflow parent. Keep workflow run/start/status/result/dispatch/artifact/event
-  construction outside this family slice. Constructor parity in
-  `pkg/transports/cli/climanifestparity` must compare help, parsing, completion,
-  handler outcomes, stdout/stderr, and success/failure behavior before this
-  production cutover is changed.
+  construction outside this family slice.
 - MCP protocol and resume smokes in `pkg/transports/cli/mcp/serve_*_test.go`
   should enter through `cli.NewRootCommandWithOptions` and the injected startup
   boundary, then delegate to the existing `mcp.RunServe` implementation with the
@@ -358,17 +337,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   EOF/cancellation, and durable resume assertions attached to the generated
   production `you mcp serve` construction instead of proving only its detached
   handwritten execution adapter.
-- Production CLI command manifest parity for the root + `session show` family lives in
-  `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
-  `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
-  `CompareHandlerOpenAPIBinding`, `OpenAPIOperationBinding`, `CompareLiveExitCodes`,
-  `CompareBaselineSideEffects`, `CompareBaselineConstraints`, and
-  `TestProductionCLIRootSessionFamily_RepresentativeCutover`). Approved execution metadata
-  for side-effects/constraints is loaded from
-  `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
-  `you.session.show` asserts `operationId` `getFactorySession` maps to
-  `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
-  `session.Show` JSON transport.   Representative-family metadata generation lives in
+- Representative-family metadata generation lives in
   `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`,
   `ExtractWorkFamily`, `WorkArtifact`) with `cmd/climanifestgen` and committed artifacts under
   `pkg/transports/cli/generated` (`RepresentativeFamilyManifest`, embedded
@@ -388,58 +357,21 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   constructor lives in the same package (`NewWorkFamilyCommand`,
   `NewWorkFamilyComponents`, `NewWorkFamilyCommandFromManifest`) and builds
   `you work` → `you work list|show|move|visualize` from embedded generated metadata
-  plus registry-attached handwritten handlers; isolated legacy construction for parity
-  uses `cli.NewLegacyWorkFamilyCommand` and shared-root helpers
-  `NewLegacyWorkFamilyRootForParity`, `NewWorkFamilyParityRoots`, and
-  `NewWorkFamilyParityRootsWithProductionHandlers`. Production root cutover is
-  controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
-  (`newRootCommandWithGeneratedRepresentativeFamily` with
-  `newLegacyRootCommandWithOptions` rollback). Generated-vs-legacy parity for the
-  representative family lives in `pkg/transports/cli/climanifestparity`
-  (`CompareConstructorIdentityParity`, `CompareConstructorHelpParity`,
-  `CompareConstructorParseParity`, `CompareConstructorCompletionInventoryParity`,
-  `TestGeneratedVsLegacyParityMatrix_RepresentativeFamily`) with isolated legacy
-  construction via `cli.NewLegacyRepresentativeFamilyCommand`. Work-family parity
-  mirrors the same package (`TestGeneratedVsLegacyParityMatrix_WorkFamily`,
-  `TestProductionManifestParsingParity_WorkFamily`,
-  `TestProductionManifestOutputModeParity_WorkFamily`) using the shared-root helpers
-  above; `WorkFamilyBindings.FlagUsages` bridges handwritten local flag help text.
+  plus registry-attached handwritten handlers. Production root construction is
+  generated-only through `newRootCommandWithGeneratedRepresentativeFamily`;
+  deprecated handwritten command trees and constructor-parity interfaces have
+  been removed. `WorkFamilyBindings.FlagUsages` supplies local flag help text.
 - Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
   and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
   Keep deliberate smoke violations snapshot-only: they must use the production
   validator and diagnostics without executing commands, invoking services,
-  mutating Cobra state, or requiring network access. The smoke target also runs
-  every `climanifestparity` package so generated and legacy trees stay
-  independently constructible with behavior parity.
-- Models-family manifest parity for `you.models` and list/inspect/invoke/pull leaves lives in
-  `pkg/transports/cli/climanifestparity` (`CompareModelsHelpIdentity`,
-  `TestProductionManifestHelpIdentityParity_ModelsFamily`,
-  `TestProductionManifestParsingParity_ModelsFamily`,
-  `TestProductionManifestOutputModeParity_ModelsFamily`,
-  `TestGeneratedVsLegacyParityMatrix_ModelsFamily`) with isolated legacy construction via
-  `cli.NewLegacyModelsFamilyCommand` and generated parity roots via
-  `cli.NewGeneratedModelsFamilyParityCommand`. Models output-mode tests stub delegates through
-  `ListModelsAccessor` / `SetListModelsAccessor` (and inspect/invoke/pull siblings) in
-  `pkg/transports/cli/root.go`. Leaf help parity intentionally omits contracted examples until
-  the live tree carries `Example` text again.
-- Docs-family manifest parity for `you.docs` lives in
-  `pkg/transports/cli/climanifestparity` (`CompareDocsHelpIdentity`,
-  `TestProductionManifestHelpIdentityParity_DocsFamily`,
-  `TestProductionManifestParsingParity_DocsFamily`,
-  `TestProductionManifestCompletionParity_DocsFamily`,
-  `TestProductionManifestOfflineDocsParity_DocsFamily`,
-  `TestGeneratedVsLegacyParityMatrix_DocsFamily`,
-  `TestGeneratedVsLegacyOfflineDocsParity_DocsFamily`) with isolated legacy construction via
-  `cli.NewLegacyDocsFamilyCommand` and generated parity roots via
-  `cli.NewGeneratedDocsFamilyParityCommand`. Offline docs behavior remains proven through
-  `pkg/transports/cli/root_docs_test.go`; help parity intentionally omits contracted
-  examples until the live tree carries `Example` text again.
+  mutating Cobra state, or requiring network access.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/transports/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and initializer, and do not restore root-local deferred lifecycle closures, initializer config-based runtime constructors, or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`, with `wire.BuildCLIRunner` returning an initializer application over the completed graph; MCP construction similarly retains its injected execution owner on the Wire graph before initializer startup. Dashboard-suppressed one-shot invocation normalizes through `service.NormalizeInvocationBootstrapConfig`, constructs its session foundation through `wire.InjectRuntimeCore`, and adapts that completed core through `service.NewInvocationBootstrap`; the service adapter must retain the exact graph-owned registry, persistence, durable execution, and runtime-build identities. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/wire/cli_test.go`, `pkg/initializer/application_concurrency_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/transports/http/... ./pkg/transports/cli/... ./pkg/transports/mcp/... ./pkg/initializer/... -short`.
+- Process startup follows `cmd/factory -> pkg/root.BuildProcess -> pkg/wire.InjectBundle -> application.Process.Execute -> CLI-selected initializer -> pkg/initializer`. Production and functional tests construct the same reusable process through `BuildProcess`; production supplies empty edges while functional tests replace explicit external boundaries. Every `Execute` call constructs a fresh command tree from invocation-local input. Only after CLI parsing does the matching `Run` or `Stdio` initializer construct its service subtree. There is no generic construction request, alternate production injector, root service-splicing path, or `ProcessGraph`. Keep domain construction out of root and initializer, do not restore root-local lifecycle closures or process-global builder registration, and never construct HTTP/dashboard resources for stdio or an MCP stdio transport for run/API. The normalized invocation home remains authoritative through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, persistence, recording, runtime logging, and metrics. `pkg/initializer` only starts, joins, unwinds, and closes the selected bundle. Boundary coverage lives in `pkg/root/root_test.go`, `pkg/wire/cli_test.go`, initializer application tests, functional CLI tests, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`.
 - `you models invoke` reuses the same Wire-built runtime core and
   `service.NormalizeInvocationBootstrapConfig` adapter path as one-shot factory
   invocation, constructed by `pkg/wire/model_invocation.go` from the typed
@@ -570,13 +502,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invocation primary-result byte fixtures live in
   `pkg/work/invocation/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
-  Provider-native typed adapters live under `pkg/workers/provider/<provider>`
+  Provider-native typed adapters live under `pkg/services/workers/provider/<provider>`
   and emit validated `responseevents.Draft` values. Sanitized cross-provider
-  parity transcripts and the adapter-neutral terminal harness are repository-only
-  support under `internal/testutil/providerparity`, with fidelity-class fixtures under
-  `testdata/`; extend that catalog for CLI/API parity proofs instead of
-  inventing parallel fixture trees. Use `parityfixtures.RunTransportParity`
-  plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
+  parity transcripts and the terminal harness are Workers-owned, same-package
+  test support under `pkg/services/workers/provider/paritytests`, with
+  fidelity-class fixtures under `testdata/`; extend that catalog for CLI/API
+  parity proofs instead of inventing parallel fixture trees. Use
+  `RunTransportParity` plus `AssertCLIAPITransportParity` and
+  `AssertTruthfulStreamingFidelity` there to
   compare decoded CLI NDJSON and API SSE `FactoryResponseEvent` values and
   terminal `InvocationResponse` outcomes for every fidelity class (full-stream,
   partial-stream, snapshot-only, and final-only including Agy) plus the structured
@@ -585,12 +518,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `ProjectPrimaryOnlyInvocation` and `ProjectResponseStreamInvocation` to prove
   primary-only and response-stream observation modes agree on authoritative
   terminal `InvocationResponse` outcomes for the same fixture run. Consolidated
-  Batch 09 parity proofs live in `parityfixtures.AssertCrossProviderParityCatalog`
+  Batch 09 parity proofs live in `AssertCrossProviderParityCatalog`
   and `AssertCrossProviderParityForFixture`; run them from
-  `internal/testutil/providerparity/suite_test.go`
-  (`TestCrossProviderParitySuite_Catalog`) and the provider-suite entrypoint
-  `tests/functional/providers/cross_provider_parity_smoke_test.go`
-  (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
+  `pkg/services/workers/provider/paritytests/suite_test.go`
+  (`TestCrossProviderParitySuite_Catalog`). Maintainer lanes:
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
   Batch 09 private-contract removal gates live in
@@ -609,9 +540,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `tests/functional/smoke/response_stream_private_contract_closure_smoke_test.go`
   (`TestResponseStreamPrivateContractClosureSmoke`). Supported CLI NDJSON
   recordType constants and retired-record rejection live in
-  `pkg/factory/sessions/responsestream/ndjsoncontract`; the canonical decoder in
-  `internal/testutil/providerparity/transport.go` rejects retired private
-  record types before validating public envelopes. Run these before deleting
+  `pkg/services/factory_sessions/responsestream/ndjsoncontract`; the removal
+  gate validates retired vocabulary directly, while CLI renderer tests decode
+  public envelopes through transport-local canonical fixtures. Run these before deleting
   private NDJSON record types. The retired `responsestream/compat` mapper package
   must stay deleted; internal fragment projection now lives in `fragmentmap`.
   The exact old→new CLI JSON migration map for retired private NDJSON records lives in
@@ -806,8 +737,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invalid UTF-8 assets, and assembly rejects unsafe or duplicate canonical
   bundled targets before the payload can reach config initialization. The
   assembler attaches exact asset bytes but does not install or persist anything.
-  `pkg/config/configinit` passes each missing assembled catalog payload through
-  the transactional `factoryconfig.PersistNamedFactory` boundary. That shared
+  `pkg/initializer/configinit` passes each missing assembled catalog payload
+  through the injected Factory Definitions `Persistence` boundary. That shared
   persistence path materializes `SCRIPT` entries at mode `0755`, writes only
   thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
   runtime before publishing the named-factory directory. Existing valid package
@@ -910,7 +841,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
   the real shared bootstrap path with mock workers and deterministic API-server
   starter guards to assert no factory API/dashboard listener is served.
-  `run.BuildApplication` must also skip listener reservation entirely in
+  the injected `run.Open` operation must also skip listener reservation entirely in
   invocation mode rather than briefly binding and then discarding a listener.
 - No-server bootstrap CLI/API invocation-equivalence proof lives in
   `pkg/transports/cli/run/run_invocation_test.go`

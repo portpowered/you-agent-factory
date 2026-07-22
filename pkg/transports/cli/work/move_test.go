@@ -2,6 +2,7 @@ package work
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -38,7 +39,7 @@ func TestMove_HumanOutputIncludesMoveSummary(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Move(MoveConfig{
+	err := NewMove(testHTTPProtocol(t))(MoveConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		WorkID:    "work-move-1",
 		StateName: "complete",
@@ -76,7 +77,7 @@ func TestMove_JSONOutputEmitsStableEnvelope(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Move(MoveConfig{
+	err := NewMove(testHTTPProtocol(t))(MoveConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		WorkID:    "work-move-1",
 		StateName: "init",
@@ -115,7 +116,7 @@ func TestMove_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Move(MoveConfig{
+	err := NewMove(testHTTPProtocol(t))(MoveConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		SessionID: "session/beta",
 		WorkID:    "work/review",
@@ -152,7 +153,7 @@ func TestMove_InFlightDispatchReturnsClearError(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Move(MoveConfig{
+	err := NewMove(testHTTPProtocol(t))(MoveConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		WorkID:    "work-busy",
 		StateName: "complete",
@@ -188,7 +189,7 @@ func TestMove_Returns409ForDuplicateRequestId(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Move(MoveConfig{
+	err := NewMove(testHTTPProtocol(t))(MoveConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		WorkID:    "work-dup",
 		StateName: "complete",

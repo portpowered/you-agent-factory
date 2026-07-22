@@ -1,0 +1,177 @@
+package wire
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"strings"
+
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	applicationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/applicationopening"
+	"github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	"go.uber.org/zap"
+)
+
+func provideWorkersMockWorkersConfigFileSystem(
+	edges serviceedges.Edges,
+) workers.MockWorkersConfigFileSystem {
+	if edges.WorkersMockWorkersConfigFileSystem != nil {
+		return edges.WorkersMockWorkersConfigFileSystem
+	}
+	return platformfilesystem.Local{}
+}
+
+// provideRuntimeOpeningRequestFactory is the sole mapping from transport
+// selections into the bounded owner requests consumed by Factory Sessions.
+func provideRuntimeOpeningRequestFactory() runcli.RuntimeOpeningRequestFactory {
+	return func(
+		cfg runcli.RunConfig,
+		mockWorkers *workers.MockWorkersConfig,
+		observer factorysessions.RuntimeHostObserver,
+	) factorysessions.ApplicationOpeningRequest {
+		logDirectory := cfg.RuntimeLogDir
+		if strings.TrimSpace(logDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
+			logDirectory = logging.RuntimeLogsRoot(cfg.HomeDir)
+		}
+		metricsDirectory := cfg.RuntimeMetricsDir
+		if strings.TrimSpace(metricsDirectory) == "" && strings.TrimSpace(cfg.HomeDir) != "" {
+			metricsDirectory = platformmetrics.RuntimeMetricsRoot(cfg.HomeDir)
+		}
+		mode := factorydefinitions.RuntimeModeBatch
+		if cfg.Continuously {
+			mode = factorydefinitions.RuntimeModeService
+		}
+
+		request := &factorysessions.RuntimeOpeningRequest{
+			FactoryDefinition: factorydefinitions.RuntimeOpeningRequest{
+				Directory:        cfg.Dir,
+				ExecutionBaseDir: cfg.ExecutionBaseDir,
+			},
+			FactoryRuntime: factoryruntime.RuntimeOpeningRequest{
+				Mode:         mode,
+				Verbose:      cfg.Verbose,
+				LogDirectory: logDirectory,
+				LogConfig: factoryruntime.RuntimeLogStorageConfig{
+					MaxSize: cfg.RuntimeLogConfig.MaxSize, MaxBackups: cfg.RuntimeLogConfig.MaxBackups,
+					MaxAge: cfg.RuntimeLogConfig.MaxAge, Compress: cfg.RuntimeLogConfig.Compress,
+				},
+				MetricsDirectory: metricsDirectory,
+				MetricsConfig: factoryruntime.RuntimeMetricsStorageConfig{
+					MaxSize: cfg.RuntimeMetricsConfig.MaxSize, MaxBackups: cfg.RuntimeMetricsConfig.MaxBackups,
+					MaxAge: cfg.RuntimeMetricsConfig.MaxAge, Compress: cfg.RuntimeMetricsConfig.Compress,
+				},
+			},
+			FactorySession: factorysessions.SessionRuntimeOpeningRequest{
+				SystemConfigHome: cfg.HomeDir,
+				WorkFile:         cfg.WorkFile,
+				Host: factorysessions.RuntimeHostRequest{
+					Directory:   cfg.Dir,
+					RuntimeMode: mode,
+					WorkFile:    cfg.WorkFile,
+					MockWorkers: mockWorkers != nil,
+					Port:        cfg.Port,
+					AutoPort:    cfg.AutoPort,
+				},
+			},
+			Workers: workers.RuntimeOpeningRequest{
+				RunnerID:                          cfg.RunnerID,
+				MockWorkers:                       mockWorkers,
+				InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
+			},
+			Recordings: recordings.RuntimeOpeningRequest{
+				RecordPath: cfg.RecordPath,
+				ReplayPath: cfg.ReplayPath,
+				WorkflowID: cfg.Workflow,
+			},
+			Models: models.RuntimeOpeningRequest{
+				CacheDirectory: cfg.ModelCacheDir,
+			},
+			OperatorDefaults: cfg.OperatorDefaults,
+		}
+		return factorysessions.ApplicationOpeningRequest{
+			Runtime: request,
+			Ports: factorysessions.ApplicationOpeningPorts{
+				InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
+				RuntimeHostObserver:       observer,
+			},
+		}
+	}
+}
+
+// provideRuntimeInputResolver merges only external edges. Per-operation
+// selections are already owner-bounded by the canonical injector mapper.
+func provideRuntimeInputResolver(
+	defaultEdges serviceedges.Edges,
+	resolveClock factoryruntime.ClockResolver,
+) applicationopening.RuntimeInputResolver {
+	return func(
+		ctx context.Context,
+		request *factorysessions.RuntimeOpeningRequest,
+		ports factorysessions.ApplicationOpeningPorts,
+		logger *zap.Logger,
+	) (applicationopening.RuntimeInputs, error) {
+		edges := defaultEdges
+		if ports.InvocationMetricsRecorder != nil {
+			edges.InvocationMetricsRecorder = ports.InvocationMetricsRecorder
+		}
+		if ports.RuntimeHostObserver != nil {
+			edges.RuntimeHostObserver = ports.RuntimeHostObserver
+		}
+		if resolveClock != nil {
+			edges.Clock = resolveClock(edges.Clock)
+		}
+		if err := validateResolvedRuntimeInputs(ctx, request, edges, logger); err != nil {
+			return applicationopening.RuntimeInputs{}, err
+		}
+		configured := *request
+		return applicationopening.RuntimeInputs{
+			Request: &configured,
+			Edges:   edges,
+			Logger:  logger,
+		}, nil
+	}
+}
+
+func validateResolvedRuntimeInputs(
+	ctx context.Context,
+	request *factorysessions.RuntimeOpeningRequest,
+	edges serviceedges.Edges,
+	logger *zap.Logger,
+) error {
+	switch {
+	case ctx == nil:
+		return errors.New("context is required")
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case request == nil:
+		return errors.New("runtime opening request is required")
+	case logger == nil:
+		return errors.New("runtime logger is required")
+	case isNilRuntimeInput(edges.Clock):
+		return errors.New("runtime clock edge is required")
+	default:
+		return nil
+	}
+}
+
+func isNilRuntimeInput(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
+}

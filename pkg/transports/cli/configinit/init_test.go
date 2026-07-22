@@ -2,245 +2,291 @@ package configinitcmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"io"
-	"os"
-	"path/filepath"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
+	systeminitialization "github.com/portpowered/infinite-you/pkg/services/system_initialization"
 )
 
-func TestInit_FreshHomeCreatesSystemConfigAndReportsOutcome(t *testing.T) {
-	homeDir := t.TempDir()
-	var stdout bytes.Buffer
+type fakeSystemInitializationService struct {
+	initialize func(context.Context, systeminitialization.Request) (systeminitialization.Result, error)
+}
 
-	err := Init(InitConfig{
-		HomeDir: homeDir,
-		Output:  &stdout,
+func (fake fakeSystemInitializationService) Initialize(
+	ctx context.Context,
+	request systeminitialization.Request,
+) (systeminitialization.Result, error) {
+	return fake.initialize(ctx, request)
+}
+
+func TestInitializerPropagatesContextAndRequestAndRendersText(t *testing.T) {
+	t.Parallel()
+
+	type contextKey struct{}
+	ctx := context.WithValue(t.Context(), contextKey{}, "invocation")
+	var output bytes.Buffer
+	var diagnostics bytes.Buffer
+	calls := 0
+	initialize := NewInitializer(fakeSystemInitializationService{
+		initialize: func(
+			gotContext context.Context,
+			request systeminitialization.Request,
+		) (systeminitialization.Result, error) {
+			calls++
+			if gotContext != ctx {
+				t.Fatal("Initialize context was not propagated unchanged")
+			}
+			if request.HomeDir != "/tmp/operator" {
+				t.Fatalf("request.HomeDir = %q, want trimmed home", request.HomeDir)
+			}
+			return systeminitialization.Result{
+				HomeDir:             request.HomeDir,
+				ConfigPath:          "/tmp/operator/config.json",
+				NamedFactoriesRoot:  "/tmp/operator/factories",
+				SystemConfigOutcome: systeminitialization.SystemConfigCreated,
+				PackagedFactories: []systeminitialization.PackagedFactoryResult{
+					{
+						Name:       "@you/goal",
+						FactoryDir: "/tmp/operator/factories/@you/goal",
+						Outcome:    systeminitialization.PackagedFactoryCreated,
+					},
+					{
+						Name:       "@you/subagent",
+						FactoryDir: "/tmp/operator/factories/@you/subagent",
+						Outcome:    systeminitialization.PackagedFactorySkipped,
+					},
+				},
+			}, nil
+		},
 	})
-	if err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
 
-	configPath := defaultpaths.OperatorConfigPath(homeDir)
-	if _, err := os.Stat(configPath); err != nil {
-		t.Fatalf("Stat(configPath): %v", err)
-	}
-	got := stdout.String()
-	if !strings.Contains(got, "Created system config at "+filepath.Clean(configPath)) {
-		t.Fatalf("stdout = %q, want created system config message", got)
-	}
-	for _, name := range factorypackages.Names() {
-		if !strings.Contains(got, "Created packaged factory "+name) {
-			t.Fatalf("stdout = %q, want created packaged factory message for %q", got, name)
-		}
-	}
-}
-
-func TestInit_JSONEmitsStructuredSummary(t *testing.T) {
-	homeDir := t.TempDir()
-	var stdout bytes.Buffer
-
-	if err := Init(InitConfig{
-		HomeDir: homeDir,
-		JSON:    true,
-		Output:  &stdout,
-	}); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
-
-	var payload InitResult
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("Unmarshal stdout: %v\n%s", err, stdout.String())
-	}
-	if payload.SystemConfigOutcome != "created" {
-		t.Fatalf("systemConfigOutcome = %q, want created", payload.SystemConfigOutcome)
-	}
-	if payload.ConfigPath != defaultpaths.OperatorConfigPath(homeDir) {
-		t.Fatalf("configPath = %q, want %q", payload.ConfigPath, defaultpaths.OperatorConfigPath(homeDir))
-	}
-	if payload.NamedFactoriesRoot != defaultpaths.NamedFactoriesRoot(homeDir) {
-		t.Fatalf("namedFactoriesRoot = %q, want %q", payload.NamedFactoriesRoot, defaultpaths.NamedFactoriesRoot(homeDir))
-	}
-	wantNames := factorypackages.Names()
-	if len(payload.PackagedFactories) != len(wantNames) {
-		t.Fatalf("packagedFactories count = %d, want %d", len(payload.PackagedFactories), len(wantNames))
-	}
-	for i, factory := range payload.PackagedFactories {
-		if factory.Name != wantNames[i] {
-			t.Fatalf("packagedFactories[%d].Name = %q, want %q", i, factory.Name, wantNames[i])
-		}
-		if factory.Outcome != "created" {
-			t.Fatalf("packagedFactories[%d].Outcome = %q, want created", i, factory.Outcome)
-		}
-		wantDir, err := factoryconfig.MapNamedFactoryDir(payload.NamedFactoriesRoot, factory.Name)
-		if err != nil {
-			t.Fatalf("MapNamedFactoryDir(%q): %v", factory.Name, err)
-		}
-		if factory.FactoryDir != wantDir {
-			t.Fatalf("packagedFactories[%d].FactoryDir = %q, want %q", i, factory.FactoryDir, wantDir)
-		}
-	}
-}
-
-func TestInit_ExistingConfigReportsSkippedWithoutRewrite(t *testing.T) {
-	homeDir := t.TempDir()
-	configPath := defaultpaths.OperatorConfigPath(homeDir)
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
-	}
-	original := []byte(`{"defaults":{"workerModelProvider":"codex"}}`)
-	if err := os.WriteFile(configPath, original, 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	var stdout bytes.Buffer
-	if err := Init(InitConfig{HomeDir: homeDir, Output: &stdout}); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
-	if got := stdout.String(); !strings.Contains(got, "already present") {
-		t.Fatalf("stdout = %q, want already-present message", got)
-	}
-	got, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("ReadFile: %v", err)
-	}
-	if string(got) != string(original) {
-		t.Fatalf("config changed:\n%s", string(got))
-	}
-}
-
-func TestInit_UsesProvidedHomeDirWithoutReadingProcessHome(t *testing.T) {
-	homeDir := t.TempDir()
-	var stdout bytes.Buffer
-	if err := Init(InitConfig{
-		HomeDir:     homeDir,
-		Output:      &stdout,
-		Diagnostics: io.Discard,
-	}); err != nil {
-		t.Fatalf("Init() error = %v", err)
-	}
-	if _, err := os.Stat(defaultpaths.OperatorConfigPath(homeDir)); err != nil {
-		t.Fatalf("expected config under provided home: %v", err)
-	}
-}
-
-func TestInit_DoubleRunReportsSkippedOutcomes(t *testing.T) {
-	homeDir := t.TempDir()
-	var stdout bytes.Buffer
-
-	if err := Init(InitConfig{HomeDir: homeDir, Output: &stdout}); err != nil {
-		t.Fatalf("first Init() error = %v", err)
-	}
-	firstOut := stdout.String()
-	if !strings.Contains(firstOut, "Created system config at") {
-		t.Fatalf("first stdout = %q, want created system config message", firstOut)
-	}
-
-	stdout.Reset()
-	if err := Init(InitConfig{HomeDir: homeDir, Output: &stdout}); err != nil {
-		t.Fatalf("second Init() error = %v", err)
-	}
-	secondOut := stdout.String()
-	if !strings.Contains(secondOut, "System config already present at") {
-		t.Fatalf("second stdout = %q, want already-present system config message", secondOut)
-	}
-	for _, name := range factorypackages.Names() {
-		if !strings.Contains(secondOut, "Packaged factory "+name+" already present at") {
-			t.Fatalf("second stdout = %q, want already-present packaged factory message for %q", secondOut, name)
-		}
-	}
-}
-
-func TestInit_DoubleRunJSONReportsSkippedOutcomes(t *testing.T) {
-	homeDir := t.TempDir()
-	var stdout bytes.Buffer
-
-	if err := Init(InitConfig{HomeDir: homeDir, JSON: true, Output: &stdout}); err != nil {
-		t.Fatalf("first Init() error = %v", err)
-	}
-
-	stdout.Reset()
-	if err := Init(InitConfig{HomeDir: homeDir, JSON: true, Output: &stdout}); err != nil {
-		t.Fatalf("second Init() error = %v", err)
-	}
-
-	var payload InitResult
-	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
-		t.Fatalf("Unmarshal stdout: %v\n%s", err, stdout.String())
-	}
-	if payload.SystemConfigOutcome != "skipped" {
-		t.Fatalf("systemConfigOutcome = %q, want skipped", payload.SystemConfigOutcome)
-	}
-	for i, factory := range payload.PackagedFactories {
-		if factory.Outcome != "skipped" {
-			t.Fatalf("packagedFactories[%d].Outcome = %q, want skipped", i, factory.Outcome)
-		}
-	}
-}
-
-func TestInit_ConfigCreationFailureSurfacesActionableCLIError(t *testing.T) {
-	homeDir := t.TempDir()
-	configPath := defaultpaths.OperatorConfigPath(homeDir)
-	parentDir := filepath.Dir(configPath)
-	if err := os.WriteFile(parentDir, []byte("blocks config directory creation\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(parent blocker): %v", err)
-	}
-
-	var stderr bytes.Buffer
-	err := Init(InitConfig{
-		HomeDir:     homeDir,
-		Output:      io.Discard,
-		Diagnostics: &stderr,
+	err := initialize(InitConfig{
+		Context:     ctx,
+		HomeDir:     " /tmp/operator ",
+		Output:      &output,
+		Diagnostics: &diagnostics,
 		Verbose:     true,
 	})
-	if err == nil {
-		t.Fatal("expected config init failure")
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
 	}
-	got := err.Error()
-	for _, want := range []string{
-		"create system config at",
-		"config.json",
-		"is not a directory",
-		"remove or rename",
+	if calls != 1 {
+		t.Fatalf("Initialize calls = %d, want 1", calls)
+	}
+	for _, expected := range []string{
+		"Created system config at /tmp/operator/config.json",
+		"Created packaged factory @you/goal at /tmp/operator/factories/@you/goal",
+		"Packaged factory @you/subagent already present at /tmp/operator/factories/@you/subagent",
 	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("error = %q, want substring %q", got, want)
+		if !strings.Contains(output.String(), expected) {
+			t.Fatalf("output = %q, want %q", output.String(), expected)
 		}
+	}
+	if !strings.Contains(diagnostics.String(), "config init request homeDir=/tmp/operator") ||
+		!strings.Contains(diagnostics.String(), "config init complete") {
+		t.Fatalf("diagnostics = %q, want request and completion", diagnostics.String())
 	}
 }
 
-func TestInit_FactoryMaterializationFailureSurfacesActionableCLIError(t *testing.T) {
-	homeDir := t.TempDir()
-	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	if err := os.MkdirAll(namedFactoriesRoot, 0o755); err != nil {
-		t.Fatalf("MkdirAll(namedFactoriesRoot): %v", err)
-	}
-	blocker := filepath.Join(namedFactoriesRoot, "@you")
-	if err := os.WriteFile(blocker, []byte("blocks hierarchical factory layout\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(factory scope blocker): %v", err)
+func TestInitializerRendersJSONResult(t *testing.T) {
+	t.Parallel()
+
+	var output bytes.Buffer
+	initialize := NewInitializer(fakeSystemInitializationService{
+		initialize: func(
+			_ context.Context,
+			request systeminitialization.Request,
+		) (systeminitialization.Result, error) {
+			return systeminitialization.Result{
+				HomeDir:             request.HomeDir,
+				ConfigPath:          "/home/operator/config.json",
+				NamedFactoriesRoot:  "/home/operator/factories",
+				SystemConfigOutcome: systeminitialization.SystemConfigSkipped,
+				PackagedFactories: []systeminitialization.PackagedFactoryResult{{
+					Name:       "@you/goal",
+					FactoryDir: "/home/operator/factories/@you/goal",
+					Outcome:    systeminitialization.PackagedFactorySkipped,
+				}},
+			}, nil
+		},
+	})
+
+	err := initialize(InitConfig{
+		Context: t.Context(),
+		HomeDir: "/home/operator",
+		JSON:    true,
+		Output:  &output,
+	})
+	if err != nil {
+		t.Fatalf("initialize: %v", err)
 	}
 
-	err := Init(InitConfig{
-		HomeDir:     homeDir,
-		Output:      io.Discard,
-		Diagnostics: io.Discard,
-	})
-	if err == nil {
-		t.Fatal("expected factory materialization failure")
+	var result InitResult
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatalf("decode output: %v", err)
 	}
-	got := err.Error()
-	for _, want := range []string{
-		"install packaged factory",
-		"@you/deep-research",
-		namedFactoriesRoot,
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("error = %q, want substring %q", got, want)
-		}
+	if result.HomeDir != "/home/operator" ||
+		result.SystemConfigOutcome != string(systeminitialization.SystemConfigSkipped) ||
+		len(result.PackagedFactories) != 1 ||
+		result.PackagedFactories[0].Outcome != string(systeminitialization.PackagedFactorySkipped) {
+		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestInitializerRejectsMissingEdgesBeforeCallingService(t *testing.T) {
+	calls := 0
+	initialize := NewInitializer(fakeSystemInitializationService{
+		initialize: func(
+			context.Context,
+			systeminitialization.Request,
+		) (systeminitialization.Result, error) {
+			calls++
+			return systeminitialization.Result{}, nil
+		},
+	})
+
+	tests := []struct {
+		name string
+		cfg  InitConfig
+		want string
+	}{
+		{
+			name: "context",
+			cfg:  InitConfig{HomeDir: "/home/operator", Output: &bytes.Buffer{}},
+			want: "context is required",
+		},
+		{
+			name: "output",
+			cfg:  InitConfig{Context: t.Context(), HomeDir: "/home/operator"},
+			want: "output is required",
+		},
+		{
+			name: "home",
+			cfg:  InitConfig{Context: t.Context(), HomeDir: "  ", Output: &bytes.Buffer{}},
+			want: "home directory is required",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := initialize(test.cfg)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %q", err, test.want)
+			}
+		})
+	}
+	if calls != 0 {
+		t.Fatalf("Initialize calls = %d, want 0", calls)
+	}
+}
+
+func TestInitializerRejectsMissingService(t *testing.T) {
+	t.Parallel()
+
+	err := NewInitializer(nil)(InitConfig{
+		Context: t.Context(),
+		HomeDir: "/home/operator",
+		Output:  &bytes.Buffer{},
+	})
+	if err == nil || !strings.Contains(err.Error(), "service is required") {
+		t.Fatalf("error = %v, want required service", err)
+	}
+}
+
+func TestInitializerPropagatesServiceFailure(t *testing.T) {
+	t.Parallel()
+
+	expected := errors.New("initialize failed")
+	err := NewInitializer(fakeSystemInitializationService{
+		initialize: func(
+			context.Context,
+			systeminitialization.Request,
+		) (systeminitialization.Result, error) {
+			return systeminitialization.Result{}, expected
+		},
+	})(InitConfig{
+		Context: t.Context(),
+		HomeDir: "/home/operator",
+		Output:  &bytes.Buffer{},
+	})
+	if !errors.Is(err, expected) {
+		t.Fatalf("error = %v, want %v", err, expected)
+	}
+}
+
+func TestInitializerRejectsUnknownSystemConfigOutcome(t *testing.T) {
+	t.Parallel()
+
+	for _, jsonOutput := range []bool{false, true} {
+		jsonOutput := jsonOutput
+		t.Run(fmt.Sprintf("json=%t", jsonOutput), func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+			err := NewInitializer(fakeSystemInitializationService{
+				initialize: func(
+					context.Context,
+					systeminitialization.Request,
+				) (systeminitialization.Result, error) {
+					return systeminitialization.Result{
+						SystemConfigOutcome: systeminitialization.SystemConfigOutcome("unexpected"),
+					}, nil
+				},
+			})(InitConfig{
+				Context: t.Context(),
+				HomeDir: "/home/operator",
+				JSON:    jsonOutput,
+				Output:  &output,
+			})
+			if err == nil || !strings.Contains(err.Error(), `unknown system config outcome "unexpected"`) {
+				t.Fatalf("error = %v, want unknown system config outcome", err)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("output = %q, want no output", output.String())
+			}
+		})
+	}
+}
+
+func TestInitializerRejectsUnknownPackagedFactoryOutcome(t *testing.T) {
+	t.Parallel()
+
+	for _, jsonOutput := range []bool{false, true} {
+		jsonOutput := jsonOutput
+		t.Run(fmt.Sprintf("json=%t", jsonOutput), func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+			err := NewInitializer(fakeSystemInitializationService{
+				initialize: func(
+					context.Context,
+					systeminitialization.Request,
+				) (systeminitialization.Result, error) {
+					return systeminitialization.Result{
+						SystemConfigOutcome: systeminitialization.SystemConfigCreated,
+						PackagedFactories: []systeminitialization.PackagedFactoryResult{
+							{
+								Name:    "@you/unknown",
+								Outcome: systeminitialization.PackagedFactoryOutcome("unexpected"),
+							},
+						},
+					}, nil
+				},
+			})(InitConfig{
+				Context: t.Context(),
+				HomeDir: "/home/operator",
+				JSON:    jsonOutput,
+				Output:  &output,
+			})
+			if err == nil || !strings.Contains(err.Error(), `unknown packaged factory outcome "unexpected" for "@you/unknown"`) {
+				t.Fatalf("error = %v, want unknown packaged factory outcome", err)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("output = %q, want no output", output.String())
+			}
+		})
 	}
 }

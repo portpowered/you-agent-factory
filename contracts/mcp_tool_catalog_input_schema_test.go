@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
-	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 

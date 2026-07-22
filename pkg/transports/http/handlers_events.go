@@ -5,21 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	events "github.com/portpowered/infinite-you/pkg/services/recordings"
+	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/events"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"go.uber.org/zap"
 )
 
@@ -32,25 +27,23 @@ const (
 
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
-	s.getStatus(w, r, s.runtime.GetEngineStateSnapshot)
+	s.getStatus(w, r, "")
 }
 
 func (s *Server) GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
-		return
-	}
-	s.getStatus(w, r, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
-	})
+	s.getStatus(w, r, string(sessionID))
 }
 
 func (s *Server) getStatus(
 	w http.ResponseWriter,
 	r *http.Request,
-	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
+	sessionID string,
 ) {
-	snapshot, err := loadSnapshot(r.Context())
+	if s.factoryStatus == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "factory status is unavailable", "SERVICE_UNAVAILABLE")
+		return
+	}
+	status, err := s.factoryStatus.ProjectFactoryStatus(r.Context(), sessionID)
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
@@ -61,15 +54,7 @@ func (s *Server) getStatus(
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, statusFromEngineStateSnapshot(*snapshot))
-}
-
-// GetEvents handles compatibility-only process-global GET /events.
-func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factoryapi.GetEventsParams) {
-	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
-	s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-		return s.runtime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{})
-	})
+	s.writeJSON(w, http.StatusOK, apisurface.FactoryStatusToAPI(status))
 }
 
 func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetEventsBySessionIdParams) {
@@ -84,7 +69,15 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 		if !ok {
 			return
 		}
-		stream, err := reader.ReadDurableFactorySessionEvents(r.Context(), string(sessionID), params)
+		raw, err := factorysessionmapping.EventReconnectRequestFromAPI(params)
+		if err == nil {
+			raw, err = s.sessionRequests.PrepareEventReconnect(raw)
+		}
+		if err != nil {
+			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+			return
+		}
+		stream, err := reader.ReadDurableFactorySessionEvents(r.Context(), string(sessionID), raw)
 		if err != nil {
 			if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
@@ -107,12 +100,12 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 		return
 	}
 
-	sessionRuntime, ok := s.requireSessionRuntime(w)
+	workAPI, ok := s.requireWorkAPI(w)
 	if !ok {
 		return
 	}
 	s.getEvents(w, r, true, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
+		return workAPI.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
 	})
 }
 
@@ -130,7 +123,7 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 		return
 	}
 
-	afterSequence, dispatchID, kinds, ok := s.responseEventStreamOptions(w, params)
+	request, ok := s.responseEventStreamRequest(w, string(sessionID), params)
 	if !ok {
 		return
 	}
@@ -138,9 +131,7 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 	if !ok {
 		return
 	}
-	subscription, err := sessionRuntime.SubscribeFactoryResponseEventsForSession(
-		r.Context(), string(sessionID), afterSequence, dispatchID,
-	)
+	subscription, err := sessionRuntime.SubscribeFactoryResponseEventsForSession(r.Context(), request)
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory response-event session not found", "RESPONSE_EVENT_SESSION_NOT_FOUND")
@@ -164,16 +155,13 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 	for {
 		events, err := subscription.Next(r.Context())
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, factorysessionexecution.ErrResponseEventSubscriptionClosed) {
 				return
 			}
 			s.logger.Error("read factory response events failed", zap.String("session_id", string(sessionID)), zap.Error(err))
 			return
 		}
 		for _, event := range events {
-			if !responseEventKindSelected(responseevents.Kind(event.Kind), kinds) {
-				continue
-			}
 			if err := writeFactoryResponseEventSSE(w, event); err != nil {
 				s.logger.Debug("write factory response event failed", zap.String("session_id", string(sessionID)), zap.Error(err))
 				return
@@ -183,63 +171,62 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 	}
 }
 
-func (s *Server) responseEventStreamOptions(
+func (s *Server) responseEventStreamRequest(
 	w http.ResponseWriter,
+	sessionID string,
 	params factoryapi.GetFactoryResponseEventsBySessionIdParams,
-) (int64, string, map[responseevents.Kind]struct{}, bool) {
+) (factorysessionexecution.ResponseEventSubscriptionRequest, bool) {
+	request := factorysessionexecution.ResponseEventSubscriptionRequest{
+		SessionID: sessionID,
+	}
 	var afterSequence int64
 	if params.AfterSequence != nil {
 		afterSequence = int64(*params.AfterSequence)
 		if afterSequence < 0 {
 			s.writeError(w, http.StatusBadRequest, "after_sequence must be non-negative", "INVALID_RESPONSE_EVENT_CURSOR")
-			return 0, "", nil, false
+			return factorysessionexecution.ResponseEventSubscriptionRequest{}, false
 		}
 	}
+	request.AfterSequence = afterSequence
 	var dispatchID string
 	if params.DispatchId != nil {
 		dispatchID = strings.TrimSpace(string(*params.DispatchId))
 		if dispatchID == "" {
 			s.writeError(w, http.StatusBadRequest, "dispatch_id must not be empty", "INVALID_RESPONSE_EVENT_FILTER")
-			return 0, "", nil, false
+			return factorysessionexecution.ResponseEventSubscriptionRequest{}, false
 		}
 	}
+	request.DispatchID = dispatchID
 	kinds, valid := responseEventKinds(params.Kind)
 	if !valid {
 		s.writeError(w, http.StatusBadRequest, "kind must contain only public FactoryResponseEventKind values", "INVALID_RESPONSE_EVENT_FILTER")
-		return 0, "", nil, false
+		return factorysessionexecution.ResponseEventSubscriptionRequest{}, false
 	}
-	return afterSequence, dispatchID, kinds, true
+	request.Kinds = kinds
+	return request, true
 }
 
-func responseEventKinds(values *factoryapi.ResponseEventKind) (map[responseevents.Kind]struct{}, bool) {
+func responseEventKinds(values *factoryapi.ResponseEventKind) ([]factorysessionexecution.ResponseEventKind, bool) {
 	if values == nil {
 		return nil, true
 	}
 	if len(*values) == 0 {
 		return nil, false
 	}
-	kinds := make(map[responseevents.Kind]struct{}, len(*values))
+	kinds := make([]factorysessionexecution.ResponseEventKind, 0, len(*values))
 	for _, value := range *values {
-		kind := responseevents.Kind(value)
+		kind := factorysessionexecution.ResponseEventKind(value)
 		switch kind {
-		case responseevents.KindSession, responseevents.KindRun, responseevents.KindTurn,
-			responseevents.KindMessage, responseevents.KindReasoning, responseevents.KindTool,
-			responseevents.KindFileChange, responseevents.KindPlan, responseevents.KindProgress,
-			responseevents.KindUsage, responseevents.KindError, responseevents.KindStreamGap:
-			kinds[kind] = struct{}{}
+		case factorysessionexecution.ResponseEventKindSession, factorysessionexecution.ResponseEventKindRun, factorysessionexecution.ResponseEventKindTurn,
+			factorysessionexecution.ResponseEventKindMessage, factorysessionexecution.ResponseEventKindReasoning, factorysessionexecution.ResponseEventKindTool,
+			factorysessionexecution.ResponseEventKindFileChange, factorysessionexecution.ResponseEventKindPlan, factorysessionexecution.ResponseEventKindProgress,
+			factorysessionexecution.ResponseEventKindUsage, factorysessionexecution.ResponseEventKindError, factorysessionexecution.ResponseEventKindStreamGap:
+			kinds = append(kinds, kind)
 		default:
 			return nil, false
 		}
 	}
 	return kinds, true
-}
-
-func responseEventKindSelected(kind responseevents.Kind, selected map[responseevents.Kind]struct{}) bool {
-	if len(selected) == 0 || kind == responseevents.KindStreamGap {
-		return true
-	}
-	_, ok := selected[kind]
-	return ok
 }
 
 func writeFactoryResponseEventSSE(w http.ResponseWriter, event apisurface.FactoryResponseEventRecord) error {
@@ -257,25 +244,30 @@ func (s *Server) probeFactorySessionEventStreamRecovery(
 	sessionID string,
 	reconnect *interfaces.FactoryEventReconnectCursor,
 ) {
-	probeCtx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-
 	var err error
 	if isDurableExecutionSessionID(sessionID) {
 		reader, ok := s.requireDurableSessionEventsReader(w)
 		if !ok {
 			return
 		}
-		_, err = reader.ReadDurableFactorySessionEvents(probeCtx, sessionID, factoryapi.GetEventsBySessionIdParams{
+		raw, prepareErr := factorysessionmapping.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{
 			AfterEventId:  afterEventIDParam(reconnect),
 			AfterSequence: afterSequenceParam(reconnect),
 		})
+		if prepareErr == nil {
+			raw, prepareErr = s.sessionRequests.PrepareEventReconnect(raw)
+		}
+		if prepareErr != nil {
+			err = prepareErr
+		} else {
+			err = reader.ProbeDurableFactorySessionEvents(r.Context(), sessionID, raw)
+		}
 	} else {
-		sessionRuntime, ok := s.requireSessionRuntime(w)
+		workAPI, ok := s.requireWorkAPI(w)
 		if !ok {
 			return
 		}
-		_, err = sessionRuntime.SubscribeFactoryEventsForSession(probeCtx, sessionID, reconnect)
+		err = workAPI.ProbeFactoryEventsForSession(r.Context(), sessionID, reconnect)
 	}
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
@@ -476,123 +468,4 @@ func tokenToResponse(t *factorytoken.Token, includeHistory bool) factoryapi.Toke
 		}
 	}
 	return resp
-}
-
-func statusFromEngineStateSnapshot(snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) factoryapi.StatusResponse {
-	categories, resources := categorizeStatusTokens(&snapshot.Marking, snapshot.Topology)
-	response := factoryapi.StatusResponse{
-		Categories:    categories,
-		FactoryState:  snapshot.FactoryState,
-		Resources:     resourceUsagePtr(resources),
-		RuntimeStatus: string(snapshot.RuntimeStatus),
-		TotalTokens:   countPublicStatusTokens(&snapshot.Marking),
-	}
-	if lifecycleControlStatus := strings.TrimSpace(snapshot.LifecycleControlStatus); lifecycleControlStatus != "" {
-		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
-		response.LifecycleControlStatus = &status
-	}
-	return response
-}
-
-func categorizeStatusTokens(marking *petri.MarkingSnapshot, net *state.Net) (factoryapi.StatusCategories, []factoryapi.ResourceUsage) {
-	var categories factoryapi.StatusCategories
-	resourceCounts := make(map[string]int)
-	resourceTotals := resourceTotalsFromTopology(net)
-
-	if marking == nil {
-		return categories, resourceUsage(resourceCounts, resourceTotals)
-	}
-
-	for _, token := range marking.Tokens {
-		if token == nil {
-			continue
-		}
-		if interfaces.IsSystemTimeToken(token) {
-			continue
-		}
-
-		if token.Color.DataType == factorytoken.DataTypeResource {
-			resourceID, resourceState := state.SplitPlaceID(token.PlaceID)
-			if _, ok := resourceTotals[resourceID]; !ok {
-				resourceTotals[resourceID]++
-			}
-			if resourceState == interfaces.ResourceStateAvailable {
-				resourceCounts[resourceID]++
-			}
-			continue
-		}
-
-		switch statusStateCategory(net, token.PlaceID) {
-		case state.StateCategoryFailed:
-			categories.Failed++
-		case state.StateCategoryTerminal:
-			categories.Terminal++
-		case state.StateCategoryInitial:
-			categories.Initial++
-		default:
-			categories.Processing++
-		}
-	}
-
-	return categories, resourceUsage(resourceCounts, resourceTotals)
-}
-
-func countPublicStatusTokens(marking *petri.MarkingSnapshot) int {
-	if marking == nil {
-		return 0
-	}
-	count := 0
-	for _, token := range marking.Tokens {
-		if token == nil || interfaces.IsSystemTimeToken(token) {
-			continue
-		}
-		count++
-	}
-	return count
-}
-
-func statusStateCategory(net *state.Net, placeID string) state.StateCategory {
-	if net == nil {
-		return state.StateCategoryProcessing
-	}
-	return net.StateCategoryForPlace(placeID)
-}
-
-func resourceTotalsFromTopology(net *state.Net) map[string]int {
-	totals := make(map[string]int)
-	if net == nil {
-		return totals
-	}
-	for id, resource := range net.Resources {
-		if resource == nil {
-			continue
-		}
-		totals[id] = resource.Capacity
-	}
-	return totals
-}
-
-func resourceUsage(counts map[string]int, totals map[string]int) []factoryapi.ResourceUsage {
-	ids := make([]string, 0, len(totals))
-	for id := range totals {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
-	resources := make([]factoryapi.ResourceUsage, 0, len(ids))
-	for _, id := range ids {
-		resources = append(resources, factoryapi.ResourceUsage{
-			Available: counts[id],
-			Name:      id,
-			Total:     totals[id],
-		})
-	}
-	return resources
-}
-
-func resourceUsagePtr(values []factoryapi.ResourceUsage) *[]factoryapi.ResourceUsage {
-	if len(values) == 0 {
-		return nil
-	}
-	return &values
 }

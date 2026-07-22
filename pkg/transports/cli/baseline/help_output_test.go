@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/baseline"
 )
 
@@ -38,11 +37,11 @@ func TestHelpBaselines_AreStableAcrossRuns(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			first, err := captureProductionHelp(tc.args)
+			first, err := captureProductionHelp(t, tc.args)
 			if err != nil {
 				t.Fatalf("capture first help output: %v", err)
 			}
-			second, err := captureProductionHelp(tc.args)
+			second, err := captureProductionHelp(t, tc.args)
 			if err != nil {
 				t.Fatalf("capture second help output: %v", err)
 			}
@@ -59,12 +58,12 @@ func TestHelpBaselines_AreStableAcrossRuns(t *testing.T) {
 func assertHelpMatchesFixture(t *testing.T, fixture string, args []string) {
 	t.Helper()
 
-	got, err := captureProductionHelp(args)
+	got, err := captureProductionHelp(t, args)
 	if err != nil {
 		t.Fatalf("capture help output: %v", err)
 	}
 
-	want, err := baseline.ReadFixtureText(fixture)
+	want, err := baseline.ReadFixtureText(fixtureSourceStore(), fixture)
 	if err != nil {
 		t.Fatalf("read help baseline fixture: %v", err)
 	}
@@ -80,9 +79,10 @@ func assertHelpMatchesFixture(t *testing.T, fixture string, args []string) {
 	)
 }
 
-func captureProductionHelp(args []string) (string, error) {
-	root := cli.NewRootCommand()
-	return baseline.CaptureHelpOutput(root, args)
+func captureProductionHelp(t testing.TB, args []string) (string, error) {
+	t.Helper()
+	output, err := executeProductionCLI(t, args...)
+	return baseline.NormalizeHelpOutput(output), err
 }
 
 func formatHelpDiff(want, got string) string {

@@ -33,6 +33,3 @@ issues:
     - path: pkg/factory/runtime/factory.go
       linters:
         - contextcheck
-    - path: pkg/service/factory.go
-      linters:
-        - contextcheck

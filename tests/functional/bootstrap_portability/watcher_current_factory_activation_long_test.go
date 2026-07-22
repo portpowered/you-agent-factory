@@ -3,25 +3,21 @@
 package bootstrap_portability
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
-	"errors"
-	"io/fs"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory(t *testing.T) {
@@ -29,112 +25,83 @@ func TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResol
 
 	rootDir := t.TempDir()
 
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", functionalNamedFactoryPayload(t, "alpha")); err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
-	if _, err := config.PersistNamedFactory(rootDir, "beta", functionalNamedFactoryPayload(t, "beta")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
-	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
-	}
+	alphaDir := createAndActivateFunctionalNamedFactoryFixture(t, rootDir, "alpha", functionalNamedFactoryPayload(t, "alpha"))
+	betaDir := createFunctionalNamedFactoryFixture(t, rootDir, "beta", functionalNamedFactoryPayload(t, "beta"))
 
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
+	server := startFunctionalServer(t, rootDir, true)
+	assertCurrentFactoryReadback(t, server.URL(), "alpha", alphaDir)
 
-	initialLoaded, err := config.LoadRuntimeConfig(rootDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(initial): %v", err)
-	}
-	if initialLoaded.FactoryConfig().Project != "alpha" {
-		t.Fatalf("initial project = %q, want alpha", initialLoaded.FactoryConfig().Project)
-	}
+	activateNamedFactoryOverHTTP(t, server.URL(), functionalNamedFactoryPayload(t, "beta"))
 
-	if err := svc.ActivateNamedFactory(context.Background(), "beta"); err != nil {
-		t.Fatalf("ActivateNamedFactory(beta): %v", err)
-	}
+	wantDir := betaDir
+	assertCurrentFactoryReadback(t, server.URL(), "beta", wantDir)
+}
 
-	if got, err := config.ReadCurrentFactoryPointer(rootDir); err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer(beta): %v", err)
-	} else if got != "beta" {
-		t.Fatalf("current factory pointer = %q, want beta", got)
-	}
+func createFunctionalNamedFactoryFixture(
+	t *testing.T,
+	rootDir string,
+	name string,
+	payload []byte,
+) string {
+	return createFunctionalNamedFactoryFixtureAtBoundary(t, rootDir, name, payload, false)
+}
 
-	wantDir := filepath.Join(rootDir, "beta")
-	if got, err := config.ResolveCurrentFactoryDir(rootDir); err != nil {
-		t.Fatalf("ResolveCurrentFactoryDir(beta): %v", err)
-	} else if got != wantDir {
-		t.Fatalf("resolved current dir = %q, want %q", got, wantDir)
-	}
+func createAndActivateFunctionalNamedFactoryFixture(
+	t *testing.T,
+	rootDir string,
+	name string,
+	payload []byte,
+) string {
+	return createFunctionalNamedFactoryFixtureAtBoundary(t, rootDir, name, payload, true)
+}
 
-	loaded, err := config.LoadRuntimeConfig(rootDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(after activation): %v", err)
+func createFunctionalNamedFactoryFixtureAtBoundary(
+	t *testing.T,
+	rootDir string,
+	name string,
+	payload []byte,
+	activate bool,
+) string {
+	t.Helper()
+
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(sourcePath, payload, 0o600); err != nil {
+		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	if loaded.FactoryDir() != wantDir {
-		t.Fatalf("loaded factory dir = %q, want %q", loaded.FactoryDir(), wantDir)
+	if activate {
+		return support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
 	}
-	if loaded.FactoryConfig().Project != "beta" {
-		t.Fatalf("activated project = %q, want beta", loaded.FactoryConfig().Project)
-	}
+	return support.CreateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
 }
 
 func TestCurrentFactoryActivationFixture_WatchedFileExecutionFollowsActivatedFactory(t *testing.T) {
 	support.SkipLongFunctional(t, "slow current-factory watcher activation smoke")
 
 	rootDir := t.TempDir()
-	alphaDir := copyCurrentFactoryFixture(t, rootDir, "alpha")
+	alphaDir := copyAndActivateCurrentFactoryFixture(t, rootDir, "alpha")
 	betaDir := copyCurrentFactoryFixture(t, rootDir, "beta")
 	createCurrentFactoryWatchChannel(t, alphaDir, "task", "activated")
 	createCurrentFactoryWatchChannel(t, betaDir, "task", "activated")
-
-	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
-	}
 
 	provider := testutil.NewMockProvider(
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	core, observedLogs := observer.New(zap.InfoLevel)
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:              rootDir,
-		RuntimeMode:      interfaces.RuntimeModeService,
+	server := startFunctionalServer(t, rootDir, false, serviceedges.Edges{
 		ProviderOverride: provider,
-		Logger:           zap.New(core),
 	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- svc.Run(runCtx)
-	}()
-	defer stopCurrentFactoryActivationService(t, cancelRun, errCh)
-
-	waitForObservedLogCount(t, observedLogs, "factory started", 1, 5*time.Second)
-	waitForCurrentFactoryRuntimeIdle(t, svc, 5*time.Second)
-
-	if err := svc.ActivateNamedFactory(context.Background(), "beta"); err != nil {
-		t.Fatalf("ActivateNamedFactory(beta): %v", err)
-	}
-	assertCurrentFactoryReadback(t, rootDir, "beta", betaDir)
-	waitForObservedLogCount(t, observedLogs, "file watcher started", 2, 5*time.Second)
+	support.WaitForRuntimeIdle(t, server.URL(), 5*time.Second)
+	activateNamedFactoryOverHTTP(t, server.URL(), functionalNamedFactoryPayload(t, "beta"))
+	assertCurrentFactoryReadback(t, server.URL(), "beta", betaDir)
+	createCurrentFactoryWatchChannel(t, betaDir, "task", "activated")
 
 	writeCurrentFactoryWatchedInput(t, betaDir, "task", "activated", "beta-work.json", []byte(`{"title":"beta watched work"}`))
-	waitForCurrentFactoryWatchedCompletion(t, rootDir, betaDir, svc, provider, observedLogs, 1, 5*time.Second)
+	waitForCurrentFactoryWatchedCompletion(t, betaDir, server, provider, 1, 5*time.Second)
 
 	writeCurrentFactoryWatchedInput(t, alphaDir, "task", "activated", "alpha-work.json", []byte(`{"title":"alpha watched work"}`))
-	assertNoAdditionalCurrentFactoryWork(t, rootDir, betaDir, svc, provider, 750*time.Millisecond)
+	assertNoAdditionalCurrentFactoryWork(t, betaDir, server, provider, 750*time.Millisecond)
 }
 
 func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *testing.T) {
@@ -142,31 +109,33 @@ func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *t
 
 	rootDir := t.TempDir()
 
-	if _, err := config.PersistNamedFactory(rootDir, "alpha", functionalNamedFactoryPayloadWithTerminalState(t, "alpha", "alpha-complete")); err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
-	if _, err := config.PersistNamedFactory(rootDir, "beta", functionalNamedFactoryPayloadWithTerminalState(t, "beta", "beta-complete")); err != nil {
-		t.Fatalf("PersistNamedFactory(beta): %v", err)
-	}
-	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
-	}
-
+	createAndActivateFunctionalNamedFactoryFixture(
+		t,
+		rootDir,
+		"alpha",
+		functionalNamedFactoryPayloadWithTerminalState(t, "alpha", "alpha-complete"),
+	)
+	createFunctionalNamedFactoryFixture(
+		t,
+		rootDir,
+		"beta",
+		functionalNamedFactoryPayloadWithTerminalState(t, "beta", "beta-complete"),
+	)
 	provider := testutil.NewMockProvider(
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	server := startFunctionalServerWithConfig(t, rootDir, false, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderOverride = provider
+	server := startFunctionalServer(t, rootDir, false, serviceedges.Edges{
+		ProviderOverride: provider,
 	})
 
-	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
-
-	if err := server.service.ActivateNamedFactory(context.Background(), "beta"); err != nil {
-		t.Fatalf("ActivateNamedFactory(beta): %v", err)
-	}
-	assertCurrentFactoryReadback(t, rootDir, "beta", filepath.Join(rootDir, "beta"))
+	support.WaitForRuntimeIdle(t, server.URL(), 5*time.Second)
+	activateNamedFactoryOverHTTP(
+		t,
+		server.URL(),
+		functionalNamedFactoryPayloadWithTerminalState(t, "beta", "beta-complete"),
+	)
+	assertCurrentFactoryReadback(t, server.URL(), "beta", filepath.Join(rootDir, "beta"))
 	waitForCurrentFactoryActivatedRuntime(t, server, "task:beta-complete", 5*time.Second)
 
 	traceID := server.SubmitWork(t, "task", json.RawMessage(`{"title":"beta api work"}`))
@@ -175,15 +144,14 @@ func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *t
 	}
 	work := waitForGeneratedWorkAtPlace(t, server.URL(), traceID, "task:beta-complete", 5*time.Second)
 	if len(work.Results) != 1 {
-		snapshot := server.GetEngineStateSnapshot(t)
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
 		t.Fatalf(
-			"GET /work result count after activation = %d, want 1; provider_calls=%d factory_state=%q runtime_status=%q dispatch_history=%d tokens=%d",
+			"GET /work result count after activation = %d, want 1; provider_calls=%d factory_state=%q runtime_status=%q total_tokens=%d",
 			len(work.Results),
 			provider.CallCount(),
-			snapshot.FactoryState,
-			snapshot.RuntimeStatus,
-			len(snapshot.DispatchHistory),
-			len(snapshot.Marking.Tokens),
+			status.FactoryState,
+			status.RuntimeStatus,
+			status.TotalTokens,
 		)
 	}
 	if generatedWorkPlaceID(work.Results[0]) != "task:beta-complete" {
@@ -207,31 +175,22 @@ func TestCurrentFactoryActivationFixture_LiveAPIReadsFollowActivatedFactory(t *t
 }
 
 func copyCurrentFactoryFixture(t *testing.T, rootDir, name string) string {
+	return copyCurrentFactoryFixtureAtBoundary(t, rootDir, name, false)
+}
+
+func copyAndActivateCurrentFactoryFixture(t *testing.T, rootDir, name string) string {
+	return copyCurrentFactoryFixtureAtBoundary(t, rootDir, name, true)
+}
+
+func copyCurrentFactoryFixtureAtBoundary(t *testing.T, rootDir, name string, activate bool) string {
 	t.Helper()
 
 	srcDir := support.LegacyFixtureDir(t, "filewatcher_flow")
-	dstDir := filepath.Join(rootDir, name)
-	if err := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-		target := filepath.Join(dstDir, rel)
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		return os.WriteFile(target, data, 0o644)
-	}); err != nil {
-		t.Fatalf("copy fixture %q: %v", name, err)
+	sourcePath := filepath.Join(srcDir, interfaces.FactoryConfigFile)
+	if activate {
+		return support.CreateAndActivateNamedFactoryAtRoot(t, srcDir, rootDir, name, sourcePath)
 	}
-	return dstDir
+	return support.CreateNamedFactoryAtRoot(t, srcDir, rootDir, name, sourcePath)
 }
 
 func createCurrentFactoryWatchChannel(t *testing.T, factoryDir, workType, channel string) {
@@ -252,30 +211,12 @@ func writeCurrentFactoryWatchedInput(t *testing.T, factoryDir, workType, channel
 	}
 }
 
-func waitForCurrentFactoryRuntimeIdle(t *testing.T, svc *service.FactoryService, timeout time.Duration) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	var lastStatus interfaces.RuntimeStatus
-	for time.Now().Before(deadline) {
-		snap, err := svc.GetEngineStateSnapshot(context.Background())
-		if err == nil && snap.RuntimeStatus == interfaces.RuntimeStatusIdle {
-			return
-		}
-		if err == nil {
-			lastStatus = snap.RuntimeStatus
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for idle runtime; last status=%q", lastStatus)
-}
-
 func waitForCurrentFactoryActivatedRuntime(
 	t *testing.T,
 	server *functionalAPIServer,
 	wantPlaceID string,
 	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+) {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -283,13 +224,16 @@ func waitForCurrentFactoryActivatedRuntime(
 	var lastRuntimeStatus interfaces.RuntimeStatus
 	var sawPlace bool
 	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		lastFactoryState = snapshot.FactoryState
-		lastRuntimeStatus = snapshot.RuntimeStatus
-		sawPlace = snapshot.Topology != nil && snapshot.Topology.Places[wantPlaceID] != nil
-		if snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-			sawPlace {
-			return snapshot
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+		factory := support.GetJSON[factoryapi.Factory](
+			t,
+			server.URL()+"/factory-sessions/~default/factory",
+		)
+		lastFactoryState = status.FactoryState
+		lastRuntimeStatus = interfaces.RuntimeStatus(status.RuntimeStatus)
+		sawPlace = generatedFactoryHasPlace(factory, wantPlaceID)
+		if lastRuntimeStatus == interfaces.RuntimeStatusIdle && sawPlace {
+			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
@@ -301,34 +245,13 @@ func waitForCurrentFactoryActivatedRuntime(
 		lastRuntimeStatus,
 		sawPlace,
 	)
-	return nil
-}
-
-func waitForObservedLogCount(
-	t *testing.T,
-	observedLogs *observer.ObservedLogs,
-	message string,
-	wantCount int,
-	timeout time.Duration,
-) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if observedLogs.FilterMessage(message).Len() >= wantCount {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for log %q count >= %d; got %d", message, wantCount, observedLogs.FilterMessage(message).Len())
 }
 
 func waitForCurrentFactoryWatchedCompletion(
 	t *testing.T,
-	rootDir, wantDir string,
-	svc *service.FactoryService,
+	wantDir string,
+	server *functionalAPIServer,
 	provider *testutil.MockProvider,
-	observedLogs *observer.ObservedLogs,
 	wantCalls int,
 	timeout time.Duration,
 ) {
@@ -336,42 +259,33 @@ func waitForCurrentFactoryWatchedCompletion(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		assertCurrentFactoryReadback(t, rootDir, "beta", wantDir)
+		assertCurrentFactoryReadback(t, server.URL(), "beta", wantDir)
 
-		snap, err := svc.GetEngineStateSnapshot(context.Background())
-		if err == nil &&
-			snap.RuntimeStatus == interfaces.RuntimeStatusIdle &&
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+		work := support.ListDefaultSessionWork(t, server.URL())
+		if status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
 			provider.CallCount() == wantCalls &&
-			len(snap.DispatchHistory) == wantCalls &&
-			len(snap.Marking.Tokens) == wantCalls &&
-			len(snap.Marking.TokensInPlace("task:complete")) == wantCalls &&
-			len(snap.Marking.TokensInPlace("task:failed")) == 0 {
+			len(work.Results) == wantCalls &&
+			allWorkInState(work.Results, "complete") {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 
-	snap, err := svc.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot after watched completion timeout: %v", err)
-	}
+	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	work := support.ListDefaultSessionWork(t, server.URL())
 	t.Fatalf(
-		"timed out waiting for activated-factory watched completion: provider_calls=%d runtime_status=%q dispatch_history=%d total_tokens=%d complete_tokens=%d failed_tokens=%d new_input_logs=%d watcher_started_logs=%d",
+		"timed out waiting for activated-factory watched completion: provider_calls=%d runtime_status=%q work=%#v",
 		provider.CallCount(),
-		snap.RuntimeStatus,
-		len(snap.DispatchHistory),
-		len(snap.Marking.Tokens),
-		len(snap.Marking.TokensInPlace("task:complete")),
-		len(snap.Marking.TokensInPlace("task:failed")),
-		observedLogs.FilterMessage("new input detected").Len(),
-		observedLogs.FilterMessage("file watcher started").Len(),
+		status.RuntimeStatus,
+		work.Results,
 	)
 }
 
 func assertNoAdditionalCurrentFactoryWork(
 	t *testing.T,
-	rootDir, wantDir string,
-	svc *service.FactoryService,
+	wantDir string,
+	server *functionalAPIServer,
 	provider *testutil.MockProvider,
 	stableFor time.Duration,
 ) {
@@ -379,68 +293,104 @@ func assertNoAdditionalCurrentFactoryWork(
 
 	deadline := time.Now().Add(stableFor)
 	for time.Now().Before(deadline) {
-		assertCurrentFactoryReadback(t, rootDir, "beta", wantDir)
+		assertCurrentFactoryReadback(t, server.URL(), "beta", wantDir)
 
-		snap, err := svc.GetEngineStateSnapshot(context.Background())
-		if err != nil {
-			t.Fatalf("GetEngineStateSnapshot during old-factory stability check: %v", err)
-		}
+		status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+		work := support.ListDefaultSessionWork(t, server.URL())
 		if provider.CallCount() != 1 {
 			t.Fatalf("old factory directory still triggered work: provider call count = %d, want 1", provider.CallCount())
 		}
-		if snap.RuntimeStatus != interfaces.RuntimeStatusIdle {
-			t.Fatalf("runtime status after old-factory write = %q, want %q", snap.RuntimeStatus, interfaces.RuntimeStatusIdle)
+		if status.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
+			t.Fatalf("runtime status after old-factory write = %q, want %q", status.RuntimeStatus, interfaces.RuntimeStatusIdle)
 		}
-		if len(snap.DispatchHistory) != 1 {
-			t.Fatalf("dispatch history after old-factory write = %d, want 1", len(snap.DispatchHistory))
-		}
-		if len(snap.Marking.Tokens) != 1 || len(snap.Marking.TokensInPlace("task:complete")) != 1 {
-			t.Fatalf(
-				"terminal tokens after old-factory write = total:%d complete:%d, want total:1 complete:1",
-				len(snap.Marking.Tokens),
-				len(snap.Marking.TokensInPlace("task:complete")),
-			)
+		if len(work.Results) != 1 || !allWorkInState(work.Results, "complete") {
+			t.Fatalf("GET /work after old-factory write = %#v, want one complete work", work.Results)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
 }
 
-func assertCurrentFactoryReadback(t *testing.T, rootDir, wantName, wantDir string) {
+func assertCurrentFactoryReadback(t *testing.T, serverURL, wantName, wantDir string) {
 	t.Helper()
 
-	if got, err := config.ReadCurrentFactoryPointer(rootDir); err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer(%s): %v", wantName, err)
-	} else if got != wantName {
-		t.Fatalf("current factory pointer = %q, want %q", got, wantName)
+	current := support.GetJSON[factoryapi.Factory](t, serverURL+"/factory-sessions/~default/factory")
+	if current.Name != factoryapi.FactoryName(wantName) {
+		t.Fatalf("current factory name = %q, want %q", current.Name, wantName)
 	}
-
-	if got, err := config.ResolveCurrentFactoryDir(rootDir); err != nil {
-		t.Fatalf("ResolveCurrentFactoryDir(%s): %v", wantName, err)
-	} else if got != wantDir {
-		t.Fatalf("resolved current dir = %q, want %q", got, wantDir)
-	}
-
-	loaded, err := config.LoadRuntimeConfig(rootDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(%s): %v", wantName, err)
-	}
-	if loaded.FactoryDir() != wantDir {
-		t.Fatalf("loaded factory dir = %q, want %q", loaded.FactoryDir(), wantDir)
+	if current.FactoryDirectory == nil || *current.FactoryDirectory != wantDir {
+		t.Fatalf("current factory directory = %#v, want %q", current.FactoryDirectory, wantDir)
 	}
 }
 
-func stopCurrentFactoryActivationService(t *testing.T, cancel context.CancelFunc, errCh <-chan error) {
+func activateNamedFactoryOverHTTP(t *testing.T, baseURL string, payload []byte) {
 	t.Helper()
-
-	cancel()
-	select {
-	case err := <-errCh:
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("service-mode run error: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for service-mode run to stop")
+	var factory factoryapi.Factory
+	if err := json.Unmarshal(payload, &factory); err != nil {
+		t.Fatalf("decode named factory API payload: %v", err)
 	}
+	// UPSERT_NAMED_AND_ACTIVATE is an optimistic-concurrency write. These
+	// fixtures are persisted before the process starts, so emulate a client
+	// editing that stored definition by submitting an advanced version.
+	factory.Version = &factoryapi.HybridLogicalTimestamp{
+		Logical:  apitypes.Int64String(1<<62 - 1),
+		Physical: time.Now().UTC().Add(time.Hour),
+	}
+	mode := factoryapi.FactorySaveModeUpsertNamedAndActivate
+	body, err := json.Marshal(factoryapi.SaveFactoryForSessionRequest{
+		Factory: factory,
+		Mode:    &mode,
+	})
+	if err != nil {
+		t.Fatalf("encode named factory activation: %v", err)
+	}
+	request, err := http.NewRequest(
+		http.MethodPut,
+		baseURL+"/factory-sessions/~default/factory",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("build named factory activation request: %v", err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("activate named factory over HTTP: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		responseBody, _ := io.ReadAll(response.Body)
+		t.Fatalf(
+			"activate named factory status = %d, want 200: %s",
+			response.StatusCode,
+			string(responseBody),
+		)
+	}
+}
+
+func generatedFactoryHasPlace(factory factoryapi.Factory, placeID string) bool {
+	if factory.WorkTypes == nil {
+		return false
+	}
+	for _, workType := range *factory.WorkTypes {
+		for _, state := range workType.States {
+			if workType.Name+":"+state.Name == placeID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func allWorkInState(work []factoryapi.Work, stateName string) bool {
+	if len(work) == 0 {
+		return false
+	}
+	for _, item := range work {
+		if item.State == nil || item.State.Name != stateName {
+			return false
+		}
+	}
+	return true
 }
 
 func functionalNamedFactoryPayload(t *testing.T, project string) []byte {

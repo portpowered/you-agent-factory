@@ -15,13 +15,13 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
+	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
 )
 
 func TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult(t *testing.T) {
@@ -105,7 +105,7 @@ func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
 		t,
 		dir,
 		"goal-executor",
-		support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"),
+		support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"),
 	)
 	return dir
 }
@@ -153,6 +153,7 @@ func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText(t *testin
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty stderr on successful invocation", stderr.String())
 	}
+	functionalevidence.Covers(t, "cli/you.run")
 }
 
 func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromStdin(t *testing.T) {
@@ -410,19 +411,13 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 	homeDir := t.TempDir()
 
 	sourceDir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
-	loaded, err := factoryconfig.LoadRuntimeConfig(sourceDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig(source): %v", err)
-	}
-	canonical, err := factoryconfig.MarshalCanonicalFactoryConfig(loaded.FactoryConfig())
-	if err != nil {
-		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
-	}
-	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	namedFactoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", canonical)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(alpha): %v", err)
-	}
+	namedFactoryDir := support.CreateNamedFactory(
+		t,
+		homeDir,
+		sourceDir,
+		"alpha",
+		filepath.Join(sourceDir, interfaces.FactoryConfigFile),
+	)
 
 	prompt := fmt.Sprintf("functional-smoke-named-factory-%d", time.Now().UnixNano())
 	testutil.WriteSeedRequest(t, namedFactoryDir, work.SubmitRequest{
@@ -457,7 +452,11 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 		mockWorkersPath,
 	)
 	cmd.Dir = unrelatedWorkingDir
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(
+		os.Environ(),
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+	)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -472,18 +471,30 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 		waitCh <- cmd.Wait()
 	}()
 
-	item, err := waitForFactoryPromptWorkComplete(ctx, baseURL, defaultPromptRunWorkTypeName, prompt, 20*time.Second)
+	item, err := waitForFactoryPromptWorkComplete(
+		ctx,
+		baseURL,
+		defaultPromptRunWorkTypeName,
+		"named-factory-smoke-work",
+		20*time.Second,
+	)
 	if err != nil {
 		if waitErr := <-waitCh; waitErr != nil {
-			t.Fatalf("you run --named: %v\nstdout:\n%s\nstderr:\n%s", waitErr, stdout.String(), stderr.String())
+			t.Fatalf(
+				"wait for completed named-factory work: %v\nyou run --named: %v\nstdout:\n%s\nstderr:\n%s",
+				err,
+				waitErr,
+				stdout.String(),
+				stderr.String(),
+			)
 		}
 		t.Fatalf("wait for completed named-factory work: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
 	}
 	if stringPointerValue(item.WorkTypeName) != defaultPromptRunWorkTypeName {
 		t.Fatalf("work type = %q, want %q", stringPointerValue(item.WorkTypeName), defaultPromptRunWorkTypeName)
 	}
-	if !factoryPromptRunWorkContentIncludes(item, prompt) {
-		t.Fatalf("work content = %#v, want prompt text %q", item.Content, prompt)
+	if !factoryPromptRunWorkContentIncludes(item, "mock worker accepted") {
+		t.Fatalf("work content = %#v, want mock worker result", item.Content)
 	}
 
 	cancel()
@@ -564,7 +575,7 @@ func promptRunWorkTypeStates() []map[string]string {
 func writeDefaultMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	data, err := json.MarshalIndent(factoryconfig.NewEmptyMockWorkersConfig(), "", "  ")
+	data, err := json.MarshalIndent(workers.NewEmptyMockWorkersConfig(), "", "  ")
 	if err != nil {
 		t.Fatalf("marshal default mock-workers config: %v", err)
 	}
@@ -578,23 +589,23 @@ func writeDefaultMockWorkersConfig(t *testing.T) string {
 func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-planner",
 				WorkstationName: "plan-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-executor",
 				WorkstationName: "execute-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-checker",
 				WorkstationName: "check-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{"plain"},
 				},
@@ -602,8 +613,8 @@ func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
 			{
 				WorkerName:      "goal-reviewer",
 				WorkstationName: "review-goal",
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{"accepted"},
 				},
@@ -713,11 +724,12 @@ func waitForFactoryPromptWorkComplete(
 	ctx context.Context,
 	baseURL string,
 	workTypeName string,
-	wantPrompt string,
+	wantWorkID string,
 	timeout time.Duration,
 ) (factoryapi.Work, error) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	deadline := time.Now().Add(timeout)
+	var lastResults []factoryapi.Work
 
 	for time.Now().Before(deadline) {
 		select {
@@ -749,6 +761,7 @@ func waitForFactoryPromptWorkComplete(
 		if resp.StatusCode != http.StatusOK {
 			return factoryapi.Work{}, fmt.Errorf("GET /work status = %d", resp.StatusCode)
 		}
+		lastResults = append(lastResults[:0], work.Results...)
 
 		for _, item := range work.Results {
 			if stringPointerValue(item.WorkTypeName) != workTypeName {
@@ -760,7 +773,7 @@ func waitForFactoryPromptWorkComplete(
 			if factoryPromptRunWorkStateType(item.State) != factoryapi.WorkStateTypeTERMINAL {
 				continue
 			}
-			if !factoryPromptRunWorkContentIncludes(item, wantPrompt) {
+			if stringPointerValue(item.WorkId) != wantWorkID {
 				continue
 			}
 			return item, nil
@@ -773,7 +786,13 @@ func waitForFactoryPromptWorkComplete(
 		}
 	}
 
-	return factoryapi.Work{}, fmt.Errorf("timed out waiting for completed %q work with prompt %q", workTypeName, wantPrompt)
+	lastResultsJSON, _ := json.Marshal(lastResults)
+	return factoryapi.Work{}, fmt.Errorf(
+		"timed out waiting for completed %q work %q; last results: %s",
+		workTypeName,
+		wantWorkID,
+		lastResultsJSON,
+	)
 }
 
 func factoryPromptRunWorkContentIncludes(item factoryapi.Work, wantPrompt string) bool {

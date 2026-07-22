@@ -1,224 +1,280 @@
 package support
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/wire"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
-	"go.uber.org/zap"
 )
 
 const functionalServerReadyTimeout = 5 * time.Second
 
+// FunctionalAPIServerConfig describes customer process inputs and replaceable
+// external boundaries. Product/runtime configuration is supplied through Args
+// exactly as it is for a real CLI invocation.
 type FunctionalAPIServerConfig struct {
 	FactoryDir                string
+	WorkingDirectory          string
 	UseMockWorkers            bool
+	MockWorkersConfig         *workers.MockWorkersConfig
 	WaitForServiceModeRuntime bool
-	RecordPath                string
-	ReplayPath                string
-	ExecutionBaseDir          string
-	Configure                 func(*service.FactoryServiceConfig)
-	ExtraOptions              []factory.FactoryOption
-	CaptureAPISurface         func(apisurface.APISurface)
-	CaptureService            func(*service.FactoryService)
-	CaptureHTTPServer         func(*httptest.Server)
-	CaptureShutdown           func(context.CancelFunc, <-chan struct{})
+	Args                      []string
+	Env                       []string
+	Edges                     serviceedges.Edges
 }
 
+// FunctionalAPIServer owns one daemon invocation on a reusable root Process.
 type FunctionalAPIServer struct {
-	httpSrv *httptest.Server
-	service *service.FactoryService
-	cancel  context.CancelFunc
-	done    chan struct{}
+	process *ProcessCommand
+	api     *ProcessAPIServer
+	url     string
 }
 
 // ConfigureWorkerCommands installs typed functional command edges before the
-// service graph is assembled.
+// root process is constructed.
 func ConfigureWorkerCommands(
 	t *testing.T,
-	cfg *service.FactoryServiceConfig,
-	providerRunner, scriptRunner workers.CommandRunner,
+	edges *serviceedges.Edges,
+	providerRunner, scriptRunner platformprocess.CommandRunner,
 ) {
 	t.Helper()
-	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
-		ProviderCommandRunner: providerRunner,
-		ScriptCommandRunner:   scriptRunner,
-	})
-	if err != nil {
-		t.Fatalf("construct functional worker application: %v", err)
-	}
-	cfg.WorkerApplication = components
+	edges.ProviderCommandRunner = providerRunner
+	edges.ScriptCommandRunner = scriptRunner
 }
 
 func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *FunctionalAPIServer {
 	t.Helper()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	edges := cfg.Edges
 
-	var handler http.Handler
-	readyCh := make(chan struct{})
+	api := NewProcessAPIServer()
+	edges.APIServerStarter = api.Start
+	process := BuildProcess(t, edges)
 
-	serviceCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
-		Dir:          cfg.FactoryDir,
-		Port:         1,
-		ExtraOptions: cfg.ExtraOptions,
-		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
-			if cfg.CaptureAPISurface != nil {
-				cfg.CaptureAPISurface(surface)
-			}
-			handler = api.NewServer(surface, 0, l).Handler()
-			close(readyCh)
-			<-ctx.Done()
-			return nil
-		},
-	})
-	if cfg.UseMockWorkers {
-		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
+	args := append([]string{"you", "run"}, functionalRunArgs(t, cfg)...)
+	inputs := FakeInputs(context.Background(), args)
+	// Match a customer invoking `you run` from the selected Factory directory.
+	// This keeps invocation-relative durable state and packaged source
+	// resolution aligned with the public CLI contract without changing the
+	// process-wide working directory.
+	inputs.WorkingDirectory = cfg.WorkingDirectory
+	if inputs.WorkingDirectory == "" {
+		inputs.WorkingDirectory = cfg.FactoryDir
 	}
-	serviceCfg.ReplayPath = cfg.ReplayPath
-	serviceCfg.RecordPath = cfg.RecordPath
-	serviceCfg.ExecutionBaseDir = cfg.ExecutionBaseDir
-	if cfg.Configure != nil {
-		cfg.Configure(serviceCfg)
-	}
-
-	svc, err := wire.InjectFactoryService(ctx, serviceCfg)
-	if err != nil {
-		cancel()
-		t.Fatalf("InjectFactoryService: %v", err)
-	}
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		if err := svc.Run(ctx); err != nil && err != context.Canceled {
-			fmt.Printf("functional support server: svc.Run ended: %v\n", err)
-		}
-	}()
-
-	waitForHandlerReadiness(t, cancel, readyCh)
-	if cfg.WaitForServiceModeRuntime && serviceCfg.RuntimeMode == interfaces.RuntimeModeService {
-		waitForServiceRuntimeReady(t, cancel, svc)
-	}
-
-	httpSrv := httptest.NewServer(handler)
-	if cfg.CaptureService != nil {
-		cfg.CaptureService(svc)
-	}
-	if cfg.CaptureHTTPServer != nil {
-		cfg.CaptureHTTPServer(httpSrv)
-	}
-	if cfg.CaptureShutdown != nil {
-		cfg.CaptureShutdown(cancel, done)
-	}
-	server := &FunctionalAPIServer{
-		httpSrv: httpSrv,
-		service: svc,
-		cancel:  cancel,
-		done:    done,
+	if cfg.Env == nil {
+		home := t.TempDir()
+		inputs.Env = withFunctionalEnvironment(inputs.Env, "HOME", home)
+		inputs.Env = withFunctionalEnvironment(inputs.Env, "USERPROFILE", home)
+	} else {
+		inputs.Env = append([]string(nil), cfg.Env...)
 	}
 	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(functionalServerReadyTimeout):
+		if !t.Failed() {
+			return
 		}
-		httpSrv.Close()
+		if stderr := strings.TrimSpace(inputs.Stderr()); stderr != "" {
+			t.Logf("daemon stderr:\n%s", stderr)
+		}
+		if stdout := strings.TrimSpace(inputs.Stdout()); stdout != "" {
+			t.Logf("daemon stdout:\n%s", stdout)
+		}
 	})
+	command := StartProcessCommand(t, process, inputs.Input)
+	server := &FunctionalAPIServer{process: command, api: api}
+	server.url = api.WaitForURL(t)
+	if cfg.WaitForServiceModeRuntime {
+		WaitForStatus(t, server.url, functionalServerReadyTimeout, func(status factoryapi.StatusResponse) bool {
+			return status.RuntimeStatus != ""
+		})
+	}
 	return server
 }
 
-// StartFunctionalAPIServiceModeServer starts the standard functional HTTP seam
-// with a service-mode runtime. Customer-boundary scenarios should use this
-// helper instead of assembling runtime options themselves.
+func withFunctionalEnvironment(environment []string, name, value string) []string {
+	prefix := name + "="
+	out := make([]string, 0, len(environment)+1)
+	for _, entry := range environment {
+		if strings.EqualFold(strings.SplitN(entry, "=", 2)[0]+"=", prefix) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	return append(out, prefix+value)
+}
+
+// StartFunctionalAPIServiceModeServer starts the standard customer-facing
+// service process.
 func StartFunctionalAPIServiceModeServer(t *testing.T, factoryDir string, useMockWorkers bool) *FunctionalAPIServer {
 	t.Helper()
 	return StartFunctionalAPIServer(t, FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		UseMockWorkers:            useMockWorkers,
 		WaitForServiceModeRuntime: true,
-		ExtraOptions:              []factory.FactoryOption{factory.WithServiceMode()},
 	})
 }
 
-func waitForHandlerReadiness(t *testing.T, cancel context.CancelFunc, readyCh <-chan struct{}) {
+func functionalRunArgs(t *testing.T, cfg FunctionalAPIServerConfig) []string {
 	t.Helper()
-
-	select {
-	case <-readyCh:
-	case <-time.After(functionalServerReadyTimeout):
-		cancel()
-		t.Fatal("FunctionalServer: timed out waiting for API handler")
+	args := []string{"--dir", cfg.FactoryDir, "--continuously", "--quiet"}
+	if !containsFunctionalArgument(cfg.Args, "--record") {
+		args = append(args, "--no-record")
 	}
+	mockWorkersConfig := cfg.MockWorkersConfig
+	if cfg.UseMockWorkers && mockWorkersConfig == nil {
+		mockWorkersConfig = workers.NewEmptyMockWorkersConfig()
+	}
+	if mockWorkersConfig != nil {
+		path := filepath.Join(t.TempDir(), "mock-workers.json")
+		payload, err := json.Marshal(mockWorkersConfig)
+		if err != nil {
+			t.Fatalf("marshal mock workers config: %v", err)
+		}
+		if err := os.WriteFile(path, payload, 0o600); err != nil {
+			t.Fatalf("write mock workers config: %v", err)
+		}
+		args = append(args, "--with-mock-workers", path)
+	}
+	return append(args, cfg.Args...)
 }
 
-func waitForServiceRuntimeReady(t *testing.T, cancel context.CancelFunc, svc *service.FactoryService) {
-	t.Helper()
-
-	deadline := time.Now().Add(functionalServerReadyTimeout)
-	for time.Now().Before(deadline) {
-		snapshot, err := svc.GetEngineStateSnapshot(context.Background())
-		if err == nil && snapshot.FactoryState == string(interfaces.FactoryStateRunning) {
-			return
+func containsFunctionalArgument(args []string, name string) bool {
+	for _, arg := range args {
+		if arg == name || strings.HasPrefix(arg, name+"=") {
+			return true
 		}
-		time.Sleep(10 * time.Millisecond)
 	}
-
-	cancel()
-	t.Fatal("FunctionalServer: timed out waiting for service runtime readiness")
+	return false
 }
 
 func (fs *FunctionalAPIServer) URL() string {
-	return fs.httpSrv.URL
-}
-
-func (fs *FunctionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-
-	snapshot, err := fs.service.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	if fs == nil {
+		return ""
 	}
-	return snapshot
-}
-
-func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
-	t.Helper()
-
-	events, err := fs.service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	return events
+	return fs.url
 }
 
 func (fs *FunctionalAPIServer) Done() <-chan struct{} {
-	return fs.done
+	if fs == nil || fs.process == nil {
+		closed := make(chan struct{})
+		close(closed)
+		return closed
+	}
+	return fs.process.Done()
 }
 
 func (fs *FunctionalAPIServer) Stop(t *testing.T) {
 	t.Helper()
+	if fs != nil && fs.process != nil {
+		fs.process.Stop(t)
+	}
+}
 
-	fs.cancel()
+// WaitForExitError observes an expected terminal process failure through the
+// canonical root invocation without having cleanup report it a second time.
+func (fs *FunctionalAPIServer) WaitForExitError(t testing.TB, timeout time.Duration) error {
+	t.Helper()
+	if fs == nil || fs.process == nil {
+		t.Fatal("WaitForExitError requires a running process")
+	}
 	select {
-	case <-fs.done:
-	case <-time.After(functionalServerReadyTimeout):
-		t.Fatal("FunctionalServer: timed out waiting for shutdown")
+	case <-fs.process.Done():
+		err := fs.process.Err()
+		fs.process.AcceptError()
+		return err
+	case <-time.After(timeout):
+		t.Fatalf("timed out waiting for process failure")
+		return nil
+	}
+}
+
+// GetFactoryEvents reads the canonical public session event stream. The
+// endpoint first replays retained history, so a short quiet period yields a
+// stable observation without reaching into the runtime service graph.
+func (fs *FunctionalAPIServer) GetFactoryEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	return GetFactoryEventsAt(t, fs.URL())
+}
+
+// GetFactoryEventsAt reads retained Factory Event history from a public
+// session endpoint without requiring the FunctionalAPIServer wrapper.
+func GetFactoryEventsAt(t testing.TB, baseURL string) []factoryapi.FactoryEvent {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, DefaultSessionEventsURL(baseURL), nil)
+	if err != nil {
+		t.Fatalf("build factory events request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("GET factory events: %v", err)
+	}
+	if response.StatusCode != http.StatusOK {
+		defer response.Body.Close()
+		t.Fatalf("GET factory events status = %d", response.StatusCode)
+	}
+
+	events := make(chan factoryapi.FactoryEvent, 256)
+	errs := make(chan error, 1)
+	go func() {
+		defer response.Body.Close()
+		scanner := bufio.NewScanner(response.Body)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !strings.HasPrefix(line, "data:") {
+				continue
+			}
+			var event factoryapi.FactoryEvent
+			if err := json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &event); err != nil {
+				errs <- fmt.Errorf("decode factory event: %w", err)
+				return
+			}
+			events <- event
+		}
+		if err := scanner.Err(); err != nil && !errors.Is(err, context.Canceled) {
+			errs <- err
+		}
+	}()
+
+	var collected []factoryapi.FactoryEvent
+	deadline := time.NewTimer(functionalServerReadyTimeout)
+	defer deadline.Stop()
+	var quiet *time.Timer
+	var quietC <-chan time.Time
+	for {
+		select {
+		case event := <-events:
+			collected = append(collected, event)
+			if quiet == nil {
+				quiet = time.NewTimer(25 * time.Millisecond)
+			} else {
+				if !quiet.Stop() {
+					select {
+					case <-quiet.C:
+					default:
+					}
+				}
+				quiet.Reset(25 * time.Millisecond)
+			}
+			quietC = quiet.C
+		case err := <-errs:
+			t.Fatalf("read factory events: %v", err)
+		case <-quietC:
+			return collected
+		case <-deadline.C:
+			t.Fatalf("timed out reading factory event history")
+		}
 	}
 }

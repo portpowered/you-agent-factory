@@ -96,13 +96,13 @@ func writeFixtureRepo(t *testing.T, readme string) string {
 
 	repoRoot := t.TempDir()
 	files := map[string]string{
-		"README.md":                                      readme,
-		"LICENSE.md":                                     "MIT",
-		"scripts/install.sh":                             "#!/bin/sh",
-		"docs/internal/resources/dashboard.png":          "png",
-		"docs/reference/authoring-factories.md":          "# authoring",
-		"docs/comparatives/comparing-systems.md":         "# compare",
-		"docs/architecture/architecture.md":              "# architecture",
+		"README.md":                              readme,
+		"LICENSE.md":                             "MIT",
+		"scripts/install.sh":                     "#!/bin/sh",
+		"docs/internal/resources/dashboard.png":  "png",
+		"docs/reference/authoring-factories.md":  "# authoring",
+		"docs/comparatives/comparing-systems.md": "# compare",
+		"docs/architecture/architecture.md":      "# architecture",
 	}
 	for relativePath, body := range files {
 		fullPath := filepath.Join(repoRoot, filepath.FromSlash(relativePath))

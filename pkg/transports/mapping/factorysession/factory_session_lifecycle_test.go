@@ -11,9 +11,8 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -83,13 +82,12 @@ func TestLifecycleControlResponseToAPI_MapsPauseCancelAndRetryFixtures(t *testin
 }
 
 func TestRetryDispatchRequestFromAPI_RequiresDispatchID(t *testing.T) {
-	_, err := factorysession.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{})
-	if err == nil {
-		t.Fatal("error = nil, want validation error")
+	raw, err := factorysession.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{})
+	if err != nil {
+		t.Fatalf("RetryDispatchRequestFromAPI: %v", err)
 	}
-	var validationErr *factorysessionexecution.ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want ValidationError", err)
+	if raw.DispatchID != "" {
+		t.Fatalf("dispatchId = %q, want raw empty value", raw.DispatchID)
 	}
 }
 
@@ -142,13 +140,12 @@ func TestRetryDispatchRequestFromAPI_NormalizesDispatchAndFlags(t *testing.T) {
 }
 
 func TestInterruptDispatchRequestFromAPI_RequiresDispatchID(t *testing.T) {
-	_, err := factorysession.InterruptDispatchRequestFromAPI(factoryapi.FactorySessionInterruptDispatchRequest{})
-	if err == nil {
-		t.Fatal("error = nil, want validation error")
+	raw, err := factorysession.InterruptDispatchRequestFromAPI(factoryapi.FactorySessionInterruptDispatchRequest{})
+	if err != nil {
+		t.Fatalf("InterruptDispatchRequestFromAPI: %v", err)
 	}
-	var validationErr *factorysessionexecution.ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want ValidationError", err)
+	if raw.DispatchID != "" {
+		t.Fatalf("dispatchId = %q, want raw empty value", raw.DispatchID)
 	}
 }
 
@@ -169,50 +166,30 @@ func TestInterruptDispatchRequestFromAPI_NormalizesDispatchAndMetadata(t *testin
 }
 
 func TestEvaluateInterruptDispatchControlFromServiceSpec(t *testing.T) {
-	accepted := factorysessionexecution.EvaluateInterruptDispatchControl(
-		factorysessionexecution.LifecycleStatusRunning,
-		factorysessionexecution.DispatchStatusRunning,
-	)
-	if accepted != factorysessionexecution.LifecycleControlOutcomeAccepted {
-		t.Fatalf("accepted outcome = %q, want ACCEPTED", accepted)
-	}
-	queued := factorysessionexecution.EvaluateInterruptDispatchControl(
-		factorysessionexecution.LifecycleStatusRunning,
-		factorysessionexecution.DispatchStatusQueued,
-	)
-	if queued != factorysessionexecution.LifecycleControlOutcomeInvalidState {
-		t.Fatalf("queued outcome = %q, want INVALID_STATE", queued)
-	}
-	noop := factorysessionexecution.EvaluateInterruptDispatchControl(
-		factorysessionexecution.LifecycleStatusRunning,
-		factorysessionexecution.DispatchStatusInterrupted,
-	)
-	if noop != factorysessionexecution.LifecycleControlOutcomeNoOp {
-		t.Fatalf("noop outcome = %q, want NO_OP", noop)
-	}
-	invalid := factorysessionexecution.EvaluateInterruptDispatchControl(
-		factorysessionexecution.LifecycleStatusRunning,
-		factorysessionexecution.DispatchStatusCompleted,
-	)
-	if invalid != factorysessionexecution.LifecycleControlOutcomeInvalidState {
-		t.Fatalf("invalid outcome = %q, want INVALID_STATE", invalid)
-	}
-	terminal := factorysessionexecution.EvaluateInterruptDispatchControl(
-		factorysessionexecution.LifecycleStatusSucceeded,
-		factorysessionexecution.DispatchStatusRunning,
-	)
-	if terminal != factorysessionexecution.LifecycleControlOutcomeTerminalSession {
-		t.Fatalf("terminal outcome = %q, want TERMINAL_SESSION", terminal)
+	for _, outcome := range []factorysessionexecution.LifecycleControlOutcome{
+		"ACCEPTED", "INVALID_STATE", "NO_OP", "TERMINAL_SESSION",
+	} {
+		mapped := factorysession.LifecycleControlResponseToAPI(factorysessionexecution.LifecycleControlResult{
+			SessionID: "session-1",
+			Operation: "INTERRUPT_DISPATCH",
+			Outcome:   outcome,
+			Status:    factorysessionexecution.LifecycleStatusRunning,
+		})
+		if string(mapped.Outcome) != string(outcome) {
+			t.Fatalf("mapped outcome = %q, want %q", mapped.Outcome, outcome)
+		}
 	}
 }
 
 func TestEvaluateLifecycleControlFromServiceSpec_MatchesRetryTerminalFixture(t *testing.T) {
-	outcome := factorysessionexecution.EvaluateLifecycleControl(
-		factorysessionexecution.LifecycleControlRetryDispatch,
-		factorysessionexecution.LifecycleStatusSucceeded,
-	)
-	if outcome != factorysessionexecution.LifecycleControlOutcomeTerminalSession {
-		t.Fatalf("outcome = %q, want TERMINAL_SESSION", outcome)
+	mapped := factorysession.LifecycleControlResponseToAPI(factorysessionexecution.LifecycleControlResult{
+		SessionID: "dur-sess-js-success-002",
+		Operation: "RETRY_DISPATCH",
+		Outcome:   "TERMINAL_SESSION",
+		Status:    factorysessionexecution.LifecycleStatusSucceeded,
+	})
+	if mapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("outcome = %q, want TERMINAL_SESSION", mapped.Outcome)
 	}
 }
 
@@ -321,7 +298,7 @@ func applySessionReadFixtureOutcomeFields(result *factorysessionexecution.Sessio
 }
 
 func sessionUsageFromFixture(session map[string]any) factorysessionexecution.SessionUsage {
-	usage := factorysessionexecution.EmptySessionUsage()
+	usage := factorysessionexecution.SessionUsage{Resources: []factorysessionexecution.ResourceUsage{}}
 	rawUsage, ok := session["usage"].(map[string]any)
 	if !ok {
 		return usage
@@ -362,7 +339,7 @@ func lifecycleControlFromFixture(control map[string]any) factorysessionexecution
 
 func resolvedSourceFromFixture(source map[string]any) factorysessionexecution.ResolvedSource {
 	result := factorysessionexecution.ResolvedSource{
-		Kind:       workflowsource.Kind(stringValue(source, "kind")),
+		Kind:       factory.WorkflowSourceKind(stringValue(source, "kind")),
 		SourceRef:  stringValue(source, "sourceRef"),
 		SourceHash: stringValue(source, "sourceHash"),
 		Dialect:    stringValue(source, "dialect"),
@@ -515,7 +492,7 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 	status, response, ok := factorysession.LifecycleControlErrorResponse(
 		"dur-sess-js-success-002",
 		&factorysessionexecution.ControlError{
-			Operation: factorysessionexecution.LifecycleControlCancel,
+			Operation: "CANCEL",
 			Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
 			Status:    factorysessionexecution.LifecycleStatusSucceeded,
 			Message:   "terminal",
@@ -577,7 +554,7 @@ func TestLifecycleControlSuccessStatus_MapsAcceptedCancelAndTerminate(t *testing
 
 	terminateStatus := factorysession.LifecycleControlSuccessStatus(factorysessionexecution.LifecycleControlResult{
 		Outcome: factorysessionexecution.LifecycleControlOutcomeAccepted,
-		Status:  factorysessionexecution.LifecycleStatusTerminated,
+		Status:  factorysessionexecution.LifecycleStatus("TERMINATED"),
 	})
 	if terminateStatus != http.StatusOK {
 		t.Fatalf("terminate status = %d, want 200", terminateStatus)
@@ -601,7 +578,7 @@ func TestLifecycleControlErrorResponse_ReturnsFalseForUnknownErrors(t *testing.T
 func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *testing.T) {
 	status, response, ok := factorysession.LifecycleControlErrorResponse(
 		"dur-sess-js-run-n-001",
-		factorysessionexecution.NewValidationError("dispatchId", "dispatchId is required"),
+		&factorysessionexecution.ExecutionValidationError{Field: "dispatchId", Message: "dispatchId is required"},
 	)
 	if !ok {
 		t.Fatal("LifecycleControlErrorResponse = false, want true for validation")
@@ -627,46 +604,5 @@ func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *test
 	errResp, ok = response.(factoryapi.ErrorResponse)
 	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
-	}
-}
-func TestFactoryStateToLifecycleStatus_MapsLiveFactoryStates(t *testing.T) {
-	cases := []struct {
-		state interfaces.FactoryState
-		want  factorysessionexecution.LifecycleStatus
-	}{
-		{interfaces.FactoryStateIdle, factorysessionexecution.LifecycleStatusRunning},
-		{interfaces.FactoryStateRunning, factorysessionexecution.LifecycleStatusRunning},
-		{interfaces.FactoryStatePaused, factorysessionexecution.LifecycleStatusPaused},
-		{interfaces.FactoryStateCompleted, factorysessionexecution.LifecycleStatusSucceeded},
-		{interfaces.FactoryStateFailed, factorysessionexecution.LifecycleStatusFailed},
-	}
-	for _, tc := range cases {
-		if got := factorysession.FactoryStateToLifecycleStatus(tc.state); got != tc.want {
-			t.Fatalf("state %q = %q, want %q", tc.state, got, tc.want)
-		}
-	}
-}
-
-func TestLiveLifecycleControlResponse_BuildsTypedPauseOutcome(t *testing.T) {
-	response := factorysession.LiveLifecycleControlResponse(
-		"~default",
-		factorysessionexecution.LifecycleControlPause,
-		factorysessionexecution.LifecycleControlOutcomeAccepted,
-		factorysessionexecution.LifecycleStatusPaused,
-	)
-	if response.SessionId != "~default" {
-		t.Fatalf("sessionId = %q, want ~default", response.SessionId)
-	}
-	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
-		t.Fatalf("operation = %q, want PAUSE", response.Operation)
-	}
-	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
-	}
-	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
-		t.Fatalf("status = %q, want PAUSED", response.Status)
-	}
-	if response.Links == nil || response.Links.Session == nil || *response.Links.Session != "/factory-sessions/~default" {
-		t.Fatalf("links = %#v, want /factory-sessions/~default", response.Links)
 	}
 }

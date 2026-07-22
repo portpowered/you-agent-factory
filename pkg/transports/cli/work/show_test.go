@@ -2,6 +2,7 @@ package work
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -48,7 +49,7 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		WorkID: "work-review-1",
 		Output: &out,
@@ -112,7 +113,7 @@ func TestShow_HumanOutputIncludesInterruptedStopSummary(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		SessionID: "session-beta",
 		WorkID:    "work-review-1",
@@ -169,7 +170,7 @@ func TestShow_HumanOutputIncludesPausedLifecycleStopSummary(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		SessionID: "session-paused",
 		WorkID:    "work-review-1",
@@ -212,7 +213,7 @@ func TestShow_JSONOutputEmitsWorkObject(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		WorkID: "work-1",
 		JSON:   true,
@@ -251,7 +252,7 @@ func TestShow_NotFoundExitsWithClearError(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		WorkID: "missing-work",
 		Output: &out,
@@ -284,7 +285,7 @@ func TestShow_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		SessionID: "session/beta",
 		WorkID:    "work/review",
@@ -313,7 +314,7 @@ func TestShow_PrimaryTraceFallsBackToTraceId(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := Show(ShowConfig{
+	err := NewShow(testHTTPProtocol(t))(ShowConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		WorkID: "work-1",
 		Output: &out,

@@ -2,6 +2,7 @@ package work
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -45,7 +46,7 @@ func TestList_SendsStateFilters(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		StateName: "review",
 		StateType: "PROCESSING",
@@ -84,7 +85,7 @@ func TestList_SendsNameAndWorkTypeNameFilters(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:       serverBase(t, srv),
 		Name:         "prd",
 		WorkTypeName: "story",
@@ -114,7 +115,7 @@ func TestList_SendsTraceIdFilter(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:  serverBase(t, srv),
 		TraceID: "trace-submit-1",
 		Output:  &out,
@@ -135,7 +136,7 @@ func TestList_VerboseDiagnosticsIncludeActiveFilterKeys(t *testing.T) {
 
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{FilterSummary: "name,workTypeName,traceId"})(ListConfig{Context: context.Background(),
 		Server:       serverBase(t, srv),
 		Name:         "alpha",
 		WorkTypeName: "story",
@@ -165,7 +166,7 @@ func TestList_SessionScopedRouteUsesFactorySessionPath(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:    serverBase(t, srv),
 		SessionID: "session/beta",
 		Output:    &out,
@@ -194,7 +195,7 @@ func TestList_HumanOutputShowsEmptyState(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -227,7 +228,7 @@ func TestList_HumanOutputShowsOneWorkItemIdentityAndState(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -261,7 +262,7 @@ func TestList_HumanOutputLeavesWorkTypeEmptyWhenAbsent(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -307,7 +308,7 @@ func TestList_HumanOutputShowsManyWorkItems(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -354,7 +355,7 @@ func TestList_HumanOutputOmitsRuntimeResourcesWhenMixedResponseContainsOnlyVisib
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -402,7 +403,7 @@ func TestList_HumanOutputShowsRelationSummaryForOneRelation(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -459,7 +460,7 @@ func TestList_HumanOutputShowsDeterministicSummaryForMultipleRelations(t *testin
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		Output: &out,
 	})
@@ -506,7 +507,7 @@ func TestList_SendsPaginationControlsAndEmitsJSONResponse(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:     serverBase(t, srv),
 		MaxResults: 2,
 		NextToken:  requestToken,
@@ -554,7 +555,7 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{FilterSummary: "state.name,state.type"})(ListConfig{Context: context.Background(),
 		Server:      serverBase(t, srv),
 		SessionID:   "session-alpha",
 		StateName:   "review",
@@ -603,7 +604,7 @@ func TestList_VerboseLogsFailureStatus(t *testing.T) {
 
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:      serverBase(t, srv),
 		Verbose:     true,
 		Output:      &out,
@@ -641,7 +642,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 	defer srv.Close()
 
 	var firstOut bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:     serverBase(t, srv),
 		MaxResults: 1,
 		JSON:       true,
@@ -656,7 +657,7 @@ func TestList_JSONOutputOmitsResourcesAndPreservesPaginationAcrossVisibleWorkPag
 	assertListJSONPage(t, firstOut.Bytes(), "work-1", &secondToken, "first")
 
 	var secondOut bytes.Buffer
-	err = List(ListConfig{
+	err = NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:     serverBase(t, srv),
 		MaxResults: 1,
 		NextToken:  secondToken,
@@ -698,7 +699,7 @@ func TestList_JSONOutputPreservesGeneratedResponseShape(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		JSON:   true,
 		Output: &out,
@@ -780,7 +781,7 @@ func TestList_JSONOutputSupportsAutomationSelectionWithFiltersAndPagination(t *t
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server:     serverBase(t, srv),
 		StateName:  "review",
 		StateType:  "PROCESSING",
@@ -833,7 +834,7 @@ func TestList_JSONOutputLeavesRelationsOmittedWhenAPIResponseDoesNotIncludeThem(
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), testListRequestPreparation{})(ListConfig{Context: context.Background(),
 		Server: serverBase(t, srv),
 		JSON:   true,
 		Output: &out,

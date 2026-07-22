@@ -23,7 +23,7 @@ delegation to the target owner or part of an active removal lane.
 | Work domain | target `pkg/work` | Put Work content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts in the collapsed Work owner. Until Batch 006 moves a slice, use its registered migration root and do not create a parallel implementation. |
 | Platform infrastructure | `pkg/platform` | Put logging in `pkg/platform/logging`, policy-free replay artifact filesystem mechanics in `pkg/platform/replay`, file-backed metric recording in `pkg/platform/metrics`, cursor mechanics and safe persistence diagnostics in `pkg/platform/cursors`, and real or deterministic clock implementations in `pkg/platform/clock`. Keep replay event construction, reduction, recording lifecycle, and delivery policy in `pkg/factory/replay`; keep canonical event meaning, Factory Session state, metric and clock meaning, and cursor identity or recovery decisions at their domain boundaries. Shared log/metric path reservation is internal to `pkg/platform`. Platform implementations receive explicit inputs and never choose domain policy. |
 | Transport boundaries | target `pkg/transports` | Put HTTP, CLI, MCP, generated transport contracts/clients, and boundary mapping at the process edge. Canonical Factory snapshots carried by event-derived domain projections or hydrated replay artifacts use `pkg/factory/contracts.FactorySnapshot` so unknown JSON fields survive projection cloning and replay reconstruction; decode them into generated API values only in an explicit boundary adapter such as `factorysnapshot.ToAPI`. Factory replay captures runtime definitions and metadata directly into that snapshot, and reconstructs its embedded runtime lookup from the snapshot without exposing a generated Factory in the replay API. Replay artifact construction accepts that snapshot directly; composition maps it to a generated value only when a public transport response requires one. Replay metadata comparison likewise consumes snapshots on both sides. The Factory owner defines `FactoryEvent`, `FactoryEventContext`, `FactoryEventType`, and the canonical event schema version; in-memory history, reconnect selection, live and durable event streams, runtime recorders, and `ReplayArtifact.Events` carry that detached domain envelope. Event-history reads expose only detached canonical values through `CanonicalEvents`; generated union conversion belongs in transport adapters or compatibility-test helpers, not an `Events` method on the Factory owner. Clone the envelope before exposing it to recorders or stream consumers so payload and context slices cannot mutate canonical history. Factory Session completion bindings consume the canonical event type recorder, including history replay for late binding, rather than accepting generated HTTP events. Replay parsing, sequencing, validation, and reduction operate on the domain envelope. Reconnect selection consumes canonical history directly; generated event conversion occurs only after selection when a public response requires it. Typed reducers should decode their owner-defined payload directly with `FactoryEvent.DecodePayload`; Factory run request and response, dispatch request, work-state change, Work-owned work request, and worker-execution-owned inference and dispatch responses demonstrate this while preserving historical compatibility fields and context fallbacks. Run-request artifact encoding likewise starts from the Factory-owned payload and uses the worker diagnostics owner's public-wire encoder; generated union decoding belongs in compatibility tests, not the production artifact builder. Run-request reduction rebuilds the domain `FactoryConfig` and embedded runtime definitions from the Factory-owned snapshot; dispatch reconstruction and submission defaults consume that domain configuration rather than retaining a generated public `Factory` in reduced state. Replay canonicalization, legacy cron repair, and adjacent-config hydration rewrite detached domain snapshots and payloads directly, preserving unknown fields and public JSON compatibility without rebuilding a generated Factory-event union. OpenAPI parity code compares the authored transport contract against the domain vocabulary, and generated discriminator decoding remains transport/test-boundary support rather than a production Factory dependency. Until Batch 006 moves a slice, use its registered migration root; transport adapters must not own domain policy. |
-| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin, normalize process input and select mode in `pkg/root`, construct the concrete runtime core once in `pkg/wire/runtime_core.go`, and execute startup/shutdown lifecycle for already-built transports and sidecars in `pkg/initializer`. Copy caller-owned config before normalization, project only narrow domain contracts into the graph, and retain cleanup ownership for the startup bundle rather than exposing construction internals. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. A fallible graph phase should retain any closeable construction resource so `pkg/wire` can unwind acquired resources once, in reverse order, before returning a later phase failure. Initializer should record only successfully started collaborators, stop them in reverse order on partial failure or shutdown, and make graph close part of the same idempotent shutdown result. |
+| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin. `pkg/root` injects the lazy bundle and lets the CLI select an explicit service entrypoint after parsing. Both public injectors use one canonical Wire set. The selected run/API or stdio initializer constructs only its service subtree and flattens it into `bundle.Bundle`; `pkg/initializer` executes startup and shutdown for the attached handles. Copy caller-owned config before normalization and retain cleanup ownership in the bundle. Fallible construction retains each closeable resource so Wire can unwind once in reverse order; initializer records only successfully started collaborators and closes the bundle through the same idempotent shutdown path. |
 
 Editable Factory persistence consumes a detached `FactorySnapshot` and the
 Factory-owned `FactoryVersion`; it removes version metadata before split-layout
@@ -144,9 +144,10 @@ payload, and prove generated OpenAPI union compatibility after history appends
 the canonical event rather than constructing generated events in composition.
 
 Production command runners must remain blocking without taking lifecycle ownership
-back from `pkg/initializer`. The entrypoint should construct and start the graph
-through `pkg/root`, then let the returned application wait for its selected
-graph-owned transport and perform the same idempotent reverse-order shutdown.
+back from `pkg/initializer`. `pkg/root` injects the inert bundle before parsing;
+the selected CLI service entrypoint constructs its bundle resources and lets the
+returned application wait for its selected transport and perform the same
+idempotent reverse-order shutdown.
 `initializer.BuildCore` must require the valid worker application composed at
 that outer boundary; it must not fill in a missing component with production
 defaults before loading configuration or starting lifecycle work.
@@ -191,19 +192,15 @@ deadline exits are normal shutdown outcomes. When multiple components return
 non-cancellation failures, report them in declared lifecycle-plan order rather
 than arrival order so goroutine scheduling cannot change terminal precedence.
 
-The production `you mcp serve` branch follows the same ownership path even
-though it does not activate run sidecars. Fixture-backed MCP may construct its
-narrow fake execution edge, but runtime-backed MCP must construct and retain
-the completed `wire.Graph`, including its registry, persistence, runtime-build,
-durable-execution, and startup-bundle cleanup ownership. Construct the MCP
-stdio lifecycle from the request's explicit reader and writer, and let
-`pkg/initializer` start, wait for, stop, and close that graph. Runtime-backed
-CLI session execution follows the same rule by retaining its complete graph in
-the returned closable execution owner; it must not discard the graph after
-extracting durable execution. The CLI command boundary must retain that owner
-for the full workflow or durable-list operation and close it exactly once after
-both successful and failed command execution. Do not return a separately
-composed MCP application from the process graph builder.
+The production `you mcp serve` branch follows the same ownership path without
+constructing HTTP, dashboard, worker, watcher, or runtime sidecars.
+Fixture-backed MCP may construct its narrow fake execution edge; runtime-backed
+MCP retains the completed `bundle.Bundle`, including registry, persistence,
+runtime-build, durable-execution, and startup-bundle cleanup ownership, then
+attaches only its MCP host and stdio lifecycle. `pkg/initializer` starts, waits
+for, stops, and closes that bundle. Runtime-backed CLI session execution retains
+the same flat bundle in its closable execution owner and closes it exactly once
+after successful or failed command execution.
 
 The repository-only MCP client harness under `internal/testutil/mcpclient`
 records real stdio traffic at the newline-delimited frame boundary. Its reader
@@ -286,7 +283,7 @@ without routing through transport aliases.
 Model discovery summaries, details, capabilities, resources, compatibility
 status, and load-state vocabulary belong in `pkg/models/catalog`. The local
 catalog builder returns those contracts, and
-`pkg/transports/mapping/modelcatalog` alone converts them to generated model
+`pkg/services/models/transports/http` alone converts them to generated model
 list and detail values.
 
 The same check rejects recreation or import of converged roots and reports the

@@ -2,13 +2,10 @@
 package replay
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"time"
 )
 
@@ -17,8 +14,27 @@ const (
 	artifactReplaceDelay    = 10 * time.Millisecond
 )
 
+// Storage is the exact replay-artifact filesystem effect consumed by the
+// Recordings owner.
+type Storage interface {
+	WriteFile(string, []byte) error
+	ReadFile(string) ([]byte, error)
+}
+
+// Local is the policy-free local artifact adapter for one Wire-selected host
+// operating system.
+type Local struct {
+	operatingSystem string
+}
+
+// NewLocal binds replacement mechanics to the host operating system selected
+// by Wire.
+func NewLocal(operatingSystem string) Local {
+	return Local{operatingSystem: operatingSystem}
+}
+
 // WriteFile atomically replaces path with a completed artifact snapshot.
-func WriteFile(path string, data []byte) error {
+func (local Local) WriteFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create replay artifact directory: %w", err)
@@ -51,7 +67,7 @@ func WriteFile(path string, data []byte) error {
 	if err := os.Rename(tmpPath, path); err == nil {
 		cleanupTemp = false
 		return nil
-	} else if runtime.GOOS != "windows" {
+	} else if local.operatingSystem != "windows" {
 		return fmt.Errorf("replace replay artifact with temp file: %w; temp artifact left at %s", err, tmpPath)
 	}
 
@@ -72,9 +88,9 @@ func WriteFile(path string, data []byte) error {
 
 // ReadFile reads one artifact snapshot, retrying transient Windows replacement
 // races without interpreting the artifact contents.
-func ReadFile(path string) ([]byte, error) {
+func (local Local) ReadFile(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
-	if err == nil || runtime.GOOS != "windows" {
+	if err == nil || local.operatingSystem != "windows" {
 		return data, err
 	}
 
@@ -90,91 +106,4 @@ func ReadFile(path string) ([]byte, error) {
 	return nil, lastErr
 }
 
-const unavailableHistoricalFailureMessage = "Failure details were not recorded in this historical event."
-
-var canonicalFailureReasons = map[string]struct{}{
-	"auth_failure": {}, "misconfigured": {}, "permanent_bad_request": {},
-	"internal_server_error": {}, "throttled": {}, "timeout": {}, "unknown": {},
-}
-
-// NormalizeHistoricalFailureDetails translates legacy diagnostic fields before
-// the domain-owned artifact codec decodes its canonical events.
-func NormalizeHistoricalFailureDetails(data []byte) ([]byte, error) {
-	var root map[string]any
-	if err := json.Unmarshal(data, &root); err != nil {
-		return nil, err
-	}
-	if payload, ok := root["payload"].(map[string]any); ok {
-		normalizeHistoricalFailureObject(payload)
-	}
-	if events, ok := root["events"].([]any); ok {
-		for _, value := range events {
-			event, ok := value.(map[string]any)
-			if !ok {
-				continue
-			}
-			if payload, ok := event["payload"].(map[string]any); ok {
-				normalizeHistoricalFailureObject(payload)
-			}
-		}
-	}
-	return json.Marshal(root)
-}
-
-func normalizeHistoricalFailureObject(object map[string]any) {
-	detail, validCanonical := validHistoricalFailureDetail(object["failureDetail"])
-	legacyReason, hasLegacyReason := trimmedString(object["failureReason"])
-	legacyMessage, hasLegacyMessage := trimmedString(object["failureMessage"])
-	errorClass, hasErrorClass := trimmedString(object["errorClass"])
-	delete(object, "failureReason")
-	delete(object, "failureMessage")
-	delete(object, "errorClass")
-	if validCanonical {
-		object["failureDetail"] = detail
-		return
-	}
-	if !hasLegacyReason && !hasLegacyMessage && !hasErrorClass {
-		return
-	}
-	reason := "unknown"
-	if hasLegacyReason {
-		reason = normalizedHistoricalFailureReason(legacyReason)
-	} else if hasErrorClass {
-		reason = normalizedHistoricalFailureReason(errorClass)
-	}
-	if !hasLegacyMessage {
-		legacyMessage = unavailableHistoricalFailureMessage
-	}
-	object["failureDetail"] = map[string]any{"reason": reason, "message": legacyMessage}
-}
-
-func validHistoricalFailureDetail(value any) (map[string]any, bool) {
-	detail, ok := value.(map[string]any)
-	if !ok || len(detail) != 2 {
-		return nil, false
-	}
-	reason, hasReason := trimmedString(detail["reason"])
-	message, hasMessage := trimmedString(detail["message"])
-	if !hasReason || !hasMessage {
-		return nil, false
-	}
-	if _, ok := canonicalFailureReasons[reason]; !ok {
-		return nil, false
-	}
-	return map[string]any{"reason": reason, "message": message}, true
-}
-
-func normalizedHistoricalFailureReason(value string) string {
-	normalized := strings.ToLower(strings.TrimSpace(value))
-	normalized = strings.NewReplacer("-", "_", " ", "_").Replace(normalized)
-	if _, ok := canonicalFailureReasons[normalized]; ok {
-		return normalized
-	}
-	return "unknown"
-}
-
-func trimmedString(value any) (string, bool) {
-	text, ok := value.(string)
-	text = strings.TrimSpace(text)
-	return text, ok && text != ""
-}
+var _ Storage = Local{}

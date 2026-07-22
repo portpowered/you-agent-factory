@@ -346,7 +346,7 @@ Review expectations:
 
 - Adding a new feature **SHOULD** add or extend a feature-local message catalog.
 - New user-facing UI copy in `ui/src/` **SHOULD** be authored through a feature-owned message catalog, and reviewers **SHOULD** treat new hardcoded production JSX copy, textual component props, or accessibility labels as a blocking issue unless the literal is a documented non-product diagnostic exception.
-- Legitimate non-product diagnostic literals **MUST** use the inline `hardcoded-ui-copy-exception: non-product-diagnostic` marker near the literal instead of adding product copy back to `ui/scripts/hardcoded-ui-copy-baseline.txt`.
+- Legitimate non-product diagnostic literals **MUST** use the inline `hardcoded-ui-copy-exception: non-product-diagnostic` marker near the literal instead of adding product copy back to `docs/internal/baselines/hardcoded-ui-copy-baseline.txt`.
 - Renaming a feature or domain **SHOULD NOT** force broad key churn outside that ownership boundary.
 - Reviewers **SHOULD** reject concatenated translated fragments when a full localized message should be authored instead.
 

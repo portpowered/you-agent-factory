@@ -5,83 +5,76 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-func TestNormalizeWorkflowSourceRequest_ResolvesWorkflowNameThroughOrchestratorSource(t *testing.T) {
-	projectRoot := t.TempDir()
-	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
+func TestFactoryPreviewResultFromPreview_MapsResolvedWorkflowSource(t *testing.T) {
+	preview := factory.WorkflowPreview{SourceResolution: factory.WorkflowSourceResolution{
+		RequestKind: factory.WorkflowSourceKindWorkflowName,
+		Found:       true,
+		SourceRef:   ".claude/workflows/review.js",
+		SourceHash:  "sha256:review",
+	}}
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
-	if err != nil {
-		t.Fatalf("DefaultContext: %v", err)
-	}
-	req := workflowsource.Request{
-		Kind:  workflowsource.KindWorkflowName,
-		Value: "review",
-	}
-
-	viaSurface := apisurface.NormalizeWorkflowSourceRequest(req, ctx)
-	direct := workflowsource.Resolve(req, ctx)
-	if viaSurface.Found != direct.Found ||
-		viaSurface.SourceRef != direct.SourceRef ||
-		viaSurface.SourceHash != direct.SourceHash {
-		t.Fatalf("surface = %#v, orchestrator = %#v, want equivalent source resolution", viaSurface, direct)
+	result := apisurface.FactoryPreviewResultFromPreview(preview)
+	if !result.SourceResolution.Found ||
+		result.SourceResolution.SourceRef == nil || *result.SourceResolution.SourceRef != preview.SourceResolution.SourceRef ||
+		result.SourceResolution.SourceHash == nil || *result.SourceResolution.SourceHash != preview.SourceResolution.SourceHash {
+		t.Fatalf("result = %#v, want detached source resolution %#v", result, preview.SourceResolution)
 	}
 }
 
-func TestNormalizeWorkflowSourceRequest_MissingWorkflowReportsNotFoundDiagnostic(t *testing.T) {
-	projectRoot := t.TempDir()
-	ctx, err := workflowsource.DefaultContext(projectRoot)
-	if err != nil {
-		t.Fatalf("DefaultContext: %v", err)
-	}
+func TestFactoryPreviewResultFromPreview_MapsMissingWorkflowDiagnostic(t *testing.T) {
+	preview := factory.WorkflowPreview{SourceResolution: factory.WorkflowSourceResolution{
+		RequestKind: factory.WorkflowSourceKindWorkflowName,
+		Diagnostics: []factory.WorkflowSourceDiagnostic{{
+			Code:    factory.WorkflowSourceCodeNotFound,
+			Message: "scripted source was not found",
+		}},
+	}}
 
-	resolution := apisurface.NormalizeWorkflowSourceRequest(workflowsource.Request{
-		Kind:  workflowsource.KindWorkflowName,
-		Value: "missing",
-	}, ctx)
-	if resolution.Found {
-		t.Fatalf("resolution = %#v, want not found", resolution)
+	result := apisurface.FactoryPreviewResultFromPreview(preview)
+	if result.SourceResolution.Found {
+		t.Fatalf("result = %#v, want not found", result.SourceResolution)
 	}
-	if len(resolution.Diagnostics) == 0 {
+	if result.SourceResolution.Diagnostics == nil || len(*result.SourceResolution.Diagnostics) == 0 {
 		t.Fatal("expected source resolution diagnostics")
 	}
-	if resolution.Diagnostics[0].Code != workflowsource.CodeSourceNotFound {
-		t.Fatalf("diagnostic code = %q, want %q", resolution.Diagnostics[0].Code, workflowsource.CodeSourceNotFound)
+	if (*result.SourceResolution.Diagnostics)[0].Code != factory.WorkflowSourceCodeNotFound {
+		t.Fatalf("diagnostic code = %q, want %q", (*result.SourceResolution.Diagnostics)[0].Code, factory.WorkflowSourceCodeNotFound)
 	}
 }
 
 func TestWorkflowSessionResultMappingPreservesDomainProjection(t *testing.T) {
 	timestamp := time.Date(2026, 7, 16, 3, 15, 0, 0, time.UTC)
-	input := workflowresult.SessionResultInput{
-		SessionID:    "session-js-1",
-		Status:       interfaces.RuntimeStatusFinished,
-		PrimaryValue: workflowresult.TypedValue{JSON: json.RawMessage(`{"ok":true}`)},
-		CheckpointRefs: []interfaces.FactorySessionJavaScriptCheckpointEventRef{{
-			ID: "checkpoint-1", Timestamp: &timestamp,
-			ArtifactRef: &interfaces.FactoryArtifactRef{
-				ID: "artifact-checkpoint-1", Kind: "CHECKPOINT", Visibility: "INTERNAL_CHECKPOINT",
-			},
-		}},
-		ResultArtifact: &interfaces.FactoryArtifactRef{
-			ID: "artifact-result-1", Kind: "FINAL_RESULT", Visibility: "PUBLIC",
+	checkpointRefs := []interfaces.FactorySessionJavaScriptCheckpointEventRef{{
+		ID: "checkpoint-1", Timestamp: &timestamp,
+		ArtifactRef: &interfaces.FactoryArtifactRef{
+			ID: "artifact-checkpoint-1", Kind: "CHECKPOINT", Visibility: "INTERNAL_CHECKPOINT",
 		},
+	}}
+	resultArtifact := &interfaces.FactoryArtifactRef{
+		ID: "artifact-result-1", Kind: "FINAL_RESULT", Visibility: "PUBLIC",
 	}
 
-	live := apisurface.BuildWorkflowSessionLiveResult(input)
-	assertLiveWorkflowResult(t, live, timestamp)
-	partial := apisurface.WorkflowSessionPartialResultToAPI(workflowresult.PartialSessionResult{
-		SessionID:                input.SessionID,
-		Phase:                    "review",
-		CheckpointRefs:           input.CheckpointRefs,
-		PartialResultArtifactRef: input.ResultArtifact,
+	live := apisurface.WorkflowSessionLiveResultToAPI(factory.LiveSessionResult{
+		SessionID:         "session-js-1",
+		Status:            interfaces.RuntimeStatusFinished,
+		CheckpointRefs:    checkpointRefs,
+		ResultArtifactRef: resultArtifact,
 	})
-	if partial.SessionId != input.SessionID || partial.Phase != "review" {
+	assertLiveWorkflowResult(t, live, timestamp)
+	partial := apisurface.WorkflowSessionPartialResultToAPI(factory.PartialSessionResult{
+		SessionID:                "session-js-1",
+		Phase:                    "review",
+		CheckpointRefs:           checkpointRefs,
+		PartialResultArtifactRef: resultArtifact,
+	})
+	if partial.SessionId != "session-js-1" || partial.Phase != "review" {
 		t.Fatalf("partial result = %#v", partial)
 	}
 	if partial.CheckpointRefs == nil || len(*partial.CheckpointRefs) != 1 || (*partial.CheckpointRefs)[0].Id != "checkpoint-1" {
@@ -90,7 +83,21 @@ func TestWorkflowSessionResultMappingPreservesDomainProjection(t *testing.T) {
 	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.Id != "artifact-result-1" {
 		t.Fatalf("partial artifact ref = %#v", partial.PartialResultArtifactRef)
 	}
-	assertDurableWorkflowResult(t, input)
+	assertDurableWorkflowResult(t, factory.SessionResult{
+		SessionID:    "session-js-1",
+		ResultStatus: factory.ResultStatusFinal,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeJSON,
+			JSON: json.RawMessage(`{"ok":true}`),
+		}},
+		ArtifactRefs: []interfaces.FactoryArtifactRef{*resultArtifact},
+	}, factory.SessionResultUpdatedPayload{
+		ResultStatus: interfaces.FactorySessionResultStatusFinal,
+		ResultSummary: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeJSON,
+			JSON: json.RawMessage(`{"ok":true}`),
+		}},
+	})
 }
 
 func TestWorkflowArtifactsToAPIPreservesSessionProjection(t *testing.T) {
@@ -183,13 +190,17 @@ func assertLiveWorkflowResult(t *testing.T, live factoryapi.FactorySessionLiveRe
 	}
 }
 
-func assertDurableWorkflowResult(t *testing.T, input workflowresult.SessionResultInput) {
+func assertDurableWorkflowResult(
+	t *testing.T,
+	result factory.SessionResult,
+	eventResult factory.SessionResultUpdatedPayload,
+) {
 	t.Helper()
-	durable := apisurface.BuildWorkflowSessionResult(input)
+	durable := apisurface.WorkflowSessionResultToAPI(result)
 	if durable.ResultStatus != factoryapi.FactorySessionResultStatusFinal || durable.PrimaryResult == nil || len(*durable.PrimaryResult) != 1 {
 		t.Fatalf("durable result = %#v", durable)
 	}
-	payload := apisurface.BuildWorkflowSessionResultUpdatedPayload(input)
+	payload := apisurface.WorkflowSessionResultUpdatedPayloadToAPI(eventResult)
 	if payload.ResultStatus != factoryapi.FactoryEventSessionResultStatusFinal || payload.ResultSummary == nil || len(*payload.ResultSummary) != 1 {
 		t.Fatalf("event payload = %#v", payload)
 	}

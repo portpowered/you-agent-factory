@@ -1,29 +1,27 @@
 package validationentry_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // topologyDeferredOutcomeRouteCodes are validate-only structural findings that
 // ProfilePrePersist intentionally omits after canonical load / blocking-load.
 var topologyDeferredOutcomeRouteCodes = map[string]struct{}{
-	factoryvalidation.CodeWorkstationMissingFailureRoute:   {},
-	factoryvalidation.CodeWorkstationMissingRejectionRoute: {},
-	factoryvalidation.CodeWorkTypeMissingCompletionState:   {},
-	factoryvalidation.CodeWorkTypeMissingFailureState:      {},
-	factoryvalidation.CodeWorkStateMissingTerminalPath:     {},
+	"factory.workstation.missingFailureRoute":         {},
+	"factory.workstation.missingRejectionRoute":       {},
+	"factory.workType.missingCompletionState":         {},
+	"factory.workType.missingFailureState":            {},
+	"factory.workState.missingTerminalCompletionPath": {},
 }
 
 // prePersistDisallowedOutcomeRouteCodes must not appear on the save pre-check path.
 var prePersistDisallowedOutcomeRouteCodes = map[string]struct{}{
-	factoryvalidation.CodeWorkstationMissingFailureRoute:   {},
-	factoryvalidation.CodeWorkstationMissingRejectionRoute: {},
+	"factory.workstation.missingFailureRoute":   {},
+	"factory.workstation.missingRejectionRoute": {},
 }
 
 // TestCrossPathInvalidFixture_ProfileTopologyDiffersFromPrePersistDocumentsValidateEndpointGap
@@ -40,33 +38,42 @@ func TestCrossPathInvalidFixture_ProfileTopologyDiffersFromPrePersistDocumentsVa
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	topologyResult := mustValidateFactoryAPI(t, factory, factoryvalidation.ProfileTopology)
-	prePersistResult := mustValidateFactoryAPI(t, factory, factoryvalidation.ProfilePrePersist)
+	topologyFindings := validationResult(
+		codeDuplicateIdentifier,
+		"factory.workstation.missingFailureRoute",
+		"factory.workType.missingCompletionState",
+	)
+	prePersistFindings := validationResult(codeDuplicateIdentifier)
+	topologyResult := mustValidateFactoryAPI(t, factory, factoryvalidation.ValidationProfileTopology, topologyFindings)
+	prePersistResult := mustValidateFactoryAPI(t, factory, factoryvalidation.ValidationProfilePrePersist, prePersistFindings)
 	assertCrossPathInvalidProfileGap(t, topologyResult, prePersistResult)
 }
 
-func mustValidateFactoryAPI(t *testing.T, factory factoryapi.Factory, profile factoryvalidation.Profile) factoryvalidation.Result {
+func mustValidateFactoryAPI(
+	t *testing.T,
+	factory factoryapi.Factory,
+	profile factoryvalidation.ValidationProfile,
+	findings factoryvalidation.ValidationResult,
+) factoryvalidation.ValidationResult {
 	t.Helper()
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: profile,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI(%s): %v", profile, err)
+	validator := testFactoryDefinitionValidator(findings)
+	if profile == factoryvalidation.ValidationProfilePrePersist {
+		validator = testFactoryDefinitionValidator(factoryvalidation.ValidationResult{}, findings)
 	}
-	return result
+	return invokeDefinitionValidationRole(t, factory, profile, validator)
 }
 
-func assertCrossPathInvalidProfileGap(t *testing.T, topologyResult, prePersistResult factoryvalidation.Result) {
+func assertCrossPathInvalidProfileGap(t *testing.T, topologyResult, prePersistResult factoryvalidation.ValidationResult) {
 	t.Helper()
 
 	if !topologyResult.HasTargets() || !prePersistResult.HasTargets() {
 		t.Fatal("expected both profiles to reject cross-path invalid fixture")
 	}
 
-	topologySignatures := factoryvalidation.CanonicalTargetSignatures(topologyResult.Targets)
-	prePersistSignatures := factoryvalidation.CanonicalTargetSignatures(prePersistResult.Targets)
-	if factoryvalidation.EquivalentCanonicalTargetSignatures(topologySignatures, prePersistSignatures) {
+	topologySignatures := targetCodes(topologyResult.Targets)
+	prePersistSignatures := targetCodes(prePersistResult.Targets)
+	if len(topologySignatures) == len(prePersistSignatures) {
 		t.Fatal("expected ProfileTopology and ProfilePrePersist to differ on cross-path invalid fixture")
 	}
 
@@ -82,13 +89,21 @@ func assertCrossPathInvalidProfileGap(t *testing.T, topologyResult, prePersistRe
 	}
 }
 
-func targetsContainAnyCode(targets []factoryvalidation.Target, codes map[string]struct{}) bool {
+func targetsContainAnyCode(targets []factoryvalidation.ValidationTarget, codes map[string]struct{}) bool {
 	for _, target := range targets {
 		if _, ok := codes[target.Code]; ok {
 			return true
 		}
 	}
 	return false
+}
+
+func targetCodes(targets []factoryvalidation.ValidationTarget) []string {
+	codes := make([]string, 0, len(targets))
+	for _, target := range targets {
+		codes = append(codes, target.Code)
+	}
+	return codes
 }
 
 func canonicalTargetSignaturesSubset(subset, superset []string) bool {

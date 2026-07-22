@@ -20,14 +20,18 @@ Put reusable project workflows under `.claude/workflows/` and select them by
 name. For a one-off source check, pass inline JavaScript directly:
 
 ```bash
-you workflow validate --kind INLINE_WORKFLOW --inline 'phase("setup");'
+curl -X POST http://localhost:7437/factories/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"sourceKind":"INLINE_WORKFLOW","inlineSource":"phase(\"setup\");"}'
 ```
 
 To validate a reusable project workflow named `release-train`, run from its
 project root so ordered source lookup can find `.claude/workflows/`:
 
 ```bash
-you workflow validate --kind WORKFLOW_NAME --value release-train --dir .
+curl -X POST http://localhost:7437/factories/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"sourceKind":"WORKFLOW_NAME","sourceValue":"release-train","projectRoot":"."}'
 ```
 
 Validation resolves and checks source without creating a Factory Session.
@@ -35,35 +39,30 @@ Correct every blocking diagnostic before execution.
 
 ### 2. Start synchronously or asynchronously
 
-Every start needs a stable request id and exactly one source selector:
-`--workflow`, `--workflow-file`, or `--factory`. Supply invocation data as a
-JSON object with `--args` when the workflow expects inputs.
+Every start needs a stable request id and exactly one source selector. Supply
+invocation data as a JSON object when the factory expects inputs.
 
 Use `run` when the caller should wait for a terminal result or the configured
 timeout. This copy-paste command exercises the published deterministic timeout
 fixture and still returns its Factory Session id for inspection:
 
 ```bash
-you --json workflow run \
-  --request-id req-js-timeout-001 \
-  --workflow long-running-audit \
-  --args '{"scope":"release"}' \
-  --wait-timeout-millis 1000
+curl -X POST http://localhost:7437/factory-sessions/sync \
+  -H 'Content-Type: application/json' \
+  -d '{"requestId":"req-js-timeout-001","workflowName":"long-running-audit","args":{"scope":"release"},"waitTimeoutMillis":1000}'
 ```
 
 Use `start` when the caller should receive the Factory Session id immediately
 and poll it later:
 
 ```bash
-you --json workflow start \
-  --request-id req-js-run-n-001 \
-  --workflow release-train \
-  --args '{"release":"2026.06"}'
+curl -X POST http://localhost:7437/factory-sessions/async \
+  -H 'Content-Type: application/json' \
+  -d '{"requestId":"req-js-run-n-001","workflowName":"release-train","args":{"release":"2026.06"}}'
 ```
 
-Retain the returned `sessionId`. The retired run-level workflow source flag is
-not supported; dynamic workflow execution belongs to `you workflow run` and
-`you workflow start`.
+Retain the returned `sessionId`. JavaScript execution uses the same canonical
+Factory Session API and MCP surfaces as other orchestrators.
 
 These examples use the deterministic fake execution provider and published
 fixture catalog selected by default. For live source resolution and JavaScript
@@ -199,11 +198,11 @@ result availability have the same meaning on every surface.
 
 | Operation | CLI | REST API | MCP |
 |-----------|-----|----------|-----|
-| Validate or resolve source without starting a session | `you workflow validate --kind WORKFLOW_NAME --value review` | `POST /factories/preview` | `you.factory_session.validate_source` |
-| Start and wait | `you --json workflow run --request-id req-js-timeout-001 --workflow long-running-audit --args '{"scope":"release"}' --wait-timeout-millis 1000` | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
-| Start for polling | `you --json workflow start --request-id req-js-run-n-001 --workflow release-train --args '{"release":"2026.06"}'` | `POST /factory-sessions/async` | `you.factory_session.start_async` |
-| Read status or final/partial result | `you --json workflow status SESSION_ID`; `you --json workflow result SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
-| Inspect child work and durable facts | `you --json workflow dispatches SESSION_ID`; `artifacts`; `events` | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
+| Validate or resolve source without starting a session | — | `POST /factories/preview` | `you.factory_session.validate_source` |
+| Start and wait | `you run --named FACTORY` for canonical named-Factory invocation | `POST /factory-sessions/sync` | `you.factory_session.start_sync` |
+| Start for polling | — | `POST /factory-sessions/async` | `you.factory_session.start_async` |
+| Read status or final/partial result | `you session show SESSION_ID` | `GET /factory-sessions/SESSION_ID`; `GET /factory-sessions/SESSION_ID/results` | `you.factory_session.get`; `you.factory_session.get_result` |
+| Inspect child work and durable facts | `you session dispatches SESSION_ID` | `GET /factory-sessions/SESSION_ID/dispatches`; `artifacts`; `events` | `you.factory_session.list_dispatches`; `list_artifacts`; `read_events` |
 
 Start requests use the shared `FactorySessionExecutionRequest` shape: one source
 selector, JSON-compatible `args`, requested policy where applicable, and the
@@ -218,9 +217,7 @@ remain inspectable.
 scenarios. Use `you mcp serve --runtime` for live JavaScript execution. Both
 modes expose the same `you.factory_session.*` tool envelopes, but fixture-backed
 calls return catalog scenarios while runtime-backed calls execute resolved
-source. Workflow-named MCP tools such as `you.workflow.run`,
-`you.workflow.status`, and `you.workflow.result` are compatibility aliases;
-new integrations should use `you.factory_session.*`.
+source.
 
 ## Child worker presets
 

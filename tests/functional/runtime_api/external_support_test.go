@@ -1,13 +1,5 @@
 package runtime_api_test
 
-import (
-	"context"
-	"sync"
-
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-)
-
 func twoStagePipelineConfig() map[string]any {
 	return map[string]any{
 		"name": "factory",
@@ -20,11 +12,25 @@ func twoStagePipelineConfig() map[string]any {
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
-		"workers": []map[string]string{{"name": "worker-a"}, {"name": "worker-b"}},
+		"workers": []map[string]string{
+			{
+				"name":          "worker-a",
+				"type":          "MODEL_WORKER",
+				"model":         "functional-model",
+				"modelProvider": "CODEX",
+			},
+			{
+				"name":          "worker-b",
+				"type":          "MODEL_WORKER",
+				"model":         "functional-model",
+				"modelProvider": "CODEX",
+			},
+		},
 		"workstations": []map[string]any{
 			{
 				"name":      "worker-a",
 				"worker":    "worker-a",
+				"type":      "MODEL_WORKSTATION",
 				"behavior":  "STANDARD",
 				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "stage1"}},
@@ -33,6 +39,7 @@ func twoStagePipelineConfig() map[string]any {
 			{
 				"name":      "worker-b",
 				"worker":    "worker-b",
+				"type":      "MODEL_WORKSTATION",
 				"behavior":  "STANDARD",
 				"inputs":    []map[string]string{{"workType": "task", "state": "stage1"}},
 				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
@@ -40,24 +47,4 @@ func twoStagePipelineConfig() map[string]any {
 			},
 		},
 	}
-}
-
-type blockingExecutor struct {
-	releaseCh <-chan struct{}
-	mu        *sync.Mutex
-	calls     *int
-}
-
-func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
-	e.mu.Lock()
-	*e.calls++
-	e.mu.Unlock()
-
-	<-e.releaseCh
-
-	return workerexecution.WorkResult{
-		DispatchID:   d.DispatchID,
-		TransitionID: d.TransitionID,
-		Outcome:      workerexecution.OutcomeAccepted,
-	}, nil
 }

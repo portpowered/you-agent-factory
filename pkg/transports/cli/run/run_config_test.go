@@ -13,34 +13,70 @@ import (
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type canonicalResponseEventRunStub struct {
-	stubResponseStreamInvocationService
-	store      *factorysessions.SessionResponseEventStore
+	stubInvocationService
+	cursor     *scriptedResponseEventCursor
 	subscribed chan struct{}
 	once       sync.Once
 }
 
 func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEventsFromLatest(
 	_ string,
-) (*responseeventstore.Subscription, error) {
-	subscription, err := s.store.Subscribe(s.store.LatestSequence())
-	if err == nil {
-		s.once.Do(func() { close(s.subscribed) })
+) (factorysessions.ResponseEventCursor, error) {
+	s.once.Do(func() { close(s.subscribed) })
+	return s.cursor, nil
+}
+
+type scriptedResponseEventCursor struct {
+	batches chan []factorysessions.FactoryResponseEvent
+}
+
+func newScriptedResponseEventCursor() *scriptedResponseEventCursor {
+	return &scriptedResponseEventCursor{
+		batches: make(chan []factorysessions.FactoryResponseEvent, 1),
 	}
-	return subscription, err
+}
+
+func (c *scriptedResponseEventCursor) Next(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case events, ok := <-c.batches:
+		if !ok {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		}
+		return events, nil
+	}
+}
+
+func (c *scriptedResponseEventCursor) Drain() ([]factorysessions.FactoryResponseEvent, error) {
+	select {
+	case events, ok := <-c.batches:
+		if !ok {
+			return nil, factorysessions.ErrResponseEventSubscriptionClosed
+		}
+		return events, nil
+	default:
+		return nil, nil
+	}
+}
+
+func (c *scriptedResponseEventCursor) Detach() {}
+
+func (c *scriptedResponseEventCursor) publish(events []factorysessions.FactoryResponseEvent) {
+	c.batches <- events
+	close(c.batches)
 }
 
 func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
@@ -49,18 +85,13 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	const canary = "SECRET_PROVIDER_PAYLOAD_7f8a"
 	const answer = "authoritative answer"
 	var output strings.Builder
-	legacy := newRecordingResponseStreamAttachable()
-	legacy.ensureDispatch("dispatch-1")
-	store := factorysessions.NewSessionResponseEventStore(factorysessions.DefaultSessionID)
+	cursor := newScriptedResponseEventCursor()
 	stub := &canonicalResponseEventRunStub{
-		stubResponseStreamInvocationService: stubResponseStreamInvocationService{
-			stubInvocationService: stubInvocationService{run: func(ctx context.Context) error {
-				<-ctx.Done()
-				return nil
-			}},
-			attachable: legacy,
-		},
-		store: store, subscribed: make(chan struct{}),
+		stubInvocationService: stubInvocationService{run: func(ctx context.Context) error {
+			<-ctx.Done()
+			return nil
+		}},
+		cursor: cursor, subscribed: make(chan struct{}),
 	}
 	stub.invoke = func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 		select {
@@ -68,41 +99,32 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 		case <-time.After(2 * time.Second):
 			t.Fatal("canonical response-event subscription was not established")
 		}
-		legacy.stream("dispatch-1").Append(responsestream.Event{
-			Kind: responsestream.EventKindProgressFragment, Type: responsestream.EventTypeProgress,
-			Payload: canary,
-		})
 		attempt := 2
-		events := []responseevents.FactoryResponseEvent{
-			humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{Summary: "selected safe path"}),
-			humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{
+		events := []factorysessions.FactoryResponseEvent{
+			humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventReasoning{Summary: "selected safe path"}),
+			humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseStarted, factorysessions.ResponseEventTool{
 				ToolCallID: "call-1", ToolName: "search", ArgumentsSummary: json.RawMessage(`{"secret":"` + canary + `"}`),
 			}),
-			humanResponseEvent(responseevents.KindTool, responseevents.PhaseDelta, responseevents.ToolDeltaPayload{ToolCallID: "call-1", OutputDelta: canary}),
-			humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{
+			humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventToolDelta{ToolCallID: "call-1", OutputDelta: canary}),
+			humanResponseEvent(factorysessions.ResponseEventKindError, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventErrorPayload{
 				Code: "rate_limited", Message: canary, Retryable: true, RetryAttempt: &attempt,
 			}),
-			humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning", Message: "next step"}),
-			humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
-				ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: answer,
+			humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "planning", Message: "next step"}),
+			humanResponseEvent(factorysessions.ResponseEventKindMessage, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventMessageDelta{
+				ContentBlockIndex: 0, ContentBlockKind: factorysessions.ResponseEventContentBlockText, TextDelta: answer,
 			}),
-			humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{InputTokens: 99, Model: canary}),
-			humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{
+			humanResponseEvent(factorysessions.ResponseEventKindUsage, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventUsage{InputTokens: 99, Model: canary}),
+			humanResponseEvent(factorysessions.ResponseEventKindStreamGap, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventStreamGap{
 				FromSequence: 40, ToSequence: 44, FirstAvailableSequence: 45, Reason: "retention window",
 			}),
 		}
-		for _, event := range events {
-			if _, err := store.Publish(event); err != nil {
-				t.Fatalf("publish canonical response event: %v", err)
-			}
-		}
-		store.Complete()
+		cursor.publish(events)
 		return apisurface.FactoryInvocationResult{
 			Status:        interfaces.InvocationTerminalStatusCompleted,
 			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
 		}, nil
 	}
-	buildInvocationBootstrap = func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stub, nil
 	}
 
@@ -123,8 +145,8 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	if got := output.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}
-	if strings.Contains(output.String(), canary) || len(legacy.subscribeCalls) != 0 {
-		t.Fatalf("human output used unsafe legacy/provider data: %q", output.String())
+	if strings.Contains(output.String(), canary) {
+		t.Fatalf("human output used unsafe provider data: %q", output.String())
 	}
 }
 
@@ -132,26 +154,26 @@ func TestHumanResponseStreamRenderer_CanonicalNonToolGolden(t *testing.T) {
 	attempt, delay, percent := 3, int64(12), 42.5
 	tests := []struct {
 		name  string
-		event responseevents.FactoryResponseEvent
+		event factorysessions.FactoryResponseEvent
 		want  string
 	}{
-		{"reasoning started", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseStarted, responseevents.ReasoningPayload{}), "reasoning: started\n"},
-		{"reasoning delta", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseDelta, responseevents.ReasoningPayload{SummaryDelta: "compare\noptions"}), "reasoning: compare options\n"},
-		{"reasoning completed", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{Summary: "selected path"}), "reasoning: selected path\n"},
-		{"reasoning completed empty", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{}), "reasoning: completed\n"},
-		{"retry minimal", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "busy", Message: "hidden", Retryable: true}), "retry: code=busy\n"},
-		{"retry full", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "rate_limited", Message: "hidden", RetryAttempt: &attempt, RetryAfterSeconds: &delay}), "retry: code=rate_limited attempt=3 retry-in=12s\n"},
-		{"throttle", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "throttled", Message: "hidden"}), "retry: code=throttled\n"},
-		{"progress minimal", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning"}), "progress: planning\n"},
-		{"progress full", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "review", Message: "checking\r\nresults", PercentComplete: &percent}), "progress: review — checking results (42.5%)\n"},
-		{"stream gap", humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{FromSequence: 8, ToSequence: 14, FirstAvailableSequence: 15, Reason: "retention\nwindow"}), "stream gap: sequences 8-14 unavailable (reason=retention window)\n"},
-		{"item stream gap", humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{AffectedItemID: "cursor-tool/call-1", ToolCallID: "call-1", Reason: "provider_reconnect"}), "stream gap: item cursor-tool/call-1 lifecycle is incomplete (reason=provider_reconnect)\n"},
+		{"reasoning started", humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseStarted, factorysessions.ResponseEventReasoning{}), "reasoning: started\n"},
+		{"reasoning delta", humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventReasoning{SummaryDelta: "compare\noptions"}), "reasoning: compare options\n"},
+		{"reasoning completed", humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventReasoning{Summary: "selected path"}), "reasoning: selected path\n"},
+		{"reasoning completed empty", humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventReasoning{}), "reasoning: completed\n"},
+		{"retry minimal", humanResponseEvent(factorysessions.ResponseEventKindError, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventErrorPayload{Code: "busy", Message: "hidden", Retryable: true}), "retry: code=busy\n"},
+		{"retry full", humanResponseEvent(factorysessions.ResponseEventKindError, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventErrorPayload{Code: "rate_limited", Message: "hidden", RetryAttempt: &attempt, RetryAfterSeconds: &delay}), "retry: code=rate_limited attempt=3 retry-in=12s\n"},
+		{"throttle", humanResponseEvent(factorysessions.ResponseEventKindError, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventErrorPayload{Code: "throttled", Message: "hidden"}), "retry: code=throttled\n"},
+		{"progress minimal", humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "planning"}), "progress: planning\n"},
+		{"progress full", humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "review", Message: "checking\r\nresults", PercentComplete: &percent}), "progress: review — checking results (42.5%)\n"},
+		{"stream gap", humanResponseEvent(factorysessions.ResponseEventKindStreamGap, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventStreamGap{FromSequence: 8, ToSequence: 14, FirstAvailableSequence: 15, Reason: "retention\nwindow"}), "stream gap: sequences 8-14 unavailable (reason=retention window)\n"},
+		{"item stream gap", humanResponseEvent(factorysessions.ResponseEventKindStreamGap, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventStreamGap{AffectedItemID: "cursor-tool/call-1", ToolCallID: "call-1", Reason: "provider_reconnect"}), "stream gap: item cursor-tool/call-1 lifecycle is incomplete (reason=provider_reconnect)\n"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var output strings.Builder
-			renderer := newHumanResponseStreamRenderer(&output)
-			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{tc.event})
+			renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+			renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{tc.event})
 			renderer.stopProgressRendering()
 			if got := output.String(); got != tc.want {
 				t.Fatalf("output = %q, want %q", got, tc.want)
@@ -160,23 +182,23 @@ func TestHumanResponseStreamRenderer_CanonicalNonToolGolden(t *testing.T) {
 	}
 }
 
-func humanResponseEvent(kind responseevents.Kind, phase responseevents.Phase, payload any) responseevents.FactoryResponseEvent {
+func humanResponseEvent(kind factorysessions.ResponseEventKind, phase factorysessions.ResponseEventPhase, payload any) factorysessions.FactoryResponseEvent {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)
 	}
-	return responseevents.FactoryResponseEvent{Kind: kind, Phase: phase, Payload: encoded}
+	return factorysessions.FactoryResponseEvent{Kind: kind, Phase: phase, Payload: encoded}
 }
 
 func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResult(t *testing.T) {
 	t.Parallel()
 
-	messageEvents := []responseevents.FactoryResponseEvent{
-		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
-			ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "final ",
+	messageEvents := []factorysessions.FactoryResponseEvent{
+		humanResponseEvent(factorysessions.ResponseEventKindMessage, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventMessageDelta{
+			ContentBlockIndex: 0, ContentBlockKind: factorysessions.ResponseEventContentBlockText, TextDelta: "final ",
 		}),
-		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseCompleted, responseevents.MessagePayload{
-			Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
+		humanResponseEvent(factorysessions.ResponseEventKindMessage, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventMessage{
+			Role: "assistant", ContentBlocks: []factorysessions.ResponseEventContentBlock{{Kind: factorysessions.ResponseEventContentBlockText, Text: "final answer"}},
 		}),
 	}
 	result := apisurface.FactoryInvocationResult{
@@ -188,8 +210,8 @@ func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResul
 
 	t.Run("suppressed messages preserve plain output", func(t *testing.T) {
 		var output strings.Builder
-		renderer := newHumanResponseStreamRenderer(&output)
-		renderer.onResponseEvents(messageEvents)
+		renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+		renderer.PresentResponseEvents(messageEvents)
 		if err := renderer.writeFinalInvocationResult(result); err != nil {
 			t.Fatalf("writeFinalInvocationResult: %v", err)
 		}
@@ -200,13 +222,13 @@ func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResul
 
 	t.Run("progress precedes one authoritative answer", func(t *testing.T) {
 		var output strings.Builder
-		renderer := newHumanResponseStreamRenderer(&output)
+		renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
 		events := append(messageEvents, humanResponseEvent(
-			responseevents.KindProgress,
-			responseevents.PhaseUpdated,
-			responseevents.ProgressPayload{Label: "checking result"},
+			factorysessions.ResponseEventKindProgress,
+			factorysessions.ResponseEventPhaseUpdated,
+			factorysessions.ResponseEventProgress{Label: "checking result"},
 		))
-		renderer.onResponseEvents(events)
+		renderer.PresentResponseEvents(events)
 		if err := renderer.writeFinalInvocationResult(result); err != nil {
 			t.Fatalf("writeFinalInvocationResult: %v", err)
 		}
@@ -240,7 +262,7 @@ func TestHumanResponseStreamRenderer_TerminalBlockIsWrittenOnce(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var output strings.Builder
-			renderer := newHumanResponseStreamRenderer(&output)
+			renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
 			var wg sync.WaitGroup
 			errs := make(chan error, 8)
 			for range 8 {
@@ -266,24 +288,24 @@ func TestHumanResponseStreamRenderer_CanonicalToolLifecycleGolden(t *testing.T) 
 
 	tests := []struct {
 		name   string
-		phase  responseevents.Phase
+		phase  factorysessions.ResponseEventPhase
 		status string
 		want   string
 	}{
-		{name: "started", phase: responseevents.PhaseStarted, status: "provider-pending", want: "started"},
-		{name: "completed", phase: responseevents.PhaseCompleted, status: "provider-done", want: "completed"},
-		{name: "failed", phase: responseevents.PhaseFailed, status: "provider-crashed", want: "failed"},
-		{name: "canceled", phase: responseevents.PhaseCanceled, status: "provider-aborted", want: "canceled"},
+		{name: "started", phase: factorysessions.ResponseEventPhaseStarted, status: "provider-pending", want: "started"},
+		{name: "completed", phase: factorysessions.ResponseEventPhaseCompleted, status: "provider-done", want: "completed"},
+		{name: "failed", phase: factorysessions.ResponseEventPhaseFailed, status: "provider-crashed", want: "failed"},
+		{name: "canceled", phase: factorysessions.ResponseEventPhaseCanceled, status: "provider-aborted", want: "canceled"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			event := humanResponseEvent(responseevents.KindTool, tc.phase, responseevents.ToolPayload{
+			event := humanResponseEvent(factorysessions.ResponseEventKindTool, tc.phase, factorysessions.ResponseEventTool{
 				ToolCallID: "call\r\n42", ToolName: "read\nfile", Status: tc.status,
 			})
 			var output strings.Builder
-			renderer := newHumanResponseStreamRenderer(&output)
-			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+			renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+			renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{event})
 			renderer.stopProgressRendering()
 			want := "tool: name=read file call=call 42 status=" + tc.want + "\n"
 			if got := output.String(); got != want {
@@ -296,15 +318,15 @@ func TestHumanResponseStreamRenderer_CanonicalToolLifecycleGolden(t *testing.T) 
 func TestHumanResponseStreamRenderer_ToolLifecyclePreservesCorrelationOrder(t *testing.T) {
 	t.Parallel()
 
-	events := []responseevents.FactoryResponseEvent{
-		humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{ToolCallID: "call-a", ToolName: "search"}),
-		humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{ToolCallID: "call-b", ToolName: "read"}),
-		humanResponseEvent(responseevents.KindTool, responseevents.PhaseCompleted, responseevents.ToolPayload{ToolCallID: "call-b", ToolName: "read"}),
-		humanResponseEvent(responseevents.KindTool, responseevents.PhaseFailed, responseevents.ToolPayload{ToolCallID: "call-a", ToolName: "search"}),
+	events := []factorysessions.FactoryResponseEvent{
+		humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseStarted, factorysessions.ResponseEventTool{ToolCallID: "call-a", ToolName: "search"}),
+		humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseStarted, factorysessions.ResponseEventTool{ToolCallID: "call-b", ToolName: "read"}),
+		humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventTool{ToolCallID: "call-b", ToolName: "read"}),
+		humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseFailed, factorysessions.ResponseEventTool{ToolCallID: "call-a", ToolName: "search"}),
 	}
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onResponseEvents(events)
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	renderer.PresentResponseEvents(events)
 	renderer.stopProgressRendering()
 	want := "tool: name=search call=call-a status=started\n" +
 		"tool: name=read call=call-b status=started\n" +
@@ -323,24 +345,24 @@ func TestHumanResponseStreamRenderer_ToolDataNeverLeaks(t *testing.T) {
 		"SECRET_RAW_PAYLOAD", "SECRET_PROMPT", "SECRET_CREDENTIAL",
 		"SECRET_ENVIRONMENT", "SECRET_PROVENANCE",
 	}
-	lifecycle := humanResponseEvent(responseevents.KindTool, responseevents.PhaseCompleted, map[string]any{
+	lifecycle := humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseCompleted, map[string]any{
 		"toolCallId": "call-safe", "toolName": "safe-tool", "status": canaries[3],
 		"argumentsSummary":   map[string]string{"argument": canaries[0], "prompt": canaries[5], "credential": canaries[6]},
 		"resultSummary":      map[string]string{"result": canaries[1], "environment": canaries[7]},
 		"rawProviderPayload": canaries[4],
 	})
-	lifecycle.Provenance = responseevents.Provenance{
+	lifecycle.Provenance = factorysessions.ResponseEventProvenance{
 		Provider: canaries[8], NativeEventType: canaries[8],
-		Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationNotification,
-		Fidelity: responseevents.FidelityLifecycleOnly,
+		Delivery: factorysessions.ResponseEventDeliveryNativeStream, Representation: factorysessions.ResponseEventRepresentationNotification,
+		Fidelity: factorysessions.ResponseEventFidelityLifecycleOnly,
 	}
-	delta := humanResponseEvent(responseevents.KindTool, responseevents.PhaseDelta, responseevents.ToolDeltaPayload{
+	delta := humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventToolDelta{
 		ToolCallID: "call-safe", OutputDelta: canaries[2],
 	})
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{lifecycle, delta})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{lifecycle, delta})
 	renderer.stopProgressRendering()
 	got := output.String()
 	if want := "tool: name=safe-tool call=call-safe status=completed\n"; got != want {
@@ -356,13 +378,13 @@ func TestHumanResponseStreamRenderer_ToolDataNeverLeaks(t *testing.T) {
 func TestHumanResponseStreamRenderer_ToolIdentityIsUTF8SafeAndBounded(t *testing.T) {
 	t.Parallel()
 
-	event := humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{
+	event := humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseStarted, factorysessions.ResponseEventTool{
 		ToolCallID: "call\x00id", ToolName: strings.Repeat("界", maxHumanProgressLineBytes),
 		ArgumentsSummary: json.RawMessage(`{"secret":"must-not-render"}`),
 	})
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{event})
 	renderer.stopProgressRendering()
 	got := strings.TrimSuffix(output.String(), "\n")
 	if !utf8.ValidString(got) || len([]byte(got)) > maxHumanProgressLineBytes {
@@ -376,12 +398,12 @@ func TestHumanResponseStreamRenderer_ToolIdentityIsUTF8SafeAndBounded(t *testing
 func TestHumanResponseStreamRenderer_CanonicalOutputIsUTF8SafeAndBounded(t *testing.T) {
 	t.Parallel()
 
-	event := humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{
+	event := humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventReasoning{
 		Summary: strings.Repeat("界", maxHumanProgressLineBytes),
 	})
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{event})
 	renderer.stopProgressRendering()
 
 	got := strings.TrimSuffix(output.String(), "\n")
@@ -399,16 +421,16 @@ func TestHumanResponseStreamRenderer_CanonicalOutputIsUTF8SafeAndBounded(t *test
 func TestHumanResponseStreamRenderer_CanonicalEventsPreserveSessionOrderAndSkipDuplicateSequences(t *testing.T) {
 	t.Parallel()
 
-	first := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "first"})
+	first := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "first"})
 	first.Sequence = 1
-	duplicate := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "duplicate"})
+	duplicate := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "duplicate"})
 	duplicate.Sequence = 1
-	second := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "second"})
+	second := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "second"})
 	second.Sequence = 2
 
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{first, duplicate, second})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), testResponseEventValidator())
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{first, duplicate, second})
 	renderer.stopProgressRendering()
 	if got, want := output.String(), "progress: first\nprogress: second\n"; got != want {
 		t.Fatalf("output = %q, want ordered unique output %q", got, want)
@@ -421,15 +443,20 @@ func TestHumanResponseStreamRenderer_CanonicalInvalidEventsDoNotLeakPayload(t *t
 	const canary = "RAW_UNKNOWN_PROVIDER_EVENT_CANARY"
 	const answer = "authoritative answer"
 	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	unknownKind := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
-	unknownKind.Kind = responseevents.Kind("PROVIDER_NATIVE_UNKNOWN")
-	invalidPhase := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
-	invalidPhase.Phase = responseevents.PhaseCompleted
-	invalidPayload := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	validationCalls := 0
+	reject := factorysessions.ResponseEventValidator(func(factorysessions.FactoryResponseEvent) error {
+		validationCalls++
+		return errors.New("programmed owner rejection")
+	})
+	renderer := newHumanResponseStreamRenderer(&output, testResponsePresentation(), reject)
+	unknownKind := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: canary})
+	unknownKind.Kind = factorysessions.ResponseEventKind("PROVIDER_NATIVE_UNKNOWN")
+	invalidPhase := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: canary})
+	invalidPhase.Phase = factorysessions.ResponseEventPhaseCompleted
+	invalidPayload := humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: canary})
 	invalidPayload.Payload = json.RawMessage(`{"label":"` + canary + `"`)
 
-	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{unknownKind, invalidPhase, invalidPayload})
+	renderer.PresentResponseEvents([]factorysessions.FactoryResponseEvent{unknownKind, invalidPhase, invalidPayload})
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status:        interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
@@ -439,22 +466,19 @@ func TestHumanResponseStreamRenderer_CanonicalInvalidEventsDoNotLeakPayload(t *t
 	if got := output.String(); got != answer {
 		t.Fatalf("invalid canonical event leaked through human stdout: %q", got)
 	}
+	if validationCalls != 3 {
+		t.Fatalf("owner validation calls = %d, want 3", validationCalls)
+	}
 }
 
 func TestRun_BootstrapErrorSkipsServiceStart(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalBootstrap := bootstrapFactory
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-		bootstrapFactory = originalBootstrap
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	bootstrapFactory = func(_ string) error {
-		return errors.New("bootstrap failed")
-	}
-
 	builderCalled := false
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		builderCalled = true
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -463,7 +487,15 @@ func TestRun_BootstrapErrorSkipsServiceStart(t *testing.T) {
 		}, nil
 	}
 
-	err := Run(context.Background(), RunConfig{Bootstrap: true})
+	err := Run(context.Background(), RunConfig{
+		Bootstrap: true,
+		ResolveCurrentFactoryDir: func(string) (string, error) {
+			return "", interfaces.ErrFactoryLayoutNotFound
+		},
+		FactoryScaffoldInitializer: func(interfaces.ScaffoldConfig) error {
+			return errors.New("bootstrap failed")
+		},
+	})
 	if err == nil {
 		t.Fatal("expected bootstrap failure")
 	}
@@ -476,13 +508,13 @@ func TestRun_BootstrapErrorSkipsServiceStart(t *testing.T) {
 }
 
 func TestRun_VerbosePassedToServiceConfig(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	var capturedVerbose bool
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedVerbose = cfg.Verbose
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -499,28 +531,14 @@ func TestRun_VerbosePassedToServiceConfig(t *testing.T) {
 	}
 }
 
-func TestRun_DefaultsExecutionBaseDirToCurrentWorkingDirectory(t *testing.T) {
-	originalBuilder := buildFactoryService
+func TestRun_DoesNotDiscoverMissingExecutionBaseDir(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-	}()
-
-	workingDirectory := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	var capturedBaseDir string
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedBaseDir = cfg.ExecutionBaseDir
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -529,37 +547,24 @@ func TestRun_DefaultsExecutionBaseDirToCurrentWorkingDirectory(t *testing.T) {
 		}, nil
 	}
 
-	if err := Run(context.Background(), RunConfig{Dir: "factory"}); err != nil {
+	if err := Run(context.Background(), RunConfig{Dir: "factory", DisableDefaultRecording: true}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if testutil.CanonicalPath(capturedBaseDir) != testutil.CanonicalPath(workingDirectory) {
-		t.Fatalf("execution base dir = %q, want %q", capturedBaseDir, workingDirectory)
+	if capturedBaseDir != "" {
+		t.Fatalf("execution base dir = %q, want the missing Process input to remain missing", capturedBaseDir)
 	}
 }
 
-func TestRun_ExplicitExecutionBaseDirOverridesCurrentWorkingDirectory(t *testing.T) {
-	originalBuilder := buildFactoryService
+func TestRun_PreservesExplicitExecutionBaseDir(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	workingDirectory := t.TempDir()
 	overrideDir := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
 
 	var capturedBaseDir string
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedBaseDir = cfg.ExecutionBaseDir
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -568,7 +573,7 @@ func TestRun_ExplicitExecutionBaseDirOverridesCurrentWorkingDirectory(t *testing
 		}, nil
 	}
 
-	if err := Run(context.Background(), RunConfig{Dir: "factory", ExecutionBaseDir: overrideDir}); err != nil {
+	if err := Run(context.Background(), RunConfig{Dir: "factory", ExecutionBaseDir: overrideDir, DisableDefaultRecording: true}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if testutil.CanonicalPath(capturedBaseDir) != testutil.CanonicalPath(overrideDir) {
@@ -577,13 +582,13 @@ func TestRun_ExplicitExecutionBaseDirOverridesCurrentWorkingDirectory(t *testing
 }
 
 func TestRun_RuntimeLogConfigPassedToServiceConfig(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	var capturedConfig *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedConfig = cfg
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -617,13 +622,13 @@ func TestRun_RuntimeLogConfigPassedToServiceConfig(t *testing.T) {
 }
 
 func TestRun_RuntimeMetricsConfigPassedToServiceConfig(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	var capturedConfig *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedConfig = cfg
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -656,14 +661,41 @@ func TestRun_RuntimeMetricsConfigPassedToServiceConfig(t *testing.T) {
 	}
 }
 
-func TestRun_WithMockWorkersWithoutPathPassesDefaultConfigToService(t *testing.T) {
-	originalBuilder := buildFactoryService
+func TestRun_ModelCacheDirPassedToServiceConfig(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	var capturedConfig *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	if err := Run(context.Background(), RunConfig{ModelCacheDir: "managed-model-cache"}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil {
+		t.Fatal("expected factory service to be built")
+	}
+	if capturedConfig.ModelCacheDir != "managed-model-cache" {
+		t.Fatalf("model cache dir = %q, want managed-model-cache", capturedConfig.ModelCacheDir)
+	}
+}
+
+func TestRun_WithMockWorkersWithoutPathPassesDefaultConfigToService(t *testing.T) {
+	originalBuilder := openTestRuntimeRunner
+	defer func() {
+		openTestRuntimeRunner = originalBuilder
+	}()
+
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedConfig = cfg
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -685,30 +717,25 @@ func TestRun_WithMockWorkersWithoutPathPassesDefaultConfigToService(t *testing.T
 }
 
 func TestRun_WithMockWorkersConfigPathLoadsConfigBeforeServiceStart(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	dir := t.TempDir()
-	mockWorkersPath := filepath.Join(dir, "mock-workers.json")
-	writeFile(t, mockWorkersPath, `{
-  "mockWorkers": [
-    {
-      "id": "reviewer-rejects",
-      "workerName": "reviewer",
-      "runType": "reject",
-      "rejectConfig": {
-        "stderr": "needs changes",
-        "exitCode": 42
-      }
-    }
-  ]
-}
-`)
+	mockWorkersPath := filepath.Join(t.TempDir(), "mock-workers.json")
+	exitCode := 42
+	wantConfig := &workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{{
+		ID: "reviewer-rejects", WorkerName: "reviewer", RunType: workers.MockWorkerRunTypeReject,
+		RejectConfig: &workers.MockWorkerRejectConfig{Stderr: "needs changes", ExitCode: &exitCode},
+	}}}
+	var loadedPath string
+	load := workers.MockWorkersConfigLoader(func(path string) (*workers.MockWorkersConfig, error) {
+		loadedPath = path
+		return wantConfig, nil
+	})
 
-	var capturedConfig *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedConfig = cfg
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -717,15 +744,18 @@ func TestRun_WithMockWorkersConfigPathLoadsConfigBeforeServiceStart(t *testing.T
 		}, nil
 	}
 
-	err := Run(context.Background(), RunConfig{
+	err := runWithMockWorkersConfigLoader(context.Background(), RunConfig{
 		MockWorkersEnabled:    true,
 		MockWorkersConfigPath: mockWorkersPath,
-	})
+	}, load)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if capturedConfig == nil || capturedConfig.MockWorkersConfig == nil {
 		t.Fatal("expected loaded mock workers config to be passed to service")
+	}
+	if loadedPath != mockWorkersPath {
+		t.Fatalf("loader path = %q, want exact CLI path %q", loadedPath, mockWorkersPath)
 	}
 	got := capturedConfig.MockWorkersConfig.MockWorkers
 	if len(got) != 1 {
@@ -740,13 +770,13 @@ func TestRun_WithMockWorkersConfigPathLoadsConfigBeforeServiceStart(t *testing.T
 }
 
 func TestRun_WithMockWorkersInvalidPathFailsBeforeServiceStart(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	builderCalled := false
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		builderCalled = true
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -755,10 +785,11 @@ func TestRun_WithMockWorkersInvalidPathFailsBeforeServiceStart(t *testing.T) {
 		}, nil
 	}
 
-	err := Run(context.Background(), RunConfig{
+	wantReadErr := errors.New("read mock workers config: missing")
+	err := runWithMockWorkersConfigLoader(context.Background(), RunConfig{
 		MockWorkersEnabled:    true,
 		MockWorkersConfigPath: filepath.Join(t.TempDir(), "missing.json"),
-	})
+	}, func(string) (*workers.MockWorkersConfig, error) { return nil, wantReadErr })
 	if err == nil {
 		t.Fatal("expected missing mock workers config path to fail")
 	}
@@ -771,9 +802,9 @@ func TestRun_WithMockWorkersInvalidPathFailsBeforeServiceStart(t *testing.T) {
 }
 
 func TestRun_WithMockWorkersInvalidJSONFailsBeforeServiceStart(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	dir := t.TempDir()
@@ -781,7 +812,7 @@ func TestRun_WithMockWorkersInvalidJSONFailsBeforeServiceStart(t *testing.T) {
 	writeFile(t, mockWorkersPath, `{"mockWorkers":[{"runType":"bogus"}]}`)
 
 	builderCalled := false
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		builderCalled = true
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -790,10 +821,11 @@ func TestRun_WithMockWorkersInvalidJSONFailsBeforeServiceStart(t *testing.T) {
 		}, nil
 	}
 
-	err := Run(context.Background(), RunConfig{
+	wantParseErr := errors.New("runType must be one of accept, script, or reject")
+	err := runWithMockWorkersConfigLoader(context.Background(), RunConfig{
 		MockWorkersEnabled:    true,
 		MockWorkersConfigPath: mockWorkersPath,
-	})
+	}, func(string) (*workers.MockWorkersConfig, error) { return nil, wantParseErr })
 	if err == nil {
 		t.Fatal("expected invalid mock workers config to fail")
 	}
@@ -806,13 +838,13 @@ func TestRun_WithMockWorkersInvalidJSONFailsBeforeServiceStart(t *testing.T) {
 }
 
 func TestRun_WithSkipPermissionsPassesInvocationOverrideToService(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	var capturedConfig *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedConfig = cfg
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -837,13 +869,13 @@ func TestRun_WithSkipPermissionsPassesInvocationOverrideToService(t *testing.T) 
 }
 
 func TestRun_WithoutSkipPermissionsOmitsInvocationOverrideFromService(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
-	var capturedConfig *service.FactoryServiceConfig
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	var capturedConfig *testRuntimeSelections
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedConfig = cfg
 		return stubFactoryService{
 			run: func(context.Context) error {
@@ -865,9 +897,9 @@ func TestRun_WithoutSkipPermissionsOmitsInvocationOverrideFromService(t *testing
 }
 
 func TestRun_WithSkipPermissionsDoesNotMutatePersistedFactoryWorkerConfig(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	dir := t.TempDir()
@@ -885,7 +917,7 @@ func TestRun_WithSkipPermissionsDoesNotMutatePersistedFactoryWorkerConfig(t *tes
   }
 }`)
 
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			run: func(context.Context) error {
 				return nil

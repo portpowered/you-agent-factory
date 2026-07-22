@@ -7,32 +7,28 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
+	platformbrowser "github.com/portpowered/infinite-you/pkg/platform/browser"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelscli "github.com/portpowered/infinite-you/pkg/services/models/transports/cli"
+	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
-	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/factoryload"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
-	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
+	cliobservation "github.com/portpowered/infinite-you/pkg/transports/cli/observation"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
-	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -40,42 +36,12 @@ import (
 	"go.uber.org/zap"
 )
 
-var runCLI = runcli.Run
-var flattenFactoryConfig = configcli.FlattenFactoryConfig
-var expandFactoryConfig = configcli.ExpandFactoryConfig
-var initFactory = initcmd.Init
-var submitWork = submitcli.Submit
-var submitBatch = submitcli.SubmitBatch
-var listWork = workcli.List
-var showWork = workcli.Show
-var moveWork = workcli.Move
-var visualizeWork = workcli.Visualize
-var listSessions = sessioncli.List
-var showSession = sessioncli.Show
-var pauseSession = sessioncli.Pause
-var resumeSession = sessioncli.Resume
-var listSessionDispatches = sessioncli.Dispatches
-var createSession = sessioncli.Create
-var deleteSession = sessioncli.Delete
-var queryFactory = factorycli.Query
-var listFactories = factorycli.List
-var validateFactory = factorycli.Validate
-var createFactoryFromFile = factorycli.CreateFromFile
-var replaceFactoryCurrent = factorycli.ReplaceCurrent
-var updateFactoryFromFile = factorycli.UpdateFromFile
-var deleteFactory = factorycli.Delete
-var listModels = modelscli.List
-var inspectModel = modelscli.Inspect
-var invokeModel = modelscli.Invoke
-var pullModel = modelscli.Pull
-
 const (
 	defaultMockWorkersConfigPathSentinel = "__agent_factory_default_mock_workers_config__"
 )
 
 const cliBinaryName = "you"
 
-// NewRootCommand creates the top-level Cobra command for the you-agent-factory CLI.
 type cliGlobalOptions struct {
 	server string
 	json   bool
@@ -86,68 +52,249 @@ type cliOperatorDefaultsOptions struct {
 	defaultWorkerModel         string
 }
 
-// RootCommandOptions supplies process-owned values used while executing a
-// command. Zero values preserve the legacy process environment behavior.
-type RootCommandOptions struct {
-	HomeDir               func() (string, error)
-	LookupEnv             func(string) (string, bool)
-	Startup               startupcli.Handler
-	RunFactory            func(context.Context, runcli.RunConfig) error
+type SubmitWorkOperation func(submitcli.SubmitConfig) error
+type SubmitBatchOperation func(submitcli.BatchConfig) error
+type ListSessionsOperation func(sessioncli.ListConfig) error
+type ShowSessionOperation func(sessioncli.ShowConfig) error
+type PauseSessionOperation func(sessioncli.LifecycleControlConfig) error
+type ResumeSessionOperation func(sessioncli.LifecycleControlConfig) error
+type ListSessionDispatchesOperation func(sessioncli.DispatchesConfig) error
+type CreateSessionOperation func(sessioncli.CreateConfig) error
+type DeleteSessionOperation func(sessioncli.DeleteConfig) error
+type FlattenFactoryConfigOperation func(configcli.FactoryConfigFlattenConfig) error
+type ExpandFactoryConfigOperation func(configcli.FactoryConfigExpandConfig) error
+type InitSystemConfigOperation func(configinitcmd.InitConfig) error
+type QueryFactoryOperation func(factorycli.QueryConfig) error
+type ListFactoriesOperation func(factorycli.ListConfig) error
+type ValidateFactoryOperation func(factorycli.ValidateConfig) error
+type CreateFactoryFromFileOperation func(factorycli.CreateFromFileConfig) error
+type ReplaceFactoryCurrentOperation func(factorycli.ReplaceCurrentConfig) error
+type UpdateFactoryFromFileOperation func(factorycli.UpdateFromFileConfig) error
+type DeleteFactoryOperation func(factorycli.DeleteConfig) error
+type ListWorkOperation func(workcli.ListConfig) error
+type ShowWorkOperation func(workcli.ShowConfig) error
+type MoveWorkOperation func(workcli.MoveConfig) error
+type VisualizeWorkOperation func(workcli.VisualizeConfig) error
+type NamedFactoryRootsResolver func(homeDir, workingDir string) (interfaces.NamedFactoryRoots, error)
+
+// CommandOperations is the complete inert CLI operation graph assembled by
+// Wire. No transport constructor selects implementations for missing fields.
+type CommandOperations struct {
+	ObserveCLI                        platformprocess.CLIObserver
+	NamedFactoryCatalog               interfaces.NamedFactoryCatalog
+	ResolveNamedFactoryRoots          NamedFactoryRootsResolver
+	ResolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
+	ResolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
+	ResolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
+	LoadFactoryConfigFile             interfaces.FactoryConfigFileLoader
+	WorkRequestFileLoader             work.RequestFileLoader
+	PrepareInvocationInput            work.InvocationInputPreparation
+	BuildTerminalLogger               terminalpolicy.LoggerBuilder
+	RunDefaults                       runcli.RunConfig
+	BatchInputFileSystem              submitcli.BatchInputFileSystem
+	RunDirectoryCreator               platformfilesystem.DirectoryCreator
+	BrowserOpener                     platformbrowser.Opener
+	ResolveOperatorDefaults           operatorconfig.DefaultsResolver
+	BuildExecution                    fse.ExecutionServiceBuilder
+	ModelsCLI                         modelscli.Service
+	SubmitWork                        SubmitWorkOperation
+	SubmitBatch                       SubmitBatchOperation
+	ListSessions                      ListSessionsOperation
+	ShowSession                       ShowSessionOperation
+	PauseSession                      PauseSessionOperation
+	ResumeSession                     ResumeSessionOperation
+	ListSessionDispatches             ListSessionDispatchesOperation
+	CreateSession                     CreateSessionOperation
+	DeleteSession                     DeleteSessionOperation
+	FlattenFactoryConfig              FlattenFactoryConfigOperation
+	ExpandFactoryConfig               ExpandFactoryConfigOperation
+	InitFactory                       interfaces.ScaffoldInitializer
+	InitSystemConfig                  InitSystemConfigOperation
+	QueryFactory                      QueryFactoryOperation
+	ListFactories                     ListFactoriesOperation
+	ValidateFactory                   ValidateFactoryOperation
+	CreateFactoryFromFile             CreateFactoryFromFileOperation
+	ReplaceFactoryCurrent             ReplaceFactoryCurrentOperation
+	UpdateFactoryFromFile             UpdateFactoryFromFileOperation
+	DeleteFactory                     DeleteFactoryOperation
+	ListWork                          ListWorkOperation
+	ShowWork                          ShowWorkOperation
+	MoveWork                          MoveWorkOperation
+	VisualizeWork                     VisualizeWorkOperation
+	OpenRunSelection                  runcli.SelectionFactory
+}
+
+// CommandFactory constructs a fresh Cobra tree for each process invocation.
+// Its fields are immutable command entrypoints supplied by Wire, not a second
+// service graph. NewCommand adds only invocation-local process edges.
+type CommandFactory struct {
+	observeCLI                        platformprocess.CLIObserver
+	homeDir                           func() (string, error)
+	lookupEnv                         func(string) (string, bool)
+	initializer                       startupcli.Initializer
+	namedFactoryCatalog               interfaces.NamedFactoryCatalog
+	resolveNamedFactoryRoots          NamedFactoryRootsResolver
+	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver
+	resolveCurrentFactoryDir          interfaces.CurrentFactoryDirectoryResolver
+	resolveFactoryConfigRoot          interfaces.FactoryConfigRootResolver
+	loadFactoryConfigFile             interfaces.FactoryConfigFileLoader
+	workRequestFileLoader             work.RequestFileLoader
+	prepareInvocationInput            work.InvocationInputPreparation
+	buildTerminalLogger               terminalpolicy.LoggerBuilder
+	runDefaults                       runcli.RunConfig
+	batchInputFileSystem              submitcli.BatchInputFileSystem
+	runDirectoryCreator               platformfilesystem.DirectoryCreator
+	browserOpener                     platformbrowser.Opener
+	resolveOperatorDefaults           operatorconfig.DefaultsResolver
+
 	SubmitWork            func(submitcli.SubmitConfig) error
 	SubmitBatch           func(submitcli.BatchConfig) error
-	BuildSessionExecution sessionexecutioncli.ServiceBuilder
-	BuildModelInvocation  modelscli.InvocationBuilder
+	ListSessions          func(sessioncli.ListConfig) error
+	ShowSession           func(sessioncli.ShowConfig) error
+	PauseSession          func(sessioncli.LifecycleControlConfig) error
+	ResumeSession         func(sessioncli.LifecycleControlConfig) error
+	ListSessionDispatches func(sessioncli.DispatchesConfig) error
+	CreateSession         func(sessioncli.CreateConfig) error
+	DeleteSession         func(sessioncli.DeleteConfig) error
+	BuildExecution        fse.ExecutionServiceBuilder
+	ModelsCLI             modelscli.Service
+	FlattenFactoryConfig  func(configcli.FactoryConfigFlattenConfig) error
+	ExpandFactoryConfig   func(configcli.FactoryConfigExpandConfig) error
+	InitFactory           interfaces.ScaffoldInitializer
+	InitSystemConfig      func(configinitcmd.InitConfig) error
+	QueryFactory          func(factorycli.QueryConfig) error
+	ListFactories         func(factorycli.ListConfig) error
+	ValidateFactory       func(factorycli.ValidateConfig) error
+	CreateFactoryFromFile func(factorycli.CreateFromFileConfig) error
+	ReplaceFactoryCurrent func(factorycli.ReplaceCurrentConfig) error
+	UpdateFactoryFromFile func(factorycli.UpdateFromFileConfig) error
+	DeleteFactory         func(factorycli.DeleteConfig) error
+	ListWork              func(workcli.ListConfig) error
+	ShowWork              func(workcli.ShowConfig) error
+	MoveWork              func(workcli.MoveConfig) error
+	VisualizeWork         func(workcli.VisualizeConfig) error
+	openRunSelection      runcli.SelectionFactory
 }
 
-func NewRootCommand() *cobra.Command {
-	return NewRootCommandWithOptions(RootCommandOptions{})
+// NewCommandFactory copies the complete Wire-built operation graph without
+// selecting implementations or installing defaults.
+func NewCommandFactory(operations CommandOperations) CommandFactory {
+	return CommandFactory{
+		observeCLI:                        operations.ObserveCLI,
+		namedFactoryCatalog:               operations.NamedFactoryCatalog,
+		resolveNamedFactoryRoots:          operations.ResolveNamedFactoryRoots,
+		resolveNamedFactoryCandidatePaths: operations.ResolveNamedFactoryCandidatePaths,
+		resolveCurrentFactoryDir:          operations.ResolveCurrentFactoryDir,
+		resolveFactoryConfigRoot:          operations.ResolveFactoryConfigRoot,
+		loadFactoryConfigFile:             operations.LoadFactoryConfigFile,
+		workRequestFileLoader:             operations.WorkRequestFileLoader,
+		prepareInvocationInput:            operations.PrepareInvocationInput,
+		buildTerminalLogger:               operations.BuildTerminalLogger,
+		runDefaults:                       operations.RunDefaults,
+		batchInputFileSystem:              operations.BatchInputFileSystem,
+		runDirectoryCreator:               operations.RunDirectoryCreator,
+		browserOpener:                     operations.BrowserOpener,
+		resolveOperatorDefaults:           operations.ResolveOperatorDefaults,
+		SubmitWork:                        operations.SubmitWork,
+		SubmitBatch:                       operations.SubmitBatch,
+		ListSessions:                      operations.ListSessions,
+		ShowSession:                       operations.ShowSession,
+		PauseSession:                      operations.PauseSession,
+		ResumeSession:                     operations.ResumeSession,
+		ListSessionDispatches:             operations.ListSessionDispatches,
+		CreateSession:                     operations.CreateSession,
+		DeleteSession:                     operations.DeleteSession,
+		BuildExecution:                    operations.BuildExecution,
+		ModelsCLI:                         operations.ModelsCLI,
+		FlattenFactoryConfig:              operations.FlattenFactoryConfig,
+		ExpandFactoryConfig:               operations.ExpandFactoryConfig,
+		InitFactory:                       operations.InitFactory,
+		InitSystemConfig:                  operations.InitSystemConfig,
+		QueryFactory:                      operations.QueryFactory,
+		ListFactories:                     operations.ListFactories,
+		ValidateFactory:                   operations.ValidateFactory,
+		CreateFactoryFromFile:             operations.CreateFactoryFromFile,
+		ReplaceFactoryCurrent:             operations.ReplaceFactoryCurrent,
+		UpdateFactoryFromFile:             operations.UpdateFactoryFromFile,
+		DeleteFactory:                     operations.DeleteFactory,
+		ListWork:                          operations.ListWork,
+		ShowWork:                          operations.ShowWork,
+		MoveWork:                          operations.MoveWork,
+		VisualizeWork:                     operations.VisualizeWork,
+		openRunSelection:                  operations.OpenRunSelection,
+	}
 }
 
-// NewRootCommandWithOptions constructs the command tree with explicit process
-// inputs so callers can execute independent command instances deterministically.
-func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
-	if useGeneratedRepresentativeFamily {
-		return newRootCommandWithGeneratedRepresentativeFamily(options)
-	}
-	return newLegacyRootCommandWithOptions(options)
+// NewCommand constructs one fresh command tree from invocation-local process
+// boundaries and the factory's injected command collaborators.
+func (factory CommandFactory) NewCommand(
+	homeDir func() (string, error),
+	lookupEnv func(string) (string, bool),
+	initializer startupcli.Initializer,
+) *cobra.Command {
+	factory.homeDir = homeDir
+	factory.lookupEnv = lookupEnv
+	factory.initializer = initializer
+	return newRootCommandWithFactory(factory)
 }
 
-func normalizeRootCommandOptions(options RootCommandOptions) RootCommandOptions {
-	if options.HomeDir == nil {
-		options.HomeDir = os.UserHomeDir
+// ExecuteCommand constructs one private tree for the invocation. Observation
+// callers receive detached contracts and parser state; ordinary callers run
+// the selected command handler.
+func (factory CommandFactory) ExecuteCommand(input startupcli.CommandInvocation) error {
+	factory.homeDir = input.HomeDir
+	factory.lookupEnv = input.LookupEnv
+	factory.initializer = input.Initializer
+	root := newRootCommandWithFactory(factory)
+	if root == nil {
+		return fmt.Errorf("execute CLI command: command is required")
 	}
-	if options.LookupEnv == nil {
-		options.LookupEnv = os.LookupEnv
+	root.SetArgs(append([]string(nil), input.Arguments...))
+	root.SetIn(input.Stdin)
+	root.SetOut(input.Stdout)
+	root.SetErr(input.Stderr)
+	root.SetContext(input.Context)
+	if factory.observeCLI == nil {
+		return root.Execute()
 	}
-	if options.RunFactory == nil {
-		options.RunFactory = func(ctx context.Context, cfg runcli.RunConfig) error {
-			return runCLI(ctx, cfg)
-		}
+	snapshot, err := cliobservation.CaptureSnapshot(root)
+	if err != nil {
+		return err
 	}
-	if options.SubmitWork == nil {
-		options.SubmitWork = submitWork
+	command, positionals, parseErr := ParseArgvForCLIInputsInventory(root, input.Arguments)
+	result := cliobservation.Result{Snapshot: snapshot, Parse: cliobservation.CaptureParseResult(command, positionals)}
+	edgeObservation, err := cliobservation.Encode(result)
+	if err != nil {
+		return err
 	}
-	if options.SubmitBatch == nil {
-		options.SubmitBatch = submitBatch
+	if err := factory.observeCLI(edgeObservation); err != nil {
+		return fmt.Errorf("observe CLI command: %w", err)
 	}
-	return options
+	return parseErr
+}
+
+func newRootCommandWithFactory(options CommandFactory) *cobra.Command {
+	return newRootCommandWithGeneratedRepresentativeFamily(options)
 }
 
 func buildWorkflowExecutionService(
 	ctx context.Context,
-	options RootCommandOptions,
-	backend sessionexecutioncli.ExecutionBackendConfig,
+	options CommandFactory,
+	provider string,
+	projectRoot string,
 	fixtureCatalogPath string,
 	childExecutorMode string,
-) (sessionexecutioncli.ServiceOwner, error) {
-	if options.BuildSessionExecution == nil {
+) (fse.OwnedExecutionService, error) {
+	if options.BuildExecution == nil {
 		return nil, fmt.Errorf("construct workflow execution: durable execution builder is required")
 	}
-	service, err := options.BuildSessionExecution(ctx, sessionexecutioncli.ServiceRequest{
-		ExecutionBackendConfig: backend,
-		FixtureCatalogPath:     fixtureCatalogPath,
-		ChildExecutorMode:      childExecutorMode,
-	})
+	service, err := options.BuildExecution(
+		ctx,
+		provider,
+		projectRoot,
+		fixtureCatalogPath,
+		childExecutorMode,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("construct workflow execution: %w", err)
 	}
@@ -155,38 +302,6 @@ func buildWorkflowExecutionService(
 		return nil, fmt.Errorf("construct workflow execution: builder returned nil service")
 	}
 	return service, nil
-}
-
-func withWorkflowExecutionService(
-	ctx context.Context,
-	options RootCommandOptions,
-	backend sessionexecutioncli.ExecutionBackendConfig,
-	fixtureCatalogPath string,
-	childExecutorMode string,
-	run func(fse.Service) error,
-) (err error) {
-	owner, err := buildWorkflowExecutionService(ctx, options, backend, fixtureCatalogPath, childExecutorMode)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if closeErr := owner.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("close workflow execution: %w", closeErr))
-		}
-	}()
-	return run(owner)
-}
-
-func addWorkflowExecutionBackendFlags(
-	cmd *cobra.Command,
-	backend *sessionexecutioncli.ExecutionBackendConfig,
-	childExecutorMode *string,
-) {
-	cmd.Flags().StringVar(&backend.Provider, "execution-provider", string(fse.ExecutionProviderFake), "durable execution backend: fake or javascript-runtime")
-	cmd.Flags().StringVar(&backend.ProjectRoot, "project-root", "", "project root for javascript-runtime workflow source lookup")
-	if childExecutorMode != nil {
-		cmd.Flags().StringVar(childExecutorMode, "child-executor-mode", "", "javascript child executor mode: fake or live-provider")
-	}
 }
 
 type cliDiagnosticsOptions struct {
@@ -225,238 +340,55 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
-func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
-	modelsCmd := &cobra.Command{
-		Use:   "models",
-		Short: "Inspect discovered models from a running service",
-		Long: "Inspect discovered models from a running infinite-you service.\n\n" +
-			"Use list to discover model identifiers, inspect to view one model's readiness and capabilities, " +
-			"invoke to call a discovered model directly through the shared in-process bootstrap, " +
-			"and pull to populate the managed local-model cache for supported local assets.",
+func newMCPCommand(options CommandFactory) *cobra.Command {
+	var initializeStdio startupcli.StdioHandler
+	if options.initializer != nil {
+		initializeStdio = options.initializer.Stdio
 	}
-	modelsCmd.AddCommand(
-		newModelsListCommand(globals, diagnostics),
-		newModelsInspectCommand(globals, diagnostics),
-		newModelsInvokeCommand(globals, diagnostics, operatorDefaults, rootOptions),
-		newModelsPullCommand(globals, diagnostics),
-	)
-	return modelsCmd
+	return mcpcli.NewCommandWithStdioInitializer(initializeStdio, options.homeDir)
 }
 
-func newModelsListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.ListConfig{Server: globals.server}
-	cmd := &cobra.Command{
-		Use:     "list",
-		Short:   "List discovered models",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return listModels(cfg)
-		},
-	}
-	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.InspectConfig{Server: globals.server}
-	cmd := &cobra.Command{
-		Use:     "inspect <model-name>",
-		Short:   "Inspect one discovered model",
-		Args:    cobra.ExactArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.ModelName = args[0]
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return inspectModel(cfg)
-		},
-	}
-	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
-	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
-	cmd := &cobra.Command{
-		Use:     "invoke <model-name>",
-		Short:   "Invoke one discovered model",
-		Args:    cobra.ExactArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			policy := diagnostics.resolvePolicy(false)
-			logger, err := policy.BuildLogger(logging.BuildLogger)
-			if err != nil {
-				return err
-			}
-			homeDir, err := rootOptions.HomeDir()
-			if err != nil {
-				return fmt.Errorf("resolve process home directory: %w", err)
-			}
-			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
-			if err != nil {
-				return err
-			}
-			cfg.Server = globals.server
-			cfg.ModelName = args[0]
-			cfg.JSON = globals.json
-			cfg.HomeDir = homeDir
-			cfg.OperatorDefaults = resolvedOperatorDefaults
-			cfg.Logger = logger
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			cfg.BuildInvocation = rootOptions.BuildModelInvocation
-			return invokeModel(cfg)
-		},
-	}
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Operation, "operation", cfg.Operation, "uppercase provider-agnostic operation name")
-	cmd.Flags().StringVar(&cfg.Text, "text", "", "text input for direct invocation")
-	cmd.Flags().StringVar(&cfg.OutputPath, "output", "", "output file path for streamed audio responses")
-	return cmd
-}
-
-func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := modelscli.PullConfig{Server: globals.server}
-	cmd := &cobra.Command{
-		Use:     "pull <model-name>",
-		Short:   "Pull one discovered local model into the managed cache",
-		Args:    cobra.ExactArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.ModelName = args[0]
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return pullModel(cfg)
-		},
-	}
-	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newMCPCommand(options RootCommandOptions) *cobra.Command {
-	if options.Startup == nil {
-		return mcpcli.NewCommand()
-	}
-	return mcpcli.NewCommandWithStartup(options.Startup)
-}
-
-func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	docsCmd := &cobra.Command{
-		Use:          "docs [topic]",
-		Short:        "Print packaged markdown reference topics",
-		SilenceUsage: true,
-		Long: "Print packaged markdown reference topics from the installed binary.\n\n" +
-			"Run without a topic to print the quick-start blurb and packaged docs index. Use one supported topic argument to print the authored markdown page with no wrapper formatting.",
-		Args:      cobra.MaximumNArgs(1),
-		ValidArgs: docscli.SupportedTopicCommands(),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				_, err := io.WriteString(cmd.OutOrStdout(), docscli.IndexMarkdown(cliBinaryName))
-				return err
-			}
-
-			topic := args[0]
-			diagnosticsOutput := diagnostics.writer(cmd)
-			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs request topic=%s", topic)
-			markdown, err := docscli.Markdown(topic)
-			if err != nil {
-				clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs failed topic=%s phase=resolve-topic", topic)
-				return err
-			}
-			clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs resolved topic=%s contentBytes=%d", topic, len(markdown))
-			_, err = io.WriteString(cmd.OutOrStdout(), markdown)
-			if err != nil {
-				clidiag.Printf(diagnosticsOutput, diagnostics.verboseEnabled(), "docs failed topic=%s phase=write-output", topic)
-			}
-			return err
-		},
-	}
-
-	return docsCmd
-}
-
-func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := initcmd.InitConfig{
-		Dir:      defaultcmd.FactoryDir,
-		Type:     string(initcmd.DefaultScaffoldType),
-		Executor: initcmd.DefaultStarterExecutor,
-	}
-
-	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Create factory directory structure",
-		Long: "Create factory directory structure.\n\n" +
-			"Supported scaffold types:\n" +
-			"  default - single-step task-processing scaffold\n" +
-			"  ralph   - minimal PRD-to-execution scaffold\n\n" +
-			"Omitting --executor preserves the default Codex-backed starter scaffold. " +
-			"Supported starter scaffold values are codex and claude. " +
-			"Omitting --type keeps the current default scaffold behavior. " +
-			"For the default scaffold, --executor chooses which starter worker scaffold is generated.",
-		Example: "  # Create the default Codex-backed scaffold in ./factory.\n" +
-			"  " + cliBinaryName + " init\n\n" +
-			"  # Create a Claude-backed default scaffold in a custom directory.\n" +
-			"  " + cliBinaryName + " init --dir my-factory --executor claude\n\n" +
-			"  # Create the minimal Ralph PRD-to-execution scaffold.\n" +
-			"  " + cliBinaryName + " init --type ralph --dir ralph-factory",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return initFactory(cfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "base directory to create")
-	cmd.Flags().StringVar(&cfg.Type, "type", cfg.Type, "scaffold type to generate (supported: default, ralph)")
-	cmd.Flags().StringVar(
-		&cfg.Executor,
-		"executor",
-		cfg.Executor,
-		fmt.Sprintf(
-			"starter scaffold to generate (%s)",
-			strings.Join(initcmd.SupportedStarterExecutors(), ", "),
-		),
-	)
-	return cmd
-}
-
-func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions RootCommandOptions, defaultInvocation bool) error {
-	logger, err := policy.BuildLogger(logging.BuildLogger)
+func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions CommandFactory, defaultInvocation bool) error {
+	logger, err := policy.BuildLogger(rootOptions.buildTerminalLogger)
 	if err != nil {
 		return err
 	}
 	cfg.Logger = logger
 	cfg.Verbose = policy.VerboseEnabled()
 	cfg.TerminalPolicy = policy
+	cfg.ExecutionBaseDir = startupcli.WorkingDirectory(cmd.Context())
 
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
-	homeDir, err := rootOptions.HomeDir()
+	homeDir, err := resolveProcessHomeDir(rootOptions)
 	if err != nil {
-		return fmt.Errorf("resolve process home directory: %w", err)
+		return err
 	}
 	cfg.HomeDir = homeDir
-	if err := resolveRunFactorySelection(cmd, &cfg, homeDir); err != nil {
+	modelCacheDir, _, err := lookupProcessEnvironment(
+		rootOptions,
+		runcli.ModelCacheDirEnvironment,
+	)
+	if err != nil {
+		return err
+	}
+	cfg.ModelCacheDir = modelCacheDir
+	cfg.FactoryScaffoldInitializer = rootOptions.InitFactory
+	cfg.ResolveCurrentFactoryDir = rootOptions.resolveCurrentFactoryDir
+	cfg.ResolveFactoryConfigRoot = rootOptions.resolveFactoryConfigRoot
+	cfg.LoadFactoryConfigFile = rootOptions.loadFactoryConfigFile
+	cfg.WorkRequestFileLoader = rootOptions.workRequestFileLoader
+	cfg.DirectoryCreator = rootOptions.runDirectoryCreator
+	cfg.BrowserOpener = rootOptions.browserOpener
+	if err := resolveRunFactorySelection(
+		cmd,
+		&cfg,
+		homeDir,
+		rootOptions.namedFactoryCatalog,
+		rootOptions.resolveNamedFactoryRoots,
+		rootOptions.resolveNamedFactoryCandidatePaths,
+	); err != nil {
 		return err
 	}
 
@@ -465,7 +397,10 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		return err
 	}
 	cfg.OperatorDefaults = resolvedOperatorDefaults
-	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
+	cfg.Stdin = cmd.InOrStdin()
+	cfg.StdinIsTTY = func() bool { return startupcli.StdinIsTTY(cmd.Context()) }
+	cfg.OutputIsTTY = startupcli.StdoutIsTTY(cmd.Context())
+	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs, rootOptions.prepareInvocationInput); err != nil {
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
 	}
@@ -487,41 +422,25 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 	}
 	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
-	ctx, cancel := context.WithCancel(cmd.Context())
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	defer signal.Stop(sigCh)
-	go func() {
-		select {
-		case <-sigCh:
-			logger.Info("received signal, shutting down")
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
-	if rootOptions.Startup == nil {
-		return rootOptions.RunFactory(ctx, cfg)
+	if rootOptions.initializer == nil {
+		return errors.New("run service initializer is required")
 	}
-	return delegateRunStartup(ctx, cfg, defaultInvocation, rootOptions)
+	return delegateRunInitialization(cmd.Context(), cfg, defaultInvocation, rootOptions)
 }
 
-func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options RootCommandOptions) error {
-	invocationOnly := cfg.CleanInvocation || cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil || cfg.InvocationNormalizedArguments != nil
-	request := startupcli.Request{
-		Kind: startupcli.KindRun,
-		Run: startupcli.RunIntent{
-			DefaultInvocation:     defaultInvocation,
-			Continuous:            cfg.Continuously,
-			APIEnabled:            cfg.Port > 0 && !invocationOnly,
-			DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
-			WorkerSidecarsEnabled: true,
-		},
-		RunConfig: &cfg,
+func delegateRunInitialization(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options CommandFactory) error {
+	invocationOnly := cfg.CleanInvocation || cfg.PreparedInvocationInput != nil || cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil || cfg.InvocationNormalizedArguments != nil
+	intent := startupcli.RunIntent{
+		DefaultInvocation:     defaultInvocation,
+		Continuous:            cfg.Continuously,
+		APIEnabled:            cfg.Port > 0 && !invocationOnly,
+		DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
+		WorkerSidecarsEnabled: true,
 	}
-	return options.Startup(ctx, request)
+	if options.openRunSelection == nil {
+		return fmt.Errorf("run selection operation is required")
+	}
+	return options.initializer.Run(ctx, intent, options.openRunSelection(cfg))
 }
 
 func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePolicy terminalpolicy.Policy) terminalpolicy.Policy {
@@ -545,18 +464,59 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 	textInvocation = invocationFactorySelected &&
 		!cmd.Flags().Changed("work") &&
 		!cfg.Continuously &&
-		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
+		(cfg.InvocationPositionalText != nil ||
+			cfg.InvocationStdinText != nil ||
+			cfg.InvocationNormalizedArguments != nil ||
+			cfg.PreparedInvocationInput != nil)
 	return cleanInvocation, textInvocation
 }
 
-func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions CommandFactory, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+	if rootOptions.resolveOperatorDefaults == nil {
+		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("Operator Settings defaults resolver is required")
+	}
 	environment := operatorconfig.Defaults{}
-	environment.WorkerModelProvider, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModelProvider)
-	environment.WorkerModel, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModel)
-	return operatorconfig.ResolveFromHomeWithEnvironment(homeDir, environment, operatorconfig.FlagOverrides{
+	var err error
+	environment.WorkerModelProvider, _, err = lookupProcessEnvironment(
+		rootOptions,
+		operatorconfig.EnvDefaultWorkerModelProvider,
+	)
+	if err != nil {
+		return operatorconfig.ResolvedDefaults{}, err
+	}
+	environment.WorkerModel, _, err = lookupProcessEnvironment(
+		rootOptions,
+		operatorconfig.EnvDefaultWorkerModel,
+	)
+	if err != nil {
+		return operatorconfig.ResolvedDefaults{}, err
+	}
+	return rootOptions.resolveOperatorDefaults(homeDir, environment, operatorconfig.FlagOverrides{
 		WorkerModelProvider: persistentFlagValueIfChanged(cmd, "default-worker-model-provider", operatorDefaults.defaultWorkerModelProvider),
 		WorkerModel:         persistentFlagValueIfChanged(cmd, "default-worker-model", operatorDefaults.defaultWorkerModel),
 	})
+}
+
+func resolveProcessHomeDir(options CommandFactory) (string, error) {
+	if options.homeDir == nil {
+		return "", fmt.Errorf("process home directory resolver is required")
+	}
+	homeDir, err := options.homeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve process home directory: %w", err)
+	}
+	return homeDir, nil
+}
+
+func lookupProcessEnvironment(
+	options CommandFactory,
+	name string,
+) (string, bool, error) {
+	if options.lookupEnv == nil {
+		return "", false, fmt.Errorf("process environment lookup is required")
+	}
+	value, ok := options.lookupEnv(name)
+	return value, ok, nil
 }
 
 func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string {
@@ -581,7 +541,14 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	return nil
 }
 
-func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig, homeDir string) error {
+func resolveRunFactorySelection(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	homeDir string,
+	namedFactoryCatalog interfaces.NamedFactoryCatalog,
+	resolveNamedFactoryRoots NamedFactoryRootsResolver,
+	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
+) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	dirChanged := cmd.Flags().Changed("dir")
 	namedChanged := cmd.Flags().Changed("named")
@@ -592,7 +559,14 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig, homeD
 		case dirChanged:
 			return fmt.Errorf("--named cannot be used with --dir")
 		}
-		return resolveRunNamedFactorySelection(cfg, homeDir)
+		return resolveRunNamedFactorySelection(
+			cmd.Context(),
+			cfg,
+			homeDir,
+			namedFactoryCatalog,
+			resolveNamedFactoryRoots,
+			resolveNamedFactoryCandidatePaths,
+		)
 	}
 	if factoryChanged && dirChanged {
 		return fmt.Errorf("--factory cannot be used with --dir")
@@ -601,7 +575,10 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig, homeD
 		return nil
 	}
 
-	factoryRoot, err := factoryrun.ResolveFactoryRootFromConfigFile(cfg.FactoryConfigPath)
+	if cfg.ResolveFactoryConfigRoot == nil {
+		return fmt.Errorf("Factory Definitions config root resolver is required")
+	}
+	factoryRoot, err := cfg.ResolveFactoryConfigRoot(cfg.FactoryConfigPath)
 	if err != nil {
 		return err
 	}
@@ -609,64 +586,93 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig, homeD
 	return nil
 }
 
-func resolveRunNamedFactorySelection(cfg *runcli.RunConfig, homeDir string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("resolve current working directory for --named: %w", err)
+func resolveRunNamedFactorySelection(
+	ctx context.Context,
+	cfg *runcli.RunConfig,
+	homeDir string,
+	namedFactoryCatalog interfaces.NamedFactoryCatalog,
+	resolveNamedFactoryRoots NamedFactoryRootsResolver,
+	resolveNamedFactoryCandidatePaths interfaces.NamedFactoryCandidatePathsResolver,
+) error {
+	if namedFactoryCatalog == nil {
+		return fmt.Errorf("Factory Definitions named-factory catalog is required")
 	}
-	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(cwd)
-	if err != nil {
-		return fmt.Errorf("resolve project named-factory root: %w", err)
+	if resolveNamedFactoryRoots == nil {
+		return fmt.Errorf("Factory Definitions named-factory root resolver is required")
 	}
-	globalRoot, err := factoryconfig.GlobalNamedFactoryRootForHome(homeDir)
-	if err != nil {
-		return fmt.Errorf("resolve global named-factory root: %w", err)
+	if resolveNamedFactoryCandidatePaths == nil {
+		return fmt.Errorf("Factory Definitions named-factory candidate-path resolver is required")
 	}
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, cfg.NamedFactoryName)
+	cwd := startupcli.WorkingDirectory(ctx)
+	if strings.TrimSpace(cwd) == "" {
+		return fmt.Errorf("resolve current working directory for --named: process working directory is required")
+	}
+	roots, err := resolveNamedFactoryRoots(homeDir, cwd)
 	if err != nil {
-		return factoryconfig.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, cfg.NamedFactoryName)
+		return fmt.Errorf("resolve named-Factory roots: %w", err)
+	}
+	resolution, err := namedFactoryCatalog.ResolveNamedFactoryAcrossRoots(
+		roots.Project,
+		roots.Global,
+		cfg.NamedFactoryName,
+	)
+	if err != nil {
+		candidates, candidateErr := resolveNamedFactoryCandidatePaths(
+			roots.Project,
+			roots.Global,
+			cfg.NamedFactoryName,
+		)
+		if candidateErr != nil {
+			return err
+		}
+		return factoryload.MaybeFormatOperatorErrorForNamedFactory(err, candidates)
 	}
 	cfg.Dir = resolution.FactoryDir
 	cfg.NamedFactoryResolution = resolution
 	return nil
 }
 
-func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string) error {
+func resolveRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	preparation work.InvocationInputPreparation,
+) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
 
 	if !factoryChanged && !namedChanged {
-		return resolveLegacyRunFactoryPrompt(cmd, promptArgs)
+		return resolveLegacyRunFactoryPrompt(cmd, promptArgs, preparation)
 	}
-	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.InOrStdin()) {
+	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
 		return nil
 	}
 
-	signature, err := runcli.ResolveFactoryInvocationSignature(cfg.Dir)
+	signature, err := runcli.ResolveFactoryInvocationSignature(cfg.LoadFactoryConfigFile, cfg.Dir)
 	if err != nil {
 		return err
 	}
 	if signature != nil {
-		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature)
+		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature, preparation)
 	}
-	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged)
+	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged, preparation)
 }
 
-func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string) error {
+func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string, preparation work.InvocationInputPreparation) error {
 	for _, arg := range promptArgs {
 		if strings.HasPrefix(arg, "-") {
 			return fmt.Errorf("unknown flag: %s", arg)
 		}
 	}
-	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
-		PromptArgs: promptArgs,
-		Stdin:      cmd.InOrStdin(),
-	})
-	if err != nil {
-		return err
+	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.Context()) {
+		return nil
 	}
-	if input.Payload != "" {
+	input, err := prepareRunInvocationInput(cmd, promptArgs, nil, preparation)
+	if err != nil {
+		return runcli.MapInvocationInputError(err)
+	}
+	if input.ResolvedInput != nil {
 		return fmt.Errorf("positional prompt arguments require --factory or --named")
 	}
 	return nil
@@ -677,16 +683,14 @@ func resolveSignatureRunFactoryPrompt(
 	cfg *runcli.RunConfig,
 	promptArgs []string,
 	signature *interfaces.InvocationSignatureConfig,
+	preparation work.InvocationInputPreparation,
 ) error {
-	normalized, err := runcli.ResolveSignatureFactoryInvocationInput(runcli.SignatureFactoryInvocationInputConfig{
-		PromptArgs: promptArgs,
-		Signature:  signature,
-		Stdin:      cmd.InOrStdin(),
-	})
+	prepared, err := prepareRunInvocationInput(cmd, promptArgs, signature, preparation)
 	if err != nil {
-		return err
+		return runcli.MapInvocationInputError(err)
 	}
-	cfg.InvocationNormalizedArguments = &normalized
+	cfg.InvocationNormalizedArguments = prepared.NormalizedArguments
+	cfg.PreparedInvocationInput = &prepared
 	return nil
 }
 
@@ -695,260 +699,142 @@ func resolveCompatibilityRunFactoryPrompt(
 	cfg *runcli.RunConfig,
 	promptArgs []string,
 	workChanged bool,
+	preparation work.InvocationInputPreparation,
 ) error {
-	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
-		PromptArgs: promptArgs,
-		Stdin:      cmd.InOrStdin(),
-	})
+	input, err := prepareRunInvocationInput(cmd, promptArgs, nil, preparation)
 	if err != nil {
-		return err
+		return runcli.MapInvocationInputError(err)
 	}
-	if workChanged && input.Payload != "" {
-		return fmt.Errorf("%s cannot be used with --work", input.Source)
+	if workChanged && input.ResolvedInput != nil {
+		return fmt.Errorf("%s cannot be used with --work", runcli.InvocationInputSourceFromWork(input.Source))
 	}
 	if workChanged {
 		cfg.CleanInvocationInputSource = runcli.InvocationInputSourceWorkFile
 	}
-	if input.Payload == "" {
+	if input.ResolvedInput == nil {
 		return nil
 	}
+	cfg.PreparedInvocationInput = &input
 	assignCompatibilityInvocationInput(cfg, input)
 	return nil
 }
 
-func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input runcli.FactoryInvocationInput) {
-	payload := input.Payload
-	switch input.Source {
+func prepareRunInvocationInput(
+	cmd *cobra.Command,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+	preparation work.InvocationInputPreparation,
+) (work.PreparedInvocationInput, error) {
+	if preparation == nil {
+		return work.PreparedInvocationInput{}, fmt.Errorf("Work invocation-input preparation is required")
+	}
+	stdinText, err := collectRunInvocationStdin(
+		promptArgs,
+		cmd.InOrStdin(),
+		func() bool { return startupcli.StdinIsTTY(cmd.Context()) },
+	)
+	if err != nil {
+		return work.PreparedInvocationInput{}, err
+	}
+	return preparation.PrepareInvocationInput(cmd.Context(), work.InvocationInputPreparationRequest{
+		Arguments: append([]string(nil), promptArgs...),
+		Signature: signature,
+		StdinText: stdinText,
+	})
+}
+
+func collectRunInvocationStdin(
+	arguments []string,
+	stdin io.Reader,
+	stdinIsTTY func() bool,
+) (*string, error) {
+	explicitStdin := false
+	for _, argument := range arguments {
+		if strings.TrimSpace(argument) == "-" {
+			explicitStdin = true
+			break
+		}
+	}
+	if stdinIsTTY == nil {
+		if stdin == nil {
+			return nil, fmt.Errorf("classify invocation stdin: process terminal metadata is required")
+		}
+	} else if !explicitStdin && stdinIsTTY() {
+		return nil, nil
+	}
+	if stdin == nil {
+		return nil, fmt.Errorf("read invocation stdin: process stdin is required")
+	}
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return nil, fmt.Errorf("read invocation stdin: %w", err)
+	}
+	if len(data) == 0 && !explicitStdin {
+		return nil, nil
+	}
+	text := string(data)
+	return &text, nil
+}
+
+func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input work.PreparedInvocationInput) {
+	payload := input.ResolvedInput.Text
+	source := runcli.InvocationInputSourceFromWork(input.Source)
+	switch source {
 	case runcli.InvocationInputSourcePositional:
 		cfg.InvocationPositionalText = &payload
 	case runcli.InvocationInputSourceStdin:
 		cfg.InvocationStdinText = &payload
 	}
-	cfg.CleanInvocationInputSource = input.Source
+	cfg.CleanInvocationInputSource = source
 }
 
-func runCommandInputIsTTY(stdin io.Reader) bool {
-	if stdin != nil && stdin != os.Stdin {
-		return false
-	}
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
+func runCommandInputIsTTY(ctx context.Context) bool {
+	return startupcli.StdinIsTTY(ctx)
 }
 
-// ShowSessionAccessor returns the current session show delegate.
-func ShowSessionAccessor() func(sessioncli.ShowConfig) error {
-	return showSession
-}
-
-// SetShowSessionAccessor replaces the session show delegate for tests.
-func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) {
-	showSession = fn
-}
-
-// ListModelsAccessor returns the current models list delegate.
-func ListModelsAccessor() func(modelscli.ListConfig) error {
-	return listModels
-}
-
-// SetListModelsAccessor replaces the models list delegate for tests.
-func SetListModelsAccessor(fn func(modelscli.ListConfig) error) {
-	listModels = fn
-}
-
-// InspectModelAccessor returns the current models inspect delegate.
-func InspectModelAccessor() func(modelscli.InspectConfig) error {
-	return inspectModel
-}
-
-// SetInspectModelAccessor replaces the models inspect delegate for tests.
-func SetInspectModelAccessor(fn func(modelscli.InspectConfig) error) {
-	inspectModel = fn
-}
-
-// InvokeModelAccessor returns the current models invoke delegate.
-func InvokeModelAccessor() func(modelscli.InvokeConfig) error {
-	return invokeModel
-}
-
-// SetInvokeModelAccessor replaces the models invoke delegate for tests.
-func SetInvokeModelAccessor(fn func(modelscli.InvokeConfig) error) {
-	invokeModel = fn
-}
-
-// PullModelAccessor returns the current models pull delegate.
-func PullModelAccessor() func(modelscli.PullConfig) error {
-	return pullModel
-}
-
-// SetPullModelAccessor replaces the models pull delegate for tests.
-func SetPullModelAccessor(fn func(modelscli.PullConfig) error) {
-	pullModel = fn
-}
-
-// useGeneratedModelsDocsFamily toggles production models/docs wiring between the
-// generated metadata constructor and the legacy handwritten path.
-const useGeneratedModelsDocsFamily = true
-
-// NewLegacyModelsFamilyCommand builds the isolated handwritten you → models tree
-// used by the generator-vs-legacy parity matrix.
-func NewLegacyModelsFamilyCommand() *cobra.Command {
-	root, globals, diagnostics, operatorDefaults, options := newModelsFamilyParityShell()
-	root.AddCommand(newModelsCommand(globals, diagnostics, operatorDefaults, options))
-	return root
-}
-
-// NewGeneratedModelsFamilyParityCommand builds you → models from generated metadata
-// and attaches handwritten handlers by stable command ID for parity tests.
-func NewGeneratedModelsFamilyParityCommand(
-	registry *commandregistry.Registry,
-	invokeFlags climanifestcobra.ModelsInvokeFlagBindings,
-) (*cobra.Command, error) {
-	root, _, _, _, _ := newModelsFamilyParityShell()
-	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
-	if err != nil {
-		return nil, err
-	}
-	root.AddCommand(components.Models)
-	return root, nil
-}
-
-// NewLegacyDocsFamilyCommand builds the isolated handwritten you → docs tree used
-// by the generator-vs-legacy parity matrix.
-func NewLegacyDocsFamilyCommand() *cobra.Command {
-	root, diagnostics, _, _, _ := newDocsFamilyParityShell()
-	root.AddCommand(newDocsCommand(diagnostics))
-	return root
-}
-
-// NewGeneratedDocsFamilyParityCommand builds you → docs from generated metadata
-// and attaches handwritten handlers by stable command ID for parity tests.
-func NewGeneratedDocsFamilyParityCommand(
-	registry *commandregistry.Registry,
-	invokeFlags climanifestcobra.ModelsInvokeFlagBindings,
-) (*cobra.Command, error) {
-	root, _, _, _, _ := newDocsFamilyParityShell()
-	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
-	if err != nil {
-		return nil, err
-	}
-	root.AddCommand(components.Docs)
-	return root, nil
-}
-
-func newDocsFamilyParityShell() (*cobra.Command, *cliDiagnosticsOptions, *cliGlobalOptions, *cliOperatorDefaultsOptions, RootCommandOptions) {
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	return root, diagnostics, globals, operatorDefaults, options
-}
-
-func newModelsFamilyParityShell() (*cobra.Command, *cliGlobalOptions, *cliDiagnosticsOptions, *cliOperatorDefaultsOptions, RootCommandOptions) {
-	options := normalizeRootCommandOptions(RootCommandOptions{})
-	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
-	diagnostics := &cliDiagnosticsOptions{}
-	operatorDefaults := &cliOperatorDefaultsOptions{}
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	return root, globals, diagnostics, operatorDefaults, options
-}
-
-func newProductionModelsDocsCommands(
-	globals *cliGlobalOptions,
+func newProductionDocsCommand(
 	diagnostics *cliDiagnosticsOptions,
-	operatorDefaults *cliOperatorDefaultsOptions,
-	options RootCommandOptions,
-) (*cobra.Command, *cobra.Command, error) {
-	if !useGeneratedModelsDocsFamily {
-		return newDocsCommand(diagnostics), newModelsCommand(globals, diagnostics, operatorDefaults, options), nil
-	}
-
-	registry, invokeFlags, err := newModelsDocsHandlerRegistry(globals, diagnostics, operatorDefaults, options)
-	if err != nil {
-		return nil, nil, err
-	}
-	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
-	if err != nil {
-		return nil, nil, err
-	}
-	return components.Docs, components.Models, nil
-}
-
-func newModelsDocsHandlerRegistry(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-	operatorDefaults *cliOperatorDefaultsOptions,
-	rootOptions RootCommandOptions,
-) (*commandregistry.Registry, climanifestcobra.ModelsInvokeFlagBindings, error) {
-	if operatorDefaults == nil {
-		operatorDefaults = &cliOperatorDefaultsOptions{}
-	}
-	invokeCfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
-	registry, err := commandregistry.NewModelsDocsRegistry(commandregistry.ModelsDocsHandlers{
+) (*cobra.Command, error) {
+	registry, err := commandregistry.NewDocsRegistry(commandregistry.DocsHandlers{
 		DocsRunE: commandregistry.DocsRunE(commandregistry.DocsBinding{
-			BinaryName:        cliBinaryName,
-			DiagnosticsWriter: diagnostics.writer,
-			Verbose:           diagnostics.verboseEnabled,
-		}),
-		ModelsListRunE: commandregistry.ModelsListRunE(commandregistry.ModelsListBinding{
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			ListModels:        listModels,
-		}),
-		ModelsInspectRunE: commandregistry.ModelsInspectRunE(commandregistry.ModelsInspectBinding{
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			InspectModel:      inspectModel,
-		}),
-		ModelsInvokeRunE: commandregistry.ModelsInvokeRunE(commandregistry.ModelsInvokeBinding{
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Operation:         &invokeCfg.Operation,
-			Text:              &invokeCfg.Text,
-			OutputPath:        &invokeCfg.OutputPath,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			HomeDir:           rootOptions.HomeDir,
-			ResolveOperatorDefaults: func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
-				return resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
-			},
-			BuildLogger: func() (*zap.Logger, error) {
-				policy := diagnostics.resolvePolicy(false)
-				return policy.BuildLogger(logging.BuildLogger)
-			},
-			BuildModelInvocation: rootOptions.BuildModelInvocation,
-			InvokeModel:          invokeModel,
-		}),
-		ModelsPullRunE: commandregistry.ModelsPullRunE(commandregistry.ModelsPullBinding{
-			Server:            &globals.server,
-			JSON:              &globals.json,
-			Verbose:           diagnostics.verboseEnabled,
-			Debug:             &diagnostics.debug,
-			DiagnosticsWriter: diagnostics.writer,
-			PullModel:         pullModel,
+			BinaryName: cliBinaryName, DiagnosticsWriter: diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
 		}),
 	})
 	if err != nil {
-		return nil, climanifestcobra.ModelsInvokeFlagBindings{}, err
+		return nil, err
 	}
-	return registry, climanifestcobra.ModelsInvokeFlagBindings{
-		Operation:  &invokeCfg.Operation,
-		Text:       &invokeCfg.Text,
-		OutputPath: &invokeCfg.OutputPath,
-		FlagUsages: map[string]string{
-			"operation": "uppercase provider-agnostic operation name",
-			"text":      "text input for direct invocation",
-			"output":    "output file path for streamed audio responses",
+	return climanifestcobra.NewDocsCommand(registry)
+}
+
+func newProductionModelsCommand(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions CommandFactory,
+) (*cobra.Command, error) {
+	if operatorDefaults == nil {
+		operatorDefaults = &cliOperatorDefaultsOptions{}
+	}
+	handler := modelscli.NewCommandHandler(
+		rootOptions.ModelsCLI,
+		&globals.server,
+		&globals.json,
+		diagnostics.verboseEnabled,
+		&diagnostics.debug,
+		diagnostics.writer,
+		rootOptions.homeDir,
+		func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+			return resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
 		},
-	}, nil
+		func() (*zap.Logger, error) {
+			policy := diagnostics.resolvePolicy(false)
+			return policy.BuildLogger(rootOptions.buildTerminalLogger)
+		},
+	)
+	registry, err := commandregistry.NewModelsRegistry(handler)
+	if err != nil {
+		return nil, err
+	}
+	return climanifestcobra.NewModelsCommand(registry)
 }

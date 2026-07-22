@@ -82,10 +82,7 @@ func TestRepositoryStagedFactorySchema_MatchesOpenAPIDerivedProjection(t *testin
 	t.Parallel()
 
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
+	artifacts := testArtifactsForRepository(t, repositoryRoot)
 	const target = "packages/api/generated/schemas/factory.schema.json"
 	projected := artifacts[target]
 	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash(target))

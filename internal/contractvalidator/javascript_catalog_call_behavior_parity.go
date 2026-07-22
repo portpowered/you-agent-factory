@@ -1,8 +1,8 @@
 package contractvalidator
 
 import (
-	jscatalog "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
+	"github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/callbehavior"
+	jscatalog "github.com/portpowered/infinite-you/pkg/services/factory_runtime/tooling/javascript/catalog"
 )
 
 // JavaScriptRuntimeCatalogCallBehaviorParityDiagnostics applies authored-catalog

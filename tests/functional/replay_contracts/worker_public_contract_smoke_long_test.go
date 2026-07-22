@@ -9,14 +9,15 @@ import (
 	"testing"
 	"time"
 
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,23 +28,16 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 	support.WriteAgentConfig(t, dir, "worker-a", workerPublicContractSmokeWorkerConfig())
 	support.WriteAgentConfig(t, dir, "worker-b", workerPublicContractSmokeWorkerConfig())
 
-	loaded, err := factoryconfig.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	assertWorkerPublicContractInternalRuntime(t, loaded, "worker-a")
-
-	flattened, err := factoryconfig.FlattenFactoryConfig(dir)
+	flattened, err := support.FlattenFactoryConfig(t, dir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig: %v", err)
 	}
 	assertWorkerPublicContractPublicJSON(t, flattened)
-	flattenedFactory, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(flattened)
+	flattenedFactory, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(flattened)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(flattened): %v", err)
 	}
 	assertWorkerPublicContractPublicFactory(t, flattenedFactory, "worker-a")
-	assertWorkerPublicContractPublicRuntime(t, flattenedFactory, "worker-a")
 
 	artifactPath := filepath.Join(t.TempDir(), "worker-public-contract-smoke.replay.json")
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -54,21 +48,22 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 		Payload:    []byte(`{"title":"worker public contract smoke"}`),
 	})
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Step one done. COMPLETE")},
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		platformprocess.CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"Step one done. COMPLETE","session_id":"worker-contract-1"}` + "\n")},
+		platformprocess.CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"Done. COMPLETE","session_id":"worker-contract-2"}` + "\n")},
 	)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-
-	harness.RunUntilComplete(t, 10*time.Second)
-	harness.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	assertReplaySessionPlaces(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+		"task:complete": 1, "task:init": 0, "task:failed": 0,
+	})
 	assertWorkerPublicContractProviderRequest(t, runner)
+	server.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	runStarted := requireFactoryOnlyRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
@@ -78,7 +73,6 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 	}
 	assertWorkerPublicContractPublicJSON(t, runStartedJSON)
 	assertWorkerPublicContractPublicFactory(t, runStarted.Factory, "worker-a")
-	assertWorkerPublicContractPublicRuntime(t, runStarted.Factory, "worker-a")
 
 	flattenedWorker := requireWorkerPublicContractWorker(t, flattenedFactory, "worker-a")
 	recordedWorker := requireWorkerPublicContractWorker(t, runStarted.Factory, "worker-a")
@@ -89,60 +83,6 @@ func TestWorkerPublicContractSmoke_CanonicalWorkerExecutesAndKeepsRuntimeOnlyFie
 	}
 }
 
-func assertWorkerPublicContractInternalRuntime(
-	t *testing.T,
-	loaded *factoryconfig.LoadedFactoryConfig,
-	workerName string,
-) {
-	t.Helper()
-
-	worker, ok := loaded.Worker(workerName)
-	if !ok {
-		t.Fatalf("expected worker %q in runtime config", workerName)
-	}
-	if worker.ExecutorProvider != "script_wrap" {
-		t.Fatalf("executor provider = %q, want script_wrap", worker.ExecutorProvider)
-	}
-	if worker.ModelProvider != string(modelprovider.Claude) {
-		t.Fatalf("model provider = %q, want %q", worker.ModelProvider, modelprovider.Claude)
-	}
-	if worker.SessionID != "" {
-		t.Fatalf("session id = %q, want empty runtime-owned field", worker.SessionID)
-	}
-	if worker.Concurrency != 0 {
-		t.Fatalf("concurrency = %d, want runtime-owned field to stay empty", worker.Concurrency)
-	}
-}
-
-func assertWorkerPublicContractPublicRuntime(t *testing.T, generated factoryapi.Factory, workerName string) {
-	t.Helper()
-
-	snapshot, err := interfaces.NewFactorySnapshot(generated)
-	if err != nil {
-		t.Fatalf("capture recorded Factory: %v", err)
-	}
-	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(snapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
-	}
-	worker, ok := runtimeCfg.Worker(workerName)
-	if !ok {
-		t.Fatalf("expected worker %q in generated runtime config", workerName)
-	}
-	if worker.ExecutorProvider != "script_wrap" {
-		t.Fatalf("generated runtime executor provider = %q, want script_wrap", worker.ExecutorProvider)
-	}
-	if worker.ModelProvider != string(modelprovider.Claude) {
-		t.Fatalf("generated runtime model provider = %q, want %q", worker.ModelProvider, modelprovider.Claude)
-	}
-	if worker.SessionID != "" {
-		t.Fatalf("generated runtime session id = %q, want empty", worker.SessionID)
-	}
-	if worker.Concurrency != 0 {
-		t.Fatalf("generated runtime concurrency = %d, want 0", worker.Concurrency)
-	}
-}
-
 func assertWorkerPublicContractProviderRequest(t *testing.T, runner *testutil.ProviderCommandRunner) {
 	t.Helper()
 
@@ -150,8 +90,8 @@ func assertWorkerPublicContractProviderRequest(t *testing.T, runner *testutil.Pr
 		t.Fatalf("provider command runner call count = %d, want 2", runner.CallCount())
 	}
 	req := runner.Requests()[0]
-	if req.Command != string(modelprovider.Claude) {
-		t.Fatalf("provider command = %q, want %q", req.Command, modelprovider.Claude)
+	if req.Command != string(modelprovider.ProviderClaude) {
+		t.Fatalf("provider command = %q, want %q", req.Command, modelprovider.ProviderClaude)
 	}
 	for _, arg := range req.Args {
 		if arg == "--resume" {
@@ -174,8 +114,8 @@ func assertWorkerPublicContractPublicFactory(t *testing.T, generated factoryapi.
 	if stringPointerValue(worker.ModelProvider) != string(factoryapi.WorkerModelProviderClaude) {
 		t.Fatalf("public worker modelProvider = %q, want %q", stringPointerValue(worker.ModelProvider), factoryapi.WorkerModelProviderClaude)
 	}
-	if stringPointerValue(worker.Type) != interfaces.WorkerTypeModel {
-		t.Fatalf("public worker type = %q, want %q", stringPointerValue(worker.Type), interfaces.WorkerTypeModel)
+	if stringPointerValue(worker.Type) != interfaces.WorkerTypeAgent {
+		t.Fatalf("public worker type = %q, want %q", stringPointerValue(worker.Type), interfaces.WorkerTypeAgent)
 	}
 	if stringPointerValue(worker.StopToken) != "COMPLETE" {
 		t.Fatalf("public worker stopToken = %q, want COMPLETE", stringPointerValue(worker.StopToken))

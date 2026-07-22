@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
@@ -21,43 +20,46 @@ func TestConfigDriven_RESTAPISubmitAndQuery(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 
-	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "API test"}`))
-
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "Processed. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	defer server.Stop(t)
 
-	h.RunUntilComplete(t, 10*time.Second)
-	h.Assert().HasTokenInPlace("task:complete").TokenCount(1)
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	mockFactory := &testutil.MockFactory{EngineState: snapshot}
-	srv := api.NewServer(mockFactory, 0, zap.NewNop())
-
-	postWorkViaAPI(t, srv)
-	assertListWorkResponse(t, srv)
+	postWorkViaAPI(t, server.URL())
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	assertListWorkResponse(t, server.URL())
 }
 
-func postWorkViaAPI(t *testing.T, srv *api.Server) {
+func postWorkViaAPI(t *testing.T, baseURL string) {
 	t.Helper()
 
-	req := httptest.NewRequest("POST", support.DefaultSessionWorkPath("/work"), bytes.NewBufferString(`{"name":"rest-submit","workTypeName": "task", "payload": {"title": "REST submit"}}`))
+	req, err := http.NewRequest(
+		http.MethodPost,
+		strings.TrimSuffix(baseURL, "/")+support.DefaultSessionWorkPath("/work"),
+		bytes.NewBufferString(`{"name":"rest-submit","workTypeName": "task", "payload": {"title": "REST submit"}}`),
+	)
+	if err != nil {
+		t.Fatalf("build POST /work request: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusCreated {
-		t.Errorf("POST /work: expected status 201, got %d (body: %s)", rec.Code, rec.Body.String())
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusCreated {
+		t.Errorf("POST /work: expected status 201, got %d", response.StatusCode)
 	}
 
 	var submitResp factoryapi.SubmitWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&submitResp); err != nil {
+	if err := json.NewDecoder(response.Body).Decode(&submitResp); err != nil {
 		t.Fatalf("POST /work: failed to decode response: %v", err)
 	}
 	if submitResp.TraceId == "" {
@@ -65,20 +67,13 @@ func postWorkViaAPI(t *testing.T, srv *api.Server) {
 	}
 }
 
-func assertListWorkResponse(t *testing.T, srv *api.Server) {
+func assertListWorkResponse(t *testing.T, baseURL string) {
 	t.Helper()
 
-	req := httptest.NewRequest("GET", support.DefaultSessionWorkPath("/work"), nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /work: expected status 200, got %d", rec.Code)
-	}
-
-	var listResp factoryapi.ListWorkResponse
-	if err := json.NewDecoder(rec.Body).Decode(&listResp); err != nil {
-		t.Fatalf("GET /work: failed to decode response: %v", err)
-	}
+	listResp := support.GetJSON[factoryapi.ListWorkResponse](
+		t,
+		strings.TrimSuffix(baseURL, "/")+support.DefaultSessionWorkPath("/work"),
+	)
 	if len(listResp.Results) != 1 {
 		t.Fatalf("GET /work: expected 1 result, got %d", len(listResp.Results))
 	}

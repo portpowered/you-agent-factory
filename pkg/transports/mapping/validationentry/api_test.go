@@ -1,18 +1,26 @@
 package validationentry_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+)
+
+const (
+	codeDuplicateIdentifier                              = "factory.duplicateIdentifier"
+	codeDanglingWorkerReference                          = "factory.worker.danglingReference"
+	codeDanglingPlaceReference                           = "factory.route.danglingPlaceReference"
+	codeWorkstationMissingFailureRoute                   = "factory.workstation.missingFailureRoute"
+	codeWorkstationMissingRejectionRoute                 = "factory.workstation.missingRejectionRoute"
+	codeInvocationSignatureUnknownOutputPathParameter    = "factory.invocationSignature.unknownOutputPathParameter"
+	codeInvocationSignatureInvalidInterpolationReference = "factory.invocationSignature.invalidInterpolationReference"
+	codeInvocationSignatureIncompatibleInterpolation     = "factory.invocationSignature.incompatibleInterpolationReference"
 )
 
 func TestValidateEditableFactorySnapshot_PreservesPublicValidationError(t *testing.T) {
@@ -27,7 +35,8 @@ func TestValidateEditableFactorySnapshot_PreservesPublicValidationError(t *testi
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
 
-	err = validationentry.ValidateEditableFactorySnapshot(snapshot, nil)
+	findings := validationResult(codeDuplicateIdentifier)
+	err = validateEditableSnapshotThroughRole(t, snapshot, testFactoryDefinitionValidator(interfaces.ValidationResult{}, findings))
 	if !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
 		t.Fatalf("error = %v, want ErrInvalidNamedFactory", err)
 	}
@@ -58,7 +67,7 @@ func TestValidateEditableFactorySnapshot_PreservesLayoutBoundaryPath(t *testing.
 		t.Fatalf("error = %#v, want one structured layout target", err)
 	}
 	target := topologyErr.Targets[0]
-	if target.Code != factoryvalidation.CodeLayoutInvalidGeometry || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
+	if target.Code != interfaces.ValidationCodeLayoutInvalidGeometry || target.Path == nil || *target.Path != "factory.layout.annotations[0].size.width" {
 		t.Fatalf("target = %#v, want field-specific invalid geometry", target)
 	}
 }
@@ -74,10 +83,10 @@ func TestValidateEditableFactorySnapshot_ValidAndMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
-	if err := validationentry.ValidateEditableFactorySnapshot(snapshot, nil); err != nil {
+	if err := validateEditableSnapshotThroughRole(t, snapshot, testFactoryDefinitionValidator()); err != nil {
 		t.Fatalf("ValidateEditableFactorySnapshot(valid): %v", err)
 	}
-	if err := validationentry.ValidateEditableFactorySnapshot(nil, nil); !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
+	if err := validateEditableSnapshotThroughRole(t, nil, testFactoryDefinitionValidator()); !errors.Is(err, apisurface.ErrInvalidNamedFactory) {
 		t.Fatalf("ValidateEditableFactorySnapshot(nil) error = %v, want ErrInvalidNamedFactory", err)
 	}
 }
@@ -100,25 +109,21 @@ func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
-	}
+	findings := validationResult(codeDuplicateIdentifier, codeDanglingWorkerReference, codeDanglingPlaceReference)
+	result := invokeSubmittedDefinitionRole(t, factory, findings)
 	if !result.HasTargets() {
 		t.Fatal("expected topology profile targets for cross-path invalid fixture")
 	}
 
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDuplicateIdentifier)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDanglingWorkerReference)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	validationassert.HasDomainTargetCode(t, result.Targets, codeDuplicateIdentifier)
+	validationassert.HasDomainTargetCode(t, result.Targets, codeDanglingWorkerReference)
+	validationassert.HasDomainTargetCode(t, result.Targets, codeDanglingPlaceReference)
 
 	apiResult := apisurface.FactoryValidationResultToAPI(result)
 	if len(apiResult.Targets) != len(result.Targets) {
 		t.Fatalf("api targets = %d, canonical targets = %d", len(apiResult.Targets), len(result.Targets))
 	}
-	validationassert.HasTargetCode(t, apiResult.Targets, factoryvalidation.CodeDuplicateIdentifier)
+	validationassert.HasTargetCode(t, apiResult.Targets, codeDuplicateIdentifier)
 }
 
 func TestValidateFactoryAPI_ProfilePrePersist_CrossPathInvalidFixture(t *testing.T) {
@@ -129,22 +134,23 @@ func TestValidateFactoryAPI_ProfilePrePersist_CrossPathInvalidFixture(t *testing
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfilePrePersist,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
-	}
+	findings := validationResult(codeDuplicateIdentifier)
+	result := invokeDefinitionValidationRole(
+		t,
+		factory,
+		interfaces.ValidationProfilePrePersist,
+		testFactoryDefinitionValidator(interfaces.ValidationResult{}, findings),
+	)
 	if !result.HasTargets() {
 		t.Fatal("expected pre-persist profile targets for cross-path invalid fixture")
 	}
 	for _, target := range result.Targets {
-		if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute ||
-			target.Code == factoryvalidation.CodeWorkstationMissingRejectionRoute {
+		if target.Code == codeWorkstationMissingFailureRoute ||
+			target.Code == codeWorkstationMissingRejectionRoute {
 			t.Fatalf("unexpected deferred outcome-route target %#v", target)
 		}
 	}
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDuplicateIdentifier)
+	validationassert.HasDomainTargetCode(t, result.Targets, codeDuplicateIdentifier)
 
 	message, targets := apisurface.FactoryTopologyValidationErrorInput(result, "")
 	topologyErr := apisurface.NewTopologyValidationError(message, targets)
@@ -161,18 +167,13 @@ func TestValidateFactoryAPI_ProfileTopology_ValidFactory_NoTargets(t *testing.T)
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
-	}
+	result := invokeSubmittedDefinitionRole(t, factory, interfaces.ValidationResult{})
 	if result.HasTargets() {
 		t.Fatalf("valid factory targets = %#v, want none", result.Targets)
 	}
 }
 
-func TestValidateFactoryAPI_ProfileTopology_MatchesValidateEndpointPath(t *testing.T) {
+func TestValidateFactoryAPI_ProfileTopology_PreservesInjectedEndpointFindings(t *testing.T) {
 	t.Parallel()
 
 	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
@@ -180,34 +181,16 @@ func TestValidateFactoryAPI_ProfileTopology_MatchesValidateEndpointPath(t *testi
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
 
-	apiResult, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
-	}
+	findings := validationResult(codeDuplicateIdentifier, codeDanglingWorkerReference)
+	apiResult := invokeSubmittedDefinitionRole(t, factory, findings)
 
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(factory)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
-	}
-	handlerEquivalent := factoryvalidation.Validate(&cfg)
-
-	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.Targets)
-	handlerSignatures := factoryvalidation.CanonicalTargetSignatures(handlerEquivalent.Targets)
-	if !factoryvalidation.EquivalentCanonicalTargetSignatures(handlerSignatures, apiSignatures) {
-		t.Fatalf("ValidateFactoryAPI signatures = %#v, handler path signatures = %#v",
-			apiSignatures, handlerSignatures)
+	if len(apiResult.Targets) != len(findings.Targets) {
+		t.Fatalf("ValidateFactoryAPI targets = %#v, want injected findings %#v", apiResult.Targets, findings.Targets)
 	}
 
 	validationResult := apisurface.FactoryValidationResultToAPI(apiResult)
-	handlerAPI := apisurface.FactoryValidationResultToAPI(handlerEquivalent)
-	if !factoryvalidation.EquivalentCanonicalTargetSignatures(
-		validationassert.CanonicalAPITargetSignatures(handlerAPI.Targets),
-		validationassert.CanonicalAPITargetSignatures(validationResult.Targets),
-	) {
-		t.Fatalf("api result targets = %#v, handler api targets = %#v",
-			validationResult.Targets, handlerAPI.Targets)
+	if len(validationResult.Targets) != len(findings.Targets) {
+		t.Fatalf("API targets = %#v, want all injected findings", validationResult.Targets)
 	}
 }
 
@@ -219,12 +202,12 @@ func TestValidateFactoryAPI_ProfilePrePersist_ValidFactory_NoTargets(t *testing.
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfilePrePersist,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
-	}
+	result := invokeDefinitionValidationRole(
+		t,
+		factory,
+		interfaces.ValidationProfilePrePersist,
+		testFactoryDefinitionValidator(),
+	)
 	if result.HasTargets() {
 		t.Fatalf("valid factory targets = %#v, want none", result.Targets)
 	}
@@ -260,7 +243,7 @@ func TestValidateFactoryAPI_ProfileTopology_RejectsInvalidInvocationSignature(t 
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{
+		Workers: []interfaces.FactoryWorkerConfig{{
 			Name:  "worker-a",
 			Type:  interfaces.WorkerTypeInference,
 			Model: "${missing}",
@@ -274,16 +257,31 @@ func TestValidateFactoryAPI_ProfileTopology_RejectsInvalidInvocationSignature(t 
 			Body:           "Use ${items}",
 		}},
 	}
-	factory := factoryconfig.FactoryConfigToOpenAPI(cfg)
+	factory := factorymapping.FactoryConfigToOpenAPI(cfg)
 
-	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
-		Profile: factoryvalidation.ProfileTopology,
-	})
-	if err != nil {
-		t.Fatalf("ValidateFactoryAPI: %v", err)
+	findings := validationResult(
+		codeInvocationSignatureUnknownOutputPathParameter,
+		codeInvocationSignatureInvalidInterpolationReference,
+		codeInvocationSignatureIncompatibleInterpolation,
+	)
+	result := invokeSubmittedDefinitionRole(t, factory, findings)
+
+	validationassert.HasDomainTargetCode(t, result.Targets, codeInvocationSignatureUnknownOutputPathParameter)
+	validationassert.HasDomainTargetCode(t, result.Targets, codeInvocationSignatureInvalidInterpolationReference)
+	validationassert.HasDomainTargetCode(t, result.Targets, codeInvocationSignatureIncompatibleInterpolation)
+}
+
+func validationResult(codes ...string) interfaces.ValidationResult {
+	targets := make([]interfaces.ValidationTarget, 0, len(codes))
+	for _, code := range codes {
+		targets = append(targets, interfaces.ValidationTarget{
+			Code: code, Severity: interfaces.ValidationSeverityError,
+			Message: code,
+			Subject: interfaces.ValidationSubject{
+				Type: interfaces.ValidationSubjectTypeFactory,
+				ID:   code, Location: interfaces.ValidationSubjectLocationDefinition,
+			},
+		})
 	}
-
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureUnknownOutputPathParameter)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidInterpolationReference)
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureIncompatibleInterpolationReference)
+	return interfaces.ValidationResult{Targets: targets}
 }

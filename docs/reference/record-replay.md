@@ -186,15 +186,15 @@ files fit together.
 
 ## Inspect a Replayed JavaScript Factory Session
 
-Use the Factory Session id reported by the replay with the public durable
-inspection commands:
+Use the Factory Session id reported by the replay with the canonical session
+read and inspection routes:
 
 ```bash
-you workflow status <session-id>
-you workflow events <session-id>
-you workflow artifacts <session-id>
-you workflow result <session-id> --mode partial
-you workflow result <session-id> --mode final
+you session show <session-id>
+curl http://localhost:7437/factory-sessions/<session-id>/events
+curl http://localhost:7437/factory-sessions/<session-id>/artifacts
+curl http://localhost:7437/factory-sessions/<session-id>/results?mode=partial
+curl http://localhost:7437/factory-sessions/<session-id>/results?mode=final
 ```
 
 These reads expose the recorded public status, ordered `FactoryEvent`

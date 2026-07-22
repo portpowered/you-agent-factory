@@ -1,30 +1,12 @@
 package mcpcli
 
 import (
-	"context"
 	"fmt"
-	"io"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
-	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/spf13/cobra"
 )
-
-// ServeConfig holds CLI inputs for the stdio MCP server.
-type ServeConfig struct {
-	FixtureCatalogPath string
-	RuntimeBacked      bool
-	ProjectRoot        string
-	Service            factorysessionexecution.Service
-	Stdin              io.Reader
-	Stdout             io.Writer
-}
 
 // ServeBinding supplies the mutable flag state and lifecycle delegate used by
 // the handwritten MCP serve handler.
@@ -32,17 +14,13 @@ type ServeBinding struct {
 	FixtureCatalogPath *string
 	RuntimeBacked      *bool
 	ProjectRoot        *string
-	Startup            startupcli.Handler
-	RunServe           func(context.Context, ServeConfig) error
+	HomeDir            func() (string, error)
+	InitializeStdio    startupcli.StdioHandler
 }
 
 // ServeRunE returns the handwritten MCP serve handler used by legacy and
 // generated metadata construction.
 func ServeRunE(binding ServeBinding) func(*cobra.Command, []string) error {
-	runServe := binding.RunServe
-	if runServe == nil {
-		runServe = RunServe
-	}
 	return func(cmd *cobra.Command, _ []string) error {
 		fixtureCatalogPath := ""
 		if binding.FixtureCatalogPath != nil {
@@ -59,86 +37,37 @@ func ServeRunE(binding ServeBinding) func(*cobra.Command, []string) error {
 		if binding.ProjectRoot != nil {
 			projectRoot = *binding.ProjectRoot
 		}
-		cfg := ServeConfig{
+		if binding.InitializeStdio == nil {
+			return fmt.Errorf("MCP stdio initializer is required")
+		}
+		homeDir := ""
+		if runtimeBacked {
+			if binding.HomeDir == nil {
+				return fmt.Errorf("process home directory resolver is required")
+			}
+			var err error
+			homeDir, err = binding.HomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve process home directory: %w", err)
+			}
+		}
+		return binding.InitializeStdio(cmd.Context(), startupcli.MCPIntent{
 			FixtureCatalogPath: fixtureCatalogPath,
 			RuntimeBacked:      runtimeBacked,
 			ProjectRoot:        projectRoot,
+			HomeDir:            homeDir,
 			Stdin:              cmd.InOrStdin(),
 			Stdout:             cmd.OutOrStdout(),
-		}
-		if binding.Startup == nil {
-			return runServe(cmd.Context(), cfg)
-		}
-		return binding.Startup(cmd.Context(), startupcli.Request{
-			Kind: startupcli.KindMCPServe,
-			MCP: startupcli.MCPIntent{
-				FixtureCatalogPath: cfg.FixtureCatalogPath,
-				RuntimeBacked:      cfg.RuntimeBacked,
-				ProjectRoot:        cfg.ProjectRoot,
-				Stdin:              cfg.Stdin,
-				Stdout:             cfg.Stdout,
-			},
 		})
 	}
 }
 
-// RunServe starts the Factory Session MCP stdio server until stdin closes or the
-// process receives SIGINT/SIGTERM.
-func RunServe(ctx context.Context, cfg ServeConfig) error {
-	application, err := BuildServeApplication(cfg)
-	if err != nil {
-		return err
-	}
-	return application.Run(ctx)
-}
-
-// ServeApplication is the already-constructed MCP transport graph consumed by
-// the initializer lifecycle boundary.
-type ServeApplication struct {
-	server *mcpserver.Server
-	stdin  io.Reader
-	stdout io.Writer
-}
-
-// BuildServeApplication constructs the MCP service, client, and server without
-// starting stdio processing.
-func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
-	if cfg.Service == nil {
-		return nil, fmt.Errorf("build MCP serve application: durable execution service is required")
-	}
-	client := mcpfactorysession.NewClientWithService(cfg.Service)
-	server, err := mcpserver.New(mcpserver.Options{Client: client})
-	if err != nil {
-		return nil, err
-	}
-
-	stdin := cfg.Stdin
-	if stdin == nil {
-		stdin = os.Stdin
-	}
-	stdout := cfg.Stdout
-	if stdout == nil {
-		stdout = os.Stdout
-	}
-	return &ServeApplication{server: server, stdin: stdin, stdout: stdout}, nil
-}
-
-// Run starts stdio handling for an MCP graph that has already been built.
-func (application *ServeApplication) Run(ctx context.Context) error {
-	if application == nil || application.server == nil {
-		return fmt.Errorf("run MCP application: graph is required")
-	}
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	return application.server.ServeStdio(ctx, application.stdin, application.stdout)
-}
-
 // NewServeCommand constructs `you mcp serve`.
 func NewServeCommand() *cobra.Command {
-	return newServeCommand(nil)
+	return newServeCommand(nil, nil)
 }
 
-func newServeCommand(startup startupcli.Handler) *cobra.Command {
+func newServeCommand(initializeStdio startupcli.StdioHandler, homeDir func() (string, error)) *cobra.Command {
 	var fixtureCatalogPath string
 	var runtimeBacked bool
 	var projectRoot string
@@ -164,7 +93,8 @@ func newServeCommand(startup startupcli.Handler) *cobra.Command {
 			FixtureCatalogPath: &fixtureCatalogPath,
 			RuntimeBacked:      &runtimeBacked,
 			ProjectRoot:        &projectRoot,
-			Startup:            startup,
+			HomeDir:            homeDir,
+			InitializeStdio:    initializeStdio,
 		}),
 	}
 	cmd.Flags().StringVar(
@@ -190,16 +120,19 @@ func newServeCommand(startup startupcli.Handler) *cobra.Command {
 
 // NewCommand constructs the `you mcp` command group.
 func NewCommand() *cobra.Command {
-	return NewCommandWithStartup(nil)
+	return NewCommandWithStdioInitializer(nil, nil)
 }
 
-// NewCommandWithStartup constructs the MCP command group with process startup
-// delegated to the supplied root handler.
-func NewCommandWithStartup(startup startupcli.Handler) *cobra.Command {
+// NewCommandWithStdioInitializer constructs the MCP command group with stdio
+// initialization delegated to the supplied bundle entrypoint.
+func NewCommandWithStdioInitializer(
+	initializeStdio startupcli.StdioHandler,
+	homeDir func() (string, error),
+) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Model Context Protocol servers for Factory Session tools",
 	}
-	cmd.AddCommand(newServeCommand(startup))
+	cmd.AddCommand(newServeCommand(initializeStdio, homeDir))
 	return cmd
 }

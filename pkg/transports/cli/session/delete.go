@@ -6,15 +6,12 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
-
-const deleteRequestTimeout = 10 * time.Second
 
 // DeleteConfig holds parameters for the session delete command.
 type DeleteConfig struct {
@@ -25,6 +22,11 @@ type DeleteConfig struct {
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	HTTP        clihttp.Protocol
+}
+
+func NewDelete(transport clihttp.Protocol) func(DeleteConfig) error {
+	return func(cfg DeleteConfig) error { cfg.HTTP = transport; return Delete(cfg) }
 }
 
 // DeleteResult is the CLI JSON confirmation emitted after a successful close.
@@ -34,13 +36,15 @@ type DeleteResult struct {
 
 // Delete closes one live factory session on a running host via HTTP.
 func Delete(cfg DeleteConfig) error {
-	if cfg.Output == nil {
-		cfg.Output = os.Stdout
-	}
-
 	sessionID := strings.TrimSpace(cfg.SessionID)
 	if sessionID == "" {
 		return fmt.Errorf("session id is required")
+	}
+	if cfg.Output == nil {
+		return fmt.Errorf("output writer is required")
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
 	endpoint := deleteEndpoint(cfg.Port, sessionID)
@@ -54,18 +58,17 @@ func Delete(cfg DeleteConfig) error {
 		sessionID,
 	)
 
-	client := &http.Client{Timeout: deleteRequestTimeout}
-	started := time.Now()
 	req, err := http.NewRequest(http.MethodDelete, endpoint.String(), nil)
 	if err != nil {
 		return fmt.Errorf("build delete factory session request: %w", err)
 	}
 
-	resp, err := client.Do(req)
+	response, err := cfg.HTTP.Execute(req)
 	if err != nil {
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session delete response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, time.Since(started).Milliseconds())
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session delete response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
@@ -76,15 +79,15 @@ func Delete(cfg DeleteConfig) error {
 			"session delete response endpointPath=%s status=%d durationMillis=%d session=%s",
 			endpoint.Path,
 			resp.StatusCode,
-			time.Since(started).Milliseconds(),
+			response.Duration.Milliseconds(),
 			sessionID,
 		)
 		return renderDeleteSuccess(cfg, sessionID)
 	case http.StatusNotFound:
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session delete response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session delete response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		return deleteNotFoundError(sessionID, resp)
 	default:
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session delete response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds())
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session delete response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		return deleteStatusError(resp)
 	}
 }

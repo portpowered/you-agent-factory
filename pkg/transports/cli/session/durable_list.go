@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
@@ -14,6 +14,19 @@ import (
 type DurableSessionLister func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error)
 
 type durableSessionLister = DurableSessionLister
+
+func (lister DurableSessionLister) ListSessions(
+	ctx context.Context,
+	req fse.ListSessionsRequest,
+) (fse.ListSessionsResult, error) {
+	return listDurableSessions(ctx, lister, req)
+}
+
+type detachedLiveSessionReader []fse.ScopedLiveSessionSummary
+
+func (reader detachedLiveSessionReader) ListScopedLiveSessions(context.Context) ([]fse.ScopedLiveSessionSummary, error) {
+	return append([]fse.ScopedLiveSessionSummary(nil), reader...), nil
+}
 
 func listDurableSessions(
 	ctx context.Context,
@@ -31,29 +44,30 @@ func mergeScopedListResult(
 	cfg ListConfig,
 	normalized fse.ListSessionsRequest,
 	liveSessions []fse.LiveSessionSummary,
-) (fse.ListSessionsResult, error) {
-	needsDurable := normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll
-	if !needsDurable {
-		return fse.ApplySessionListScope(fse.ListSessionsResult{
-			Scope:        normalized.Scope,
-			LiveSessions: liveSessions,
-		}, normalized), nil
+) (fse.ScopedSessionListResult, error) {
+	var liveReader fse.LiveSessionListReader
+	if normalized.Scope == fse.SessionListScopeLive || normalized.Scope == fse.SessionListScopeAll {
+		rows := make(detachedLiveSessionReader, 0, len(liveSessions))
+		for _, session := range liveSessions {
+			rows = append(rows, fse.ScopedLiveSessionSummary{
+				ID: session.ID, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
+				Project: session.Project, IsDefault: session.IsDefault,
+			})
+		}
+		liveReader = rows
 	}
 
-	durableResult, err := listDurableSessions(ctx, cfg.DurableLister, fse.ListSessionsRequest{
-		Scope: fse.SessionListScopeAll,
-	})
+	var durableReader fse.DurableSessionListReader
+	if normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll {
+		durableReader = cfg.DurableLister
+	}
+	result, err := fse.ListScopedSessions(ctx, normalized, liveReader, durableReader)
 	if err != nil {
-		return fse.ListSessionsResult{}, fmt.Errorf("list durable factory sessions failed: %w", err)
+		return fse.ScopedSessionListResult{}, fmt.Errorf("list durable factory sessions failed: %w", err)
 	}
-
-	return fse.ApplySessionListScope(fse.ListSessionsResult{
-		Scope:           normalized.Scope,
-		LiveSessions:    liveSessions,
-		DurableSessions: durableResult.DurableSessions,
-	}, normalized), nil
+	return result, nil
 }
 
-func listResponseFromScopedResult(result fse.ListSessionsResult) factoryapi.ListFactorySessionsResponse {
-	return factorysession.ListSessionsResponseToAPI(result)
+func listResponseFromScopedResult(result fse.ScopedSessionListResult) factoryapi.ListFactorySessionsResponse {
+	return factorysession.ScopedSessionListResponseToAPI(result)
 }

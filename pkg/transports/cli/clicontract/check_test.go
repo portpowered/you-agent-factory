@@ -5,19 +5,15 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 )
 
 func TestCheckProductionAcceptsCompleteApprovedTree(t *testing.T) {
-	root := cli.NewRootCommand()
-	before, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("Walk(before) error = %v", err)
-	}
+	production := productionCLIInventory(t)
+	before := append([]commandidentity.CommandRecord(nil), production.Commands...)
 
-	findings, err := CheckProduction(root, repositoryRoot(t))
+	findings, err := CheckProduction(testSourceStore(), production, repositoryRoot(t))
 	if err != nil {
 		t.Fatalf("CheckProduction() error = %v", err)
 	}
@@ -25,12 +21,8 @@ func TestCheckProductionAcceptsCompleteApprovedTree(t *testing.T) {
 		t.Fatalf("CheckProduction() findings =\n%s", formatFindings(findings))
 	}
 
-	after, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("Walk(after) error = %v", err)
-	}
-	if !reflect.DeepEqual(before, after) {
-		t.Fatal("CheckProduction mutated the Cobra command tree")
+	if !reflect.DeepEqual(before, production.Commands) {
+		t.Fatal("CheckProduction mutated the detached production inventory")
 	}
 }
 
@@ -45,36 +37,29 @@ func TestCheckProductionViolationUsesProductionDiagnosticsWithoutMutatingTree(t 
 		{ViolationUncontractedCommand, KindUncontractedCommand, "you.experimental", "you experimental", ""},
 		{ViolationStaleMetadata, KindStaleMetadata, "you", "you", "name"},
 		{ViolationMissingHandler, KindMissingHandler, "you.run", "you run", "handler"},
-		{ViolationAliasAsCanonical, KindAliasAsCanonical, "you.workflow.preview", "you workflow preview", "classification"},
+		{ViolationAliasAsCanonical, KindAliasAsCanonical, "you.compatibility-preview", "you compatibility-preview", "classification"},
 	}
 
 	for _, tc := range tests {
 		t.Run(string(tc.violation), func(t *testing.T) {
-			root := cli.NewRootCommand()
-			before, err := commandidentity.Walk(root)
-			if err != nil {
-				t.Fatalf("Walk(before) error = %v", err)
-			}
+			production := productionCLIInventory(t)
+			before := append([]commandidentity.CommandRecord(nil), production.Commands...)
 
-			findings, err := CheckProductionViolation(root, repositoryRoot(t), tc.violation)
+			findings, err := CheckProductionViolation(testSourceStore(), production, repositoryRoot(t), tc.violation)
 			if err != nil {
 				t.Fatalf("CheckProductionViolation() error = %v", err)
 			}
 			assertFinding(t, findings, tc.kind, tc.stableID, tc.path, tc.field)
 
-			after, err := commandidentity.Walk(root)
-			if err != nil {
-				t.Fatalf("Walk(after) error = %v", err)
-			}
-			if !reflect.DeepEqual(before, after) {
-				t.Fatal("CheckProductionViolation mutated the Cobra command tree")
+			if !reflect.DeepEqual(before, production.Commands) {
+				t.Fatal("CheckProductionViolation mutated the detached production inventory")
 			}
 		})
 	}
 }
 
 func TestCheckProductionViolationRejectsUnknownFixture(t *testing.T) {
-	findings, err := CheckProductionViolation(cli.NewRootCommand(), repositoryRoot(t), DeliberateViolation("unknown"))
+	findings, err := CheckProductionViolation(testSourceStore(), productionCLIInventory(t), repositoryRoot(t), DeliberateViolation("unknown"))
 	if err == nil || err.Error() != `unknown deliberate CLI contract violation "unknown"` {
 		t.Fatalf("CheckProductionViolation() findings = %#v, error = %v", findings, err)
 	}
@@ -97,7 +82,7 @@ func TestValidateRejectsMissingAndUncontractedProductionCommands(t *testing.T) {
 
 func TestValidateKeepsCompatibilityOutOfCanonicalContracts(t *testing.T) {
 	input := productionInput(t)
-	compatibility := input.Compatibility.Commands["you.workflow.preview"]
+	compatibility := addSyntheticCompatibility(&input)
 	input.Canonical.Commands[compatibility.ID] = compatibility
 	input.GeneratedCanonical[0].Commands[compatibility.ID] = compatibility
 
@@ -166,19 +151,16 @@ func TestValidateRejectsMissingRunnableHandlerDeterministically(t *testing.T) {
 func productionInput(t *testing.T) Input {
 	t.Helper()
 	root := repositoryRoot(t)
-	production, err := commandidentity.Walk(cli.NewRootCommand())
-	if err != nil {
-		t.Fatalf("Walk(production) error = %v", err)
-	}
-	canonical, err := climanifest.LoadProduction(filepath.Join(root, filepath.FromSlash(climanifest.ProductionManifestPath)))
+	production := productionCLIInventory(t)
+	canonical, err := climanifest.LoadProduction(testSourceStore(), filepath.Join(root, filepath.FromSlash(climanifest.ProductionManifestPath)))
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}
-	compatibility, err := climanifest.LoadCompatibility(filepath.Join(root, filepath.FromSlash(climanifest.CompatibilityManifestPath)))
+	compatibility, err := climanifest.LoadCompatibility(testSourceStore(), filepath.Join(root, filepath.FromSlash(climanifest.CompatibilityManifestPath)))
 	if err != nil {
 		t.Fatalf("LoadCompatibility() error = %v", err)
 	}
-	approved, err := LoadApprovedCompatibility(filepath.Join(root, filepath.FromSlash(CompatibilityInventoryPath)))
+	approved, err := LoadApprovedCompatibility(testSourceStore(), filepath.Join(root, filepath.FromSlash(CompatibilityInventoryPath)))
 	if err != nil {
 		t.Fatalf("LoadApprovedCompatibility() error = %v", err)
 	}

@@ -6,206 +6,67 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func sliceValue[T any](values *[]T) []T {
-	if values == nil {
-		return nil
-	}
-	return *values
-}
-
-func mapValue[K comparable, V any](values *map[K]V) map[K]V {
-	if values == nil {
-		return nil
-	}
-	return *values
-}
-
-// portos:func-length-exception owner=agent-factory reason=service-mode-lifecycle-runtime-api-smoke review=2026-07-19 removal=split-startup-idle-submission-completion-and-cancel-assertions-before-next-service-mode-smoke-change
 func TestServiceModeSmoke_EmptyStartupIdleSubmissionAndPostCompletionIdleStayReachableUntilCanceled(t *testing.T) {
 	support.SkipLongFunctional(t, "slow service-mode lifecycle smoke")
 	server, dispatchRelease := newServiceModeObservabilityServer(t)
-	initialState, initialDashboard, initialStreamSnapshot, stream := waitForInitialServiceModeSnapshots(t, server)
-	assertInitialServiceModeState(t, initialState, initialDashboard, initialStreamSnapshot)
-	traceID := submitServiceModeSmokeWork(t, server)
-	activeSnapshot := waitForActiveServiceModeSnapshot(t, stream)
-	_, activeWorkItem := findActiveWorkItemByTraceID(t, activeSnapshot, traceID)
-	close(dispatchRelease)
-	finalIdleSnapshot := waitForFinalIdleServiceModeSnapshot(t, stream)
-	assertCompletedServiceModeWork(t, server, traceID, activeWorkItem)
-	assertPostCompletionServiceModeState(t, server)
-	assertServiceModeServerStillRunning(t, server, "service-mode runtime exited after returning to idle; expected it to stay alive until cancellation")
-	if finalIdleSnapshot.Runtime.Session.CompletedCount == 0 {
-		t.Fatal("expected final idle snapshot to report completed work")
-	}
-	server.Stop(t)
-}
 
-// portos:func-length-exception owner=agent-factory reason=observability-runtime-api-smoke review=2026-07-19 removal=split-snapshot-dashboard-status-and-event-assertions-before-next-observability-smoke-change
-func TestObservabilitySmoke_CanonicalServiceSnapshotMatchesStateAndDashboardAcrossRuntimeTransitions(t *testing.T) {
-	support.SkipLongFunctional(t, "slow observability smoke")
-	server, dispatchRelease := newServiceModeObservabilityServer(t)
-	stream := server.OpenDashboardStream(t)
-	assertIdleObservabilityPhase(t, server, stream)
-	traceID := submitServiceModeSmokeWork(t, server)
-	_, activeWorkItem := assertActiveObservabilityPhase(t, server, stream, traceID)
-	if support.StringPointerValue(activeWorkItem.TraceId) != traceID {
-		t.Fatalf("active dashboard work item trace ID = %q, want %q", support.StringPointerValue(activeWorkItem.TraceId), traceID)
+	initial := waitForPublicFactorySession(t, server, 5*time.Second, serviceModeSessionIdle)
+	if initial.Runtime.Progress.TotalTokens != 0 {
+		t.Fatalf("initial total tokens = %d, want 0", initial.Runtime.Progress.TotalTokens)
 	}
+
+	traceID := submitServiceModeSmokeWork(t, server)
+	waitForPublicFactorySession(t, server, 10*time.Second, serviceModeSessionActive)
+	activeWorkID := requirePublicWorkForTrace(t, server, traceID)
+	assertServiceModeHasPendingDispatch(t, server, activeWorkID)
+
 	close(dispatchRelease)
-	assertCompletedObservabilityPhase(t, server, stream, activeWorkItem.WorkId)
-	assertServiceModeServerStillRunning(t, server, "service-mode runtime exited after returning to idle; expected canonical observability coverage to prove it stays alive until cancellation")
+	completed := waitForPublicFactorySession(t, server, 10*time.Second, func(session factoryapi.FactorySession) bool {
+		return serviceModeSessionIdle(session) &&
+			support.SessionHasWorkAtPlace(session, activeWorkID, "task:complete")
+	})
+	if completed.Runtime.Progress.Categories.Terminal != 1 {
+		t.Fatalf("completed terminal count = %d, want 1", completed.Runtime.Progress.Categories.Terminal)
+	}
+	assertCompletedServiceModeWork(t, server, traceID, activeWorkID)
+	assertServiceModeHasCompletedDispatch(t, server, activeWorkID)
+	assertServiceModeServerStillRunning(t, server, "service-mode runtime exited after returning to idle; expected it to stay alive until cancellation")
+
 	server.Stop(t)
 	assertServiceModeServerStops(t, server)
 }
 
-func assertIdleObservabilityPhase(t *testing.T, server *FunctionalServer, stream *DashboardStream) {
-	t.Helper()
+func TestObservabilitySmoke_PublicStatusSessionWorkAndEventsAlignAcrossRuntimeTransitions(t *testing.T) {
+	support.SkipLongFunctional(t, "slow observability smoke")
+	server, dispatchRelease := newServiceModeObservabilityServer(t)
 
-	idleEngineState := waitForEngineStateSnapshot(
-		t,
-		server,
-		5*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return snapshot.FactoryState == "RUNNING" &&
-				snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-				snapshot.InFlightCount == 0
-		},
-	)
-	assertCanonicalObservabilityAlignment(t, idleEngineState, server.GetState(t), server.GetDashboard(t))
-	idleStreamSnapshot := waitForStreamSnapshot(
-		t,
-		stream,
-		5*time.Second,
-		func(snapshot DashboardResponse) bool {
-			return snapshot.FactoryState == idleEngineState.FactoryState &&
-				snapshot.RuntimeStatus == string(idleEngineState.RuntimeStatus) &&
-				snapshot.Runtime.InFlightDispatchCount == idleEngineState.InFlightCount
-		},
-	)
-	assertDashboardMatchesEngineState(t, "idle stream snapshot", idleEngineState, idleStreamSnapshot)
-}
+	idle := waitForPublicFactorySession(t, server, 5*time.Second, serviceModeSessionIdle)
+	assertPublicStatusMatchesSession(t, server, idle)
 
-func assertActiveObservabilityPhase(t *testing.T, server *FunctionalServer, stream *DashboardStream, traceID string) (DashboardResponse, DashboardWorkItemRef) {
-	t.Helper()
+	traceID := submitServiceModeSmokeWork(t, server)
+	active := waitForPublicFactorySession(t, server, 10*time.Second, serviceModeSessionActive)
+	activeWorkID := requirePublicWorkForTrace(t, server, traceID)
+	assertPublicStatusMatchesSession(t, server, active)
+	assertServiceModeHasPendingDispatch(t, server, activeWorkID)
 
-	activeEngineState := waitForEngineStateSnapshot(
-		t,
-		server,
-		10*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return snapshot.FactoryState == "RUNNING" &&
-				snapshot.RuntimeStatus == interfaces.RuntimeStatusActive &&
-				snapshot.InFlightCount > 0
-		},
-	)
-	if activeEngineState.Topology == nil || len(activeEngineState.Topology.Transitions) == 0 {
-		t.Fatal("expected aggregate engine-state snapshot to include topology")
-	}
-	if len(activeEngineState.Dispatches) == 0 {
-		t.Fatal("expected aggregate engine-state snapshot to include raw in-flight dispatch records")
-	}
-	activeState := waitForStateSnapshot(
-		t,
-		10*time.Second,
-		func() (StateResponse, bool) {
-			stateResp := server.GetState(t)
-			return stateResp, stateResp.FactoryState == "RUNNING" &&
-				stateResp.RuntimeStatus == string(interfaces.RuntimeStatusActive)
-		},
-	)
-	activeDashboard := waitForDashboardSnapshot(
-		t,
-		10*time.Second,
-		func() (DashboardResponse, bool) {
-			dashboard := server.GetDashboard(t)
-			return dashboard, dashboard.FactoryState == "RUNNING" &&
-				dashboard.RuntimeStatus == string(interfaces.RuntimeStatusActive) &&
-				dashboard.Runtime.InFlightDispatchCount > 0
-		},
-	)
-	assertCanonicalObservabilityAlignment(t, activeEngineState, activeState, activeDashboard)
-	activeStreamSnapshot := waitForStreamSnapshot(
-		t,
-		stream,
-		10*time.Second,
-		func(snapshot DashboardResponse) bool {
-			return snapshot.FactoryState == activeEngineState.FactoryState &&
-				snapshot.RuntimeStatus == string(activeEngineState.RuntimeStatus) &&
-				snapshot.Runtime.InFlightDispatchCount == activeEngineState.InFlightCount
-		},
-	)
-	assertStreamDashboardMatchesEngineState(t, "active stream snapshot", activeEngineState, activeStreamSnapshot)
-	_, activeWorkItem := findActiveWorkItemByTraceID(t, activeDashboard, traceID)
-	return activeDashboard, activeWorkItem
-}
+	close(dispatchRelease)
+	completed := waitForPublicFactorySession(t, server, 10*time.Second, func(session factoryapi.FactorySession) bool {
+		return serviceModeSessionIdle(session) &&
+			support.SessionHasWorkAtPlace(session, activeWorkID, "task:complete")
+	})
+	assertPublicStatusMatchesSession(t, server, completed)
+	assertCompletedServiceModeWork(t, server, traceID, activeWorkID)
+	assertServiceModeHasCompletedDispatch(t, server, activeWorkID)
+	assertServiceModeServerStillRunning(t, server, "service-mode runtime exited after returning to idle")
 
-func assertCompletedObservabilityPhase(
-	t *testing.T,
-	server *FunctionalServer,
-	stream *DashboardStream,
-	workID string,
-) {
-	t.Helper()
-
-	completedEngineState := waitForEngineStateSnapshot(
-		t,
-		server,
-		10*time.Second,
-		func(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-			return snapshot.FactoryState == "RUNNING" &&
-				snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-				snapshot.InFlightCount == 0 &&
-				support.HasWorkTokenInPlace(snapshot.Marking, "task:complete", workID)
-		},
-	)
-	if len(completedEngineState.DispatchHistory) == 0 {
-		t.Fatal("expected aggregate engine-state snapshot to retain raw completed dispatch history")
-	}
-	completedState := waitForStateSnapshot(
-		t,
-		10*time.Second,
-		func() (StateResponse, bool) {
-			stateResp := server.GetState(t)
-			return stateResp, stateResp.FactoryState == "RUNNING" &&
-				stateResp.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
-				stateResp.Categories.Terminal > 0
-		},
-	)
-	completedDashboard := waitForDashboardSnapshot(
-		t,
-		10*time.Second,
-		func() (DashboardResponse, bool) {
-			dashboard := server.GetDashboard(t)
-			return dashboard, dashboard.FactoryState == "RUNNING" &&
-				dashboard.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
-				dashboard.Runtime.InFlightDispatchCount == 0 &&
-				dashboard.Runtime.Session.CompletedCount > 0
-		},
-	)
-	assertCanonicalObservabilityAlignment(t, completedEngineState, completedState, completedDashboard)
-	completedStreamSnapshot := waitForStreamSnapshot(
-		t,
-		stream,
-		10*time.Second,
-		func(snapshot DashboardResponse) bool {
-			return snapshot.FactoryState == completedEngineState.FactoryState &&
-				snapshot.RuntimeStatus == string(completedEngineState.RuntimeStatus) &&
-				snapshot.Runtime.InFlightDispatchCount == completedEngineState.InFlightCount &&
-				snapshot.Runtime.Session.CompletedCount == completedDashboard.Runtime.Session.CompletedCount
-		},
-	)
-	assertStreamDashboardMatchesEngineState(t, "completed stream snapshot", completedEngineState, completedStreamSnapshot)
+	server.Stop(t)
+	assertServiceModeServerStops(t, server)
 }
 
 func newServiceModeObservabilityServer(t *testing.T) (*FunctionalServer, chan struct{}) {
@@ -213,57 +74,20 @@ func newServiceModeObservabilityServer(t *testing.T) (*FunctionalServer, chan st
 
 	dir := support.ScaffoldFactory(t, twoStagePipelineConfig())
 	dispatchRelease := make(chan struct{})
-	dispatchExecutor := &blockingExecutor{releaseCh: dispatchRelease, mu: &sync.Mutex{}, calls: new(int)}
-	server := StartFunctionalServer(t, dir, false,
-		factory.WithServiceMode(),
-		factory.WithWorkerExecutor("worker-a", dispatchExecutor),
-		factory.WithWorkerExecutor("worker-b", staticOutcomeExecutor{outcome: workerexecution.OutcomeAccepted}),
-	)
-	return server, dispatchRelease
+	provider := &serviceModeBlockingProvider{release: dispatchRelease}
+	return StartFunctionalServer(t, dir, false, withProvider(provider)), dispatchRelease
 }
 
-func waitForInitialServiceModeSnapshots(t *testing.T, server *FunctionalServer) (StateResponse, DashboardResponse, DashboardResponse, *DashboardStream) {
-	t.Helper()
-
-	initialState := waitForStateSnapshot(
-		t,
-		5*time.Second,
-		func() (StateResponse, bool) {
-			stateResp := server.GetState(t)
-			return stateResp, stateResp.FactoryState == "RUNNING" && stateResp.RuntimeStatus == string(interfaces.RuntimeStatusIdle)
-		},
-	)
-	initialDashboard := server.GetDashboard(t)
-	stream := server.OpenDashboardStream(t)
-	initialStreamSnapshot := waitForStreamSnapshot(
-		t,
-		stream,
-		5*time.Second,
-		func(snapshot DashboardResponse) bool {
-			return snapshot.FactoryState == "RUNNING" && snapshot.RuntimeStatus == string(interfaces.RuntimeStatusIdle)
-		},
-	)
-	return initialState, initialDashboard, initialStreamSnapshot, stream
+func serviceModeSessionIdle(session factoryapi.FactorySession) bool {
+	return session.Runtime.Progress.FactoryState == "RUNNING" &&
+		string(session.Runtime.Status) == string(interfaces.RuntimeStatusIdle) &&
+		session.Runtime.Progress.InFlightCount == 0
 }
 
-func assertInitialServiceModeState(t *testing.T, initialState StateResponse, initialDashboard, initialStreamSnapshot DashboardResponse) {
-	t.Helper()
-
-	if initialState.TotalTokens != 0 {
-		t.Fatalf("initial total tokens = %d, want 0", initialState.TotalTokens)
-	}
-	if initialDashboard.FactoryState != "RUNNING" {
-		t.Fatalf("initial dashboard factory_state = %q, want RUNNING", initialDashboard.FactoryState)
-	}
-	if initialDashboard.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
-		t.Fatalf("initial dashboard runtime_status = %q, want %q", initialDashboard.RuntimeStatus, interfaces.RuntimeStatusIdle)
-	}
-	if initialDashboard.Runtime.InFlightDispatchCount != 0 {
-		t.Fatalf("initial in-flight dispatches = %d, want 0", initialDashboard.Runtime.InFlightDispatchCount)
-	}
-	if initialStreamSnapshot.Runtime.Session.CompletedCount != 0 {
-		t.Fatalf("initial stream completed count = %d, want 0", initialStreamSnapshot.Runtime.Session.CompletedCount)
-	}
+func serviceModeSessionActive(session factoryapi.FactorySession) bool {
+	return session.Runtime.Progress.FactoryState == "RUNNING" &&
+		string(session.Runtime.Status) == string(interfaces.RuntimeStatusActive) &&
+		session.Runtime.Progress.InFlightCount > 0
 }
 
 func submitServiceModeSmokeWork(t *testing.T, server *FunctionalServer) string {
@@ -271,72 +95,109 @@ func submitServiceModeSmokeWork(t *testing.T, server *FunctionalServer) string {
 
 	traceID := server.SubmitWork(t, "task", []byte(`{"title":"service-mode smoke item"}`))
 	if traceID == "" {
-		t.Fatal("expected POST /work to return a trace ID")
+		t.Fatal("POST /work returned an empty trace ID")
 	}
 	return traceID
 }
 
-func waitForActiveServiceModeSnapshot(t *testing.T, stream *DashboardStream) DashboardResponse {
+func requirePublicWorkForTrace(t *testing.T, server *FunctionalServer, traceID string) string {
 	t.Helper()
 
-	activeSnapshot := waitForStreamSnapshot(
-		t,
-		stream,
-		10*time.Second,
-		func(snapshot DashboardResponse) bool {
-			return snapshot.RuntimeStatus == string(interfaces.RuntimeStatusActive) && snapshot.Runtime.InFlightDispatchCount > 0
-		},
-	)
-	if activeSnapshot.FactoryState != "RUNNING" {
-		t.Fatalf("active snapshot factory_state = %q, want RUNNING", activeSnapshot.FactoryState)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, item := range server.ListWork(t).Results {
+			if support.StringPointerValue(item.TraceId) == traceID {
+				workID := support.StringPointerValue(item.WorkId)
+				if workID == "" {
+					t.Fatalf("public Work for trace %q has empty work ID: %#v", traceID, item)
+				}
+				return workID
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	return activeSnapshot
+	t.Fatalf("public Work listing never exposed trace %q", traceID)
+	return ""
 }
 
-func waitForFinalIdleServiceModeSnapshot(t *testing.T, stream *DashboardStream) DashboardResponse {
+func assertCompletedServiceModeWork(t *testing.T, server *FunctionalServer, traceID, workID string) {
 	t.Helper()
 
-	return waitForStreamSnapshot(
-		t,
-		stream,
-		10*time.Second,
-		func(snapshot DashboardResponse) bool {
-			return snapshot.FactoryState == "RUNNING" &&
-				snapshot.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
-				snapshot.Runtime.InFlightDispatchCount == 0 &&
-				snapshot.Runtime.Session.CompletedCount > 0
-		},
-	)
+	for _, item := range server.ListWork(t).Results {
+		if support.StringPointerValue(item.WorkId) != workID {
+			continue
+		}
+		if support.StringPointerValue(item.TraceId) != traceID {
+			t.Fatalf("completed Work trace ID = %q, want %q", support.StringPointerValue(item.TraceId), traceID)
+		}
+		if item.State == nil || item.State.Name != "complete" || item.State.Type != factoryapi.WorkStateTypeTERMINAL {
+			t.Fatalf("completed Work state = %#v, want complete/TERMINAL", item.State)
+		}
+		return
+	}
+	t.Fatalf("public Work listing missing completed work %q", workID)
 }
 
-func assertCompletedServiceModeWork(t *testing.T, server *FunctionalServer, traceID string, activeWorkItem DashboardWorkItemRef) {
+func assertPublicStatusMatchesSession(t *testing.T, server *FunctionalServer, session factoryapi.FactorySession) {
 	t.Helper()
 
-	work := server.ListWork(t)
-	if len(work.Results) != 1 {
-		t.Fatalf("work result count = %d, want 1", len(work.Results))
+	status := support.GetJSON[factoryapi.StatusResponse](t, server.URL()+"/status")
+	if status.FactoryState != session.Runtime.Progress.FactoryState {
+		t.Fatalf("GET /status factoryState = %q, Factory Session = %q", status.FactoryState, session.Runtime.Progress.FactoryState)
 	}
-	if support.StringPointerValue(work.Results[0].TraceId) != traceID {
-		t.Fatalf("completed work trace ID = %q, want %q", support.StringPointerValue(work.Results[0].TraceId), traceID)
+	if status.RuntimeStatus != string(session.Runtime.Status) {
+		t.Fatalf("GET /status runtimeStatus = %q, Factory Session = %q", status.RuntimeStatus, session.Runtime.Status)
 	}
-	if work.Results[0].State == nil || work.Results[0].State.Name != "complete" || work.Results[0].State.Type != factoryapi.WorkStateTypeTERMINAL {
-		t.Fatalf("completed work state = %#v, want complete/TERMINAL", work.Results[0].State)
+	if status.TotalTokens != session.Runtime.Progress.TotalTokens {
+		t.Fatalf("GET /status totalTokens = %d, Factory Session = %d", status.TotalTokens, session.Runtime.Progress.TotalTokens)
 	}
-	if support.StringPointerValue(work.Results[0].WorkId) != activeWorkItem.WorkId {
-		t.Fatalf("completed work ID = %q, want %q", support.StringPointerValue(work.Results[0].WorkId), activeWorkItem.WorkId)
+	if status.Categories.Terminal != session.Runtime.Progress.Categories.Terminal ||
+		status.Categories.Processing != session.Runtime.Progress.Categories.Processing {
+		t.Fatalf("GET /status categories = %#v, Factory Session = %#v", status.Categories, session.Runtime.Progress.Categories)
 	}
 }
 
-func assertPostCompletionServiceModeState(t *testing.T, server *FunctionalServer) {
+func assertServiceModeHasPendingDispatch(t *testing.T, server *FunctionalServer, workID string) {
 	t.Helper()
 
-	postCompletionState := server.GetState(t)
-	if postCompletionState.FactoryState != "RUNNING" {
-		t.Fatalf("post-completion factory_state = %q, want RUNNING", postCompletionState.FactoryState)
+	for _, dispatch := range support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)) {
+		if support.DispatchObservationIncludesWork(dispatch, workID) && dispatch.Response == nil {
+			return
+		}
 	}
-	if postCompletionState.RuntimeStatus != string(interfaces.RuntimeStatusIdle) {
-		t.Fatalf("post-completion runtime_status = %q, want %q", postCompletionState.RuntimeStatus, interfaces.RuntimeStatusIdle)
+	t.Fatalf("public Factory Events contain no pending dispatch for work %q", workID)
+}
+
+func assertServiceModeHasCompletedDispatch(t *testing.T, server *FunctionalServer, workID string) {
+	t.Helper()
+
+	for _, dispatch := range support.ObserveDispatchEvents(t, server.GetFactoryEvents(t)) {
+		if support.DispatchObservationIncludesWork(dispatch, workID) && dispatch.Response != nil {
+			return
+		}
 	}
+	t.Fatalf("public Factory Events contain no completed dispatch for work %q", workID)
+}
+
+func waitForPublicFactorySession(
+	t *testing.T,
+	server *FunctionalServer,
+	timeout time.Duration,
+	match func(factoryapi.FactorySession) bool,
+) factoryapi.FactorySession {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session := support.GetDefaultSession(t, server.URL())
+		if match(session) {
+			return session
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	session := support.GetDefaultSession(t, server.URL())
+	t.Fatalf("timed out waiting for public Factory Session within %s: %#v", timeout, session.Runtime)
+	return session
 }
 
 func assertServiceModeServerStillRunning(t *testing.T, server *FunctionalServer, failureMessage string) {
@@ -359,213 +220,26 @@ func assertServiceModeServerStops(t *testing.T, server *FunctionalServer) {
 	}
 }
 
-type staticOutcomeExecutor struct {
-	outcome workerexecution.WorkOutcome
+type serviceModeBlockingProvider struct {
+	release <-chan struct{}
+	mu      sync.Mutex
+	calls   int
 }
 
-func (e staticOutcomeExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
-	return workerexecution.WorkResult{
-		DispatchID:   dispatch.DispatchID,
-		TransitionID: dispatch.TransitionID,
-		Outcome:      e.outcome,
-	}, nil
-}
-
-func waitForDashboardSnapshot(t *testing.T, timeout time.Duration, check func() (DashboardResponse, bool)) DashboardResponse {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot, ok := check()
-		if ok {
-			return snapshot
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	snapshot, _ := check()
-	t.Fatalf("timed out waiting for dashboard condition within %s", timeout)
-	return snapshot
-}
-
-func waitForEngineStateSnapshot(
-	t *testing.T,
-	server *FunctionalServer,
-	timeout time.Duration,
-	match func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		if match(snapshot) {
-			return snapshot
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	snapshot := server.GetEngineStateSnapshot(t)
-	t.Fatalf("timed out waiting for engine state snapshot within %s", timeout)
-	return snapshot
-}
-
-func assertCanonicalObservabilityAlignment(
-	t *testing.T,
-	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	stateResp StateResponse,
-	dashboard DashboardResponse,
-) {
-	t.Helper()
-
-	if stateResp.FactoryState != engineState.FactoryState {
-		t.Fatalf("state factory_state = %q, want %q", stateResp.FactoryState, engineState.FactoryState)
-	}
-	if stateResp.RuntimeStatus != string(engineState.RuntimeStatus) {
-		t.Fatalf("state runtime_status = %q, want %q", stateResp.RuntimeStatus, engineState.RuntimeStatus)
-	}
-	if stateResp.TotalTokens != len(engineState.Marking.Tokens) {
-		t.Fatalf("state total_tokens = %d, want %d", stateResp.TotalTokens, len(engineState.Marking.Tokens))
-	}
-
-	if dashboard.FactoryState != engineState.FactoryState {
-		t.Fatalf("dashboard factory_state = %q, want %q", dashboard.FactoryState, engineState.FactoryState)
-	}
-	if dashboard.RuntimeStatus != string(engineState.RuntimeStatus) {
-		t.Fatalf("dashboard runtime_status = %q, want %q", dashboard.RuntimeStatus, engineState.RuntimeStatus)
-	}
-	if dashboard.TickCount < engineState.TickCount {
-		t.Fatalf("dashboard tick_count = %d, want at least %d", dashboard.TickCount, engineState.TickCount)
-	}
-	if dashboard.Runtime.InFlightDispatchCount != engineState.InFlightCount {
-		t.Fatalf("dashboard in-flight dispatch count = %d, want %d", dashboard.Runtime.InFlightDispatchCount, engineState.InFlightCount)
-	}
-	if dashboard.UptimeSeconds != int64(engineState.Uptime/time.Second) {
-		t.Fatalf("dashboard uptime_seconds = %d, want %d", dashboard.UptimeSeconds, int64(engineState.Uptime/time.Second))
-	}
-	assertDashboardMatchesEngineState(t, "dashboard", engineState, dashboard)
-}
-
-func assertDashboardMatchesEngineState(
-	t *testing.T,
-	label string,
-	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	dashboard DashboardResponse,
-) {
-	t.Helper()
-	assertDashboardMatchesEngineStateWithTickCheck(t, label, engineState, dashboard, true)
-}
-
-func assertStreamDashboardMatchesEngineState(
-	t *testing.T,
-	label string,
-	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	dashboard DashboardResponse,
-) {
-	t.Helper()
-	assertDashboardMatchesEngineStateWithTickCheck(t, label, engineState, dashboard, false)
-}
-
-func assertDashboardMatchesEngineStateWithTickCheck(
-	t *testing.T,
-	label string,
-	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	dashboard DashboardResponse,
-	requireCurrentTick bool,
-) {
-	t.Helper()
-
-	if dashboard.FactoryState != engineState.FactoryState {
-		t.Fatalf("%s factory_state = %q, want %q", label, dashboard.FactoryState, engineState.FactoryState)
-	}
-	if dashboard.RuntimeStatus != string(engineState.RuntimeStatus) {
-		t.Fatalf("%s runtime_status = %q, want %q", label, dashboard.RuntimeStatus, engineState.RuntimeStatus)
-	}
-	if requireCurrentTick && dashboard.TickCount < engineState.TickCount {
-		t.Fatalf("%s tick_count = %d, want at least %d", label, dashboard.TickCount, engineState.TickCount)
-	}
-	if dashboard.Runtime.InFlightDispatchCount != engineState.InFlightCount {
-		t.Fatalf("%s in-flight dispatch count = %d, want %d", label, dashboard.Runtime.InFlightDispatchCount, engineState.InFlightCount)
-	}
-	if dashboard.UptimeSeconds != int64(engineState.Uptime/time.Second) {
-		t.Fatalf("%s uptime_seconds = %d, want %d", label, dashboard.UptimeSeconds, int64(engineState.Uptime/time.Second))
-	}
-
-	if engineState.Topology != nil && len(engineState.Topology.Transitions) > 0 && len(sliceValue(dashboard.Topology.WorkstationNodeIds)) == 0 {
-		t.Fatalf("%s topology workstation node count = 0, want topology derived from event world view", label)
-	}
-	if engineState.Topology != nil && len(engineState.Topology.Resources) > 0 && len(sliceValue(dashboard.Resources)) == 0 {
-		t.Fatalf("%s resource count = 0, want marking-derived resource usage from aggregate snapshot", label)
-	}
-	if len(engineState.DispatchHistory) > 0 && dashboard.Runtime.Session.CompletedCount == 0 && dashboard.Runtime.Session.FailedCount == 0 {
-		t.Fatalf("%s session counts are empty despite aggregate dispatch history", label)
-	}
-}
-
-func waitForStateSnapshot(t *testing.T, timeout time.Duration, check func() (StateResponse, bool)) StateResponse {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot, ok := check()
-		if ok {
-			return snapshot
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	snapshot, _ := check()
-	t.Fatalf("timed out waiting for state condition within %s", timeout)
-	return snapshot
-}
-
-func waitForStreamSnapshot(
-	t *testing.T,
-	stream *DashboardStream,
-	timeout time.Duration,
-	match func(DashboardResponse) bool,
-) DashboardResponse {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		snapshot := stream.NextSnapshot(time.Until(deadline))
-		if match(snapshot) {
-			return snapshot
+func (p *serviceModeBlockingProvider) Infer(
+	ctx context.Context,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	p.mu.Unlock()
+	if call == 1 {
+		select {
+		case <-p.release:
+		case <-ctx.Done():
+			return workerexecution.InferenceResponse{}, ctx.Err()
 		}
 	}
-
-	t.Fatalf("timed out waiting for matching dashboard stream snapshot within %s", timeout)
-	return DashboardResponse{}
-}
-
-func findActiveWorkItemByTraceID(
-	t *testing.T,
-	snapshot DashboardResponse,
-	traceID string,
-) (DashboardActiveExecution, DashboardWorkItemRef) {
-	t.Helper()
-
-	for _, dispatchID := range sliceValue(snapshot.Runtime.ActiveDispatchIds) {
-		execution, ok := mapValue(snapshot.Runtime.ActiveExecutionsByDispatchId)[dispatchID]
-		if !ok {
-			continue
-		}
-		for _, workItem := range sliceValue(execution.WorkItems) {
-			if support.StringPointerValue(workItem.TraceId) == traceID {
-				return execution, workItem
-			}
-		}
-	}
-
-	for _, execution := range mapValue(snapshot.Runtime.ActiveExecutionsByDispatchId) {
-		for _, workItem := range sliceValue(execution.WorkItems) {
-			if support.StringPointerValue(workItem.TraceId) == traceID {
-				return execution, workItem
-			}
-		}
-	}
-
-	t.Fatalf("expected an active dashboard work item for trace %q", traceID)
-	return DashboardActiveExecution{}, DashboardWorkItemRef{}
+	return workerexecution.InferenceResponse{Content: "completed"}, nil
 }

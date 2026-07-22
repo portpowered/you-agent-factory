@@ -1,17 +1,11 @@
 package apisurface
 
 import (
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	workflowresult "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 )
-
-// BuildWorkflowSessionLiveResult projects the live terminal session result read shape.
-func BuildWorkflowSessionLiveResult(input workflowresult.SessionResultInput) factoryapi.FactorySessionLiveResult {
-	return WorkflowSessionLiveResultToAPI(workflowresult.BuildLiveSessionResult(input))
-}
 
 // WorkflowSessionLiveResultToAPI maps one JavaScript result-owner projection
 // to the generated live Factory Session result contract.
@@ -42,9 +36,9 @@ func WorkflowSessionPartialResultToAPI(result workflowresult.PartialSessionResul
 	return response
 }
 
-// BuildWorkflowSessionResult projects the durable terminal session result read shape.
-func BuildWorkflowSessionResult(input workflowresult.SessionResultInput) factoryapi.FactorySessionResult {
-	result := workflowresult.BuildSessionResult(input)
+// WorkflowSessionResultToAPI maps one Factory Runtime-owned durable result
+// projection to the generated Factory Session result contract.
+func WorkflowSessionResultToAPI(result workflowresult.SessionResult) factoryapi.FactorySessionResult {
 	response := factoryapi.FactorySessionResult{
 		SessionId:    result.SessionID,
 		ResultStatus: factoryapi.FactorySessionResultStatus(result.ResultStatus),
@@ -64,10 +58,9 @@ func BuildWorkflowSessionResult(input workflowresult.SessionResultInput) factory
 	return response
 }
 
-// BuildWorkflowSessionResultUpdatedPayload projects the SESSION_RESULT_UPDATED
-// event payload from the shared session result contract.
-func BuildWorkflowSessionResultUpdatedPayload(input workflowresult.SessionResultInput) factoryapi.SessionResultUpdatedEventPayload {
-	result := workflowresult.BuildSessionResultUpdatedPayload(input)
+// WorkflowSessionResultUpdatedPayloadToAPI maps one Factory Runtime-owned
+// result event fact to the generated Factory Event payload contract.
+func WorkflowSessionResultUpdatedPayloadToAPI(result workflowresult.SessionResultUpdatedPayload) factoryapi.SessionResultUpdatedEventPayload {
 	payload := factoryapi.SessionResultUpdatedEventPayload{
 		ResultStatus:  factoryapi.FactoryEventSessionResultStatus(result.ResultStatus),
 		ResultSummary: contentcontract.GeneratedPtrFromParts(result.ResultSummary),
@@ -156,10 +149,4 @@ func artifactRedactionCountsToAPI(
 	return &factoryapi.FactoryArtifactRedactionCounts{
 		Paths: counts.Paths, Secrets: counts.Secrets, Tokens: counts.Tokens,
 	}
-}
-
-// NormalizeWorkflowSourceRequest is the shared API, CLI, MCP, and website entry
-// point for workflow source lookup and artifact-root validation.
-func NormalizeWorkflowSourceRequest(req workflowsource.Request, ctx workflowsource.Context) workflowsource.Resolution {
-	return workflowsource.Resolve(req, ctx)
 }

@@ -1,19 +1,21 @@
 package providers
 
 import (
-	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"testing/fstest"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/packageassets"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 const packagedRuntimeScriptPath = "scripts/pf2-003-runtime-fixture.sh"
@@ -26,14 +28,32 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 	factoryDir := installPackagedScriptRuntimeFixture(t, "packaged-script-runtime-success", "#!/bin/sh\nprintf 'packaged runtime success\\n'\n")
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte("input-payload"))
 
-	h := testutil.NewServiceTestHarness(t, factoryDir, testutil.WithFullWorkerPoolAndScriptWrap())
-	h.RunUntilComplete(t, 5*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir,
+		Edges:      packagedScriptRuntimeEdges(t),
+	})
+	defer server.Stop(t)
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	for placeID, want := range map[string]int{
+		"task:complete": 1,
+		"task:init":     0,
+		"task:failed":   0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
+	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "complete", "packaged runtime success")
+}
 
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-	assertTokenPayload(t, h.Marking(), "task:complete", "packaged runtime success")
+func packagedScriptRuntimeEdges(t *testing.T) serviceedges.Edges {
+	t.Helper()
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
+	if err != nil {
+		t.Fatalf("construct packaged script runtime command runner: %v", err)
+	}
+	return serviceedges.Edges{ScriptCommandRunner: runner}
 }
 
 func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.T) {
@@ -44,62 +64,50 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 	factoryDir := installPackagedScriptRuntimeFixture(t, "packaged-script-runtime-failure", "#!/bin/sh\nprintf 'packaged runtime failure\\n' >&2\nexit 23\n")
 	testutil.WriteSeedFile(t, factoryDir, "task", []byte("input-payload"))
 
-	h := testutil.NewServiceTestHarness(t, factoryDir, testutil.WithFullWorkerPoolAndScriptWrap())
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:complete")
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: factoryDir,
+		Edges:      packagedScriptRuntimeEdges(t),
+	})
+	defer server.Stop(t)
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	for placeID, want := range map[string]int{
+		"task:failed":   1,
+		"task:init":     0,
+		"task:complete": 0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
 	}
-	if len(snapshot.DispatchHistory) != 1 {
-		t.Fatalf("dispatch history = %#v, want one completed dispatch", snapshot.DispatchHistory)
-	}
-	dispatch := snapshot.DispatchHistory[0]
-	if dispatch.Outcome != workerexecution.OutcomeFailed || dispatch.Reason != "packaged runtime failure" {
-		t.Fatalf("dispatch outcome = %s reason = %q, want FAILED with script stderr", dispatch.Outcome, dispatch.Reason)
-	}
-
-	assertPackagedScriptExitEvent(t, h, 23, "packaged runtime failure\n")
+	assertPackagedScriptExitEvent(t, server.GetFactoryEvents(t), 23, "packaged runtime failure\n")
 }
 
 func installPackagedScriptRuntimeFixture(t *testing.T, packageName, scriptBody string) string {
 	t.Helper()
 
-	payload, err := packageassets.Assemble(packageassets.Definition{
-		Package: packageName,
-		FactoryJSON: []byte(fmt.Sprintf(`{
+	factoryDir := t.TempDir()
+	factoryJSON := []byte(fmt.Sprintf(`{
   "name":%q,
   "workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
   "workers":[{"name":"runner","type":"SCRIPT_WORKER","command":%q}],
-  "workstations":[{"name":"run-script","worker":"runner","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]
-}`, packageName, packagedRuntimeScriptPath)),
-		Assets: fstest.MapFS{
-			packagedRuntimeScriptPath: {Data: []byte(scriptBody), Mode: 0o600},
-		},
-	})
-	if err != nil {
-		t.Fatalf("packageassets.Assemble: %v", err)
+  "workstations":[{"name":"run-script","worker":"runner","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}],"definition":{"type":"SCRIPT_RUN","worker":"runner","body":"Run the packaged script."}}]
+}`, packageName, packagedRuntimeScriptPath))
+	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), factoryJSON, 0o600); err != nil {
+		t.Fatalf("write customer factory.json: %v", err)
 	}
-
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), packageName, payload)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
+	scriptPath := filepath.Join(factoryDir, filepath.FromSlash(packagedRuntimeScriptPath))
+	if err := os.MkdirAll(filepath.Dir(scriptPath), 0o755); err != nil {
+		t.Fatalf("create customer script directory: %v", err)
+	}
+	if err := os.WriteFile(scriptPath, []byte(scriptBody), 0o700); err != nil {
+		t.Fatalf("write customer script: %v", err)
 	}
 	return factoryDir
 }
 
-func assertPackagedScriptExitEvent(t *testing.T, h *testutil.ServiceTestHarness, wantExitCode int, wantStderr string) {
+func assertPackagedScriptExitEvent(t *testing.T, events []factoryapi.FactoryEvent, wantExitCode int, wantStderr string) {
 	t.Helper()
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
 	for _, event := range events {
 		if event.Type != factoryapi.FactoryEventTypeScriptResponse {
 			continue
@@ -117,6 +125,34 @@ func assertPackagedScriptExitEvent(t *testing.T, h *testutil.ServiceTestHarness,
 		return
 	}
 	t.Fatalf("factory events %s do not contain a script response", strings.Join(packagedScriptEventTypes(events), ","))
+}
+
+func assertListedWorkText(
+	t *testing.T,
+	listed factoryapi.ListWorkResponse,
+	workType string,
+	state string,
+	want string,
+) {
+	t.Helper()
+	for _, item := range listed.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType ||
+			item.State == nil || item.State.Name != state {
+			continue
+		}
+		if item.Content == nil || len(*item.Content) == 0 {
+			t.Fatalf("%s:%s Work has no content", workType, state)
+		}
+		part, err := (*item.Content)[0].AsWorkTextContentPart()
+		if err != nil {
+			t.Fatalf("decode Work text content: %v", err)
+		}
+		if part.Text != want {
+			t.Fatalf("Work text = %q, want %q", part.Text, want)
+		}
+		return
+	}
+	t.Fatalf("no listed Work found in %s:%s", workType, state)
 }
 
 func packagedScriptEventTypes(events []factoryapi.FactoryEvent) []string {

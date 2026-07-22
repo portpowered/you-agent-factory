@@ -5,23 +5,54 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func ProviderErrorCorpusEntry(t *testing.T, name string) workerprovider.ProviderErrorCorpusEntry {
+var providerErrorCommandResults = map[string]platformprocess.CommandResult{
+	"claude_authentication_error": {
+		ExitCode: 1,
+		Stderr: []byte(
+			`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"invalid api key"}}`,
+		),
+	},
+	"claude_internal_server_api_error": {
+		ExitCode: 1,
+		Stderr: []byte(
+			`API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}`,
+		),
+	},
+	"claude_rate_limit_error": {
+		ExitCode: 1,
+		Stderr: []byte(
+			`API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`,
+		),
+	},
+}
+
+func providerErrorCommandResult(t *testing.T, name string) platformprocess.CommandResult {
 	t.Helper()
 
-	corpus, err := workerprovider.LoadProviderErrorCorpus()
-	if err != nil {
-		t.Fatalf("provider.LoadProviderErrorCorpus() error = %v", err)
-	}
-	entry, ok := corpus.Entry(name)
+	entry, ok := providerErrorCommandResults[name]
 	if !ok {
-		t.Fatalf("provider error corpus entry %q not found", name)
+		t.Fatalf("provider error command result %q not found", name)
 	}
 	return entry
+}
+
+func ProviderErrorCommandResult(t *testing.T, name string) platformprocess.CommandResult {
+	t.Helper()
+	return providerErrorCommandResult(t, name)
+}
+
+func RepeatedProviderErrorCommandResults(t *testing.T, name string, count int) []platformprocess.CommandResult {
+	t.Helper()
+	entry := providerErrorCommandResult(t, name)
+	results := make([]platformprocess.CommandResult, count)
+	for i := range results {
+		results[i] = entry
+	}
+	return results
 }
 
 func AcceptedProviderResponse() workerexecution.InferenceResponse {
@@ -59,22 +90,12 @@ func CursorProviderSuccessStdout(result string) []byte {
 	return append(append(systemEncoded, '\n'), resultEncoded...)
 }
 
-func AcceptedCommandResults(count int) []workers.CommandResult {
-	results := make([]workers.CommandResult, count)
+func AcceptedCommandResults(count int) []platformprocess.CommandResult {
+	results := make([]platformprocess.CommandResult, count)
 	for i := range results {
-		results[i] = workers.CommandResult{Stdout: []byte("Done. COMPLETE")}
+		results[i] = platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")}
 	}
 	return results
-}
-
-func ProviderCommandRequestsForWorker(runner *testutil.ProviderCommandRunner, workerType string) []workers.CommandRequest {
-	var requests []workers.CommandRequest
-	for _, request := range runner.Requests() {
-		if request.WorkerType == workerType {
-			requests = append(requests, request)
-		}
-	}
-	return requests
 }
 
 func ProviderCallsForWorker(provider *testutil.MockProvider, workerType string) []workerexecution.ProviderInferenceRequest {

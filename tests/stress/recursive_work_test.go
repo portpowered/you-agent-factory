@@ -8,13 +8,11 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/work"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestRecursiveWorkGeneration validates that a workflow where agents generate
@@ -33,35 +31,29 @@ func TestRecursiveWorkGeneration(t *testing.T) {
 	}
 
 	dir := testutil.ScaffoldFactoryDir(t, recursiveWorkCfg())
-	h := testutil.NewServiceTestHarness(t, dir)
-
 	const maxDepth = 3 // depths 0,1,2 spawn children; depth 3 does not → 1+2+4+8 = 15
 	spawner := &recursiveSpawnerExecutor{maxDepth: maxDepth}
-	h.SetCustomExecutor("spawner", spawner)
-
-	// Finisher always accepts — one result per work item (15 total).
-	finisherResults := make([]workerexecution.WorkResult, 15)
-	for i := range finisherResults {
-		finisherResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	h.MockWorker("finisher", finisherResults...)
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+		"spawner":  spawner,
+		"finisher": &acceptedCountingExecutor{},
+	}})
+	t.Cleanup(h.Stop)
 
 	// Submit root work item at depth 0.
 	h.SubmitWork("work-item", []byte(`{"task": "root"}`))
 
 	// Tick until all work tokens reach terminal state.
 	// Use a generous tick budget — recursive spawning requires multiple rounds.
-	h.RunUntilComplete(t, 10*time.Second)
+	h.WaitForTerminalCount(15, 10*time.Second)
 
-	// Assert: exactly 15 tokens in work-item:complete.
-	h.Assert().
-		PlaceTokenCount("work-item:complete", 15).
-		HasNoTokenInPlace("work-item:init").
-		HasNoTokenInPlace("work-item:processing").
-		HasNoTokenInPlace("work-item:failed")
-
-	// Assert: total token count is exactly 15 (no phantom tokens).
-	h.Assert().TokenCount(15)
+	session := h.Session()
+	assertSessionPlaceCount(t, session, "work-item:complete", 15)
+	assertSessionPlaceCount(t, session, "work-item:init", 0)
+	assertSessionPlaceCount(t, session, "work-item:processing", 0)
+	assertSessionPlaceCount(t, session, "work-item:failed", 0)
+	if session.Runtime.Progress.TotalTokens != 15 {
+		t.Errorf("total public Work count = %d, want 15", session.Runtime.Progress.TotalTokens)
+	}
 
 	// Assert: spawner was called 15 times (once per work item).
 	if spawner.callCount() != 15 {
@@ -90,20 +82,16 @@ func TestRecursiveWorkGenerationTimeout(t *testing.T) {
 		defer close(done)
 
 		dir := testutil.ScaffoldFactoryDir(t, recursiveWorkCfg())
-		h := testutil.NewServiceTestHarness(t, dir)
-
 		spawner := &recursiveSpawnerExecutor{maxDepth: 3}
-		h.SetCustomExecutor("spawner", spawner)
-
-		finisherResults := make([]workerexecution.WorkResult, 15)
-		for i := range finisherResults {
-			finisherResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-		}
-		h.MockWorker("finisher", finisherResults...)
+		h := startStressProcess(t, dir, workerExecutorProvider{executor: workerMuxExecutor{
+			"spawner":  spawner,
+			"finisher": &acceptedCountingExecutor{},
+		}})
+		defer h.Stop()
 
 		h.SubmitWork("work-item", []byte(`{"task": "root"}`))
 
-		h.RunUntilComplete(t, 10*time.Second)
+		h.WaitForTerminalCount(15, 10*time.Second)
 	}()
 
 	select {
@@ -128,7 +116,7 @@ func recursiveWorkCfg() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "spawner"}, {Name: "finisher"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "spawner"}, {Name: "finisher"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{
 				Name: "process", WorkerTypeName: "spawner",
@@ -198,20 +186,22 @@ func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch work.Work
 		Outcome:      workerexecution.OutcomeAccepted,
 	}
 
-	// Spawn 2 children if not at max depth.
+	// Generate two child Work items through the canonical Work Request output.
 	if depth < e.maxDepth {
 		nextDepth := strconv.Itoa(depth + 1)
+		children := make([]work.Work, 0, 2)
 		for i := range 2 {
 			childID := fmt.Sprintf("%s-child-%d", parentWorkID, i)
-			result.SpawnedWork = append(result.SpawnedWork, factorytoken.Color{
-				WorkTypeID: "work-item",
+			children = append(children, work.Work{
+				Name:       childID,
 				WorkID:     childID,
-				ParentID:   parentWorkID,
+				WorkTypeID: "work-item",
 				Tags: map[string]string{
 					"depth": nextDepth,
 				},
 			})
 		}
+		result.Output = workerGeneratedBatchOutput(children)
 	}
 
 	return result, nil

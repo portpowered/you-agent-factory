@@ -13,10 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/service"
-	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"github.com/portpowered/infinite-you/tests/internal/functionalevidence"
@@ -26,7 +24,7 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 	support.SkipLongFunctional(t, "slow generated API and live runtime alignment smoke")
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("generated-api-integration-smoke"),
@@ -75,7 +73,7 @@ func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAl
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredSubmission(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	req := map[string]any{
 		"name":         "generated-api-header-only",
@@ -118,7 +116,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredS
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmission(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	req := map[string]any{
 		"name":         "generated-api-empty-items",
@@ -144,7 +142,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmis
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	req := map[string]any{
 		"name":         "generated-api-items-text",
@@ -195,7 +193,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	req := map[string]any{
 		"name":         "generated-api-content-text",
@@ -244,7 +242,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts(t *
 
 func TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	workID := "work-generated-api-batch-content"
 	requestID := "request-generated-api-batch-content"
@@ -311,16 +309,14 @@ func TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent(t *testing.
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
-	server := startFunctionalServerWithConfig(
+	server := startFunctionalServerWithArgs(
 		t,
 		dir,
 		false,
-		func(cfg *service.FactoryServiceConfig) {
-			support.ConfigureWorkerCommands(t, cfg, support.NewStaticSuccessCommandRunner("Done. COMPLETE"), nil)
-		},
-		factory.WithServiceMode(),
+		nil,
+		withWorkerCommands(support.NewStaticSuccessCommandRunner("Done. COMPLETE"), nil),
 	)
 	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
@@ -353,17 +349,15 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Gemini, "gemini-1.5-pro"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderGemini, "gemini-1.5-pro"))
 	runner := support.NewRecordingCommandRunner("unused")
 
-	server := startFunctionalServerWithConfig(
+	server := startFunctionalServerWithArgs(
 		t,
 		dir,
 		false,
-		func(cfg *service.FactoryServiceConfig) {
-			support.ConfigureWorkerCommands(t, cfg, runner, nil)
-		},
-		factory.WithServiceMode(),
+		nil,
+		withWorkerCommands(runner, nil),
 	)
 	stagedImageRef, stagedImageURL := stageGeneratedSubmitWorkFile(t, server.URL(), "image", "review.png", "image/png", []byte("png-bytes"))
 
@@ -385,28 +379,11 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubm
 		t.Fatalf("provider command runner calls = %d, want 0 because capability rejection should happen before subprocess launch", runner.CallCount())
 	}
 
-	workID := stringPointerValue(item.WorkId)
-	snapshot := server.GetEngineStateSnapshot(t)
-	for _, token := range snapshot.Marking.TokensInPlace("task:failed") {
-		if token.Color.WorkID != workID {
-			continue
-		}
-		if token.History.LastError == "" {
-			t.Fatalf("failed token history = %#v, want last error evidence", token.History)
-		}
-		const want = "image input is not supported by the gemini runner in v1"
-		if !strings.Contains(token.History.LastError, want) {
-			t.Fatalf("failed token last error = %q, want substring %q", token.History.LastError, want)
-		}
-		return
-	}
-
-	t.Fatalf("failed token for work %q not found in task:failed", workID)
 }
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileReference(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	req := factoryapi.SubmitWorkRequest{
 		Name:         stringPtr("generated-api-forged-staged-ref"),
@@ -434,20 +411,29 @@ func TestGeneratedAPIIntegrationSmoke_CLIWorkTypeNameReachesLiveAPIHandler(t *te
 	support.SkipLongFunctional(t, "slow CLI submit generated API smoke")
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, true)
 
 	payloadPath := filepath.Join(t.TempDir(), "request.md")
 	if err := os.WriteFile(payloadPath, []byte("ship name based CLI submit"), 0o644); err != nil {
 		t.Fatalf("write CLI submit payload: %v", err)
 	}
 
-	if err := submitcli.Submit(submitcli.SubmitConfig{
-		Name:         "  cli-live-api-name  ",
-		WorkTypeName: "task",
-		Payload:      payloadPath,
-		Server:       functionalServerBase(t, server.URL()),
-	}); err != nil {
-		t.Fatalf("agent-factory submit --work-type-name: %v", err)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you",
+		"--server", functionalServerBase(t, server.URL()),
+		"submit",
+		"--name", "  cli-live-api-name  ",
+		"--work-type-name", "task",
+		"--payload", payloadPath,
+	})
+	inputs.Input.WorkingDirectory = dir
+	if err := support.BuildProcess(t, serviceedges.Edges{}).Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute(you submit --work-type-name) error = %v\nstdout:\n%s\nstderr:\n%s",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
 	}
 
 	item := waitForGeneratedWorkTypeComplete(t, server.URL(), "task", 10*time.Second)

@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,8 +24,8 @@ type processErrorCommandRunner struct {
 	stderr string
 }
 
-func (r processErrorCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{Stderr: []byte(r.stderr)}, errors.New("exec: file not found")
+func (r processErrorCommandRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{Stderr: []byte(r.stderr)}, errors.New("exec: file not found")
 }
 
 func TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundary(t *testing.T) {
@@ -39,12 +40,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundar
 		Tags:       map[string]string{"priority": "high"},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	events := runHarnessAndLoadEvents(t, h)
+	events := runProcessAndLoadEvents(t, dir, support.NewStaticSuccessCommandRunner("script-output-ok"), "")
 	indices := requireScriptRequestEventIndices(t, events)
 
 	assertFunctionalScriptRequestBoundaryEvent(t, events, indices, "work-script-request-event")
@@ -62,13 +58,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResp
 		Payload:    []byte("script input"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("script-output-ok")),
-		testutil.WithRecordPath(recordPath),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	events := runHarnessAndLoadEvents(t, h)
+	events := runProcessAndLoadEvents(t, dir, support.NewStaticSuccessCommandRunner("script-output-ok"), recordPath)
 	indices := requireScriptResponseEventIndices(t, events)
 
 	assertFunctionalScriptResponseBoundaryEvent(t, events, indices, expectedFunctionalScriptResponse{
@@ -98,13 +88,7 @@ func TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHis
 		Payload:    []byte("script input"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(processErrorCommandRunner{stderr: "launch failed"}),
-		testutil.WithRecordPath(recordPath),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	events := runHarnessAndLoadEvents(t, h)
+	events := runProcessAndLoadEvents(t, dir, processErrorCommandRunner{stderr: "launch failed"}, recordPath)
 	indices := requireScriptResponseEventIndices(t, events)
 
 	processError := factoryapi.ScriptFailureTypeProcessError
@@ -158,15 +142,27 @@ func writeScriptWorkerArgsFixture(t *testing.T, dir string) {
 	support.WriteAgentConfig(t, dir, "script-worker", agentsMD)
 }
 
-func runHarnessAndLoadEvents(t *testing.T, h *testutil.ServiceTestHarness) []factoryapi.FactoryEvent {
+func runProcessAndLoadEvents(
+	t *testing.T,
+	dir string,
+	runner platformprocess.CommandRunner,
+	recordPath string,
+) []factoryapi.FactoryEvent {
 	t.Helper()
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
+	var args []string
+	if recordPath != "" {
+		args = []string{"--record", recordPath}
 	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       args,
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
+	events := server.GetFactoryEvents(t)
+	server.Stop(t)
 	return events
 }
 

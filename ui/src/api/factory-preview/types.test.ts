@@ -9,13 +9,7 @@ type GeneratedFactoryPreviewRequest =
   components["schemas"]["FactoryPreviewRequest"];
 type GeneratedFactoryPreviewResult =
   components["schemas"]["FactoryPreviewResult"];
-type GeneratedWorkflowPreviewRequest =
-  components["schemas"]["WorkflowPreviewRequest"];
-type GeneratedWorkflowPreviewResult =
-  components["schemas"]["WorkflowPreviewResult"];
-
 type CanonicalPreviewPath = paths["/factories/preview"]["post"];
-type ObsoletePreviewPath = paths["/workflow-previews"]["post"];
 
 describe("factory-preview generated types", () => {
   it("uses FactoryPreviewRequest and FactoryPreviewResult as the canonical preview models", () => {
@@ -71,43 +65,7 @@ describe("factory-preview generated types", () => {
     expect(generatedDiagnostic.path).toBe("orchestrator.javascript");
   });
 
-  it("keeps WorkflowPreview schemas as obsolete aliases of the Factory preview models", () => {
-    const request: GeneratedWorkflowPreviewRequest = {
-      sourceKind: "INLINE_WORKFLOW",
-      projectRoot: "/tmp/project",
-      inlineSource: "phase('setup');",
-    };
-    const result: GeneratedWorkflowPreviewResult = {
-      valid: false,
-      sourceResolution: {
-        found: true,
-        requestKind: "INLINE_WORKFLOW",
-      },
-      sourceValidationIssues: [],
-      policyPreview: {
-        effectivePolicy: { mode: "READ_ONLY" },
-        policyHash: "sha256:policy",
-        maxChildCount: 16,
-        maxConcurrency: 4,
-        deniedCapabilities: [],
-        validationIssues: [],
-      },
-      resultConstraints: {
-        requiresStructuredCloneableJson: true,
-        artifactUriScheme: "you-artifact",
-        maxEmbeddedBytes: 65536,
-        rejectedValueKinds: ["function"],
-      },
-    };
-
-    const factoryRequest: GeneratedFactoryPreviewRequest = request;
-    const factoryResult: GeneratedFactoryPreviewResult = result;
-
-    expect(factoryRequest.inlineSource).toBe("phase('setup');");
-    expect(factoryResult.valid).toBe(false);
-  });
-
-  it("exposes canonical previewFactory and obsolete previewWorkflow operations", () => {
+  it("exposes the canonical previewFactory operation", () => {
     const canonicalRequest: CanonicalPreviewPath["requestBody"] = {
       content: {
         "application/json": {
@@ -117,21 +75,8 @@ describe("factory-preview generated types", () => {
         },
       },
     };
-    const obsoleteRequest: ObsoletePreviewPath["requestBody"] = {
-      content: {
-        "application/json": {
-          sourceKind: "WORKFLOW_NAME",
-          projectRoot: "/tmp/project",
-          sourceValue: "review",
-        },
-      },
-    };
-
     expect(
       canonicalRequest.content["application/json"].sourceKind,
-    ).toBe("WORKFLOW_NAME");
-    expect(
-      obsoleteRequest.content["application/json"].sourceKind,
     ).toBe("WORKFLOW_NAME");
   });
 });

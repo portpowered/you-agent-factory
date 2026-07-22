@@ -106,6 +106,9 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"test-maintenance":                    "@printf '%s\\n' 'stub:test-maintenance'\n",
+		"test-integration":                    "@printf '%s\\n' 'stub:test-integration'\n",
+		"test-contract":                       "@printf '%s\\n' 'stub:test-contract'\n",
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
@@ -126,7 +129,13 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
-		"Running required CI-equivalent test lanes: release surface smoke + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage",
+		"Running required CI-equivalent test lanes: maintenance + integration + contract + release surface + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage",
+		"==> Backend Maintenance lane [make test-maintenance]",
+		"stub:test-maintenance",
+		"==> Backend Integration lane [make test-integration]",
+		"stub:test-integration",
+		"==> Backend Contract lane [make test-contract]",
+		"stub:test-contract",
 		"==> Release surface smoke lane [make release-surface-smoke]",
 		"stub:release-surface-smoke",
 		"==> Built-CLI S24 acceptance lane [make test-built-cli-acceptance]",
@@ -141,6 +150,9 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 
 	for _, expected := range []string{
 		"stub:verify-build-contracts",
+		"stub:test-maintenance",
+		"stub:test-integration",
+		"stub:test-contract",
 		"stub:release-surface-smoke",
 		"stub:test-built-cli-acceptance",
 		"stub:run-concurrent-ui-verification-lanes",
@@ -167,6 +179,9 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"test-maintenance":                    "@printf '%s\\n' 'stub:test-maintenance'\n",
+		"test-integration":                    "@printf '%s\\n' 'stub:test-integration'\n",
+		"test-contract":                       "@printf '%s\\n' 'stub:test-contract'\n",
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n\t@exit 23\n",
@@ -258,6 +273,9 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":               "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"test-maintenance":                    "@printf '%s\\n' 'stub:test-maintenance'\n",
+		"test-integration":                    "@printf '%s\\n' 'stub:test-integration'\n",
+		"test-contract":                       "@printf '%s\\n' 'stub:test-contract'\n",
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
@@ -276,6 +294,12 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
+		"==> Backend Maintenance lane [make test-maintenance]",
+		"stub:test-maintenance",
+		"==> Backend Integration lane [make test-integration]",
+		"stub:test-integration",
+		"==> Backend Contract lane [make test-contract]",
+		"stub:test-contract",
 		"==> Release surface smoke lane [make release-surface-smoke]",
 		"stub:release-surface-smoke",
 		"==> Built-CLI S24 acceptance lane [make test-built-cli-acceptance]",
@@ -290,6 +314,9 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 
 	for _, expected := range []string{
 		"stub:verify-build-contracts",
+		"stub:test-maintenance",
+		"stub:test-integration",
+		"stub:test-contract",
 		"stub:release-surface-smoke",
 		"stub:test-built-cli-acceptance",
 		"stub:run-concurrent-ui-verification-lanes",

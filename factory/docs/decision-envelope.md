@@ -4,7 +4,7 @@ Reviewer and checker workers that use the decision-envelope contract return one
 small JSON object instead of ad hoc text markers. The runtime maps that
 envelope directly onto the existing `WorkResult` contract.
 
-Authoritative parsing lives in `pkg/factory/packages/goal/decision_envelope.go`.
+Authoritative parsing lives in `pkg/services/factory_definitions/packages/goal/decision_envelope.go`.
 Workstations that emit this envelope set `outcomeFormat: "decision-envelope"` in
 `factory.json` so the agent executor routes output through the envelope parser
 instead of stop-token markers.
@@ -110,7 +110,7 @@ mode.
 
 ## Where to author responses
 
-- Packaged `@you/goal` authored prompts: `pkg/factory/packages/definitions/goal/prompts/`
+- Packaged `@you/goal` authored prompts: `pkg/services/factory_definitions/packages/definitions/goal/prompts/`
 - Checker or review-style prompts in other packaged goal factories should use
   this envelope shape and the decision vocabulary that matches their routing
   mode.

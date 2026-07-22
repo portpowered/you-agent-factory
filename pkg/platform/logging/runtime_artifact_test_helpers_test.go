@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 )
 
 func assertRuntimeArtifactRootLacksCalendarDirectories(t *testing.T, rootDir string) {
@@ -43,13 +43,13 @@ func assertPathUsesPlatformSeparators(t *testing.T, path string) {
 	}
 }
 
-func assertRuntimeArtifactCollisionPath(t *testing.T, path, rootDir string, at time.Time, kind defaultpaths.RuntimeArtifactKind, suffix string, collisionIndex int) {
+func assertRuntimeArtifactCollisionPath(t *testing.T, path, rootDir string, at time.Time, kind runtimeartifact.RuntimeArtifactKind, suffix string, collisionIndex int) {
 	t.Helper()
-	want := defaultpaths.RuntimeArtifactPathWithCollision(rootDir, at, kind, suffix, collisionIndex)
+	want := runtimeartifact.RuntimeArtifactPathWithCollision(rootDir, at, kind, suffix, collisionIndex)
 	if path != want {
 		t.Fatalf("collision path = %q, want %q", path, want)
 	}
-	if filepath.Dir(path) != defaultpaths.RuntimeLogsDatedDir(rootDir, at) {
+	if filepath.Dir(path) != runtimeartifact.RuntimeLogsDatedDir(rootDir, at) {
 		t.Fatalf("collision path parent = %q, want dated directory", filepath.Dir(path))
 	}
 }

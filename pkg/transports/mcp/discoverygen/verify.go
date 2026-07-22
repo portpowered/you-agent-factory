@@ -23,11 +23,7 @@ var discoveryForbiddenContentTypes = []string{"image", "audio", "resource"}
 // VerifyDiscoveryAliasExclusion rejects compatibility workflow-named tools from
 // generated primary discovery metadata.
 func VerifyDiscoveryAliasExclusion(metadata DiscoveryMetadata) error {
-	aliasNames := compatibilityAliasNameSet()
 	for id, tool := range metadata.Tools {
-		if _, isAlias := aliasNames[tool.Name]; isAlias {
-			return fmt.Errorf("compatibility alias %q must not appear in generated discovery metadata", tool.Name)
-		}
 		if strings.HasPrefix(tool.Name, "you.workflow.") {
 			return fmt.Errorf("compatibility alias %q must not appear in generated discovery metadata", tool.Name)
 		}
@@ -154,13 +150,4 @@ func verifyDiscoveryItems(value any) error {
 		}
 	}
 	return nil
-}
-
-func compatibilityAliasNameSet() map[string]struct{} {
-	aliases := mcpfactorysession.DiscoverCompatibilityAliases()
-	names := make(map[string]struct{}, len(aliases))
-	for _, alias := range aliases {
-		names[alias.Name] = struct{}{}
-	}
-	return names
 }

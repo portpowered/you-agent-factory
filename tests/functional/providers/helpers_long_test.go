@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func buildModelWorkerConfig(provider modelprovider.ID, model string) string {
+func buildModelWorkerConfig(provider modelprovider.Provider, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s
@@ -238,7 +238,7 @@ func cursorExecutionTemplateWantPrompt(dir string) string {
 	return cursorMergedPrompt("Process the input task.", executionTemplateWantPrompt(dir))
 }
 
-func assertProviderExecutionFields(t *testing.T, dir string, req workers.CommandRequest) {
+func assertProviderExecutionFields(t *testing.T, dir string, req platformprocess.CommandRequest) {
 	t.Helper()
 
 	if req.WorkDir != support.ResolvedRuntimePath(dir, "/workspace/execution-template-name/feature-token-branch") {

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPartsFromGeneratedPreservesSupportedPartOrderAndValues(t *testing.T) {
@@ -89,7 +89,7 @@ func TestGeneratedPtrFromPartsReturnsNilWhenAllPartsAreUnsupported(t *testing.T)
 	}
 }
 
-func TestPartsFromGeneratedAcceptsUppercaseAndExtendedContentShapes(t *testing.T) {
+func TestPartsFromGeneratedPreservesUppercaseAliasesAndExtendedContentShapes(t *testing.T) {
 	jsonMetadata := factoryapi.WorkContentMetadata{"voice": "alloy"}
 	content := factoryapi.WorkContent{
 		mustGeneratedUpperTextPart(t, "Alpha", "input"),
@@ -101,7 +101,7 @@ func TestPartsFromGeneratedAcceptsUppercaseAndExtendedContentShapes(t *testing.T
 	got := PartsFromGenerated(&content)
 
 	assertWorkContentPartsEqual(t, got, []work.WorkContentPart{
-		{Type: work.WorkContentPartTypeText, Text: "Alpha", Label: "input"},
+		{Type: work.WorkContentPartType("TEXT"), Text: "Alpha", Label: "input"},
 		{Type: work.WorkContentPartTypeAudio, URL: testContentURL("fixtures/output.wav"), Metadata: map[string]any{"voice": "alloy"}},
 		{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
 		{Type: work.WorkContentPartTypeBinary, URL: testContentURL("fixtures/blob.bin")},

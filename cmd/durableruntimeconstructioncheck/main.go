@@ -19,8 +19,7 @@ const (
 	storeDirectoryName     = "DirForProjectRoot"
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
-	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/workers/provider"
-	sessionPersistencePath = "github.com/portpowered/infinite-you/pkg/platform/cursors/session"
+	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/services/workers/provider"
 )
 
 var canonicalEventOwnerCalls = map[string]struct{}{
@@ -37,34 +36,27 @@ var applicationCompositionCalls = map[string]struct{}{
 }
 
 var approvedApplicationCompositionFiles = map[string]struct{}{
-	"pkg/wire/process.go":                                   {},
-	"pkg/wire/model_invocation.go":                          {},
-	"pkg/wire/session_execution.go":                         {},
-	"pkg/wire/production.go":                                {},
-	"pkg/factory/sessions/execution/service.go":             {},
-	"pkg/factory/sessions/execution/testharness/harness.go": {},
-	"pkg/wire/runtime_core.go":                              {},
-	"pkg/service/factory.go":                                {},
+	"pkg/initializer/application/entrypoints.go":                {},
+	"pkg/services/factory_sessions/executionopening/factory.go": {},
+	"pkg/services/factory_sessions/execution/service.go":        {},
+	"pkg/services/factory_sessions/service/execution.go":        {},
 }
 
 var javascriptLiveChildRoots = []string{
-	"pkg/factory/sessions/execution/livechild/",
+	"pkg/services/factory_sessions/execution/livechild/",
 	"pkg/orchestrators/javascript/",
 }
 
 var approvedRuntimeConstructorFiles = map[string]struct{}{
-	"pkg/factory/sessions/execution/service.go":             {},
-	"pkg/factory/sessions/execution/testharness/harness.go": {},
+	"pkg/services/factory_sessions/execution/service.go": {},
 }
 
 var approvedPersistenceCompositionFiles = map[string]struct{}{
-	"pkg/transports/http/servertests/server_durable_session_execution_test.go": {},
-	"pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go":                {},
-	"pkg/transports/cli/session/smoke/resume_smoke_test.go":                    {},
-	"pkg/factory/sessions/execution/service.go":                                {},
-	"pkg/factory/sessions/execution/runtimepersist/store.go":                   {},
-	"pkg/factory/sessions/execution/testharness/harness.go":                    {},
-	"pkg/transports/mcp/factorysession/execution_test.go":                      {},
+	"pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go":       {},
+	"pkg/transports/cli/session/smoke/resume_smoke_test.go":           {},
+	"pkg/services/factory_sessions/execution/service.go":              {},
+	"pkg/services/factory_sessions/execution/runtimepersist/store.go": {},
+	"pkg/transports/mcp/factorysession/execution_test.go":             {},
 }
 
 type config struct{ root string }
@@ -129,19 +121,11 @@ func scan(root string) ([]string, error) {
 		if ast.IsGenerated(file) {
 			return nil
 		}
-		if isJavaScriptOrchestratorFile(relative) {
-			for _, imported := range file.Imports {
-				if strings.Trim(imported.Path.Value, `"`) == sessionPersistencePath {
-					appendFinding(&findings, fileSet, imported.Pos(), relative, sessionPersistencePath,
-						"return typed orchestration records to the canonical Factory Session recorder instead of persisting them directly")
-				}
-			}
-		}
 		if isJavaScriptLiveChildFile(relative) {
 			for _, imported := range file.Imports {
 				if strings.Trim(imported.Path.Value, `"`) == providerPackagePath {
 					appendFinding(&findings, fileSet, imported.Pos(), relative, providerPackagePath,
-						"route production live-child provider execution through pkg/workers/providerexecution")
+						"route production live-child provider execution through pkg/services/workers")
 				}
 			}
 		}
@@ -156,13 +140,13 @@ func scan(root string) ([]string, error) {
 						"construct application collaborators in pkg/wire and inject them into the transport")
 				}
 				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
-					!strings.HasPrefix(relative, "pkg/factory/sessions/execution/") {
+					!strings.HasPrefix(relative, "pkg/services/factory_sessions/execution/") {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
-						"route canonical Factory Events through the pkg/factory/sessions/execution recorder and persistence owner")
+						"route canonical Factory Events through the pkg/services/factory_sessions/execution recorder and persistence owner")
 				}
 				if name == providerInferenceName && isJavaScriptLiveChildFile(relative) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
-						"route production live-child provider invocation through pkg/workers/providerexecution")
+						"route production live-child provider invocation through pkg/services/workers")
 				}
 				if name == runtimeConstructorName && !approved(relative, approvedRuntimeConstructorFiles) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,

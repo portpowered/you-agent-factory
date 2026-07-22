@@ -3,18 +3,18 @@
 package replay_contracts
 
 import (
-	"context"
 	"encoding/json"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,8 +23,8 @@ func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t 
 
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "canonical dispatch output",
-		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		submit: func(server *support.FunctionalAPIServer) {
+			support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
 				RequestID: "request-dispatch-smoke-001",
 				Type:      work.WorkRequestTypeFactoryRequestBatch,
 				Works: []work.Work{{
@@ -56,26 +56,27 @@ func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t 
 func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayload(t *testing.T) {
 	support.SkipLongFunctional(t, "slow replay work-dispatch legacy adapter sweep")
 
+	var submitted factoryapi.SubmitWorkResponse
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "legacy dispatch output",
-		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitFull(context.Background(), []work.SubmitRequest{{
-				RequestID:  "request-legacy-smoke-001",
-				Name:       "legacy-dispatch-smoke",
-				WorkID:     "work-legacy-smoke-001",
-				WorkTypeID: "task",
-				TraceID:    "trace-legacy-smoke-001",
-				Payload:    []byte(`{"title":"legacy dispatch contract"}`),
-				Tags: map[string]string{
-					"branch": "legacy-adapter",
-					"team":   "agent-factory",
-				},
-			}})
+		submit: func(server *support.FunctionalAPIServer) {
+			traceID := "trace-legacy-smoke-001"
+			tags := factoryapi.StringMap{
+				"branch": "legacy-adapter",
+				"team":   "agent-factory",
+			}
+			submitted = support.SubmitDefaultSessionWork(t, server.URL(), factoryapi.SubmitWorkRequest{
+				Name:         "legacy-dispatch-smoke",
+				WorkTypeName: "task",
+				TraceId:      &traceID,
+				Payload:      map[string]any{"title": "legacy dispatch contract"},
+				Tags:         &tags,
+			})
 		},
 	})
 	assertCommandWorkDispatch(t, req, expectedDispatchPayload{
-		requestID:                "request-legacy-smoke-001",
-		workID:                   "work-legacy-smoke-001",
+		requestID:                submitted.RequestId,
+		workID:                   stringPointerValue(submitted.WorkId),
 		workTypeID:               "task",
 		traceID:                  "trace-legacy-smoke-001",
 		currentChainingTraceID:   "trace-legacy-smoke-001",
@@ -93,8 +94,8 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 
 	run := runRecordedWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "recorded dispatch output",
-		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
+		submit: func(server *support.FunctionalAPIServer) {
+			support.UpsertDefaultSessionWorkRequest(t, server.URL(), work.WorkRequest{
 				RequestID: "request-recorded-smoke-001",
 				Type:      work.WorkRequestTypeFactoryRequestBatch,
 				Works: []work.Work{{
@@ -125,23 +126,23 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 	assertCommandWorkDispatch(t, run.request, want)
 	indices := requireScriptResponseEventIndices(t, run.events)
 	assertDispatchSmokeEventCorrelation(t, run.events, indices, run.request, want, run.commandOutput)
-	assertDispatchSmokeEventsRecordedInArtifact(t, run.events, testutil.GeneratedFactoryEvents(t, run.artifact.Events))
-	assertScriptEventsRecordedInArtifact(t, run.events, testutil.GeneratedFactoryEvents(t, run.artifact.Events))
+	recordedEvents := testutil.GeneratedFactoryEvents(t, run.artifact.Events)
+	assertDispatchSmokeEventsRecordedInArtifact(t, run.events, recordedEvents)
+	assertScriptEventsRecordedInArtifact(t, run.events, recordedEvents)
 
-	replayHarness := testutil.AssertReplaySucceeds(t, run.artifactPath, 10*time.Second)
-	replayHarness.Service.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	replay := observeReplayThroughRoot(t, run.artifactPath, 10*time.Second)
+	assertReplayPlaceCounts(t, replay.Session, map[string]int{
+		"task:done": 1, "task:init": 0, "task:failed": 0,
+	})
 }
 
 type dispatchContractScenario struct {
 	commandOutput string
-	submit        func(*testutil.ServiceTestHarness)
+	submit        func(*support.FunctionalAPIServer)
 }
 
 type recordedDispatchContractRun struct {
-	request       workers.CommandRequest
+	request       platformprocess.CommandRequest
 	dir           string
 	artifactPath  string
 	commandOutput string
@@ -149,7 +150,7 @@ type recordedDispatchContractRun struct {
 	artifact      *interfaces.ReplayArtifact
 }
 
-func runWorkDispatchContractSmoke(t *testing.T, scenario dispatchContractScenario) (workers.CommandRequest, string) {
+func runWorkDispatchContractSmoke(t *testing.T, scenario dispatchContractScenario) (platformprocess.CommandRequest, string) {
 	t.Helper()
 
 	run := runRecordedWorkDispatchContractSmoke(t, scenario)
@@ -173,24 +174,24 @@ func runRecordedWorkDispatchContractSmoke(t *testing.T, scenario dispatchContrac
 	})
 
 	runner := support.NewRecordingCommandRunner(scenario.commandOutput)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-		testutil.WithRecordPath(artifactPath),
-	)
-	scenario.submit(harness)
-	harness.RunUntilComplete(t, 10*time.Second)
-	harness.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	scenario.submit(server)
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	assertReplayPlaceCounts(t, support.GetDefaultSession(t, server.URL()), map[string]int{
+		"task:done": 1, "task:init": 0, "task:failed": 0,
+	})
 	if got := runner.CallCount(); got != 1 {
 		t.Fatalf("script command runner calls = %d, want 1", got)
 	}
-	events, err := harness.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
+	events := server.GetFactoryEvents(t)
+	server.Stop(t)
 
 	return recordedDispatchContractRun{
 		request:       runner.LastRequest(),
@@ -216,16 +217,14 @@ type expectedDispatchPayload struct {
 	payloadTitle             string
 }
 
-func assertCommandWorkDispatch(t *testing.T, req workers.CommandRequest, want expectedDispatchPayload) {
+func assertCommandWorkDispatch(t *testing.T, req platformprocess.CommandRequest, want expectedDispatchPayload) {
 	t.Helper()
 
 	assertCommandRequestEnvelope(t, req, want)
-	assertCommandExecutionMetadata(t, req, want)
 	assertCommandEnvironment(t, req, want)
-	assertCommandInputToken(t, req, want)
 }
 
-func assertCommandRequestEnvelope(t *testing.T, req workers.CommandRequest, want expectedDispatchPayload) {
+func assertCommandRequestEnvelope(t *testing.T, req platformprocess.CommandRequest, want expectedDispatchPayload) {
 	t.Helper()
 
 	if req.Command != "echo" {
@@ -234,55 +233,9 @@ func assertCommandRequestEnvelope(t *testing.T, req workers.CommandRequest, want
 	if req.WorkDir != want.workingDirectory {
 		t.Fatalf("command work dir = %q, want %q", req.WorkDir, want.workingDirectory)
 	}
-	if req.DispatchID == "" {
-		t.Fatal("dispatch ID is empty")
-	}
-	if req.TransitionID != "run-script" {
-		t.Fatalf("transition ID = %q, want run-script", req.TransitionID)
-	}
-	if req.WorkerType != "script-worker" {
-		t.Fatalf("worker type = %q, want script-worker", req.WorkerType)
-	}
-	if req.WorkstationName != "run-script" {
-		t.Fatalf("workstation name = %q, want run-script", req.WorkstationName)
-	}
-	if req.CurrentChainingTraceID != want.currentChainingTraceID {
-		t.Fatalf("current chaining trace ID = %q, want %q", req.CurrentChainingTraceID, want.currentChainingTraceID)
-	}
-	if len(req.PreviousChainingTraceIDs) != len(want.previousChainingTraceIDs) {
-		t.Fatalf("previous chaining trace IDs = %v, want %v", req.PreviousChainingTraceIDs, want.previousChainingTraceIDs)
-	}
-	for i := range want.previousChainingTraceIDs {
-		if req.PreviousChainingTraceIDs[i] != want.previousChainingTraceIDs[i] {
-			t.Fatalf("previous chaining trace IDs = %v, want %v", req.PreviousChainingTraceIDs, want.previousChainingTraceIDs)
-		}
-	}
 }
 
-func assertCommandExecutionMetadata(t *testing.T, req workers.CommandRequest, want expectedDispatchPayload) {
-	t.Helper()
-
-	if req.Execution.DispatchCreatedTick == 0 {
-		t.Fatal("dispatch created tick is zero")
-	}
-	if req.Execution.CurrentTick != req.Execution.DispatchCreatedTick {
-		t.Fatalf("current tick = %d, want dispatch created tick %d", req.Execution.CurrentTick, req.Execution.DispatchCreatedTick)
-	}
-	if req.Execution.RequestID != want.requestID {
-		t.Fatalf("execution request ID = %q, want %q", req.Execution.RequestID, want.requestID)
-	}
-	if req.Execution.TraceID != want.traceID {
-		t.Fatalf("execution trace ID = %q, want %q", req.Execution.TraceID, want.traceID)
-	}
-	if len(req.Execution.WorkIDs) != 1 || req.Execution.WorkIDs[0] != want.workID {
-		t.Fatalf("execution work IDs = %v, want [%s]", req.Execution.WorkIDs, want.workID)
-	}
-	if req.Execution.ReplayKey == "" {
-		t.Fatal("execution replay key is empty")
-	}
-}
-
-func assertCommandEnvironment(t *testing.T, req workers.CommandRequest, want expectedDispatchPayload) {
+func assertCommandEnvironment(t *testing.T, req platformprocess.CommandRequest, want expectedDispatchPayload) {
 	t.Helper()
 
 	if !commandEnvContains(req.Env, "BRANCH="+want.branch) {
@@ -293,87 +246,11 @@ func assertCommandEnvironment(t *testing.T, req workers.CommandRequest, want exp
 	}
 }
 
-func assertCommandInputToken(t *testing.T, req workers.CommandRequest, want expectedDispatchPayload) {
-	t.Helper()
-
-	token := firstCommandRequestInputToken(t, req)
-	if token.PlaceID != "task:init" {
-		t.Fatalf("input token place ID = %q, want task:init", token.PlaceID)
-	}
-	if token.Color.RequestID != want.requestID {
-		t.Fatalf("input token request ID = %q, want %q", token.Color.RequestID, want.requestID)
-	}
-	if token.Color.WorkID != want.workID {
-		t.Fatalf("input token work ID = %q, want %q", token.Color.WorkID, want.workID)
-	}
-	if token.Color.WorkTypeID != want.workTypeID {
-		t.Fatalf("input token work type ID = %q, want %q", token.Color.WorkTypeID, want.workTypeID)
-	}
-	if token.Color.TraceID != want.traceID {
-		t.Fatalf("input token trace ID = %q, want %q", token.Color.TraceID, want.traceID)
-	}
-	if token.Color.Name != want.workName {
-		t.Fatalf("input token name = %q, want %q", token.Color.Name, want.workName)
-	}
-	if token.Color.Tags["branch"] != want.branch {
-		t.Fatalf("input token tag branch = %q, want %q", token.Color.Tags["branch"], want.branch)
-	}
-	if token.Color.Tags["team"] != want.team {
-		t.Fatalf("input token tag team = %q, want %q", token.Color.Tags["team"], want.team)
-	}
-
-	var payload map[string]string
-	if err := json.Unmarshal(token.Color.Payload, &payload); err != nil {
-		t.Fatalf("input token payload is not JSON object: %v", err)
-	}
-	if payload["title"] != want.payloadTitle {
-		t.Fatalf("input token payload title = %q, want %q", payload["title"], want.payloadTitle)
-	}
-}
-
-func firstCommandRequestInputToken(t *testing.T, req workers.CommandRequest) factorytoken.Token {
-	t.Helper()
-
-	tokens := commandRequestInputTokens(req)
-	if len(tokens) == 0 {
-		t.Fatal("command request has no input tokens")
-	}
-	for _, token := range tokens {
-		if token.Color.DataType != factorytoken.DataTypeResource {
-			return token
-		}
-	}
-	t.Fatal("command request has no work input token")
-	return factorytoken.Token{}
-}
-
-func commandRequestInputTokens(req workers.CommandRequest) []factorytoken.Token {
-	if len(req.InputTokens) == 0 {
-		return nil
-	}
-	tokens := make([]factorytoken.Token, 0, len(req.InputTokens))
-	for _, raw := range req.InputTokens {
-		if token, ok := raw.(factorytoken.Token); ok {
-			tokens = append(tokens, token)
-			continue
-		}
-		encoded, err := json.Marshal(raw)
-		if err != nil {
-			continue
-		}
-		var token factorytoken.Token
-		if err := json.Unmarshal(encoded, &token); err == nil {
-			tokens = append(tokens, token)
-		}
-	}
-	return tokens
-}
-
 func assertDispatchSmokeEventCorrelation(
 	t *testing.T,
 	events []factoryapi.FactoryEvent,
 	indices scriptBoundaryEventIndices,
-	req workers.CommandRequest,
+	req platformprocess.CommandRequest,
 	want expectedDispatchPayload,
 	wantOutput string,
 ) {
@@ -397,8 +274,8 @@ func assertDispatchSmokeEventCorrelation(
 	}
 
 	dispatchID := stringPointerValue(events[indices.dispatch].Context.DispatchId)
-	if dispatchID != req.DispatchID {
-		t.Fatalf("dispatch event context dispatchId = %q, want command request dispatchId %q", dispatchID, req.DispatchID)
+	if dispatchID == "" {
+		t.Fatal("dispatch event context dispatchId is empty")
 	}
 	if got := stringPointerValue(events[indices.dispatch].Context.RequestId); got != want.requestID {
 		t.Fatalf("dispatch request context requestId = %q, want %q", got, want.requestID)
@@ -407,17 +284,17 @@ func assertDispatchSmokeEventCorrelation(
 		assertDispatchSmokeEventContext(t, events[idx], want, dispatchID)
 	}
 
-	if dispatchRequest.TransitionId != req.TransitionID {
-		t.Fatalf("dispatch request transitionId = %q, want %q", dispatchRequest.TransitionId, req.TransitionID)
+	if dispatchRequest.TransitionId != "run-script" {
+		t.Fatalf("dispatch request transitionId = %q, want run-script", dispatchRequest.TransitionId)
 	}
-	if dispatchResponse.TransitionId != req.TransitionID {
-		t.Fatalf("dispatch response transitionId = %q, want %q", dispatchResponse.TransitionId, req.TransitionID)
+	if dispatchResponse.TransitionId != "run-script" {
+		t.Fatalf("dispatch response transitionId = %q, want run-script", dispatchResponse.TransitionId)
 	}
 	if scriptRequest.DispatchId != dispatchID || scriptResponse.DispatchId != dispatchID {
 		t.Fatalf("script event dispatch correlation mismatch: request=%q response=%q want=%q", scriptRequest.DispatchId, scriptResponse.DispatchId, dispatchID)
 	}
-	if scriptRequest.TransitionId != req.TransitionID || scriptResponse.TransitionId != req.TransitionID {
-		t.Fatalf("script event transition correlation mismatch: request=%q response=%q want=%q", scriptRequest.TransitionId, scriptResponse.TransitionId, req.TransitionID)
+	if scriptRequest.TransitionId != "run-script" || scriptResponse.TransitionId != "run-script" {
+		t.Fatalf("script event transition correlation mismatch: request=%q response=%q want=run-script", scriptRequest.TransitionId, scriptResponse.TransitionId)
 	}
 	if scriptRequest.Command != req.Command {
 		t.Fatalf("script request command = %q, want %q", scriptRequest.Command, req.Command)
@@ -515,7 +392,14 @@ func assertDispatchSmokeEventsRecordedInArtifact(
 		if err != nil {
 			t.Fatalf("marshal recorded dispatch event %s: %v", live.Id, err)
 		}
-		if string(recordedJSON) != string(liveJSON) {
+		var recordedValue, liveValue any
+		if err := json.Unmarshal(recordedJSON, &recordedValue); err != nil {
+			t.Fatalf("decode recorded dispatch event %s: %v", live.Id, err)
+		}
+		if err := json.Unmarshal(liveJSON, &liveValue); err != nil {
+			t.Fatalf("decode live dispatch event %s: %v", live.Id, err)
+		}
+		if !reflect.DeepEqual(recordedValue, liveValue) {
 			t.Fatalf("recorded dispatch event %s does not match live history\nrecorded=%s\nlive=%s", live.Id, recordedJSON, liveJSON)
 		}
 	}

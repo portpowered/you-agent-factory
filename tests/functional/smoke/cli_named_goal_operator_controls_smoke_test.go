@@ -14,10 +14,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -44,12 +42,12 @@ func TestNamedGoalOperatorControls_PauseBuffersSubmitUntilResume(t *testing.T) {
 
 	submitted := submitNamedGoalRoutingWork(t, server, "paused-operator-submit", "customer goal request text")
 	workID := stringPointerValue(submitted.WorkId)
-	snapshot := server.GetEngineStateSnapshot(t)
-	if markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:init") {
-		t.Fatalf("paused submit reached goal:init while session was paused: %#v", snapshot.Marking.Tokens)
+	session := support.GetDefaultSession(t, server.URL())
+	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:init") {
+		t.Fatalf("paused submit reached goal:init while session was paused: %#v", session.Runtime.Petri)
 	}
-	if markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:complete") {
-		t.Fatalf("paused submit reached goal:complete before resume: %#v", snapshot.Marking.Tokens)
+	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
+		t.Fatalf("paused submit reached goal:complete before resume: %#v", session.Runtime.Petri)
 	}
 
 	resume := postNamedGoalOperatorLifecycleControl(
@@ -94,9 +92,9 @@ func TestNamedGoalOperatorControls_ClIPauseResumeDrainsBufferedGoalsInOrder(t *t
 	firstID := stringPointerValue(first.WorkId)
 	secondID := stringPointerValue(second.WorkId)
 
-	snapshot := server.GetEngineStateSnapshot(t)
+	session := support.GetDefaultSession(t, server.URL())
 	for _, workID := range []string{firstID, secondID} {
-		if markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:complete") {
+		if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
 			t.Fatalf("work %q reached goal:complete before resume", workID)
 		}
 	}
@@ -122,13 +120,13 @@ func assertNamedGoalOperatorBufferedGoalsDrainedInSubmissionOrder(
 
 	waitForNamedGoalRoutingWorkAtState(t, server, []string{firstID, secondID}, "complete", 30*time.Second)
 
-	snapshot := server.GetEngineStateSnapshot(t)
+	dispatches := support.ObserveDispatchEvents(t, server.GetFactoryEvents(t))
 	firstPlan, okFirst := namedGoalOperatorPlanGoalDispatchForWork(
-		snapshot.DispatchHistory,
+		dispatches,
 		firstID,
 	)
 	secondPlan, okSecond := namedGoalOperatorPlanGoalDispatchForWork(
-		snapshot.DispatchHistory,
+		dispatches,
 		secondID,
 	)
 	if !okFirst || !okSecond {
@@ -136,14 +134,14 @@ func assertNamedGoalOperatorBufferedGoalsDrainedInSubmissionOrder(
 			"dispatch history missing plan-goal dispatches for buffered goals %q and %q: %#v",
 			firstID,
 			secondID,
-			snapshot.DispatchHistory,
+			dispatches,
 		)
 	}
-	if !firstPlan.StartTime.Before(secondPlan.StartTime) {
+	if !firstPlan.StartedAt.Before(secondPlan.StartedAt) {
 		t.Fatalf(
 			"plan-goal start order = first@%s second@%s for works %q then %q; want first buffered goal to start before second",
-			firstPlan.StartTime.UTC(),
-			secondPlan.StartTime.UTC(),
+			firstPlan.StartedAt.UTC(),
+			secondPlan.StartedAt.UTC(),
 			firstID,
 			secondID,
 		)
@@ -151,35 +149,18 @@ func assertNamedGoalOperatorBufferedGoalsDrainedInSubmissionOrder(
 }
 
 func namedGoalOperatorPlanGoalDispatchForWork(
-	history []interfaces.CompletedDispatch,
+	dispatches []support.DispatchEventObservation,
 	workID string,
-) (interfaces.CompletedDispatch, bool) {
-	for _, dispatch := range history {
-		if dispatch.WorkstationName != goal.PackagedPlanWorkstationName {
+) (support.DispatchEventObservation, bool) {
+	for _, dispatch := range dispatches {
+		if dispatch.Request.TransitionId != publicGoal.PackagedPlanWorkstationName {
 			continue
 		}
-		if namedGoalOperatorDispatchInvolvesWorkID(dispatch, workID) {
+		if support.DispatchObservationIncludesWork(dispatch, workID) {
 			return dispatch, true
 		}
 	}
-	return interfaces.CompletedDispatch{}, false
-}
-
-func namedGoalOperatorDispatchInvolvesWorkID(
-	dispatch interfaces.CompletedDispatch,
-	workID string,
-) bool {
-	for _, token := range dispatch.ConsumedTokens {
-		if token.Color.WorkID == workID {
-			return true
-		}
-	}
-	for _, mutation := range dispatch.OutputMutations {
-		if mutation.Token != nil && mutation.Token.Color.WorkID == workID {
-			return true
-		}
-	}
-	return false
+	return support.DispatchEventObservation{}, false
 }
 
 func TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStopSummary(t *testing.T) {
@@ -235,11 +216,11 @@ func TestNamedGoalOperatorControls_InterruptedGoalInspectSurfacesDispatchAndStop
 		t.Fatalf("work latestDispatch = %#v, want INTERRUPTED dispatch context", work.StopSummary.LatestDispatch)
 	}
 
-	snapshot := server.GetEngineStateSnapshot(t)
-	if markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:complete") {
+	session = support.GetDefaultSession(t, server.URL())
+	if markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:complete") {
 		t.Fatalf("interrupted work %q reached goal:complete", workID)
 	}
-	if !markingContainsNamedGoalRoutingWorkAtPlace(snapshot, workID, "goal:interrupted") {
+	if !markingContainsNamedGoalRoutingWorkAtPlace(session, workID, "goal:interrupted") {
 		t.Fatalf("marking missing goal:interrupted token for work %q", workID)
 	}
 }
@@ -419,35 +400,35 @@ func writePackagedGoalSlowPlannerTopologyMockWorkers(t *testing.T, opts packaged
 	}
 	reviewerWorkstation := strings.TrimSpace(opts.reviewerWorkstation)
 	if reviewerWorkstation == "" {
-		reviewerWorkstation = goal.PackagedReviewWorkstationName
+		reviewerWorkstation = publicGoal.PackagedReviewWorkstationName
 	}
 	reviewerOutput := strings.TrimSpace(opts.reviewerOutput)
 	if reviewerOutput == "" {
 		reviewerOutput = "accepted"
 	}
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-planner",
-				WorkstationName: goal.PackagedPlanWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				WorkstationName: publicGoal.PackagedPlanWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/sh",
 					Args:    []string{"-c", "sleep 2"},
 				},
 			},
 			{
 				WorkerName:      "goal-executor",
-				WorkstationName: goal.PackagedExecuteWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkstationName: publicGoal.PackagedExecuteWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 			{
 				WorkerName:      "goal-checker",
-				WorkstationName: goal.PackagedCheckWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				WorkstationName: publicGoal.PackagedCheckWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{checkerOutput},
 				},
@@ -455,8 +436,8 @@ func writePackagedGoalSlowPlannerTopologyMockWorkers(t *testing.T, opts packaged
 			{
 				WorkerName:      "goal-reviewer",
 				WorkstationName: reviewerWorkstation,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{reviewerOutput},
 				},

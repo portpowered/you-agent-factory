@@ -5,83 +5,107 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
-	"github.com/portpowered/infinite-you/pkg/service"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	factorydefinitionfixtures "github.com/portpowered/infinite-you/internal/testutil/factorydefinitionfixtures"
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/metrics"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	runtimehost "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
 )
 
 type stubFactoryService struct {
 	run                   func(context.Context) error
-	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
-	runtimeLogDiagnostics service.RuntimeLogDiagnostics
+	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error)
+	runtimeLogDiagnostics runtimehost.RuntimeLogDiagnostics
 }
 
 func (s stubFactoryService) Run(ctx context.Context) error {
 	return s.run(ctx)
 }
 
-func (s stubFactoryService) RuntimeLogDiagnostics() service.RuntimeLogDiagnostics {
+func (s stubFactoryService) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
 	return s.runtimeLogDiagnostics
 }
 
-func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error) {
 	if s.snapshot == nil {
 		return nil, errors.New("snapshot unavailable")
 	}
 	return s.snapshot(ctx)
 }
 
-type capturedOOTBSmokeRun struct {
-	cfg *service.FactoryServiceConfig
-	svc *service.FactoryService
+func buildTransportTestRuntime(
+	_ context.Context,
+	_ *testRuntimeSelections,
+	_ serviceedges.Edges,
+) (RuntimeRunner, error) {
+	snapshot := completedTransportTestSnapshot()
+	return stubFactoryService{
+		run: func(context.Context) error { return nil },
+		snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net], error) {
+			return snapshot, nil
+		},
+	}, nil
+}
+
+func completedTransportTestSnapshot() *interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net] {
+	var topology runtimehost.Net
+	if err := json.Unmarshal([]byte(`{
+		"id":"transport-test",
+		"places":{"task:done":{"id":"task:done","type_id":"task","state":"done"}},
+		"transitions":{},"arcs":{},
+		"work_types":{"task":{"id":"task","name":"task","states":[{"value":"done","category":"TERMINAL"}]}},
+		"resources":{},"limits":{}
+	}`), &topology); err != nil {
+		panic(err)
+	}
+	token := &runtimehost.RuntimeToken{
+		ID:      "dashboard-render-test-work",
+		PlaceID: "task:done",
+		Color: runtimehost.RuntimeTokenColor{
+			WorkID:     "dashboard-render-test-work",
+			WorkTypeID: "task",
+			TraceID:    "dashboard-render-test-trace",
+			Payload:    []byte("mock worker accepted"),
+		},
+	}
+	return &interfaces.EngineStateSnapshot[runtimehost.PetriMarkingSnapshot, *runtimehost.Net]{
+		Topology: &topology,
+		Marking: runtimehost.PetriMarkingSnapshot{
+			Tokens:      map[string]*runtimehost.RuntimeToken{token.ID: token},
+			PlaceTokens: map[string][]string{token.PlaceID: {token.ID}},
+		},
+	}
 }
 
 func preserveRunGlobals(t *testing.T) {
 	t.Helper()
 
-	originalBuilder := buildFactoryService
-	originalInvocationBootstrap := buildInvocationBootstrap
-	originalBootstrap := bootstrapFactory
-	originalOpener := dashboardOpener
-	originalInteractive := interactiveOutput
-	originalStartAPIServer := startAPIServer
-	originalServeFactoryAPIServer := serveFactoryAPIServer
-	if buildInvocationBootstrap == nil {
-		buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
-			svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
-			if err != nil {
-				return nil, err
-			}
-			return service.NewInvocationBootstrap(svc)
+	originalBuilder := openTestRuntimeRunner
+	originalInvocationBootstrap := openTestInvocationRunner
+	if openTestInvocationRunner == nil {
+		openTestInvocationRunner = func(context.Context, *testRuntimeSelections, serviceedges.Edges) (InvocationRunner, error) {
+			return &capturingBootstrapRunner{}, nil
 		}
 	}
 	t.Cleanup(func() {
-		buildFactoryService = originalBuilder
-		buildInvocationBootstrap = originalInvocationBootstrap
-		bootstrapFactory = originalBootstrap
-		dashboardOpener = originalOpener
-		interactiveOutput = originalInteractive
-		startAPIServer = originalStartAPIServer
-		serveFactoryAPIServer = originalServeFactoryAPIServer
+		openTestRuntimeRunner = originalBuilder
+		openTestInvocationRunner = originalInvocationBootstrap
 	})
 }
 
@@ -97,15 +121,15 @@ func setUserHomeForTest(t *testing.T, homeDir string) {
 func TestCountTokenStates(t *testing.T) {
 	tests := []struct {
 		name     string
-		tokens   map[string]*factorytoken.Token
+		tokens   map[string]*runtimehost.RuntimeToken
 		wantWIP  int
 		wantDone int
 		wantFail int
 	}{
-		{name: "empty marking", tokens: map[string]*factorytoken.Token{}},
+		{name: "empty marking", tokens: map[string]*runtimehost.RuntimeToken{}},
 		{
 			name: "mixed states",
-			tokens: map[string]*factorytoken.Token{
+			tokens: map[string]*runtimehost.RuntimeToken{
 				"t1": {ID: "t1", PlaceID: "task:todo"},
 				"t2": {ID: "t2", PlaceID: "task:in-progress"},
 				"t3": {ID: "t3", PlaceID: "task:completed"},
@@ -118,7 +142,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "all completed",
-			tokens: map[string]*factorytoken.Token{
+			tokens: map[string]*runtimehost.RuntimeToken{
 				"t1": {ID: "t1", PlaceID: "page:completed"},
 				"t2": {ID: "t2", PlaceID: "page:completed"},
 			},
@@ -126,7 +150,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "all failed",
-			tokens: map[string]*factorytoken.Token{
+			tokens: map[string]*runtimehost.RuntimeToken{
 				"t1": {ID: "t1", PlaceID: "task:failed"},
 				"t2": {ID: "t2", PlaceID: "task:failed"},
 				"t3": {ID: "t3", PlaceID: "task:failed"},
@@ -135,7 +159,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "work type prefix stays local to suffix classification",
-			tokens: map[string]*factorytoken.Token{
+			tokens: map[string]*runtimehost.RuntimeToken{
 				"t1": {ID: "t1", PlaceID: "story:phase:completed"},
 				"t2": {ID: "t2", PlaceID: "story:phase:failed"},
 				"t3": {ID: "t3", PlaceID: "story:phase:queued"},
@@ -148,7 +172,7 @@ func TestCountTokenStates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			snap := &petri.MarkingSnapshot{Tokens: tt.tokens}
+			snap := &runtimehost.PetriMarkingSnapshot{Tokens: tt.tokens}
 			wip, done, failed := CountTokenStates(snap)
 			if wip != tt.wantWIP {
 				t.Errorf("wip = %d, want %d", wip, tt.wantWIP)
@@ -187,9 +211,17 @@ func TestFormatDuration(t *testing.T) {
 func TestDocsExampleStartupWorkFile(t *testing.T) {
 	path := testutil.MustRepoPath(t, "docs/examples/startup-work.json")
 
-	got, err := LoadWorkFile(path)
+	got, err := batchload.LoadFromFile(func(gotPath string) (work.WorkRequest, error) {
+		if gotPath != path {
+			t.Fatalf("path = %q, want %q", gotPath, path)
+		}
+		return work.WorkRequest{
+			RequestID: "docs-example-story-001", Type: work.WorkRequestTypeFactoryRequestBatch,
+			Works: []work.Work{{WorkTypeID: "story", State: "init", Payload: map[string]any{"story": "fixture"}}},
+		}, nil
+	}, path)
 	if err != nil {
-		t.Fatalf("LoadWorkFile(%q): %v", path, err)
+		t.Fatalf("LoadFromFile(%q): %v", path, err)
 	}
 	if got.RequestID != "docs-example-story-001" {
 		t.Fatalf("request ID = %q, want docs-example-story-001", got.RequestID)
@@ -243,18 +275,24 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
-	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+	if _, err := factorydefinitionfixtures.SeedNamedFactoryUnchecked(filepath.Join(rootDir, "alpha"), payload); err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
-	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile),
+		[]byte("alpha\n"),
+		0o644,
+	); err != nil {
 		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
 	}
 
-	if err := bootstrapFactory(rootDir); err != nil {
+	if err := bootstrapFactoryWithInitializer(rootDir, nil, func(string) (string, error) {
+		return filepath.Join(rootDir, "alpha"), nil
+	}, platformfilesystem.Local{}); err != nil {
 		t.Fatalf("bootstrapFactory: %v", err)
 	}
 
-	inputDir := filepath.Join(rootDir, "alpha", interfaces.InputsDir, initcmd.DefaultFactoryInputType, interfaces.DefaultChannelName)
+	inputDir := filepath.Join(rootDir, "alpha", interfaces.InputsDir, interfaces.DefaultFactoryInputType, interfaces.DefaultChannelName)
 	if _, err := os.Stat(inputDir); err != nil {
 		t.Fatalf("expected bootstrap to prepare current named-factory input dir %s: %v", inputDir, err)
 	}
@@ -264,13 +302,13 @@ func TestBootstrapFactory_UsesCurrentNamedFactoryPointerLayout(t *testing.T) {
 }
 
 func TestRun_DefaultModeUsesBatchRuntimeAndExitsWhenRunReturns(t *testing.T) {
-	originalBuilder := buildFactoryService
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	var capturedMode interfaces.RuntimeMode
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedMode = cfg.RuntimeMode
 		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 	}
@@ -284,25 +322,17 @@ func TestRun_DefaultModeUsesBatchRuntimeAndExitsWhenRunReturns(t *testing.T) {
 }
 
 func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
-	originalDefaultRecordPath := defaultLiveRunRecordPath
-	defer func() {
-		defaultLiveRunRecordPath = originalDefaultRecordPath
-	}()
-
 	tests := []struct {
-		name               string
-		cfg                RunConfig
-		defaultRecordPath  string
-		wantRecordPath     string
-		wantReplayPath     string
-		wantGeneratorCalls int
+		name              string
+		cfg               RunConfig
+		wantDefaultRecord bool
+		wantRecordPath    string
+		wantReplayPath    string
 	}{
 		{
-			name:               "default live mode",
-			cfg:                RunConfig{},
-			defaultRecordPath:  "auto-generated-recording.json",
-			wantRecordPath:     "auto-generated-recording.json",
-			wantGeneratorCalls: 1,
+			name:              "default live mode",
+			cfg:               RunConfig{},
+			wantDefaultRecord: true,
 		},
 		{
 			name:           "record mode",
@@ -331,20 +361,23 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			originalBuilder := buildFactoryService
+			originalBuilder := openTestRuntimeRunner
 			defer func() {
-				buildFactoryService = originalBuilder
+				openTestRuntimeRunner = originalBuilder
 			}()
 
-			generatorCalls := 0
-			defaultLiveRunRecordPath = func() (string, error) {
-				generatorCalls++
-				return tt.defaultRecordPath, nil
-			}
+			tt.cfg.HomeDir = t.TempDir()
+			plannedPath := filepath.Join(tt.cfg.HomeDir, "planned-recording.json")
+			tt.cfg.RecordingTargetPlanner = recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				if request.HomeDir != tt.cfg.HomeDir || request.ReportedSessionID != defaultFactorySessionID {
+					t.Fatalf("recording request = %#v", request)
+				}
+				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
+			})
 
 			var capturedRecordPath string
 			var capturedReplayPath string
-			buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+			openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 				capturedRecordPath = cfg.RecordPath
 				capturedReplayPath = cfg.ReplayPath
 				return stubFactoryService{run: func(context.Context) error { return nil }}, nil
@@ -358,45 +391,42 @@ func TestRun_RecordOrReplayPathPassedToServiceConfig(t *testing.T) {
 				if !strings.Contains(err.Error(), "--no-record cannot be used with --record") {
 					t.Fatalf("unexpected error: %v", err)
 				}
-				if generatorCalls != 0 {
-					t.Fatalf("default record path generator calls = %d, want 0", generatorCalls)
-				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			if capturedRecordPath != tt.wantRecordPath {
+			if tt.wantDefaultRecord {
+				if capturedRecordPath != plannedPath {
+					t.Fatalf("record path = %q, want injected planned path %q", capturedRecordPath, plannedPath)
+				}
+			} else if capturedRecordPath != tt.wantRecordPath {
 				t.Fatalf("record path = %q, want %q", capturedRecordPath, tt.wantRecordPath)
 			}
 			if capturedReplayPath != tt.wantReplayPath {
 				t.Fatalf("replay path = %q, want %q", capturedReplayPath, tt.wantReplayPath)
-			}
-			if generatorCalls != tt.wantGeneratorCalls {
-				t.Fatalf("default record path generator calls = %d, want %d", generatorCalls, tt.wantGeneratorCalls)
 			}
 		})
 	}
 }
 
 func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalDefaultRecordPath := defaultLiveRunRecordPath
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-		defaultLiveRunRecordPath = originalDefaultRecordPath
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	builderCalled := false
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		builderCalled = true
 		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 	}
-	defaultLiveRunRecordPath = func() (string, error) {
-		return "", errors.New("home lookup failed")
-	}
-
-	err := Run(context.Background(), RunConfig{})
+	err := runWithTestRuntimeRunner(context.Background(), RunConfig{
+		HomeDir: "home",
+		RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(func(recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+			return recordings.LiveRecordingTarget{}, errors.New("target planning failed")
+		}),
+	}, nil)
 	if err == nil {
 		t.Fatal("expected default record path resolution to fail")
 	}
@@ -408,139 +438,84 @@ func TestRun_DefaultRecordPathResolutionErrorSkipsServiceStart(t *testing.T) {
 	}
 }
 
-func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTemplate(t *testing.T) {
-	originalTime := defaultLiveRunRecordTime
-	originalUUID := defaultLiveRunRecordUUID
-	defer func() {
-		defaultLiveRunRecordTime = originalTime
-		defaultLiveRunRecordUUID = originalUUID
-	}()
+func TestResolveRecordPathForRunRequiresInjectedRecordingPlanner(t *testing.T) {
+	t.Parallel()
 
-	homeDir := t.TempDir()
-	setUserHomeForTest(t, homeDir)
-	defaultLiveRunRecordTime = func() time.Time {
-		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
-	}
-	defaultLiveRunRecordUUID = func() string {
-		return "uuid-1"
-	}
-
-	path, err := generateDefaultLiveRunRecordPath()
-	if err != nil {
-		t.Fatalf("generateDefaultLiveRunRecordPath: %v", err)
-	}
-
-	recordingsDir := defaultpaths.RecordingsDatedDir(
-		defaultpaths.RecordingsRoot(homeDir),
-		time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60)),
-	)
-	want := filepath.Join(
-		recordingsDir,
-		"factory-session-"+defaultRecordPathSessionToken+"-184512-uuid-1.json",
-	)
-	if path != want {
-		t.Fatalf("generated path = %q, want %q", path, want)
-	}
-	if got := resolveDefaultSessionRecordPath(path); got != filepath.Join(
-		recordingsDir,
-		"factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json",
-	) {
-		t.Fatalf("resolved default-session path = %q", got)
+	_, err := resolveRecordPathForRun(RunConfig{HomeDir: "home"})
+	if err == nil || err.Error() != "Recordings live recording target planner is required" {
+		t.Fatalf("resolveRecordPathForRun() error = %v, want required planner", err)
 	}
 }
 
-func TestBuildApplicationSequentialHomesControlDefaultRecordingPath(t *testing.T) {
+func TestOpenSequentialHomesControlDefaultRecordingPath(t *testing.T) {
 	ambientHome := t.TempDir()
 	setUserHomeForTest(t, ambientHome)
 
 	for _, homeDir := range []string{t.TempDir(), t.TempDir()} {
+		plannedPath := filepath.Join(homeDir, "recordings", "planned.json")
+		var plannedRequest recordings.LiveRecordingTargetRequest
 		var gotRecordPath string
 		var gotSystemHome string
 		var gotLogDir string
 		var gotMetricsDir string
-		application, err := BuildApplication(context.Background(), RunConfig{
-			Dir: t.TempDir(), HomeDir: homeDir, Port: 0, SuppressDashboardRendering: true,
-		}, func(_ context.Context, cfg *service.FactoryServiceConfig) (RuntimeRunner, error) {
+		factory := testRunnerOpeners{runtime: func(
+			_ context.Context,
+			cfg *testRuntimeSelections,
+			_ serviceedges.Edges,
+		) (RuntimeRunner, error) {
 			gotRecordPath = cfg.RecordPath
 			gotSystemHome = cfg.SystemConfigHomeDir
 			gotLogDir = cfg.RuntimeLogDir
 			gotMetricsDir = cfg.RuntimeMetricsDir
 			return stubFactoryService{run: func(context.Context) error { return nil }}, nil
-		}, nil)
+		}}
+		operation, err := Open(context.Background(), RunConfig{
+			Dir: t.TempDir(), HomeDir: homeDir, Port: 0, SuppressDashboardRendering: true,
+			StdinIsTTY: func() bool { return true },
+			RecordingTargetPlanner: recordings.LiveRecordingTargetPlannerFunc(func(request recordings.LiveRecordingTargetRequest) (recordings.LiveRecordingTarget, error) {
+				plannedRequest = request
+				return recordings.LiveRecordingTarget{ServicePath: plannedPath, ReportedPath: plannedPath}, nil
+			}),
+		}, factory.BuildRunner, factory.Invocation(), testResponsePresentation(), testResponseEventValidator(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
 		if err != nil {
-			t.Fatalf("BuildApplication(home %q) error = %v", homeDir, err)
+			t.Fatalf("Open(home %q) error = %v", homeDir, err)
 		}
-		wantRoot := defaultpaths.RecordingsRoot(homeDir)
-		if !strings.HasPrefix(filepath.Clean(gotRecordPath), filepath.Clean(wantRoot)+string(os.PathSeparator)) {
-			t.Fatalf("record path = %q, want below supplied home root %q", gotRecordPath, wantRoot)
+		if plannedRequest.HomeDir != homeDir || gotRecordPath != plannedPath {
+			t.Fatalf("planner request/path = %#v / %q, want home %q / %q", plannedRequest, gotRecordPath, homeDir, plannedPath)
 		}
-		if strings.HasPrefix(filepath.Clean(gotRecordPath), filepath.Clean(defaultpaths.RecordingsRoot(ambientHome))) {
-			t.Fatalf("record path = %q, unexpectedly used ambient home %q", gotRecordPath, ambientHome)
-		}
-		if gotSystemHome != homeDir || gotLogDir != defaultpaths.RuntimeLogsRoot(homeDir) || gotMetricsDir != defaultpaths.RuntimeMetricsRoot(homeDir) {
+		if gotSystemHome != homeDir || gotLogDir != logging.RuntimeLogsRoot(homeDir) || gotMetricsDir != metrics.RuntimeMetricsRoot(homeDir) {
 			t.Fatalf("service home paths = home %q logs %q metrics %q; want roots below %q", gotSystemHome, gotLogDir, gotMetricsDir, homeDir)
 		}
-		if err := application.Run(context.Background()); err != nil {
-			t.Fatalf("Application.Run(home %q) error = %v", homeDir, err)
+		if err := operation.Run(context.Background()); err != nil {
+			t.Fatalf("Operation.Run(home %q) error = %v", homeDir, err)
 		}
-	}
-}
-
-func TestGenerateDefaultLiveRunRecordPath_UsesUniqueSuffixes(t *testing.T) {
-	originalTime := defaultLiveRunRecordTime
-	originalUUID := defaultLiveRunRecordUUID
-	defer func() {
-		defaultLiveRunRecordTime = originalTime
-		defaultLiveRunRecordUUID = originalUUID
-	}()
-
-	homeDir := t.TempDir()
-	setUserHomeForTest(t, homeDir)
-	defaultLiveRunRecordTime = func() time.Time {
-		return time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60))
-	}
-	nextUUID := []string{"uuid-1", "uuid-2"}
-	defaultLiveRunRecordUUID = func() string {
-		id := nextUUID[0]
-		nextUUID = nextUUID[1:]
-		return id
-	}
-
-	first, err := generateDefaultLiveRunRecordPath()
-	if err != nil {
-		t.Fatalf("generateDefaultLiveRunRecordPath(first): %v", err)
-	}
-	second, err := generateDefaultLiveRunRecordPath()
-	if err != nil {
-		t.Fatalf("generateDefaultLiveRunRecordPath(second): %v", err)
-	}
-	if first == second {
-		t.Fatalf("generated paths matched: %q", first)
 	}
 }
 
 func TestRun_WithBootstrapCallsBootstrapFactory(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalBootstrap := bootstrapFactory
+	originalBuilder := openTestRuntimeRunner
 	defer func() {
-		buildFactoryService = originalBuilder
-		bootstrapFactory = originalBootstrap
+		openTestRuntimeRunner = originalBuilder
 	}()
 
 	dir := t.TempDir()
 	var gotBootstrapDir string
-	bootstrapFactory = func(inDir string) error {
+	resolve := func(inDir string) (string, error) {
 		gotBootstrapDir = inDir
-		return nil
+		return dir, nil
 	}
 
 	var capturedMode interfaces.RuntimeMode
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+	openTestRuntimeRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (factoryServiceRunner, error) {
 		capturedMode = cfg.RuntimeMode
 		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
 	}
 
-	if err := Run(context.Background(), RunConfig{Bootstrap: true, Dir: dir}); err != nil {
+	if err := Run(context.Background(), RunConfig{
+		Bootstrap: true, Dir: dir,
+		ResolveCurrentFactoryDir: resolve,
+		DirectoryCreator:         platformfilesystem.Local{},
+	}); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if gotBootstrapDir != dir {
@@ -561,14 +536,14 @@ func TestRun_StartupOutputReportsDashboardAndOpensBrowser(t *testing.T) {
 		Bootstrap:     true,
 		Continuously:  true,
 		OpenDashboard: true,
+		OutputIsTTY:   true,
 		StartupOutput: &out,
 	}
-	if !emitStartupMessages(cfg, service.RuntimeLogDiagnostics{}, func(io.Writer) bool { return true }) {
+	if !emitStartupMessages(cfg, runtimehost.RuntimeLogDiagnostics{}) {
 		t.Fatal("startup messages did not request dashboard open")
 	}
-	dashboardReady := make(chan struct{})
-	wait := openDashboardWhenServerReady(
-		context.Background(), cfg, dashboardReady,
+	openDashboardAtBoundEndpoint(
+		context.Background(), cfg,
 		func(_ context.Context, url string) error {
 			openedURL = url
 			close(opened)
@@ -577,17 +552,9 @@ func TestRun_StartupOutputReportsDashboardAndOpensBrowser(t *testing.T) {
 	)
 	select {
 	case <-opened:
-		t.Fatal("dashboard opener ran before API server readiness")
-	default:
-	}
-	close(dashboardReady)
-	select {
-	case <-opened:
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for dashboard opener")
 	}
-	wait()
-
 	wantURL := "http://localhost:7437/dashboard/ui"
 	if openedURL != wantURL {
 		t.Fatalf("opened URL = %q, want %q", openedURL, wantURL)
@@ -635,9 +602,9 @@ func assertStableSourceConflictError(t *testing.T, err error) {
 		t.Fatal("expected stable source conflict error")
 	}
 	for _, want := range []string{
-		string(invocations.InputErrorCodeSourceConflict),
-		string(invocations.InputSourcePositionalText),
-		string(invocations.InputSourceStdinText),
+		string(work.InputErrorCodeSourceConflict),
+		string(work.InputSourcePositionalText),
+		string(work.InputSourceStdinText),
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err.Error(), want)
@@ -649,10 +616,29 @@ func stringPtr(value string) *string {
 	return &value
 }
 
+func preparedTextInvocationInput(source work.InputSourceLabel, text string) work.PreparedInvocationInput {
+	resolved := &work.ResolvedInput{Source: source, Text: text, Content: []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText, Text: text,
+	}}}
+	return work.PreparedInvocationInput{Source: source, ResolvedInput: resolved}
+}
+
+func preparedTextInvocationInputPtr(source work.InputSourceLabel, text string) *work.PreparedInvocationInput {
+	prepared := preparedTextInvocationInput(source, text)
+	return &prepared
+}
+
+func scriptedInvocationConflictError() error {
+	return MapInvocationInputError(&work.InputError{
+		Code: work.InputErrorCodeSourceConflict, Message: "invocation input sources conflict: positional_text, stdin_text",
+		ConflictingSources: []work.InputSourceLabel{work.InputSourcePositionalText, work.InputSourceStdinText},
+	})
+}
+
 func assertInvocationRequestMatchesSharedResolver(
 	t *testing.T,
 	request *factoryapi.InvocationRequest,
-	source invocations.InputSourceLabel,
+	source work.InputSourceLabel,
 	text string,
 ) {
 	t.Helper()
@@ -664,26 +650,13 @@ func assertInvocationRequestMatchesSharedResolver(
 		t.Fatalf("sourceKind = %v, want text", request.SourceKind)
 	}
 
-	sources := invocations.TextInputSources{}
 	switch source {
-	case invocations.InputSourcePositionalText:
-		sources.PositionalText = &text
-	case invocations.InputSourceStdinText:
-		sources.StdinText = &text
+	case work.InputSourcePositionalText, work.InputSourceStdinText:
 	default:
 		t.Fatalf("unsupported source label %q", source)
 	}
-
-	resolved, err := invocations.ResolveTextInput(sources)
-	if err != nil {
-		t.Fatalf("ResolveTextInput: %v", err)
-	}
-	want := invocationRequestFromResolvedInput(resolved)
-	if got := extractInvocationText(t, request); got != extractInvocationText(t, want) {
-		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, want))
-	}
-	if request.SourceKind == nil || want.SourceKind == nil || *request.SourceKind != *want.SourceKind {
-		t.Fatalf("sourceKind = %v, want %v", request.SourceKind, want.SourceKind)
+	if got := extractInvocationText(t, request); got != text {
+		t.Fatalf("invocation text = %q, want %q", got, text)
 	}
 }
 
@@ -691,8 +664,8 @@ func assertStableInvocationSourceConflictMessage(t *testing.T, got string, wantM
 	t.Helper()
 
 	for _, fragment := range []string{
-		string(invocations.InputSourcePositionalText),
-		string(invocations.InputSourceStdinText),
+		string(work.InputSourcePositionalText),
+		string(work.InputSourceStdinText),
 		wantMessage,
 	} {
 		if !strings.Contains(got, fragment) {
@@ -702,14 +675,9 @@ func assertStableInvocationSourceConflictMessage(t *testing.T, got string, wantM
 }
 
 func invocationRequestFromLogicalAPIText(text string) (*factoryapi.InvocationRequest, error) {
-	resolved, err := invocations.ResolveAPITextInputContent([]work.WorkContentPart{{
-		Type: work.WorkContentPartTypeText,
-		Text: text,
-	}})
-	if err != nil {
-		return nil, err
-	}
-	return invocationRequestFromResolvedInput(resolved), nil
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}})
+	return &factoryapi.InvocationRequest{SourceKind: &sourceKind, Content: content}, nil
 }
 
 func assertEquivalentInvocationRequests(
@@ -807,83 +775,14 @@ func withRunOutput(cfg RunConfig, output *bytes.Buffer) RunConfig {
 	return cfg
 }
 
-func TestSetBuildFactoryService_RegistersBuilder(t *testing.T) {
-	original := buildFactoryService
-	t.Cleanup(func() {
-		buildFactoryService = original
-	})
-
-	builderErr := errors.New("registered builder")
-	SetBuildFactoryService(func(
-		_ context.Context,
-		_ *service.FactoryServiceConfig,
-	) (factoryServiceRunner, error) {
-		return nil, builderErr
-	})
-
-	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
-	if !errors.Is(err, builderErr) {
-		t.Fatalf("buildFactoryService err = %v, want %v", err, builderErr)
-	}
-}
-
-func TestSetBuildFactoryService_NilRestoresDefault(t *testing.T) {
-	original := buildFactoryService
-	t.Cleanup(func() {
-		buildFactoryService = original
-	})
-
-	customErr := errors.New("custom builder")
-	SetBuildFactoryService(func(
-		_ context.Context,
-		_ *service.FactoryServiceConfig,
-	) (factoryServiceRunner, error) {
-		return nil, customErr
-	})
-	SetBuildFactoryService(nil)
-
-	secondErr := errors.New("second builder")
-	SetBuildFactoryService(func(
-		_ context.Context,
-		_ *service.FactoryServiceConfig,
-	) (factoryServiceRunner, error) {
-		return nil, secondErr
-	})
-
-	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
-	if !errors.Is(err, secondErr) {
-		t.Fatalf("buildFactoryService err = %v, want %v", err, secondErr)
-	}
-}
-
-func TestFactoryServiceBuilderFromService_AdaptsConcreteBuilder(t *testing.T) {
-	original := buildFactoryService
-	t.Cleanup(func() {
-		buildFactoryService = original
-	})
-
-	builderErr := errors.New("adapted builder")
-	SetBuildFactoryService(FactoryServiceBuilderFromService(func(
-		_ context.Context,
-		_ *service.FactoryServiceConfig,
-	) (*service.FactoryService, error) {
-		return nil, builderErr
-	}))
-
-	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
-	if !errors.Is(err, builderErr) {
-		t.Fatalf("buildFactoryService err = %v, want %v", err, builderErr)
-	}
-}
-
 func TestBuildFactoryService_DefaultRequiresInjectedBuilder(t *testing.T) {
-	original := buildFactoryService
+	original := openTestRuntimeRunner
 	t.Cleanup(func() {
-		buildFactoryService = original
+		openTestRuntimeRunner = original
 	})
-	buildFactoryService = defaultBuildFactoryService
+	openTestRuntimeRunner = missingTestRuntimeRunner
 
-	_, err := buildFactoryService(context.Background(), nil)
+	_, err := openTestRuntimeRunner(context.Background(), nil, serviceedges.Edges{})
 	if err == nil || !strings.Contains(err.Error(), "dependency-injected builder is required") {
 		t.Fatalf("default builder err = %v, want dependency-injected builder requirement", err)
 	}

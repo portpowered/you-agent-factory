@@ -7,551 +7,306 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
-
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// queueManyItems queues numItems work items via QueueBatch, sending all
-// items in a single submit call to avoid channel buffer overflow.
-func queueManyItems(t *testing.T, h *testutil.ServiceTestHarness, workTypeID string, numItems int) {
-	t.Helper()
-	ctx := context.Background()
+type workBatchSubmitter interface {
+	SubmitFull(context.Context, []work.SubmitRequest)
+}
 
-	reqs := make([]work.SubmitRequest, numItems)
-	for i := range numItems {
-		reqs[i] = work.SubmitRequest{
+func queueManyItems(t *testing.T, submitter workBatchSubmitter, workTypeID string, numItems int) {
+	t.Helper()
+	requests := make([]work.SubmitRequest, numItems)
+	for i := range requests {
+		requests[i] = work.SubmitRequest{
+			WorkID:     fmt.Sprintf("%s-%d", workTypeID, i),
+			Name:       fmt.Sprintf("%s-%d", workTypeID, i),
 			WorkTypeID: workTypeID,
 			Payload:    fmt.Appendf(nil, `{"item": %d}`, i),
 			TraceID:    fmt.Sprintf("trace-%s-%d", workTypeID, i),
 		}
 	}
-	h.SubmitFull(ctx, reqs)
+	submitter.SubmitFull(context.Background(), requests)
 }
 
-// TestResourceExhaustionGPU validates that a single GPU resource (capacity=1)
-// serializes execution correctly: at most 1 work item actively processing at
-// any time, and all 20 work items eventually complete.
-// portos:func-length-exception owner=agent-factory reason=legacy-gpu-resource-exhaustion-fixture review=2026-07-19 removal=split-resource-fixture-run-and-serialization-assertions-before-next-resource-exhaustion-change
+func resourceFactoryConfig(workerName string, resources ...interfaces.ResourceConfig) *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Resources: resources,
+		Workers:   []interfaces.FactoryWorkerConfig{{Name: workerName}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "process", WorkerTypeName: workerName,
+			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
+			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Resources: append([]interfaces.ResourceConfig(nil), resources...),
+		}},
+	}
+}
+
+func startResourceProcess(
+	t *testing.T,
+	cfg *interfaces.FactoryConfig,
+	executor workers.WorkerExecutor,
+) *stressProcessHarness {
+	t.Helper()
+	dir := testutil.ScaffoldFactoryDir(t, cfg)
+	harness := startStressProcess(t, dir, workerExecutorProvider{executor: executor})
+	t.Cleanup(harness.Stop)
+	return harness
+}
+
+// TestResourceExhaustionGPU proves a capacity-one public Workstation resource
+// serializes execution and is fully available after every Work item completes.
 func TestResourceExhaustionGPU(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
-
 	const numItems = 20
-	// Config: task init → processing (consumes gpu) → complete (returns gpu).
-	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
-			{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "processing", Type: interfaces.StateTypeProcessing},
-			{Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed},
-		}}},
-		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
-		Workers:   []workerconfig.Config{{Name: "gpu-worker"}, {Name: "release-worker"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{Name: "acquire", WorkerTypeName: "gpu-worker",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "gpu", StateName: "available"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}},
-			{Name: "release", WorkerTypeName: "release-worker",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}, {WorkTypeName: "gpu", StateName: "available"}}},
-		},
-	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	// Track concurrency via custom executor.
-	var mu sync.Mutex
-	maxConcurrent := 0
-	currentConcurrent := 0
-
-	h.SetCustomExecutor("gpu-worker", &concurrencyTracker{
-		mu: &mu, maxConcurrent: &maxConcurrent, currentConcurrent: &currentConcurrent,
-	})
-
-	releaseResults := make([]workerexecution.WorkResult, numItems)
-	for i := range releaseResults {
-		releaseResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	h.MockWorker("release-worker", releaseResults...)
-
-	// Queue all items as a single batch (one channel message), then run.
+	tracker := newConcurrencyTracker(5 * time.Millisecond)
+	h := startResourceProcess(t, resourceFactoryConfig(
+		"gpu-worker",
+		interfaces.ResourceConfig{Name: "gpu", Capacity: 1},
+	), tracker)
 	queueManyItems(t, h, "task", numItems)
+	h.WaitForTerminalCount(numItems, 30*time.Second)
 
-	h.RunUntilComplete(t, 30*time.Second)
-
-	// Assert: all 20 items complete.
-	snap := h.Marking()
-	completeCount := len(snap.TokensInPlace("task:complete"))
-	if completeCount != numItems {
-		initCount := len(snap.TokensInPlace("task:init"))
-		procCount := len(snap.TokensInPlace("task:processing"))
-		failedCount := len(snap.TokensInPlace("task:failed"))
-		t.Errorf("expected %d complete, got %d (init=%d, processing=%d, failed=%d)",
-			numItems, completeCount, initCount, procCount, failedCount)
+	assertWorkStateCounts(t, h.Session(), numItems, 0)
+	if got := tracker.max(); got > 1 {
+		t.Fatalf("maximum concurrent GPU users = %d, want at most 1", got)
 	}
-
-	// Assert: at most 1 concurrent GPU user.
-	mu.Lock()
-	observed := maxConcurrent
-	mu.Unlock()
-	if observed > 1 {
-		t.Errorf("expected at most 1 concurrent GPU user, observed %d", observed)
-	}
-
-	// Assert: no starvation — all items finished.
-	h.Assert().
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing")
-
-	// Assert: GPU returned to pool.
-	gpuTokens := snap.TokensInPlace("gpu:available")
-	if len(gpuTokens) != 1 {
-		t.Errorf("expected 1 GPU token in gpu:available, got %d", len(gpuTokens))
-	}
-
-	// Assert: no tokens lost or duplicated.
-	expectedTotal := numItems + 1 // work tokens + 1 GPU token
-	if len(snap.Tokens) != expectedTotal {
-		t.Errorf("expected %d total tokens, got %d", expectedTotal, len(snap.Tokens))
-	}
+	assertPublicResourceUsage(t, h.Session(), "gpu", 1, 1)
 }
 
-// TestResourceExhaustionMoney validates that a money resource (capacity=5)
-// correctly throttles execution: only 5 items can process concurrently,
-// and as money is returned, queued items proceed.
+// TestResourceExhaustionMoney proves a capacity-five public Workstation
+// resource bounds execution and is fully released.
 func TestResourceExhaustionMoney(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
+	const numItems, capacity = 10, 5
+	tracker := newConcurrencyTracker(5 * time.Millisecond)
+	h := startResourceProcess(t, resourceFactoryConfig(
+		"money-worker",
+		interfaces.ResourceConfig{Name: "money", Capacity: capacity},
+	), tracker)
+	queueManyItems(t, h, "task", numItems)
+	h.WaitForTerminalCount(numItems, 30*time.Second)
 
-	const (
-		numItems      = 10
-		moneyCapacity = 5
-	)
-
-	// Config: task init → processing (consumes money) → complete (returns money).
-	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
-			{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "processing", Type: interfaces.StateTypeProcessing},
-			{Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed},
-		}}},
-		Resources: []factoryresource.Config{{Name: "money", Capacity: moneyCapacity}},
-		Workers:   []workerconfig.Config{{Name: "spender"}, {Name: "earner"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{Name: "spend", WorkerTypeName: "spender",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "money", StateName: "available"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}},
-			{Name: "earn", WorkerTypeName: "earner",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}, {WorkTypeName: "money", StateName: "available"}}},
-		},
-	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	// Track max concurrency.
-	var mu sync.Mutex
-	maxConcurrent := 0
-	currentConcurrent := 0
-
-	h.SetCustomExecutor("spender", &concurrencyTracker{
-		mu: &mu, maxConcurrent: &maxConcurrent, currentConcurrent: &currentConcurrent,
-	})
-
-	earnResults := make([]workerexecution.WorkResult, numItems)
-	for i := range earnResults {
-		earnResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
+	assertWorkStateCounts(t, h.Session(), numItems, 0)
+	if got := tracker.max(); got > capacity {
+		t.Fatalf("maximum concurrent money users = %d, want at most %d", got, capacity)
 	}
-	h.MockWorker("earner", earnResults...)
-
-	// Queue all items (10 fits within buffer of 16).
-	for i := range numItems {
-		h.SubmitWork("task", fmt.Appendf(nil, `{"item": %d}`, i))
-	}
-
-	h.RunUntilComplete(t, 30*time.Second)
-
-	// Assert: all items complete.
-	h.Assert().
-		PlaceTokenCount("task:complete", numItems).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing")
-
-	// Assert: max concurrency did not exceed money capacity.
-	mu.Lock()
-	observed := maxConcurrent
-	mu.Unlock()
-	if observed > moneyCapacity {
-		t.Errorf("expected max concurrent <= %d, observed %d", moneyCapacity, observed)
-	}
-
-	// Assert: all money returned.
-	snap := h.Marking()
-	moneyTokens := snap.TokensInPlace("money:available")
-	if len(moneyTokens) != moneyCapacity {
-		t.Errorf("expected %d money tokens returned, got %d", moneyCapacity, len(moneyTokens))
-	}
-
-	// Assert: no tokens lost.
-	expectedTotal := numItems + moneyCapacity
-	if len(snap.Tokens) != expectedTotal {
-		t.Errorf("expected %d total tokens, got %d", expectedTotal, len(snap.Tokens))
-	}
+	assertPublicResourceUsage(t, h.Session(), "money", capacity, capacity)
 }
 
-// TestResourceExhaustionMoneyConsumed validates that when money is consumed
-// permanently (not returned), items that cannot acquire money are stuck and
-// the system handles it gracefully — remaining items stay in init.
-// portos:func-length-exception owner=agent-factory reason=legacy-consumable-resource-exhaustion-fixture review=2026-07-19 removal=split-consumable-resource-fixture-run-and-stuck-work-assertions-before-next-resource-exhaustion-change
-func TestResourceExhaustionMoneyConsumed(t *testing.T) {
+// TestResourceCapacityIsLeaseBased replaces the obsolete internal
+// resource-token consumption scenario. Customer-authored Workstation resources
+// are leases: capacity is returned after each dispatch and queued Work proceeds.
+func TestResourceCapacityIsLeaseBased(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
+	const numItems, capacity = 10, 5
+	h := startResourceProcess(t, resourceFactoryConfig(
+		"lease-worker",
+		interfaces.ResourceConfig{Name: "money", Capacity: capacity},
+	), newConcurrencyTracker(2*time.Millisecond))
+	queueManyItems(t, h, "task", numItems)
+	h.WaitForTerminalCount(numItems, 30*time.Second)
 
-	const (
-		numItems      = 10
-		moneyCapacity = 5
-	)
-
-	// Config: task init → complete (consumes money, does NOT return it).
-	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
-			{Name: "init", Type: interfaces.StateTypeInitial},
-			{Name: "complete", Type: interfaces.StateTypeTerminal},
-			{Name: "failed", Type: interfaces.StateTypeFailed},
-		}}},
-		Resources: []factoryresource.Config{{Name: "money", Capacity: moneyCapacity}},
-		Workers:   []workerconfig.Config{{Name: "spender"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name: "spend", WorkerTypeName: "spender",
-			Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "money", StateName: "available"}},
-			Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			// No money:available in outputs — money consumed permanently.
-		}},
-	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	spendResults := make([]workerexecution.WorkResult, numItems)
-	for i := range spendResults {
-		spendResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	h.MockWorker("spender", spendResults...)
-
-	for i := range numItems {
-		h.SubmitWork("task", fmt.Appendf(nil, `{"item": %d}`, i))
-	}
-
-	// This net has no path for stuck items (no money returned), so the engine
-	// won't reach "all terminal" when items are stuck in init. Use a timeout
-	// and check the marking state directly.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	// Wait only until the marking reaches the expected stuck state.
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for {
-		snap := h.Marking()
-		if len(snap.TokensInPlace("task:complete")) == moneyCapacity &&
-			len(snap.TokensInPlace("task:init")) == numItems-moneyCapacity {
-			break
-		}
-		if time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	cancel()
-	if err := <-errCh; err != nil && err != context.Canceled {
-		t.Fatalf("factory run error: %v", err)
-	}
-
-	// Assert: exactly moneyCapacity items completed.
-	snap := h.Marking()
-	completeCount := len(snap.TokensInPlace("task:complete"))
-	if completeCount != moneyCapacity {
-		t.Errorf("expected %d complete (money capacity), got %d", moneyCapacity, completeCount)
-	}
-
-	// Assert: remaining items stuck in init (no money available).
-	stuckCount := len(snap.TokensInPlace("task:init"))
-	expectedStuck := numItems - moneyCapacity
-	if stuckCount != expectedStuck {
-		t.Errorf("expected %d stuck in init, got %d", expectedStuck, stuckCount)
-	}
-
-	// Assert: money pool is empty (all consumed).
-	moneyTokens := snap.TokensInPlace("money:available")
-	if len(moneyTokens) != 0 {
-		t.Errorf("expected 0 money tokens (all consumed), got %d", len(moneyTokens))
-	}
-
-	// Assert: no tokens lost. Money tokens are consumed by input arcs and
-	// not returned — so they are removed from the marking entirely.
-	expectedTotal := completeCount + stuckCount
-	if len(snap.Tokens) != expectedTotal {
-		t.Errorf("expected %d total tokens (complete=%d + stuck=%d), got %d",
-			expectedTotal, completeCount, stuckCount, len(snap.Tokens))
-	}
+	assertWorkStateCounts(t, h.Session(), numItems, 0)
+	assertPublicResourceUsage(t, h.Session(), "money", capacity, capacity)
 }
 
-// TestResourceExhaustionNoTokenLoss validates that across many operations with
-// dual resources, tokens are never duplicated or destroyed when properly returned.
+// TestResourceExhaustionNoTokenLoss proves dual public resource leases do not
+// duplicate Work and both capacities return to availability.
 func TestResourceExhaustionNoTokenLoss(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
-
-	const (
-		numItems      = 20
-		gpuCapacity   = 1
-		moneyCapacity = 5
-	)
-
-	// Transition requires BOTH gpu + money to fire.
-	// GPU is bottleneck (cap 1), so only 1 processes at a time.
-	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
-			{Name: "init", Type: interfaces.StateTypeInitial}, {Name: "processing", Type: interfaces.StateTypeProcessing},
-			{Name: "complete", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed},
-		}}},
-		Resources: []factoryresource.Config{{Name: "gpu", Capacity: gpuCapacity}, {Name: "money", Capacity: moneyCapacity}},
-		Workers:   []workerconfig.Config{{Name: "worker"}, {Name: "releaser"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{
-			{Name: "acquire", WorkerTypeName: "worker",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "gpu", StateName: "available"}, {WorkTypeName: "money", StateName: "available"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}}},
-			{Name: "release", WorkerTypeName: "releaser",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "processing"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}, {WorkTypeName: "gpu", StateName: "available"}, {WorkTypeName: "money", StateName: "available"}}},
-		},
-	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	acquireResults := make([]workerexecution.WorkResult, numItems)
-	releaseResults := make([]workerexecution.WorkResult, numItems)
-	for i := range numItems {
-		acquireResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-		releaseResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	h.MockWorker("worker", acquireResults...)
-	h.MockWorker("releaser", releaseResults...)
-
+	const numItems = 20
+	h := startResourceProcess(t, resourceFactoryConfig(
+		"dual-worker",
+		interfaces.ResourceConfig{Name: "gpu", Capacity: 1},
+		interfaces.ResourceConfig{Name: "money", Capacity: 5},
+	), newConcurrencyTracker(2*time.Millisecond))
 	queueManyItems(t, h, "task", numItems)
+	h.WaitForTerminalCount(numItems, 30*time.Second)
 
-	h.RunUntilComplete(t, 30*time.Second)
-
-	// Assert: all complete.
-	h.Assert().
-		PlaceTokenCount("task:complete", numItems).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing")
-
-	// Assert: both resources fully returned.
-	snap := h.Marking()
-	gpuTokens := snap.TokensInPlace("gpu:available")
-	if len(gpuTokens) != gpuCapacity {
-		t.Errorf("expected %d GPU tokens returned, got %d", gpuCapacity, len(gpuTokens))
-	}
-	moneyTokens := snap.TokensInPlace("money:available")
-	if len(moneyTokens) != moneyCapacity {
-		t.Errorf("expected %d money tokens returned, got %d", moneyCapacity, len(moneyTokens))
-	}
-
-	// Assert: exact token count.
-	expectedTotal := numItems + gpuCapacity + moneyCapacity
-	if len(snap.Tokens) != expectedTotal {
-		t.Errorf("expected %d total tokens, got %d", expectedTotal, len(snap.Tokens))
-	}
-
-	// Verify no resource token duplication by checking unique IDs.
-	tokenIDs := make(map[string]bool, len(snap.Tokens))
-	for _, tok := range snap.Tokens {
-		if tokenIDs[tok.ID] {
-			t.Errorf("duplicate token ID: %s", tok.ID)
-		}
-		tokenIDs[tok.ID] = true
-	}
+	session := h.Session()
+	assertWorkStateCounts(t, session, numItems, 0)
+	assertPublicResourceUsage(t, session, "gpu", 1, 1)
+	assertPublicResourceUsage(t, session, "money", 5, 5)
+	assertUniquePublicWorkIDs(t, session)
 }
 
-// TestResourceExhaustionWithFailure validates that consumed reusable resources
-// are returned when work fails after acquisition and that remaining items can
-// still complete once the resource is released by the runtime failure path.
+// TestResourceExhaustionWithFailure proves a failed dispatch releases its
+// public resource lease and does not block subsequent Work.
 func TestResourceExhaustionWithFailure(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
-
-	const (
-		numItems       = 5
-		expectedFailed = 1
-		gpuCapacity    = 1
-	)
-
-	// Config: task init → complete while consuming a capacity-limited gpu resource.
-	// OnFailure routes failed work to task:failed; consumed gpu tokens are returned
-	// automatically by the transitioner failure path.
-	dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-		WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
-			{Name: "init", Type: interfaces.StateTypeInitial},
-			{Name: "complete", Type: interfaces.StateTypeTerminal},
-			{Name: "failed", Type: interfaces.StateTypeFailed},
-		}}},
-		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
-		Workers:   []workerconfig.Config{{Name: "processor"}},
-		Workstations: []interfaces.FactoryWorkstationConfig{{
-			Name: "process", WorkerTypeName: "processor",
-			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
-			Outputs:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-			Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
-			OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
-		}},
-	})
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	processResults := make([]workerexecution.WorkResult, numItems)
-	processResults[0] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeFailed, Error: "simulated processing failure"}
-	for i := 1; i < numItems; i++ {
-		processResults[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-	}
-	h.MockWorker("processor", processResults...)
-
+	const numItems = 5
+	executor := &failFirstExecutor{}
+	h := startResourceProcess(t, resourceFactoryConfig(
+		"failure-worker",
+		interfaces.ResourceConfig{Name: "gpu", Capacity: 1},
+	), executor)
 	queueManyItems(t, h, "task", numItems)
+	h.WaitForTerminalCount(numItems, 30*time.Second)
 
-	h.RunUntilComplete(t, 30*time.Second)
-
-	snap := h.Marking()
-
-	failedCount := len(snap.TokensInPlace("task:failed"))
-	if failedCount != expectedFailed {
-		t.Errorf("expected %d failed, got %d", expectedFailed, failedCount)
-	}
-
-	expectedComplete := numItems - expectedFailed
-	completeCount := len(snap.TokensInPlace("task:complete"))
-	if completeCount != expectedComplete {
-		t.Errorf("expected %d complete, got %d", expectedComplete, completeCount)
-	}
-
-	h.Assert().
-		HasNoTokenInPlace("task:init")
-
-	gpuTokens := snap.TokensInPlace("gpu:available")
-	if len(gpuTokens) != gpuCapacity {
-		t.Errorf("expected %d GPU token(s) in gpu:available, got %d", gpuCapacity, len(gpuTokens))
-	}
-
-	expectedTotal := numItems + gpuCapacity
-	if len(snap.Tokens) != expectedTotal {
-		t.Errorf("expected %d total tokens, got %d", expectedTotal, len(snap.Tokens))
-	}
-
-	tokenIDs := make(map[string]bool, len(snap.Tokens))
-	for _, tok := range snap.Tokens {
-		if tokenIDs[tok.ID] {
-			t.Errorf("duplicate token ID: %s", tok.ID)
-		}
-		tokenIDs[tok.ID] = true
-	}
-
-	failedWorkIDs := workTokenIDsInPlace(snap, "task:failed")
-	completeWorkIDs := workTokenIDsInPlace(snap, "task:complete")
-	for workID := range failedWorkIDs {
-		if completeWorkIDs[workID] {
-			t.Errorf("work %q appears in both task:failed and task:complete", workID)
-		}
-	}
+	session := h.Session()
+	assertWorkStateCounts(t, session, numItems-1, 1)
+	assertPublicResourceUsage(t, session, "gpu", 1, 1)
+	assertUniquePublicWorkIDs(t, session)
 }
 
-// TestResourceExhaustionTimeout validates no infinite loops or deadlocks
-// in resource-constrained scenarios.
 func TestResourceExhaustionTimeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
+	h := startResourceProcess(t, resourceFactoryConfig(
+		"timeout-worker",
+		interfaces.ResourceConfig{Name: "gpu", Capacity: 1},
+	), newConcurrencyTracker(time.Millisecond))
+	queueManyItems(t, h, "task", 15)
+	h.WaitForTerminalCount(15, 10*time.Second)
+	assertPublicResourceUsage(t, h.Session(), "gpu", 1, 1)
+}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-
-		dir := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
-			WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{
-				{Name: "init", Type: interfaces.StateTypeInitial},
-				{Name: "complete", Type: interfaces.StateTypeTerminal},
-				{Name: "failed", Type: interfaces.StateTypeFailed},
-			}}},
-			Resources: []factoryresource.Config{{Name: "gpu", Capacity: 1}},
-			Workers:   []workerconfig.Config{{Name: "w"}},
-			Workstations: []interfaces.FactoryWorkstationConfig{{
-				Name: "process", WorkerTypeName: "w",
-				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}, {WorkTypeName: "gpu", StateName: "available"}},
-				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}, {WorkTypeName: "gpu", StateName: "available"}},
-			}},
-		})
-		h := testutil.NewServiceTestHarness(t, dir)
-
-		results := make([]workerexecution.WorkResult, 15)
-		for i := range results {
-			results[i] = workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}
-		}
-		h.MockWorker("w", results...)
-
-		for i := range 15 {
-			h.SubmitWork("task", fmt.Appendf(nil, `{"item": %d}`, i))
-		}
-
-		h.RunUntilComplete(t, 10*time.Second)
-	}()
-
-	select {
-	case <-done:
-		// Completed within timeout.
-	case <-time.After(10 * time.Second):
-		t.Fatal("resource exhaustion test did not complete within 10s — possible deadlock")
+func assertWorkStateCounts(t *testing.T, session factoryapi.FactorySession, wantComplete, wantFailed int) {
+	t.Helper()
+	if session.Runtime.Progress.Categories.Terminal != wantComplete ||
+		session.Runtime.Progress.Categories.Failed != wantFailed ||
+		session.Runtime.Progress.Categories.Initial != 0 ||
+		session.Runtime.Progress.Categories.Processing != 0 {
+		t.Fatalf(
+			"public progress = %#v, want complete=%d failed=%d and no active Work",
+			session.Runtime.Progress,
+			wantComplete,
+			wantFailed,
+		)
 	}
 }
 
-// workTokenIDsInPlace returns work IDs for non-resource tokens in the given place.
-func workTokenIDsInPlace(snap *petri.MarkingSnapshot, placeID string) map[string]bool {
-	ids := make(map[string]bool)
-	for _, tok := range snap.TokensInPlace(placeID) {
-		if tok.Color.DataType == factorytoken.DataTypeResource || tok.Color.WorkID == "" {
+func assertPublicResourceUsage(
+	t *testing.T,
+	session factoryapi.FactorySession,
+	name string,
+	wantAvailable int,
+	wantTotal int,
+) {
+	t.Helper()
+	for _, resource := range session.Runtime.Usage.Resources {
+		if resource.Name != name {
 			continue
 		}
-		ids[tok.Color.WorkID] = true
+		if resource.Available != wantAvailable || resource.Total != wantTotal {
+			t.Fatalf("resource %q usage = %#v, want available=%d total=%d", name, resource, wantAvailable, wantTotal)
+		}
+		return
 	}
-	return ids
+	t.Fatalf("resource %q missing from public usage %#v", name, session.Runtime.Usage.Resources)
 }
 
-// --- Helper executors ---
+func assertUniquePublicWorkIDs(t *testing.T, session factoryapi.FactorySession) {
+	t.Helper()
+	if session.Runtime.Petri == nil {
+		t.Fatal("public Petri projection is missing")
+	}
+	seen := make(map[string]bool, len(session.Runtime.Petri.Marking))
+	for _, token := range session.Runtime.Petri.Marking {
+		if token.WorkId == "" {
+			continue
+		}
+		if seen[token.WorkId] {
+			t.Fatalf("duplicate public Work ID %q", token.WorkId)
+		}
+		seen[token.WorkId] = true
+	}
+}
 
-// concurrencyTracker tracks concurrent execution count.
 type concurrencyTracker struct {
-	mu                *sync.Mutex
-	maxConcurrent     *int
-	currentConcurrent *int
+	mu      sync.Mutex
+	active  int
+	peak    int
+	holdFor time.Duration
 }
 
-func (ct *concurrencyTracker) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
-	ct.mu.Lock()
-	*ct.currentConcurrent++
-	if *ct.currentConcurrent > *ct.maxConcurrent {
-		*ct.maxConcurrent = *ct.currentConcurrent
+func newConcurrencyTracker(holdFor time.Duration) *concurrencyTracker {
+	return &concurrencyTracker{holdFor: holdFor}
+}
+
+func (tracker *concurrencyTracker) Execute(
+	ctx context.Context,
+	dispatch work.WorkDispatch,
+) (workers.WorkResult, error) {
+	tracker.mu.Lock()
+	tracker.active++
+	if tracker.active > tracker.peak {
+		tracker.peak = tracker.active
 	}
-	ct.mu.Unlock()
+	tracker.mu.Unlock()
 
-	ct.mu.Lock()
-	*ct.currentConcurrent--
-	ct.mu.Unlock()
+	timer := time.NewTimer(tracker.holdFor)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+	case <-timer.C:
+	}
 
-	return workerexecution.WorkResult{DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
+	tracker.mu.Lock()
+	tracker.active--
+	tracker.mu.Unlock()
+	return workers.WorkResult{
+		DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID,
+		Outcome: workers.OutcomeAccepted,
+	}, nil
+}
+
+func (tracker *concurrencyTracker) max() int {
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	return tracker.peak
+}
+
+type failFirstExecutor struct {
+	mu    sync.Mutex
+	calls int
+}
+
+func (executor *failFirstExecutor) Execute(
+	_ context.Context,
+	dispatch work.WorkDispatch,
+) (workers.WorkResult, error) {
+	executor.mu.Lock()
+	executor.calls++
+	call := executor.calls
+	executor.mu.Unlock()
+	result := workers.WorkResult{
+		DispatchID: dispatch.DispatchID, TransitionID: dispatch.TransitionID,
+		Outcome: workers.OutcomeAccepted,
+	}
+	if call == 1 {
+		result.Outcome = workers.OutcomeFailed
+		result.Error = "simulated processing failure"
+	}
+	return result, nil
 }
 
 var (
 	_ workers.WorkerExecutor = (*concurrencyTracker)(nil)
+	_ workers.WorkerExecutor = (*failFirstExecutor)(nil)
 )

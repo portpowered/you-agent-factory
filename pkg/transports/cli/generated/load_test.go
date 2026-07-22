@@ -64,33 +64,6 @@ func TestRunSubmitFamilyManifestMatchesContractedIDs(t *testing.T) {
 	}
 }
 
-func TestWorkflowMCPGeneratedFamiliesStaySeparated(t *testing.T) {
-	mcp, err := generated.MCPFamilyManifest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	workflow, err := generated.WorkflowCompatibilityFamilyManifest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range generated.MCPFamilyCommandIDs {
-		if _, err := mcp.CommandByID(id); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := workflow.CommandByID(id); err == nil {
-			t.Fatalf("canonical MCP command %q leaked into compatibility artifact", id)
-		}
-	}
-	for _, id := range generated.WorkflowCompatibilityFamilyCommandIDs {
-		if _, err := workflow.CommandByID(id); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := mcp.CommandByID(id); err == nil {
-			t.Fatalf("workflow compatibility command %q leaked into canonical artifact", id)
-		}
-	}
-}
-
 func TestFactoryConfigInitFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
 	if len(generated.FactoryConfigInitFamilyCommandIDs) != len(climanifestgen.FactoryConfigInitFamilyCommandIDs) {
 		t.Fatalf("generated id count = %d, want %d", len(generated.FactoryConfigInitFamilyCommandIDs), len(climanifestgen.FactoryConfigInitFamilyCommandIDs))

@@ -9,7 +9,14 @@ const SOURCE_ROOT =
   process.env.AGENT_FACTORY_UI_SRC_DIR ?? path.join(UI_DIR, "src");
 const BASELINE_PATH =
   process.env.AGENT_FACTORY_UI_COPY_BASELINE_PATH ??
-  path.join(UI_DIR, "scripts", "hardcoded-ui-copy-baseline.txt");
+  path.join(
+    UI_DIR,
+    "..",
+    "docs",
+    "internal",
+    "baselines",
+    "hardcoded-ui-copy-baseline.txt",
+  );
 const NON_PRODUCT_DIAGNOSTIC_EXCEPTION_MARKER =
   "hardcoded-ui-copy-exception: non-product-diagnostic";
 

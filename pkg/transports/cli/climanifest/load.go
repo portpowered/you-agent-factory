@@ -3,7 +3,8 @@ package climanifest
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 )
 
 const (
@@ -12,8 +13,8 @@ const (
 )
 
 // LoadProduction decodes the committed production CLI command manifest.
-func LoadProduction(path string) (Manifest, error) {
-	manifest, err := load(path, "production")
+func LoadProduction(store generatedartifacts.SourceStore, path string) (Manifest, error) {
+	manifest, err := load(store, path, "production", true)
 	if err != nil {
 		return Manifest{}, err
 	}
@@ -24,12 +25,15 @@ func LoadProduction(path string) (Manifest, error) {
 }
 
 // LoadCompatibility decodes the separately classified compatibility command manifest.
-func LoadCompatibility(path string) (Manifest, error) {
-	return load(path, "compatibility")
+func LoadCompatibility(store generatedartifacts.SourceStore, path string) (Manifest, error) {
+	return load(store, path, "compatibility", false)
 }
 
-func load(path, label string) (Manifest, error) {
-	raw, err := os.ReadFile(path)
+func load(store generatedartifacts.SourceStore, path, label string, requireCommands bool) (Manifest, error) {
+	if store == nil {
+		return Manifest{}, fmt.Errorf("CLI command manifest source store is required")
+	}
+	raw, err := store.Read(path)
 	if err != nil {
 		return Manifest{}, fmt.Errorf("read %s CLI command manifest %s: %w", label, path, err)
 	}
@@ -40,7 +44,7 @@ func load(path, label string) (Manifest, error) {
 	if manifest.RootPath == "" {
 		return Manifest{}, fmt.Errorf("%s CLI command manifest missing rootPath", label)
 	}
-	if len(manifest.Commands) == 0 {
+	if requireCommands && len(manifest.Commands) == 0 {
 		return Manifest{}, fmt.Errorf("%s CLI command manifest missing commands", label)
 	}
 	return manifest, nil

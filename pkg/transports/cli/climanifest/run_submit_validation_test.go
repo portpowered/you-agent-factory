@@ -89,7 +89,7 @@ func TestValidateRunSubmitFamily_RejectsIncompleteAndContradictoryContracts(t *t
 func loadRunSubmitFixture(t *testing.T) climanifest.Manifest {
 	t.Helper()
 	path := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
-	manifest, err := climanifest.LoadProduction(path)
+	manifest, err := climanifest.LoadProduction(sourceStore(), path)
 	if err != nil {
 		t.Fatalf("LoadProduction() error = %v", err)
 	}

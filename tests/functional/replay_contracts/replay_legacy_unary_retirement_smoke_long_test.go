@@ -3,14 +3,14 @@
 package replay_contracts
 
 import (
-	"context"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,11 +23,6 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 		workerexecution.InferenceResponse{Content: "step one COMPLETE"},
 		workerexecution.InferenceResponse{Content: "step two COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
 	request := work.WorkRequest{
 		RequestID: "request-retired-unary-replay",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
@@ -38,15 +33,26 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 			Payload:    []byte(`{"title":"record replay canonical submit"}`),
 		}},
 	}
-	h.SubmitWorkRequest(context.Background(), request)
-	h.RunUntilComplete(t, 10*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Args:                      []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.UpsertDefaultSessionWorkRequest(t, server.URL(), request)
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	server.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertReplayWorkRequestRecorded(t, artifact, request.RequestID, "external-submit", 1, 0)
-	replayHarness := testutil.AssertReplaySucceeds(t, artifactPath, 10*time.Second)
-	events, err := replayHarness.Service.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents after replay: %v", err)
-	}
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath},
+	})
+	support.WaitForTerminalStatus(t, replayServer.URL(), 10*time.Second)
+	events := replayServer.GetFactoryEvents(t)
+	replayServer.Stop(t)
 	support.AssertSingleWorkRequestEvent(t, events, request.RequestID, "work-retired-unary-replay", "task")
 }

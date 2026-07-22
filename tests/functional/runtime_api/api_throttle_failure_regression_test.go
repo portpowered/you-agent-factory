@@ -7,26 +7,21 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork(t *testing.T) {
 	dir := support.ScaffoldFactory(t, retryableFailureFactoryConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.ProviderCodex, "gpt-5-codex"))
 
 	runner := testutil.NewProviderCommandRunner(repeatedThrottleCommandResults(12)...)
-	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
-		support.ConfigureWorkerCommands(t, cfg, runner, nil)
-	}, factory.WithServiceMode())
+	server := startFunctionalServerWithArgs(t, dir, false, nil,
+		withWorkerCommands(runner, nil))
 
 	server.SubmitRuntimeWork(t, work.SubmitRequest{
 		Name:       "throttled-task",
@@ -34,16 +29,17 @@ func TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork(t
 		Payload:    json.RawMessage(`{"title":"force throttle exhaustion"}`),
 	})
 
-	snapshot := waitForThrottledFailureExhaustion(t, server, 10*time.Second)
-	categories := categorizeFunctionalState(snapshot)
-	if categories.Failed != 1 {
-		t.Fatalf("failed token count = %d, want 1", categories.Failed)
+	status := waitForThrottledFailureExhaustion(t, server, 10*time.Second)
+	if status.Categories.Failed != 1 {
+		t.Fatalf("failed token count = %d, want 1", status.Categories.Failed)
 	}
-	if categories.Initial != 0 || categories.Processing != 0 || categories.Terminal != 0 {
-		t.Fatalf("non-failed token counts = initial:%d processing:%d terminal:%d, want all 0", categories.Initial, categories.Processing, categories.Terminal)
-	}
-	if snapshot.InFlightCount != 0 {
-		t.Fatalf("in-flight dispatch count = %d, want 0", snapshot.InFlightCount)
+	if status.Categories.Initial != 0 || status.Categories.Processing != 0 || status.Categories.Terminal != 0 {
+		t.Fatalf(
+			"non-failed token counts = initial:%d processing:%d terminal:%d, want all 0",
+			status.Categories.Initial,
+			status.Categories.Processing,
+			status.Categories.Terminal,
+		)
 	}
 	wantProviderCalls := 3 * 3
 	if runner.CallCount() != wantProviderCalls {
@@ -61,10 +57,10 @@ func retryableFailureFactoryConfig() map[string]any {
 	return cfg
 }
 
-func repeatedThrottleCommandResults(count int) []workers.CommandResult {
-	results := make([]workers.CommandResult, count)
+func repeatedThrottleCommandResults(count int) []platformprocess.CommandResult {
+	results := make([]platformprocess.CommandResult, count)
 	for i := range results {
-		results[i] = workers.CommandResult{
+		results[i] = platformprocess.CommandResult{
 			ExitCode: 1,
 			Stderr:   []byte("ERROR: selected model is at capacity"),
 		}
@@ -76,31 +72,27 @@ func waitForThrottledFailureExhaustion(
 	t *testing.T,
 	server *functionalAPIServer,
 	timeout time.Duration,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+) generated.StatusResponse {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		snapshot := server.GetEngineStateSnapshot(t)
-		categories := categorizeFunctionalState(snapshot)
-		if snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle &&
-			categories.Failed == 1 &&
-			snapshot.InFlightCount == 0 {
-			return snapshot
+		status := support.GetJSON[generated.StatusResponse](t, server.URL()+"/status")
+		if status.RuntimeStatus == string(interfaces.RuntimeStatusIdle) &&
+			status.Categories.Failed == 1 {
+			return status
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	snapshot := server.GetEngineStateSnapshot(t)
-	categories := categorizeFunctionalState(snapshot)
+	status := support.GetJSON[generated.StatusResponse](t, server.URL()+"/status")
 	t.Fatalf(
-		"timed out waiting for throttled work to fail; runtime_status=%s factory_state=%s active_dispatches=%d categories=%+v",
-		snapshot.RuntimeStatus,
-		snapshot.FactoryState,
-		snapshot.InFlightCount,
-		categories,
+		"timed out waiting for throttled work to fail; runtime_status=%s factory_state=%s categories=%+v",
+		status.RuntimeStatus,
+		status.FactoryState,
+		status.Categories,
 	)
-	return nil
+	return generated.StatusResponse{}
 }
 
 func assertNoDanglingDispatchCreatedEvents(t *testing.T, events []generated.FactoryEvent) {

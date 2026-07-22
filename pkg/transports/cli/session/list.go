@@ -9,21 +9,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
-	"time"
 
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-const listRequestTimeout = 10 * time.Second
-
 // ListConfig holds parameters for the session list command.
 type ListConfig struct {
+	Context       context.Context
 	Server        string
 	Port          int
 	Scope         string
@@ -34,11 +31,25 @@ type ListConfig struct {
 	Diagnostics   io.Writer
 	DurableLister durableSessionLister
 	DurableCloser io.Closer
+	HTTP          clihttp.Protocol
+	Preparation   fse.RequestPreparation
+}
+
+func NewList(transport clihttp.Protocol, prepare fse.RequestPreparation) func(ListConfig) error {
+	return func(cfg ListConfig) error {
+		cfg.HTTP = transport
+		cfg.Preparation = prepare
+		return List(cfg)
+	}
 }
 
 // List requests factory sessions from a running host and, when scoped listing
 // includes durable rows, from the deterministic fixture-backed provider.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func List(cfg ListConfig) (err error) {
+	if cfg.Context == nil {
+		return fmt.Errorf("context is required")
+	}
 	if cfg.DurableCloser != nil {
 		defer func() {
 			if closeErr := cfg.DurableCloser.Close(); closeErr != nil {
@@ -47,10 +58,13 @@ func List(cfg ListConfig) (err error) {
 		}()
 	}
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		return fmt.Errorf("output writer is required")
 	}
 
-	normalized, err := fse.NormalizeListSessionsRequest(fse.ListSessionsRequest{
+	if cfg.Preparation == nil {
+		return fmt.Errorf("Factory Session request preparation is required")
+	}
+	normalized, err := cfg.Preparation.PrepareListSessions(fse.ListSessionsRequest{
 		Scope: fse.SessionListScope(strings.TrimSpace(cfg.Scope)),
 	})
 	if err != nil {
@@ -61,7 +75,7 @@ func List(cfg ListConfig) (err error) {
 	needsDurable := normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll
 
 	if needsDurable && !needsLive {
-		scoped, err := mergeScopedListResult(context.Background(), cfg, normalized, nil)
+		scoped, err := mergeScopedListResult(cfg.Context, cfg, normalized, nil)
 		if err != nil {
 			return err
 		}
@@ -70,6 +84,9 @@ func List(cfg ListConfig) (err error) {
 
 	if !needsLive {
 		return fmt.Errorf("unsupported session list scope %q", normalized.Scope)
+	}
+	if cfg.HTTP == nil {
+		return fmt.Errorf("CLI HTTP protocol is required")
 	}
 
 	liveSessions, httpResult, err := fetchLiveSessions(cfg)
@@ -84,7 +101,7 @@ func List(cfg ListConfig) (err error) {
 		return renderListResult(cfg.Output, httpResult)
 	}
 
-	scoped, err := mergeScopedListResult(context.Background(), cfg, normalized, liveSessions)
+	scoped, err := mergeScopedListResult(cfg.Context, cfg, normalized, liveSessions)
 	if err != nil {
 		return err
 	}
@@ -128,31 +145,25 @@ func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.Lis
 		cfg.Port,
 	)
 
-	client := &http.Client{Timeout: listRequestTimeout}
-	started := time.Now()
 	var result factoryapi.ListFactorySessionsResponse
-	resp, err := clihttp.GetJSON(
-		context.Background(),
-		client,
+	response, err := cfg.HTTP.GetJSON(
+		cfg.Context,
 		endpoint.String(),
 		&result,
-		clihttp.RequestOptions{
-			Diagnostics:  cfg.Diagnostics,
-			Verbose:      cfg.Verbose,
-			EndpointPath: endpoint.Path,
-			LogLabel:     "session list",
-		},
 	)
 	if err != nil {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session list response endpointPath=%s error=unreachable durationMillis=%d", endpoint.Path, response.Duration.Milliseconds())
 		return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf(
 			"factory sessions endpoint not reachable at %s: %w",
 			endpoint.String(),
 			err,
 		)
 	}
+	resp := response.HTTP
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "session list response endpointPath=%s status=%d durationMillis=%d", endpoint.Path, resp.StatusCode, response.Duration.Milliseconds())
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
 			return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf(
 				"list factory sessions failed (%d): %s",
@@ -168,7 +179,7 @@ func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.Lis
 		"session list response endpointPath=%s status=%d durationMillis=%d sessionCount=%d",
 		endpoint.Path,
 		resp.StatusCode,
-		time.Since(started).Milliseconds(),
+		response.Duration.Milliseconds(),
 		len(result.Sessions),
 	)
 

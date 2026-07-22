@@ -1,8 +1,10 @@
 package baseline
 
 import (
-	"os"
+	"fmt"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 )
 
 // NormalizeFixtureText canonicalizes committed baseline fixture text so compares
@@ -17,8 +19,11 @@ func NormalizeFixtureText(text string) string {
 }
 
 // ReadFixtureText reads a committed baseline fixture and normalizes line endings.
-func ReadFixtureText(path string) (string, error) {
-	raw, err := os.ReadFile(path)
+func ReadFixtureText(store generatedartifacts.SourceStore, path string) (string, error) {
+	if store == nil {
+		return "", fmt.Errorf("baseline fixture source store is required")
+	}
+	raw, err := store.Read(path)
 	if err != nil {
 		return "", err
 	}

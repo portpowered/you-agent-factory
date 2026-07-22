@@ -1,11 +1,7 @@
 // Package defaultcmd defines the no-argument agent-factory default flow.
 package defaultcmd
 
-import (
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-)
+import runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 
 const (
 	// FactoryDir is the base directory used by the default local factory.
@@ -15,19 +11,16 @@ const (
 )
 
 // ExplicitRunConfig returns the baseline configuration for the explicit run command.
-func ExplicitRunConfig() runcli.RunConfig {
-	return runcli.RunConfig{
-		Dir:                  FactoryDir,
-		Port:                 FactoryPort,
-		AutoPort:             true,
-		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig: platformmetrics.DefaultRuntimeMetricsConfig(),
-	}
+func ExplicitRunConfig(defaults runcli.RunConfig) runcli.RunConfig {
+	defaults.Dir = FactoryDir
+	defaults.Port = FactoryPort
+	defaults.AutoPort = true
+	return defaults
 }
 
 // OOTBRunConfig returns the no-argument out-of-the-box run configuration.
-func OOTBRunConfig() runcli.RunConfig {
-	cfg := ExplicitRunConfig()
+func OOTBRunConfig(defaults runcli.RunConfig) runcli.RunConfig {
+	cfg := ExplicitRunConfig(defaults)
 	cfg.Continuously = true
 	cfg.Bootstrap = true
 	cfg.OpenDashboard = true

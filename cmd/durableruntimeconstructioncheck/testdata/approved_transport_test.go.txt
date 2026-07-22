@@ -1,5 +1,5 @@
 package api
 
-func testRuntime(config Config) {
-	testharness.New(config)
+func testRuntime(service Service) {
+	service.GetSession("session-1")
 }

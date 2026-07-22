@@ -176,7 +176,7 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	if !ok {
 		t.Fatal("paths object is missing")
 	}
-	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/events", "get"), "#/components/schemas/FactoryEvent")
+	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"), "#/components/schemas/FactoryEvent")
 }
 
 func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T) {
@@ -492,7 +492,7 @@ func assertBundledEventStreamRoute(t *testing.T, doc map[string]any) {
 	if !ok {
 		t.Fatal("paths object is missing")
 	}
-	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/events", "get"), "#/components/schemas/FactoryEvent")
+	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"), "#/components/schemas/FactoryEvent")
 }
 
 func assertGeneratedFactoryTypeRetiresExhaustionRules(t *testing.T, factoryType reflect.Type) {

@@ -7,14 +7,12 @@ import (
 	"os"
 	"strings"
 	"testing"
+
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -196,10 +194,8 @@ func prepareNamedGoalOutputAcceptanceSession(t *testing.T) (*builtcliacceptance.
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	initResult, err := session.Run(ctx, "config", "init")
-	session.RequireSuccess(t, "output-mode-config-init", initResult, err)
-
-	configPath := defaultpaths.OperatorConfigPath(session.HomeDir)
+	_, initOutcome := initializeConfig(t, ctx, session, "output-mode-config-init")
+	configPath := initOutcome.ConfigPath
 	configBody := []byte(`{
   "defaults": {
     "workerModelProvider": "codex",
@@ -245,15 +241,15 @@ type responseStreamJSONInvocationResultRecord struct {
 }
 
 type responseStreamJSONResponseEventRecord struct {
-	RecordType string                              `json:"recordType"`
-	Event      responseevents.FactoryResponseEvent `json:"event"`
+	RecordType string                               `json:"recordType"`
+	Event      factorysessions.FactoryResponseEvent `json:"event"`
 }
 
 type responseStreamParsedRecord struct {
 	RecordType string
 	Raw        json.RawMessage
 	Invocation factoryapi.InvocationResponse
-	Event      responseevents.FactoryResponseEvent
+	Event      factorysessions.FactoryResponseEvent
 }
 
 func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedRecord, error) {
@@ -275,10 +271,8 @@ func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedReco
 			return nil, fmt.Errorf("decode line %q: %w", line, err)
 		}
 		recordType := strings.TrimSpace(envelope.RecordType)
-		if err := ndjsoncontract.RejectRetiredPrivateRecordType(recordType); err != nil {
-			return nil, err
-		}
-		if !ndjsoncontract.IsSupportedRecordType(recordType) {
+		if recordType != outputModeResponseStreamJSONRecordInvocation &&
+			recordType != outputModeResponseStreamJSONRecordResponseEvent {
 			return nil, fmt.Errorf("unsupported recordType %q in line %q", recordType, line)
 		}
 		record := responseStreamParsedRecord{
@@ -297,7 +291,7 @@ func parseResponseStreamNDJSONRecords(stdout string) ([]responseStreamParsedReco
 			if err := json.Unmarshal([]byte(line), &responseEvent); err != nil {
 				return nil, fmt.Errorf("decode response_event line %q: %w", line, err)
 			}
-			if err := responseevents.ValidateEvent(responseEvent.Event); err != nil {
+			if err := factorysessions.ValidateFactoryResponseEvent(responseEvent.Event); err != nil {
 				return nil, fmt.Errorf("validate response_event line %q: %w", line, err)
 			}
 			record.Event = responseEvent.Event

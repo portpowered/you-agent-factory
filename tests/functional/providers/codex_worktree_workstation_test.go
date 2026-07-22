@@ -1,7 +1,6 @@
 package providers
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,10 +9,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -68,20 +68,17 @@ Process the input task.
 			})
 
 			runner := testutil.NewProviderCommandRunner(
-				workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
+				platformprocess.CommandResult{Stdout: []byte("Done. COMPLETE")},
 			)
-			h := testutil.NewServiceTestHarness(t, factoryDir,
-				testutil.WithProviderCommandRunner(runner),
-				testutil.WithFullWorkerPoolAndScriptWrap(),
-			)
-
-			h.RunUntilComplete(t, 15*time.Second)
-
-			h.Assert().
-				HasTokenInPlace("task:complete").
-				HasNoTokenInPlace("task:init").
-				HasNoTokenInPlace("task:failed").
-				TokenCount(1)
+			server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+				FactoryDir: factoryDir,
+				Edges: serviceedges.Edges{
+					ProviderCommandRunner: runner,
+				},
+			})
+			support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+			session := support.GetDefaultSession(t, server.URL())
+			assertCursorProviderCompleted(t, session)
 
 			if runner.CallCount() != 1 {
 				t.Fatalf("provider runner call count = %d, want 1", runner.CallCount())
@@ -89,8 +86,8 @@ Process the input task.
 
 			wantCheckout := filepath.Join(factoryDir, filepath.FromSlash(tc.wantParentRel), workName)
 			call := runner.LastRequest()
-			if call.Command != string(modelprovider.Codex) {
-				t.Fatalf("command = %q, want %q", call.Command, modelprovider.Codex)
+			if call.Command != string(modelprovider.ProviderCodex) {
+				t.Fatalf("command = %q, want %q", call.Command, modelprovider.ProviderCodex)
 			}
 			if call.WorkDir != wantCheckout {
 				t.Fatalf("work dir = %q, want materialized checkout %q", call.WorkDir, wantCheckout)
@@ -102,17 +99,14 @@ Process the input task.
 				t.Fatalf("materialized checkout missing at %s: %v", wantCheckout, err)
 			}
 
-			events, err := h.GetFactoryEvents(context.Background())
-			if err != nil {
-				t.Fatalf("GetFactoryEvents: %v", err)
-			}
-			request := requireInferenceRequestEvent(t, events)
+			request := requireInferenceRequestEvent(t, server.GetFactoryEvents(t))
 			if request.Worktree != workName {
 				t.Fatalf("inference request worktree = %q, want %q", request.Worktree, workName)
 			}
 			if request.WorkingDirectory != wantCheckout {
 				t.Fatalf("inference request workingDirectory = %q, want %q", request.WorkingDirectory, wantCheckout)
 			}
+			server.Stop(t)
 		})
 	}
 }

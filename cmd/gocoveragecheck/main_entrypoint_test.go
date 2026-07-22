@@ -11,14 +11,14 @@ import (
 func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	originalExit := exitFunc
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlagSet
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 		exitFunc = originalExit
@@ -38,7 +38,7 @@ func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
 		}, ","),
 		"-packages=./pkg/config",
 	}
-	execCommand = fakeGoCoverageCommandPassing
+	commandRunner = fakeGoCoverageCommandPassing
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	exitFunc = func(code int) {
@@ -71,14 +71,14 @@ func TestMainFailsWhenCoverageBelowMinimumViaFailf(t *testing.T) {
 func TestMainReportsPassingCoverageWithoutFailing(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	originalExit := exitFunc
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlagSet
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 		exitFunc = originalExit
@@ -98,7 +98,7 @@ func TestMainReportsPassingCoverageWithoutFailing(t *testing.T) {
 		}, ","),
 		"-packages=./pkg/config",
 	}
-	execCommand = fakeGoCoverageCommandPassing
+	commandRunner = fakeGoCoverageCommandPassing
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	exitFunc = func(code int) {
@@ -121,14 +121,14 @@ func TestMainReportsPassingCoverageWithoutFailing(t *testing.T) {
 func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	originalExit := exitFunc
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlagSet
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 		exitFunc = originalExit
@@ -152,7 +152,7 @@ func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 		}, ","),
 		"-packages=./pkg/config",
 	}
-	execCommand = fakeGoCoverageCommand
+	commandRunner = fakeGoCoverageCommand
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	exitFunc = func(code int) {
@@ -179,14 +179,14 @@ func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	originalExit := exitFunc
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlagSet
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 		exitFunc = originalExit
@@ -210,7 +210,7 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 		}, ","),
 		"-packages=./pkg/config",
 	}
-	execCommand = fakeGoCoverageCommand
+	commandRunner = fakeGoCoverageCommand
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	exitFunc = func(code int) {
@@ -237,14 +237,14 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	originalExit := exitFunc
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlagSet
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 		exitFunc = originalExit
@@ -268,7 +268,7 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 		}, ","),
 		"-packages=./pkg/config",
 	}
-	execCommand = fakeGoCoverageCommandWithOKSummary
+	commandRunner = fakeGoCoverageCommandWithOKSummary
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	exitFunc = func(code int) {
@@ -295,14 +295,14 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
 	originalArgs := os.Args
 	originalFlagSet := flag.CommandLine
-	originalExecCommand := execCommand
+	originalCommandRunner := commandRunner
 	originalStdout := stdoutWriter
 	originalStderr := stderrWriter
 	originalExit := exitFunc
 	t.Cleanup(func() {
 		os.Args = originalArgs
 		flag.CommandLine = originalFlagSet
-		execCommand = originalExecCommand
+		commandRunner = originalCommandRunner
 		stdoutWriter = originalStdout
 		stderrWriter = originalStderr
 		exitFunc = originalExit
@@ -326,7 +326,7 @@ func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
 		}, ","),
 		"-packages=./pkg/config",
 	}
-	execCommand = fakeGoCoverageCommandWithCoverpkgOKSummary
+	commandRunner = fakeGoCoverageCommandWithCoverpkgOKSummary
 	stdoutWriter = &stdout
 	stderrWriter = &stderr
 	exitFunc = func(code int) {

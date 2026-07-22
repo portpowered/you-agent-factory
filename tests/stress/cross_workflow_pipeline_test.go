@@ -8,13 +8,11 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/work"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestCrossWorkflowPipeline verifies that two workflows can cooperate:
@@ -34,6 +32,8 @@ func TestCrossWorkflowPipeline(t *testing.T) {
 
 	hA := setupCrossWorkflowCodePipelineHarness(t)
 	hB := setupCrossWorkflowMetaPipelineHarness(t)
+	t.Cleanup(hA.Stop)
+	t.Cleanup(hB.Stop)
 	findings := []crossWorkflowFinding{
 		{ID: "refactor-x", Description: "Refactor function X for readability"},
 		{ID: "add-test-y", Description: "Add unit test for module Y"},
@@ -46,7 +46,7 @@ func TestCrossWorkflowPipeline(t *testing.T) {
 
 	// --- Execute Workflow B ---
 	hB.SubmitWork("analysis", []byte(`{"target": "codebase-v1"}`))
-	hB.RunUntilComplete(t, 10*time.Second)
+	hB.WaitForTerminalCount(1, 10*time.Second)
 
 	// --- Assert: Workflow B completed ---
 	hB.Assert().
@@ -60,7 +60,7 @@ func TestCrossWorkflowPipeline(t *testing.T) {
 		t.Errorf("expected 3 cross-workflow submissions, got %d", got)
 	}
 
-	hA.RunUntilComplete(t, 10*time.Second)
+	hA.WaitForTerminalCount(3, 10*time.Second)
 	completeA := assertCrossWorkflowCodePipelineState(t, hA, 3)
 	snapA := hA.Marking()
 	for id, tok := range snapA.Tokens {
@@ -84,8 +84,10 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 
 	// Workflow A: simple 2-stage with a slow executor.
 	dirA := testutil.ScaffoldFactoryDir(t, simpleCodePipelineCfg("slow-worker"))
-	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(factory.WithWorkerExecutor("slow-worker", &delayExecutor{maxDelay: 20 * time.Millisecond})))
+	hA := startStressProcess(t, dirA, workerExecutorProvider{
+		executor: &delayExecutor{maxDelay: 20 * time.Millisecond},
+	})
+	t.Cleanup(hA.Stop)
 
 	// Workflow B: simple 1-stage meta-pipeline that submits to A.
 	dirB := testutil.ScaffoldFactoryDir(t, &interfaces.FactoryConfig{
@@ -97,7 +99,7 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "submitter"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "submitter"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "submit-work", WorkerTypeName: "submitter",
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "init"}},
@@ -105,8 +107,7 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 			OnFailure: []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "failed"}},
 		}},
 	})
-	hB := testutil.NewServiceTestHarness(t, dirB)
-	hB.SetCustomExecutor("submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	hB := startStressProcess(t, dirB, workerExecutorProvider{executor: &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 		for i := range 3 {
 			hA.SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: "code-change",
@@ -119,12 +120,13 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 			TransitionID: dispatch.TransitionID,
 			Outcome:      workerexecution.OutcomeAccepted,
 		}, nil
-	}})
+	}}})
+	t.Cleanup(hB.Stop)
 
 	// B should complete fast (fire-and-forget submission).
 	start := time.Now()
 	hB.SubmitWork("analysis", []byte(`{"test": "deadlock"}`))
-	hB.RunUntilComplete(t, 10*time.Second)
+	hB.WaitForTerminalCount(1, 10*time.Second)
 	bDuration := time.Since(start)
 
 	hB.Assert().
@@ -137,7 +139,7 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 	}
 
 	// Run A only after B has finished submitting its fire-and-forget work.
-	hA.RunUntilComplete(t, 10*time.Second)
+	hA.WaitForTerminalCount(3, 10*time.Second)
 
 	snapA := hA.Marking()
 	if complete := len(snapA.TokensInPlace("code-change:complete")); complete != 3 {
@@ -156,6 +158,8 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 
 	hA := setupCrossWorkflowCodePipelineHarness(t)
 	hB := setupRecursiveMetaPipelineHarness(t)
+	t.Cleanup(hA.Stop)
+	t.Cleanup(hB.Stop)
 
 	var totalSubmittedToA atomic.Int32
 	var scanCount atomic.Int32
@@ -163,7 +167,7 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 
 	// --- Execute Workflow B ---
 	hB.SubmitWork("analysis", []byte(`{"target": "codebase-v2"}`))
-	hB.RunUntilComplete(t, 10*time.Second)
+	hB.WaitForTerminalCount(2, 10*time.Second)
 
 	snapB := hB.Marking()
 	completeB := len(snapB.TokensInPlace("analysis:complete"))
@@ -183,7 +187,7 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 		t.Errorf("expected 5 total submissions to Workflow A, got %d", got)
 	}
 
-	hA.RunUntilComplete(t, 10*time.Second)
+	hA.WaitForTerminalCount(5, 10*time.Second)
 	completeA := assertCrossWorkflowCodePipelineState(t, hA, 5)
 	assertNoForeignWorkTypeTokens(t, hA.Marking(), "analysis", "Workflow A")
 	assertNoForeignWorkTypeTokens(t, snapB, "code-change", "Workflow B")
@@ -194,24 +198,18 @@ func TestCrossWorkflowPipelineRecursive(t *testing.T) {
 
 // TestCrossWorkflowPipelineNoRace verifies the Factory runtime has no race-sensitive
 // failures when goroutines submit code-change Work Requests concurrently while other
-// goroutines read marking and runtime status. Harness setup uses WithServiceMode so
-// the background runtime stays alive during concurrent submission; no runtime semantic
-// changes were required.
+// goroutines read marking and runtime status. The customer daemon remains alive
+// during concurrent submission and public session reads.
 func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping stress test in short mode")
 	}
 
 	dirA := testutil.ScaffoldFactoryDir(t, oneStageCodePipelineCfg("coder"))
-	hA := testutil.NewServiceTestHarness(t, dirA, testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithExtraOptions(
-			factory.WithServiceMode(),
-			factory.WithWorkerExecutor("coder", &delayExecutor{maxDelay: time.Millisecond}),
-		))
-
-	ctxA, cancelA := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancelA()
-	errChA := hA.RunInBackground(ctxA)
+	hA := startStressProcess(t, dirA, workerExecutorProvider{
+		executor: &delayExecutor{maxDelay: time.Millisecond},
+	})
+	t.Cleanup(hA.Stop)
 
 	// Five goroutines submit code-change Work Requests concurrently.
 	const totalItems = 15
@@ -254,17 +252,15 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 					}
 					markingQueryCount.Add(1)
 
-					if stateSnap, err := hA.GetEngineStateSnapshot(); err == nil {
-						_ = stateSnap.RuntimeStatus
-						statusQueryCount.Add(1)
-					}
+					_ = hA.Session().Runtime.Status
+					statusQueryCount.Add(1)
 				}
 			}
 		}()
 	}
 
 	submitWg.Wait()
-	pollUntilAllTerminalH(t, hA, codeChangeTerminalPlaces, totalItems, 20*time.Second)
+	hA.WaitForTerminalCount(totalItems, 20*time.Second)
 
 	if markingQueryCount.Load() == 0 {
 		t.Fatal("expected concurrent marking reads before stopping query workers, got 0")
@@ -275,8 +271,6 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 
 	close(queryDone)
 	queryWg.Wait()
-	cancelA()
-	<-errChA
 
 	snapA := hA.Marking()
 	assertMarkingConsistency(t, snapA, codeChangeTerminalPlaces, totalItems)
@@ -302,7 +296,7 @@ func codePipelineCfg() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "coder"}, {Name: "review-submitter"}, {Name: "reviewer"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "coder"}, {Name: "review-submitter"}, {Name: "reviewer"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "do-coding", WorkerTypeName: "coder",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "code-change", StateName: "init"}},
@@ -332,7 +326,7 @@ func simpleCodePipelineCfg(workerName string) *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: workerName}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: workerName}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "process", WorkerTypeName: workerName,
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "code-change", StateName: "init"}},
@@ -355,7 +349,7 @@ func oneStageCodePipelineCfg(workerName string) *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: workerName}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: workerName}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "process", WorkerTypeName: workerName,
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "code-change", StateName: "init"}},
@@ -377,7 +371,7 @@ func metaPipelineCfg() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "scanner"}, {Name: "work-generator"}, {Name: "cross-submitter"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "scanner"}, {Name: "work-generator"}, {Name: "cross-submitter"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "scan-codebase", WorkerTypeName: "scanner",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "init"}},
@@ -397,22 +391,18 @@ func metaPipelineCfg() *interfaces.FactoryConfig {
 
 // --- Helper executors for cross-workflow tests ---
 
-// staticExecutor returns a fixed outcome with optional tags.
+// staticExecutor returns a fixed provider-visible output and outcome.
 type staticExecutor struct {
 	outcome workerexecution.WorkOutcome
-	tags    map[string]string
+	output  string
 }
 
 func (e *staticExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
-	output := ""
-	if e.tags != nil {
-		output = e.tags["findings"]
-	}
 	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      e.outcome,
-		Output:       output,
+		Output:       e.output,
 	}, nil
 }
 

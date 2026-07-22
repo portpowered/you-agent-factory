@@ -10,14 +10,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,93 +25,83 @@ func TestGeneratedSchemaDeserializationSmoke_FileHTTPAndReplayTransportsStayAlig
 	recordDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "generated-schema-deserialization.replay.json")
 
-	fileBoundary, loaded := loadGeneratedSchemaFileBoundaryAndRuntime(t, dir)
+	fileBoundary := flattenGeneratedSchemaFileBoundary(t, dir)
 	assertGeneratedSmokeTopologyBoundary(t, fileBoundary)
-	fileTransportSummary := generatedSchemaTransportSummaryFromRuntimeConfig(t, loaded.Worker, loaded.Workstation)
-	fileRuntimeSummary := generatedSchemaRuntimeSummaryFromLoadedConfig(t, loaded)
-	httpTransportSummary := generatedSchemaTransportSummaryFromHTTPBoundary(t, dir)
-	replayTransportSummary, replayRuntimeSummary := generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(t, recordDir, artifactPath)
+	fileTransportSummary := generatedSchemaTransportSummaryFromFactory(t, fileBoundary)
+	httpBoundary := generatedSchemaFactoryFromHTTPBoundary(t, dir)
+	recordedBoundary, replayBoundary := generatedSchemaFactoriesFromRecordedReplay(t, recordDir, artifactPath)
+	httpTransportSummary := generatedSchemaTransportSummaryFromFactory(t, httpBoundary)
+	recordedTransportSummary := generatedSchemaTransportSummaryFromFactory(t, recordedBoundary)
+	replayTransportSummary := generatedSchemaTransportSummaryFromFactory(t, replayBoundary)
 
 	if !reflect.DeepEqual(httpTransportSummary, fileTransportSummary) {
 		t.Fatalf("HTTP initial structure transport summary mismatch\nhttp: %#v\nfile: %#v", httpTransportSummary, fileTransportSummary)
 	}
-	if !reflect.DeepEqual(replayTransportSummary, fileTransportSummary) {
-		t.Fatalf("recorded run-started transport summary mismatch\nreplay: %#v\nfile:   %#v", replayTransportSummary, fileTransportSummary)
+	if !reflect.DeepEqual(recordedTransportSummary, fileTransportSummary) {
+		t.Fatalf("recorded run-request transport summary mismatch\nrecorded: %#v\nfile:     %#v", recordedTransportSummary, fileTransportSummary)
 	}
 	if !reflect.DeepEqual(replayTransportSummary, httpTransportSummary) {
-		t.Fatalf("recorded run-started and HTTP transport summaries diverged\nreplay: %#v\nhttp:   %#v", replayTransportSummary, httpTransportSummary)
+		t.Fatalf("replayed and live HTTP transport summaries diverged\nreplay: %#v\nhttp:   %#v", replayTransportSummary, httpTransportSummary)
 	}
-	if !reflect.DeepEqual(replayRuntimeSummary, fileRuntimeSummary) {
-		t.Fatalf("recorded run-started full runtime summary mismatch\nreplay: %#v\nfile:   %#v", replayRuntimeSummary, fileRuntimeSummary)
+	if !reflect.DeepEqual(replayTransportSummary, recordedTransportSummary) {
+		t.Fatalf("replayed and recorded transport summaries diverged\nreplay:   %#v\nrecorded: %#v", replayTransportSummary, recordedTransportSummary)
 	}
 }
 
-func loadGeneratedSchemaFileBoundaryAndRuntime(t *testing.T, dir string) (factoryapi.Factory, *config.LoadedFactoryConfig) {
+func flattenGeneratedSchemaFileBoundary(t *testing.T, dir string) factoryapi.Factory {
 	t.Helper()
 
-	fileJSON, err := os.ReadFile(filepath.Join(dir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("read factory.json: %v", err)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "factory", "config", "flatten", dir,
+	})
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf("Process.Execute(factory config flatten) error = %v; stderr=%q", err, inputs.Stderr())
 	}
-	fileBoundary, err := config.GeneratedFactoryFromOpenAPIJSON(fileJSON)
+	fileBoundary, err := factorymapping.GeneratedFactoryFromOpenAPIJSON([]byte(inputs.Stdout()))
 	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+		t.Fatalf("decode flattened Factory output: %v", err)
 	}
-	loaded, err := config.LoadRuntimeConfig(dir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	return fileBoundary, loaded
+	return fileBoundary
 }
 
-func generatedSchemaRuntimeSummaryFromLoadedConfig(t *testing.T, loaded *config.LoadedFactoryConfig) generatedSchemaRuntimeSummary {
-	t.Helper()
-
-	return generatedSchemaRuntimeSummaryFromRuntimeConfig(t, loaded.Worker, loaded.Workstation)
-}
-
-func generatedSchemaTransportSummaryFromRuntimeConfig(
+func generatedSchemaTransportSummaryFromFactory(
 	t *testing.T,
-	workerLookup func(string) (*workerconfig.Config, bool),
-	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
+	factory factoryapi.Factory,
 ) generatedSchemaTransportSummary {
 	t.Helper()
 
 	return generatedSchemaTransportSummary{
 		workers: []generatedSchemaWorkerSummary{
-			requireGeneratedSchemaWorkerSummary(t, workerLookup, "worker-a"),
-			requireGeneratedSchemaWorkerSummary(t, workerLookup, "worker-b"),
+			requireGeneratedSchemaWorkerSummary(t, generatedSchemaWorkers(factory), "worker-a"),
+			requireGeneratedSchemaWorkerSummary(t, generatedSchemaWorkers(factory), "worker-b"),
 		},
 		workstations: []generatedSchemaTransportWorkstationSummary{
-			requireGeneratedSchemaTransportWorkstationSummary(t, workstationLookup, "step-one"),
-			requireGeneratedSchemaTransportWorkstationSummary(t, workstationLookup, "step-two"),
+			requireGeneratedSchemaTransportWorkstationSummary(t, generatedSchemaWorkstations(factory), "step-one"),
+			requireGeneratedSchemaTransportWorkstationSummary(t, generatedSchemaWorkstations(factory), "step-two"),
 		},
 	}
 }
 
-func generatedSchemaRuntimeSummaryFromRuntimeConfig(
-	t *testing.T,
-	workerLookup func(string) (*workerconfig.Config, bool),
-	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
-) generatedSchemaRuntimeSummary {
-	t.Helper()
-
-	return generatedSchemaRuntimeSummary{
-		workers: []generatedSchemaWorkerSummary{
-			requireGeneratedSchemaWorkerSummary(t, workerLookup, "worker-a"),
-			requireGeneratedSchemaWorkerSummary(t, workerLookup, "worker-b"),
-		},
-		workstations: []generatedSchemaRuntimeWorkstationSummary{
-			requireGeneratedSchemaRuntimeWorkstationSummary(t, workstationLookup, "step-one"),
-			requireGeneratedSchemaRuntimeWorkstationSummary(t, workstationLookup, "step-two"),
-		},
+func generatedSchemaWorkers(factory factoryapi.Factory) []factoryapi.Worker {
+	if factory.Workers == nil {
+		return nil
 	}
+	return *factory.Workers
 }
 
-func generatedSchemaTransportSummaryFromHTTPBoundary(t *testing.T, dir string) generatedSchemaTransportSummary {
+func generatedSchemaWorkstations(factory factoryapi.Factory) []factoryapi.Workstation {
+	if factory.Workstations == nil {
+		return nil
+	}
+	return *factory.Workstations
+}
+
+func generatedSchemaFactoryFromHTTPBoundary(t *testing.T, dir string) factoryapi.Factory {
 	t.Helper()
 
-	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
+	server := startFunctionalServer(t, dir, false)
+	defer server.Stop(t)
 	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	_, first := requireFunctionalEventStreamPrelude(t, stream)
 	initialStructurePayload, err := first.Payload.AsInitialStructureRequestEventPayload()
@@ -121,23 +109,15 @@ func generatedSchemaTransportSummaryFromHTTPBoundary(t *testing.T, dir string) g
 		t.Fatalf("decode initial-structure payload: %v", err)
 	}
 	assertGeneratedSmokeTransportBoundary(t, initialStructurePayload.Factory)
-	httpSnapshot, err := interfaces.NewFactorySnapshot(initialStructurePayload.Factory)
-	if err != nil {
-		t.Fatalf("capture initial structure Factory: %v", err)
-	}
-	httpRuntime, err := replay.RuntimeConfigFromFactorySnapshot(httpSnapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory(initial structure HTTP payload): %v", err)
-	}
 	stream.close()
-	return generatedSchemaTransportSummaryFromRuntimeConfig(t, httpRuntime.Worker, httpRuntime.Workstation)
+	return initialStructurePayload.Factory
 }
 
-func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
+func generatedSchemaFactoriesFromRecordedReplay(
 	t *testing.T,
 	dir string,
 	artifactPath string,
-) (generatedSchemaTransportSummary, generatedSchemaRuntimeSummary) {
+) (factoryapi.Factory, factoryapi.Factory) {
 	t.Helper()
 
 	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
@@ -150,27 +130,34 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
-	harness := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithRecordPath(artifactPath),
-	)
-	harness.RunUntilComplete(t, 10*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args:       []string{"--record", artifactPath},
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	server.Stop(t)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	runStarted := requireGeneratedSchemaRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertGeneratedSmokeTransportBoundary(t, runStarted.Factory)
 	assertGeneratedSmokeRuntimeDefinitions(t, runStarted.Factory)
-	replaySnapshot, err := interfaces.NewFactorySnapshot(runStarted.Factory)
+
+	replayServer := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: t.TempDir(),
+		Args:       []string{"--replay", artifactPath},
+	})
+	stream := openDefaultSessionFactoryEventHTTPStream(t, replayServer.URL())
+	_, first := requireFunctionalEventStreamPrelude(t, stream)
+	initial, err := first.Payload.AsInitialStructureRequestEventPayload()
 	if err != nil {
-		t.Fatalf("capture run-started Factory: %v", err)
+		t.Fatalf("decode replay initial-structure payload: %v", err)
 	}
-	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(replaySnapshot)
-	if err != nil {
-		t.Fatalf("RuntimeConfigFromGeneratedFactory(run started): %v", err)
-	}
-	return generatedSchemaTransportSummaryFromRuntimeConfig(t, replayRuntime.Worker, replayRuntime.Workstation),
-		generatedSchemaRuntimeSummaryFromRuntimeConfig(t, replayRuntime.Worker, replayRuntime.Workstation)
+	stream.close()
+	replayServer.Stop(t)
+	return runStarted.Factory, initial.Factory
 }
 
 func TestGeneratedSchemaDeserializationSmoke_FileAndRecordedTransportRejectRetiredFieldsAtSameBoundaryStage(t *testing.T) {
@@ -191,18 +178,22 @@ func TestGeneratedSchemaDeserializationSmoke_FileAndRecordedTransportRejectRetir
 		t.Fatalf("write factory.json: %v", err)
 	}
 
-	_, fileErr := config.LoadRuntimeConfig(dir, nil)
+	fileInputs := support.FakeInputs(t.Context(), []string{
+		"you", "run", "--dir", dir, "--no-record",
+	})
+	fileErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(fileInputs.Input)
 	assertGeneratedSchemaBoundaryFailure(t, fileErr)
 
 	artifactPath := filepath.Join(t.TempDir(), "retired-generated-schema-boundary.replay.json")
 	writeGeneratedSchemaReplayArtifact(t, artifactPath, factoryJSON)
-	_, replayErr := replay.Load(artifactPath)
+	replayInputs := support.FakeInputs(t.Context(), []string{
+		"you", "run",
+		"--dir", t.TempDir(),
+		"--replay", artifactPath,
+		"--no-record",
+	})
+	replayErr := support.BuildProcess(t, serviceedges.Edges{}).Execute(replayInputs.Input)
 	assertGeneratedSchemaBoundaryFailure(t, replayErr)
-}
-
-type generatedSchemaRuntimeSummary struct {
-	workers      []generatedSchemaWorkerSummary
-	workstations []generatedSchemaRuntimeWorkstationSummary
 }
 
 type generatedSchemaTransportSummary struct {
@@ -220,13 +211,6 @@ type generatedSchemaTransportWorkstationSummary struct {
 	name            string
 	workerTypeName  string
 	workstationType string
-}
-
-type generatedSchemaRuntimeWorkstationSummary struct {
-	name            string
-	workerTypeName  string
-	workstationType string
-	body            string
 }
 
 func assertGeneratedSmokeTopologyBoundary(t *testing.T, generated factoryapi.Factory) {
@@ -257,8 +241,8 @@ func assertGeneratedSmokeTransportBoundary(t *testing.T, generated factoryapi.Fa
 		if worker.Name != "worker-a" && worker.Name != "worker-b" {
 			continue
 		}
-		if stringValueFromFunctionalPtr(worker.Type) != interfaces.WorkerTypeInference {
-			t.Fatalf("runtime boundary worker %q type = %q, want %q", worker.Name, stringValueFromFunctionalPtr(worker.Type), interfaces.WorkerTypeInference)
+		if stringValueFromFunctionalPtr(worker.Type) != interfaces.WorkerTypeAgent {
+			t.Fatalf("runtime boundary worker %q type = %q, want %q", worker.Name, stringValueFromFunctionalPtr(worker.Type), interfaces.WorkerTypeAgent)
 		}
 	}
 	if generated.Workstations == nil {
@@ -268,8 +252,8 @@ func assertGeneratedSmokeTransportBoundary(t *testing.T, generated factoryapi.Fa
 		if workstation.Name != "step-one" && workstation.Name != "step-two" {
 			continue
 		}
-		if stringValueFromFunctionalPtr(workstation.Type) != interfaces.WorkstationTypeModel {
-			t.Fatalf("runtime boundary workstation %q type = %q, want %q", workstation.Name, stringValueFromFunctionalPtr(workstation.Type), interfaces.WorkstationTypeModel)
+		if stringValueFromFunctionalPtr(workstation.Type) != interfaces.WorkstationTypeAgent {
+			t.Fatalf("runtime boundary workstation %q type = %q, want %q", workstation.Name, stringValueFromFunctionalPtr(workstation.Type), interfaces.WorkstationTypeAgent)
 		}
 	}
 	assertGeneratedSmokeSerializedWorkstationBoundary(t, generated, false)
@@ -328,57 +312,44 @@ func assertGeneratedSmokeSerializedWorkstationBoundary(t *testing.T, generated f
 
 func requireGeneratedSchemaWorkerSummary(
 	t *testing.T,
-	workerLookup func(string) (*workerconfig.Config, bool),
+	workers []factoryapi.Worker,
 	name string,
 ) generatedSchemaWorkerSummary {
 	t.Helper()
 
-	worker, ok := workerLookup(name)
-	if !ok {
-		t.Fatalf("worker lookup missing %q", name)
+	for _, worker := range workers {
+		if worker.Name != name {
+			continue
+		}
+		return generatedSchemaWorkerSummary{
+			name:       worker.Name,
+			workerType: stringValueFromFunctionalPtr(worker.Type),
+			model:      stringValueFromFunctionalPtr(worker.Model),
+		}
 	}
-	return generatedSchemaWorkerSummary{
-		name:       worker.Name,
-		workerType: worker.Type,
-		model:      worker.Model,
-	}
+	t.Fatalf("public Factory workers = %#v, missing %q", workers, name)
+	return generatedSchemaWorkerSummary{}
 }
 
 func requireGeneratedSchemaTransportWorkstationSummary(
 	t *testing.T,
-	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
+	workstations []factoryapi.Workstation,
 	name string,
 ) generatedSchemaTransportWorkstationSummary {
 	t.Helper()
 
-	workstation, ok := workstationLookup(name)
-	if !ok {
-		t.Fatalf("workstation lookup missing %q", name)
+	for _, workstation := range workstations {
+		if workstation.Name != name {
+			continue
+		}
+		return generatedSchemaTransportWorkstationSummary{
+			name:            workstation.Name,
+			workerTypeName:  workstation.Worker,
+			workstationType: stringValueFromFunctionalPtr(workstation.Type),
+		}
 	}
-	return generatedSchemaTransportWorkstationSummary{
-		name:            workstation.Name,
-		workerTypeName:  workstation.WorkerTypeName,
-		workstationType: workstation.Type,
-	}
-}
-
-func requireGeneratedSchemaRuntimeWorkstationSummary(
-	t *testing.T,
-	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
-	name string,
-) generatedSchemaRuntimeWorkstationSummary {
-	t.Helper()
-
-	workstation, ok := workstationLookup(name)
-	if !ok {
-		t.Fatalf("workstation lookup missing %q", name)
-	}
-	return generatedSchemaRuntimeWorkstationSummary{
-		name:            workstation.Name,
-		workerTypeName:  workstation.WorkerTypeName,
-		workstationType: workstation.Type,
-		body:            workstation.Body,
-	}
+	t.Fatalf("public Factory workstations = %#v, missing %q", workstations, name)
+	return generatedSchemaTransportWorkstationSummary{}
 }
 
 func assertGeneratedSmokeWorkstationBoundary(t *testing.T, workstations []factoryapi.Workstation, name, worker string) {
@@ -437,7 +408,7 @@ func writeGeneratedSchemaReplayArtifact(t *testing.T, path string, factoryJSON [
 
 	recordedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	artifact := map[string]any{
-		"schemaVersion": replay.CurrentSchemaVersion,
+		"schemaVersion": interfaces.ReplayV1SourceFormat,
 		"recordedAt":    recordedAt.UTC().Format(time.RFC3339),
 		"events": []any{
 			map[string]any{

@@ -1,7 +1,7 @@
 {
   "exports": {
     "generated.cli.commands": {
-      "artifactHash": "87c81b57bc2c7adedb2af83636ce8108761b5f05ff44e1d4c19a82a9610c21c3",
+      "artifactHash": "168aa6075fec7ff0977724614fae02a8c46bb9d9517d9ea0ede2fc71657b693f",
       "documentation": {
         "documentation": {
           "description": {
@@ -18,7 +18,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "87c81b57bc2c7adedb2af83636ce8108761b5f05ff44e1d4c19a82a9610c21c3",
+        "sourceHash": "168aa6075fec7ff0977724614fae02a8c46bb9d9517d9ea0ede2fc71657b693f",
         "visibility": "public"
       },
       "family": "cli",
@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "93b3bb68faa9560878697b4ee4f94bdb42a71cde5b8762b251105704e631c30c",
+      "artifactHash": "9f0f285b2d18ef73ff66893507163194eefa5b2998dabbc93f87c24955099be2",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "93b3bb68faa9560878697b4ee4f94bdb42a71cde5b8762b251105704e631c30c",
+        "sourceHash": "9f0f285b2d18ef73ff66893507163194eefa5b2998dabbc93f87c24955099be2",
         "visibility": "public"
       },
       "family": "openapi",
@@ -331,7 +331,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "d13af3b56397d8da27f47f7b7823a570583f8ac9207602df04364123bdcf88e1",
+      "artifactHash": "8efebae977e57240de63bb05be3586334efcc6ecd74a7859b1edccb9116bcebf",
       "documentation": {
         "documentation": {
           "description": {
@@ -348,7 +348,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "d13af3b56397d8da27f47f7b7823a570583f8ac9207602df04364123bdcf88e1",
+        "sourceHash": "8efebae977e57240de63bb05be3586334efcc6ecd74a7859b1edccb9116bcebf",
         "visibility": "public"
       },
       "family": "config",
@@ -372,5 +372,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "071c4c852fc5462ae14ba7faa0364c8273df1358"
+  "sourceCommit": "014042306e999e08a2157e1f7a95fbd291cff646"
 }

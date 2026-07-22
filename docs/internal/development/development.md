@@ -19,7 +19,9 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
   command-specific adapters, shared server/startup helpers, and CLI dashboard
   read models live under `pkg/transports/cli/`.
 - `pkg/factory/` owns runtime engine behavior, scheduling, markings, transitions, resources, and engine state snapshots.
-- `pkg/service/` wires the runtime, configuration, API server, replay, logging, and worker construction.
+- `pkg/services/` defines transport-independent service contracts and
+  implementations; `pkg/wire/` is the sole composition root for the complete
+  inert customer process graph.
 - `pkg/transports/http/` serves runtime HTTP endpoints and the embedded dashboard shell.
 - `pkg/workers/` owns worker execution contracts, provider calls, script command execution, and work-scoped metadata.
 - `pkg/platform/replay/` owns policy-free replay artifact filesystem mechanics; `pkg/factory/replay/` owns Factory-event artifact construction, side-effect matching, and deterministic replay behavior.
@@ -133,11 +135,20 @@ The older aggregate names remain available as compatibility aliases while docs, 
 
 Treat the matrix below as the canonical suite-ownership and rerun guide for the tiered test surface:
 
-The focused Go suite commands are `make test-unit`, `make test-functional`,
-`make test-stress`, and `make test-release`. The unit command discovers the
-repository's ordinary package tests while excluding all three specialized
-suite roots. The unit and functional runners keep bounded two-package
-concurrency, and all four focused commands retain the default short-mode and timeout policy.
+The focused Go suite commands are `make test-unit`, `make test-maintenance`,
+`make test-integration`, `make test-contract`, `make test-functional`, `make
+test-stress`, and `make test-release`. The unit command enumerates only
+`./pkg/...`, then uses the shared `internal/testlanes` policy to exclude
+specialized packages. Code under `cmd/`, `internal/`, `tests/`, root
+`contracts/`, and the Go UI embed package is intentionally outside unit
+discovery. `make test-lane-audit` verifies that every required Go test package
+has one primary owner. Unit package concurrency defaults to 32 and remains
+overridable with `UNIT_DEFAULT_JOBS`. The fast unit lane schedules only packages
+that contain Go tests and disables `go test`'s duplicate implicit vet pass;
+`make lint` and the required PR verification tier continue to run `go vet ./...`.
+The normal `make test` loop retains Go's content-addressed test cache, so
+unchanged packages do not relink and rerun on every local invocation. Use
+`make test-unit-fresh` when uncached `-count=1` evidence is explicitly needed.
 `make test` is the compatibility entrypoint for `make test-unit`; `make
 test-full` remains the broad unshortened aggregate across every Go package.
 
@@ -146,7 +157,7 @@ test-full` remains the broad unshortened aggregate across every Go package.
 | `make verify-fast` | `make typecheck`, `make ui-test`, `make test` | `make test-ui-coverage`, `make ui-integration-test`, `make test-backend-verification`, `make long-tests` | rerun the failing owned step directly: `make typecheck`, `make ui-test`, or `make test` |
 | `make verify-pr` | `make verify-build-contracts` once, then `make verify-tests` once | `make long-tests`, `make test-functional-long`, managed-runtime specialty coverage | rerun `make verify-pr` for the full required envelope, or rerun the failing owned lane called out in output |
 | `make verify-extended` | `make verify-pr`, then `make long-tests` | no extra hidden suites beyond the named long and specialty lanes | rerun `make verify-extended` for the whole opt-in pass, or rerun the failing owned long lane called out in output |
-| `make verify-tests` | `make release-surface-smoke`, `make test-built-cli-acceptance`, concurrent `make run-sharded-ui-coverage` + `make ui-integration-test` through `make run-concurrent-ui-verification-lanes`, then independent `make test-unit-coverage` and `make test-functional-coverage` | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
+| `make verify-tests` | `make test-maintenance`, `make test-integration`, `make test-contract`, `make release-surface-smoke`, `make test-built-cli-acceptance`, concurrent UI coverage/browser integration, then independent backend unit and functional coverage | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
 | `make long-tests` | `make long-tests-managed-runtime`, `make long-tests-functional-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
 
 Compatibility aliases that still remain on the root command surface:
@@ -166,19 +177,19 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
 
-`make backend-size` is the direct maintainer command for the repo-owned backend size gate. It runs `go run ./cmd/backendsizecheck` and fails when maintained backend Go files exceed 1000 lines or maintained backend Go functions exceed 100 lines under the scanner's explicit owned-source rules. When a legacy oversized surface must stay intact temporarily, use an inline `backendsizecheck:ignore-file` or `backendsizecheck:ignore-function` comment with a concrete justification at the owning file or function instead of adding shell-only allowlists. Register the exact rule and reported file or `file#Function` target in the sorted root `backend-exemption-budget.json`, including a non-empty accountable `owner` and an actionable `removalReason`; the command rejects an unregistered directive or incomplete entry. Production validation defines an actionable removal reason as at least 20 characters that names a concrete removal action such as split, extract, refactor, replace, reduce, move, migrate, simplify, remove, or delete.
+`make backend-size` is the direct maintainer command for the repo-owned backend size gate. It runs `go run ./cmd/backendsizecheck` and fails when maintained backend Go files exceed 1000 lines or maintained backend Go functions exceed 100 lines under the scanner's explicit owned-source rules. When a legacy oversized surface must stay intact temporarily, use an inline `backendsizecheck:ignore-file` or `backendsizecheck:ignore-function` comment with a concrete justification at the owning file or function instead of adding shell-only allowlists. Register the exact rule and reported file or `file#Function` target in the sorted `docs/internal/baselines/backend-exemption-budget.json`, including a non-empty accountable `owner` and an actionable `removalReason`; the command rejects an unregistered directive or incomplete entry. Production validation defines an actionable removal reason as at least 20 characters that names a concrete removal action such as split, extract, refactor, replace, reduce, move, migrate, simplify, remove, or delete.
 
-`make pkg-maint` is the stable maintainer and reviewer command path for the handwritten `pkg/` maintainability lane. It runs `go run ./cmd/pkgmaintcheck -root .`, scans only owned `pkg/` Go source, excludes generated artifacts and `testdata` through the same repo-owned path rules as the backend size gate, and reports `file-lines`, `function-lines`, and `cyclomatic-complexity` violations with actual values and configured limits. The current thresholds are 1000 file lines, 100 function lines, and cyclomatic complexity 15. Use rule-scoped inline directives only when a later maintainability story needs a narrow exception tied to a concrete runtime, boundary, or generated-artifact constraint: `pkgmaintcheck:ignore-file-lines`, `pkgmaintcheck:ignore-function-lines`, or `pkgmaintcheck:ignore-cyclomatic-complexity`, each paired with a reviewer-readable justification comment and a matching accountable entry in `backend-exemption-budget.json`.
+`make pkg-maint` is the stable maintainer and reviewer command path for the handwritten `pkg/` maintainability lane. It runs `go run ./cmd/pkgmaintcheck -root .`, scans only owned `pkg/` Go source, excludes generated artifacts and `testdata` through the same repo-owned path rules as the backend size gate, and reports `file-lines`, `function-lines`, and `cyclomatic-complexity` violations with actual values and configured limits. The current thresholds are 1000 file lines, 100 function lines, and cyclomatic complexity 15. Use rule-scoped inline directives only when a later maintainability story needs a narrow exception tied to a concrete runtime, boundary, or generated-artifact constraint: `pkgmaintcheck:ignore-file-lines`, `pkgmaintcheck:ignore-function-lines`, or `pkgmaintcheck:ignore-cyclomatic-complexity`, each paired with a reviewer-readable justification comment and a matching accountable entry in `docs/internal/baselines/backend-exemption-budget.json`.
 
-Burn down an exemption by removing both the inline directive and its matching `backend-exemption-budget.json` entry in the same change, then run `make backend-size` and `make pkg-maint`. Removing only the directive leaves a stale entry and fails the applicable command; removing both lowers the checked baseline without requiring cleanup of unrelated exemptions. The exemption budget covers only these size and complexity directives. Root package-family and migration-shim policy remains exclusively owned by `make pkg-boundary`.
+Burn down an exemption by removing both the inline directive and its matching `docs/internal/baselines/backend-exemption-budget.json` entry in the same change, then run `make backend-size` and `make pkg-maint`. Removing only the directive leaves a stale entry and fails the applicable command; removing both lowers the checked baseline without requiring cleanup of unrelated exemptions. The exemption budget covers only these size and complexity directives. Root package-family and migration-shim policy remains exclusively owned by `make pkg-boundary`.
 
-`make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/development/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating either baseline.
+`make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/baselines/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/baselines/deadcode-baseline.txt`. Review any drift before updating either baseline.
 
 Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for handwritten frontend code, not as a prompt to add new suppressions. Generated API artifacts under `ui/src/api/generated/` may keep generated-code-specific exceptions, but handwritten app code, tests, stories, and fixtures should stay under the standard limits by decomposing the surface into smaller feature components, story modules, shared fixtures, or named test helpers. Review-ready proof for that decomposition is the normal `make typecheck`, `make lint`, and behavior-specific test or Storybook evidence for the touched surface, not a separate source-inventory audit.
 
 `make verify-build-contracts` is the repository-owned aggregate for local full build-contract verification. It runs `make typecheck`, then `make verify-build`, `make verify-lint`, and `make verify-api`. CI runs those three focused commands in independent `Build`, `Lint`, and `API` jobs after each job's own setup.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make release-surface-smoke`, then `make test-built-cli-acceptance`, then starts `make run-sharded-ui-coverage` and `make ui-integration-test` concurrently through `make run-concurrent-ui-verification-lanes`, and finishes with independent `make test-unit-coverage` and `make test-functional-coverage` lanes. The concurrent orchestrator prefixes each UI lane's stdout with `[UI Coverage]` or `[UI Browser Integration]`, writes per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`, and emits the exact `make <target>` rerun command for any failed lane. GitHub Actions publishes backend unit and functional coverage as separate matrix checks and retains distinct `coverage.out`, `coverage.txt`, and `command.log` artifacts for each. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` use the same shard-and-merge contract through `make run-sharded-ui-coverage` (default `UI_COVERAGE_SHARD_TOTAL=10`). `make test-ui-coverage` remains the monolithic compatibility path for ad hoc comparison runs.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It starts with maintenance (including the lane audit), integration, and contract evidence before release and built-CLI acceptance, concurrent UI coverage/browser integration, and the independent backend unit and functional coverage lanes. The concurrent orchestrator prefixes each UI lane's stdout with `[UI Coverage]` or `[UI Browser Integration]`, writes per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`, and emits the exact `make <target>` rerun command for any failed lane. GitHub Actions publishes backend unit and functional coverage as separate matrix checks and retains distinct `coverage.out`, `coverage.txt`, and `command.log` artifacts for each. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` use the same shard-and-merge contract through `make run-sharded-ui-coverage` (default `UI_COVERAGE_SHARD_TOTAL=10`). `make test-ui-coverage` remains the monolithic compatibility path for ad hoc comparison runs.
 
 `make test-built-cli-acceptance` is the focused rerun command for the hermetic built-CLI S24 acceptance package under `tests/functional/acceptance`. It builds `./cmd/factory`, runs the full behavioral acceptance corpus (including named-goal, stream, subagent, and local-model scenarios that skip under `-short`), and fails with scenario subtest names such as `s24-fresh-install` when the scenario matrix drifts from its documented customer-outcome mapping in `internal/builtcliacceptance/scenarios.go`.
 
@@ -352,7 +363,7 @@ The normal UI lint path also runs this guard through:
 cd ui && bun run lint
 ```
 
-The guard intentionally excludes tests, stories, generated API code, fixtures, developer-testing seams, and message-catalog files. Do not add product UI copy to `ui/scripts/hardcoded-ui-copy-baseline.txt`; the baseline is expected to stay empty for product copy. If the scanner reports a literal that is truly not product UI copy, such as a structural node id, an API error code, a class recipe, or maintainer-only diagnostic text, document that exact literal with the inline marker `hardcoded-ui-copy-exception: non-product-diagnostic` near the source. Use that marker narrowly and never as a bypass for customer-facing copy.
+The guard intentionally excludes tests, stories, generated API code, fixtures, developer-testing seams, and message-catalog files. Do not add product UI copy to `docs/internal/baselines/hardcoded-ui-copy-baseline.txt`; the baseline is expected to stay empty for product copy. If the scanner reports a literal that is truly not product UI copy, such as a structural node id, an API error code, a class recipe, or maintainer-only diagnostic text, document that exact literal with the inline marker `hardcoded-ui-copy-exception: non-product-diagnostic` near the source. Use that marker narrowly and never as a bypass for customer-facing copy.
 
 Localization changes should include tests at the layer where users observe the message. Prefer assertions against rendered text, accessible names, formatted labels, emitted validation errors, or pure message helper output, and cover at least one non-default locale when the behavior depends on locale selection, fallback, or interpolation. Avoid testing the source inventory itself; the guard already owns scanner behavior.
 
@@ -362,7 +373,7 @@ Treat the opt-in long and specialty commands as a separate maintainer tier rathe
 
 - `make verify-pr-inference` is the required merge-blocking PR inference approval lane. It runs only the named OMNIVOICE regression and is separate from `make verify-pr`.
 - `make verify-extended` is the canonical "everything above plus the deeper safety nets" pass. Use it after `make verify-pr` when a change may have touched managed-local runtime behavior or the real local inference path and you want one aggregate command that still preserves exact rerun hints.
-- `make long-tests-managed-runtime` is the narrow specialty rerun for the package-level managed-runtime lane in `pkg/service`. It protects the subprocess adapter, managed local model loading, and handle-reuse behavior without requiring the full end-to-end API flow.
+- `make long-tests-managed-runtime` is the narrow specialty rerun for the managed-runtime lane in `pkg/models/local`. It protects the subprocess adapter and managed local model behavior without requiring the full end-to-end API flow.
 - `make long-tests-functional-runtime` is the narrow specialty rerun for the real OMNIVOICE functional lane in `tests/functional/runtime_api`. It delegates to `make pr-inference-approval` so the PR regression and specialty functional lane share one test invocation without changing the broader `make long-tests` meaning.
 - `make long-tests` is the explicit aggregate over those two opt-in specialty lanes. It prints the owned specialty lane before each nested step and reports the direct `make long-tests-...` rerun command on failure.
 
@@ -482,20 +493,18 @@ referenced fragment, then regenerate.
 
 ## Factory CLI Wire Composition
 
-`google/wire` is limited to `cmd/factory/compose/`. Production `you run` builds
-`*service.FactoryService` through the generated `InjectFactoryService` entry;
-`cmd/factory/main.go` may register that builder through `pkg/transports/cli/run` before
-CLI execution. HTTP serving uses the same wired instance via
-`compose.ServeAPIServer`. See [cmd-factory-wire-composition.md](cmd-factory-wire-composition.md)
-and [factory-cli-wire-composition.md](factory-cli-wire-composition.md) for the full
-workflow.
+`google/wire` composition lives in `pkg/wire`. `root.BuildProcess` calls the
+single checked-in `wire.InjectBundle` injector to construct one complete,
+inert process graph. HTTP, CLI, and MCP receive only the service interfaces
+they consume; `pkg/initializer` activates the selected lifecycle. Tests use
+the same root-built process and replace external systems through `edges.Edges`.
 
-From a clean checkout, after editing `wire.go` or `providers.go`:
+From a clean checkout, after editing `wire.go` or a provider:
 
 1. Regenerate the checked-in injector:
 
 ```bash
-go generate ./cmd/factory/compose/...
+go generate ./pkg/wire
 ```
 
 2. Commit `wire_gen.go` with the provider changes. Do not hand-edit
@@ -590,7 +599,7 @@ Cron behavior crosses service tick production, Petri-net guards, dispatcher iden
 Use these focused checks before the broader package gates when changing cron behavior:
 
 ```bash
-go test ./pkg/config ./pkg/work/timework ./pkg/service ./pkg/factory/scheduler ./pkg/factory/subsystems ./pkg/factory/projections -count=1
+go test ./pkg/config ./pkg/work/timework ./pkg/services/automation/service ./pkg/factory/scheduler ./pkg/factory/subsystems ./pkg/factory/projections -count=1
 make cron-time-work-smoke CRON_TIME_WORK_SMOKE_COUNT=1
 make test-full GO_TEST_TIMEOUT=300s
 ```
@@ -601,31 +610,22 @@ Run `make ui-test` and `make ui-build` when dashboard or projection code changes
 
 ## Functional Test Harness Guidance
 
-Functional tests should use `testutil.WithFullWorkerPoolAndScriptWrap()` or
-the current full-worker-pool equivalent whenever the behavior can be observed
-through normal runtime dispatch. Mock at the outer provider, provider
-command-runner, command-runner, or mock-worker command boundary instead of
-replacing workstation execution with the synchronous/default harness path.
+Functional tests construct one reusable process with `root.BuildProcess`,
+provide only typed external replacements through `edges.Edges`, and invoke the
+same CLI, HTTP, or MCP surfaces used by customers. Provider behavior belongs at
+the provider or provider-command boundary; process, filesystem, HTTP, clock,
+and listener behavior belongs at the corresponding exact edge.
 
-Use lower-level custom executors, synchronous/default execution, or async-only
-harness seams only when the test intentionally verifies a lower-level contract
-that the edge mocks cannot expose. Acceptable examples include pausing an
-in-flight dispatch for dashboard or runtime snapshot inspection, asserting raw
-dispatch fields before workstation resolution, or testing harness compatibility
-itself. Document the reason near the test or in the inventory so reviewers can
-see what behavior would be lost by migrating it.
+Do not construct a Factory Runtime, service bundle, transport server, mapping
+graph, or test-only application graph. If supported behavior cannot be
+observed publicly, first add the missing public projection or event. If the
+behavior is an intentionally malformed internal contract, move that test to
+the package that owns the contract instead of exposing a new functional edge.
 
 Use [Functional Test Execution Mode Inventory](functional-test-execution-mode-inventory.md)
-when migrating shortcut tests or reviewing exceptions. Keep
-`docs/internal/processes/AGENTS.md` linked to this section instead of duplicating the
-full rule set for autonomous-agent instructions.
-
-The functional-test package includes
-`TestFunctionalTestsUseFullWorkerPoolHarnessOrDocumentException` as a
-lightweight guardrail. New `testutil.NewServiceTestHarness(...)` calls should
-include `testutil.WithFullWorkerPoolAndScriptWrap()`. If a shortcut is truly
-needed, add a narrow entry to that test's exception map with the exact shortcut
-count and the behavior that would be lost by migrating it.
+when migrating historical shortcut tests. Keep
+`docs/internal/processes/AGENTS.md` linked to this section instead of
+duplicating the rule.
 
 Provider-error smoke tests that need to prove "requeue first, then fail after a
 bounded retry budget" should mutate the copied fixture's `factory.json` with a
@@ -669,8 +669,8 @@ behavior explicit inside the test that needs it.
 - Canonical runtime history for dashboard and Factory Session consumers is exposed through `GET /factory-sessions/{session_id}/events`; `GET /events` remains compatibility-only for process-global diagnostics. New API and UI history consumers should replay factory events from the session-scoped stream instead of depending on dashboard snapshot routes.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
-- Runtime log policy is service-configured, but each live session should own its own runtime log sink and emitted records. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
-- Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/transports/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
+- Runtime log policy is process-configured, but each live session owns its runtime log sink and emitted records. Construct file-backed logging through the Wire runtime graph and pass work identity through `workers.ExecutionMetadata`.
+- Runtime metrics CLI wiring mirrors runtime logging: add flags on `you run`, map them into the session coordinator configuration at the Wire boundary, and expose selected paths through startup diagnostics rather than teaching CLI packages about metrics file layout details.
 - Multi-session runtime ownership should follow `docs/architecture/session-runtime-ownership.md`: the service is the coordinator and router, while session runtime config, execution base, event history, and active runtime state belong to the addressed live session rather than mutable service-global config.
 - Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
 - Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/transports/http`, `pkg/config`, or `pkg/factory/replay` behavior tests.
@@ -683,7 +683,7 @@ behavior explicit inside the test that needs it.
 - When retiring a public `Factory` config field from `api/openapi.yaml`, remove it from the generated/public `Factory` model, drop any orphaned OpenAPI component schemas that existed only for that field, reject the raw input at `FactoryConfigMapper.Expand` with migration guidance once the validation story lands, and migrate checked-in fixtures/examples to the supported replacement contract in the same change.
 - Guarded loop breakers authored as `type: LOGICAL_MOVE` plus `visit_count` guards stay normal scheduler-dispatched workstations when docs or tests need dispatcher-visible execution history; reserve `TransitionExhaustion` for legacy or system circuit-breaker paths such as retired `exhaustion_rules` and time-expiry consumption.
 - File watcher input handling should parse `FACTORY_REQUEST_BATCH` JSON as the only structured submit format, map public batch item `workTypeName` values into runtime work type IDs, fill missing batch item work types from the watched folder, wrap Markdown and non-batch JSON files as one-item `WorkRequest` batches with raw file content payloads, reject item work-type conflicts before submitting, and parse plus validate all preseed files before calling the factory so startup failures do not create partial work.
-- Deadcode findings are baseline-managed through `docs/internal/development/deadcode-baseline.txt` for Go and `docs/internal/development/frontend-deadcode-baseline.json` for the UI. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library, public-surface, or test-helper debt.
+- Deadcode findings are baseline-managed through `docs/internal/baselines/deadcode-baseline.txt` for Go and `docs/internal/baselines/frontend-deadcode-baseline.json` for the UI. Remove confirmed stale symbols first, then update the baseline only for accepted remaining library, public-surface, or test-helper debt.
 
 ## Extending the Type System
 
@@ -782,6 +782,7 @@ Successful graph saves converge the document plane and live snapshot without a f
 
 ## Related Docs
 
+- [Model Provider Integration Convergence Plan](plans/model-providers/provider-integration-convergence.md)
 - [Factory CLI wire composition](cmd-factory-wire-composition.md)
 - [CLI release policy](cli-release-policy.md)
 - [Agent Factory README](../../README.md)

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 

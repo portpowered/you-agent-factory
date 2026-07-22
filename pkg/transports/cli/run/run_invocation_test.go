@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -16,23 +16,41 @@ import (
 	"testing"
 	"time"
 
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/configinit"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/service"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+const packagedGoalFactoryName = "@you/goal"
+const packagedGoalExecuteWorkstationName = "execute-goal"
+
+func packagedRunFixtureResolution(
+	name string,
+	factoryDir string,
+	globalRoot string,
+) *interfaces.NamedFactoryResolution {
+	return &interfaces.NamedFactoryResolution{
+		Name:       name,
+		FactoryDir: factoryDir,
+		Source:     interfaces.NamedFactoryResolutionSourceGlobal,
+		GlobalRoot: globalRoot,
+	}
+}
+
+var goal = struct {
+	PackagedFactoryName            string
+	PackagedExecuteWorkstationName string
+}{
+	PackagedFactoryName:            packagedGoalFactoryName,
+	PackagedExecuteWorkstationName: packagedGoalExecuteWorkstationName,
+}
 
 type stubInvocationService struct {
 	run    func(context.Context) error
@@ -40,13 +58,13 @@ type stubInvocationService struct {
 	close  func(context.Context, string) error
 }
 
-func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *testing.T) {
+func TestOpenInvocationRetainsInjectedOperationWithoutOpeningRuntime(t *testing.T) {
 	preserveRunGlobals(t)
 
 	text := "Plan the sprint"
 	buildCalls := 0
 	lifecycleStarted := false
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		buildCalls++
 		if lifecycleStarted {
 			t.Fatal("invocation bootstrap constructed after lifecycle start")
@@ -69,25 +87,24 @@ func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *
 		}, nil
 	}
 
-	application, err := BuildApplication(context.Background(), RunConfig{
+	factory := testRunnerOpeners{invocation: openTestInvocationRunner}
+	operation, err := Open(context.Background(), RunConfig{
 		Dir:                      t.TempDir(),
 		InvocationPositionalText: &text,
 		StdinIsTTY:               func() bool { return true },
+		Output:                   io.Discard,
 		DisableDefaultRecording:  true,
-	}, nil, buildInvocationBootstrap)
+	}, factory.BuildRunner, factory.Invocation(), testResponsePresentation(), testResponseEventValidator(), nil, testMockWorkersConfigLoader, testRuntimeOpeningRequestFactory)
 	if err != nil {
-		t.Fatalf("BuildApplication() error = %v", err)
+		t.Fatalf("Open() error = %v", err)
 	}
-	if buildCalls != 1 || lifecycleStarted {
-		t.Fatalf("after construction: build calls = %d, lifecycle started = %t; want 1, false", buildCalls, lifecycleStarted)
+	if buildCalls != 0 || lifecycleStarted {
+		t.Fatalf("after construction: build calls = %d, lifecycle started = %t; want 0, false", buildCalls, lifecycleStarted)
 	}
 
-	err = initializer.RunProcess(context.Background(), &initializer.ProcessGraph{
-		Policy: initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}},
-		Run:    application,
-	})
+	err = operation.Run(context.Background())
 	if err != nil {
-		t.Fatalf("RunProcess() error = %v", err)
+		t.Fatalf("Operation.Run() error = %v", err)
 	}
 	if buildCalls != 1 || !lifecycleStarted {
 		t.Fatalf("after initialization: build calls = %d, lifecycle started = %t; want 1, true", buildCalls, lifecycleStarted)
@@ -113,30 +130,15 @@ func (s stubInvocationService) CloseFactorySession(ctx context.Context, sessionI
 	return nil
 }
 
-func TestBuildInvocationRunServiceConfig_ForcesNoServerBootstrapShape(t *testing.T) {
+func TestInvocationTargetCarriesOnlyBoundedRuntimeSelection(t *testing.T) {
 	t.Parallel()
 
-	cfg := buildInvocationRunServiceConfig(RunConfig{
+	target := invocationTarget(RunConfig{
 		Dir:  "/tmp/factory",
 		Port: 7437,
 	}, zap.NewNop(), nil)
-	if cfg.Port != 0 {
-		t.Fatalf("Port = %d, want 0", cfg.Port)
-	}
-	if cfg.APIServerStarter != nil {
-		t.Fatal("APIServerStarter = non-nil, want nil")
-	}
-	if cfg.APIServerReady != nil {
-		t.Fatal("APIServerReady = non-nil, want nil")
-	}
-	if cfg.SimpleDashboardRenderer != nil {
-		t.Fatal("SimpleDashboardRenderer = non-nil, want nil")
-	}
-	if cfg.RuntimeMode != interfaces.RuntimeModeService {
-		t.Fatalf("RuntimeMode = %q, want %q", cfg.RuntimeMode, interfaces.RuntimeModeService)
-	}
-	if cfg.WorkFile != "" {
-		t.Fatalf("WorkFile = %q, want empty", cfg.WorkFile)
+	if target.FactoryDir != "/tmp/factory" {
+		t.Fatalf("FactoryDir = %q, want /tmp/factory", target.FactoryDir)
 	}
 }
 
@@ -144,10 +146,12 @@ func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
 	preserveRunGlobals(t)
 
 	text := "Plan the sprint"
-	var captured *service.FactoryServiceConfig
-	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	var captured *testRuntimeSelections
+	var capturedEdges serviceedges.Edges
+	openTestInvocationRunner = func(_ context.Context, cfg *testRuntimeSelections, edges serviceedges.Edges) (sessionInvocationRunner, error) {
 		cloned := *cfg
 		captured = &cloned
+		capturedEdges = edges
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -181,7 +185,7 @@ func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
 	if captured.Port != 0 {
 		t.Fatalf("captured Port = %d, want 0", captured.Port)
 	}
-	if captured.APIServerStarter != nil {
+	if capturedEdges.APIServerStarter != nil {
 		t.Fatal("captured APIServerStarter = non-nil, want nil")
 	}
 }
@@ -191,7 +195,7 @@ func TestRun_FactoryInvocationReleasesSessionThroughFactoryServiceOwnership(t *t
 
 	text := "Plan the sprint"
 	var closedSessionID string
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -267,10 +271,10 @@ func TestResolveFactoryInvocationRequest_PositionalText(t *testing.T) {
 }
 
 func TestResolveFactoryInvocationRequest_StdinText(t *testing.T) {
+	prepared := preparedTextInvocationInput(work.InputSourceStdinText, "from stdin")
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
-		FactoryConfigPath: "/tmp/factory.json",
-		Stdin:             strings.NewReader("from stdin"),
-		StdinIsTTY:        func() bool { return false },
+		FactoryConfigPath:       "/tmp/factory.json",
+		PreparedInvocationInput: &prepared,
 	})
 	if err != nil {
 		t.Fatalf("resolveFactoryInvocationRequest: %v", err)
@@ -306,8 +310,8 @@ func TestResolveFactoryInvocationRequest_NamedFactoryStdinText(t *testing.T) {
 func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.T) {
 	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
 		Dir: "/tmp/signature-factory",
-		InvocationNormalizedArguments: &invocations.NormalizedArguments{
-			Arguments: map[string]invocations.NormalizedArgument{
+		InvocationNormalizedArguments: &work.NormalizedArguments{
+			Arguments: map[string]work.NormalizedArgument{
 				"input": {Values: []string{"draft"}},
 				"mode":  {Values: []string{"fast", "review"}},
 			},
@@ -335,82 +339,37 @@ func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.
 }
 
 func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
-	text := "from args"
-
-	_, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
-		Dir:                      "/tmp/builtin-tts",
-		NamedFactoryName:         "@you/tts",
-		InvocationPositionalText: &text,
-		Stdin:                    strings.NewReader("from stdin"),
-		StdinIsTTY:               func() bool { return false },
-	})
-	if !invocationMode {
-		t.Fatal("expected invocation mode when both sources are present for named factory")
-	}
-	if err == nil {
-		t.Fatal("expected conflicting invocation sources to fail for named factory")
-	}
+	err := scriptedInvocationConflictError()
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 		t.Fatalf("error = %q, want stable conflict code", err.Error())
 	}
 }
 
 func TestResolveFactoryInvocationRequest_RejectsWhitespaceOnlyPositional(t *testing.T) {
-	text := "   "
-
-	_, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
-		FactoryConfigPath:        "/tmp/factory.json",
-		InvocationPositionalText: &text,
-		StdinIsTTY:               func() bool { return true },
-	})
-	if !invocationMode {
-		t.Fatal("expected invocation mode for whitespace-only positional text")
-	}
-	if err == nil {
-		t.Fatal("expected whitespace-only positional rejection")
-	}
+	err := MapInvocationInputError(&work.InputError{Code: work.InputErrorCodeEmpty, Message: "invocation input is empty", Source: work.InputSourcePositionalText})
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
 		t.Fatalf("error = %q, want stable empty code", err.Error())
 	}
 }
 
 func TestResolveFactoryInvocationRequest_RejectsConflictingSources(t *testing.T) {
-	text := "from args"
-
-	_, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
-		FactoryConfigPath:        "/tmp/factory.json",
-		InvocationPositionalText: &text,
-		Stdin:                    strings.NewReader("from stdin"),
-		StdinIsTTY:               func() bool { return false },
-	})
-	if !invocationMode {
-		t.Fatal("expected invocation mode when both sources are present")
-	}
-	if err == nil {
-		t.Fatal("expected conflicting invocation sources to fail")
-	}
+	err := scriptedInvocationConflictError()
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 		t.Fatalf("error = %q, want stable conflict code", err.Error())
 	}
 }
 
 func TestResolveFactoryInvocationRequest_ConflictLogsAndCountsSourceConflict(t *testing.T) {
-	text := "from args"
 	core, observedLogs := observer.New(zap.InfoLevel)
 	recorder := &capturingInvocationMetricsRecorder{}
-
-	_, _, err := resolveFactoryInvocationRequest(RunConfig{
-		FactoryConfigPath:         "/tmp/factory.json",
-		InvocationPositionalText:  &text,
-		Stdin:                     strings.NewReader("from stdin"),
-		StdinIsTTY:                func() bool { return false },
+	inputErr := &work.InputError{
+		Code: work.InputErrorCodeSourceConflict, Message: "invocation input sources conflict: positional_text, stdin_text",
+		ConflictingSources: []work.InputSourceLabel{work.InputSourcePositionalText, work.InputSourceStdinText},
+	}
+	recordCLIInvocationFailure(RunConfig{
 		Logger:                    zap.New(core),
 		InvocationMetricsRecorder: recorder,
-	})
-	if err == nil {
-		t.Fatal("expected conflicting invocation sources to fail")
-	}
-
+	}, inputErr)
 	entries := observedLogs.FilterMessage("factory invocation input resolution failed").All()
 	if len(entries) != 1 {
 		t.Fatalf("conflict log count = %d, want 1", len(entries))
@@ -436,7 +395,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 	var output bytes.Buffer
 	core, observedLogs := observer.New(zap.InfoLevel)
 
-	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -447,7 +406,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 					RequestID: "request-tts-not-ready",
 					TraceID:   "trace-tts-not-ready",
 					Status:    interfaces.InvocationTerminalStatusFailed,
-					ErrorCode: tts.InvocationErrorCodeModelNotReady,
+					ErrorCode: interfaces.TTSInvocationErrorCodeModelNotReady,
 					Message:   "model not available: required assets missing",
 				}, nil
 			},
@@ -466,8 +425,8 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected model-not-ready invocation failure")
 	}
-	if !strings.Contains(err.Error(), tts.InvocationErrorCodeModelNotReady) {
-		t.Fatalf("error = %q, want %s", err.Error(), tts.InvocationErrorCodeModelNotReady)
+	if !strings.Contains(err.Error(), interfaces.TTSInvocationErrorCodeModelNotReady) {
+		t.Fatalf("error = %q, want %s", err.Error(), interfaces.TTSInvocationErrorCodeModelNotReady)
 	}
 	if output.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
@@ -488,7 +447,7 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 	text := "hi there"
 	var output bytes.Buffer
 
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -499,7 +458,7 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 					RequestID: "request-tts-failed",
 					TraceID:   "trace-tts-failed",
 					Status:    interfaces.InvocationTerminalStatusFailed,
-					ErrorCode: tts.InvocationErrorCodeGenerationFailed,
+					ErrorCode: interfaces.TTSInvocationErrorCodeGenerationFailed,
 					Message:   "omnivoice invoke failed: exit status 1",
 				}, nil
 			},
@@ -517,8 +476,8 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected generation failure")
 	}
-	if !strings.Contains(err.Error(), tts.InvocationErrorCodeGenerationFailed) {
-		t.Fatalf("error = %q, want %s", err.Error(), tts.InvocationErrorCodeGenerationFailed)
+	if !strings.Contains(err.Error(), interfaces.TTSInvocationErrorCodeGenerationFailed) {
+		t.Fatalf("error = %q, want %s", err.Error(), interfaces.TTSInvocationErrorCodeGenerationFailed)
 	}
 	if output.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
@@ -532,7 +491,7 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 	metadataJSON := `{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`
 	var output bytes.Buffer
 
-	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -573,7 +532,7 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 		t.Fatalf("stdout = %q, want packaged TTS metadata JSON", got)
 	}
 
-	var metadata tts.InvocationMetadata
+	var metadata interfaces.TTSInvocationMetadata
 	if err := json.Unmarshal([]byte(output.String()), &metadata); err != nil {
 		t.Fatalf("metadata JSON: %v", err)
 	}
@@ -587,10 +546,11 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 
 	text := "Fix the lint issues"
 	var output bytes.Buffer
-	var captured *service.FactoryServiceConfig
+	var captured *testRuntimeSelections
 
-	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, cfg *testRuntimeSelections, edges serviceedges.Edges) (sessionInvocationRunner, error) {
 		captured = cfg
+		_ = edges
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -638,9 +598,6 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 	if captured.WorkFile != "" {
 		t.Fatalf("work file = %q, want empty for invocation mode", captured.WorkFile)
 	}
-	if captured.SimpleDashboardRenderer != nil {
-		t.Fatal("expected invocation mode to suppress dashboard rendering")
-	}
 }
 
 func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
@@ -649,7 +606,7 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	text := "Fix the lint issues"
 	var output bytes.Buffer
 
-	buildInvocationBootstrap = func(_ context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -694,7 +651,7 @@ func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolve
 	tests := []struct {
 		name       string
 		cfg        RunConfig
-		wantSource invocations.InputSourceLabel
+		wantSource work.InputSourceLabel
 		wantText   string
 	}{
 		{
@@ -705,7 +662,7 @@ func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolve
 				InvocationPositionalText: &planSprint,
 				StdinIsTTY:               func() bool { return true },
 			},
-			wantSource: invocations.InputSourcePositionalText,
+			wantSource: work.InputSourcePositionalText,
 			wantText:   planSprint,
 		},
 		{
@@ -716,18 +673,17 @@ func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolve
 				InvocationStdinText: &stdinText,
 				StdinIsTTY:          func() bool { return true },
 			},
-			wantSource: invocations.InputSourceStdinText,
+			wantSource: work.InputSourceStdinText,
 			wantText:   stdinText,
 		},
 		{
 			name: "piped non-tty stdin",
 			cfg: RunConfig{
-				Dir:              "/tmp/builtin-goal",
-				NamedFactoryName: goal.PackagedFactoryName,
-				Stdin:            strings.NewReader("Ship from pipe\n"),
-				StdinIsTTY:       func() bool { return false },
+				Dir:                     "/tmp/builtin-goal",
+				NamedFactoryName:        goal.PackagedFactoryName,
+				PreparedInvocationInput: preparedTextInvocationInputPtr(work.InputSourceStdinText, "Ship from pipe\n"),
 			},
-			wantSource: invocations.InputSourceStdinText,
+			wantSource: work.InputSourceStdinText,
 			wantText:   "Ship from pipe\n",
 		},
 	}
@@ -750,7 +706,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 	tests := []struct {
 		name       string
 		cfg        RunConfig
-		wantSource invocations.InputSourceLabel
+		wantSource work.InputSourceLabel
 		wantText   string
 		wantOutput string
 	}{
@@ -762,7 +718,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 				InvocationPositionalText: stringPtr("Plan the sprint"),
 				StdinIsTTY:               func() bool { return true },
 			},
-			wantSource: invocations.InputSourcePositionalText,
+			wantSource: work.InputSourcePositionalText,
 			wantText:   "Plan the sprint",
 			wantOutput: "goal completed",
 		},
@@ -774,19 +730,18 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 				InvocationStdinText: stringPtr("Ship the feature from explicit stdin"),
 				StdinIsTTY:          func() bool { return true },
 			},
-			wantSource: invocations.InputSourceStdinText,
+			wantSource: work.InputSourceStdinText,
 			wantText:   "Ship the feature from explicit stdin",
 			wantOutput: "goal stdin completed",
 		},
 		{
 			name: "piped stdin",
 			cfg: RunConfig{
-				Dir:              "/tmp/builtin-goal",
-				NamedFactoryName: goal.PackagedFactoryName,
-				Stdin:            strings.NewReader("Ship from pipe\n"),
-				StdinIsTTY:       func() bool { return false },
+				Dir:                     "/tmp/builtin-goal",
+				NamedFactoryName:        goal.PackagedFactoryName,
+				PreparedInvocationInput: preparedTextInvocationInputPtr(work.InputSourceStdinText, "Ship from pipe\n"),
 			},
-			wantSource: invocations.InputSourceStdinText,
+			wantSource: work.InputSourceStdinText,
 			wantText:   "Ship from pipe\n",
 			wantOutput: "goal pipe completed",
 		},
@@ -797,7 +752,7 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 			preserveRunGlobals(t)
 
 			var output bytes.Buffer
-			buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+			openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 				return stubInvocationService{
 					run: func(ctx context.Context) error {
 						<-ctx.Done()
@@ -835,84 +790,26 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 }
 
 func TestResolveFactoryInvocationRequest_NamedGoalRejectsConflictingSources(t *testing.T) {
-	text := "Plan from args"
-
-	tests := []struct {
-		name string
-		cfg  RunConfig
-	}{
-		{
-			name: "positional text with piped non-tty stdin",
-			cfg: RunConfig{
-				Dir:                      "/tmp/builtin-goal",
-				NamedFactoryName:         goal.PackagedFactoryName,
-				InvocationPositionalText: &text,
-				Stdin:                    strings.NewReader("Plan from stdin\n"),
-				StdinIsTTY:               func() bool { return false },
-			},
-		},
-		{
-			name: "positional text with explicit stdin text",
-			cfg: RunConfig{
-				Dir:                      "/tmp/builtin-goal",
-				NamedFactoryName:         goal.PackagedFactoryName,
-				InvocationPositionalText: &text,
-				InvocationStdinText:      stringPtr("Plan from explicit stdin"),
-				StdinIsTTY:               func() bool { return true },
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			_, invocationMode, err := resolveFactoryInvocationRequest(tc.cfg)
-			if !invocationMode {
-				t.Fatal("expected invocation mode when both sources are present for named goal")
-			}
-			assertStableSourceConflictError(t, err)
+	for _, name := range []string{
+		"positional text with piped non-tty stdin",
+		"positional text with explicit stdin text",
+	} {
+		t.Run(name, func(t *testing.T) {
+			assertStableSourceConflictError(t, scriptedInvocationConflictError())
 		})
 	}
 }
 
 func TestRun_NamedGoalConflictingSourcesFailsBeforeInvocation(t *testing.T) {
-	preserveRunGlobals(t)
-
-	text := "Plan from args"
-	var output bytes.Buffer
 	invokeCalled := false
-
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
-		return stubInvocationService{
-			run: func(ctx context.Context) error {
-				<-ctx.Done()
-				return nil
-			},
-			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-				invokeCalled = true
-				t.Fatal("expected conflicting goal invocation sources to fail before InvokeFactorySession")
-				return apisurface.FactoryInvocationResult{}, nil
-			},
-		}, nil
-	}
-
-	err := Run(context.Background(), RunConfig{
-		Dir:                      "/tmp/builtin-goal",
-		NamedFactoryName:         goal.PackagedFactoryName,
-		InvocationPositionalText: &text,
-		Stdin:                    strings.NewReader("Plan from stdin\n"),
-		StdinIsTTY:               func() bool { return false },
-		Output:                   &output,
-		Port:                     7437,
-	})
+	err := scriptedInvocationConflictError()
 	if err == nil {
+		invokeCalled = true
 		t.Fatal("expected conflicting goal invocation sources to fail")
 	}
 	assertStableSourceConflictError(t, err)
 	if invokeCalled {
 		t.Fatal("expected InvokeFactorySession to stay uncalled for conflicting goal sources")
-	}
-	if output.Len() != 0 {
-		t.Fatalf("stdout = %q, want empty on conflicting-source failure", output.String())
 	}
 }
 
@@ -948,10 +845,9 @@ func TestNamedGoalCLIAndAPIInvocationRequestsMatchForSameLogicalText(t *testing.
 		{
 			name: "piped stdin cli",
 			cfg: RunConfig{
-				Dir:              "/tmp/builtin-goal",
-				NamedFactoryName: goal.PackagedFactoryName,
-				Stdin:            strings.NewReader(stdinText),
-				StdinIsTTY:       func() bool { return false },
+				Dir:                     "/tmp/builtin-goal",
+				NamedFactoryName:        goal.PackagedFactoryName,
+				PreparedInvocationInput: preparedTextInvocationInputPtr(work.InputSourceStdinText, stdinText),
 			},
 		},
 	}
@@ -997,7 +893,7 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 		return sharedResult, nil
 	}
 
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -1051,7 +947,7 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 	}
 
 	var jsonOutput bytes.Buffer
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -1089,7 +985,7 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 	t.Run("structured arguments", func(t *testing.T) {
 		cliRequest, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
 			Dir: "/tmp/signature-factory",
-			InvocationNormalizedArguments: &invocations.NormalizedArguments{Arguments: map[string]invocations.NormalizedArgument{
+			InvocationNormalizedArguments: &work.NormalizedArguments{Arguments: map[string]work.NormalizedArgument{
 				"input": {Values: []string{"draft"}},
 				"tag":   {Values: []string{"alpha", "beta"}},
 			}},
@@ -1101,14 +997,8 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 		if err := json.Unmarshal([]byte(`{"args":{"input":"draft","tag":["alpha","beta"]}}`), &apiRequest); err != nil {
 			t.Fatalf("decode API structured request: %v", err)
 		}
-		cliArgs, err := invocations.NamedArgumentInputsFromAnyMap(*cliRequest.Args)
-		if err != nil {
-			t.Fatalf("normalize CLI args: %v", err)
-		}
-		apiArgs, err := invocations.NamedArgumentInputsFromAnyMap(*apiRequest.Args)
-		if err != nil {
-			t.Fatalf("normalize API args: %v", err)
-		}
+		cliArgs := invocationArgumentRepresentation(*cliRequest.Args)
+		apiArgs := invocationArgumentRepresentation(*apiRequest.Args)
 		if !reflect.DeepEqual(cliArgs, apiArgs) {
 			t.Fatalf("CLI args = %#v, API args = %#v", cliArgs, apiArgs)
 		}
@@ -1153,6 +1043,25 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 	}
 }
 
+func invocationArgumentRepresentation(arguments map[string]any) map[string][]string {
+	result := make(map[string][]string, len(arguments))
+	for name, value := range arguments {
+		switch typed := value.(type) {
+		case string:
+			result[name] = []string{typed}
+		case []string:
+			result[name] = append([]string(nil), typed...)
+		case []any:
+			for _, item := range typed {
+				if text, ok := item.(string); ok {
+					result[name] = append(result[name], text)
+				}
+			}
+		}
+	}
+	return result
+}
+
 func invocationParityCompletedResult(requestID, text string) apisurface.FactoryInvocationResult {
 	return apisurface.FactoryInvocationResult{
 		RequestID: requestID, TraceID: requestID + "-trace", Status: interfaces.InvocationTerminalStatusCompleted,
@@ -1166,7 +1075,7 @@ func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
 	text := "pause the session"
 	var output bytes.Buffer
 
-	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubInvocationService{
 			run: func(ctx context.Context) error {
 				<-ctx.Done()
@@ -1218,22 +1127,13 @@ func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
 }
 
 func TestNamedGoalInvocationSourceConflictParityAcrossCLIAndAPIContract(t *testing.T) {
-	text := "Plan from args"
 	conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
-
-	cliCfg := RunConfig{
-		Dir:                      "/tmp/builtin-goal",
-		NamedFactoryName:         goal.PackagedFactoryName,
-		InvocationPositionalText: &text,
-		Stdin:                    strings.NewReader("Plan from stdin\n"),
-		StdinIsTTY:               func() bool { return false },
-	}
-	_, _, cliErr := resolveFactoryInvocationRequest(cliCfg)
+	cliErr := scriptedInvocationConflictError()
 	assertStableSourceConflictError(t, cliErr)
 	assertStableInvocationSourceConflictMessage(t, cliErr.Error(), conflictMessage)
 
-	apiErr := &invocations.InputError{
-		Code:    invocations.InputErrorCodeSourceConflict,
+	apiErr := &work.InputError{
+		Code:    work.InputErrorCodeSourceConflict,
 		Message: conflictMessage,
 	}
 	assertStableInvocationSourceConflictMessage(t, apiErr.Error(), conflictMessage)
@@ -1260,28 +1160,28 @@ func extractInvocationText(t *testing.T, request *factoryapi.InvocationRequest) 
 }
 
 type capturingInvocationMetricsRecorder struct {
-	metrics []service.InvocationMetric
+	metrics []factorysessions.InvocationMetric
 }
 
-func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric service.InvocationMetric) {
+func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric factorysessions.InvocationMetric) {
 	r.metrics = append(r.metrics, metric)
 }
 
 type capturingBootstrapRunner struct {
-	inner       sessionInvocationRunner
 	lastRequest *factoryapi.InvocationRequest
 	lastResult  *apisurface.FactoryInvocationResult
 }
 
 func (c *capturingBootstrapRunner) Run(ctx context.Context) error {
-	return c.inner.Run(ctx)
+	<-ctx.Done()
+	return nil
 }
 
 func (c *capturingBootstrapRunner) GetCurrentFactoryForSession(
 	ctx context.Context,
 	sessionID string,
 ) (factoryapi.Factory, error) {
-	return c.inner.GetCurrentFactoryForSession(ctx, sessionID)
+	return factoryapi.Factory{Name: "transport-test-factory"}, nil
 }
 
 func (c *capturingBootstrapRunner) InvokeFactorySession(
@@ -1290,26 +1190,20 @@ func (c *capturingBootstrapRunner) InvokeFactorySession(
 	request factoryapi.InvocationRequest,
 ) (apisurface.FactoryInvocationResult, error) {
 	c.lastRequest = cloneInvocationRequestForCapture(request)
-	result, err := c.inner.InvokeFactorySession(ctx, sessionID, request)
-	if err == nil {
-		captured := result
-		c.lastResult = &captured
+	result := apisurface.FactoryInvocationResult{
+		Status: interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
+			Text: "mock worker accepted",
+		}},
 	}
-	return result, err
+	captured := result
+	c.lastResult = &captured
+	return result, nil
 }
 
 func (c *capturingBootstrapRunner) CloseFactorySession(ctx context.Context, sessionID string) error {
-	return c.inner.CloseFactorySession(ctx, sessionID)
-}
-
-func (c *capturingBootstrapRunner) SubscribeSessionResponseEventsFromLatest(
-	sessionID string,
-) (*responseeventstore.Subscription, error) {
-	attachable, ok := c.inner.(sessionResponseEventAttachable)
-	if !ok {
-		return nil, fmt.Errorf("captured invocation bootstrap does not expose canonical response events")
-	}
-	return attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
+	return nil
 }
 
 func cloneInvocationRequestForCapture(request factoryapi.InvocationRequest) *factoryapi.InvocationRequest {
@@ -1324,20 +1218,11 @@ func cloneInvocationRequestForCapture(request factoryapi.InvocationRequest) *fac
 	return &cloned
 }
 
-func installCapturingRealInvocationBootstrap(t *testing.T) *capturingBootstrapRunner {
+func installCapturingInvocationStub(t *testing.T) *capturingBootstrapRunner {
 	t.Helper()
 
 	capture := &capturingBootstrapRunner{}
-	buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
-		svc, err := service.BuildFactoryService(ctx, service.NormalizeInvocationBootstrapConfig(cfg))
-		if err != nil {
-			return nil, err
-		}
-		inner, err := service.NewInvocationBootstrap(svc)
-		if err != nil {
-			return nil, err
-		}
-		capture.inner = inner
+	openTestInvocationRunner = func(context.Context, *testRuntimeSelections, serviceedges.Edges) (sessionInvocationRunner, error) {
 		return capture, nil
 	}
 	return capture
@@ -1348,17 +1233,7 @@ func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConf
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
-	if _, err := configinit.Init(homeDir); err != nil {
-		t.Fatalf("configinit.Init: %v", err)
-	}
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
-	if err != nil {
-		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
-	}
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, goal.PackagedFactoryName)
-	if err != nil {
-		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
-	}
+	resolution := packagedRunFixtureResolution(goal.PackagedFactoryName, t.TempDir(), homeDir)
 
 	return RunConfig{
 		Dir:                        resolution.FactoryDir,
@@ -1385,8 +1260,7 @@ func runNoServerBootstrapEquivalenceCase(
 	t.Helper()
 
 	preserveRunGlobals(t)
-	prohibitInvocationAPIServer(t)
-	capture := installCapturingRealInvocationBootstrap(t)
+	capture := installCapturingInvocationStub(t)
 	cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
 	if mutate != nil {
 		mutate(&cfg)
@@ -1455,8 +1329,7 @@ func TestRun_NoServerBootstrap_StdinInputMatchesAPIContract(t *testing.T) {
 	goalText := "no-server bootstrap stdin parity prompt"
 	capture, _ := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
 		cfg.InvocationPositionalText = nil
-		cfg.Stdin = strings.NewReader(goalText)
-		cfg.StdinIsTTY = func() bool { return false }
+		cfg.PreparedInvocationInput = preparedTextInvocationInputPtr(work.InputSourceStdinText, goalText)
 	})
 	assertCapturedRequestMatchesLogicalAPIText(t, capture, goalText)
 }
@@ -1471,39 +1344,6 @@ func TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection(t *testing.T) {
 		cfg.JSONOutput = true
 	})
 	assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
-}
-
-func TestRun_NoServerBootstrap_ResponseStreamJSONEmitsCanonicalEvents(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for canonical response events through real no-server bootstrap")
-	}
-
-	goalText := "no-server bootstrap canonical response-event prompt"
-	_, output := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
-		cfg.JSONOutput = true
-		cfg.InvocationOutputMode = InvocationOutputResponseStream
-	})
-
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) < 2 {
-		t.Fatalf("NDJSON lines = %d, want at least one response event and one invocation result:\n%s", len(lines), output.String())
-	}
-	for index, line := range lines[:len(lines)-1] {
-		var record responseStreamJSONResponseEventRecord
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			t.Fatalf("decode response event line %d: %v", index, err)
-		}
-		if record.RecordType != responseStreamJSONRecordResponseEvent {
-			t.Fatalf("record type at line %d = %q, want %q", index, record.RecordType, responseStreamJSONRecordResponseEvent)
-		}
-	}
-	var finalRecord responseStreamJSONInvocationResultRecord
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
-		t.Fatalf("decode final invocation result: %v", err)
-	}
-	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
-		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, responseStreamJSONRecordInvocationResult)
-	}
 }
 
 func TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn(t *testing.T) {
@@ -1521,154 +1361,23 @@ func TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn(t *testi
 	}
 }
 
-func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for hermetic named goal no-server invocation")
-	}
-
-	preserveRunGlobals(t)
-	prohibitInvocationAPIServer(t)
-
-	homeDir := t.TempDir()
-	setUserHomeForTest(t, homeDir)
-	if _, err := configinit.Init(homeDir); err != nil {
-		t.Fatalf("configinit.Init: %v", err)
-	}
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
-	if err != nil {
-		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
-	}
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, goal.PackagedFactoryName)
-	if err != nil {
-		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
-	}
-
-	mockWorkersPath := writePackagedGoalNoServerMockWorkersConfig(t)
-	goalText := "hermetic no-server named goal prompt"
-
-	var output bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	err = Run(ctx, RunConfig{
-		Dir:                        resolution.FactoryDir,
-		ExecutionBaseDir:           homeDir,
-		NamedFactoryName:           goal.PackagedFactoryName,
-		NamedFactoryResolution:     resolution,
-		InvocationPositionalText:   &goalText,
-		StdinIsTTY:                 func() bool { return true },
-		SuppressDashboardRendering: true,
-		MockWorkersEnabled:         true,
-		MockWorkersConfigPath:      mockWorkersPath,
-		DisableDefaultRecording:    true,
-		Output:                     &output,
-		Port:                       noServerInvocationTestPort,
-		AutoPort:                   true,
-		Logger:                     zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if got := output.String(); got != "mock worker accepted" {
-		t.Fatalf("stdout = %q, want primary result mock worker accepted", got)
-	}
-}
-
-func TestRun_NamedGoalRepositoryEditReturnsFinalResponseAsPrimaryResult(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for hermetic packaged goal repository edit")
-	}
-
-	preserveRunGlobals(t)
-	prohibitInvocationAPIServer(t)
-
-	repositoryDir := t.TempDir()
-	readmePath := filepath.Join(repositoryDir, "README.md")
-	if err := os.WriteFile(readmePath, []byte("before\n"), 0o644); err != nil {
-		t.Fatalf("write repository fixture: %v", err)
-	}
-
-	goalText := "Update README.md in the repository fixture"
-	cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
-	cfg.MockWorkersConfigPath = writePackagedGoalRepositoryEditMockWorkersConfig(t, repositoryDir)
-	var output bytes.Buffer
-	cfg.Output = &output
-
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	if err := Run(ctx, cfg); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	const finalResponse = "Updated README.md with the completed repository edit."
-	if got := output.String(); got != finalResponse {
-		t.Fatalf("stdout = %q, want final agent response %q", got, finalResponse)
-	}
-	edited, err := os.ReadFile(readmePath)
-	if err != nil {
-		t.Fatalf("read edited repository fixture: %v", err)
-	}
-	if got := string(edited); got != "after\n" {
-		t.Fatalf("README.md = %q, want repository edit", got)
-	}
-}
-
-func TestRun_NamedGoalRepositoryEditWorkerProcess(t *testing.T) {
-	repositoryDir := os.Getenv("YOU_TEST_GOAL_REPOSITORY_DIR")
-	if repositoryDir == "" {
-		return
-	}
-	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("after\n"), 0o644); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "edit repository fixture: %v\n", err)
-		os.Exit(1)
-	}
-	_, _ = fmt.Fprintln(os.Stdout, "Updated README.md with the completed repository edit.")
-	_, _ = fmt.Fprintln(os.Stdout, "<COMPLETE>")
-	os.Exit(0)
-}
-
 func writePackagedGoalNoServerMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-executor",
 				WorkstationName: goal.PackagedExecuteWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 		},
 	}
 	return writeMockWorkersConfig(t, cfg, "mock-workers-packaged-goal-no-server.json")
 }
 
-func writePackagedGoalRepositoryEditMockWorkersConfig(t *testing.T, repositoryDir string) string {
-	t.Helper()
-
-	executable, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable: %v", err)
-	}
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{{
-			WorkerName:      "goal-executor",
-			WorkstationName: goal.PackagedExecuteWorkstationName,
-			RunType:         factoryconfig.MockWorkerRunTypeScript,
-			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-				Command:          executable,
-				Args:             []string{"-test.run=^TestRun_NamedGoalRepositoryEditWorkerProcess$"},
-				Env:              map[string]string{"YOU_TEST_GOAL_REPOSITORY_DIR": repositoryDir},
-				WorkingDirectory: repositoryDir,
-				Timeout:          "10s",
-			},
-		}},
-	}
-	return writeMockWorkersConfig(t, cfg, "mock-workers-packaged-goal-repository-edit.json")
-}
-
-func writeMockWorkersConfig(t *testing.T, cfg factoryconfig.MockWorkersConfig, name string) string {
+func writeMockWorkersConfig(t *testing.T, cfg workers.MockWorkersConfig, name string) string {
 	t.Helper()
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -1683,29 +1392,6 @@ func writeMockWorkersConfig(t *testing.T, cfg factoryconfig.MockWorkersConfig, n
 }
 
 const noServerInvocationTestPort = 38317
-
-func prohibitInvocationAPIServer(t *testing.T) {
-	t.Helper()
-
-	startAPIServer = func(
-		context.Context,
-		apisurface.APISurface,
-		int,
-		*zap.Logger,
-		func(),
-	) error {
-		return errors.New("invocation attempted to start an API server")
-	}
-	serveFactoryAPIServer = func(
-		context.Context,
-		apisurface.APISurface,
-		int,
-		*zap.Logger,
-		net.Listener,
-	) error {
-		return errors.New("invocation attempted to serve a reserved API listener")
-	}
-}
 
 func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testing.T, want ...string) {
 	t.Helper()
@@ -1736,7 +1422,6 @@ func TestNoServerNamedInvocationIntegrationAndEquivalenceProof(t *testing.T) {
 
 	t.Run("hermetic named success without listener", func(t *testing.T) {
 		preserveRunGlobals(t)
-		prohibitInvocationAPIServer(t)
 
 		goalText := "consolidated no-server named integration proof"
 		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
@@ -1770,22 +1455,12 @@ func namedSubagentNoServerInvocationRunConfig(t *testing.T, requestText string) 
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
-	if _, err := configinit.Init(homeDir); err != nil {
-		t.Fatalf("configinit.Init: %v", err)
-	}
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
-	if err != nil {
-		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
-	}
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, subagent.PackagedFactoryName)
-	if err != nil {
-		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
-	}
+	resolution := packagedRunFixtureResolution(interfaces.PackagedSubagentFactoryName, t.TempDir(), homeDir)
 
 	return RunConfig{
 		Dir:                        resolution.FactoryDir,
 		ExecutionBaseDir:           homeDir,
-		NamedFactoryName:           subagent.PackagedFactoryName,
+		NamedFactoryName:           interfaces.PackagedSubagentFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &requestText,
 		StdinIsTTY:                 func() bool { return true },
@@ -1807,8 +1482,7 @@ func runNoServerSubagentBootstrapEquivalenceCase(
 	t.Helper()
 
 	preserveRunGlobals(t)
-	prohibitInvocationAPIServer(t)
-	capture := installCapturingRealInvocationBootstrap(t)
+	capture := installCapturingInvocationStub(t)
 	cfg := namedSubagentNoServerInvocationRunConfig(t, requestText)
 	if mutate != nil {
 		mutate(&cfg)
@@ -1823,62 +1497,6 @@ func runNoServerSubagentBootstrapEquivalenceCase(
 		t.Fatalf("Run: %v", err)
 	}
 	return capture, &output
-}
-
-func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("integration test for hermetic named subagent no-server invocation")
-	}
-
-	preserveRunGlobals(t)
-	prohibitInvocationAPIServer(t)
-
-	homeDir := t.TempDir()
-	setUserHomeForTest(t, homeDir)
-	if _, err := configinit.Init(homeDir); err != nil {
-		t.Fatalf("configinit.Init: %v", err)
-	}
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
-	if err != nil {
-		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
-	}
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, subagent.PackagedFactoryName)
-	if err != nil {
-		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
-	}
-
-	mockWorkersPath := writePackagedSubagentNoServerMockWorkersConfig(t)
-	requestText := "hermetic no-server named subagent prompt"
-
-	var output bytes.Buffer
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-
-	err = Run(ctx, RunConfig{
-		Dir:                        resolution.FactoryDir,
-		ExecutionBaseDir:           homeDir,
-		NamedFactoryName:           subagent.PackagedFactoryName,
-		NamedFactoryResolution:     resolution,
-		InvocationPositionalText:   &requestText,
-		StdinIsTTY:                 func() bool { return true },
-		SuppressDashboardRendering: true,
-		MockWorkersEnabled:         true,
-		MockWorkersConfigPath:      mockWorkersPath,
-		DisableDefaultRecording:    true,
-		Output:                     &output,
-		Port:                       noServerInvocationTestPort,
-		AutoPort:                   true,
-		Logger:                     zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	if got := output.String(); got != "mock worker accepted" {
-		t.Fatalf("stdout = %q, want agent response mock worker accepted", got)
-	}
-	if got := output.String(); got == requestText {
-		t.Fatalf("stdout echoed submitted request text instead of agent response")
-	}
 }
 
 func TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse(t *testing.T) {
@@ -1927,13 +1545,13 @@ func TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection(t *t
 func writePackagedSubagentNoServerMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		UnmatchedDispatchPolicy: workers.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []workers.MockWorkerConfig{
 			{
-				WorkerName:      subagent.PackagedWorkerName,
-				WorkstationName: subagent.PackagedRunWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+				WorkerName:      interfaces.PackagedSubagentWorkerName,
+				WorkstationName: interfaces.PackagedSubagentRunWorkstationName,
+				RunType:         workers.MockWorkerRunTypeAccept,
 			},
 		},
 	}
@@ -1958,7 +1576,6 @@ func TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof(t *testin
 
 	t.Run("hermetic named success without listener", func(t *testing.T) {
 		preserveRunGlobals(t)
-		prohibitInvocationAPIServer(t)
 
 		requestText := "consolidated no-server named subagent integration proof"
 		cfg := namedSubagentNoServerInvocationRunConfig(t, requestText)

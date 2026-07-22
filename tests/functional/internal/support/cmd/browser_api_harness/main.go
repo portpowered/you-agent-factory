@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -13,17 +15,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/service"
-	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	platformhttpserver "github.com/portpowered/infinite-you/pkg/platform/httpserver"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/wire"
-	"go.uber.org/zap"
 )
 
-const startupTimeout = 10 * time.Second
+const (
+	startupTimeout           = 10 * time.Second
+	projectWorkflowDirectory = ".claude/workflows"
+)
 
 type readyPayload struct {
 	APIPort   int    `json:"apiPort"`
@@ -41,17 +42,11 @@ type harnessConfig struct {
 	workflowName     string
 }
 
-type runningHTTPServer struct {
-	server *http.Server
-	done   <-chan error
-}
-
 func main() {
 	cfg := parseHarnessConfig()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	logger := zap.NewNop()
 	projectRoot, cleanupProjectRoot, err := prepareWorkflowProjectRoot(
 		cfg.executionBaseDir,
 		cfg.workflowFixture,
@@ -62,14 +57,45 @@ func main() {
 	}
 	defer cleanupProjectRoot()
 
-	svc, handler, serviceDone, err := startFactoryService(ctx, logger, cfg, projectRoot)
-	if err != nil {
-		fatalf("InjectFactoryService: %v", err)
+	ready := make(chan struct{})
+	edges := serviceedges.Edges{
+		APIServerStarter: func(serverCtx context.Context, request platformhttpserver.StartRequest) error {
+			if request.OnBound != nil {
+				request.OnBound(platformhttpserver.Binding{Port: cfg.apiPort})
+			}
+			return serveInjectedHTTP(serverCtx, cfg.apiPort, request.Handler, ready)
+		},
 	}
-
-	httpServer, err := startHTTPServer(cfg.apiPort, handler)
+	process, err := root.BuildProcess(ctx, edges)
 	if err != nil {
-		fatalf("start http server: %v", err)
+		fatalf("build root process: %v", err)
+	}
+	processDone := make(chan error, 1)
+	go func() {
+		processDone <- process.Execute(root.Input{
+			Args: []string{
+				"you", "run",
+				"--dir", cfg.factoryDir,
+				"--continuously",
+				"--server", fmt.Sprintf("http://127.0.0.1:%d", cfg.apiPort),
+				"--with-mock-workers",
+				"--quiet",
+				"--no-record",
+			},
+			Env:              os.Environ(),
+			Stdin:            os.Stdin,
+			Stdout:           io.Discard,
+			Stderr:           os.Stderr,
+			Context:          ctx,
+			WorkingDirectory: projectRoot,
+		})
+	}()
+	select {
+	case <-ready:
+	case err := <-processDone:
+		fatalf("root process exited before API ready: %v", err)
+	case <-time.After(startupTimeout):
+		fatalf("timed out waiting for root process API")
 	}
 
 	waitForHTTPReady(cfg.apiPort)
@@ -81,7 +107,7 @@ func main() {
 			WorkflowName: strPtr(cfg.workflowName),
 		},
 	}
-	sessionID, err := startSession(ctx, svc, cfg.startMode, startRequest)
+	sessionID, err := startSession(ctx, cfg.apiPort, cfg.startMode, startRequest)
 	if err != nil {
 		fatalf("start durable factory session (%s): %v", cfg.startMode, err)
 	}
@@ -95,7 +121,7 @@ func main() {
 	}
 
 	<-ctx.Done()
-	shutdownHarness(httpServer, serviceDone)
+	waitForExit(processDone)
 }
 
 func parseHarnessConfig() harnessConfig {
@@ -133,61 +159,10 @@ func validateHarnessConfig(cfg harnessConfig) {
 	}
 }
 
-func startFactoryService(
-	ctx context.Context,
-	logger *zap.Logger,
-	cfg harnessConfig,
-	projectRoot string,
-) (*service.FactoryService, http.Handler, <-chan error, error) {
-	var handler http.Handler
-	readyCh := make(chan struct{})
-	serviceCfg := &service.FactoryServiceConfig{
-		Dir:                      cfg.factoryDir,
-		ExecutionBaseDir:         projectRoot,
-		Logger:                   logger,
-		MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
-		Port:                     cfg.apiPort,
-		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
-		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
-			handler = api.NewServer(surface, port, l).Handler()
-			close(readyCh)
-			<-ctx.Done()
-			return nil
-		},
-	}
-
-	svc, err := wire.InjectFactoryService(ctx, serviceCfg)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	serviceDone := make(chan error, 1)
-	go func() {
-		serviceDone <- svc.Run(ctx)
-	}()
-
-	if err := waitForAPIHandler(readyCh, serviceDone); err != nil {
-		return nil, nil, nil, err
-	}
-
-	return svc, handler, serviceDone, nil
-}
-
-func waitForAPIHandler(readyCh <-chan struct{}, serviceDone <-chan error) error {
-	select {
-	case <-readyCh:
-		return nil
-	case err := <-serviceDone:
-		return fmt.Errorf("service exited before API ready: %w", err)
-	case <-time.After(startupTimeout):
-		return fmt.Errorf("timed out waiting for API handler readiness")
-	}
-}
-
-func startHTTPServer(apiPort int, handler http.Handler) (*runningHTTPServer, error) {
+func serveInjectedHTTP(ctx context.Context, apiPort int, handler http.Handler, ready chan<- struct{}) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", apiPort))
 	if err != nil {
-		return nil, fmt.Errorf("listen on api port %d: %w", apiPort, err)
+		return fmt.Errorf("listen on api port %d: %w", apiPort, err)
 	}
 	httpServer := &http.Server{Handler: handler}
 	httpDone := make(chan error, 1)
@@ -199,18 +174,12 @@ func startHTTPServer(apiPort int, handler http.Handler) (*runningHTTPServer, err
 		}
 		httpDone <- err
 	}()
-	return &runningHTTPServer{
-		server: httpServer,
-		done:   httpDone,
-	}, nil
-}
-
-func shutdownHarness(httpServer *runningHTTPServer, serviceDone <-chan error) {
+	close(ready)
+	<-ctx.Done()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer shutdownCancel()
-	_ = httpServer.server.Shutdown(shutdownCtx)
-	waitForExit(httpServer.done)
-	waitForExit(serviceDone)
+	_ = httpServer.Shutdown(shutdownCtx)
+	return <-httpDone
 }
 
 func waitForExit(done <-chan error) {
@@ -244,11 +213,11 @@ func prepareWorkflowProjectRoot(
 }
 
 func installWorkflowFixture(projectRoot, workflowFixture, workflowName string) error {
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, projectWorkflowDirectory)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		return err
 	}
-	raw, err := os.ReadFile(filepath.Join("pkg", "orchestrators", "javascript", "runtime", "testdata", workflowFixture))
+	raw, err := os.ReadFile(filepath.Join("tests", "fixtures", "javascript_runtime", workflowFixture))
 	if err != nil {
 		return err
 	}
@@ -281,20 +250,31 @@ func fatalf(format string, args ...any) {
 
 func startSession(
 	ctx context.Context,
-	svc *service.FactoryService,
+	apiPort int,
 	startMode string,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (string, error) {
-	if startMode == "async" {
-		started, err := svc.StartDurableFactorySessionAsync(ctx, request)
-		if err != nil {
-			return "", err
-		}
-		return started.SessionId, nil
-	}
-
-	started, err := svc.StartDurableFactorySessionSync(ctx, request)
+	body, err := json.Marshal(request)
 	if err != nil {
+		return "", err
+	}
+	endpoint := fmt.Sprintf("http://127.0.0.1:%d/factory-sessions/%s", apiPort, startMode)
+	httpRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpRequest.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(httpRequest)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(response.Body)
+		return "", fmt.Errorf("POST %s status = %d: %s", endpoint, response.StatusCode, payload)
+	}
+	var started factoryapi.FactorySessionExecutionResponse
+	if err := json.NewDecoder(response.Body).Decode(&started); err != nil {
 		return "", err
 	}
 	return started.SessionId, nil

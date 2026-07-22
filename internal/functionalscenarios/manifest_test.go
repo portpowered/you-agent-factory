@@ -16,8 +16,8 @@ func TestBuildReviewedManifestPublishesTruthfulCoverageAndSSEPolicy(t *testing.T
 	if err != nil {
 		t.Fatalf("BuildReviewedManifest() error = %v", err)
 	}
-	if len(manifest.Scenarios) != 97 {
-		t.Fatalf("scenario count = %d, want 97", len(manifest.Scenarios))
+	if len(manifest.Scenarios) != 94 {
+		t.Fatalf("scenario count = %d, want 94", len(manifest.Scenarios))
 	}
 	byID := make(map[string]Scenario, len(manifest.Scenarios))
 	for _, scenario := range manifest.Scenarios {
@@ -33,7 +33,6 @@ func TestBuildReviewedManifestPublishesTruthfulCoverageAndSSEPolicy(t *testing.T
 		t.Fatalf("CLI dispatches scenario = %#v, want truthful missing status", got)
 	}
 	assertSSEPolicy(t, byID[sessionEventsStableID], true, SSERequired, StatusPartial)
-	assertSSEPolicy(t, byID[globalEventsStableID], false, SSEDeprecatedLaterRemoval, StatusNotApplicable)
 	assertSSEPolicy(t, byID[responseEventsStableID], false, SSECurrentlyDeferred, StatusNotApplicable)
 }
 

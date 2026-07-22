@@ -23,7 +23,6 @@
     "commands": {
       "description": "Command records keyed by stable command identifiers. Object keys make duplicate command IDs structurally unrepresentable.",
       "type": "object",
-      "minProperties": 1,
       "propertyNames": {
         "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
       },

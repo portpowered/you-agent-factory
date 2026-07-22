@@ -12,42 +12,126 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factorysessionfixtures"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
+	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestFactoryResponseEventsBySessionID_RetainedThenLiveUsesExactSessionAndFlushesEachMessage(t *testing.T) {
-	defaultStore := responseeventstore.NewSessionResponseEventStore("session-default")
-	betaStore := responseeventstore.NewSessionResponseEventStore("session-beta")
-	publishResponseProgress(t, defaultStore, "default-retained")
-	wantRetained := publishResponseProgress(t, betaStore, "beta-retained")
+func newLiveSessionTestServer(sessions apisurface.LiveSessionAPI) *Server {
+	return newFactorySessionRolesTestServer(sessions, nil, nil, nil)
+}
 
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"~default":     {ResponseEventStore: defaultStore},
-		"session-beta": {ResponseEventStore: betaStore},
-	}})
+type httpRequestPreparationFake struct {
+	factorysessions.RequestPreparation
+}
+
+func (httpRequestPreparationFake) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+	if request.Scope == "" {
+		request.Scope = factorysessions.SessionListScopeLive
+	}
+	return request, nil
+}
+
+type strictInvocationAPIFake struct {
+	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+}
+
+type strictFactoryStatusAPIFake struct {
+	project func(context.Context, string) (factoryruntime.FactoryStatus, error)
+}
+
+func (fake strictFactoryStatusAPIFake) ProjectFactoryStatus(ctx context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+	if fake.project == nil {
+		panic("unexpected FactoryStatusAPI.ProjectFactoryStatus call")
+	}
+	return fake.project(ctx, sessionID)
+}
+
+func (fake strictInvocationAPIFake) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	if fake.invoke == nil {
+		panic("unexpected InvocationAPI.InvokeFactorySession call")
+	}
+	return fake.invoke(ctx, sessionID, request)
+}
+
+func newFactorySessionRolesTestServer(
+	sessions apisurface.LiveSessionAPI,
+	workAPI apisurface.WorkAPI,
+	definitions apisurface.FactorySaveAPI,
+	invocation apisurface.InvocationAPI,
+	statusRoles ...apisurface.FactoryStatusAPI,
+) *Server {
+	var status apisurface.FactoryStatusAPI
+	if len(statusRoles) > 0 {
+		status = statusRoles[0]
+	}
+	workRead, _ := workAPI.(apisurface.WorkReadAPI)
+	var liveLister factorysessions.LiveSessionListReader
+	if sessions != nil {
+		liveLister = httpLiveSessionListReader{sessions: sessions}
+	}
+	return NewServer(
+		nil, status, sessions, workAPI, workRead, invocation, &modelshttp.Handler{},
+		definitions, httpFactoryValidator{}, nil,
+		nil, nil, nil, nil, nil, liveLister, nil, nil,
+		newContentStagingFake(),
+		&workRequestPreparationFake{prepare: func(_ context.Context, input work.WorkRequestPreparation) (work.WorkRequest, error) {
+			return input.Request, nil
+		}},
+		httpRequestPreparationFake{}, zap.NewNop(),
+	)
+}
+
+type httpLiveSessionListReader struct {
+	sessions apisurface.LiveSessionAPI
+}
+
+func (reader httpLiveSessionListReader) ListScopedLiveSessions(ctx context.Context) ([]factorysessions.ScopedLiveSessionSummary, error) {
+	response, err := reader.sessions.ListFactorySessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]factorysessions.ScopedLiveSessionSummary, 0, len(response.Sessions))
+	for _, session := range response.Sessions {
+		target := factorysessions.TargetRef{Kind: factorysessions.TargetKind(session.Target.Kind)}
+		if session.Target.Name != nil {
+			target.Name = strings.TrimSpace(*session.Target.Name)
+		}
+		rows = append(rows, factorysessions.ScopedLiveSessionSummary{
+			ID: session.Id, FactoryDir: session.FactoryDir, FolderPath: session.FolderPath,
+			Project: session.Project, IsDefault: session.IsDefault, Target: target,
+		})
+	}
+	return rows, nil
+}
+
+func TestFactoryResponseEventsBySessionID_RetainedThenLiveUsesExactSessionAndFlushesEachMessage(t *testing.T) {
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(2)
+	wantRetained := responseProgressEvent(t, "session-beta", 1, "beta-retained")
+	subscription.Batches <- responseEventRecords(t, wantRetained)
+	var subscribedSession string
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			subscribedSession = request.SessionID
+			return subscription, nil
+		},
+	})
 	httpServer := httptest.NewServer(srv.Handler())
 	defer httpServer.Close()
 
@@ -73,31 +157,51 @@ func TestFactoryResponseEventsBySessionID_RetainedThenLiveUsesExactSessionAndFlu
 	if retained.EventID != wantRetained.EventID || retained.FactorySessionID != "session-beta" {
 		t.Fatalf("retained response event = %#v, want beta event %q", retained, wantRetained.EventID)
 	}
-	wantLive := publishResponseProgress(t, betaStore, "beta-live")
+	if subscribedSession != "session-beta" {
+		t.Fatalf("subscribed session = %q, want session-beta", subscribedSession)
+	}
+	wantLive := responseProgressEvent(t, "session-beta", 2, "beta-live")
+	subscription.Batches <- responseEventRecords(t, wantLive)
 	live := readSSEFactoryResponseEvent(t, reader)
 	if live.EventID != wantLive.EventID || live.Sequence <= retained.Sequence {
 		t.Fatalf("live response event = %#v, want event %q after sequence %d", live, wantLive.EventID, retained.Sequence)
 	}
-	if defaultStore.SubscriberCount() != 0 {
-		t.Fatalf("default response-event subscribers = %d, want 0", defaultStore.SubscriberCount())
-	}
 
 	cancel()
-	deadline := time.Now().Add(time.Second)
-	for betaStore.SubscriberCount() != 0 && time.Now().Before(deadline) {
-		runtime.Gosched()
-	}
-	if betaStore.SubscriberCount() != 0 {
-		t.Fatalf("beta response-event subscribers after disconnect = %d, want 0", betaStore.SubscriberCount())
+	select {
+	case <-subscription.Detached:
+	case <-time.After(time.Second):
+		t.Fatal("response-event subscription was not detached after disconnect")
 	}
 }
 
 func TestFactoryResponseEventsBySessionID_DisconnectDoesNotStopPublicationOrCatchUp(t *testing.T) {
-	store := responseeventstore.NewSessionResponseEventStore("session-beta")
-	retained := publishResponseProgress(t, store, "before-disconnect")
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	firstSubscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	retained := responseProgressEvent(t, "session-beta", 1, "before-disconnect")
+	firstSubscription.Batches <- responseEventRecords(t, retained)
+	secondSubscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	afterDisconnect := responseProgressEvent(t, "session-beta", 2, "after-disconnect")
+	secondSubscription.Batches <- responseEventRecords(t, afterDisconnect)
+	close(secondSubscription.Batches)
+	var subscriptionCount int
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			subscriptionCount++
+			if request.SessionID != "session-beta" {
+				t.Fatalf("subscribed session = %q, want session-beta", request.SessionID)
+			}
+			if subscriptionCount == 1 {
+				return firstSubscription, nil
+			}
+			if request.AfterSequence != retained.Sequence {
+				t.Fatalf("reconnect cursor = %d, want %d", request.AfterSequence, retained.Sequence)
+			}
+			return secondSubscription, nil
+		},
+	})
 	httpServer := httptest.NewServer(srv.Handler())
 	defer httpServer.Close()
 
@@ -117,49 +221,50 @@ func TestFactoryResponseEventsBySessionID_DisconnectDoesNotStopPublicationOrCatc
 	}
 
 	cancel()
-	waitForNoResponseEventSubscribers(t, store)
-	afterDisconnect := publishResponseProgress(t, store, "after-disconnect")
-	catchUp, err := store.Subscribe(retained.Sequence)
+	select {
+	case <-firstSubscription.Detached:
+	case <-time.After(time.Second):
+		t.Fatal("first response-event subscription was not detached")
+	}
+	catchUpRequest, err := http.NewRequest(
+		http.MethodGet,
+		httpServer.URL+"/factory-sessions/session-beta/response-events?after_sequence=1",
+		nil,
+	)
 	if err != nil {
-		t.Fatalf("subscribe after observer disconnect: %v", err)
+		t.Fatalf("new catch-up request: %v", err)
 	}
-	defer catchUp.Detach()
-	events, err := catchUp.Next(context.Background())
+	catchUp, err := http.DefaultClient.Do(catchUpRequest)
 	if err != nil {
-		t.Fatalf("read event published after observer disconnect: %v", err)
+		t.Fatalf("open catch-up stream: %v", err)
 	}
-	if len(events) != 1 || events[0].EventID != afterDisconnect.EventID {
-		t.Fatalf("events after observer disconnect = %#v, want continued event %q", events, afterDisconnect.EventID)
-	}
-}
-
-func waitForNoResponseEventSubscribers(t *testing.T, store *responseeventstore.SessionResponseEventStore) {
-	t.Helper()
-	deadline := time.Now().Add(time.Second)
-	for store.SubscriberCount() != 0 && time.Now().Before(deadline) {
-		runtime.Gosched()
-	}
-	if store.SubscriberCount() != 0 {
-		t.Fatalf("response-event subscribers after disconnect = %d, want 0", store.SubscriberCount())
+	defer catchUp.Body.Close()
+	gotAfterDisconnect := readSSEFactoryResponseEvent(t, bufio.NewReader(catchUp.Body))
+	if gotAfterDisconnect.EventID != afterDisconnect.EventID {
+		t.Fatalf("event after reconnect = %#v, want %q", gotAfterDisconnect, afterDisconnect.EventID)
 	}
 }
 
 func TestFactoryResponseEventsBySessionID_StaleCursorGetsGapBeforeRetainedAndLiveEvents(t *testing.T) {
-	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
-		"session-beta",
-		responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20},
-	)
-	if err != nil {
-		t.Fatalf("new response-event store: %v", err)
-	}
-	publishResponseProgress(t, store, "dropped-1")
-	publishResponseProgress(t, store, "dropped-2")
-	retainedFirst := publishResponseProgress(t, store, "retained-3")
-	retainedSecond := publishResponseProgress(t, store, "retained-4")
-
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(2)
+	gap := responseStreamGapEvent(t, "session-beta", 2, 2, 3)
+	retainedFirst := responseProgressEvent(t, "session-beta", 3, "retained-3")
+	retainedSecond := responseProgressEvent(t, "session-beta", 4, "retained-4")
+	subscription.Batches <- responseEventRecords(t, gap, retainedFirst, retainedSecond)
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			if request.SessionID != "session-beta" || request.AfterSequence != 1 {
+				t.Fatalf("subscription = (%q, %d), want (session-beta, 1)", request.SessionID, request.AfterSequence)
+			}
+			if len(request.Kinds) != 1 || request.Kinds[0] != factorysessions.ResponseEventKindProgress {
+				t.Fatalf("kind selection = %#v, want [PROGRESS]", request.Kinds)
+			}
+			return subscription, nil
+		},
+	})
 	httpServer := httptest.NewServer(srv.Handler())
 	defer httpServer.Close()
 
@@ -184,19 +289,20 @@ func TestFactoryResponseEventsBySessionID_StaleCursorGetsGapBeforeRetainedAndLiv
 	}
 
 	reader := bufio.NewReader(response.Body)
-	gap := readSSEFactoryResponseEvent(t, reader)
-	gapPayload := decodeSSEStreamGap(t, gap)
+	gotGap := readSSEFactoryResponseEvent(t, reader)
+	gapPayload := decodeSSEStreamGap(t, gotGap)
 	if gapPayload.FromSequence != 2 || gapPayload.ToSequence != 2 || gapPayload.FirstAvailableSequence != 3 {
 		t.Fatalf("STREAM_GAP payload = %#v, want unavailable 2..2 and first available 3", gapPayload)
 	}
-	retained := []responseevents.FactoryResponseEvent{
+	retained := []factorysessions.FactoryResponseEvent{
 		readSSEFactoryResponseEvent(t, reader),
 		readSSEFactoryResponseEvent(t, reader),
 	}
 	if retained[0].EventID != retainedFirst.EventID || retained[1].EventID != retainedSecond.EventID {
 		t.Fatalf("retained events = [%q %q], want [%q %q]", retained[0].EventID, retained[1].EventID, retainedFirst.EventID, retainedSecond.EventID)
 	}
-	liveWant := publishResponseProgress(t, store, "live-5")
+	liveWant := responseProgressEvent(t, "session-beta", 5, "live-5")
+	subscription.Batches <- responseEventRecords(t, liveWant)
 	live := readSSEFactoryResponseEvent(t, reader)
 	if live.EventID != liveWant.EventID || live.Sequence != 5 {
 		t.Fatalf("live event = %#v, want sequence 5 event %q", live, liveWant.EventID)
@@ -204,21 +310,22 @@ func TestFactoryResponseEventsBySessionID_StaleCursorGetsGapBeforeRetainedAndLiv
 }
 
 func TestFactoryResponseEventsBySessionID_CursorInsideRetainedSuffixDoesNotGetGap(t *testing.T) {
-	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
-		"session-beta",
-		responseeventstore.RetentionLimits{MaxEvents: 2, MaxBytes: 1 << 20},
-	)
-	if err != nil {
-		t.Fatalf("new response-event store: %v", err)
-	}
-	publishResponseProgress(t, store, "dropped-1")
-	publishResponseProgress(t, store, "dropped-2")
-	retainedFirst := publishResponseProgress(t, store, "retained-3")
-	retainedSecond := publishResponseProgress(t, store, "retained-4")
-	store.Complete()
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	retainedFirst := responseProgressEvent(t, "session-beta", 3, "retained-3")
+	retainedSecond := responseProgressEvent(t, "session-beta", 4, "retained-4")
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	subscription.Batches <- responseEventRecords(t, retainedSecond)
+	close(subscription.Batches)
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			if request.AfterSequence != retainedFirst.Sequence {
+				t.Fatalf("after sequence = %d, want %d", request.AfterSequence, retainedFirst.Sequence)
+			}
+			return subscription, nil
+		},
+	})
 
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events?after_sequence=3", nil)
 	recorder := httptest.NewRecorder()
@@ -227,20 +334,29 @@ func TestFactoryResponseEventsBySessionID_CursorInsideRetainedSuffixDoesNotGetGa
 		t.Fatalf("current response-event status = %d, want 200: %s", recorder.Code, recorder.Body.String())
 	}
 	got := readSSEFactoryResponseEvent(t, bufio.NewReader(recorder.Body))
-	if got.Kind == responseevents.KindStreamGap || got.EventID != retainedSecond.EventID {
+	if got.Kind == factorysessions.ResponseEventKindStreamGap || got.EventID != retainedSecond.EventID {
 		t.Fatalf("current cursor event = %#v, want retained event %q without gap after %q", got, retainedSecond.EventID, retainedFirst.EventID)
 	}
 }
 
 func TestFactoryResponseEventsBySessionID_KnownCursorEmitsOnlyNewerEvents(t *testing.T) {
-	store := responseeventstore.NewSessionResponseEventStore("session-beta")
-	first := publishResponseProgress(t, store, "first")
-	second := publishResponseProgress(t, store, "second")
-	third := publishResponseProgress(t, store, "third")
-	store.Complete()
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	first := responseProgressEvent(t, "session-beta", 1, "first")
+	second := responseProgressEvent(t, "session-beta", 2, "second")
+	third := responseProgressEvent(t, "session-beta", 3, "third")
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	subscription.Batches <- responseEventRecords(t, second, third)
+	close(subscription.Batches)
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			if request.AfterSequence != first.Sequence {
+				t.Fatalf("after sequence = %d, want %d", request.AfterSequence, first.Sequence)
+			}
+			return subscription, nil
+		},
+	})
 
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events?after_sequence=1", nil)
 	recorder := httptest.NewRecorder()
@@ -260,41 +376,40 @@ func TestFactoryResponseEventsBySessionID_KnownCursorEmitsOnlyNewerEvents(t *tes
 }
 
 func TestFactoryResponseEventsBySessionID_UnknownSessionNeverFallsBackToDefault(t *testing.T) {
-	defaultStore := responseeventstore.NewSessionResponseEventStore("session-default")
-	publishResponseProgress(t, defaultStore, "default-retained")
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"~default": {ResponseEventStore: defaultStore},
-	}})
+	var subscribedSession string
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			_ context.Context,
+			request factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			subscribedSession = request.SessionID
+			return nil, apisurface.ErrFactorySessionNotFound
+		},
+	})
 
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-missing/response-events", nil)
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, request)
 	assertJSONError(t, recorder, http.StatusNotFound, "RESPONSE_EVENT_SESSION_NOT_FOUND", "factory response-event session not found")
-	if defaultStore.SubscriberCount() != 0 {
-		t.Fatalf("default response-event subscribers = %d, want 0 after unknown-session request", defaultStore.SubscriberCount())
+	if subscribedSession != "session-missing" {
+		t.Fatalf("subscribed session = %q, want session-missing without default fallback", subscribedSession)
 	}
 }
 
-type responseEventTestClock struct {
-	now time.Time
-}
-
-func (c *responseEventTestClock) Now() time.Time {
-	return c.now
-}
-
 func TestFactoryResponseEventsBySessionID_CompletedWithinRetentionDrainsAndCloses(t *testing.T) {
-	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	clock := &responseEventTestClock{now: start}
-	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
-	wantFirst := publishResponseProgress(t, store, "completed-first")
-	wantSecond := publishResponseProgress(t, store, "completed-second")
-	store.Complete()
-	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow - time.Second)
-
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	wantFirst := responseProgressEvent(t, "session-beta", 1, "completed-first")
+	wantSecond := responseProgressEvent(t, "session-beta", 2, "completed-second")
+	subscription := factorysessionfixtures.NewFactoryResponseEventSubscription(1)
+	subscription.Batches <- responseEventRecords(t, wantFirst, wantSecond)
+	close(subscription.Batches)
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			context.Context,
+			factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			return subscription, nil
+		},
+	})
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, request)
@@ -314,16 +429,14 @@ func TestFactoryResponseEventsBySessionID_CompletedWithinRetentionDrainsAndClose
 }
 
 func TestFactoryResponseEventsBySessionID_ExpiredCompletedStreamReturnsTypedGone(t *testing.T) {
-	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	clock := &responseEventTestClock{now: start}
-	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
-	publishResponseProgress(t, store, "completed")
-	store.Complete()
-	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
-
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventStore: store},
-	}})
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			context.Context,
+			factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			return nil, apisurface.ErrFactoryResponseEventStreamExpired
+		},
+	})
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, request)
@@ -335,9 +448,14 @@ func TestFactoryResponseEventsBySessionID_ExpiredCompletedStreamReturnsTypedGone
 }
 
 func TestFactoryResponseEventsBySessionID_SubscriptionFailureReturnsTypedInternalError(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
-		"session-beta": {ResponseEventSubscribeErr: errors.New("subscription storage failed")},
-	}})
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{
+		subscribe: func(
+			context.Context,
+			factorysessions.ResponseEventSubscriptionRequest,
+		) (apisurface.FactoryResponseEventSubscription, error) {
+			return nil, errors.New("subscription storage failed")
+		},
+	})
 	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
 	recorder := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(recorder, request)
@@ -345,33 +463,93 @@ func TestFactoryResponseEventsBySessionID_SubscriptionFailureReturnsTypedInterna
 	assertJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to subscribe to factory response events")
 }
 
-func publishResponseProgress(t *testing.T, store *responseeventstore.SessionResponseEventStore, label string) responseevents.FactoryResponseEvent {
+func responseProgressEvent(
+	t *testing.T,
+	sessionID string,
+	sequence int64,
+	label string,
+) factorysessions.FactoryResponseEvent {
 	t.Helper()
-	payload, err := json.Marshal(responseevents.ProgressPayload{Label: label})
+	payload, err := json.Marshal(factorysessions.ResponseEventProgress{Label: label})
 	if err != nil {
 		t.Fatalf("marshal response progress payload: %v", err)
 	}
-	event, err := store.Publish(responseevents.FactoryResponseEvent{
-		FactorySessionID: store.FactorySessionID(),
-		Kind:             responseevents.KindProgress,
-		Phase:            responseevents.PhaseUpdated,
-		Provenance: responseevents.Provenance{
+	return factorysessions.FactoryResponseEvent{
+		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
+		Sequence:         sequence,
+		EventID:          fmt.Sprintf("response-event/%d", sequence),
+		FactorySessionID: sessionID,
+		Kind:             factorysessions.ResponseEventKindProgress,
+		Phase:            factorysessions.ResponseEventPhaseUpdated,
+		Provenance: factorysessions.ResponseEventProvenance{
 			Provider:        "test-provider",
 			NativeEventType: "progress",
-			Delivery:        responseevents.DeliveryNativeStream,
-			Representation:  responseevents.RepresentationNotification,
-			Fidelity:        responseevents.FidelityLossless,
+			Delivery:        factorysessions.ResponseEventDeliveryNativeStream,
+			Representation:  factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:        factorysessions.ResponseEventFidelityLossless,
 		},
-		RunID:   "run-test",
-		Payload: payload,
-	})
-	if err != nil {
-		t.Fatalf("publish response progress: %v", err)
+		RunID:      "run-test",
+		RecordedAt: time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
+		Payload:    payload,
 	}
-	return event
 }
 
-func readSSEFactoryResponseEvent(t *testing.T, reader *bufio.Reader) responseevents.FactoryResponseEvent {
+func responseStreamGapEvent(
+	t *testing.T,
+	sessionID string,
+	fromSequence int64,
+	toSequence int64,
+	firstAvailableSequence int64,
+) factorysessions.FactoryResponseEvent {
+	t.Helper()
+	payload, err := json.Marshal(factorysessions.ResponseEventStreamGap{
+		FromSequence:           fromSequence,
+		ToSequence:             toSequence,
+		FirstAvailableSequence: firstAvailableSequence,
+		Reason:                 "retention_limit",
+	})
+	if err != nil {
+		t.Fatalf("marshal response stream gap: %v", err)
+	}
+	return factorysessions.FactoryResponseEvent{
+		SchemaVersion:    factorysessions.ResponseEventSchemaVersionV1,
+		EventID:          fmt.Sprintf("response-event/gap/%d/%d", fromSequence, toSequence),
+		FactorySessionID: sessionID,
+		Kind:             factorysessions.ResponseEventKindStreamGap,
+		Phase:            factorysessions.ResponseEventPhaseUpdated,
+		Provenance: factorysessions.ResponseEventProvenance{
+			Provider:        "you-agent-factory",
+			NativeEventType: "response.retention_gap",
+			Delivery:        factorysessions.ResponseEventDeliverySynthesized,
+			Representation:  factorysessions.ResponseEventRepresentationNotification,
+			Fidelity:        factorysessions.ResponseEventFidelityLossy,
+		},
+		RecordedAt: time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC),
+		Payload:    payload,
+	}
+}
+
+func responseEventRecords(
+	t *testing.T,
+	events ...factorysessions.FactoryResponseEvent,
+) []apisurface.FactoryResponseEventRecord {
+	t.Helper()
+	records := make([]apisurface.FactoryResponseEventRecord, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal response event: %v", err)
+		}
+		records = append(records, apisurface.FactoryResponseEventRecord{
+			Sequence: event.Sequence,
+			Kind:     string(event.Kind),
+			Data:     data,
+		})
+	}
+	return records
+}
+
+func readSSEFactoryResponseEvent(t *testing.T, reader *bufio.Reader) factorysessions.FactoryResponseEvent {
 	t.Helper()
 	var idLine, dataLine string
 	for {
@@ -401,43 +579,136 @@ func readSSEFactoryResponseEvent(t *testing.T, reader *bufio.Reader) responseeve
 	if idLine == "" || dataLine == "" {
 		t.Fatalf("SSE message id=%q data=%q, want exactly one of each", idLine, dataLine)
 	}
-	var event responseevents.FactoryResponseEvent
+	var event factorysessions.FactoryResponseEvent
 	if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
 		t.Fatalf("decode response-event SSE data: %v", err)
 	}
 	if idLine != fmt.Sprint(event.Sequence) {
 		t.Fatalf("SSE id = %q, want event sequence %d", idLine, event.Sequence)
 	}
-	if err := responseevents.ValidateEvent(event); err != nil {
-		t.Fatalf("SSE response event is schema-invalid: %v", err)
-	}
 	return event
 }
 
-func decodeSSEStreamGap(t *testing.T, event responseevents.FactoryResponseEvent) responseevents.StreamGapPayload {
+func decodeSSEStreamGap(t *testing.T, event factorysessions.FactoryResponseEvent) factorysessions.ResponseEventStreamGap {
 	t.Helper()
-	if event.Kind != responseevents.KindStreamGap {
+	if event.Kind != factorysessions.ResponseEventKindStreamGap {
 		t.Fatalf("first response event kind = %q, want STREAM_GAP", event.Kind)
 	}
-	var payload responseevents.StreamGapPayload
+	var payload factorysessions.ResponseEventStreamGap
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		t.Fatalf("decode STREAM_GAP payload: %v", err)
 	}
 	return payload
 }
 
+type sessionScopedHTTPObservation struct {
+	eventStream    *interfaces.FactoryEventStream
+	currentFactory factoryapi.Factory
+	readItem       work.ReadModel
+	WorkRequests   []work.WorkRequest
+	ListWorkCalls  int
+	GetWorkCalls   int
+}
+
+func newSessionScopedHTTPObservation(
+	t *testing.T,
+	_ time.Time,
+	factoryID *string,
+	factoryName string,
+	tokenID string,
+	workID string,
+	historyEventID string,
+) *sessionScopedHTTPObservation {
+	t.Helper()
+	return &sessionScopedHTTPObservation{
+		readItem: work.ReadModel{CursorID: tokenID, WorkID: workID, Name: workID, WorkTypeName: "task", State: &work.State{Name: "init", Type: work.StateTypeInitial}},
+		eventStream: &interfaces.FactoryEventStream{
+			StreamGenerationID: "stream-gen-" + factoryName,
+			History: []interfaces.FactoryEvent{canonicalFactoryEventForHTTPTest(t, factoryapi.FactoryEvent{
+				Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest,
+			})},
+			Events: make(chan interfaces.FactoryEvent),
+		},
+		currentFactory: factoryapi.Factory{Name: factoryapi.FactoryName(factoryName), Id: factoryID},
+	}
+}
+
+func newSessionScopedRolesTestServer(sessions map[string]*sessionScopedHTTPObservation) *Server {
+	lookup := func(sessionID string) (*sessionScopedHTTPObservation, error) {
+		session, ok := sessions[sessionID]
+		if !ok {
+			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		return session, nil
+	}
+	workRole := strictWorkAPIFake{
+		submit: func(_ context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+			session, err := lookup(sessionID)
+			if err != nil {
+				return work.WorkRequestSubmitResult{}, err
+			}
+			session.WorkRequests = append(session.WorkRequests, request)
+			return acceptProgrammedHTTPWorkRequest(request), nil
+		},
+		list: func(_ context.Context, sessionID string, _ work.ListOptions) (work.ListResult, error) {
+			session, err := lookup(sessionID)
+			if err != nil {
+				return work.ListResult{}, err
+			}
+			session.ListWorkCalls++
+			return work.ListResult{Results: []work.ReadModel{session.readItem}, MaxResults: work.DefaultListMaxResults}, nil
+		},
+		getWork: func(_ context.Context, sessionID, id string) (work.ReadModel, error) {
+			session, err := lookup(sessionID)
+			if err != nil {
+				return work.ReadModel{}, err
+			}
+			session.GetWorkCalls++
+			if id != session.readItem.CursorID && id != session.readItem.WorkID {
+				return work.ReadModel{}, work.ErrWorkNotFound
+			}
+			return session.readItem, nil
+		},
+		subscribe: func(_ context.Context, sessionID string, _ *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+			session, err := lookup(sessionID)
+			if err != nil {
+				return nil, err
+			}
+			return session.eventStream, nil
+		},
+	}
+	liveRole := strictLiveSessionAPIFake{get: func(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		if _, err := lookup(sessionID); err != nil {
+			return factoryapi.FactorySession{}, err
+		}
+		return factoryapi.FactorySession{Id: sessionID}, nil
+	}}
+	definitions := strictFactorySaveAPIFake{getCurrent: func(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+		session, err := lookup(sessionID)
+		if err != nil {
+			return factoryapi.Factory{}, err
+		}
+		return session.currentFactory, nil
+	}}
+	status := strictFactoryStatusAPIFake{project: func(_ context.Context, sessionID string) (factoryruntime.FactoryStatus, error) {
+		_, err := lookup(sessionID)
+		if err != nil {
+			return factoryruntime.FactoryStatus{}, err
+		}
+		return factoryruntime.FactoryStatus{TotalTokens: 1}, nil
+	}}
+	return newFactorySessionRolesTestServer(liveRole, workRole, definitions, nil, status)
+}
+
 func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	defaultFactoryID := "root-runtime"
 	betaFactoryID := "beta-runtime"
-	defaultSession := newSessionScopedMockFactory(t, now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
-	betaSession := newSessionScopedMockFactory(t, now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
-	srv := newTestServer(&testutil.MockFactory{
-		CurrentFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default":     defaultSession,
-			"session-beta": betaSession,
-		},
+	defaultSession := newSessionScopedHTTPObservation(t, now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
+	betaSession := newSessionScopedHTTPObservation(t, now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
+	srv := newSessionScopedRolesTestServer(map[string]*sessionScopedHTTPObservation{
+		factorysessions.DefaultSessionID: defaultSession,
+		"session-beta":                   betaSession,
 	})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
@@ -450,50 +721,7 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 	assertScopedSessionEvents(t, server.URL, "factory-event/work-request/beta-history")
 }
 
-func newSessionScopedMockFactory(
-	t *testing.T,
-	now time.Time,
-	factoryID *string,
-	factoryName string,
-	tokenID string,
-	workID string,
-	historyEventID string,
-) *testutil.MockFactory {
-	return &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*factorytoken.Token{
-				tokenID: listWorkToken(tokenID, workID, "task:init", "task", now),
-			},
-		},
-		Net: sessionScopedStateNet(),
-		FactoryEventStream: &interfaces.FactoryEventStream{
-			StreamGenerationID: "stream-gen-" + factoryName,
-			History:            []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest})},
-			Events:             make(chan interfaces.FactoryEvent),
-		},
-		CurrentFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
-	}
-}
-
-func sessionScopedStateNet() *state.Net {
-	return &state.Net{
-		Places: map[string]*petri.Place{
-			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
-			"task:done": {ID: "task:done", TypeID: "task", State: "done"},
-		},
-		WorkTypes: map[string]*state.WorkType{
-			"task": {
-				ID: "task",
-				States: []state.StateDefinition{
-					{Value: "init", Category: state.StateCategoryInitial},
-					{Value: "done", Category: state.StateCategoryTerminal},
-				},
-			},
-		},
-	}
-}
-
-func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *testutil.MockFactory, defaultSession *testutil.MockFactory) {
+func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *sessionScopedHTTPObservation, defaultSession *sessionScopedHTTPObservation) {
 	t.Helper()
 
 	response := requireHTTPSuccess(t, http.MethodPost, serverURL+"/factory-sessions/session-beta/work", bytes.NewBufferString(`{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"scoped"}}`), "application/json", http.StatusCreated)
@@ -519,7 +747,7 @@ func assertScopedSessionSubmit(t *testing.T, serverURL string, betaSession *test
 	}
 }
 
-func assertScopedSessionList(t *testing.T, serverURL string, betaSession *testutil.MockFactory, defaultSession *testutil.MockFactory) {
+func assertScopedSessionList(t *testing.T, serverURL string, betaSession *sessionScopedHTTPObservation, defaultSession *sessionScopedHTTPObservation) {
 	t.Helper()
 
 	response := requireHTTPSuccess(t, http.MethodGet, serverURL+"/factory-sessions/session-beta/work", nil, "", http.StatusOK)
@@ -532,11 +760,11 @@ func assertScopedSessionList(t *testing.T, serverURL string, betaSession *testut
 	if len(listBody.Results) != 1 || stringValue(listBody.Results[0].WorkId) != "beta-work-1" {
 		t.Fatalf("scoped list results = %#v, want beta-work-1", listBody.Results)
 	}
-	if betaSession.EngineStateSnapshotCalls == 0 {
-		t.Fatal("expected scoped GET /work to read the targeted session snapshot")
+	if betaSession.ListWorkCalls == 0 {
+		t.Fatal("expected scoped GET /work to call the targeted Work read role")
 	}
-	if defaultSession.EngineStateSnapshotCalls != 0 {
-		t.Fatalf("default session snapshot calls = %d, want 0 after scoped list", defaultSession.EngineStateSnapshotCalls)
+	if defaultSession.ListWorkCalls != 0 {
+		t.Fatalf("default session ListWork calls = %d, want 0 after scoped list", defaultSession.ListWorkCalls)
 	}
 }
 
@@ -636,9 +864,9 @@ func requireHTTPSuccess(
 }
 
 func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}},
+	srv := newFactorySessionRolesTestServer(nil, nil, nil, nil, strictFactoryStatusAPIFake{
+		project: func(context.Context, string) (factoryruntime.FactoryStatus, error) {
+			return factoryruntime.FactoryStatus{}, apisurface.ErrFactorySessionNotFound
 		},
 	})
 
@@ -650,8 +878,8 @@ func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		FactorySessions: factoryapi.ListFactorySessionsResponse{
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{list: func(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+		return factoryapi.ListFactorySessionsResponse{
 			Sessions: []factoryapi.FactorySessionSummary{
 				{
 					FactoryDir: "/workspace/root",
@@ -675,8 +903,8 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 					},
 				},
 			},
-		},
-	})
+		}, nil
+	}})
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions", nil)
 	rec := httptest.NewRecorder()
@@ -702,8 +930,10 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
-	mf := &testutil.MockFactory{
-		OpenFactorySessionResult: factoryapi.OpenFactorySessionResponse{
+	var opened []factoryapi.OpenFactorySessionRequest
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+		opened = append(opened, request)
+		return factoryapi.OpenFactorySessionResponse{
 			Session: &factoryapi.FactorySessionSummary{
 				FactoryDir: "/workspace/fleet/beta",
 				FolderPath: "/workspace/fleet",
@@ -715,9 +945,8 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 					Name: stringPointerForAPITest("beta"),
 				},
 			},
-		},
-	}
-	srv := newTestServer(mf)
+		}, nil
+	}})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","target":{"kind":"named","name":"beta"}}`))
 	rec := httptest.NewRecorder()
@@ -726,17 +955,17 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /factory-sessions status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.OpenedFactorySessions) != 1 {
-		t.Fatalf("opened factory sessions = %d, want 1", len(mf.OpenedFactorySessions))
+	if len(opened) != 1 {
+		t.Fatalf("opened factory sessions = %d, want 1", len(opened))
 	}
-	if mf.OpenedFactorySessions[0].FolderPath != "/workspace/fleet" {
-		t.Fatalf("opened session folder = %q, want /workspace/fleet", mf.OpenedFactorySessions[0].FolderPath)
+	if opened[0].FolderPath != "/workspace/fleet" {
+		t.Fatalf("opened session folder = %q, want /workspace/fleet", opened[0].FolderPath)
 	}
-	if mf.OpenedFactorySessions[0].Target == nil ||
-		mf.OpenedFactorySessions[0].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
-		mf.OpenedFactorySessions[0].Target.Name == nil ||
-		*mf.OpenedFactorySessions[0].Target.Name != "beta" {
-		t.Fatalf("opened session target = %#v, want named beta", mf.OpenedFactorySessions[0].Target)
+	if opened[0].Target == nil ||
+		opened[0].Target.Kind != factoryapi.FactorySessionTargetRefKindNamed ||
+		opened[0].Target.Name == nil ||
+		*opened[0].Target.Name != "beta" {
+		t.Fatalf("opened session target = %#v, want named beta", opened[0].Target)
 	}
 	var response factoryapi.OpenFactorySessionResponse
 	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
@@ -748,14 +977,13 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
-	mf := &testutil.MockFactory{
-		OpenFactorySessionErr: factorysessions.NewValidationError(
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+		return factoryapi.OpenFactorySessionResponse{}, factorysessions.NewValidationError(
 			factorysessions.ValidationReasonMissing,
 			"folderPath",
 			errors.New("folder validation failed"),
-		),
-	}
-	srv := newTestServer(mf)
+		)
+	}})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/missing","validateOnly":true}`))
 	rec := httptest.NewRecorder()
@@ -785,20 +1013,19 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 }
 
 func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testing.T) {
-	mf := &testutil.MockFactory{
-		OpenFactorySessionErr: apiTestSessionValidationError{
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+		return factoryapi.OpenFactorySessionResponse{}, apiTestSessionValidationError{
 			message: "factory configuration could not be loaded from the selected folder",
 			code:    "FACTORY_SESSION_CONFIG_LOAD_FAILED",
 			targets: []factoryapi.FactoryValidationTarget{
-				apisurface.FactoryValidationTargetToAPI(factoryvalidation.FactorySessionTargetTarget(
+				apisurface.FactoryValidationTargetToAPI(interfaces.FactorySessionTargetValidationTarget(
 					"config_load_failed",
 					"default",
 					`Factory target "default" at "/workspace/fleet" could not be loaded: unexpected end of JSON input`,
 				)),
 			},
-		},
-	}
-	srv := newTestServer(mf)
+		}
+	}})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","validateOnly":true}`))
 	rec := httptest.NewRecorder()
@@ -831,8 +1058,11 @@ func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testi
 }
 
 func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
-	mf := &testutil.MockFactory{}
-	srv := newTestServer(mf)
+	var closed []string
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{close: func(_ context.Context, sessionID string) error {
+		closed = append(closed, sessionID)
+		return nil
+	}})
 
 	req := httptest.NewRequest(http.MethodDelete, "/factory-sessions/session-beta", nil)
 	rec := httptest.NewRecorder()
@@ -841,8 +1071,8 @@ func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("DELETE /factory-sessions/session-beta status = %d, want 204: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.ClosedFactorySessions) != 1 || mf.ClosedFactorySessions[0] != "session-beta" {
-		t.Fatalf("closed factory sessions = %#v, want [session-beta]", mf.ClosedFactorySessions)
+	if len(closed) != 1 || closed[0] != "session-beta" {
+		t.Fatalf("closed factory sessions = %#v, want [session-beta]", closed)
 	}
 }
 
@@ -868,9 +1098,9 @@ func (e apiTestSessionValidationError) ErrorCode() string {
 }
 
 func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		CloseFactorySessionErr: apisurface.ErrFactorySessionNotFound,
-	})
+	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{close: func(context.Context, string) error {
+		return apisurface.ErrFactorySessionNotFound
+	}})
 
 	req := httptest.NewRequest(http.MethodDelete, "/factory-sessions/missing-session", nil)
 	rec := httptest.NewRecorder()
@@ -880,20 +1110,13 @@ func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
 }
 
 func TestGetCurrentFactoryBySessionId_ReturnsSessionDefinitionAndVersion(t *testing.T) {
-	defaultVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 1).UTC(), Logical: 1}
 	sessionVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 2).UTC(), Logical: 2}
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {
-				CurrentFactory: &factoryapi.Factory{Name: "alpha"},
-				FactoryVersion: defaultVersion,
-			},
-			"session-2": {
-				CurrentFactory: &factoryapi.Factory{Name: "beta"},
-				FactoryVersion: sessionVersion,
-			},
-		},
-	})
+	srv := newFactorySessionRolesTestServer(nil, nil, strictFactorySaveAPIFake{getCurrent: func(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+		if sessionID != "session-2" {
+			return factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound
+		}
+		return factoryapi.Factory{Name: "beta", Version: &sessionVersion}, nil
+	}}, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-2/factory", nil)
 	rec := httptest.NewRecorder()
@@ -912,22 +1135,16 @@ func TestGetCurrentFactoryBySessionId_ReturnsSessionDefinitionAndVersion(t *test
 }
 
 func TestSaveCurrentFactoryBySessionId_SubmitsToTargetedSessionOnly(t *testing.T) {
-	defaultVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 1).UTC(), Logical: 1}
 	sessionVersion := factoryapi.HybridLogicalTimestamp{Physical: time.Unix(0, 2).UTC(), Logical: 2}
-	defaultFactory := &testutil.MockFactory{
-		CurrentFactory: &factoryapi.Factory{Name: "alpha"},
-		FactoryVersion: defaultVersion,
-	}
-	sessionFactory := &testutil.MockFactory{
-		CurrentFactory: &factoryapi.Factory{Name: "beta"},
-		FactoryVersion: sessionVersion,
-	}
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default":  defaultFactory,
-			"session-2": sessionFactory,
-		},
-	})
+	savedBySession := make(map[string][]factoryapi.Factory)
+	srv := newFactorySessionRolesTestServer(nil, nil, strictFactorySaveAPIFake{save: func(_ context.Context, sessionID string, _ factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+		if sessionID != "session-2" && sessionID != factorysessions.DefaultSessionID {
+			return factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound
+		}
+		savedBySession[sessionID] = append(savedBySession[sessionID], request)
+		request.Version = &sessionVersion
+		return request, nil
+	}}, nil)
 
 	body := saveFactoryForSessionRequestBody(`{"name":"beta","version":{"physical":"1970-01-01T00:00:00.000000002Z","logical":2},"workTypes":[],"workstations":[],"workers":[]}`)
 	req := httptest.NewRequest(http.MethodPut, "/factory-sessions/session-2/factory", bytes.NewBufferString(body))
@@ -938,24 +1155,27 @@ func TestSaveCurrentFactoryBySessionId_SubmitsToTargetedSessionOnly(t *testing.T
 	if rec.Code != http.StatusOK {
 		t.Fatalf("PUT factory status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	if len(defaultFactory.SavedCurrentFactories) != 0 {
-		t.Fatalf("default session save count = %d, want 0", len(defaultFactory.SavedCurrentFactories))
+	if len(savedBySession[factorysessions.DefaultSessionID]) != 0 {
+		t.Fatalf("default session save count = %d, want 0", len(savedBySession[factorysessions.DefaultSessionID]))
 	}
-	if len(sessionFactory.SavedCurrentFactories) != 1 {
-		t.Fatalf("session save count = %d, want 1", len(sessionFactory.SavedCurrentFactories))
+	if len(savedBySession["session-2"]) != 1 {
+		t.Fatalf("session save count = %d, want 1", len(savedBySession["session-2"]))
 	}
-	saved := sessionFactory.SavedCurrentFactories[0]
+	saved := savedBySession["session-2"][0]
 	if saved.Name != "beta" {
 		t.Fatalf("saved factory = %#v, want beta definition", saved)
 	}
 }
 
 func TestCurrentFactoryBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {},
+	srv := newFactorySessionRolesTestServer(nil, nil, strictFactorySaveAPIFake{
+		getCurrent: func(context.Context, string) (factoryapi.Factory, error) {
+			return factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound
 		},
-	})
+		save: func(context.Context, string, factoryapi.FactorySaveMode, factoryapi.Factory) (factoryapi.Factory, error) {
+			return factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound
+		},
+	}, nil)
 
 	getReq := httptest.NewRequest(http.MethodGet, "/factory-sessions/missing-session/factory", nil)
 	getRec := httptest.NewRecorder()
@@ -1006,23 +1226,54 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			mock := &testutil.MockFactory{
-				SessionFactories: map[string]*testutil.MockFactory{
-					"~default": {},
-				},
-				InvokeFactoryResult: tc.result,
-			}
-			assertFactorySessionInvocation(t, mock, tc.body, tc.result, tc.wantSubmitText)
+			assertStrictFactorySessionInvocation(t, tc.body, tc.result, tc.wantSubmitText)
 		})
 	}
 }
 
+func assertStrictFactorySessionInvocation(
+	t *testing.T,
+	body string,
+	wantResult apisurface.FactoryInvocationResult,
+	wantSubmitText string,
+) {
+	t.Helper()
+	var invoked []factoryapi.InvocationRequest
+	role := strictInvocationAPIFake{invoke: func(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		if sessionID != factorysessions.DefaultSessionID {
+			return apisurface.FactoryInvocationResult{}, apisurface.ErrFactorySessionNotFound
+		}
+		invoked = append(invoked, request)
+		return wantResult, nil
+	}}
+	srv := newFactorySessionRolesTestServer(nil, nil, nil, role)
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
+	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != factoryapi.InvocationTerminalStatus(wantResult.Status) {
+		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
+	}
+	assertGeneratedWorkContentParts(t, response.PrimaryResult, wantResult.PrimaryResult)
+	if wantSubmitText != "" {
+		if len(invoked) != 1 {
+			t.Fatalf("invoked factory sessions = %d, want 1", len(invoked))
+		}
+		if got := extractInvocationRequestText(t, &invoked[0]); got != wantSubmitText {
+			t.Fatalf("invocation text = %q, want %q", got, wantSubmitText)
+		}
+	}
+}
+
 func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testing.T) {
-	mock := &testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {},
-		},
-		InvokeFactoryResult: apisurface.FactoryInvocationResult{
+	var invoked []factoryapi.InvocationRequest
+	role := strictInvocationAPIFake{invoke: func(_ context.Context, _ string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		invoked = append(invoked, request)
+		return apisurface.FactoryInvocationResult{
 			RequestID: "invoke-structured-1",
 			TraceID:   "trace-structured-1",
 			Status:    "COMPLETED",
@@ -1030,10 +1281,10 @@ func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testin
 				Type: work.WorkContentPartTypeText,
 				Text: "ok",
 			}},
-		},
-	}
+		}, nil
+	}}
 
-	srv := newTestServer(mock)
+	srv := newFactorySessionRolesTestServer(nil, nil, nil, role)
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(`{"args":{"input":"hello","tag":["alpha","beta"]}}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -1042,13 +1293,13 @@ func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testin
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	if len(mock.InvokedFactorySessions) != 1 {
-		t.Fatalf("invoked factory sessions = %d, want 1", len(mock.InvokedFactorySessions))
+	if len(invoked) != 1 {
+		t.Fatalf("invoked factory sessions = %d, want 1", len(invoked))
 	}
-	if mock.InvokedFactorySessions[0].Args == nil {
+	if invoked[0].Args == nil {
 		t.Fatal("invocation args = nil, want decoded args map")
 	}
-	if got := (*mock.InvokedFactorySessions[0].Args)["input"]; got != "hello" {
+	if got := (*invoked[0].Args)["input"]; got != "hello" {
 		t.Fatalf("args[input] = %#v, want hello", got)
 	}
 }
@@ -1057,15 +1308,12 @@ func TestFactorySessionsAPI_InvokeFactorySession_InputConflictReturnsStableBadRe
 	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
 	conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
 
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {},
-		},
-		InvokeFactoryErr: &invocations.InputError{
-			Code:    invocations.InputErrorCodeSourceConflict,
+	srv := newFactorySessionRolesTestServer(nil, nil, nil, strictInvocationAPIFake{invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		return apisurface.FactoryInvocationResult{}, &work.InputError{
+			Code:    work.InputErrorCodeSourceConflict,
 			Message: conflictMessage,
-		},
-	})
+		}
+	}})
 
 	body := `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
@@ -1073,245 +1321,11 @@ func TestFactorySessionsAPI_InvokeFactorySession_InputConflictReturnsStableBadRe
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, string(invocations.InputErrorCodeSourceConflict), conflictMessage)
-}
-
-func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
-	session := strings.Join([]string{
-		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"reasoning","summary":["checked input"],"encrypted_content":"sealed"}}`,
-		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":{"cmd":"go test ./pkg/api"}}}`,
-		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok"}}`,
-		`{"timestamp":"2026-05-18T10:00:04Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"cached_input_tokens":40,"output_tokens":25,"reasoning_output_tokens":5,"total_tokens":130}}}}`,
-		`{"timestamp":"2026-05-18T10:00:05Z","type":"turn_context"}`,
-		`{"timestamp":"2026-05-18T10:00:06Z","type":"response_item","payload":{"type":"custom_tool_call","call_id":"call-2","name":"apply_patch","input":"patch text","status":"in_progress"}}`,
-		`{"timestamp":"2026-05-18T10:00:07Z","type":"event_msg","payload":{"type":"new_future_event"}}`,
-		`{"timestamp":"2026-05-18T10:00:08Z","type":"unexpected_top_level"}`,
-		`{bad json`,
-	}, "\n")
-
-	summary, err := parseCodexSessionSummary(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session summary: %v", err)
-	}
-	assertCodexSessionSummaryCoreCounts(t, summary)
-	assertCodexSessionSummaryFunctionCalls(t, summary)
-	assertCodexSessionSummaryReasoning(t, summary)
-	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session details: %v", err)
-	}
-	assertParsedCodexSessionSummaryTranscript(t, parsed)
-	assertCodexSessionSummaryTokenUsage(t, summary)
-	assertCodexSessionSummaryUnknowns(t, summary)
-}
-
-func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing.T) {
-	session := strings.Join([]string{
-		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Inspect the failing run."}]}}`,
-		`{"timestamp":"2026-05-18T10:00:02Z","type":"response_item","payload":{"type":"reasoning","summary":["Checking tool output"],"encrypted_content":"sealed"}}`,
-		`{"timestamp":"2026-05-18T10:00:03Z","type":"response_item","payload":{"type":"function_call","call_id":"call-1","name":"exec_command","arguments":{"cmd":"go test ./pkg/api"}}}`,
-		`{"timestamp":"2026-05-18T10:00:04Z","type":"response_item","payload":{"type":"function_call_output","call_id":"call-1","output":"ok","status":"completed"}}`,
-		`{"timestamp":"2026-05-18T10:00:05Z","type":"event_msg","payload":{"type":"agent_message","message":"The package tests passed."}}`,
-		`{"timestamp":"2026-05-18T10:00:06Z","type":"event_msg","payload":{"type":"task_started","message":"Applying follow-up patch"}}`,
-		`{"timestamp":"2026-05-18T10:00:07Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"Need one more validation step."}}`,
-		`{"timestamp":"2026-05-18T10:00:08Z","type":"event_msg","payload":{"type":"new_future_event"}}`,
-		`{"timestamp":"2026-05-18T10:00:09Z","type":"unexpected_top_level"}`,
-		`{bad json`,
-	}, "\n")
-
-	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session details: %v", err)
-	}
-
-	assertMixedCodexSessionSummary(t, parsed.Summary)
-	assertMixedCodexSessionTranscript(t, parsed)
-}
-
-func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if summary.LineCount != 10 || summary.EventCount != 9 || summary.MalformedLineCount != 1 || summary.UnknownEventCount != 2 || len(summary.Turns) != 2 || len(summary.FunctionCalls) != 2 {
-		t.Fatalf("summary = %#v, want parsed counts and two turns/calls", summary)
-	}
-}
-
-func assertCodexSessionSummaryFunctionCalls(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	firstCall := summary.FunctionCalls[0]
-	if firstCall.Order != 1 || stringValue(firstCall.Name) != "exec_command" || stringValue(firstCall.Arguments) != `{"cmd":"go test ./pkg/api"}` || stringValue(firstCall.Output) != "ok" || stringValue(firstCall.Status) != "completed" {
-		t.Fatalf("first function call = %#v, want completed exec_command call", firstCall)
-	}
-	secondCall := summary.FunctionCalls[1]
-	if secondCall.Order != 2 || stringValue(secondCall.Name) != "apply_patch" || stringValue(secondCall.Status) != "in_progress" || stringValue(secondCall.Output) != "" {
-		t.Fatalf("second function call = %#v, want in-progress custom tool call", secondCall)
-	}
-}
-
-func assertCodexSessionSummaryReasoning(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if len(summary.Reasoning) != 1 || stringValue(summary.Reasoning[0].Summary) != `["checked input"]` || summary.Reasoning[0].Encrypted == nil || !*summary.Reasoning[0].Encrypted || stringValue(summary.Reasoning[0].EncryptedContent) != "sealed" {
-		t.Fatalf("reasoning = %#v, want summary, encrypted marker, and encrypted content", summary.Reasoning)
-	}
-}
-
-func assertParsedCodexSessionSummaryTranscript(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	if len(parsed.Transcript) != 4 {
-		t.Fatalf("transcript = %#v, want four ordered transcript entries", parsed.Transcript)
-	}
-	if parsed.Transcript[0].Type != factoryapi.Reasoning || stringValue(parsed.Transcript[0].SourceType) != "reasoning" || intValue(parsed.Transcript[0].LineNumber) != 2 {
-		t.Fatalf("first transcript entry = %#v, want reasoning line 2", parsed.Transcript[0])
-	}
-	if parsed.Transcript[1].Type != factoryapi.ToolCall || stringValue(parsed.Transcript[1].Name) != "exec_command" || stringValue(parsed.Transcript[1].Arguments) != `{"cmd":"go test ./pkg/api"}` {
-		t.Fatalf("second transcript entry = %#v, want exec_command tool call", parsed.Transcript[1])
-	}
-	if parsed.Transcript[2].Type != factoryapi.ToolOutput || stringValue(parsed.Transcript[2].Output) != "ok" || stringValue(parsed.Transcript[2].Status) != "completed" {
-		t.Fatalf("third transcript entry = %#v, want completed tool output", parsed.Transcript[2])
-	}
-	if parsed.Transcript[3].Type != factoryapi.ToolCall || stringValue(parsed.Transcript[3].Name) != "apply_patch" || stringValue(parsed.Transcript[3].Status) != "in_progress" {
-		t.Fatalf("fourth transcript entry = %#v, want in-progress apply_patch tool call", parsed.Transcript[3])
-	}
-	if parsed.Transcript[3].Order != 4 {
-		t.Fatalf("final transcript entry order = %d, want 4", parsed.Transcript[3].Order)
-	}
-}
-
-func assertCodexSessionSummaryTokenUsage(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if summary.TokenUsage == nil || intValue(summary.TokenUsage.InputTokens) != 100 || intValue(summary.TokenUsage.CachedInputTokens) != 40 || intValue(summary.TokenUsage.OutputTokens) != 25 || intValue(summary.TokenUsage.ReasoningOutputTokens) != 5 || intValue(summary.TokenUsage.TotalTokens) != 130 {
-		t.Fatalf("token usage = %#v, want total consumed token fields", summary.TokenUsage)
-	}
-}
-
-func assertCodexSessionSummaryUnknowns(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if len(summary.UnknownEvents) != 2 || summary.UnknownEvents[0].LineNumber != 8 || stringValue(summary.UnknownEvents[0].Type) != "event_msg" || stringValue(summary.UnknownEvents[0].PayloadType) != "new_future_event" || summary.UnknownEvents[1].LineNumber != 9 || stringValue(summary.UnknownEvents[1].Type) != "unexpected_top_level" {
-		t.Fatalf("unknown events = %#v, want compact line-level unknown records", summary.UnknownEvents)
-	}
-	if len(summary.ParseErrors) != 1 || summary.ParseErrors[0].LineNumber != 10 {
-		t.Fatalf("parse errors = %#v, want malformed line retained", summary.ParseErrors)
-	}
-}
-
-func assertMixedCodexSessionSummary(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if summary.LineCount != 11 || summary.EventCount != 10 || summary.MalformedLineCount != 1 || summary.UnknownEventCount != 2 {
-		t.Fatalf("summary = %#v, want mixed-session diagnostic counts", summary)
-	}
-	if len(summary.Turns) != 1 || summary.Turns[0].FunctionCallCount != 1 || summary.Turns[0].ReasoningCount != 2 {
-		t.Fatalf("turn summary = %#v, want one turn with function and reasoning counts", summary.Turns)
-	}
-	if len(summary.UnknownEvents) != 2 || summary.UnknownEvents[0].LineNumber != 9 || summary.UnknownEvents[1].LineNumber != 10 {
-		t.Fatalf("unknown events = %#v, want unknown event_msg and top-level event retained", summary.UnknownEvents)
-	}
-	if len(summary.ParseErrors) != 1 || summary.ParseErrors[0].LineNumber != 11 {
-		t.Fatalf("parse errors = %#v, want malformed line 11 retained", summary.ParseErrors)
-	}
-}
-
-func assertMixedCodexSessionTranscriptLength(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	if len(parsed.Transcript) != 7 {
-		t.Fatalf("transcript = %#v, want seven ordered transcript entries", parsed.Transcript)
-	}
-}
-
-func assertMixedCodexSessionTranscriptEntry(t *testing.T, parsed parsedCodexSessionDetails, index int, wantType factoryapi.ProviderSessionTranscriptEntryType, wantLine int, wantText string) {
-	t.Helper()
-
-	entry := parsed.Transcript[index]
-	if entry.Order != index+1 || entry.Type != wantType || intValue(entry.LineNumber) != wantLine || stringValue(entry.Text) != wantText {
-		t.Fatalf("transcript[%d] = %#v, want order=%d type=%q line=%d text=%q", index, entry, index+1, wantType, wantLine, wantText)
-	}
-	if intValue(entry.TurnIndex) != 1 {
-		t.Fatalf("transcript[%d] turn index = %#v, want 1", index, entry.TurnIndex)
-	}
-}
-
-func assertMixedCodexSessionTranscript(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	assertMixedCodexSessionTranscriptLength(t, parsed)
-	assertMixedCodexSessionTranscriptUserMessage(t, parsed)
-	assertMixedCodexSessionTranscriptReasoning(t, parsed)
-	assertMixedCodexSessionTranscriptToolEvents(t, parsed)
-	assertMixedCodexSessionTranscriptAssistantAndSystemEvents(t, parsed)
-}
-
-func assertMixedCodexSessionTranscriptUserMessage(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	assertMixedCodexSessionTranscriptEntry(t, parsed, 0, factoryapi.UserMessage, 2, "Inspect the failing run.")
-	if parsed.Transcript[0].SourceType == nil || *parsed.Transcript[0].SourceType != "message" {
-		t.Fatalf("first transcript source type = %#v, want message", parsed.Transcript[0].SourceType)
-	}
-}
-
-func assertMixedCodexSessionTranscriptReasoning(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	if parsed.Transcript[1].Order != 2 || parsed.Transcript[1].Type != factoryapi.Reasoning || intValue(parsed.Transcript[1].LineNumber) != 3 || stringValue(parsed.Transcript[1].Summary) != `["Checking tool output"]` || parsed.Transcript[1].Encrypted == nil || !*parsed.Transcript[1].Encrypted || stringValue(parsed.Transcript[1].EncryptedContent) != "sealed" {
-		t.Fatalf("transcript[1] = %#v, want encrypted reasoning summary and content on line 3", parsed.Transcript[1])
-	}
-
-	assertMixedCodexSessionTranscriptEntry(t, parsed, 6, factoryapi.Reasoning, 8, "Need one more validation step.")
-	if parsed.Transcript[6].SourceType == nil || *parsed.Transcript[6].SourceType != "agent_reasoning" {
-		t.Fatalf("final reasoning transcript source type = %#v, want agent_reasoning", parsed.Transcript[6].SourceType)
-	}
-}
-
-func assertMixedCodexSessionTranscriptToolEvents(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	if parsed.Transcript[2].Order != 3 || parsed.Transcript[2].Type != factoryapi.ToolCall || intValue(parsed.Transcript[2].LineNumber) != 4 || stringValue(parsed.Transcript[2].Name) != "exec_command" {
-		t.Fatalf("transcript[2] = %#v, want tool call on line 4", parsed.Transcript[2])
-	}
-	if parsed.Transcript[3].Order != 4 || parsed.Transcript[3].Type != factoryapi.ToolOutput || intValue(parsed.Transcript[3].LineNumber) != 5 || stringValue(parsed.Transcript[3].Output) != "ok" || stringValue(parsed.Transcript[3].Status) != "completed" {
-		t.Fatalf("transcript[3] = %#v, want tool output on line 5", parsed.Transcript[3])
-	}
-}
-
-func assertMixedCodexSessionTranscriptAssistantAndSystemEvents(t *testing.T, parsed parsedCodexSessionDetails) {
-	t.Helper()
-
-	assertMixedCodexSessionTranscriptEntry(t, parsed, 4, factoryapi.AssistantMessage, 6, "The package tests passed.")
-	if parsed.Transcript[4].SourceType == nil || *parsed.Transcript[4].SourceType != "agent_message" {
-		t.Fatalf("assistant transcript source type = %#v, want agent_message", parsed.Transcript[4].SourceType)
-	}
-
-	assertMixedCodexSessionTranscriptEntry(t, parsed, 5, factoryapi.SystemEvent, 7, "Applying follow-up patch")
-	if parsed.Transcript[5].SourceType == nil || *parsed.Transcript[5].SourceType != "task_started" {
-		t.Fatalf("system-event transcript source type = %#v, want task_started", parsed.Transcript[5].SourceType)
-	}
-}
-
-func TestParseCodexSessionSummary_AcceptsLargeJSONLRecords(t *testing.T) {
-	session := strings.Join([]string{
-		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-05-18T10:00:01Z","type":"response_item","payload":{"type":"reasoning","content":"` + strings.Repeat("x", 128*1024) + `"}}`,
-	}, "\n")
-
-	summary, err := parseCodexSessionSummary(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session summary: %v", err)
-	}
-	if summary.LineCount != 2 || summary.EventCount != 2 || len(summary.Reasoning) != 1 {
-		t.Fatalf("summary = %#v, want large response item parsed successfully", summary)
-	}
+	assertJSONError(t, rec, http.StatusBadRequest, string(work.InputErrorCodeSourceConflict), conflictMessage)
 }
 
 func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
-	srv := newTestServerWithCodexRoot(t.TempDir())
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("codex", "session_id", "missing-session", providersessions.ErrSessionNotFound))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1319,7 +1333,7 @@ func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
-	srv := newTestServerWithCursorRoot(t.TempDir())
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("cursor", "session_id", "missing-session", providersessions.ErrSessionNotFound))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1327,7 +1341,7 @@ func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T)
 }
 
 func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t *testing.T) {
-	srv := newTestServerWithCursorRoot(t.TempDir())
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("agent", "session_id", "missing-session", providersessions.ErrSessionNotFound))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=agent&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1337,11 +1351,10 @@ func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t 
 func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 	root := t.TempDir()
 	core, logs := observer.New(zap.InfoLevel)
-	srv := NewServerWithOptions(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*factorytoken.Token),
-		},
-	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: root})
+	srv := newTestServerWithProviderSessionCallsAndLogger(t, zap.New(core), providerSessionFailure(
+		"cursor", "session_id", "missing-session",
+		providerSessionLookupFailure(providersessions.ProviderCursor, root, providersessions.ErrSessionNotFound),
+	))
 
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
@@ -1372,7 +1385,7 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundWithUnavailableRoot(t *testing.T) {
-	srv := newTestServerWithUnavailableCursorRoot(t)
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("cursor", "session_id", "missing-session", providersessions.ErrSessionNotFound))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1380,8 +1393,7 @@ func TestGetProviderSessionDetails_CursorNotFoundWithUnavailableRoot(t *testing.
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundWithMissingRootDirectory(t *testing.T) {
-	missingRoot := filepath.Join(t.TempDir(), "does-not-exist")
-	srv := newTestServerWithCursorRoot(missingRoot)
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("cursor", "session_id", "missing-session", providersessions.ErrSessionNotFound))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1390,12 +1402,10 @@ func TestGetProviderSessionDetails_CursorNotFoundWithMissingRootDirectory(t *tes
 
 func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigured(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
-	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
-	srv := NewServerWithOptions(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*factorytoken.Token),
-		},
-	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: missingRoot})
+	srv := newTestServerWithProviderSessionCallsAndLogger(t, zap.New(core), providerSessionFailure(
+		"cursor", "session_id", "missing-session",
+		providerSessionLookupFailure(providersessions.ProviderCursor, "", providersessions.ErrSessionNotFound),
+	))
 
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
 	rec := httptest.NewRecorder()
@@ -1425,27 +1435,15 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigu
 	}
 }
 
-func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-backup-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-backup-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
-}
-
 func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
-	for _, target := range []string{
-		"/provider-sessions/detail?provider=codex&kind=session_id&id=../secret",
-		"/provider-sessions/detail?provider=codex&kind=session_id&id=/tmp/rollout-session.jsonl",
-		"/provider-sessions/detail?provider=codex&kind=session_id&id=session.with.dot",
+	for _, test := range []struct{ target, id string }{
+		{"/provider-sessions/detail?provider=codex&kind=session_id&id=../secret", "../secret"},
+		{"/provider-sessions/detail?provider=codex&kind=session_id&id=/tmp/rollout-session.jsonl", "/tmp/rollout-session.jsonl"},
+		{"/provider-sessions/detail?provider=codex&kind=session_id&id=session.with.dot", "session.with.dot"},
 	} {
-		t.Run(target, func(t *testing.T) {
-			srv := newTestServerWithCodexRoot(t.TempDir())
-			req := httptest.NewRequest("GET", target, nil)
+		t.Run(test.target, func(t *testing.T) {
+			srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure("codex", "session_id", test.id, providersessions.ErrInvalidIdentifier))
+			req := httptest.NewRequest("GET", test.target, nil)
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
@@ -1454,14 +1452,17 @@ func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *tes
 }
 
 func TestGetProviderSessionDetails_CursorRejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
-	for _, target := range []string{
-		"/provider-sessions/detail?provider=cursor&kind=session_id&id=../secret",
-		"/provider-sessions/detail?provider=cursor&kind=session_id&id=/tmp/store.db",
-		"/provider-sessions/detail?provider=cursor&kind=session_id&id=session.with.dot",
+	for _, test := range []struct{ target, id string }{
+		{"/provider-sessions/detail?provider=cursor&kind=session_id&id=../secret", "../secret"},
+		{"/provider-sessions/detail?provider=cursor&kind=session_id&id=/tmp/store.db", "/tmp/store.db"},
+		{"/provider-sessions/detail?provider=cursor&kind=session_id&id=session.with.dot", "session.with.dot"},
 	} {
-		t.Run(target, func(t *testing.T) {
-			srv := newTestServerWithCursorRoot(t.TempDir())
-			req := httptest.NewRequest("GET", target, nil)
+		t.Run(test.target, func(t *testing.T) {
+			srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure(
+				"cursor", "session_id", test.id,
+				providerSessionLookupFailure(providersessions.ProviderCursor, "", providersessions.ErrInvalidIdentifier),
+			))
+			req := httptest.NewRequest("GET", test.target, nil)
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
@@ -1470,14 +1471,17 @@ func TestGetProviderSessionDetails_CursorRejectsPathLikeAndMalformedIdentifiers(
 }
 
 func TestGetProviderSessionDetails_LegacyAgentCursorRejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
-	for _, target := range []string{
-		"/provider-sessions/detail?provider=agent&kind=session_id&id=../secret",
-		"/provider-sessions/detail?provider=agent&kind=session_id&id=/tmp/store.db",
-		"/provider-sessions/detail?provider=agent&kind=session_id&id=session.with.dot",
+	for _, test := range []struct{ target, id string }{
+		{"/provider-sessions/detail?provider=agent&kind=session_id&id=../secret", "../secret"},
+		{"/provider-sessions/detail?provider=agent&kind=session_id&id=/tmp/store.db", "/tmp/store.db"},
+		{"/provider-sessions/detail?provider=agent&kind=session_id&id=session.with.dot", "session.with.dot"},
 	} {
-		t.Run(target, func(t *testing.T) {
-			srv := newTestServerWithCursorRoot(t.TempDir())
-			req := httptest.NewRequest("GET", target, nil)
+		t.Run(test.target, func(t *testing.T) {
+			srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure(
+				"agent", "session_id", test.id,
+				providerSessionLookupFailure(providersessions.ProviderCursor, "", providersessions.ErrInvalidIdentifier),
+			))
+			req := httptest.NewRequest("GET", test.target, nil)
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
@@ -1486,14 +1490,17 @@ func TestGetProviderSessionDetails_LegacyAgentCursorRejectsPathLikeAndMalformedI
 }
 
 func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t *testing.T) {
-	for _, target := range []string{
-		"/provider-sessions/detail?provider=openai&kind=session_id&id=sess-123",
-		"/provider-sessions/detail?provider=codex&kind=path&id=sess-123",
-		"/provider-sessions/detail?provider=cursor&kind=path&id=sess-123",
+	for _, test := range []struct {
+		target, provider, kind string
+		err                    error
+	}{
+		{"/provider-sessions/detail?provider=openai&kind=session_id&id=sess-123", "openai", "session_id", providersessions.ErrUnsupportedProvider},
+		{"/provider-sessions/detail?provider=codex&kind=path&id=sess-123", "codex", "path", providersessions.ErrUnsupportedKind},
+		{"/provider-sessions/detail?provider=cursor&kind=path&id=sess-123", "cursor", "path", providersessions.ErrUnsupportedKind},
 	} {
-		t.Run(target, func(t *testing.T) {
-			srv := newTestServerWithCodexRoot(t.TempDir())
-			req := httptest.NewRequest("GET", target, nil)
+		t.Run(test.target, func(t *testing.T) {
+			srv := newTestServerWithProviderSessionCalls(t, providerSessionFailure(test.provider, test.kind, "sess-123", test.err))
+			req := httptest.NewRequest("GET", test.target, nil)
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request parameter")
@@ -1501,178 +1508,16 @@ func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t 
 	}
 }
 
-func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	outside := t.TempDir()
-	outsideSessionPath := filepath.Join(outside, "rollout-sess-outside.jsonl")
-	if err := os.WriteFile(outsideSessionPath, []byte(`{"type":"session_meta"}`), 0o600); err != nil {
-		t.Fatalf("write outside session fixture: %v", err)
-	}
-	sessionDir := filepath.Join(root, "2026", "05", "18")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("create session dir: %v", err)
-	}
-	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-sess-outside.jsonl")); err != nil {
-		if runtime.GOOS == "windows" {
-			t.Skipf("symlink capability unavailable: %v", err)
-		}
-		t.Fatalf("create provider session symlink: %v", err)
-	}
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess-outside", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
-}
-
-func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEvenWhenValidMatchExists(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess-shared", `{"type":"session_meta","id":"sess-shared"}`)
-	outside := t.TempDir()
-	outsideSessionPath := filepath.Join(outside, "rollout-2026-05-20T17-35-24-sess-shared.jsonl")
-	if err := os.WriteFile(outsideSessionPath, []byte(`{"type":"session_meta"}`), 0o600); err != nil {
-		t.Fatalf("write outside session fixture: %v", err)
-	}
-	sessionDir := filepath.Join(root, "2026", "05", "18")
-	if err := os.Symlink(outsideSessionPath, filepath.Join(sessionDir, "rollout-2026-05-20T17-35-24-sess-shared.jsonl")); err != nil {
-		if runtime.GOOS == "windows" {
-			t.Skipf("symlink capability unavailable: %v", err)
-		}
-		t.Fatalf("create provider session symlink: %v", err)
-	}
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess-shared", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
-}
-
-func TestLoadProviderSessionDetails_LoadsExactRolloutFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", strings.Join([]string{
-		`{"type":"session_meta","id":"sess_123"}`,
-		`{"type":"response_item","item":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	resp, err := loadProviderSessionDetails(root, "sess_123")
-	if err != nil {
-		t.Fatalf("loadProviderSessionDetails: %v", err)
-	}
-	if string(resp.ProviderSession.Provider) != "codex" || string(resp.ProviderSession.Kind) != "session_id" || resp.ProviderSession.Id != "sess_123" {
-		t.Fatalf("provider session = %#v, want codex session_id sess_123", resp.ProviderSession)
-	}
-	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" || resp.Source.SizeBytes == 0 {
-		t.Fatalf("source = %#v, want rooted rollout metadata", resp.Source)
-	}
-	if resp.Parse.EventCount != 2 {
-		t.Fatalf("parse summary = %#v, want two parsed events", resp.Parse)
-	}
-}
-
-func TestLoadProviderSessionDetails_LoadsTimestampPrefixedRolloutFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	sessionID := "019e44f4-580e-7f32-981e-1e54ec6907d6"
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-"+sessionID+".jsonl", strings.Join([]string{
-		`{"type":"session_meta","id":"` + sessionID + `"}`,
-		`{"type":"response_item","payload":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	resp, err := loadProviderSessionDetails(root, sessionID)
-	if err != nil {
-		t.Fatalf("loadProviderSessionDetails: %v", err)
-	}
-	wantRelativePath := "2026/05/18/rollout-2026-05-20T17-35-24-" + sessionID + ".jsonl"
-	if resp.Source.RelativePath != wantRelativePath || resp.ProviderSession.Id != sessionID {
-		t.Fatalf("provider session detail = %#v, want timestamp-prefixed rollout at %s", resp, wantRelativePath)
-	}
-}
-
-func TestLoadProviderSessionDetails_PrefersExactRolloutWhenBothLayoutsExist(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", `{"type":"session_meta","id":"sess_123"}`)
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-
-	resp, err := loadProviderSessionDetails(root, "sess_123")
-	if err != nil {
-		t.Fatalf("loadProviderSessionDetails: %v", err)
-	}
-	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
-		t.Fatalf("relative path = %q, want exact rollout basename", resp.Source.RelativePath)
-	}
-}
-
-func TestLoadProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
-	_, err := loadProviderSessionDetails(t.TempDir(), "missing-session")
-	if !errors.Is(err, errProviderSessionNotFound) {
-		t.Fatalf("err = %v, want errProviderSessionNotFound", err)
-	}
-}
-
-func TestLoadProviderSessionDetails_RejectsPathLikeIdentifiers(t *testing.T) {
-	for _, id := range []string{"../secret", "/tmp/rollout-session.jsonl", "session.with.dot"} {
-		t.Run(id, func(t *testing.T) {
-			_, err := loadProviderSessionDetails(t.TempDir(), id)
-			if !errors.Is(err, errInvalidProviderSessionIdentifier) {
-				t.Fatalf("err = %v, want errInvalidProviderSessionIdentifier", err)
-			}
-		})
-	}
-}
-
-func TestResolveCodexSessionFile_RejectsAmbiguousTimestampPrefixedMatches(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-	sessionDir := filepath.Join(root, "2026", "05", "19")
-	writeNamedProviderSessionFixtureAt(t, sessionDir, "rollout-2026-05-20T17-45-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-
-	_, err := resolveCodexSessionFile(root, "sess_123")
-	if !errors.Is(err, errAmbiguousProviderSessionFile) {
-		t.Fatalf("err = %v, want errAmbiguousProviderSessionFile", err)
-	}
-}
-
-func TestMatchesCodexSessionBaseName_AcceptsSupportedLayoutsOnly(t *testing.T) {
-	exactName := "rollout-sess_123.jsonl"
-	tests := []struct {
-		baseName string
-		want     bool
-	}{
-		{baseName: exactName, want: true},
-		{baseName: "rollout-2026-05-20T17-35-24-sess_123.jsonl", want: true},
-		{baseName: "rollout-backup-sess_123.jsonl", want: false},
-		{baseName: "rollout-2026-05-20T17-35-24-backup-sess_123.jsonl", want: false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.baseName, func(t *testing.T) {
-			if got := matchesCodexSessionBaseName(tc.baseName, "sess_123", exactName); got != tc.want {
-				t.Fatalf("matchesCodexSessionBaseName(%q) = %v, want %v", tc.baseName, got, tc.want)
-			}
-		})
-	}
-}
-
-func writeNamedProviderSessionFixtureAt(t *testing.T, dir, fileName, contents string) {
-	t.Helper()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("create provider session fixture directory: %v", err)
-	}
-	path := filepath.Join(dir, fileName)
-	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-		t.Fatalf("write named provider session fixture: %v", err)
-	}
-}
-
 func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testing.T) {
-	codexRoot := t.TempDir()
-	writeProviderSessionFixture(t, codexRoot, "sess_123", strings.Join([]string{
-		`{"type":"session_meta","id":"sess_123"}`,
-		`{"type":"response_item","item":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	cursorRoot, cursorSessionID := writeCursorProviderSessionUUIDFixture(t)
-	srv := newTestServerWithProviderSessionRoots(codexRoot, cursorRoot)
+	cursorSessionID := customerCursorProviderSessionID
+	codexDetail := codexProviderSessionDetail("sess_123", "2026/05/18/rollout-sess_123.jsonl", 3)
+	cursorDetail := cursorProviderSessionDetail(cursorSessionID, customerCursorWorkspaceHash+"/"+cursorSessionID+"/store.db")
+	srv := newTestServerWithProviderSessionCalls(t,
+		providerSessionSuccess("codex", "sess_123", codexDetail),
+		providerSessionSuccess("cursor", cursorSessionID, cursorDetail),
+		providerSessionSuccess("agent", cursorSessionID, cursorDetail),
+		providerSessionSuccess("cursor", cursorSessionID, cursorDetail),
+	)
 
 	codexEventRef := factoryapi.LoadableProviderSessionRef{
 		Provider: factoryapi.Codex,
@@ -1695,11 +1540,11 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 	}
 	assertProviderSessionDetailLoadsFromEventRef(t, srv, legacyAgentEventRef, factoryapi.Cursor)
 
-	canonicalizedLegacyRef := loadableProviderSessionRefFromEventMetadata(workerexecution.ProviderSessionMetadata{
-		Provider: "agent",
-		Kind:     "session_id",
-		ID:       cursorSessionID,
-	})
+	canonicalizedLegacyRef := factoryapi.LoadableProviderSessionRef{
+		Provider: factoryapi.Cursor,
+		Kind:     factoryapi.LoadableProviderSessionKindSessionID,
+		Id:       cursorSessionID,
+	}
 	if string(canonicalizedLegacyRef.Provider) != string(factoryapi.Cursor) {
 		t.Fatalf("canonicalized legacy ref provider = %q, want cursor", canonicalizedLegacyRef.Provider)
 	}
@@ -1707,15 +1552,11 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 }
 
 func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRoots(t *testing.T) {
-	codexRoot := t.TempDir()
-	writeProviderSessionFixture(t, codexRoot, "sess_123", strings.Join([]string{
-		`{"type":"session_meta","id":"sess_123"}`,
-		`{"type":"response_item","item":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	cursorRoot, cursorSessionID := writeCursorProviderSessionUUIDFixture(t)
-
-	srv := newTestServerWithProviderSessionRoots(codexRoot, cursorRoot)
+	cursorSessionID := customerCursorProviderSessionID
+	srv := newTestServerWithProviderSessionCalls(t,
+		providerSessionSuccess("codex", "sess_123", codexProviderSessionDetail("sess_123", "2026/05/18/rollout-sess_123.jsonl", 3)),
+		providerSessionSuccess("cursor", cursorSessionID, cursorProviderSessionDetail(cursorSessionID, customerCursorWorkspaceHash+"/"+cursorSessionID+"/store.db")),
+	)
 
 	codexReq := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
 	codexRec := httptest.NewRecorder()
@@ -1739,16 +1580,9 @@ func TestGetProviderSessionDetails_RegressionLoadsCodexAndCursorFromConfiguredRo
 }
 
 func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", strings.Join([]string{
-		`{"type":"session_meta","id":"sess_123"}`,
-		`{"type":"response_item","item":{"type":"reasoning"}}`,
-		`{"unexpected":true}`,
-		`not-json`,
-		``,
-	}, "\n"))
-
-	srv := newTestServerWithCodexRoot(root)
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionSuccess(
+		"codex", "sess_123", codexProviderSessionDetail("sess_123", "2026/05/18/rollout-sess_123.jsonl", 3),
+	))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1764,9 +1598,10 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 }
 
 func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testing.T) {
-	root, sessionID := writeCursorProviderSessionFixture(t)
-
-	srv := newTestServerWithCursorRoot(root)
+	sessionID := "cursor-api-readable"
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionSuccess(
+		"cursor", sessionID, cursorProviderSessionDetail(sessionID, "workspace-hash/"+sessionID+"/store.db"),
+	))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1793,9 +1628,10 @@ func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testi
 }
 
 func TestGetProviderSessionDetails_LoadsCursorUUIDSessionFromConfiguredRoot(t *testing.T) {
-	root, sessionID := writeCursorProviderSessionUUIDFixture(t)
-
-	srv := newTestServerWithCursorRoot(root)
+	sessionID := customerCursorProviderSessionID
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionSuccess(
+		"cursor", sessionID, cursorProviderSessionDetail(sessionID, customerCursorWorkspaceHash+"/"+sessionID+"/store.db"),
+	))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -1817,9 +1653,10 @@ func TestGetProviderSessionDetails_LoadsCursorUUIDSessionFromConfiguredRoot(t *t
 }
 
 func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRoot(t *testing.T) {
-	root, sessionID := writeCursorProviderSessionFixture(t)
-
-	srv := newTestServerWithCursorRoot(root)
+	sessionID := "cursor-api-readable"
+	srv := newTestServerWithProviderSessionCalls(t, providerSessionSuccess(
+		"agent", sessionID, cursorProviderSessionDetail(sessionID, "workspace-hash/"+sessionID+"/store.db"),
+	))
 	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=agent&kind=session_id&id="+sessionID, nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

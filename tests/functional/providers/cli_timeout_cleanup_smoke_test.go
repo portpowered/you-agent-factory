@@ -12,9 +12,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -62,8 +61,8 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 		Payload:    []byte("spawn a descendant process"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap())
-	h.RunUntilComplete(t, 10*time.Second)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
 
 	childPID := readTimeoutCleanupPID(t, childPIDFile)
 	t.Cleanup(func() {
@@ -73,30 +72,12 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 		t.Fatalf("spawned descendant process %d is still running after factory timeout", childPID)
 	}
 
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:done")
-
-	engineState, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	if engineState.InFlightCount != 0 {
-		t.Fatalf("InFlightCount = %d, want 0", engineState.InFlightCount)
-	}
-	if len(engineState.Dispatches) != 0 {
-		t.Fatalf("active dispatch count = %d, want 0", len(engineState.Dispatches))
-	}
-	if len(engineState.DispatchHistory) == 0 {
-		t.Fatal("DispatchHistory is empty, want completed timeout dispatch")
-	}
-	if engineState.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("first dispatch outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
-	}
-	if engineState.DispatchHistory[0].Reason != "execution timeout" {
-		t.Fatalf("first dispatch reason = %q, want execution timeout", engineState.DispatchHistory[0].Reason)
-	}
+	session := support.GetDefaultSession(t, server.URL())
+	assertSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:done": 0})
+	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+	}, "execution timeout")
+	server.Stop(t)
 }
 
 func TestIntegrationSmoke_TimeoutRequeuesWorkAndSucceedsOnLaterAttempt(t *testing.T) {
@@ -128,49 +109,16 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 		Payload:    []byte("timeout once and retry"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithFullWorkerPoolAndScriptWrap())
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
-
-	engineState, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot() error = %v", err)
-	}
-	dispatches := dispatchesForWorkID(engineState.DispatchHistory, "work-timeout-requeue-smoke")
-	if len(dispatches) != 2 {
-		t.Fatalf("dispatch count for timeout work = %d, want 2", len(dispatches))
-	}
-	first := dispatches[0]
-	if first.Outcome != workerexecution.OutcomeFailed {
-		t.Fatalf("first dispatch outcome = %s, want %s", first.Outcome, workerexecution.OutcomeFailed)
-	}
-	if first.Reason != "execution timeout" {
-		t.Fatalf("first dispatch reason = %q, want execution timeout", first.Reason)
-	}
-	if first.FailureMetadata == nil {
-		t.Fatal("first dispatch FailureMetadata is nil, want timeout metadata")
-	}
-	if first.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
-		t.Fatalf("first dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
-	}
-	if first.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
-		t.Fatalf("first dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
-	}
-	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
-		t.Fatalf("first dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)
-	}
-	if first.OutputMutations[0].Token == nil || first.OutputMutations[0].Token.History.LastError != "execution timeout" {
-		t.Fatalf("first dispatch requeued token = %#v, want timeout history", first.OutputMutations[0].Token)
-	}
-
-	second := dispatches[1]
-	if second.Outcome != workerexecution.OutcomeAccepted {
-		t.Fatalf("second dispatch outcome = %s, want %s", second.Outcome, workerexecution.OutcomeAccepted)
-	}
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{FactoryDir: dir})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	assertSessionPlaces(t, session, map[string]int{"task:done": 1, "task:init": 0, "task:failed": 0})
+	assertListedWorkIdentity(t, support.ListDefaultSessionWork(t, server.URL()), "done", "work-timeout-requeue-smoke", "task", "trace-timeout-requeue-smoke", nil)
+	assertDispatchOutcomeSequence(t, server.GetFactoryEvents(t), []factoryapi.WorkOutcome{
+		factoryapi.WorkOutcomeFailed,
+		factoryapi.WorkOutcomeAccepted,
+	}, "execution timeout")
+	server.Stop(t)
 }
 
 func TestIntegrationSmoke_ProcessTreeHelper(t *testing.T) {
@@ -293,17 +241,4 @@ func waitForTimeoutCleanupProcessExit(pid int, timeout time.Duration) bool {
 
 func yamlSingleQuoted(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
-}
-
-func dispatchesForWorkID(history []interfaces.CompletedDispatch, workID string) []interfaces.CompletedDispatch {
-	dispatches := make([]interfaces.CompletedDispatch, 0, len(history))
-	for _, dispatch := range history {
-		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.WorkID == workID {
-				dispatches = append(dispatches, dispatch)
-				break
-			}
-		}
-	}
-	return dispatches
 }

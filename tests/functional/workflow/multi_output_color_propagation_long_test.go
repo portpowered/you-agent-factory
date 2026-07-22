@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -25,47 +27,13 @@ func TestMultiOutputColorPropagation(t *testing.T) {
 		Tags:       map[string]string{"priority": "high"},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("split-output")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("idea:complete").
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("task:init")
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:complete" {
-			if tok.Color.Name != "my-feature-plan" {
-				t.Errorf("task:complete Name: want 'my-feature-plan, got %q", tok.Color.Name)
-			}
-			if tok.Color.WorkID == "work-idea-001" {
-				t.Error("task:complete WorkID should be fresh, got input's WorkID")
-			}
-			if tok.Color.WorkID == "" {
-				t.Error("task:complete WorkID should not be empty")
-			}
-			if tok.Color.TraceID != "trace-multi-out" {
-				t.Errorf("task:complete TraceID: want 'trace-multi-out', got %q", tok.Color.TraceID)
-			}
-			if len(tok.Color.Tags) > 0 {
-				t.Errorf("task:complete Tags should be empty for cross-type, got %v", tok.Color.Tags)
-			}
-			if tok.Color.WorkTypeID != "task" {
-				t.Errorf("task:complete WorkTypeID: want 'task', got %q", tok.Color.WorkTypeID)
-			}
-			if tok.Color.ParentID != "work-idea-001" {
-				t.Errorf("task:complete ParentID: want 'work-idea-001', got %q", tok.Color.ParentID)
-			}
-			return
-		}
-	}
-	t.Error("no token found in task:complete")
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("split-output"),
+	}, 5*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:complete": 1, "task:complete": 1, "idea:init": 0, "task:init": 0,
+	})
+	assertCrossTypeTerminalWork(t, listedWork, "my-feature-plan", "work-idea-001", "trace-multi-out")
 }
 
 func TestMultiOutputColorPropagation_NameAvailableDownstream(t *testing.T) {
@@ -81,21 +49,32 @@ func TestMultiOutputColorPropagation_NameAvailableDownstream(t *testing.T) {
 		Payload:    []byte("idea about logging"),
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("downstream-ok")),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ScriptCommandRunner: support.NewStaticSuccessCommandRunner("downstream-ok"),
+	}, 5*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1})
+	assertCrossTypeTerminalWork(t, listedWork, "prd-factory-log-levels", "work-idea-002", "trace-name-downstream")
+}
 
-	h.RunUntilComplete(t, 5*time.Second)
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID == "task:complete" {
-			if tok.Color.Name != "prd-factory-log-levels" {
-				t.Errorf("downstream task Name: want 'prd-factory-log-levels', got %q", tok.Color.Name)
-			}
-			return
+func assertCrossTypeTerminalWork(t *testing.T, response factoryapi.ListWorkResponse, name, sourceWorkID, traceID string) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != "task" || item.State == nil || item.State.Name != "complete" {
+			continue
 		}
+		if item.Name != name {
+			t.Errorf("task:complete name = %q, want %q", item.Name, name)
+		}
+		if item.WorkId == nil || *item.WorkId == "" || *item.WorkId == sourceWorkID {
+			t.Errorf("task:complete Work ID = %#v, want generated ID distinct from %q", item.WorkId, sourceWorkID)
+		}
+		if item.TraceId == nil || *item.TraceId != traceID {
+			t.Errorf("task:complete trace ID = %#v, want %q", item.TraceId, traceID)
+		}
+		if item.Tags != nil && len(*item.Tags) != 0 {
+			t.Errorf("task:complete tags = %#v, want empty cross-type tags", *item.Tags)
+		}
+		return
 	}
-	t.Error("no token found in task:complete")
+	t.Error("listed Work has no task:complete item")
 }

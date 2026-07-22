@@ -1,20 +1,134 @@
 package testutil_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	petri "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+func TestMockFactory_LiveSessionPauseResume_ReturnsTypedControlForExistingSession(t *testing.T) {
+	t.Parallel()
+
+	resumeCalls := 0
+	session := &testutil.MockFactory{}
+	session.PauseLiveFactorySessionFunc = func(
+		context.Context,
+		string,
+		factorysessions.ControlRequest,
+	) (factorysessions.LifecycleControlResult, error) {
+		return factorysessions.LifecycleControlResult{
+			SessionID: "live-sess-001",
+			Operation: factorysessions.LifecycleControlPause,
+			Outcome:   factorysessions.LifecycleControlOutcomeAccepted,
+			Status:    factorysessions.LifecycleStatusPaused,
+		}, nil
+	}
+	session.ResumeLiveFactorySessionFunc = func(
+		context.Context,
+		string,
+		factorysessions.ControlRequest,
+	) (factorysessions.LifecycleControlResult, error) {
+		resumeCalls++
+		outcome := factorysessions.LifecycleControlOutcomeAccepted
+		if resumeCalls > 1 {
+			outcome = factorysessions.LifecycleControlOutcomeNoOp
+		}
+		return factorysessions.LifecycleControlResult{
+			SessionID: "live-sess-001",
+			Operation: factorysessions.LifecycleControlResume,
+			Outcome:   outcome,
+			Status:    factorysessions.LifecycleStatusRunning,
+		}, nil
+	}
+	mock := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"live-sess-001": session,
+		},
+	}
+
+	pause, err := mock.PauseLiveFactorySession(context.Background(), "live-sess-001", factorysessions.ControlRequest{})
+	if err != nil {
+		t.Fatalf("PauseLiveFactorySession() error = %v", err)
+	}
+	if pause.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		pause.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("pause response = %#v, want ACCEPTED/PAUSED", pause)
+	}
+
+	resume, err := mock.ResumeLiveFactorySession(context.Background(), "live-sess-001", factorysessions.ControlRequest{})
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession() error = %v", err)
+	}
+	if resume.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		resume.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume response = %#v, want ACCEPTED/RUNNING", resume)
+	}
+
+	noOp, err := mock.ResumeLiveFactorySession(context.Background(), "live-sess-001", factorysessions.ControlRequest{})
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession() no-op error = %v", err)
+	}
+	if noOp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp ||
+		noOp.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume no-op response = %#v, want NO_OP/RUNNING", noOp)
+	}
+}
+
+func TestMockFactory_LiveSessionPauseResume_ReturnsNotFoundForMissingSession(t *testing.T) {
+	t.Parallel()
+
+	mock := &testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{}}
+	_, pauseErr := mock.PauseLiveFactorySession(t.Context(), "missing-session", factorysessions.ControlRequest{})
+	if !errors.Is(pauseErr, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("PauseLiveFactorySession() error = %v, want %v", pauseErr, apisurface.ErrFactorySessionNotFound)
+	}
+	_, resumeErr := mock.ResumeLiveFactorySession(t.Context(), "missing-session", factorysessions.ControlRequest{})
+	if !errors.Is(resumeErr, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("ResumeLiveFactorySession() error = %v, want %v", resumeErr, apisurface.ErrFactorySessionNotFound)
+	}
+}
+
+func TestMockFactory_LiveSessionPauseResume_ReturnsControlErrorForTerminalSession(t *testing.T) {
+	t.Parallel()
+
+	mock := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"live-sess-001": {
+				PauseLiveFactorySessionFunc: func(
+					context.Context,
+					string,
+					factorysessions.ControlRequest,
+				) (factorysessions.LifecycleControlResult, error) {
+					return factorysessions.LifecycleControlResult{}, &factorysessions.ControlError{
+						Operation: factorysessions.LifecycleControlPause,
+						Outcome:   factorysessions.LifecycleControlOutcomeTerminalSession,
+						Status:    factorysessions.LifecycleStatusSucceeded,
+						Message:   "terminal session",
+					}
+				},
+			},
+		},
+	}
+	_, err := mock.PauseLiveFactorySession(t.Context(), "live-sess-001", factorysessions.ControlRequest{})
+	var controlErr *factorysessions.ControlError
+	if !errors.As(err, &controlErr) {
+		t.Fatalf("PauseLiveFactorySession() error = %T(%v), want *ControlError", err, err)
+	}
+	if controlErr.Outcome != factorysessions.LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("control outcome = %s, want TERMINAL_SESSION", controlErr.Outcome)
+	}
+}
+
 func TestMockFactory_GetEngineStateSnapshot_ReturnsConfiguredEngineStateAndCountsCall(t *testing.T) {
-	expected := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+	expected := &interfaces.EngineStateSnapshot[petri.PetriMarkingSnapshot, *petri.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		FactoryState:  string(interfaces.FactoryStateRunning),
 		InFlightCount: 2,
@@ -34,9 +148,9 @@ func TestMockFactory_GetEngineStateSnapshot_ReturnsConfiguredEngineStateAndCount
 }
 
 func TestMockFactory_GetEngineStateSnapshot_BuildsAggregateSnapshotFromConfiguredFields(t *testing.T) {
-	net := &state.Net{ID: "test-net"}
-	marking := &petri.MarkingSnapshot{
-		Tokens: map[string]*factorytoken.Token{
+	net := &petri.Net{ID: "test-net"}
+	marking := &petri.PetriMarkingSnapshot{
+		Tokens: map[string]*petri.RuntimeToken{
 			"tok-1": {ID: "tok-1", PlaceID: "task:init"},
 		},
 		PlaceTokens: map[string][]string{"task:init": {"tok-1"}},

@@ -5,9 +5,8 @@ import (
 	"strings"
 	"time"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workflowsource "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
@@ -15,8 +14,8 @@ import (
 
 // InvocationRequestFromAPI maps the public invocation carrier into the Factory
 // Session-owned request before domain normalization and submission.
-func InvocationRequestFromAPI(request factoryapi.InvocationRequest) sessioninvocation.InvocationRequest {
-	result := sessioninvocation.InvocationRequest{
+func InvocationRequestFromAPI(request factoryapi.InvocationRequest) factorysessionexecution.InvocationRequest {
+	result := factorysessionexecution.InvocationRequest{
 		Content:         contentcontract.PartsFromGenerated(request.Content),
 		ContentProvided: request.Content != nil,
 	}
@@ -29,7 +28,7 @@ func InvocationRequestFromAPI(request factoryapi.InvocationRequest) sessioninvoc
 		result.RequestID = &requestID
 	}
 	if request.SourceKind != nil {
-		sourceKind := sessioninvocation.InvocationInputSourceKind(*request.SourceKind)
+		sourceKind := factorysessionexecution.InvocationInputSourceKind(*request.SourceKind)
 		result.SourceKind = &sourceKind
 	}
 	if request.TimeoutMillis != nil {
@@ -487,12 +486,6 @@ func DurableSessionListSummaryFromAPI(response factoryapi.FactorySessionDurableS
 	if response.Links != nil {
 		summary.Links = executionLinksFromAPI(*response.Links)
 	}
-	if !summary.Recoverable {
-		summary.Recoverable = factorysessionexecution.IsRecoverableSession(summary.Status, summary.StaleLease)
-	}
-	if summary.Actions == (factorysessionexecution.SessionActionAvailability{}) {
-		summary.Actions = factorysessionexecution.DeriveSessionActionAvailability(summary.Status)
-	}
 	return summary
 }
 
@@ -535,26 +528,15 @@ func ControlErrorToAPI(sessionID string, err *factorysessionexecution.ControlErr
 	if err == nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}
 	}
-	response := factoryapi.FactorySessionLifecycleControlResponse{
-		SessionId: sessionID,
-		Operation: factoryapi.FactorySessionLifecycleControlKind(err.Operation),
-		Outcome:   factoryapi.FactorySessionLifecycleControlOutcome(err.Outcome),
-	}
-	if err.Status != "" {
-		response.Status = factoryapi.FactorySessionDurableLifecycleStatus(err.Status)
-	}
-	if message := strings.TrimSpace(err.Message); message != "" {
-		response.Detail = &message
-	}
-	if links := lifecycleControlLinksToAPI(factorysessionexecution.LifecycleControlLinksForSession(sessionID, true)); links != nil {
-		response.Links = links
-	}
-	return response
+	return LifecycleControlResponseToAPI(factorysessionexecution.LifecycleControlResult{
+		SessionID: sessionID, Operation: err.Operation, Outcome: err.Outcome,
+		Status: err.Status, Detail: strings.TrimSpace(err.Message), Links: err.Links,
+	})
 }
 
 func resolvedSourceFromAPI(source factoryapi.FactorySessionResolvedSourceIdentity) factorysessionexecution.ResolvedSource {
 	result := factorysessionexecution.ResolvedSource{
-		Kind: workflowsource.Kind(source.Kind),
+		Kind: workflowsource.WorkflowSourceKind(source.Kind),
 	}
 	if source.Dialect != nil {
 		result.Dialect = strings.TrimSpace(*source.Dialect)

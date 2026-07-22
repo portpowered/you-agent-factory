@@ -1,15 +1,14 @@
 package smoke
 
 import (
-	"bytes"
-	"io"
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
-	agentcli "github.com/portpowered/infinite-you/pkg/transports/cli"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -53,9 +52,9 @@ var docsSmokeTopics = []docsSmokeTopic{
 	{name: "work", heading: "# Submitted Work", markers: []string{"## Single-Work API Submission", "## Submission contract shapes", "SubmitWorkRequest", "WorkRequest", "`items` cannot be combined with `content` or `payload`", "POST /factory-sessions/{session_id}/work", "~default", "workTypeName", "## Tags And Prompt Templates", "Token.Tags", "`you docs config`", "`you docs batch-inputs`", "FACTORY_REQUEST_BATCH"}, absent: []string{"../internal/development/parent-aware-fan-in.md", "../internal/development/workstation-guards-and-guarded-loop-breakers.md", "## Work Types", "supportingFiles", "## Portability Resource Manifest", "[Config](config.md)", "[Batch Inputs](batch-inputs.md)", "POST /work`", "`POST /work/staged-files`"}},
 	{name: "sessions", heading: "# Sessions and Runtime", markers: []string{"you session list", "you session pause", "you session resume", "POST /factory-sessions/{session_id}/pause", "SESSION_LIFECYCLE_CONTROL", "make docs-reference-smoke", "you factory query", "GET /factory-sessions/{session_id}/status", "factoryState", "runtimeStatus", "categories", "INVOCATION_BLOCKED", "INVOCATION_NEEDS_HUMAN", "INVOCATION_PAUSED", "INVOCATION_INTERRUPTED", "INVOCATION_RUNTIME_FAILURE", "INVOCATION_TIMED_OUT", "INVOCATION_CANCELED", "http://localhost:7437/dashboard/ui", "`you docs agents`", "`you docs work`", "`you docs config`", "`you docs javascript-workflows`", "## Response-event stream lifecycle and reconnect", "GET /factory-sessions/{session_id}/response-events", "FactoryResponseEvent", "after_sequence", "STREAM_GAP", "RESPONSE_EVENT_SESSION_NOT_FOUND", "RESPONSE_EVENT_STREAM_EXPIRED", "GET /factory-sessions/{session_id}/events", "canonical Factory events", "durable process-restart replay", "`you docs run`"}, absent: []string{"[Agents](agents.md)", "[Work](work.md)", "[Config](config.md)", "you docs packaged-goal"}},
 	{name: "orchestrators", heading: "# Orchestrators and Factory Sessions", markers: []string{"### Beta JavaScript child-agent contract", "`prompt`", "`label`", "`preset`", "`modelProvider`", "`model`", "`reasoningEffort`", "agent-run-valid", "agent-run-invalid", "`agent.run() does not support field \"writableRoots\"`", "dynamically constructed argument object", "`you docs javascript-workflows`"}},
-	{name: "javascript-workflows", heading: "# JavaScript Workflows", markers: []string{"## Operator flow", "you workflow validate --kind INLINE_WORKFLOW", "you workflow validate --kind WORKFLOW_NAME --value release-train --dir .", "you --json workflow run", "--request-id req-js-timeout-001", "--workflow long-running-audit", "--wait-timeout-millis 1000", "you --json workflow start", "--request-id req-js-run-n-001", `--args '{"release":"2026.06"}'`, "you --json workflow status SESSION_ID", "you --json workflow result SESSION_ID --mode final", "you --json workflow dispatches SESSION_ID", "you --json workflow artifacts SESSION_ID", "you --json workflow events SESSION_ID", "--execution-provider javascript-runtime --project-root .", "POST /factory-sessions/sync", "you.factory_session.start_sync", "FactoryArtifact", "FactoryEvent", "## Stable failures and recovery"}, absent: []string{"you run --workflow", "command?, sandbox?", "writableRoots?", "allowNetwork?", "outputSchema?"}},
+	{name: "javascript-workflows", heading: "# JavaScript Workflows", markers: []string{"## Operator flow", "POST http://localhost:7437/factories/preview", "POST http://localhost:7437/factory-sessions/sync", "POST http://localhost:7437/factory-sessions/async", "req-js-timeout-001", "long-running-audit", "waitTimeoutMillis", "req-js-run-n-001", "you session show SESSION_ID", "you session dispatches SESSION_ID", "POST /factory-sessions/sync", "you.factory_session.start_sync", "FactoryArtifact", "FactoryEvent", "## Stable failures and recovery"}, absent: []string{"you workflow", "you.run --workflow", "command?, sandbox?", "writableRoots?", "allowNetwork?", "outputSchema?"}},
 	{name: "mock-workers", heading: "# Mock Workers", markers: []string{"--with-mock-workers", "mockWorkers", "unmatchedDispatchPolicy", "passthrough", "runType", "accept", "reject", "script", "scriptConfig", "docs/examples/mock-workers.json", "docs/examples/mock-workers-script.json", "docs/examples/mock-workers-mixed.json", "docs/examples/startup-work.json", "## Reviewer Verification", "Do not rely on a live real-agent passthrough run for signoff", "automated service and runner tests"}},
-	{name: "record-replay", heading: "# Record and Replay", markers: []string{"--record", "--replay", "--no-record", "~/.you-agent-factory/recordings/", "docs/examples/sample-run.replay.json", "Recording saved:", "you run --factory ./workflow.js", "you run --record ./recordings/workflow-run.json --factory ./workflow.js", "you run --replay ./recordings/workflow-run.json --factory ./workflow.js", "you workflow status <session-id>", "you workflow events <session-id>", "you workflow artifacts <session-id>", "you workflow result <session-id> --mode final", "replayCompatibilityVersion", "raw JavaScript runtime state", "provider transcripts", "child-dispatch lists", "does not invoke a provider, dispatch a child, or execute the JavaScript source", "`--record` with `--replay`", "`--no-record` with `--record`"}},
+	{name: "record-replay", heading: "# Record and Replay", markers: []string{"--record", "--replay", "--no-record", "~/.you-agent-factory/recordings/", "docs/examples/sample-run.replay.json", "Recording saved:", "you run --factory ./workflow.js", "you run --record ./recordings/workflow-run.json --factory ./workflow.js", "you run --replay ./recordings/workflow-run.json --factory ./workflow.js", "you session show <session-id>", "/factory-sessions/<session-id>/events", "/factory-sessions/<session-id>/artifacts", "/factory-sessions/<session-id>/results?mode=final", "replayCompatibilityVersion", "raw JavaScript runtime state", "provider transcripts", "child-dispatch lists", "does not invoke a provider, dispatch a child, or execute the JavaScript source", "`--record` with `--replay`", "`--no-record` with `--record`"}},
 	{name: "guards", heading: "# Guards", markers: []string{"VISIT_COUNT", "SAME_NAME", "MATCHES_FIELDS", "ALL_CHILDREN_COMPLETE", "ANY_CHILD_FAILED", "INFERENCE_THROTTLE_GUARD", "LOGICAL_MOVE", "limits.maxRetries"}},
 	{name: "relationships", heading: "# Relationships", markers: []string{"DEPENDS_ON", "PARENT_CHILD", "SPAWNED_BY", "requiredState", "sourceWorkName", "targetWorkName", "workTypeName", "requestId", "FACTORY_REQUEST_BATCH", "`you docs guards`", "`you docs batch-inputs`"}, absent: []string{"work_type_name", "source_work_name", "target_work_name", "[Guards](guards.md)", "[Batch Inputs](batch-inputs.md)"}},
 	{name: "workstations", heading: "# Workstations Reference", markers: []string{"workstation authoring contract", "INFERENCE_RUN", "AGENT_RUN", "MODEL_WORKSTATION", "MODEL_INVOKE", "CLASSIFIER_WORKSTATION", "LOGICAL_MOVE", "`you docs guards`", "`you docs relationships`"}, absent: []string{"../internal/development/parent-aware-fan-in.md", "../internal/development/workstation-guards-and-guarded-loop-breakers.md", "[Guards](guards.md)", "[Relationships](relationships.md)"}},
@@ -129,39 +128,23 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 		}
 	}
 
-	var unsupportedStdout bytes.Buffer
-	runInWorkingDirectory(t, workingDir, func() {
-		root := agentcli.NewRootCommand()
-		root.SetOut(&unsupportedStdout)
-		root.SetErr(io.Discard)
-		root.SetArgs([]string{"docs", "unknown"})
-
-		err := root.Execute()
-		if err == nil {
-			t.Fatal("expected unsupported docs topic to fail")
-		}
-		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, batch-inputs, templates)` {
-			t.Fatalf("unexpected unsupported topic error %q", got)
-		}
-	})
-	if got := unsupportedStdout.String(); got != "" {
+	unsupportedStdout, err := executeDocsSmokeCommandResult(t, workingDir, "docs", "unknown")
+	if err == nil {
+		t.Fatal("expected unsupported docs topic to fail")
+	}
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, batch-inputs, templates)` {
+		t.Fatalf("unexpected unsupported topic error %q", got)
+	}
+	if got := unsupportedStdout; got != "" {
 		t.Fatalf("unsupported docs topic should not write stdout, got %q", got)
 	}
 
 	for _, retiredTopic := range []string{"packaged-fusion", "packaged-goal", "packaged-tts", "mcp-hosts"} {
-		var retiredStdout bytes.Buffer
-		runInWorkingDirectory(t, workingDir, func() {
-			root := agentcli.NewRootCommand()
-			root.SetOut(&retiredStdout)
-			root.SetErr(io.Discard)
-			root.SetArgs([]string{"docs", retiredTopic})
-
-			err := root.Execute()
-			if err == nil || !strings.Contains(err.Error(), `unsupported docs topic "`+retiredTopic+`"`) {
-				t.Fatalf("execute retired docs topic %s error = %v, want unsupported-topic error", retiredTopic, err)
-			}
-		})
-		if got := retiredStdout.String(); got != "" {
+		retiredStdout, err := executeDocsSmokeCommandResult(t, workingDir, "docs", retiredTopic)
+		if err == nil || !strings.Contains(err.Error(), `unsupported docs topic "`+retiredTopic+`"`) {
+			t.Fatalf("execute retired docs topic %s error = %v, want unsupported-topic error", retiredTopic, err)
+		}
+		if got := retiredStdout; got != "" {
 			t.Fatalf("retired docs topic %s wrote stdout %q", retiredTopic, got)
 		}
 	}
@@ -200,22 +183,26 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 func executeDocsSmokeCommand(t *testing.T, workingDir string, args ...string) string {
 	t.Helper()
 
-	var out bytes.Buffer
-	runInWorkingDirectory(t, workingDir, func() {
-		root := agentcli.NewRootCommand()
-		root.SetOut(&out)
-		root.SetErr(io.Discard)
-		root.SetArgs(args)
-
-		if err := root.Execute(); err != nil {
-			t.Fatalf("execute root command %v: %v", args, err)
-		}
-	})
-	return out.String()
+	output, err := executeDocsSmokeCommandResult(t, workingDir, args...)
+	if err != nil {
+		t.Fatalf("execute root command %v: %v", args, err)
+	}
+	return output
 }
 
-func runInWorkingDirectory(t *testing.T, dir string, fn func()) {
+func executeDocsSmokeCommandResult(
+	t *testing.T,
+	workingDir string,
+	args ...string,
+) (string, error) {
 	t.Helper()
 
-	support.WithWorkingDirectory(t, dir, fn)
+	process := support.BuildProcess(t, serviceedges.Edges{})
+	inputs := support.FakeInputs(
+		context.Background(),
+		append([]string{"you"}, args...),
+	)
+	inputs.WorkingDirectory = workingDir
+	err := process.Execute(inputs.Input)
+	return inputs.Stdout(), err
 }

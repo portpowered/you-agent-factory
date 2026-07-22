@@ -424,9 +424,9 @@ func TestCompareYAML_UnsupportedSchemaKeywordFixtures_FailClosed(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name       string
-		fixture    string
-		wantPath   string
+		name     string
+		fixture  string
+		wantPath string
 	}{
 		{
 			name:     "nullable-narrow",

@@ -4,10 +4,9 @@ package smoke
 
 import (
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,17 +23,7 @@ func TestStatelessCollector_TwoStagePipeline(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:stage1").
-		HasNoTokenInPlace("task:failed")
+	runFactoryThroughCustomerProcess(t, dir, provider)
 
 	if provider.CallCount() != 2 {
 		t.Errorf("expected 2 provider calls, got %d", provider.CallCount())
@@ -47,6 +36,8 @@ func TestStatelessCollector_MultipleWorkItems(t *testing.T) {
 	support.SkipLongFunctional(t, "slow stateless-collector multi-item sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "stateless_collector"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item": "w1"}`))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item": "w2"}`))
+	testutil.WriteSeedFile(t, dir, "task", []byte(`{"item": "w3"}`))
 
 	provider := testutil.NewMockProvider(
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
@@ -56,23 +47,8 @@ func TestStatelessCollector_MultipleWorkItems(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	if err := h.SubmitWork("task", []byte(`{"item": "w2"}`)); err != nil {
-		t.Fatalf("submit w2: %v", err)
+	runFactoryThroughCustomerProcess(t, dir, provider)
+	if provider.CallCount() != 6 {
+		t.Fatalf("provider call count = %d, want 6 for three two-stage items", provider.CallCount())
 	}
-	if err := h.SubmitWork("task", []byte(`{"item": "w3"}`)); err != nil {
-		t.Fatalf("submit w3: %v", err)
-	}
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:done", 3).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:stage1").
-		HasNoTokenInPlace("task:failed")
 }

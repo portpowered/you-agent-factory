@@ -1,13 +1,12 @@
 package climanifestcobra_test
 
 import (
+	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
@@ -36,7 +35,7 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 		"work move",
 		"work visualize",
 	} {
-		cmd, err := climanifestparity.FindCommandByPath(work, path)
+		cmd, err := findCommandByPath(work, path)
 		if err != nil {
 			t.Fatalf("FindCommandByPath(%q) error = %v", path, err)
 		}
@@ -48,7 +47,7 @@ func TestNewWorkFamilyCommandBuildsContractedPaths(t *testing.T) {
 		}
 	}
 
-	list, err := climanifestparity.FindCommandByPath(work, "work list")
+	list, err := findCommandByPath(work, "work list")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
 	}
@@ -98,22 +97,20 @@ func TestNewWorkFamilyCommandExposesOnlyWorkFamily(t *testing.T) {
 		if id == "you.work" {
 			continue
 		}
-		if _, err := climanifestparity.FindCommandByPath(work, workPathForID(id)); err != nil {
+		if _, err := findCommandByPath(work, workPathForID(id)); err != nil {
 			t.Fatalf("work path for %q missing: %v", id, err)
 		}
 	}
-	if _, err := climanifestparity.FindCommandByPath(work, "work submit"); err == nil {
+	if _, err := findCommandByPath(work, "work submit"); err == nil {
 		t.Fatal("generated work constructor must not expose work submit")
 	}
 }
 
 func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	work, _ := mustWorkFamilyTree(t)
-	manifest := mustWorkFamilyManifest(t)
 	assertWorkShowContractedFlags(t, work)
 	assertWorkListContractedFlags(t, work)
 	assertWorkVisualizeContractedFlags(t, work)
-	assertWorkFamilyCompletionParity(t, work, manifest)
 }
 
 func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
@@ -135,14 +132,14 @@ func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
 	}
-	list, err := climanifestparity.FindCommandByPath(work, "work list")
+	list, err := findCommandByPath(work, "work list")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
 	}
 	if got := list.Flags().Lookup("session").Usage; got != "custom session help for parity" {
 		t.Fatalf("session flag usage = %q, want custom binding usage", got)
 	}
-	visualize, err := climanifestparity.FindCommandByPath(work, "work visualize")
+	visualize, err := findCommandByPath(work, "work visualize")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work visualize) error = %v", err)
 	}
@@ -168,7 +165,7 @@ func TestNewWorkFamilyCommandRegistersEveryManifestLocalFlag(t *testing.T) {
 			if err != nil {
 				t.Fatalf("CommandByID(%q) error = %v", tc.commandID, err)
 			}
-			cmd, err := climanifestparity.FindCommandByPath(work, tc.path)
+			cmd, err := findCommandByPath(work, tc.path)
 			if err != nil {
 				t.Fatalf("FindCommandByPath(%q) error = %v", tc.path, err)
 			}
@@ -195,7 +192,7 @@ func mustWorkFamilyManifest(t *testing.T) climanifest.Manifest {
 
 func assertWorkShowContractedFlags(t *testing.T, work *cobra.Command) {
 	t.Helper()
-	show, err := climanifestparity.FindCommandByPath(work, "work show")
+	show, err := findCommandByPath(work, "work show")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work show) error = %v", err)
 	}
@@ -213,7 +210,7 @@ func assertWorkShowContractedFlags(t *testing.T, work *cobra.Command) {
 
 func assertWorkListContractedFlags(t *testing.T, work *cobra.Command) {
 	t.Helper()
-	list, err := climanifestparity.FindCommandByPath(work, "work list")
+	list, err := findCommandByPath(work, "work list")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
 	}
@@ -226,43 +223,13 @@ func assertWorkListContractedFlags(t *testing.T, work *cobra.Command) {
 
 func assertWorkVisualizeContractedFlags(t *testing.T, work *cobra.Command) {
 	t.Helper()
-	visualize, err := climanifestparity.FindCommandByPath(work, "work visualize")
+	visualize, err := findCommandByPath(work, "work visualize")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work visualize) error = %v", err)
 	}
 	formatFlag := visualize.Flags().Lookup("format")
 	if formatFlag == nil || formatFlag.DefValue != "mermaid" {
 		t.Fatalf("format flag = %#v, want default mermaid", formatFlag)
-	}
-}
-
-func assertWorkFamilyCompletionParity(t *testing.T, work *cobra.Command, manifest climanifest.Manifest) {
-	t.Helper()
-	showRecord, err := manifest.CommandByID("you.work.show")
-	if err != nil {
-		t.Fatalf("CommandByID(you.work.show) error = %v", err)
-	}
-	listRecord, err := manifest.CommandByID("you.work.list")
-	if err != nil {
-		t.Fatalf("CommandByID(you.work.list) error = %v", err)
-	}
-
-	root := workCommandWithInheritedFlags(t, work)
-	inventory, err := cliinputs.Walk(root)
-	if err != nil {
-		t.Fatalf("cliinputs.Walk() error = %v", err)
-	}
-	liveArgs, liveFlags := climanifestparity.InputsForCommandPath(inventory, showRecord.Path)
-	if len(liveArgs) != 1 {
-		t.Fatalf("show inputs inventory args = %d, want 1 positional", len(liveArgs))
-	}
-	if mismatches := climanifestparity.CompareCompletionParity(showRecord, liveArgs, liveFlags); len(mismatches) != 0 {
-		t.Fatalf("show completion wiring drift:\n%s", climanifestparity.FormatMismatchReport(mismatches))
-	}
-
-	liveListArgs, liveListFlags := climanifestparity.InputsForCommandPath(inventory, listRecord.Path)
-	if mismatches := climanifestparity.CompareCompletionParity(listRecord, liveListArgs, liveListFlags); len(mismatches) != 0 {
-		t.Fatalf("list completion wiring drift:\n%s", climanifestparity.FormatMismatchReport(mismatches))
 	}
 }
 
@@ -373,9 +340,9 @@ func mustWorkFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry
 }
 
 func testWorkBindings() climanifestcobra.WorkFamilyBindings {
-	listCfg := workcli.ListConfig{}
-	showCfg := workcli.ShowConfig{}
-	moveCfg := workcli.MoveConfig{}
+	listCfg := workcli.ListConfig{Context: context.Background()}
+	showCfg := workcli.ShowConfig{Context: context.Background()}
+	moveCfg := workcli.MoveConfig{Context: context.Background()}
 	format := "mermaid"
 	return climanifestcobra.WorkFamilyBindings{
 		ListConfig:      &listCfg,

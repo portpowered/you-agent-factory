@@ -4,20 +4,18 @@ package dashboard
 
 import (
 	"fmt"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"strings"
 	"time"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FormatSimpleDashboard renders the snapshot-only dashboard shell. Session
 // accounting requires FormatSimpleDashboardWithRenderData.
 func FormatSimpleDashboard(
-	es interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	es interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	topology *state.Net,
 	now time.Time,
 ) string {
@@ -36,8 +34,8 @@ func FormatSimpleDashboard(
 // FormatSimpleDashboardWithRenderData renders a dashboard using the dedicated
 // simple-dashboard render DTO for session accounting.
 func FormatSimpleDashboardWithRenderData(
-	es interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	renderData dashboardrender.SimpleDashboardRenderData,
+	es interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
+	renderData recordings.SimpleDashboardRenderData,
 	now time.Time,
 ) string {
 	return formatSimpleDashboard(
@@ -53,7 +51,7 @@ func FormatSimpleDashboardWithRenderData(
 }
 
 func formatSimpleDashboard(
-	es interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	es interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net],
 	topology *state.Net,
 	now time.Time,
 	active dashboardActiveView,

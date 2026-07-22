@@ -7,8 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	startupcli "github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/spf13/cobra"
 )
 
@@ -30,27 +29,6 @@ func TestNewServeCommand_HelpRoutesToCanonicalMCPTopic(t *testing.T) {
 	}
 }
 
-func TestBuildServeApplicationRequiresInjectedService(t *testing.T) {
-	application, err := BuildServeApplication(ServeConfig{})
-	if err == nil || application != nil {
-		t.Fatalf("BuildServeApplication() = (%+v, %v), want missing-service error", application, err)
-	}
-	if !strings.Contains(err.Error(), "durable execution service is required") {
-		t.Fatalf("BuildServeApplication() error = %q, want actionable missing-service error", err)
-	}
-}
-
-func TestBuildServeApplicationAcceptsInjectedService(t *testing.T) {
-	injected := factorysessionexecution.NewFakeService()
-	application, err := BuildServeApplication(ServeConfig{Service: injected})
-	if err != nil {
-		t.Fatalf("BuildServeApplication() error = %v", err)
-	}
-	if application == nil {
-		t.Fatal("BuildServeApplication() = nil, want constructed application")
-	}
-}
-
 func TestNewServeCommand_RejectsRuntimeAndFixtureCatalogTogether(t *testing.T) {
 	cmd := NewServeCommand()
 	if err := cmd.Flags().Set("runtime", "true"); err != nil {
@@ -68,19 +46,28 @@ func TestNewServeCommand_RejectsRuntimeAndFixtureCatalogTogether(t *testing.T) {
 	}
 }
 
-func TestServeRunEDelegatesUnchangedIntentThroughStartupBoundary(t *testing.T) {
+func TestNewServeCommand_RequiresInjectedStdioInitializer(t *testing.T) {
+	cmd := NewServeCommand()
+	err := cmd.RunE(cmd, nil)
+	if err == nil || !strings.Contains(err.Error(), "MCP stdio initializer is required") {
+		t.Fatalf("RunE() error = %v, want missing injected initializer", err)
+	}
+}
+
+func TestServeRunEDelegatesUnchangedIntentToStdioInitializer(t *testing.T) {
 	fixtureCatalogPath := "fixtures.json"
 	runtimeBacked := false
 	projectRoot := "/workspace/project"
 	stdin := strings.NewReader("request\n")
 	var stdout bytes.Buffer
-	var got startupcli.Request
+	var got startupcli.MCPIntent
 	runE := ServeRunE(ServeBinding{
 		FixtureCatalogPath: &fixtureCatalogPath,
 		RuntimeBacked:      &runtimeBacked,
 		ProjectRoot:        &projectRoot,
-		Startup: func(_ context.Context, request startupcli.Request) error {
-			got = request
+		HomeDir:            func() (string, error) { return "/home/test", nil },
+		InitializeStdio: func(_ context.Context, intent startupcli.MCPIntent) error {
+			got = intent
 			return nil
 		},
 	})
@@ -90,13 +77,34 @@ func TestServeRunEDelegatesUnchangedIntentThroughStartupBoundary(t *testing.T) {
 	if err := runE(cmd, nil); err != nil {
 		t.Fatalf("ServeRunE() error = %v", err)
 	}
-	if got.Kind != startupcli.KindMCPServe {
-		t.Fatalf("startup kind = %q, want %q", got.Kind, startupcli.KindMCPServe)
+	if got.FixtureCatalogPath != fixtureCatalogPath || got.RuntimeBacked || got.ProjectRoot != projectRoot {
+		t.Fatalf("stdio intent = %#v, want bound fixture/runtime/project-root", got)
 	}
-	if got.MCP.FixtureCatalogPath != fixtureCatalogPath || got.MCP.RuntimeBacked || got.MCP.ProjectRoot != projectRoot {
-		t.Fatalf("startup MCP intent = %#v, want bound fixture/runtime/project-root", got.MCP)
+	if got.Stdin != io.Reader(stdin) || got.Stdout != io.Writer(&stdout) {
+		t.Fatalf("stdio = (%T, %T), want original command streams", got.Stdin, got.Stdout)
 	}
-	if got.MCP.Stdin != io.Reader(stdin) || got.MCP.Stdout != io.Writer(&stdout) {
-		t.Fatalf("startup stdio = (%T, %T), want original command streams", got.MCP.Stdin, got.MCP.Stdout)
+}
+
+func TestServeRunERuntimeCarriesInjectedHomeToInitializer(t *testing.T) {
+	runtimeBacked := true
+	projectRoot := "/workspace/project"
+	var got startupcli.MCPIntent
+	runE := ServeRunE(ServeBinding{
+		RuntimeBacked: &runtimeBacked,
+		ProjectRoot:   &projectRoot,
+		HomeDir:       func() (string, error) { return "/home/test", nil },
+		InitializeStdio: func(_ context.Context, intent startupcli.MCPIntent) error {
+			got = intent
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "serve"}
+	cmd.SetIn(strings.NewReader(""))
+	cmd.SetOut(io.Discard)
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("ServeRunE() error = %v", err)
+	}
+	if got.HomeDir != "/home/test" || got.ProjectRoot != projectRoot || !got.RuntimeBacked {
+		t.Fatalf("stdio intent = %#v, want injected home and runtime roots", got)
 	}
 }

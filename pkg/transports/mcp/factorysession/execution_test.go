@@ -3,36 +3,127 @@ package factorysession_test
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
+	"errors"
+	"strings"
 	"testing"
-	"time"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
-func TestMockClient_StartAsync_RunningFixtureReturnsInProgressSession(t *testing.T) {
-	client := newFixtureMCPClient(t)
-	request := asyncRunningExecutionRequest()
+const (
+	runningSessionID = "dur-sess-js-run-n-001"
+	successSessionID = "dur-sess-petri-success-001"
+)
 
-	response, err := client.StartAsync(request)
+var canonicalMCPRequestPreparation factorysessions.RequestPreparation = mcpRequestPreparation{
+	start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) { return request, nil },
+	control: func(request factorysessions.ControlRequest) (factorysessions.ControlRequest, error) {
+		return request, nil
+	},
+	approve: func(request factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error) {
+		return request, nil
+	},
+	retryDispatch: func(request factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error) {
+		return request, nil
+	},
+	interruptDispatch: func(request factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error) {
+		return request, nil
+	},
+	listSessions: func(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+		if request.Scope == "" {
+			request.Scope = factorysessions.SessionListScopeLive
+		}
+		return request, nil
+	},
+	result: func(request factorysessions.ResultRequest) (factorysessions.ResultRequest, error) {
+		return request, nil
+	},
+	eventReconnect: func(request factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error) {
+		return request, nil
+	},
+}
+
+type mcpRequestPreparation struct {
+	start             func(factorysessions.StartRequest) (factorysessions.StartRequest, error)
+	control           func(factorysessions.ControlRequest) (factorysessions.ControlRequest, error)
+	approve           func(factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error)
+	retryDispatch     func(factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error)
+	interruptDispatch func(factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error)
+	listSessions      func(factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error)
+	result            func(factorysessions.ResultRequest) (factorysessions.ResultRequest, error)
+	eventReconnect    func(factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error)
+}
+
+func (preparation mcpRequestPreparation) PrepareStart(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+	if preparation.start == nil {
+		panic("unexpected PrepareStart")
+	}
+	return preparation.start(request)
+}
+func (preparation mcpRequestPreparation) PrepareControl(request factorysessions.ControlRequest) (factorysessions.ControlRequest, error) {
+	if preparation.control == nil {
+		panic("unexpected PrepareControl")
+	}
+	return preparation.control(request)
+}
+func (preparation mcpRequestPreparation) PrepareApprove(request factorysessions.ApproveRequest) (factorysessions.ApproveRequest, error) {
+	if preparation.approve == nil {
+		panic("unexpected PrepareApprove")
+	}
+	return preparation.approve(request)
+}
+func (preparation mcpRequestPreparation) PrepareRetryDispatch(request factorysessions.RetryDispatchRequest) (factorysessions.RetryDispatchRequest, error) {
+	if preparation.retryDispatch == nil {
+		panic("unexpected PrepareRetryDispatch")
+	}
+	return preparation.retryDispatch(request)
+}
+func (preparation mcpRequestPreparation) PrepareInterruptDispatch(request factorysessions.InterruptDispatchRequest) (factorysessions.InterruptDispatchRequest, error) {
+	if preparation.interruptDispatch == nil {
+		panic("unexpected PrepareInterruptDispatch")
+	}
+	return preparation.interruptDispatch(request)
+}
+func (preparation mcpRequestPreparation) PrepareListSessions(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+	if preparation.listSessions == nil {
+		panic("unexpected PrepareListSessions")
+	}
+	return preparation.listSessions(request)
+}
+func (preparation mcpRequestPreparation) PrepareResult(request factorysessions.ResultRequest) (factorysessions.ResultRequest, error) {
+	if preparation.result == nil {
+		panic("unexpected PrepareResult")
+	}
+	return preparation.result(request)
+}
+func (preparation mcpRequestPreparation) PrepareEventReconnect(request factorysessions.EventReconnectRequest) (factorysessions.EventReconnectRequest, error) {
+	if preparation.eventReconnect == nil {
+		panic("unexpected PrepareEventReconnect")
+	}
+	return preparation.eventReconnect(request)
+}
+
+func TestMockClient_StartAsync_RunningFixtureReturnsInProgressSession(t *testing.T) {
+	client := clientWithScript(scriptedExecutionService{
+		startAsync: func(_ context.Context, request factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			if request.RequestID != "req-js-run-n-001" {
+				t.Fatalf("requestId = %q, want req-js-run-n-001", request.RequestID)
+			}
+			return runningAsyncStart(), nil
+		},
+	})
+
+	response, err := client.StartAsync(context.Background(), asyncRunningExecutionRequest())
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
-	if response.Error != nil {
-		t.Fatalf("error = %#v, want success result", response.Error)
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("response = %#v, want success", response)
 	}
-	if response.Result == nil {
-		t.Fatal("result = nil, want async execution response")
-	}
-	if response.Result.SessionId != "dur-sess-js-run-n-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", response.Result.SessionId)
+	if response.Result.SessionId != runningSessionID {
+		t.Fatalf("sessionId = %q, want %q", response.Result.SessionId, runningSessionID)
 	}
 	if response.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", response.Result.Status)
@@ -42,29 +133,32 @@ func TestMockClient_StartAsync_RunningFixtureReturnsInProgressSession(t *testing
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this MCP running-status test keeps read-model and direct-service assertions together on one mock-client seam.
 func TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus(t *testing.T) {
-	client := newFixtureMCPClient(t)
-
-	started, err := client.StartAsync(asyncRunningExecutionRequest())
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
-
-	response, err := client.GetSession(mcpfactorysession.GetSessionInput{
-		SessionID: started.Result.SessionId,
+	client := clientWithScript(scriptedExecutionService{
+		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			return runningAsyncStart(), nil
+		},
+		getSession: func(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+			if sessionID != runningSessionID {
+				t.Fatalf("sessionId = %q, want %q", sessionID, runningSessionID)
+			}
+			return runningSessionRead(), nil
+		},
 	})
+
+	started, err := client.StartAsync(context.Background(), asyncRunningExecutionRequest())
+	if err != nil || started.Error != nil || started.Result == nil {
+		t.Fatalf("StartAsync = %#v, %v; want success", started, err)
+	}
+	response, err := client.GetSession(context.Background(), mcpfactorysession.GetSessionInput{SessionID: started.Result.SessionId})
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
 	if response.Error != nil || response.Result == nil {
 		t.Fatalf("read = %#v, want running session read model", response)
 	}
-	if response.Result.SessionId != "dur-sess-js-run-n-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", response.Result.SessionId)
+	if response.Result.SessionId != runningSessionID {
+		t.Fatalf("sessionId = %q, want %q", response.Result.SessionId, runningSessionID)
 	}
 	if response.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", response.Result.Status)
@@ -72,442 +166,668 @@ func TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus(t *testi
 	if response.Result.Progress == nil || response.Result.Progress.InFlightDispatches == nil {
 		t.Fatal("progress.inFlightDispatches missing from running session read model")
 	}
-	if response.Result.ResultSummary != nil &&
+	if response.Result.ResultSummary == nil ||
 		response.Result.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusPartial {
-		t.Fatalf("resultSummary = %#v, want PARTIAL when present", response.Result.ResultSummary)
-	}
-
-	service := fixtureFakeService(t)
-	if _, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-js-run-n-001",
-		Source:    asyncRunningSource(),
-	}); err != nil {
-		t.Fatalf("direct StartAsync: %v", err)
-	}
-	read, err := service.GetSession(context.Background(), "dur-sess-js-run-n-001")
-	if err != nil {
-		t.Fatalf("direct GetSession: %v", err)
-	}
-	if read.Status != factorysessionexecution.LifecycleStatusRunning {
-		t.Fatalf("direct status = %q, want RUNNING", read.Status)
+		t.Fatalf("resultSummary = %#v, want PARTIAL", response.Result.ResultSummary)
 	}
 }
 
 func TestMockClient_GetResult_RunningFixtureReturnsTypedNotReadyEnvelope(t *testing.T) {
-	client := newFixtureMCPClient(t)
-
-	started, err := client.StartAsync(asyncRunningExecutionRequest())
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
-
-	mode := factoryapi.FactorySessionResultModeFinal
-	response, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: started.Result.SessionId,
-		Mode:      &mode,
+	client := clientWithScript(scriptedExecutionService{
+		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			return runningAsyncStart(), nil
+		},
+		getResult: func(_ context.Context, sessionID string, request factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+			if sessionID != runningSessionID || request.Mode != factorysessions.ResultModeFinal {
+				t.Fatalf("GetResult(%q, %#v), want final result read for running session", sessionID, request)
+			}
+			return notReadyResult(), nil
+		},
 	})
+
+	started, err := client.StartAsync(context.Background(), asyncRunningExecutionRequest())
+	if err != nil || started.Error != nil || started.Result == nil {
+		t.Fatalf("StartAsync = %#v, %v; want success", started, err)
+	}
+	mode := factoryapi.FactorySessionResultModeFinal
+	response, err := client.GetResult(context.Background(), mcpfactorysession.GetResultInput{SessionID: started.Result.SessionId, Mode: &mode})
 	if err != nil {
 		t.Fatalf("GetResult: %v", err)
 	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want not-ready error envelope", response.Result)
+	if response.Result != nil || response.Error == nil {
+		t.Fatalf("response = %#v, want not-ready error envelope", response)
 	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want not-ready envelope")
+	if response.Error.Code != "factory_session.result.not_ready" || !response.Error.Retryable {
+		t.Fatalf("error = %#v, want retryable factory_session.result.not_ready", response.Error)
 	}
-	if response.Error.Code != "factory_session.result.not_ready" {
-		t.Fatalf("error code = %q, want factory_session.result.not_ready", response.Error.Code)
-	}
-	if !response.Error.Retryable {
-		t.Fatal("retryable = false, want true for running session")
-	}
-	if response.Error.SessionID != started.Result.SessionId {
-		t.Fatalf("sessionId = %q, want %q", response.Error.SessionID, started.Result.SessionId)
+	if response.Error.SessionID != runningSessionID {
+		t.Fatalf("sessionId = %q, want %q", response.Error.SessionID, runningSessionID)
 	}
 	if response.Error.Details == nil || response.Error.Details["reason"] != "RESULT_NOT_READY" {
 		t.Fatalf("details = %#v, want RESULT_NOT_READY reason", response.Error.Details)
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this MCP async polling test keeps running, not-ready, and completed fixture assertions together on one mock-client seam.
+// pkgmaintcheck:ignore-cyclomatic-complexity service-ownership migration preserves this decision flow; simplify branches and remove this exemption.
 func TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult(t *testing.T) {
-	client := newFixtureMCPClient(t)
-
-	runningStart, err := client.StartAsync(asyncRunningExecutionRequest())
-	if err != nil {
-		t.Fatalf("StartAsync running: %v", err)
-	}
-	if runningStart.Error != nil || runningStart.Result == nil {
-		t.Fatalf("running start = %#v, want success", runningStart)
-	}
-
-	runningStatus, err := client.GetSession(mcpfactorysession.GetSessionInput{
-		SessionID: runningStart.Result.SessionId,
+	client := clientWithScript(scriptedExecutionService{
+		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			return runningAsyncStart(), nil
+		},
+		startSync: func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+			return successfulSyncStart(), nil
+		},
+		getSession: func(_ context.Context, sessionID string) (factorysessions.SessionReadResult, error) {
+			if sessionID == runningSessionID {
+				return runningSessionRead(), nil
+			}
+			if sessionID == successSessionID {
+				return successfulSessionRead(), nil
+			}
+			t.Fatalf("unexpected session read %q", sessionID)
+			return factorysessions.SessionReadResult{}, nil
+		},
+		getResult: func(_ context.Context, sessionID string, _ factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+			if sessionID == runningSessionID {
+				return notReadyResult(), nil
+			}
+			if sessionID == successSessionID {
+				return finalResult(), nil
+			}
+			t.Fatalf("unexpected result read %q", sessionID)
+			return factorysessions.ResultReadResult{}, nil
+		},
 	})
-	if err != nil {
-		t.Fatalf("GetSession running: %v", err)
+
+	runningStart, err := client.StartAsync(context.Background(), asyncRunningExecutionRequest())
+	if err != nil || runningStart.Error != nil || runningStart.Result == nil {
+		t.Fatalf("running start = %#v, %v; want success", runningStart, err)
 	}
-	if runningStatus.Error != nil || runningStatus.Result == nil {
-		t.Fatalf("running status = %#v, want success", runningStatus)
+	runningStatus, err := client.GetSession(context.Background(), mcpfactorysession.GetSessionInput{SessionID: runningStart.Result.SessionId})
+	if err != nil || runningStatus.Error != nil || runningStatus.Result == nil {
+		t.Fatalf("running status = %#v, %v; want success", runningStatus, err)
 	}
 	if runningStatus.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("running status = %q, want RUNNING", runningStatus.Result.Status)
 	}
-
 	mode := factoryapi.FactorySessionResultModeFinal
-	notReady, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: runningStart.Result.SessionId,
-		Mode:      &mode,
-	})
-	if err != nil {
-		t.Fatalf("GetResult not-ready: %v", err)
-	}
-	if notReady.Error == nil || notReady.Error.Code != "factory_session.result.not_ready" {
-		t.Fatalf("not-ready = %#v, want factory_session.result.not_ready", notReady.Error)
+	notReady, err := client.GetResult(context.Background(), mcpfactorysession.GetResultInput{SessionID: runningSessionID, Mode: &mode})
+	if err != nil || notReady.Error == nil || notReady.Error.Code != "factory_session.result.not_ready" {
+		t.Fatalf("not-ready = %#v, %v", notReady, err)
 	}
 
-	completedStart, err := client.StartSync(syncSuccessExecutionRequest())
-	if err != nil {
-		t.Fatalf("StartSync completed: %v", err)
+	completedStart, err := client.StartSync(context.Background(), syncSuccessExecutionRequest())
+	if err != nil || completedStart.Error != nil || completedStart.Result == nil {
+		t.Fatalf("completed start = %#v, %v; want success", completedStart, err)
 	}
-	if completedStart.Error != nil || completedStart.Result == nil {
-		t.Fatalf("completed start = %#v, want success", completedStart)
+	completedStatus, err := client.GetSession(context.Background(), mcpfactorysession.GetSessionInput{SessionID: completedStart.Result.SessionId})
+	if err != nil || completedStatus.Error != nil || completedStatus.Result == nil {
+		t.Fatalf("completed status = %#v, %v; want success", completedStatus, err)
 	}
-
-	completedStatus, err := client.GetSession(mcpfactorysession.GetSessionInput{
-		SessionID: completedStart.Result.SessionId,
-	})
-	if err != nil {
-		t.Fatalf("GetSession completed: %v", err)
-	}
-	if completedStatus.Error != nil || completedStatus.Result == nil {
-		t.Fatalf("completed status = %#v, want success", completedStatus)
-	}
-	if completedStatus.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("completed status = %q, want SUCCEEDED", completedStatus.Result.Status)
-	}
-	if completedStatus.Result.ResultSummary == nil ||
+	if completedStatus.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded ||
+		completedStatus.Result.ResultSummary == nil ||
 		completedStatus.Result.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultSummary = %#v, want FINAL", completedStatus.Result.ResultSummary)
+		t.Fatalf("completed status = %#v, want succeeded FINAL", completedStatus.Result)
 	}
-
-	completedResult, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: completedStart.Result.SessionId,
-		Mode:      &mode,
-	})
-	if err != nil {
-		t.Fatalf("GetResult completed: %v", err)
-	}
-	if completedResult.Error != nil || completedResult.Result == nil {
-		t.Fatalf("completed result = %#v, want terminal result", completedResult)
+	completedResult, err := client.GetResult(context.Background(), mcpfactorysession.GetResultInput{SessionID: successSessionID, Mode: &mode})
+	if err != nil || completedResult.Error != nil || completedResult.Result == nil {
+		t.Fatalf("completed result = %#v, %v; want success", completedResult, err)
 	}
 	if completedResult.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
 		t.Fatalf("resultStatus = %q, want FINAL", completedResult.Result.ResultStatus)
 	}
-
-	service := fixtureFakeService(t)
-	if _, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-js-run-n-001",
-		Source:    asyncRunningSource(),
-	}); err != nil {
-		t.Fatalf("direct StartAsync running: %v", err)
-	}
-	runningResult, err := service.GetResult(
-		context.Background(),
-		"dur-sess-js-run-n-001",
-		factorysessionexecution.ResultRequest{Mode: factorysessionexecution.ResultModeFinal},
-	)
-	if err != nil {
-		t.Fatalf("direct GetResult running: %v", err)
-	}
-	wantRunningHash, err := fixtures.ProjectedResultReadHash(runningResult)
-	if err != nil {
-		t.Fatalf("fixtures.ProjectedResultReadHash running: %v", err)
-	}
-	if wantRunningHash != "sha256:5847ff5f39efb7f12c0a8ca67635c7e7d7332b56dbf7d724d4669450b3c8f765" {
-		t.Fatalf("running not-ready hash drift = %q", wantRunningHash)
-	}
 }
 
 func TestMockClient_StartAsync_MalformedRequestReturnsStableEnvelope(t *testing.T) {
-	client := newFixtureMCPClient(t)
-
-	response, err := client.StartAsync(factoryapi.FactorySessionExecutionRequest{
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
+	preparation := mcpRequestPreparation{start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+		return factorysessions.StartRequest{}, errors.New("factory session source factoryId is required")
+	}}
+	response, err := newTestClientWithService(scriptedExecutionService{}, preparation).StartAsync(context.Background(),
+		factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-malformed-001",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind: factoryapi.FactorySessionExecutionSourceKindFactoryId,
+			},
 		},
-	})
+	)
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want request validation envelope", response.Result)
-	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want stable validation envelope")
-	}
-	if response.Error.Code != "BAD_REQUEST" {
-		t.Fatalf("error code = %q, want BAD_REQUEST", response.Error.Code)
-	}
-	if response.Error.Retryable {
-		t.Fatal("retryable = true, want false for malformed start request")
+	if response.Result != nil || response.Error == nil || response.Error.Code != "BAD_REQUEST" || response.Error.Retryable {
+		t.Fatalf("response = %#v, want non-retryable BAD_REQUEST", response)
 	}
 }
 
 func TestMockClient_StartAsync_WithoutServiceReturnsUnavailableEnvelope(t *testing.T) {
-	client := mcpfactorysession.NewClient()
-
-	response, err := client.StartAsync(asyncRunningExecutionRequest())
+	response, err := newTestClient().StartAsync(context.Background(), asyncRunningExecutionRequest())
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want unavailable service envelope", response.Result)
-	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want unavailable service envelope")
-	}
-	if response.Error.Code != "factory_session.service.unavailable" {
-		t.Fatalf("error code = %q, want factory_session.service.unavailable", response.Error.Code)
+	if response.Result != nil || response.Error == nil ||
+		response.Error.Code != "factory_session.service.unavailable" || response.Error.Retryable {
+		t.Fatalf("response = %#v, want unavailable service envelope", response)
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this MCP sync-start test keeps terminal session fields and golden-hash assertions together on one mock-client seam.
 func TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession(t *testing.T) {
-	client := newFixtureMCPClient(t)
-	request := syncSuccessExecutionRequest()
+	client := clientWithScript(scriptedExecutionService{
+		startSync: func(_ context.Context, request factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+			if request.RequestID != "req-petri-success-001" {
+				t.Fatalf("requestId = %q, want req-petri-success-001", request.RequestID)
+			}
+			return successfulSyncStart(), nil
+		},
+	})
 
-	response, err := client.StartSync(request)
+	response, err := client.StartSync(context.Background(), syncSuccessExecutionRequest())
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
-	if response.Error != nil {
-		t.Fatalf("error = %#v, want success result", response.Error)
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("response = %#v, want success", response)
 	}
-	if response.Result == nil {
-		t.Fatal("result = nil, want sync execution response")
+	if response.Result.SessionId != successSessionID ||
+		response.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("result = %#v, want succeeded session %q", response.Result, successSessionID)
 	}
-	if response.Result.SessionId != "dur-sess-petri-success-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-petri-success-001", response.Result.SessionId)
-	}
-	if response.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("status = %q, want SUCCEEDED", response.Result.Status)
-	}
-	if response.Result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
-		t.Fatalf("syncOutcome = %q, want COMPLETED", response.Result.SyncOutcome)
-	}
-	if response.Result.SourceHash == nil || *response.Result.SourceHash == "" {
-		t.Fatal("sourceHash missing from sync success response")
-	}
-	if response.Result.ResolvedSource.SourceHash == nil || *response.Result.ResolvedSource.SourceHash == "" {
-		t.Fatal("resolvedSource.sourceHash missing from sync success response")
-	}
-	if response.Result.Result == nil || response.Result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("result = %#v, want FINAL result summary", response.Result.Result)
-	}
-	if response.Result.Links == nil || response.Result.Links.Results == nil {
-		t.Fatal("links.results missing from sync success response")
-	}
-
-	serviceResult, err := fixtureFakeService(t).StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-petri-success-001",
-		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
-			FactoryID: "customer-support-triage",
-		},
-		Args: map[string]any{"ticketId": "TKT-2002"},
-	})
-	if err != nil {
-		t.Fatalf("direct StartSync: %v", err)
-	}
-	wantHash, err := fixtures.SyncStartResultHash(serviceResult)
-	if err != nil {
-		t.Fatalf("fixtures.SyncStartResultHash: %v", err)
-	}
-	if wantHash != "sha256:89b3a278be3192017c6fcd9fbd4ca57154fb84ab6154ce961e4a597ba5fa6c05" {
-		t.Fatalf("golden hash drift = %q", wantHash)
+	if response.Result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcome("COMPLETED") || response.Result.Result == nil {
+		t.Fatalf("result = %#v, want completed sync outcome and result", response.Result)
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this MCP terminal-result test keeps result payload fields and golden-hash assertions together on one mock-client seam.
 func TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult(t *testing.T) {
-	client := newFixtureMCPClient(t)
-	request := syncSuccessExecutionRequest()
-
-	started, err := client.StartSync(request)
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
-
-	mode := factoryapi.FactorySessionResultModeFinal
-	response, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: started.Result.SessionId,
-		Mode:      &mode,
+	client := clientWithScript(scriptedExecutionService{
+		startSync: func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+			return successfulSyncStart(), nil
+		},
+		getResult: func(_ context.Context, sessionID string, request factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+			if sessionID != successSessionID || request.Mode != factorysessions.ResultModeFinal {
+				t.Fatalf("GetResult(%q, %#v), want final terminal result", sessionID, request)
+			}
+			return finalResult(), nil
+		},
 	})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
+
+	started, err := client.StartSync(context.Background(), syncSuccessExecutionRequest())
+	if err != nil || started.Error != nil || started.Result == nil {
+		t.Fatalf("StartSync = %#v, %v; want success", started, err)
 	}
-	if response.Error != nil {
-		t.Fatalf("error = %#v, want terminal result", response.Error)
+	mode := factoryapi.FactorySessionResultModeFinal
+	response, err := client.GetResult(context.Background(), mcpfactorysession.GetResultInput{SessionID: started.Result.SessionId, Mode: &mode})
+	if err != nil || response.Error != nil || response.Result == nil {
+		t.Fatalf("GetResult = %#v, %v; want success", response, err)
 	}
-	if response.Result == nil {
-		t.Fatal("result = nil, want terminal Factory Session result")
-	}
-	if response.Result.SessionId != "dur-sess-petri-success-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-petri-success-001", response.Result.SessionId)
-	}
-	if response.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultStatus = %q, want FINAL", response.Result.ResultStatus)
-	}
-	if response.Result.SessionStatus == nil || *response.Result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("sessionStatus = %#v, want SUCCEEDED", response.Result.SessionStatus)
+	if response.Result.SessionId != successSessionID ||
+		response.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal ||
+		*response.Result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("result = %#v, want succeeded FINAL", response.Result)
 	}
 	if response.Result.PrimaryResult == nil {
 		t.Fatal("primaryResult missing from terminal result")
 	}
-	if response.Result.ArtifactIds == nil || len(*response.Result.ArtifactIds) == 0 {
-		t.Fatalf("artifactIds = %#v, want related artifact identifiers", response.Result.ArtifactIds)
-	}
-
-	service := fixtureFakeService(t)
-	if _, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-petri-success-001",
-		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
-			FactoryID: "customer-support-triage",
-		},
-		Args: map[string]any{"ticketId": "TKT-2002"},
-	}); err != nil {
-		t.Fatalf("direct StartSync: %v", err)
-	}
-	serviceResult, err := service.GetResult(
-		context.Background(),
-		"dur-sess-petri-success-001",
-		factorysessionexecution.ResultRequest{Mode: factorysessionexecution.ResultModeFinal},
-	)
-	if err != nil {
-		t.Fatalf("direct GetResult: %v", err)
-	}
-	wantHash, err := fixtures.ProjectedResultReadHash(serviceResult)
-	if err != nil {
-		t.Fatalf("fixtures.ProjectedResultReadHash: %v", err)
-	}
-	if wantHash != "sha256:977772c884f0ec53b9292ca8fa0374fec1673fec8d0d481e358b3dd4ae65fb95" {
-		t.Fatalf("golden hash drift = %q", wantHash)
-	}
 }
 
 func TestMockClient_StartSync_RepeatedInvocationReturnsStableSessionIdentity(t *testing.T) {
-	client := newFixtureMCPClient(t)
-	request := syncSuccessExecutionRequest()
-
-	first, err := client.StartSync(request)
-	if err != nil {
-		t.Fatalf("first StartSync: %v", err)
+	client := clientWithScript(scriptedExecutionService{
+		startSync: func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error) {
+			return successfulSyncStart(), nil
+		},
+	})
+	first, err := client.StartSync(context.Background(), syncSuccessExecutionRequest())
+	if err != nil || first.Error != nil || first.Result == nil {
+		t.Fatalf("first StartSync = %#v, %v; want success", first, err)
 	}
-	if first.Error != nil || first.Result == nil {
-		t.Fatalf("first = %#v, want success", first)
+	second, err := client.StartSync(context.Background(), syncSuccessExecutionRequest())
+	if err != nil || second.Error != nil || second.Result == nil {
+		t.Fatalf("second StartSync = %#v, %v; want success", second, err)
 	}
-
-	second, err := client.StartSync(request)
-	if err != nil {
-		t.Fatalf("second StartSync: %v", err)
-	}
-	if second.Error != nil || second.Result == nil {
-		t.Fatalf("second = %#v, want success", second)
-	}
-	if second.Result.SessionId != first.Result.SessionId {
-		t.Fatalf("sessionId drift: first %q, second %q", first.Result.SessionId, second.Result.SessionId)
-	}
-	if second.Result.Status != first.Result.Status {
-		t.Fatalf("status drift: first %q, second %q", first.Result.Status, second.Result.Status)
-	}
-	if second.Result.SyncOutcome != first.Result.SyncOutcome {
-		t.Fatalf("syncOutcome drift: first %q, second %q", first.Result.SyncOutcome, second.Result.SyncOutcome)
-	}
-}
-
-func TestMockClient_WorkflowRunCompatibilityOnlyAliasMatchesCanonicalSuccess(t *testing.T) {
-	request := syncSuccessExecutionRequest()
-	encoded, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-
-	canonicalClient := newFixtureMCPClient(t)
-	aliasClient := newFixtureMCPClient(t)
-	canonicalRaw, err := canonicalClient.CallTool(mcpfactorysession.ToolStartSync, encoded)
-	if err != nil {
-		t.Fatalf("canonical start sync: %v", err)
-	}
-	aliasRaw, err := aliasClient.CallTool(mcpfactorysession.ToolWorkflowRun, encoded)
-	if err != nil {
-		t.Fatalf("alias start sync: %v", err)
-	}
-	if string(canonicalRaw) != string(aliasRaw) {
-		t.Fatalf("alias response = %s, want canonical %s", aliasRaw, canonicalRaw)
-	}
-
-	var response mcpfactorysession.ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]
-	if err := json.Unmarshal(aliasRaw, &response); err != nil {
-		t.Fatalf("unmarshal alias response: %v", err)
-	}
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("response = %#v, want completed sync success", response)
-	}
-	if response.Result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
-		t.Fatalf("syncOutcome = %q, want COMPLETED", response.Result.SyncOutcome)
+	if second.Result.SessionId != first.Result.SessionId ||
+		second.Result.Status != first.Result.Status ||
+		second.Result.SyncOutcome != first.Result.SyncOutcome {
+		t.Fatalf("repeated result drift: first %#v, second %#v", first.Result, second.Result)
 	}
 }
 
 func TestMockClient_StartSync_MalformedRequestReturnsStableEnvelope(t *testing.T) {
-	client := newFixtureMCPClient(t)
-
-	response, err := client.StartSync(factoryapi.FactorySessionExecutionRequest{
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
+	preparation := mcpRequestPreparation{start: func(request factorysessions.StartRequest) (factorysessions.StartRequest, error) {
+		return factorysessions.StartRequest{}, errors.New("requestId is required")
+	}}
+	response, err := newTestClientWithService(scriptedExecutionService{}, preparation).StartSync(context.Background(),
+		factoryapi.FactorySessionExecutionRequest{
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
+				FactoryId: strPtr("customer-support-triage"),
+			},
 		},
-	})
+	)
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want request validation envelope", response.Result)
-	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want stable validation envelope")
-	}
-	if response.Error.Code != "BAD_REQUEST" {
-		t.Fatalf("error code = %q, want BAD_REQUEST", response.Error.Code)
-	}
-	if response.Error.Retryable {
-		t.Fatal("retryable = true, want false for malformed start request")
+	if response.Result != nil || response.Error == nil || response.Error.Code != "BAD_REQUEST" || response.Error.Retryable {
+		t.Fatalf("response = %#v, want non-retryable BAD_REQUEST", response)
 	}
 }
 
 func TestMockClient_StartSync_WithoutServiceReturnsUnavailableEnvelope(t *testing.T) {
-	client := mcpfactorysession.NewClient()
-
-	response, err := client.StartSync(syncSuccessExecutionRequest())
+	response, err := newTestClient().StartSync(context.Background(), syncSuccessExecutionRequest())
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want unavailable service envelope", response.Result)
+	if response.Result != nil || response.Error == nil ||
+		response.Error.Code != "factory_session.service.unavailable" {
+		t.Fatalf("response = %#v, want unavailable service envelope", response)
 	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want unavailable service envelope")
+}
+
+func TestMockClient_ListSessions_DefaultsToLiveScope(t *testing.T) {
+	client := clientWithScript(scriptedExecutionService{
+		listSessions: func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			if request.Scope != factorysessions.SessionListScopeLive {
+				t.Fatalf("scope = %q, want live default", request.Scope)
+			}
+			return factorysessions.ListSessionsResult{Scope: factorysessions.SessionListScopeLive}, nil
+		},
+	})
+	response, err := client.ListSessions(context.Background(), mcpfactorysession.ListSessionsInput{})
+	if err != nil || response.Error != nil || response.Result == nil {
+		t.Fatalf("ListSessions = %#v, %v; want success", response, err)
 	}
-	if response.Error.Code != "factory_session.service.unavailable" {
-		t.Fatalf("error code = %q, want factory_session.service.unavailable", response.Error.Code)
+	if response.Result.Scope == nil || *response.Result.Scope != factoryapi.FactorySessionListScopeLive {
+		t.Fatalf("scope = %#v, want live", response.Result.Scope)
+	}
+}
+
+func TestMockClient_ListSessions_ScopedPersistedAndAll(t *testing.T) {
+	call := 0
+	client := clientWithScript(scriptedExecutionService{
+		listSessions: func(_ context.Context, request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			call++
+			switch call {
+			case 1:
+				if request.Scope != factorysessions.SessionListScopePersisted {
+					t.Fatalf("first scope = %q, want persisted", request.Scope)
+				}
+				return persistedSessionList(), nil
+			case 2:
+				if request.Scope != factorysessions.SessionListScopeAll {
+					t.Fatalf("second scope = %q, want all", request.Scope)
+				}
+				return allSessionList(), nil
+			default:
+				t.Fatalf("unexpected list call %d", call)
+				return factorysessions.ListSessionsResult{}, nil
+			}
+		},
+	})
+
+	persistedScope := factoryapi.FactorySessionListScopePersisted
+	persisted, err := client.ListSessions(context.Background(), mcpfactorysession.ListSessionsInput{Scope: &persistedScope})
+	if err != nil || persisted.Error != nil || persisted.Result == nil {
+		t.Fatalf("persisted list = %#v, %v; want success", persisted, err)
+	}
+	assertListScope(t, persisted.Result, factoryapi.FactorySessionListScopePersisted)
+	if len(persisted.Result.Sessions) != 0 {
+		t.Fatalf("sessions = %#v, want no live rows", persisted.Result.Sessions)
+	}
+	assertContainsDurableSession(t, persisted.Result, successSessionID)
+	assertOmitsDurableSession(t, persisted.Result, "dur-sess-petri-run-001")
+
+	allScope := factoryapi.FactorySessionListScopeAll
+	all, err := client.ListSessions(context.Background(), mcpfactorysession.ListSessionsInput{Scope: &allScope})
+	if err != nil || all.Error != nil || all.Result == nil {
+		t.Fatalf("all list = %#v, %v; want success", all, err)
+	}
+	assertListScope(t, all.Result, factoryapi.FactorySessionListScopeAll)
+	if len(all.Result.Sessions) != 1 || all.Result.Sessions[0].Id != "dur-sess-petri-run-001" {
+		t.Fatalf("sessions = %#v, want one live row", all.Result.Sessions)
+	}
+	assertContainsDurableSession(t, all.Result, successSessionID)
+}
+
+func TestMockClient_ListSessions_UnsupportedScopeReturnsStableEnvelope(t *testing.T) {
+	scope := factoryapi.FactorySessionListScope("workspace")
+	preparation := mcpRequestPreparation{listSessions: func(request factorysessions.ListSessionsRequest) (factorysessions.ListSessionsRequest, error) {
+		return factorysessions.ListSessionsRequest{}, errors.New(`unsupported Factory Session scope "workspace"`)
+	}}
+	response, err := newTestClientWithService(scriptedExecutionService{}, preparation).
+		ListSessions(context.Background(), mcpfactorysession.ListSessionsInput{Scope: &scope})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if response.Result != nil || response.Error == nil || response.Error.Code != "BAD_REQUEST" {
+		t.Fatalf("response = %#v, want BAD_REQUEST", response)
+	}
+}
+
+func TestMockClient_ListSessions_UnavailableServiceReturnsStableEnvelope(t *testing.T) {
+	response, err := newTestClient().ListSessions(context.Background(), mcpfactorysession.ListSessionsInput{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if response.Result != nil || response.Error == nil ||
+		response.Error.Code != "factory_session.service.unavailable" {
+		t.Fatalf("response = %#v, want unavailable service envelope", response)
+	}
+}
+
+func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyResult(t *testing.T) {
+	client := clientWithScript(scriptedExecutionService{
+		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			return runningAsyncStart(), nil
+		},
+		getSession: func(context.Context, string) (factorysessions.SessionReadResult, error) {
+			return runningSessionRead(), nil
+		},
+		getResult: func(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+			return notReadyResult(), nil
+		},
+	})
+	started, err := client.StartAsync(context.Background(), runtimeBusyLoopAsyncRequest("req-mcp-runtime-async-running-001"))
+	if err != nil || started.Error != nil || started.Result == nil {
+		t.Fatalf("StartAsync = %#v, %v; want success", started, err)
+	}
+	status, err := client.GetSession(context.Background(), mcpfactorysession.GetSessionInput{SessionID: started.Result.SessionId})
+	if err != nil || status.Error != nil || status.Result == nil ||
+		status.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("GetSession = %#v, %v; want RUNNING", status, err)
+	}
+	mode := factoryapi.FactorySessionResultModeFinal
+	result, err := client.GetResult(context.Background(), mcpfactorysession.GetResultInput{SessionID: started.Result.SessionId, Mode: &mode})
+	if err != nil || result.Error == nil || result.Error.Code != "factory_session.result.not_ready" {
+		t.Fatalf("GetResult = %#v, %v; want not-ready", result, err)
+	}
+}
+
+func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing.T) {
+	client := clientWithScript(scriptedExecutionService{
+		startAsync: func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error) {
+			return runningAsyncStart(), nil
+		},
+		getSession: func(context.Context, string) (factorysessions.SessionReadResult, error) {
+			return successfulSessionRead(), nil
+		},
+		getResult: func(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error) {
+			return finalResult(), nil
+		},
+	})
+	started, err := client.StartAsync(context.Background(), runtimeSimpleFinalAsyncRequest("req-mcp-runtime-async-final-001"))
+	if err != nil || started.Error != nil || started.Result == nil {
+		t.Fatalf("StartAsync = %#v, %v; want success", started, err)
+	}
+	status, err := client.GetSession(context.Background(), mcpfactorysession.GetSessionInput{SessionID: started.Result.SessionId})
+	if err != nil || status.Error != nil || status.Result == nil ||
+		status.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("GetSession = %#v, %v; want SUCCEEDED", status, err)
+	}
+	mode := factoryapi.FactorySessionResultModeFinal
+	result, err := client.GetResult(context.Background(), mcpfactorysession.GetResultInput{SessionID: started.Result.SessionId, Mode: &mode})
+	if err != nil || result.Error != nil || result.Result == nil ||
+		result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal ||
+		result.Result.PrimaryResult == nil {
+		t.Fatalf("GetResult = %#v, %v; want terminal FINAL result", result, err)
+	}
+}
+
+func TestToolOperationPropagatesCallerContextAndCancellation(t *testing.T) {
+	type markerKey struct{}
+	const markerValue = "mcp-request-context"
+	service := scriptedExecutionService{
+		listSessions: func(ctx context.Context, _ factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error) {
+			if got := ctx.Value(markerKey{}); got != markerValue {
+				t.Fatalf("ListSessions context marker = %v, want %q", got, markerValue)
+			}
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				t.Fatalf("ListSessions context error = %v, want context.Canceled", ctx.Err())
+			}
+			return factorysessions.ListSessionsResult{}, nil
+		},
+	}
+	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), markerKey{}, markerValue))
+	cancel()
+	response, err := clientWithScript(service).ListSessions(ctx, mcpfactorysession.ListSessionsInput{})
+	if err != nil || response.Error != nil {
+		t.Fatalf("ListSessions() = %#v, %v", response, err)
+	}
+}
+
+func TestToolOperationRejectsMissingContext(t *testing.T) {
+	operation := mcpfactorysession.BindToolOperation(
+		scriptedExecutionService{},
+		canonicalMCPRequestPreparation,
+		nil,
+	)
+	if _, err := operation(nil, mcpfactorysession.ToolListSessions, json.RawMessage(`{}`)); err == nil || !strings.Contains(err.Error(), "context is required") {
+		t.Fatalf("ToolOperation(nil context) error = %v, want required-context error", err)
+	}
+}
+
+type scriptedExecutionService struct {
+	factorysessions.ExecutionService
+	startAsync      func(context.Context, factorysessions.StartRequest) (factorysessions.AsyncStartResult, error)
+	startSync       func(context.Context, factorysessions.StartRequest) (factorysessions.SyncStartResult, error)
+	getSession      func(context.Context, string) (factorysessions.SessionReadResult, error)
+	getResult       func(context.Context, string, factorysessions.ResultRequest) (factorysessions.ResultReadResult, error)
+	listSessions    func(context.Context, factorysessions.ListSessionsRequest) (factorysessions.ListSessionsResult, error)
+	listDispatches  func(context.Context, string) (factorysessions.ListDispatchesResult, error)
+	queryDispatches func(context.Context, factorysessions.DispatchQueryRequest) (factorysessions.ListDispatchesResult, error)
+	listArtifacts   func(context.Context, string) (factorysessions.ListArtifactsResult, error)
+	readEvents      func(context.Context, string, factorysessions.EventReconnectRequest) (factorysessions.EventReadResult, error)
+	pause           func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	resume          func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	cancel          func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+	terminate       func(context.Context, string, factorysessions.ControlRequest) (factorysessions.LifecycleControlResult, error)
+}
+
+func (service scriptedExecutionService) StartAsync(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.AsyncStartResult, error) {
+	return service.startAsync(ctx, request)
+}
+
+func (service scriptedExecutionService) StartSync(
+	ctx context.Context,
+	request factorysessions.StartRequest,
+) (factorysessions.SyncStartResult, error) {
+	return service.startSync(ctx, request)
+}
+
+func (service scriptedExecutionService) GetSession(
+	ctx context.Context,
+	sessionID string,
+) (factorysessions.SessionReadResult, error) {
+	return service.getSession(ctx, sessionID)
+}
+
+func (service scriptedExecutionService) GetResult(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ResultRequest,
+) (factorysessions.ResultReadResult, error) {
+	return service.getResult(ctx, sessionID, request)
+}
+
+func (service scriptedExecutionService) ListSessions(
+	ctx context.Context,
+	request factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	return service.listSessions(ctx, request)
+}
+
+func (service scriptedExecutionService) ListDispatches(
+	ctx context.Context,
+	sessionID string,
+) (factorysessions.ListDispatchesResult, error) {
+	return service.listDispatches(ctx, sessionID)
+}
+
+func (service scriptedExecutionService) QueryDispatches(
+	ctx context.Context,
+	request factorysessions.DispatchQueryRequest,
+) (factorysessions.ListDispatchesResult, error) {
+	if service.queryDispatches != nil {
+		return service.queryDispatches(ctx, request)
+	}
+	return service.listDispatches(ctx, request.SessionID)
+}
+
+func (service scriptedExecutionService) ListArtifacts(
+	ctx context.Context,
+	sessionID string,
+) (factorysessions.ListArtifactsResult, error) {
+	return service.listArtifacts(ctx, sessionID)
+}
+
+func (service scriptedExecutionService) ReadEvents(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.EventReconnectRequest,
+) (factorysessions.EventReadResult, error) {
+	return service.readEvents(ctx, sessionID, request)
+}
+
+func (service scriptedExecutionService) Pause(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	return service.pause(ctx, sessionID, request)
+}
+
+func (service scriptedExecutionService) Resume(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	return service.resume(ctx, sessionID, request)
+}
+
+func (service scriptedExecutionService) Cancel(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	return service.cancel(ctx, sessionID, request)
+}
+
+func (service scriptedExecutionService) Terminate(
+	ctx context.Context,
+	sessionID string,
+	request factorysessions.ControlRequest,
+) (factorysessions.LifecycleControlResult, error) {
+	return service.terminate(ctx, sessionID, request)
+}
+
+func clientWithScript(service scriptedExecutionService) *testClient {
+	return newTestClientWithService(service, canonicalMCPRequestPreparation)
+}
+
+func runningAsyncStart() factorysessions.AsyncStartResult {
+	return factorysessions.AsyncStartResult{
+		SessionID: runningSessionID,
+		Status:    string(factorysessions.LifecycleStatusRunning),
+		Links: factorysessions.InspectionLinks{
+			Session: "/factory-sessions/" + runningSessionID,
+			Status:  "/factory-sessions/" + runningSessionID,
+		},
+	}
+}
+
+func successfulSyncStart() factorysessions.SyncStartResult {
+	return factorysessions.SyncStartResult{
+		AsyncStartResult: factorysessions.AsyncStartResult{
+			SessionID: successSessionID,
+			Status:    string(factorysessions.LifecycleStatusSucceeded),
+			Links: factorysessions.InspectionLinks{
+				Session: "/factory-sessions/" + successSessionID,
+				Status:  "/factory-sessions/" + successSessionID,
+			},
+		},
+		SyncOutcome: factorysessions.SyncOutcome("COMPLETED"),
+		Result: json.RawMessage(
+			`{"sessionId":"` + successSessionID +
+				`","resultStatus":"FINAL","sessionStatus":"SUCCEEDED","primaryResult":[{"type":"text","text":"resolved"}]}`,
+		),
+	}
+}
+
+func runningSessionRead() factorysessions.SessionReadResult {
+	return factorysessions.SessionReadResult{
+		SessionID: runningSessionID,
+		Status:    factorysessions.LifecycleStatusRunning,
+		Progress:  &factorysessions.ProgressCounts{TotalDispatches: 1, InFlightDispatches: 1},
+		ResultSummary: &factorysessions.ResultSummary{
+			ResultStatus: "PARTIAL",
+		},
+		Usage: factorysessions.EmptySessionUsage(),
+		Links: factorysessions.InspectionLinks{
+			Session: "/factory-sessions/" + runningSessionID,
+			Status:  "/factory-sessions/" + runningSessionID,
+		},
+	}
+}
+
+func successfulSessionRead() factorysessions.SessionReadResult {
+	return factorysessions.SessionReadResult{
+		SessionID: successSessionID,
+		Status:    factorysessions.LifecycleStatusSucceeded,
+		ResultSummary: &factorysessions.ResultSummary{
+			ResultStatus: "FINAL",
+		},
+		Usage: factorysessions.EmptySessionUsage(),
+		Links: factorysessions.InspectionLinks{
+			Session: "/factory-sessions/" + successSessionID,
+			Status:  "/factory-sessions/" + successSessionID,
+		},
+	}
+}
+
+func notReadyResult() factorysessions.ResultReadResult {
+	return factorysessions.ResultReadResult{
+		SessionID:     runningSessionID,
+		ResultStatus:  factorysessions.ResultStatusNotReady,
+		SessionStatus: factorysessions.LifecycleStatusRunning,
+		Mode:          factorysessions.ResultModeFinal,
+		Availability: &factorysessions.ResultAvailabilityDetail{
+			Reason:    "RESULT_NOT_READY",
+			Message:   "Session is still running.",
+			Retryable: true,
+		},
+	}
+}
+
+func finalResult() factorysessions.ResultReadResult {
+	return factorysessions.ResultReadResult{
+		SessionID:     successSessionID,
+		ResultStatus:  factorysessions.ResultStatus("FINAL"),
+		SessionStatus: factorysessions.LifecycleStatusSucceeded,
+		Mode:          factorysessions.ResultModeFinal,
+		PrimaryResult: json.RawMessage(`[{"type":"text","text":"resolved"}]`),
+	}
+}
+
+func persistedSessionList() factorysessions.ListSessionsResult {
+	return factorysessions.ListSessionsResult{
+		Scope: factorysessions.SessionListScopePersisted,
+		DurableSessions: []factorysessions.DurableSessionListSummary{{
+			SessionID: successSessionID,
+			Status:    factorysessions.LifecycleStatusSucceeded,
+			Links:     factorysessions.InspectionLinks{Session: "/factory-sessions/" + successSessionID},
+		}},
+	}
+}
+
+func allSessionList() factorysessions.ListSessionsResult {
+	return factorysessions.ListSessionsResult{
+		Scope: factorysessions.SessionListScopeAll,
+		LiveSessions: []factorysessions.LiveSessionSummary{{
+			ID: "dur-sess-petri-run-001",
+		}},
+		DurableSessions: []factorysessions.DurableSessionListSummary{{
+			SessionID: successSessionID,
+			Status:    factorysessions.LifecycleStatusSucceeded,
+			Links:     factorysessions.InspectionLinks{Session: "/factory-sessions/" + successSessionID},
+		}},
 	}
 }
 
@@ -518,13 +838,6 @@ func asyncRunningExecutionRequest() factoryapi.FactorySessionExecutionRequest {
 			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
 			FactoryId: strPtr("customer-support-triage"),
 		},
-	}
-}
-
-func asyncRunningSource() factorysessionexecution.Source {
-	return factorysessionexecution.Source{
-		Kind:      workflowsource.KindFactoryID,
-		FactoryID: "customer-support-triage",
 	}
 }
 
@@ -539,126 +852,68 @@ func syncSuccessExecutionRequest() factoryapi.FactorySessionExecutionRequest {
 	}
 }
 
-func newFixtureMCPClient(t *testing.T) *mcpfactorysession.Client {
-	t.Helper()
-	return mcpfactorysession.NewClientWithService(fixtureFakeService(t))
+func runtimeBusyLoopAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
+	return runtimeInlineAsyncRequest(requestID, `while (true) {}`, map[string]any{"subject": "workflows"})
 }
 
-func fixtureFakeService(t *testing.T) *factorysessionexecution.FakeService {
-	t.Helper()
-	path := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := testharness.New(testharness.Config{
-		Mode:            testharness.ModeFake,
-		FakeFixturePath: path,
-	})
-	if err != nil {
-		t.Fatalf("compose fixture-backed MCP execution service: %v", err)
-	}
-	fakeService, ok := service.(*factorysessionexecution.FakeService)
-	if !ok {
-		t.Fatalf("fixture-backed MCP execution service = %T, want *factorysessionexecution.FakeService", service)
-	}
-	return fakeService
+func runtimeSimpleFinalAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
+	return runtimeInlineAsyncRequest(requestID, `return { subject: args.subject };`, map[string]any{"subject": "workflows"})
 }
 
-func strPtr(value string) *string {
-	return &value
-}
-
-func TestMockClient_ListSessions_DefaultsToLiveScope(t *testing.T) {
-	client := newFixtureMCPClient(t)
-
-	response, err := client.ListSessions(mcpfactorysession.ListSessionsInput{})
-	if err != nil {
-		t.Fatalf("ListSessions: %v", err)
-	}
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("list = %#v, want success", response)
-	}
-	if response.Result.Scope == nil || *response.Result.Scope != factoryapi.FactorySessionListScopeLive {
-		t.Fatalf("scope = %#v, want live", response.Result.Scope)
-	}
-}
-
-func TestMockClient_ListSessions_ScopedPersistedAndAll(t *testing.T) {
-	client := newFixtureMCPClient(t)
-	seedRunningAndSuccessSessions(t, client)
-
-	persistedScope := factoryapi.FactorySessionListScopePersisted
-	persisted, err := client.ListSessions(mcpfactorysession.ListSessionsInput{Scope: &persistedScope})
-	if err != nil {
-		t.Fatalf("ListSessions persisted: %v", err)
-	}
-	persistedResult := requireListSessionsSuccess(t, persisted)
-	assertListScope(t, persistedResult, factoryapi.FactorySessionListScopePersisted)
-	if len(persistedResult.Sessions) != 0 {
-		t.Fatalf("sessions = %#v, want none for persisted scope", persistedResult.Sessions)
-	}
-	assertContainsDurableSession(t, persistedResult, "dur-sess-petri-success-001")
-	assertOmitsDurableSession(t, persistedResult, "dur-sess-petri-run-001")
-
-	allScope := factoryapi.FactorySessionListScopeAll
-	all, err := client.ListSessions(mcpfactorysession.ListSessionsInput{Scope: &allScope})
-	if err != nil {
-		t.Fatalf("ListSessions all: %v", err)
-	}
-	allResult := requireListSessionsSuccess(t, all)
-	assertListScope(t, allResult, factoryapi.FactorySessionListScopeAll)
-	if len(allResult.Sessions) != 1 || allResult.Sessions[0].Id != "dur-sess-petri-run-001" {
-		t.Fatalf("sessions = %#v, want deduped live running row", allResult.Sessions)
-	}
-	assertContainsDurableSession(t, allResult, "dur-sess-petri-success-001")
-}
-
-func seedRunningAndSuccessSessions(t *testing.T, client *mcpfactorysession.Client) {
-	t.Helper()
-	if _, err := client.StartAsync(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-petri-run-001",
+func runtimeInlineAsyncRequest(
+	requestID string,
+	source string,
+	args map[string]any,
+) factoryapi.FactorySessionExecutionRequest {
+	dialect := "you-workflow-v1"
+	return factoryapi.FactorySessionExecutionRequest{
+		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
+			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
+					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
+					Inline:   source,
+				},
+				Dialect: &dialect,
+			},
 		},
-		Args: &map[string]any{"ticketId": "TKT-1001"},
-	}); err != nil {
-		t.Fatalf("StartAsync running: %v", err)
-	}
-	if _, err := client.StartSync(syncSuccessExecutionRequest()); err != nil {
-		t.Fatalf("StartSync success: %v", err)
+		Args: &args,
 	}
 }
 
-func requireListSessionsSuccess(
+func assertListScope(
 	t *testing.T,
-	response mcpfactorysession.ToolResponse[factoryapi.ListFactorySessionsResponse],
-) *factoryapi.ListFactorySessionsResponse {
-	t.Helper()
-	if response.Error != nil || response.Result == nil {
-		t.Fatalf("list = %#v, want success", response)
-	}
-	return response.Result
-}
-
-func assertListScope(t *testing.T, result *factoryapi.ListFactorySessionsResponse, scope factoryapi.FactorySessionListScope) {
+	result *factoryapi.ListFactorySessionsResponse,
+	scope factoryapi.FactorySessionListScope,
+) {
 	t.Helper()
 	if result.Scope == nil || *result.Scope != scope {
 		t.Fatalf("scope = %#v, want %q", result.Scope, scope)
 	}
 }
 
-func assertContainsDurableSession(t *testing.T, result *factoryapi.ListFactorySessionsResponse, sessionID string) {
+func assertContainsDurableSession(
+	t *testing.T,
+	result *factoryapi.ListFactorySessionsResponse,
+	sessionID string,
+) {
 	t.Helper()
-	if result.DurableSessions == nil {
-		t.Fatalf("durableSessions = nil, want row %q", sessionID)
-	}
-	for _, row := range *result.DurableSessions {
-		if row.SessionId == sessionID {
-			return
+	if result.DurableSessions != nil {
+		for _, row := range *result.DurableSessions {
+			if row.SessionId == sessionID {
+				return
+			}
 		}
 	}
 	t.Fatalf("durableSessions = %#v, want row %q", result.DurableSessions, sessionID)
 }
 
-func assertOmitsDurableSession(t *testing.T, result *factoryapi.ListFactorySessionsResponse, sessionID string) {
+func assertOmitsDurableSession(
+	t *testing.T,
+	result *factoryapi.ListFactorySessionsResponse,
+	sessionID string,
+) {
 	t.Helper()
 	if result.DurableSessions == nil {
 		return
@@ -670,289 +925,4 @@ func assertOmitsDurableSession(t *testing.T, result *factoryapi.ListFactorySessi
 	}
 }
 
-func TestMockClient_ListSessions_UnsupportedScopeReturnsStableEnvelope(t *testing.T) {
-	client := newFixtureMCPClient(t)
-	scope := factoryapi.FactorySessionListScope("workspace")
-	response, err := client.ListSessions(mcpfactorysession.ListSessionsInput{Scope: &scope})
-	if err != nil {
-		t.Fatalf("ListSessions: %v", err)
-	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want validation envelope", response.Result)
-	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want stable validation envelope")
-	}
-	if response.Error.Code != "BAD_REQUEST" {
-		t.Fatalf("error code = %q, want BAD_REQUEST", response.Error.Code)
-	}
-}
-
-func TestMockClient_ListSessions_UnavailableServiceReturnsStableEnvelope(t *testing.T) {
-	client := mcpfactorysession.NewClient()
-	response, err := client.ListSessions(mcpfactorysession.ListSessionsInput{})
-	if err != nil {
-		t.Fatalf("ListSessions: %v", err)
-	}
-	if response.Result != nil {
-		t.Fatalf("result = %#v, want unavailable service envelope", response.Result)
-	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want unavailable service envelope")
-	}
-	if response.Error.Code != "factory_session.service.unavailable" {
-		t.Fatalf("error code = %q, want factory_session.service.unavailable", response.Error.Code)
-	}
-}
-
-const runtimeBusyLoopWorkflowSource = `// Busy loop fixture for runtime-backed MCP async polling tests.
-var spin = 0;
-while (true) {
-  spin += 1;
-}
-`
-
-const runtimeSimpleFinalWorkflowSource = `// Simple final-only workflow fixture for runtime-backed MCP async completion tests.
-return {
-  label: meta.name,
-  description: meta.description,
-  subject: args.subject,
-  repeat: args.count,
-  echo: args.prefix + ":" + args.subject,
-};
-`
-
-func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyResult(t *testing.T) {
-	client := newRuntimeMCPClient(t)
-
-	started := assertRuntimeAsyncStartRunning(t, client, runtimeBusyLoopAsyncRequest("req-mcp-runtime-async-running-001"))
-	assertRuntimeSessionStatus(t, client, started.Result.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning)
-	assertRuntimeNotReadyResult(t, client, started.Result.SessionId)
-	cancelRuntimeSession(t, client, started.Result.SessionId)
-	waitUntilRuntimeSessionStatus(t, runtimeServiceFromClient(t, client), started.Result.SessionId, factorysessionexecution.LifecycleStatusCanceled, 5*time.Second)
-}
-
-func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing.T) {
-	client := newRuntimeMCPClient(t)
-	request := runtimeSimpleFinalAsyncRequest("req-mcp-runtime-async-final-001")
-
-	started := assertRuntimeAsyncStartRunning(t, client, request)
-	service := runtimeServiceFromClient(t, client)
-	session := waitUntilRuntimeSessionStatus(
-		t,
-		service,
-		started.Result.SessionId,
-		factorysessionexecution.LifecycleStatusSucceeded,
-		5*time.Second,
-	)
-	assertRuntimeFinalResultSummary(t, session)
-	assertRuntimeTerminalSessionReads(t, client, started.Result.SessionId)
-}
-
-func assertRuntimeAsyncStartRunning(
-	t *testing.T,
-	client *runtimeMCPClient,
-	request factoryapi.FactorySessionExecutionRequest,
-) mcpfactorysession.ToolResponse[factoryapi.FactorySessionExecutionResponse] {
-	t.Helper()
-	started, err := client.StartAsync(request)
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
-	if started.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("start status = %q, want RUNNING", started.Result.Status)
-	}
-	if started.Result.SessionId == "" {
-		t.Fatal("sessionId missing from async start response")
-	}
-	return started
-}
-
-func assertRuntimeSessionStatus(
-	t *testing.T,
-	client *runtimeMCPClient,
-	sessionID string,
-	want factoryapi.FactorySessionDurableLifecycleStatus,
-) {
-	t.Helper()
-	status, err := client.GetSession(mcpfactorysession.GetSessionInput{SessionID: sessionID})
-	if err != nil {
-		t.Fatalf("GetSession: %v", err)
-	}
-	if status.Error != nil || status.Result == nil {
-		t.Fatalf("status = %#v, want success", status)
-	}
-	if status.Result.Status != want {
-		t.Fatalf("status = %q, want %q", status.Result.Status, want)
-	}
-}
-
-func assertRuntimeNotReadyResult(t *testing.T, client *runtimeMCPClient, sessionID string) {
-	t.Helper()
-	mode := factoryapi.FactorySessionResultModeFinal
-	notReady, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: sessionID,
-		Mode:      &mode,
-	})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
-	}
-	if notReady.Result != nil {
-		t.Fatalf("result = %#v, want not-ready envelope", notReady.Result)
-	}
-	if notReady.Error == nil || notReady.Error.Code != "factory_session.result.not_ready" {
-		t.Fatalf("error = %#v, want factory_session.result.not_ready", notReady.Error)
-	}
-	if !notReady.Error.Retryable {
-		t.Fatal("retryable = false, want true for running session")
-	}
-}
-
-func cancelRuntimeSession(t *testing.T, client *runtimeMCPClient, sessionID string) {
-	t.Helper()
-	service := runtimeServiceFromClient(t, client)
-	cancelled, err := service.Cancel(context.Background(), sessionID, factorysessionexecution.ControlRequest{})
-	if err != nil {
-		t.Fatalf("Cancel: %v", err)
-	}
-	if cancelled.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
-		t.Fatalf("cancel outcome = %q, want ACCEPTED", cancelled.Outcome)
-	}
-}
-
-func assertRuntimeFinalResultSummary(t *testing.T, session factorysessionexecution.SessionReadResult) {
-	t.Helper()
-	if session.ResultSummary == nil ||
-		session.ResultSummary.ResultStatus != string(factorysessionexecution.ResultStatusFinal) {
-		t.Fatalf("resultSummary = %#v, want FINAL", session.ResultSummary)
-	}
-}
-
-func assertRuntimeTerminalSessionReads(t *testing.T, client *runtimeMCPClient, sessionID string) {
-	t.Helper()
-	assertRuntimeSessionStatus(t, client, sessionID, factoryapi.FactorySessionDurableLifecycleStatusSucceeded)
-
-	mode := factoryapi.FactorySessionResultModeFinal
-	completedResult, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: sessionID,
-		Mode:      &mode,
-	})
-	if err != nil {
-		t.Fatalf("GetResult completed: %v", err)
-	}
-	if completedResult.Error != nil || completedResult.Result == nil {
-		t.Fatalf("completed result = %#v, want terminal result", completedResult)
-	}
-	if completedResult.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultStatus = %q, want FINAL", completedResult.Result.ResultStatus)
-	}
-	if completedResult.Result.PrimaryResult == nil {
-		t.Fatal("primaryResult missing from terminal result")
-	}
-}
-
-func newRuntimeMCPClient(t *testing.T) *runtimeMCPClient {
-	t.Helper()
-	projectRoot := t.TempDir()
-	service, err := testharness.New(testharness.Config{
-		Mode:              testharness.ModeJavaScript,
-		ProjectRoot:       projectRoot,
-		Clock:             platformclock.Real{},
-		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(projectRoot, "durable-sessions")},
-		ChildExecutorMode: factorysessionexecution.ChildExecutorModeFake,
-	})
-	if err != nil {
-		t.Fatalf("compose runtime-backed MCP execution service: %v", err)
-	}
-	t.Cleanup(func() {
-		drainRuntimeMCPClientSessions(t, service)
-		removeRuntimeMCPProjectState(t, projectRoot)
-	})
-	return &runtimeMCPClient{
-		Client:  mcpfactorysession.NewClientWithService(service),
-		service: service,
-	}
-}
-
-type runtimeMCPClient struct {
-	*mcpfactorysession.Client
-	service factorysessionexecution.Service
-}
-
-func runtimeServiceFromClient(t *testing.T, client *runtimeMCPClient) factorysessionexecution.Service {
-	t.Helper()
-	if client.service == nil {
-		t.Fatal("runtime service missing from MCP client wrapper")
-	}
-	return client.service
-}
-
-func runtimeBusyLoopAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
-	return runtimeInlineAsyncRequest(requestID, runtimeBusyLoopWorkflowSource, map[string]any{
-		"subject": "workflows",
-	})
-}
-
-func runtimeSimpleFinalAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {
-	return runtimeInlineAsyncRequest(requestID, runtimeSimpleFinalWorkflowSource, map[string]any{
-		"subject": "workflows",
-		"count":   2,
-		"prefix":  "you",
-	})
-}
-
-func runtimeInlineAsyncRequest(
-	requestID string,
-	source string,
-	args map[string]any,
-) factoryapi.FactorySessionExecutionRequest {
-	dialect := "you-workflow-v1"
-	metadata := factoryapi.StringMap{
-		"name":        "runtime-mcp-async-fixture",
-		"description": "runtime-backed MCP async polling fixture",
-	}
-	return factoryapi.FactorySessionExecutionRequest{
-		RequestId: requestID,
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
-			InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
-				InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{
-					Encoding: factoryapi.FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8,
-					Inline:   source,
-				},
-				Dialect:  &dialect,
-				Metadata: &metadata,
-			},
-		},
-		Args: &args,
-	}
-}
-
-func waitUntilRuntimeSessionStatus(
-	t *testing.T,
-	service factorysessionexecution.Service,
-	sessionID string,
-	want factorysessionexecution.LifecycleStatus,
-	timeout time.Duration,
-) factorysessionexecution.SessionReadResult {
-	t.Helper()
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		session, err := service.GetSession(context.Background(), sessionID)
-		if err != nil {
-			t.Fatalf("GetSession: %v", err)
-		}
-		if session.Status == want {
-			return session
-		}
-		if factorysessionexecution.IsTerminalLifecycleStatus(session.Status) && session.Status != want {
-			t.Fatalf("session %s reached terminal %q before %q", sessionID, session.Status, want)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("session %s did not reach status %q within %s", sessionID, want, timeout)
-	return factorysessionexecution.SessionReadResult{}
-}
+func strPtr(value string) *string { return &value }

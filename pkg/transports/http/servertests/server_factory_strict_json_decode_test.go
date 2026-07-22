@@ -2,14 +2,15 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type factoryStrictJSONDecodeCase struct {
@@ -21,10 +22,25 @@ type factoryStrictJSONDecodeCase struct {
 	wantTargets bool
 }
 
+type apiOpenFactorySessionScript struct {
+	apisurface.LiveSessionAPI
+	open func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
+}
+
+func (script apiOpenFactorySessionScript) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	if script.open == nil {
+		panic("unexpected LiveSessionAPI.OpenFactorySession call")
+	}
+	return script.open(ctx, request)
+}
+
 func TestFactoryStrictJSONDecode_ValidateFactory(t *testing.T) {
 	t.Parallel()
 
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServerWithValidator(
+		nil,
+		programmableFactoryValidator{},
+	)
 	cases := []factoryStrictJSONDecodeCase{
 		{
 			name:        "valid",
@@ -90,7 +106,11 @@ func TestFactoryStrictJSONDecode_ValidateFactory(t *testing.T) {
 func TestFactoryStrictJSONDecode_OpenFactorySession(t *testing.T) {
 	t.Parallel()
 
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(apiOpenFactorySessionScript{
+		open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+			return factoryapi.OpenFactorySessionResponse{}, nil
+		},
+	})
 	cases := []factoryStrictJSONDecodeCase{
 		{
 			name:       "valid",
@@ -150,7 +170,11 @@ func TestFactoryStrictJSONDecode_OpenFactorySession(t *testing.T) {
 func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionId(t *testing.T) {
 	t.Parallel()
 
-	srv := newAPITestServer(&testutil.MockFactory{})
+	srv := newAPITestServer(apiFactorySaveScript{
+		save: func(_ context.Context, _ string, _ factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
+			return request, nil
+		},
+	})
 	cases := []factoryStrictJSONDecodeCase{
 		{
 			name:       "valid",
@@ -214,15 +238,17 @@ func TestFactoryStrictJSONDecode_SaveCurrentFactoryBySessionId(t *testing.T) {
 func TestFactoryStrictJSONDecode_PromptTemplateValidation(t *testing.T) {
 	t.Parallel()
 
-	srv := newAPITestServer(&testutil.MockFactory{
-		CurrentFactory: &factoryapi.Factory{
-			Name: "beta",
-			Workstations: &[]factoryapi.Workstation{{
-				Name:    "Review",
-				Worker:  "reviewer",
-				Inputs:  []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
-				Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}},
-			}},
+	srv := newAPITestServer(apiFactorySaveScript{
+		get: func(context.Context, string) (factoryapi.Factory, error) {
+			return factoryapi.Factory{
+				Name: "beta",
+				Workstations: &[]factoryapi.Workstation{{
+					Name:    "Review",
+					Worker:  "reviewer",
+					Inputs:  []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}},
+					Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}},
+				}},
+			}, nil
 		},
 	})
 	cases := []factoryStrictJSONDecodeCase{
@@ -318,6 +344,6 @@ func assertFactoryDecodeJSONError(
 		if response.Targets == nil || len(*response.Targets) != 1 {
 			t.Fatalf("targets = %#v, want one form factory payload target", response.Targets)
 		}
-		assertHasValidationTargetCode(t, *response.Targets, factoryvalidation.CodeFactoryPayloadInvalid)
+		assertHasValidationTargetCode(t, *response.Targets, factorydefinitions.ValidationCodeFactoryPayloadInvalid)
 	}
 }

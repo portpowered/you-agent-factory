@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// ErrInvalidNamedFactoryName retains the public compatibility identity while
-// canonical named-factory validation remains owned by config.
-var ErrInvalidNamedFactoryName = factoryconfig.ErrInvalidNamedFactoryName
+// ErrInvalidNamedFactoryName retains the public compatibility identity of the
+// Factory Definitions contract.
+var ErrInvalidNamedFactoryName = interfaces.ErrInvalidNamedFactoryName
 
 // ErrFactoryResponseEventStreamExpired reports that the completed session's
 // ephemeral response-event retention window elapsed before subscription.
@@ -67,17 +66,4 @@ func FactoryEventsToAPI(events []interfaces.FactoryEvent) ([]factoryapi.FactoryE
 		mapped[index] = converted
 	}
 	return mapped, nil
-}
-
-// ValidateWritableNamedFactoryName enforces the public named-factory contract
-// for create/import paths. The reserved default-current identifier is valid for
-// readback only and must never be persisted as a customer-named factory.
-func ValidateWritableNamedFactoryName(name factoryapi.FactoryName) error {
-	if err := factoryconfig.ValidateNamedFactoryName(string(name)); err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidNamedFactoryName, err)
-	}
-	if name == DefaultCurrentFactoryName {
-		return fmt.Errorf("%w: %q is reserved for current-factory readback", ErrInvalidNamedFactoryName, name)
-	}
-	return nil
 }

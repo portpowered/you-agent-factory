@@ -2,17 +2,49 @@ package acceptance
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
+
+type configInitOutcome struct {
+	HomeDir             string                             `json:"homeDir"`
+	ConfigPath          string                             `json:"configPath"`
+	SystemConfigOutcome string                             `json:"systemConfigOutcome"`
+	PackagedFactories   []configInitPackagedFactoryOutcome `json:"packagedFactories"`
+}
+
+type configInitPackagedFactoryOutcome struct {
+	Name       string `json:"name"`
+	FactoryDir string `json:"factoryDirectory"`
+}
+
+func initializeConfig(t testing.TB, ctx context.Context, session *builtcliacceptance.Session, scenario string) (builtcliacceptance.RunResult, configInitOutcome) {
+	t.Helper()
+
+	result, err := session.Run(ctx, "config", "init", "--json")
+	session.RequireSuccess(t, scenario, result, err)
+
+	var outcome configInitOutcome
+	if err := json.Unmarshal([]byte(result.Stdout), &outcome); err != nil {
+		t.Fatalf("%s: decode config init JSON: %v\nstdout:\n%s", scenario, err, result.Stdout)
+	}
+	if strings.TrimSpace(outcome.ConfigPath) == "" {
+		t.Fatalf("%s: config init JSON has empty configPath: %s", scenario, result.Stdout)
+	}
+	if outcome.HomeDir != session.HomeDir {
+		t.Fatalf("%s: config init homeDir = %q, want isolated session home %q", scenario, outcome.HomeDir, session.HomeDir)
+	}
+	return result, outcome
+}
 
 func TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.T) {
 	t.Parallel()
@@ -30,14 +62,11 @@ func TestBuiltCLIHarness_IsolatesHomeAndLogDirectoriesAcrossSessions(t *testing.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	firstResult, err := first.Run(ctx, "config", "init")
-	first.RequireSuccess(t, "first-config-init", firstResult, err)
+	firstResult, firstInit := initializeConfig(t, ctx, first, "first-config-init")
+	_, secondInit := initializeConfig(t, ctx, second, "second-config-init")
 
-	secondResult, err := second.Run(ctx, "config", "init")
-	second.RequireSuccess(t, "second-config-init", secondResult, err)
-
-	firstConfig := defaultpaths.OperatorConfigPath(first.HomeDir)
-	secondConfig := defaultpaths.OperatorConfigPath(second.HomeDir)
+	firstConfig := firstInit.ConfigPath
+	secondConfig := secondInit.ConfigPath
 	if firstConfig == secondConfig {
 		t.Fatalf("operator config paths collided: %q", firstConfig)
 	}

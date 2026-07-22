@@ -5,9 +5,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	modelprovider "github.com/portpowered/infinite-you/pkg/services/models"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -41,7 +42,7 @@ stopToken: COMPLETE
 Process the input task.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte(
+		platformprocess.CommandResult{Stdout: []byte(
 			`{"type":"stream_event","session_id":"session-worktree","event":{"type":"message_start","message":{"id":"msg-worktree","role":"assistant","content":[]}}}` + "\n" +
 				`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}` + "\n" +
 				`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done. COMPLETE"}}}` + "\n" +
@@ -52,18 +53,10 @@ Process the input task.
 		)},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProviderCommandRunner(runner),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+	session := support.RunFactoryToCompletionWithEdges(t, dir, serviceedges.Edges{
+		ProviderCommandRunner: runner,
+	}, 15*time.Second)
+	assertCursorProviderCompleted(t, session)
 
 	// Verify the subprocess runner was called exactly once and the real
 	// ScriptWrapProvider built the expected Claude CLI command.
@@ -71,8 +64,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(modelprovider.Claude) {
-		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
+	if call.Command != string(modelprovider.ProviderClaude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.ProviderClaude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})

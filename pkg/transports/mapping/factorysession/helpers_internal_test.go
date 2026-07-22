@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -195,7 +195,7 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 		t.Fatal("dispatchStatusTransitionsToAPI(nil) should be nil")
 	}
 	transitions := dispatchStatusTransitionsToAPI([]factorysessionexecution.DispatchStatus{
-		factorysessionexecution.DispatchStatusQueued,
+		factorysessionexecution.DispatchStatus("QUEUED"),
 		" RUNNING ",
 		"",
 	})
@@ -281,7 +281,7 @@ func testResultResponseOptionalBranches(t *testing.T) {
 
 	result := ResultResponseToAPI(factorysessionexecution.ResultReadResult{
 		SessionID:        "dur-sess-1",
-		ResultStatus:     factorysessionexecution.ResultStatusFinal,
+		ResultStatus:     factorysessionexecution.ResultStatus("FINAL"),
 		SessionStatus:    factorysessionexecution.LifecycleStatusSucceeded,
 		Mode:             factorysessionexecution.ResultModePartial,
 		IncludeArtifacts: true,
@@ -315,7 +315,7 @@ func testDispatchResponseOptionalBranches(t *testing.T) {
 		SessionID: "dur-sess-1",
 		Dispatches: []factorysessionexecution.DispatchSummary{{
 			ID:           "disp-1",
-			Status:       factorysessionexecution.DispatchStatusFailed,
+			Status:       factorysessionexecution.DispatchStatus("FAILED"),
 			DispatchKind: "JAVASCRIPT_AGENT",
 			Phase:        " run ",
 			Label:        " task ",
@@ -348,7 +348,7 @@ func testDispatchResponseOptionalBranches(t *testing.T) {
 	detail := DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
 		DispatchSummary: factorysessionexecution.DispatchSummary{
 			ID:           "disp-1",
-			Status:       factorysessionexecution.DispatchStatusCompleted,
+			Status:       factorysessionexecution.DispatchStatus("COMPLETED"),
 			DispatchKind: "PETRI",
 			Usage:        &factorysessionexecution.DispatchUsage{TotalTokens: 9},
 		},

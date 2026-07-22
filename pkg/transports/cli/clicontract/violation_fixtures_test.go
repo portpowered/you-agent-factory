@@ -4,9 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
-	"github.com/spf13/cobra"
 )
 
 func TestDeliberateStructuralViolationFixturesReportStableIdentity(t *testing.T) {
@@ -37,8 +35,8 @@ func TestDeliberateStructuralViolationFixturesReportStableIdentity(t *testing.T)
 		{
 			name:        "compatibility alias promoted as canonical",
 			fixture:     aliasAsCanonicalFixture,
-			wantFinding: newFinding(KindAliasAsCanonical, "you.workflow.preview", "you workflow preview", "classification", "compatibility command is present in a canonical generated family"),
-			wantError:   `compatibility-alias-as-canonical: stable ID "you.workflow.preview" path "you workflow preview" field "classification": compatibility command is present in a canonical generated family`,
+			wantFinding: newFinding(KindAliasAsCanonical, "you.compatibility-preview", "you compatibility-preview", "classification", "compatibility command is present in a canonical generated family"),
+			wantError:   `compatibility-alias-as-canonical: stable ID "you.compatibility-preview" path "you compatibility-preview" field "classification": compatibility command is present in a canonical generated family`,
 		},
 	}
 
@@ -67,15 +65,11 @@ func TestDeliberateStructuralViolationFixturesReportStableIdentity(t *testing.T)
 func uncontractedCommandFixture(t *testing.T) Input {
 	t.Helper()
 	input := productionInput(t)
-	root := cli.NewRootCommand()
-	root.AddCommand(&cobra.Command{
-		Use:   "experimental",
-		Short: "Synthetic uncontracted command",
-		RunE: func(*cobra.Command, []string) error {
-			return nil
-		},
+	input.Production.Commands = append(input.Production.Commands, commandidentity.CommandRecord{
+		IDCandidate: "you.experimental", Name: "experimental", Path: "you experimental",
+		Short: "Synthetic uncontracted command", Visibility: "visible", Lifecycle: "active",
+		Runnable: true, HandlerPresent: true,
 	})
-	input.Production = walkFixtureTree(t, root)
 	return input
 }
 
@@ -93,35 +87,22 @@ func staleGeneratedMetadataFixture(t *testing.T) Input {
 func missingHandlerFixture(t *testing.T) Input {
 	t.Helper()
 	input := productionInput(t)
-	root := cli.NewRootCommand()
-	command, remaining, err := root.Find([]string{"run"})
-	if err != nil {
-		t.Fatalf("find run command: %v", err)
+	for index := range input.Production.Commands {
+		if input.Production.Commands[index].Path == "you run" {
+			input.Production.Commands[index].HandlerPresent = false
+			return input
+		}
 	}
-	if len(remaining) != 0 || command.CommandPath() != "you run" {
-		t.Fatalf("find run command = %q remaining %v", command.CommandPath(), remaining)
-	}
-	command.Run = nil
-	command.RunE = nil
-	input.Production = walkFixtureTree(t, root)
-	return input
+	t.Fatal("production inventory missing you run")
+	return Input{}
 }
 
 func aliasAsCanonicalFixture(t *testing.T) Input {
 	t.Helper()
 	input := productionInput(t)
 	manifest := cloneManifest(input.GeneratedCanonical[0])
-	compatibility := input.Compatibility.Commands["you.workflow.preview"]
+	compatibility := addSyntheticCompatibility(&input)
 	manifest.Commands[compatibility.ID] = compatibility
 	input.GeneratedCanonical[0] = manifest
 	return input
-}
-
-func walkFixtureTree(t *testing.T, root *cobra.Command) commandidentity.Inventory {
-	t.Helper()
-	inventory, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("walk fixture tree: %v", err)
-	}
-	return inventory
 }

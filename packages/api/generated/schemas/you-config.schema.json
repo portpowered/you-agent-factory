@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.portpowered.com/you/config/you-config.schema.json",
   "title": "You operator and system configuration",
-  "description": "The shared .you-agent-factory/config.json contract consumed by operatorconfig and systemconfig.",
+  "description": "The shared .you-agent-factory/config.json contract owned by the Operator Settings service.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "backendScopeID": {
       "type": "string",
-      "description": "Stable identifier for the local provider-backed runtime boundary owned by systemconfig.",
+      "description": "Stable identifier for the local provider-backed runtime boundary owned by operator_settings.",
       "examples": [
         "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
       ]
@@ -16,7 +16,7 @@
     "defaults": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Operator defaults parsed by operatorconfig from file before env/flag resolution.",
+      "description": "Operator defaults parsed by operator_settings from file before env/flag resolution.",
       "examples": [
         {
           "workerModelProvider": "claude",
@@ -157,10 +157,7 @@
       ],
       "properties": {
         "package": {
-          "enum": [
-            "operatorconfig",
-            "systemconfig"
-          ]
+          "const": "operator_settings"
         },
         "owns": {
           "type": "array",
@@ -200,8 +197,8 @@
         },
         "owners": {
           "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
+          "minItems": 1,
+          "maxItems": 1,
           "items": {
             "$ref": "#/$defs/fileOwner"
           }
@@ -217,10 +214,7 @@
       ],
       "properties": {
         "package": {
-          "enum": [
-            "operatorconfig",
-            "systemconfig"
-          ]
+          "const": "operator_settings"
         },
         "policy": {
           "type": "string",
@@ -269,16 +263,12 @@
           "minLength": 1
         },
         "parseOwner": {
-          "enum": [
-            "operatorconfig",
-            "systemconfig"
-          ]
+          "const": "operator_settings"
         },
         "persistenceOwner": {
           "enum": [
             "none",
-            "operatorconfig",
-            "systemconfig"
+            "operator_settings"
           ]
         },
         "strictness": {
@@ -300,17 +290,12 @@
       "resolvedBy": "defaultpaths.OperatorConfigPath(homeDir)"
     },
     "sharedFileSplit": {
-      "summary": "systemconfig owns backendScopeID load/generate/persist; operatorconfig owns defaults and workerPresets parse/resolve and tolerates sibling backendScopeID without claiming ownership",
+      "summary": "operator_settings owns backendScopeID identity, defaults, and workerPresets behavior; its focused loaders share one service-owned config file",
       "owners": [
         {
-          "package": "systemconfig",
+          "package": "operator_settings",
           "owns": [
-            "backendScopeID"
-          ]
-        },
-        {
-          "package": "operatorconfig",
-          "owns": [
+            "backendScopeID",
             "defaults",
             "defaults.workerModelProvider",
             "defaults.workerModel",
@@ -319,24 +304,18 @@
             "workerPresets[].modelProvider",
             "workerPresets[].model",
             "workerPresets[].reasoningEffort"
-          ],
-          "tolerates": [
-            "backendScopeID"
-          ],
-          "doesNotOwn": [
-            "backendScopeID"
           ]
         }
       ]
     },
     "unknownFieldPolicy": [
       {
-        "package": "operatorconfig",
-        "policy": "ParseFileConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
+        "package": "operator_settings",
+        "policy": "settings parsing uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
       },
       {
-        "package": "systemconfig",
-        "policy": "loadBackendScopeID unmarshals only backendScopeID and ignores other top-level keys on read; persistBackendScopeID rewrites the file through a raw-message map that preserves unrelated sibling keys"
+        "package": "operator_settings",
+        "policy": "identity loading reads only backendScopeID and ignores other top-level keys; identity persistence rewrites through a raw-message map that preserves unrelated sibling keys"
       }
     ],
     "siblingPreservation": "persistBackendScopeID preserves defaults, workerPresets, and unknown top-level sibling keys already present in the shared config file",
@@ -345,10 +324,10 @@
         "inventoryId": "backendScopeID",
         "jsonPath": "backendScopeID",
         "defaultEmptyBehavior": "missing, whitespace-only file, or empty value triggers EnsureLocalBackendScope to generate local-<uuid> and persist it",
-        "parseOwner": "systemconfig",
-        "persistenceOwner": "systemconfig",
-        "strictness": "systemconfig tolerant load (unknown top-level keys ignored on read; preserved on persist)",
-        "notes": "operatorconfig parse accepts sibling backendScopeID but does not return it on FileConfig",
+        "parseOwner": "operator_settings",
+        "persistenceOwner": "operator_settings",
+        "strictness": "operator_settings identity tolerant load (unknown top-level keys ignored on read; preserved on persist)",
+        "notes": "operator_settings owns identity persistence; its settings parser accepts backendScopeID as a service-owned sibling",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.backend-scope-id",
@@ -359,7 +338,7 @@
             },
             "description": {
               "id": "config.backend-scope-id.description",
-              "canonicalEnglish": "Stable identifier for the local provider-backed runtime boundary. Missing, whitespace-only, or empty values trigger EnsureLocalBackendScope to generate local-<uuid> and persist it through systemconfig."
+              "canonicalEnglish": "Stable identifier for the local provider-backed runtime boundary. Missing, whitespace-only, or empty values trigger EnsureLocalBackendScope to generate local-<uuid> and persist it through operator_settings."
             }
           },
           "examples": [
@@ -390,10 +369,10 @@
         "inventoryId": "defaults",
         "jsonPath": "defaults",
         "defaultEmptyBehavior": "missing defaults object yields empty operator defaults",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
-        "notes": "defaults object is not persisted by operatorconfig loaders; only parsed from file before env/flag resolution",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
+        "notes": "defaults object is not persisted by operator_settings loaders; only parsed from file before env/flag resolution",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults",
@@ -441,9 +420,9 @@
         "inventoryId": "defaults.workerModelProvider",
         "jsonPath": "defaults.workerModelProvider",
         "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "notes": "values are trimmed and canonicalized; unsupported providers fail resolve",
         "documentation": {
           "formatVersion": "1.0.0",
@@ -493,9 +472,9 @@
         "inventoryId": "defaults.workerModel",
         "jsonPath": "defaults.workerModel",
         "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults.worker-model",
@@ -543,9 +522,9 @@
         "inventoryId": "workerPresets",
         "jsonPath": "workerPresets",
         "defaultEmptyBehavior": "missing workerPresets array is backward compatible and yields an empty preset list",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "notes": "file-only (no env or flag layers)",
         "documentation": {
           "formatVersion": "1.0.0",
@@ -597,9 +576,9 @@
         "inventoryId": "workerPresets[].id",
         "jsonPath": "workerPresets[].id",
         "defaultEmptyBehavior": "required non-empty after trim; duplicate ids are rejected",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.id",
@@ -643,9 +622,9 @@
         "inventoryId": "workerPresets[].modelProvider",
         "jsonPath": "workerPresets[].modelProvider",
         "defaultEmptyBehavior": "required non-empty; canonicalized to supported providers; symbolic DEFAULT is rejected in presets",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.model-provider",
@@ -690,9 +669,9 @@
         "inventoryId": "workerPresets[].model",
         "jsonPath": "workerPresets[].model",
         "defaultEmptyBehavior": "optional; trimmed when present",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.model",
@@ -736,9 +715,9 @@
         "inventoryId": "workerPresets[].reasoningEffort",
         "jsonPath": "workerPresets[].reasoningEffort",
         "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
-        "parseOwner": "operatorconfig",
+        "parseOwner": "operator_settings",
         "persistenceOwner": "none",
-        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "strictness": "operator_settings strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.reasoning-effort",

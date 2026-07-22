@@ -1,12 +1,14 @@
 package factorysessionsse
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
@@ -44,45 +46,97 @@ func NewFactorySessionSSEFixture(t *testing.T) *FactorySessionSSEFixture {
 	return &FactorySessionSSEFixture{
 		SessionID: factorySessionSSEFixtureSessionID,
 		Retained:  retained,
-		domain:    testutil.FactoryEvents(t, retained),
+		domain:    factorySessionSSEEventsFromAPI(t, retained),
 		Live:      live,
 	}
 }
 
-// RootMockFactory wires the fixture into a session-scoped MockFactory root.
-func (f *FactorySessionSSEFixture) RootMockFactory() *testutil.MockFactory {
-	return &testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			f.SessionID: {
-				FactoryEventStream: &interfaces.FactoryEventStream{
-					StreamGenerationID:  factorySessionSSEFixtureStreamGenerationID,
-					BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
-					LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
-					FactorySessionID:    f.SessionID,
-					History:             append([]interfaces.FactoryEvent(nil), f.domain...),
-					Events:              f.Live,
-				},
-			},
+// WorkAPI returns the strict public service-root role used by the SSE handler.
+func (f *FactorySessionSSEFixture) WorkAPI() *programmedFactorySessionEvents {
+	service := newProgrammedFactorySessionEvents()
+	service.SetSession(f.SessionID, factorySessionEventProgram{
+		replay: factorySessionSSEReconnectScript,
+		stream: interfaces.FactoryEventStream{
+			StreamGenerationID:  factorySessionSSEFixtureStreamGenerationID,
+			BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
+			LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
+			FactorySessionID:    f.SessionID,
+			History:             append([]interfaces.FactoryEvent(nil), f.domain...),
+			Events:              f.Live,
 		},
-	}
+	})
+	return service
 }
 
 // ReplaceStreamGeneration keeps the logical and Factory Session identities but
 // installs a new stream generation with its own retained-history boundary.
-func (f *FactorySessionSSEFixture) ReplaceStreamGeneration(t *testing.T, root *testutil.MockFactory) []factoryapi.FactoryEvent {
+func (f *FactorySessionSSEFixture) ReplaceStreamGeneration(t *testing.T, service *programmedFactorySessionEvents) []factoryapi.FactoryEvent {
 	t.Helper()
 	replacement := factorySessionSSEFixtureReplacementRetainedEvents(t)
-	root.SessionFactories[f.SessionID] = &testutil.MockFactory{
-		FactoryEventStream: &interfaces.FactoryEventStream{
+	service.SetSession(f.SessionID, factorySessionEventProgram{
+		replay: factorySessionSSEReconnectScript,
+		stream: interfaces.FactoryEventStream{
 			StreamGenerationID:  factorySessionSSEFixtureNextGenerationID,
 			BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
 			LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
 			FactorySessionID:    f.SessionID,
-			History:             testutil.FactoryEvents(t, replacement),
+			History:             factorySessionSSEEventsFromAPI(t, replacement),
 			Events:              make(chan interfaces.FactoryEvent, 4),
 		},
-	}
+	})
 	return replacement
+}
+
+func factorySessionSSEEventsFromAPI(t *testing.T, events []factoryapi.FactoryEvent) []interfaces.FactoryEvent {
+	t.Helper()
+	converted := make([]interfaces.FactoryEvent, 0, len(events))
+	for index, event := range events {
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert fixture FactoryEvent[%d]: %v", index, err)
+		}
+		converted = append(converted, domainEvent)
+	}
+	return converted
+}
+
+func factorySessionSSEReconnectScript(
+	events []interfaces.FactoryEvent,
+	cursor interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) ([]interfaces.FactoryEvent, error) {
+	index := -1
+	if eventID := strings.TrimSpace(cursor.AfterEventID); eventID != "" {
+		for candidate := range events {
+			if events[candidate].Id == eventID {
+				index = candidate
+				break
+			}
+		}
+		if index < 0 {
+			return nil, fmt.Errorf("%w: after_event_id %q", apisurface.ErrInvalidEventReconnectCursor, eventID)
+		}
+	} else if cursor.AfterSequence != nil {
+		for candidate := len(events) - 1; candidate >= 0; candidate-- {
+			event := events[candidate]
+			if scope.SessionID != "" &&
+				(event.Context.SessionID == nil || strings.TrimSpace(*event.Context.SessionID) != strings.TrimSpace(scope.SessionID)) {
+				continue
+			}
+			sequence := event.Context.Sequence
+			if event.Context.SessionSequence != nil {
+				sequence = *event.Context.SessionSequence
+			}
+			if sequence == *cursor.AfterSequence {
+				index = candidate
+				break
+			}
+		}
+		if index < 0 {
+			return nil, fmt.Errorf("%w: after_sequence %d", apisurface.ErrInvalidEventReconnectCursor, *cursor.AfterSequence)
+		}
+	}
+	return append([]interfaces.FactoryEvent(nil), events[index+1:]...), nil
 }
 
 // PublishLive enqueues one live FactoryEvent on the fixture stream channel.

@@ -19,16 +19,8 @@ func TestMultiChannelFileWatcher_DefaultSubmission(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "default item"}`))
 
 	provider := testutil.NewMockProvider(support.AcceptedProviderResponse())
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		TokenCount(1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0})
 }
 
 func TestMultiChannelFileWatcher_ExecutionIDSubmission(t *testing.T) {
@@ -45,15 +37,8 @@ func TestMultiChannelFileWatcher_ExecutionIDSubmission(t *testing.T) {
 	}
 
 	provider := testutil.NewMockProvider(support.AcceptedProviderResponse())
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		TokenCount(1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1})
 }
 
 func TestMultiChannelFileWatcher_DynamicExecDir(t *testing.T) {
@@ -75,18 +60,6 @@ func TestMultiChannelFileWatcher_DynamicExecDir(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().TokenCount(2)
-
-	snap := h.Marking()
-	for _, tok := range snap.Tokens {
-		if tok.PlaceID != "task:complete" && tok.PlaceID != "task:failed" {
-			t.Errorf("token leak: token %s in non-terminal place %s", tok.ID, tok.PlaceID)
-		}
-	}
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 2, "task:init": 0, "task:processing": 0})
 }

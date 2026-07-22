@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -34,21 +36,13 @@ func TestDispatcherLifecycle_IdeaToArchive(t *testing.T) {
 		"archiver": {{Content: "success<COMPLETE>"}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
-
-	h.RunUntilComplete(t, 1000*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:archived").
-		HasNoTokenInPlace("idea:init").
-		HasNoTokenInPlace("idea:failed").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("prd:failed").
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:approved").
-		HasNoTokenInPlace("code-change:failed")
+	session, listedWork := support.RunFactoryToCompletionWithEdgesAndWork(t, dir, serviceedges.Edges{
+		ProviderOverride: provider,
+	}, 30*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:archived": 1, "idea:init": 0, "idea:failed": 0, "prd:init": 0,
+		"prd:failed": 0, "code-change:init": 0, "code-change:approved": 0, "code-change:failed": 0,
+	})
 
 	for _, workerType := range []string{"reviewer", "planner", "executor", "archiver"} {
 		if len(provider.Calls(workerType)) != 1 {
@@ -56,7 +50,7 @@ func TestDispatcherLifecycle_IdeaToArchive(t *testing.T) {
 		}
 	}
 
-	h.Assert().TokenHasTraceID("code-change:archived", originTraceID)
+	assertListedWorkStateTrace(t, listedWork, "code-change", "archived", originTraceID)
 }
 
 // TestDispatcherLifecycle_PlannerFailure verifies that when the planner fails,
@@ -70,15 +64,55 @@ func TestDispatcherLifecycle_PlannerFailure(t *testing.T) {
 		"planner": {{Content: "failed"}},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap())
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"idea:failed": 1, "prd:init": 0, "code-change:init": 0, "code-change:archived": 0,
+	})
+}
 
-	h.RunUntilComplete(t, 10*time.Second)
+func assertListedWorkStateTrace(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	workType, state, traceID string,
+) {
+	t.Helper()
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType || item.State == nil || item.State.Name != state {
+			continue
+		}
+		if item.TraceId == nil || *item.TraceId != traceID {
+			t.Errorf("%s:%s trace ID = %#v, want %q", workType, state, item.TraceId, traceID)
+		}
+		return
+	}
+	t.Errorf("listed Work missing %s:%s", workType, state)
+}
 
-	h.Assert().
-		HasTokenInPlace("idea:failed").
-		HasNoTokenInPlace("prd:init").
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:archived")
+func assertCompletedWorkTraces(
+	t *testing.T,
+	response factoryapi.ListWorkResponse,
+	workType, state string,
+	traceIDs []string,
+) {
+	t.Helper()
+	wants := make(map[string]bool, len(traceIDs))
+	for _, traceID := range traceIDs {
+		wants[traceID] = true
+	}
+	found := map[string]bool{}
+	for _, item := range response.Results {
+		if item.WorkTypeName == nil || *item.WorkTypeName != workType || item.State == nil || item.State.Name != state {
+			continue
+		}
+		if item.TraceId == nil || !wants[*item.TraceId] {
+			t.Errorf("unexpected %s:%s trace ID %#v", workType, state, item.TraceId)
+			continue
+		}
+		found[*item.TraceId] = true
+	}
+	for traceID := range wants {
+		if !found[traceID] {
+			t.Errorf("listed Work missing %s:%s trace %q", workType, state, traceID)
+		}
+	}
 }

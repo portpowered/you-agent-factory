@@ -107,11 +107,6 @@ Tool discovery exposes this primary catalog:
 | `you.factory_session.read_events` | Read ordered Factory Session events |
 | `you.factory_session.control` | Pause, resume, cancel, or terminate a Factory Session |
 
-Some hosts may also discover compatibility-only `you.workflow.*` aliases. Use
-the canonical names above in new prompts and automation. The aliases call the
-same Factory Session handlers and do not define a separate workflow-run
-resource.
-
 Source validation uses either the host working directory or an explicit
 `projectRoot`. After starting, preserve the caller-supplied `requestId`, the
 returned `sessionId`, and the last processed event id or session sequence.

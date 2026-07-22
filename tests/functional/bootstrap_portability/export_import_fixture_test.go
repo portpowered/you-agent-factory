@@ -3,16 +3,16 @@ package bootstrap_portability
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
+
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 const (
@@ -43,14 +43,14 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 
 	authoredFactoryDir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 
-	canonicalFactoryJSON, err := config.FlattenFactoryConfig(authoredFactoryDir)
+	canonicalFactoryJSON, err := support.FlattenFactoryConfig(t, authoredFactoryDir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(%s): %v", authoredFactoryDir, err)
 	}
 	canonicalFactoryJSON = withExportImportPortableBundledFiles(t, canonicalFactoryJSON)
 	canonicalFactoryJSON = withExportImportPortableLayout(t, canonicalFactoryJSON)
 
-	flattenedFactory, err := config.GeneratedFactoryFromOpenAPIJSON(canonicalFactoryJSON)
+	flattenedFactory, err := factorymapping.GeneratedFactoryFromOpenAPIJSON(canonicalFactoryJSON)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON(flattened): %v", err)
 	}
@@ -220,35 +220,33 @@ func (fixture exportImportFixture) namedFactory(name string) factoryapi.Factory 
 }
 
 func (fixture exportImportFixture) persistAs(t *testing.T, rootDir, name string) string {
+	return fixture.persistAtCustomerBoundary(t, rootDir, name, false)
+}
+
+func (fixture exportImportFixture) persistAndActivateAs(t *testing.T, rootDir, name string) string {
+	return fixture.persistAtCustomerBoundary(t, rootDir, name, true)
+}
+
+func (fixture exportImportFixture) persistAtCustomerBoundary(t *testing.T, rootDir, name string, activate bool) string {
 	t.Helper()
 
-	factoryDir, err := config.PersistNamedFactory(rootDir, name, fixture.CanonicalFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(%s): %v", name, err)
+	sourceDir := t.TempDir()
+	sourcePath := filepath.Join(sourceDir, "factory.json")
+	if err := os.WriteFile(sourcePath, fixture.CanonicalFactoryJSON, 0o600); err != nil {
+		t.Fatalf("write customer Factory source %s: %v", name, err)
 	}
-	return factoryDir
+	if activate {
+		return support.CreateAndActivateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
+	}
+	return support.CreateNamedFactoryAtRoot(t, sourceDir, rootDir, name, sourcePath)
 }
 
 func (fixture exportImportFixture) assertCurrentFactorySignals(
 	t *testing.T,
-	rootDir string,
 	svc namedFactoryReadback,
-	wantName string,
+	wantName, wantDir string,
 ) {
 	t.Helper()
-
-	if got, err := config.ReadCurrentFactoryPointer(rootDir); err != nil {
-		t.Fatalf("ReadCurrentFactoryPointer(%s): %v", wantName, err)
-	} else if got != wantName {
-		t.Fatalf("current factory pointer = %q, want %q", got, wantName)
-	}
-
-	wantDir := filepath.Join(rootDir, wantName)
-	if got, err := config.ResolveCurrentFactoryDir(rootDir); err != nil {
-		t.Fatalf("ResolveCurrentFactoryDir(%s): %v", wantName, err)
-	} else if got != wantDir {
-		t.Fatalf("resolved current factory dir = %q, want %q", got, wantDir)
-	}
 
 	current, err := svc.GetCurrentFactory(context.Background())
 	if err != nil {
@@ -256,6 +254,9 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 	}
 	if current.Name != factoryapi.FactoryName(wantName) {
 		t.Fatalf("current factory name = %q, want %q", current.Name, wantName)
+	}
+	if current.FactoryDirectory == nil || *current.FactoryDirectory != wantDir {
+		t.Fatalf("current factory directory = %#v, want %q", current.FactoryDirectory, wantDir)
 	}
 
 	if !reflect.DeepEqual(
@@ -312,16 +313,8 @@ type namedFactoryReadback interface {
 
 func buildExportImportFixtureService(t *testing.T, rootDir string) namedFactoryReadback {
 	t.Helper()
-
-	svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
-		Dir:               rootDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService(%s): %v", rootDir, err)
-	}
-	return svc
+	server := startFunctionalServer(t, rootDir, true)
+	return HTTPNamedFactoryReadback{t: t, serverURL: server.URL()}
 }
 
 func TestExportImportFixture_BuildsCanonicalExportAndImportContractsFromAuthoredFixture(t *testing.T) {
@@ -390,14 +383,10 @@ func TestExportImportFixture_PersistedFactoryExposesReusableCurrentFactorySignal
 	fixture := newExportImportFixture(t)
 	rootDir := t.TempDir()
 
-	fixture.persistAs(t, rootDir, "beta")
-	if err := config.WriteCurrentFactoryPointer(rootDir, "beta"); err != nil {
-		t.Fatalf("WriteCurrentFactoryPointer(beta): %v", err)
-	}
-	assertCurrentFactoryPointer(t, rootDir, "beta")
+	selectedDir := fixture.persistAndActivateAs(t, rootDir, "beta")
 
 	svc := buildExportImportFixtureService(t, rootDir)
-	fixture.assertCurrentFactorySignals(t, rootDir, svc, "beta")
+	fixture.assertCurrentFactorySignals(t, svc, "beta", selectedDir)
 }
 
 func assertExportImportFixtureCanonicalRouteArraysJSON(

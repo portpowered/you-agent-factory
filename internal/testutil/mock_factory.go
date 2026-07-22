@@ -7,105 +7,108 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
-	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/engine"
-	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	petri "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	modelinference "github.com/portpowered/infinite-you/pkg/services/models"
 )
 
 type MockFactory struct {
-	Submitted                         []work.SubmitRequest
-	SubmitErr                         error
-	WorkRequests                      []work.WorkRequest
-	SubmitWorkRequestErr              error
-	WorkRequestResults                map[string]work.WorkRequestSubmitResult
-	Marking                           *petri.MarkingSnapshot
-	State                             interfaces.FactoryState
-	Net                               *state.Net
-	EngineState                       *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-	EngineStateSnapshotErr            error
-	Uptime                            time.Duration
-	FactoryEvents                     []factoryapi.FactoryEvent
-	FactoryEventStream                *interfaces.FactoryEventStream
-	FactoryEventStreamCtx             context.Context
-	ResponseEventStore                *responseeventstore.SessionResponseEventStore
-	ResponseEventSubscribeErr         error
-	EngineStateSnapshotCalls          int
-	CreatedFactories                  []factoryapi.Factory
-	SaveFactoryForSessionErr          error
-	CurrentFactory                    *factoryapi.Factory
-	CurrentFactoryErr                 error
-	FactoryVersion                    factoryapi.HybridLogicalTimestamp
-	CurrentFactoryReadErr             error
-	SavedCurrentFactories             []factoryapi.Factory
-	Models                            factoryapi.ListModelsResponse
-	ListModelsErr                     error
-	ModelDetails                      map[string]factoryapi.ModelDetail
-	GetModelErr                       error
-	InvokedModels                     []factoryapi.ModelInvocationRequest
-	InvokedModelNames                 []string
-	InvokeModelResult                 apisurface.ModelInvocationResult
-	InvokeModelErr                    error
-	InvokedFactorySessions            []factoryapi.InvocationRequest
-	InvokedFactorySessionIDs          []string
-	InvokeFactoryResult               apisurface.FactoryInvocationResult
-	InvokeFactoryErr                  error
-	PulledModelNames                  []string
-	PullModelResult                   apisurface.ModelPullResult
-	PullModelErr                      error
-	SessionFactories                  map[string]*MockFactory
-	FactorySessions                   factoryapi.ListFactorySessionsResponse
-	ListFactorySessionsErr            error
-	FactorySession                    factoryapi.FactorySession
-	GetFactorySessionErr              error
-	FactorySessionSyncPreflight       factoryapi.FactorySessionSyncPreflightResponse
-	GetFactorySessionSyncPreflightErr error
-	FactorySessionLiveResult          factoryapi.FactorySessionLiveResult
-	GetFactorySessionResultErr        error
-	FactorySessionPartialResult       factoryapi.FactorySessionPartialResult
-	GetFactorySessionPartialResultErr error
-	OpenFactorySessionResult          factoryapi.OpenFactorySessionResponse
-	OpenFactorySessionErr             error
-	OpenedFactorySessions             []factoryapi.OpenFactorySessionRequest
-	ClosedFactorySessions             []string
-	CloseFactorySessionErr            error
-	MoveWorkErr                       error
-	AppliedOperatorMoveRequests       map[string]work.OperatorMoveResult
-	DurableExecutionService           factorysessionexecution.Service
+	SubmitErr                               error
+	WorkRequests                            []work.WorkRequest
+	SubmitWorkRequestErr                    error
+	SubmitWorkRequestResult                 work.WorkRequestSubmitResult
+	WorkRequestResults                      map[string]work.WorkRequestSubmitResult
+	Marking                                 *petri.PetriMarkingSnapshot
+	State                                   interfaces.FactoryState
+	Net                                     *petri.Net
+	EngineState                             *interfaces.EngineStateSnapshot[petri.PetriMarkingSnapshot, *petri.Net]
+	EngineStateSnapshotErr                  error
+	Uptime                                  time.Duration
+	FactoryEvents                           []factoryapi.FactoryEvent
+	FactoryEventStream                      *interfaces.FactoryEventStream
+	FactoryEventStreamCtx                   context.Context
+	SubscribeFactoryResponseEventsFunc      func(context.Context, factorysessions.ResponseEventSubscriptionRequest) (apisurface.FactoryResponseEventSubscription, error)
+	FactoryEventReplay                      func([]interfaces.FactoryEvent, interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) ([]interfaces.FactoryEvent, error)
+	EngineStateSnapshotCalls                int
+	CreatedFactories                        []factoryapi.Factory
+	SaveFactoryForSessionErr                error
+	CurrentFactory                          *factoryapi.Factory
+	CurrentFactoryErr                       error
+	FactoryVersion                          factoryapi.HybridLogicalTimestamp
+	CurrentFactoryReadErr                   error
+	SavedCurrentFactories                   []factoryapi.Factory
+	Models                                  factoryapi.ListModelsResponse
+	ListModelsErr                           error
+	ModelDetails                            map[string]factoryapi.ModelDetail
+	GetModelErr                             error
+	InvokedModels                           []factoryapi.ModelInvocationRequest
+	InvokedModelNames                       []string
+	InvokeModelResult                       modelinference.Result
+	InvokeModelErr                          error
+	InvokedFactorySessions                  []factoryapi.InvocationRequest
+	InvokedFactorySessionIDs                []string
+	InvokeFactoryResult                     apisurface.FactoryInvocationResult
+	InvokeFactoryErr                        error
+	PulledModelNames                        []string
+	PullModelResult                         modelinference.PullResult
+	PullModelErr                            error
+	SessionFactories                        map[string]*MockFactory
+	FactorySessions                         factoryapi.ListFactorySessionsResponse
+	ListFactorySessionsErr                  error
+	FactorySession                          factoryapi.FactorySession
+	GetFactorySessionErr                    error
+	FactorySessionSyncPreflight             factoryapi.FactorySessionSyncPreflightResponse
+	GetFactorySessionSyncPreflightErr       error
+	FactorySessionLiveResult                factoryapi.FactorySessionLiveResult
+	GetFactorySessionResultErr              error
+	FactorySessionPartialResult             factoryapi.FactorySessionPartialResult
+	GetFactorySessionPartialResultErr       error
+	OpenFactorySessionResult                factoryapi.OpenFactorySessionResponse
+	OpenFactorySessionErr                   error
+	OpenedFactorySessions                   []factoryapi.OpenFactorySessionRequest
+	ClosedFactorySessions                   []string
+	CloseFactorySessionErr                  error
+	MoveWorkErr                             error
+	AppliedOperatorMoveRequests             map[string]work.OperatorMoveResult
+	DurableExecutionService                 factorysessions.ExecutionService
+	FactorySessionRequestPreparation        factorysessions.RequestPreparation
+	ListDurableFactorySessionDispatchesFunc func(
+		context.Context,
+		string,
+		factoryapi.ListFactorySessionDispatchesParams,
+	) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	PauseLiveFactorySessionFunc func(
+		context.Context,
+		string,
+		factorysessions.ControlRequest,
+	) (factorysessions.LifecycleControlResult, error)
+	ResumeLiveFactorySessionFunc func(
+		context.Context,
+		string,
+		factorysessions.ControlRequest,
+	) (factorysessions.LifecycleControlResult, error)
 }
 
-var _ factory.APIFactory = (*MockFactory)(nil)
-var _ factory.Factory = (*MockFactory)(nil)
-var _ apisurface.ModelAPI = (*MockFactory)(nil)
+var _ petri.APIFactory = (*MockFactory)(nil)
+var _ petri.Factory = (*MockFactory)(nil)
 var _ apisurface.FactorySaveAPI = (*MockFactory)(nil)
 var _ apisurface.SessionAPI = (*MockFactory)(nil)
 var _ apisurface.WorkAPI = (*MockFactory)(nil)
 var _ apisurface.InvocationAPI = (*MockFactory)(nil)
-var _ apisurface.APISurface = (*MockFactory)(nil)
-var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 var _ apisurface.DurableSessionExecutionAPI = (*MockFactory)(nil)
 var _ apisurface.DurableSessionLifecycleAPI = (*MockFactory)(nil)
 
 func (m *MockFactory) StartDurableFactorySessionAsync(
 	ctx context.Context,
-	request factoryapi.FactorySessionExecutionRequest,
+	startReq factorysessions.StartRequest,
 ) (factoryapi.FactorySessionExecutionResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionExecutionResponse{}, err
-	}
-	startReq, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionExecutionResponse{}, err
 	}
@@ -119,13 +122,9 @@ func (m *MockFactory) StartDurableFactorySessionAsync(
 func (m *MockFactory) CancelDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	control factorysessions.ControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	control, err := factorysession.ControlRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -139,13 +138,9 @@ func (m *MockFactory) CancelDurableFactorySession(
 func (m *MockFactory) TerminateDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	control factorysessions.ControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	control, err := factorysession.ControlRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -159,13 +154,9 @@ func (m *MockFactory) TerminateDurableFactorySession(
 func (m *MockFactory) PauseDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	control factorysessions.ControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	control, err := factorysession.ControlRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -179,13 +170,9 @@ func (m *MockFactory) PauseDurableFactorySession(
 func (m *MockFactory) ResumeDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	control factorysessions.ControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	control, err := factorysession.ControlRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -199,13 +186,9 @@ func (m *MockFactory) ResumeDurableFactorySession(
 func (m *MockFactory) ApproveDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionApproveRequest,
+	approve factorysessions.ApproveRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	approve, err := factorysession.ApproveRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -219,13 +202,9 @@ func (m *MockFactory) ApproveDurableFactorySession(
 func (m *MockFactory) RetryDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionRetryDispatchRequest,
+	retry factorysessions.RetryDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	retry, err := factorysession.RetryDispatchRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -239,13 +218,9 @@ func (m *MockFactory) RetryDurableFactorySessionDispatch(
 func (m *MockFactory) InterruptDurableFactorySessionDispatch(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionInterruptDispatchRequest,
+	interrupt factorysessions.InterruptDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -258,12 +233,8 @@ func (m *MockFactory) InterruptDurableFactorySessionDispatch(
 
 func (m *MockFactory) ListDurableFactorySessions(
 	ctx context.Context,
-	params factoryapi.ListFactorySessionsParams,
+	req factorysessions.ListSessionsRequest,
 ) (factoryapi.ListFactorySessionsResponse, error) {
-	req, err := factorysession.ListSessionsRequestFromAPI(params)
-	if err != nil {
-		return factoryapi.ListFactorySessionsResponse{}, err
-	}
 	result, err := m.ListDurableExecutionSessions(ctx, req)
 	if err != nil {
 		return factoryapi.ListFactorySessionsResponse{}, err
@@ -273,12 +244,22 @@ func (m *MockFactory) ListDurableFactorySessions(
 
 func (m *MockFactory) ListDurableExecutionSessions(
 	ctx context.Context,
-	req factorysessionexecution.ListSessionsRequest,
-) (factorysessionexecution.ListSessionsResult, error) {
+	req factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
 	if m == nil || m.DurableExecutionService == nil {
-		return factorysessionexecution.ListSessionsResult{Scope: req.Scope}, nil
+		return factorysessions.ListSessionsResult{Scope: req.Scope}, nil
 	}
 	return m.DurableExecutionService.ListSessions(ctx, req)
+}
+
+// ListSessions implements the exact Factory Sessions execution root consumed
+// by transport tests. ListDurableExecutionSessions remains the mapping-facing
+// representation operation implemented by this programmable fake.
+func (m *MockFactory) ListSessions(
+	ctx context.Context,
+	req factorysessions.ListSessionsRequest,
+) (factorysessions.ListSessionsResult, error) {
+	return m.ListDurableExecutionSessions(ctx, req)
 }
 
 func (m *MockFactory) GetDurableFactorySession(
@@ -299,13 +280,9 @@ func (m *MockFactory) GetDurableFactorySession(
 func (m *MockFactory) GetDurableFactorySessionResult(
 	ctx context.Context,
 	sessionID string,
-	params factoryapi.GetFactorySessionResultsParams,
+	req factorysessions.ResultRequest,
 ) (factoryapi.FactorySessionResult, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionResult{}, err
-	}
-	req, err := factorysession.ResultRequestFromAPI(params)
 	if err != nil {
 		return factoryapi.FactorySessionResult{}, err
 	}
@@ -319,38 +296,49 @@ func (m *MockFactory) GetDurableFactorySessionResult(
 func (m *MockFactory) ReadDurableFactorySessionEvents(
 	ctx context.Context,
 	sessionID string,
-	params factoryapi.GetEventsBySessionIdParams,
+	reconnect factorysessions.EventReconnectRequest,
 ) (*interfaces.FactoryEventStream, error) {
 	service, err := m.requireDurableExecutionService()
 	if err != nil {
 		return nil, err
 	}
-	reconnect, err := factorysession.EventReconnectRequestFromAPI(params)
-	if err != nil {
-		return nil, err
-	}
 	result, err := service.ReadEvents(ctx, sessionID, reconnect)
 	if err != nil {
-		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		if errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
 			return nil, apisurface.ErrFactorySessionNotFound
 		}
-		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+		if errors.Is(err, factorysessions.ErrReconnectCursorNotFound) {
 			return nil, apisurface.ErrInvalidEventReconnectCursor
 		}
 		return nil, err
 	}
-	return factorysession.FactoryEventStreamFromReadResult(result), nil
+	return factorysessions.MaterializeEventReadStream(result), nil
+}
+
+func (m *MockFactory) ProbeDurableFactorySessionEvents(
+	ctx context.Context,
+	sessionID string,
+	reconnect factorysessions.EventReconnectRequest,
+) error {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return err
+	}
+	_, err = service.ReadEvents(ctx, sessionID, reconnect)
+	if errors.Is(err, factorysessions.ErrDurableSessionNotFound) {
+		return apisurface.ErrFactorySessionNotFound
+	}
+	if errors.Is(err, factorysessions.ErrReconnectCursorNotFound) {
+		return apisurface.ErrInvalidEventReconnectCursor
+	}
+	return err
 }
 
 func (m *MockFactory) StartDurableFactorySessionSync(
 	ctx context.Context,
-	request factoryapi.FactorySessionExecutionRequest,
+	startReq factorysessions.StartRequest,
 ) (factoryapi.FactorySessionSyncExecutionResponse, error) {
 	service, err := m.requireDurableExecutionService()
-	if err != nil {
-		return factoryapi.FactorySessionSyncExecutionResponse{}, err
-	}
-	startReq, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		return factoryapi.FactorySessionSyncExecutionResponse{}, err
 	}
@@ -366,22 +354,14 @@ func (m *MockFactory) ListDurableFactorySessionDispatches(
 	sessionID string,
 	params factoryapi.ListFactorySessionDispatchesParams,
 ) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	if m != nil && m.ListDurableFactorySessionDispatchesFunc != nil {
+		return m.ListDurableFactorySessionDispatchesFunc(ctx, sessionID, params)
+	}
 	service, err := m.requireDurableExecutionService()
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
 	result, err := service.ListDispatches(ctx, sessionID)
-	if err != nil {
-		return factoryapi.ListFactorySessionDispatchesResponse{}, err
-	}
-	filters := factorysessionexecution.DispatchFilters{}
-	if params.Phase != nil {
-		filters.Phase = string(*params.Phase)
-	}
-	if params.Status != nil {
-		filters.Status = factorysessionexecution.DispatchStatus(*params.Status)
-	}
-	result, err = factorysessionexecution.FilterDispatches(result, filters)
 	if err != nil {
 		return factoryapi.ListFactorySessionDispatchesResponse{}, err
 	}
@@ -433,7 +413,7 @@ func (m *MockFactory) GetDurableFactorySessionArtifact(
 	return factorysession.ArtifactDetailResponseToAPI(result), nil
 }
 
-func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
+func (m *MockFactory) requireDurableExecutionService() (factorysessions.ExecutionService, error) {
 	if m == nil || m.DurableExecutionService == nil {
 		return nil, errors.New("durable execution service is unavailable")
 	}
@@ -490,19 +470,19 @@ func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string)
 		}
 	}
 	if m.Marking == nil || m.Marking.Tokens == nil {
-		return work.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, petri.ErrMoveWorkNotFound
 	}
 	token, ok := findMockWorkToken(m.Marking.Tokens, workID)
 	if !ok {
-		return work.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, petri.ErrMoveWorkNotFound
 	}
 	if m.Net == nil {
-		return work.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
+		return work.OperatorMoveResult{}, petri.ErrMoveWorkInvalidState
 	}
-	toPlaceID := state.PlaceID(token.Color.WorkTypeID, stateName)
+	toPlaceID := petri.PlaceID(token.Color.WorkTypeID, stateName)
 	place, ok := m.Net.Places[toPlaceID]
 	if !ok || place.State != stateName {
-		return work.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
+		return work.OperatorMoveResult{}, petri.ErrMoveWorkInvalidState
 	}
 	fromPlaceID := token.PlaceID
 	fromState := ""
@@ -525,12 +505,12 @@ func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string)
 	return result, nil
 }
 
-func findMockWorkToken(tokens map[string]*factorytoken.Token, workID string) (*factorytoken.Token, bool) {
+func findMockWorkToken(tokens map[string]*petri.RuntimeToken, workID string) (*petri.RuntimeToken, bool) {
 	for _, token := range tokens {
 		if token == nil || token.Color.WorkID != workID {
 			continue
 		}
-		if token.Color.DataType == factorytoken.DataTypeResource {
+		if token.Color.DataType == petri.RuntimeTokenDataTypeResource {
 			continue
 		}
 		return token, true
@@ -549,29 +529,31 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequ
 		existing.Accepted = false
 		return existing, nil
 	}
-	opts := work.WorkRequestNormalizeOptions{}
-	if m.Net != nil {
-		opts.ValidWorkTypes = make(map[string]bool, len(m.Net.WorkTypes))
-		for workTypeID := range m.Net.WorkTypes {
-			opts.ValidWorkTypes[workTypeID] = true
-		}
-		opts.ValidStatesByType = state.ValidStatesByType(m.Net.WorkTypes)
-	}
-	normalized, err := requests.NormalizeWorkRequest(request, opts)
-	if err != nil {
-		return work.WorkRequestSubmitResult{}, err
-	}
 	requestID := request.RequestID
-	if requestID == "" && len(normalized) > 0 {
-		requestID = normalized[0].RequestID
+	result := m.SubmitWorkRequestResult
+	if result.RequestID == "" && result.TraceID == "" && result.WorkID == "" && result.Name == "" &&
+		result.WorkTypeName == "" && !result.Accepted && len(result.Works) == 0 {
+		result = work.WorkRequestSubmitResult{RequestID: requestID, Accepted: true}
+		for _, item := range request.Works {
+			result.Works = append(result.Works, work.WorkRequestSubmittedWork{
+				Name: item.Name, WorkTypeName: item.WorkTypeID, WorkID: item.WorkID,
+			})
+		}
+		if len(request.Works) > 0 {
+			result.WorkID = request.Works[0].WorkID
+			result.Name = request.Works[0].Name
+			result.WorkTypeName = request.Works[0].WorkTypeID
+			result.TraceID = request.Works[0].CurrentChainingTraceID
+			if result.TraceID == "" {
+				result.TraceID = request.Works[0].TraceID
+			}
+		}
 	}
-	result := requests.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 	if m.WorkRequestResults == nil {
 		m.WorkRequestResults = make(map[string]work.WorkRequestSubmitResult)
 	}
 	m.WorkRequestResults[requestID] = result
 	m.WorkRequests = append(m.WorkRequests, request)
-	m.Submitted = append(m.Submitted, normalized...)
 	return result, nil
 }
 
@@ -607,7 +589,10 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 		domainHistory = append(domainHistory, domainEvent)
 	}
 	if reconnect != nil {
-		replayed, err := factoryevents.BuildCanonicalReconnectReplay(domainHistory, *reconnect, scope)
+		if m.FactoryEventReplay == nil {
+			return nil, fmt.Errorf("factory event reconnect script is unavailable")
+		}
+		replayed, err := m.FactoryEventReplay(domainHistory, *reconnect, scope)
 		if err != nil {
 			return nil, err
 		}
@@ -627,7 +612,7 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 	return &interfaces.FactoryEventStream{History: domainHistory, Events: ch}, nil
 }
 
-func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.PetriMarkingSnapshot, *petri.Net], error) {
 	m.EngineStateSnapshotCalls++
 	if m.EngineStateSnapshotErr != nil {
 		return nil, m.EngineStateSnapshotErr
@@ -635,11 +620,11 @@ func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.Eng
 	if m.EngineState != nil {
 		return m.EngineState, nil
 	}
-	runtimeState := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}
+	runtimeState := interfaces.EngineStateSnapshot[petri.PetriMarkingSnapshot, *petri.Net]{}
 	if m.Marking != nil {
 		runtimeState.Marking = *m.Marking
 	}
-	snap := state.NewEngineStateSnapshot(runtimeState, string(m.State), m.Uptime, m.Net)
+	snap := petri.NewEngineStateSnapshot(runtimeState, string(m.State), m.Uptime, m.Net)
 	return &snap, nil
 }
 
@@ -715,27 +700,27 @@ func (m *MockFactory) GetModel(_ context.Context, modelName string) (factoryapi.
 		return factoryapi.ModelDetail{}, m.GetModelErr
 	}
 	if m.ModelDetails == nil {
-		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
+		return factoryapi.ModelDetail{}, modelinference.ErrNotFound
 	}
 	model, ok := m.ModelDetails[modelName]
 	if !ok {
-		return factoryapi.ModelDetail{}, apisurface.ErrModelNotFound
+		return factoryapi.ModelDetail{}, modelinference.ErrNotFound
 	}
 	return model, nil
 }
 
-func (m *MockFactory) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+func (m *MockFactory) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (modelinference.Result, error) {
 	if m.InvokeModelErr != nil {
-		return apisurface.ModelInvocationResult{}, m.InvokeModelErr
+		return modelinference.Result{}, m.InvokeModelErr
 	}
 	m.InvokedModelNames = append(m.InvokedModelNames, modelName)
 	m.InvokedModels = append(m.InvokedModels, request)
 	return m.InvokeModelResult, nil
 }
 
-func (m *MockFactory) PullModel(_ context.Context, modelName string) (apisurface.ModelPullResult, error) {
+func (m *MockFactory) PullModel(_ context.Context, modelName string) (modelinference.PullResult, error) {
 	if m.PullModelErr != nil {
-		return apisurface.ModelPullResult{}, m.PullModelErr
+		return modelinference.PullResult{}, m.PullModelErr
 	}
 	m.PulledModelNames = append(m.PulledModelNames, modelName)
 	return m.PullModelResult, nil
@@ -802,22 +787,21 @@ func (m *MockFactory) CloseFactorySession(_ context.Context, sessionID string) e
 func (m *MockFactory) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	control factorysessions.ControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	if m.SessionFactories != nil {
 		if sessionFactory, ok := m.SessionFactories[sessionID]; ok {
-			return sessionFactory.PauseLiveFactorySession(ctx, sessionID, request)
+			return sessionFactory.PauseLiveFactorySession(ctx, sessionID, control)
 		}
 		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
 	if _, err := m.GetFactorySession(ctx, sessionID); err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	if m.PauseLiveFactorySessionFunc == nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("live pause script is unavailable")
 	}
-	result, err := mockLiveLifecycleControl(m, sessionID, factorysessionexecution.LifecycleControlPause, control)
+	result, err := m.PauseLiveFactorySessionFunc(ctx, sessionID, control)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
@@ -827,64 +811,23 @@ func (m *MockFactory) PauseLiveFactorySession(
 func (m *MockFactory) ResumeLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.FactorySessionLifecycleControlRequest,
+	control factorysessions.ControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 	if m.SessionFactories != nil {
 		if sessionFactory, ok := m.SessionFactories[sessionID]; ok {
-			return sessionFactory.ResumeLiveFactorySession(ctx, sessionID, request)
+			return sessionFactory.ResumeLiveFactorySession(ctx, sessionID, control)
 		}
 		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
 	if _, err := m.GetFactorySession(ctx, sessionID); err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	if m.ResumeLiveFactorySessionFunc == nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("live resume script is unavailable")
 	}
-	result, err := mockLiveLifecycleControl(m, sessionID, factorysessionexecution.LifecycleControlResume, control)
+	result, err := m.ResumeLiveFactorySessionFunc(ctx, sessionID, control)
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
 	return factorysession.LifecycleControlResponseToAPI(result), nil
-}
-
-func mockLiveLifecycleControl(
-	m *MockFactory,
-	sessionID string,
-	operation factorysessionexecution.LifecycleControlKind,
-	control factorysessionexecution.ControlRequest,
-) (factorysessionexecution.LifecycleControlResult, error) {
-	if _, err := factorysessionexecution.NormalizeControlRequest(control); err != nil {
-		return factorysessionexecution.LifecycleControlResult{}, err
-	}
-	currentStatus := factorysessionexecution.LifecycleStatusFromFactoryRuntimeState(string(m.State))
-	outcome := factorysessionexecution.EvaluateLifecycleControl(operation, currentStatus)
-	if outcome == factorysessionexecution.LifecycleControlOutcomeInvalidState ||
-		outcome == factorysessionexecution.LifecycleControlOutcomeTerminalSession {
-		return factorysessionexecution.LifecycleControlResult{}, &factorysessionexecution.ControlError{
-			Operation: operation,
-			Outcome:   outcome,
-			Status:    currentStatus,
-			Message:   string(operation) + " rejected for session " + sessionID,
-		}
-	}
-	resultStatus := currentStatus
-	if outcome == factorysessionexecution.LifecycleControlOutcomeAccepted {
-		switch operation {
-		case factorysessionexecution.LifecycleControlPause:
-			_ = m.Pause(context.Background())
-			resultStatus = factorysessionexecution.LifecycleStatusPaused
-		case factorysessionexecution.LifecycleControlResume:
-			_ = m.Resume(context.Background())
-			resultStatus = factorysessionexecution.LifecycleStatusRunning
-		}
-	}
-	return factorysessionexecution.LifecycleControlResult{
-		SessionID: sessionID,
-		Operation: operation,
-		Outcome:   outcome,
-		Status:    resultStatus,
-		Links:     factorysessionexecution.LiveLifecycleControlLinksForSession(sessionID),
-	}, nil
 }

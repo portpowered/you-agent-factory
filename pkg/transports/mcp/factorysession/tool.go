@@ -3,8 +3,11 @@
 package factorysession
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -21,15 +24,6 @@ const (
 	ToolListArtifacts  = "you.factory_session.list_artifacts"
 	ToolControl        = "you.factory_session.control"
 	ToolReadEvents     = "you.factory_session.read_events"
-)
-
-// Workflow-named compatibility aliases resolve to canonical Factory Session tools.
-const (
-	ToolWorkflowValidate  = "you.workflow.validate"
-	ToolWorkflowRun       = "you.workflow.run"
-	ToolWorkflowStatus    = "you.workflow.status"
-	ToolWorkflowResult    = "you.workflow.result"
-	ToolWorkflowArtifacts = "you.workflow.artifacts"
 )
 
 // Stable error envelope fields shared by every dynamic workflow MCP tool.
@@ -50,16 +44,6 @@ type ToolDefinition struct {
 	OutputSchema        map[string]any `json:"outputSchema"`
 	SuccessStableFields []string       `json:"successStableFields"`
 	ErrorStableFields   []string       `json:"errorStableFields"`
-}
-
-// CompatibilityAlias documents one workflow-named MCP tool alias that resolves
-// to a canonical Factory Session tool implementation.
-type CompatibilityAlias struct {
-	Name          string `json:"name"`
-	CanonicalName string `json:"canonicalName"`
-	Description   string `json:"description"`
-	// CompatibilityOnly is always true for workflow-named aliases.
-	CompatibilityOnly bool `json:"compatibilityOnly"`
 }
 
 // ToolErrorEnvelope is the stable MCP failure shape for Factory Session tools.
@@ -83,69 +67,29 @@ func (t ToolDefinition) MarshalJSON() ([]byte, error) {
 	return json.Marshal(alias(t))
 }
 
-// DiscoverCompatibilityAliases returns workflow-named MCP tool aliases that
-// resolve to canonical Factory Session tool implementations.
-func DiscoverCompatibilityAliases() []CompatibilityAlias {
-	return []CompatibilityAlias{
-		{
-			Name:          ToolWorkflowValidate,
-			CanonicalName: ToolValidateSource,
-			Description: "Compatibility-only alias for you.factory_session.validate_source. " +
-				"Uses the same Factory preview validation contract and response shape.",
-			CompatibilityOnly: true,
-		},
-		{
-			Name:          ToolWorkflowRun,
-			CanonicalName: ToolStartSync,
-			Description: "Compatibility-only alias for you.factory_session.start_sync. " +
-				"Uses the same sync Factory Session start contract and response shape.",
-			CompatibilityOnly: true,
-		},
-		{
-			Name:          ToolWorkflowStatus,
-			CanonicalName: ToolGetSession,
-			Description: "Compatibility-only alias for you.factory_session.get. " +
-				"Uses the same durable Factory Session status read model.",
-			CompatibilityOnly: true,
-		},
-		{
-			Name:          ToolWorkflowResult,
-			CanonicalName: ToolGetResult,
-			Description: "Compatibility-only alias for you.factory_session.get_result. " +
-				"Uses the same durable Factory Session result read contract.",
-			CompatibilityOnly: true,
-		},
-		{
-			Name:          ToolWorkflowArtifacts,
-			CanonicalName: ToolListArtifacts,
-			Description: "Compatibility-only alias for you.factory_session.list_artifacts. " +
-				"Uses the same FactoryArtifact listing response shape.",
-			CompatibilityOnly: true,
-		},
-	}
-}
-
-// ResolveToolName maps one workflow compatibility alias to its canonical Factory
-// Session tool name. Unknown names pass through unchanged.
-func ResolveToolName(name string) string {
-	for _, alias := range DiscoverCompatibilityAliases() {
-		if alias.Name == name {
-			return alias.CanonicalName
-		}
-	}
-	return name
-}
-
 // ValidateSource runs the canonical Factory preview contract for the
 // you.factory_session.validate_source MCP tool without provider execution.
-func ValidateSource(input factoryapi.FactoryPreviewRequest) ToolResponse[factoryapi.FactoryPreviewResult] {
-	previewInput, err := apisurface.FactoryPreviewRequestFromAPI(input)
+func ValidateSource(
+	ctx context.Context,
+	workflows factoryruntime.WorkflowPreviewOperation,
+	input factoryapi.FactoryPreviewRequest,
+) ToolResponse[factoryapi.FactoryPreviewResult] {
+	previewInput, err := apisurface.FactoryPreviewInputFromAPI(input)
 	if err != nil {
 		envelope := requestValidationErrorEnvelope(err)
 		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
 	}
 
-	preview := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(previewInput))
+	if workflows == nil {
+		envelope := requestValidationErrorEnvelope(fmt.Errorf("workflow preview is unavailable"))
+		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
+	}
+	workflowPreview, err := workflows.PreviewWorkflow(ctx, previewInput)
+	if err != nil {
+		envelope := requestValidationErrorEnvelope(err)
+		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
+	}
+	preview := apisurface.FactoryPreviewResultFromPreview(workflowPreview)
 	if !preview.Valid {
 		envelope := validationErrorEnvelopeFromPreview(preview)
 		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}

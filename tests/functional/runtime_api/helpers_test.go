@@ -2,26 +2,57 @@ package runtime_api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/service"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+type runtimeOption func(*support.FunctionalAPIServerConfig)
+
+func withSubmissionRecorder(recorder recordings.SubmissionRecorder) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.SubmissionRecorder = recorder }
+}
+
+func withClock(clock platformclock.Source) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.Clock = clock }
+}
+
+func withProvider(provider workerprovider.Provider) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) { cfg.Edges.ProviderOverride = provider }
+}
+
+func withWorkerCommands(providerRunner, scriptRunner platformprocess.CommandRunner) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		cfg.Edges.ProviderCommandRunner = providerRunner
+		cfg.Edges.ScriptCommandRunner = scriptRunner
+	}
+}
+
+func withInvocationMetricsRecorder(recorder factorysessions.InvocationMetricsRecorder) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		cfg.Edges.InvocationMetricsRecorder = recorder
+	}
+}
+
+func withEnvironment(environment []string) runtimeOption {
+	return func(cfg *support.FunctionalAPIServerConfig) {
+		cfg.Env = append([]string(nil), environment...)
+	}
+}
+
 type functionalAPIServer struct {
-	factory apisurface.APISurface
 	*support.FunctionalAPIServer
 }
 
@@ -71,7 +102,7 @@ func persistTestPipelineConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []workerconfig.Config{{Name: "step-worker"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "step1", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
 			{Name: "finish", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}},
@@ -79,44 +110,57 @@ func persistTestPipelineConfig() *interfaces.FactoryConfig {
 	}
 }
 
-func startFunctionalServerWithConfig(
+func startFunctionalServerWithArgs(
 	t *testing.T,
 	factoryDir string,
 	useMockWorkers bool,
-	configure func(*service.FactoryServiceConfig),
-	extraOpts ...factory.FactoryOption,
+	runArgs []string,
+	runtimeOptions ...runtimeOption,
 ) *functionalAPIServer {
 	t.Helper()
 
-	server := &functionalAPIServer{}
-	var runtimeFactory apisurface.APISurface
-	base := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+	cfg := support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		UseMockWorkers:            useMockWorkers,
 		WaitForServiceModeRuntime: true,
-		Configure:                 configure,
-		ExtraOptions:              extraOpts,
-		CaptureAPISurface: func(surface apisurface.APISurface) {
-			runtimeFactory = surface
-		},
-	})
-	server.factory = runtimeFactory
-	server.FunctionalAPIServer = base
-	return server
+		Args:                      runArgs,
+	}
+	for _, option := range runtimeOptions {
+		option(&cfg)
+	}
+	base := support.StartFunctionalAPIServer(t, cfg)
+	return &functionalAPIServer{FunctionalAPIServer: base}
 }
 
-func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, extraOpts ...factory.FactoryOption) *functionalAPIServer {
+func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool, runtimeOptions ...runtimeOption) *functionalAPIServer {
 	t.Helper()
-	return startFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
+	return startFunctionalServerWithArgs(t, factoryDir, useMockWorkers, nil, runtimeOptions...)
 }
 
 func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work.SubmitRequest) []work.SubmitRequest {
 	t.Helper()
 
 	normalized := normalizeSubmitRequestsForFunctionalTest(submitted)
-	workRequest := requests.WorkRequestFromSubmitRequests(normalized)
-	if _, err := fs.factory.SubmitWorkRequest(context.Background(), workRequest); err != nil {
-		t.Fatalf("factory.SubmitWorkRequest: %v", err)
+	for i := range normalized {
+		request := normalized[i]
+		response := postJSON[factoryapi.SubmitWorkResponse](
+			t,
+			support.DefaultSessionWorkURL(fs.URL(), "/work"),
+			map[string]any{
+				"name":                   request.Name,
+				"workTypeName":           request.WorkTypeID,
+				"payload":                json.RawMessage(request.Payload),
+				"traceId":                request.TraceID,
+				"currentChainingTraceId": request.CurrentChainingTraceID,
+			},
+			"submit runtime work",
+		)
+		if response.WorkId != nil {
+			normalized[i].WorkID = *response.WorkId
+		}
+		normalized[i].RequestID = response.RequestId
+		normalized[i].TraceID = response.TraceId
+		normalized[i].CurrentChainingTraceID = response.TraceId
 	}
 	return normalized
 }
@@ -136,9 +180,9 @@ func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix s
 		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		payload, _ := io.ReadAll(resp.Body)
-		t.Fatalf("%s: POST %s status = %d, want 200: %s", failurePrefix, endpoint, resp.StatusCode, string(payload))
+		t.Fatalf("%s: POST %s status = %d, want success: %s", failurePrefix, endpoint, resp.StatusCode, string(payload))
 	}
 	var out T
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {

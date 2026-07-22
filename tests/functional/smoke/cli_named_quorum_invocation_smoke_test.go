@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/quorum"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -20,22 +20,21 @@ func TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult(t *testi
 		t.Skip("slow CLI named @you/quorum invocation smoke")
 	}
 	homeDir := t.TempDir()
-	if _, err := factoryconfig.PersistNamedFactory(defaultpaths.NamedFactoriesRoot(homeDir), quorum.PackagedFactoryName, quorum.BuiltInFactoryJSON); err != nil {
-		t.Fatalf("PersistNamedFactory(@you/quorum): %v", err)
-	}
+	binaryPath := buildYouCLIBinary(t)
+	initializeCLISystemConfig(t, binaryPath, homeDir)
 	port, err := reserveLocalTCPPort()
 	if err != nil {
 		t.Fatalf("reserve port: %v", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, buildYouCLIBinary(t), "--json", "run", "--named", quorum.PackagedFactoryName, "--with-mock-workers", "--no-record", "--server", fmt.Sprintf("http://127.0.0.1:%d", port), "--quiet", writeQuorumMockWorkersConfig(t), "--branch-provider", "CODEX", "--branch-model", "gpt-5.1", "--merge-provider", "CODEX", "--merge-model", "gpt-5.2", "compare the two plans")
+	cmd := exec.CommandContext(ctx, binaryPath, "--json", "run", "--named", factorydefinitions.PackagedQuorumFactoryName, "--with-mock-workers", "--no-record", "--server", fmt.Sprintf("http://127.0.0.1:%d", port), "--quiet", writeQuorumMockWorkersConfig(t), "--branch-provider", "CLAUDE", "--branch-model", "claude-sonnet-4-20250514", "--merge-provider", "CODEX", "--merge-model", "gpt-5", "compare the two plans")
 	cmd.Dir = t.TempDir()
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", quorum.PackagedFactoryName, err, stdout.String(), stderr.String())
+		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", factorydefinitions.PackagedQuorumFactoryName, err, stdout.String(), stderr.String())
 	}
 	var response factoryapi.InvocationResponse
 	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout.String())), &response); err != nil {
@@ -51,13 +50,17 @@ func TestNamedQuorumRun_RealCLIAcceptsRoleFlagsAndReturnsOneMergeResult(t *testi
 
 func writeQuorumMockWorkersConfig(t *testing.T) string {
 	t.Helper()
-	branchACommand, branchAArgs := mockWorkerEchoCommand("branch A result")
-	branchBCommand, branchBArgs := mockWorkerEchoCommand("branch B result")
+	branchACommand, branchAArgs := mockWorkerEchoCommand(
+		`{"type":"result","subtype":"success","is_error":false,"result":"branch A result","session_id":"quorum-branch-a-session"}`,
+	)
+	branchBCommand, branchBArgs := mockWorkerEchoCommand(
+		`{"type":"result","subtype":"success","is_error":false,"result":"branch B result","session_id":"quorum-branch-b-session"}`,
+	)
 	mergeCommand, mergeArgs := mockWorkerEchoCommand("quorum merge result")
-	cfg := factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{
-		{WorkerName: "quorum-branch-a", WorkstationName: "run-quorum-branch-a", RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: branchACommand, Args: branchAArgs}},
-		{WorkerName: "quorum-branch-b", WorkstationName: "run-quorum-branch-b", RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: branchBCommand, Args: branchBArgs}},
-		{WorkerName: "quorum-merge", WorkstationName: "merge-quorum", RunType: factoryconfig.MockWorkerRunTypeScript, ScriptConfig: &factoryconfig.MockWorkerScriptConfig{Command: mergeCommand, Args: mergeArgs}},
+	cfg := workers.MockWorkersConfig{MockWorkers: []workers.MockWorkerConfig{
+		{WorkerName: "quorum-branch-a", WorkstationName: "run-quorum-branch-a", RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: branchACommand, Args: branchAArgs}},
+		{WorkerName: "quorum-branch-b", WorkstationName: "run-quorum-branch-b", RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: branchBCommand, Args: branchBArgs}},
+		{WorkerName: "quorum-merge", WorkstationName: "merge-quorum", RunType: workers.MockWorkerRunTypeScript, ScriptConfig: &workers.MockWorkerScriptConfig{Command: mergeCommand, Args: mergeArgs}},
 	}}
 	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-quorum.json")
 }

@@ -11,10 +11,10 @@ import (
 
 func TestFactorySessionSSEKeepalive_UsesConnectionKeepAliveHeader(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -23,11 +23,11 @@ func TestFactorySessionSSEKeepalive_UsesConnectionKeepAliveHeader(t *testing.T) 
 
 func TestFactorySessionSSEKeepalive_IdleStreamEmitsKeepaliveWithinBoundedTimeout(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
 	idleTimeout := 300 * time.Millisecond
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -41,10 +41,10 @@ func TestFactorySessionSSEKeepalive_IdleStreamEmitsKeepaliveWithinBoundedTimeout
 
 func TestFactorySessionSSEKeepalive_IdleKeepaliveDoesNotSerializeFactoryEventKinds(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 
@@ -60,10 +60,10 @@ func TestFactorySessionSSEKeepalive_IdleKeepaliveDoesNotSerializeFactoryEventKin
 
 func TestFactorySessionSSEKeepalive_DeliversLiveEventAfterKeepaliveObserved(t *testing.T) {
 	fixture := NewFactorySessionSSEFixture(t)
-	server := httptest.NewServer(newAPITestServer(fixture.RootMockFactory()).Handler())
+	server := httptest.NewServer(newAPITestServer(fixture.WorkAPI()).Handler())
 	defer server.Close()
 
-	harness := NewFactorySessionSSEHarness(t, 2*time.Second)
+	harness := newFactorySessionSSEHarness(t, 2*time.Second)
 	stream := harness.Open(server.URL, fixture.SessionID, "")
 	defer stream.Close()
 

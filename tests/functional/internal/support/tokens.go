@@ -1,26 +1,26 @@
 package support
 
 import (
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func FirstInputToken(rawTokens any) factorytoken.Token {
+func FirstInputToken(rawTokens any) workers.Token {
 	switch tokens := rawTokens.(type) {
 	case []any:
 		if len(tokens) == 0 {
-			return factorytoken.Token{}
+			return workers.Token{}
 		}
-		tok, ok := tokens[0].(factorytoken.Token)
+		tok, ok := tokens[0].(workers.Token)
 		if !ok {
-			return factorytoken.Token{}
+			return workers.Token{}
 		}
 		return tok
-	case []factorytoken.Token:
+	case []workers.Token:
 		if len(tokens) == 0 {
-			return factorytoken.Token{}
+			return workers.Token{}
 		}
 		return tokens[0]
 	default:
-		return factorytoken.Token{}
+		return workers.Token{}
 	}
 }

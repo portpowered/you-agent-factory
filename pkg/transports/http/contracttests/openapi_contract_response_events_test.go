@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
@@ -440,7 +440,6 @@ func TestOpenAPIContract_FactoryEventLaneRemainsIsolatedFromResponseEvents(t *te
 	}
 	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"), "#/components/schemas/FactoryEvent")
 	assertEventStreamSchemaRef(t, pathOperation(t, paths, responseEventStreamPath, "get"), "#/components/schemas/FactoryResponseEvent")
-	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/events", "get"), "#/components/schemas/FactoryEvent")
 }
 
 func assertFactoryResponseEventEnvelope(t *testing.T, schemas map[string]any) {
@@ -499,7 +498,7 @@ func assertFactoryResponseEventContentBlockDiscriminator(t *testing.T, schemas m
 
 func loadRepresentativeResponseEventFixture(t *testing.T, name string) map[string]any {
 	t.Helper()
-	path := filepath.FromSlash("../../../factory/sessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../../services/factory_sessions/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)
@@ -632,7 +631,7 @@ func TestFactoryResponseEventRepresentativeFixturesHaveCanonicalWireParity(t *te
 		t.Run(fixtureName, func(t *testing.T) {
 			raw := readRepresentativeResponseEventFixtureBytes(t, fixtureName)
 
-			var domainEvent responseevents.FactoryResponseEvent
+			var domainEvent factorysessions.FactoryResponseEvent
 			if err := json.Unmarshal(raw, &domainEvent); err != nil {
 				t.Fatalf("unmarshal domain FactoryResponseEvent: %v", err)
 			}
@@ -966,7 +965,7 @@ func assertGeneratedFactoryResponseEventPayloadDecodes(t *testing.T, event facto
 
 func readRepresentativeResponseEventFixtureBytes(t *testing.T, name string) []byte {
 	t.Helper()
-	path := filepath.FromSlash("../../../factory/sessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../../services/factory_sessions/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)

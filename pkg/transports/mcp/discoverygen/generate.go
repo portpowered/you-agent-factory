@@ -1,16 +1,14 @@
 package discoverygen
 
 import (
-	"bytes"
 	"fmt"
 	"go/format"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 )
 
 const (
@@ -83,82 +81,20 @@ func discoveryMetadata(repositoryRoot string) (DiscoveryMetadata, error) {
 	return metadata, nil
 }
 
-// Generate writes MCP discovery metadata artifacts for review and drift checks.
-func Generate(repositoryRoot string) error {
-	artifacts := []struct {
-		path     string
-		producer func(string) ([]byte, error)
-	}{
-		{path: DiscoveryJSONPath, producer: DiscoveryArtifact},
-		{path: DiscoveryGoPath, producer: DiscoveryGoArtifact},
-	}
-	for _, artifact := range artifacts {
-		if err := writeArtifact(repositoryRoot, artifact.path, artifact.producer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Drift describes byte-level differences between generated artifacts and the
-// current generator output.
-type Drift struct {
-	Stale      []string
-	Missing    []string
-	Unexpected []string
-}
-
-// Empty reports whether generated artifacts match the generator output.
-func (drift Drift) Empty() bool {
-	return len(drift.Stale) == 0 && len(drift.Missing) == 0 && len(drift.Unexpected) == 0
-}
-
-// Check compares committed MCP discovery artifacts with freshly generated output.
-func Check(repositoryRoot string) (Drift, error) {
-	artifacts := []struct {
-		path     string
-		producer func(string) ([]byte, error)
-	}{
-		{path: DiscoveryJSONPath, producer: DiscoveryArtifact},
-		{path: DiscoveryGoPath, producer: DiscoveryGoArtifact},
-	}
-	drift := Drift{}
-	for _, artifact := range artifacts {
-		payload, err := artifact.producer(repositoryRoot)
-		if err != nil {
-			return Drift{}, err
-		}
-		target := filepath.Join(repositoryRoot, filepath.FromSlash(artifact.path))
-		got, err := os.ReadFile(target)
-		if err != nil {
-			if os.IsNotExist(err) {
-				drift.Missing = append(drift.Missing, artifact.path)
-				continue
-			}
-			return Drift{}, fmt.Errorf("read %s: %w", artifact.path, err)
-		}
-		if !bytes.Equal(normalizeGeneratedArtifactBytes(got), normalizeGeneratedArtifactBytes(payload)) {
-			drift.Stale = append(drift.Stale, artifact.path)
-		}
-	}
-	return drift, nil
-}
-
-func writeArtifact(repositoryRoot, path string, producer func(string) ([]byte, error)) error {
-	payload, err := producer(repositoryRoot)
+// Artifacts returns the complete deterministic MCP discovery output set.
+// Filesystem persistence and drift inspection belong to the command-selected
+// Platform artifact store.
+func Artifacts(repositoryRoot string) ([]generatedartifacts.Artifact, error) {
+	jsonPayload, err := DiscoveryArtifact(repositoryRoot)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	target := filepath.Join(repositoryRoot, filepath.FromSlash(path))
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return fmt.Errorf("create %s: %w", path, err)
+	goPayload, err := DiscoveryGoArtifact(repositoryRoot)
+	if err != nil {
+		return nil, err
 	}
-	if err := os.WriteFile(target, payload, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
-	}
-	return nil
-}
-
-func normalizeGeneratedArtifactBytes(payload []byte) []byte {
-	return bytes.ReplaceAll(payload, []byte("\r\n"), []byte("\n"))
+	return []generatedartifacts.Artifact{
+		{Path: DiscoveryJSONPath, Payload: jsonPayload},
+		{Path: DiscoveryGoPath, Payload: goPayload},
+	}, nil
 }

@@ -1,14 +1,12 @@
 package factorysession_test
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"testing"
 	"time"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -55,50 +53,28 @@ func TestDurableSessionMapperRoundTrip_AllFixtureResponses(t *testing.T) {
 }
 
 func TestDurableSessionMapperRoundTrip_CanonicalFixtureEventsThroughFakeService(t *testing.T) {
-	fixturesPath := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-
 	cases := []struct {
 		scenarioID string
-		requestID  string
 		eventCount int
 	}{
-		{"javascript-running-n-dispatch", "req-js-run-n-001", 2},
-		{"javascript-succeeded-two-dispatch", "req-js-success-002", 3},
-		{"javascript-awaiting-approval", "req-js-awaiting-001", 2},
+		{"javascript-running-n-dispatch", 2},
+		{"javascript-succeeded-two-dispatch", 3},
+		{"javascript-awaiting-approval", 2},
 	}
 	for _, tc := range cases {
 		t.Run(tc.scenarioID, func(t *testing.T) {
 			rawScenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
-			executionRequest, ok := rawScenario["executionRequest"].(map[string]any)
+			events, ok := rawScenario["events"].([]any)
 			if !ok {
-				t.Fatal("missing executionRequest")
+				t.Fatal("missing events")
 			}
-			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
-			if err != nil {
-				t.Fatalf("StartRequestFromAPI: %v", err)
+			if len(events) != tc.eventCount {
+				t.Fatalf("events = %d, want %d", len(events), tc.eventCount)
 			}
-			started, err := service.StartAsync(context.Background(), request)
-			if err != nil {
-				t.Fatalf("StartAsync: %v", err)
-			}
-			events, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
-			if err != nil {
-				t.Fatalf("ReadEvents: %v", err)
-			}
-			if len(events.Events) != tc.eventCount {
-				t.Fatalf("events = %d, want %d", len(events.Events), tc.eventCount)
-			}
-			mapped := factorysession.EventReadResponseToAPI(events)
+			rootEvents := eventReadResultFromFixture(t, events)
+			mapped := factorysession.EventReadResponseToAPI(rootEvents)
 			if len(mapped) != tc.eventCount {
 				t.Fatalf("mapped events = %d, want %d", len(mapped), tc.eventCount)
-			}
-			stream := factorysession.FactoryEventStreamFromReadResult(events)
-			if len(stream.History) != tc.eventCount {
-				t.Fatalf("stream history = %d, want %d", len(stream.History), tc.eventCount)
 			}
 			for index, event := range mapped {
 				if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
@@ -159,12 +135,6 @@ func TestDurableSessionMapperRoundTrip_DispatchCountCoverage(t *testing.T) {
 }
 
 func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
-	fixturesPath := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-
 	scenarios := []string{
 		"petri-succeeded-one-dispatch",
 		"javascript-running-n-dispatch",
@@ -174,43 +144,25 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 	for _, scenarioID := range scenarios {
 		t.Run(scenarioID, func(t *testing.T) {
 			rawScenario := findScenario(t, loadDurableFixtureCatalog(t), scenarioID)
-			executionRequest, ok := rawScenario["executionRequest"].(map[string]any)
+			session, ok := rawScenario["session"].(map[string]any)
 			if !ok {
-				t.Fatal("missing executionRequest")
+				t.Fatal("missing session")
 			}
-			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
-			if err != nil {
-				t.Fatalf("StartRequestFromAPI: %v", err)
-			}
-
-			started, err := service.StartAsync(context.Background(), request)
-			if err != nil {
-				t.Fatalf("StartAsync: %v", err)
-			}
-			assertAsyncStartMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.AsyncStartResponseToAPI(started)))
-
-			read, err := service.GetSession(context.Background(), started.SessionID)
-			if err != nil {
-				t.Fatalf("GetSession: %v", err)
-			}
-			assertSessionReadMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.SessionReadResponseToAPI(read)))
+			assertAsyncStartMapperRoundTrip(t, scenarioID, mustFixtureMap(t,
+				factorysession.AsyncStartResponseToAPI(asyncStartFromSessionFixture(session))))
+			assertSessionReadMapperRoundTrip(t, scenarioID, session)
 
 			resultFixture, ok := rawScenario["result"].(map[string]any)
 			if !ok {
 				t.Fatal("missing result fixture")
 			}
-			result, err := service.GetResult(context.Background(), started.SessionID, resultRequestFromFixture(resultFixture))
-			if err != nil {
-				t.Fatalf("GetResult: %v", err)
-			}
-			assertResultMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.ResultResponseToAPI(result)))
+			assertResultMapperRoundTrip(t, scenarioID, resultFixture)
 
-			dispatches, err := service.ListDispatches(context.Background(), started.SessionID)
-			if err != nil {
-				t.Fatalf("ListDispatches: %v", err)
+			dispatches, ok := rawScenario["dispatches"].([]any)
+			if !ok {
+				t.Fatal("missing dispatches")
 			}
-			mappedDispatches := factorysession.ListDispatchesResponseToAPI(dispatches)
-			assertDispatchListMapperRoundTrip(t, scenarioID, map[string]any{"sessionId": started.SessionID}, fixtureDispatchRows(mappedDispatches.Dispatches))
+			assertDispatchListMapperRoundTrip(t, scenarioID, rawScenario, dispatches)
 		})
 	}
 }
@@ -366,33 +318,31 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 				Kind: factoryapi.FactorySessionExecutionSourceKind("HOST_PATH"),
 			},
 		})
+
 		assertRequestValidationError(t, err)
 	})
 
 	t.Run("invalid result mode", func(t *testing.T) {
 		mode := factoryapi.FactorySessionResultMode("invalid")
-		_, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
-		var validationErr *factorysessionexecution.ValidationError
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("error = %T, want ValidationError", err)
+		raw, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
+		if err != nil || raw.Mode != factorysessionexecution.ResultMode("invalid") {
+			t.Fatalf("raw result request = %#v, error = %v", raw, err)
 		}
 	})
 
 	t.Run("unsupported list scope", func(t *testing.T) {
 		scope := factoryapi.FactorySessionListScope("workspace")
-		_, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
-		var validationErr *factorysessionexecution.ValidationError
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("error = %T, want ValidationError", err)
+		raw, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
+		if err != nil || raw.Scope != factorysessionexecution.SessionListScope("workspace") {
+			t.Fatalf("raw list request = %#v, error = %v", raw, err)
 		}
 	})
 
 	t.Run("negative event reconnect sequence", func(t *testing.T) {
 		sequence := factoryapi.AfterSequence(-1)
-		_, err := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterSequence: &sequence})
-		var validationErr *factorysessionexecution.ValidationError
-		if !errors.As(err, &validationErr) {
-			t.Fatalf("error = %T, want ValidationError", err)
+		raw, err := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterSequence: &sequence})
+		if err != nil || raw.AfterSequence == nil || *raw.AfterSequence != -1 {
+			t.Fatalf("raw reconnect request = %#v, error = %v", raw, err)
 		}
 	})
 
@@ -403,6 +353,7 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 			AfterEventId:  &eventID,
 			AfterSequence: &sequence,
 		})
+
 		if err != nil {
 			t.Fatalf("EventReconnectRequestFromAPI: %v", err)
 		}
@@ -429,10 +380,14 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 
 func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
 	mapped := factorysession.ControlErrorToAPI("dur-sess-js-success-002", &factorysessionexecution.ControlError{
-		Operation: factorysessionexecution.LifecycleControlRetryDispatch,
+		Operation: "RETRY_DISPATCH",
 		Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
 		Status:    factorysessionexecution.LifecycleStatusSucceeded,
 		Message:   "session is terminal",
+		Links: factorysessionexecution.LifecycleControlLinks{
+			Session: "/factory-sessions/dur-sess-js-success-002",
+			Results: "/factory-sessions/dur-sess-js-success-002/results",
+		},
 	})
 	if mapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
 		t.Fatalf("outcome = %q, want TERMINAL_SESSION", mapped.Outcome)
@@ -451,9 +406,12 @@ func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
 func TestControlErrorToAPI_MapsConflictOutcome(t *testing.T) {
 	mapped := factorysession.ControlErrorToAPI("dur-sess-js-run-n-001", &factorysessionexecution.ControlError{
 		Operation: factorysessionexecution.LifecycleControlResume,
-		Outcome:   factorysessionexecution.LifecycleControlOutcomeConflict,
+		Outcome:   "CONFLICT",
 		Status:    factorysessionexecution.LifecycleStatusPaused,
 		Message:   "control requestId was reused with a different operation or target",
+		Links: factorysessionexecution.LifecycleControlLinks{
+			Session: "/factory-sessions/dur-sess-js-run-n-001",
+		},
 	})
 	if mapped.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
 		t.Fatalf("operation = %q, want RESUME", mapped.Operation)
@@ -940,6 +898,47 @@ func jsonValuesEqual(left, right any) bool {
 		return false
 	}
 	return string(leftJSON) == string(rightJSON)
+}
+
+func TestRequestMappers_ForwardDecodedFieldsOnlyThroughInjectedPreparation(t *testing.T) {
+	t.Parallel()
+
+	requestID, reason := " control-1 ", " reason "
+	previewID := " preview-1 "
+	force := true
+	scope := factoryapi.FactorySessionListScopePersisted
+	mode := factoryapi.FactorySessionResultModePartial
+	include := true
+	afterEventID := factoryapi.AfterEventId(" event-1 ")
+	afterSequence := factoryapi.AfterSequence(7)
+
+	start, _ := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+		RequestId: " request-1 ",
+		Source:    factoryapi.FactorySessionExecutionSource{Kind: factoryapi.FactorySessionExecutionSourceKindFactoryId, FactoryId: strPtr(" factory-1 ")},
+	})
+	control, _ := factorysession.ControlRequestFromAPI(factoryapi.FactorySessionLifecycleControlRequest{RequestId: &requestID, Reason: &reason})
+	approve, _ := factorysession.ApproveRequestFromAPI(factoryapi.FactorySessionApproveRequest{RequestId: &requestID, Reason: &reason, ApprovalPreviewId: &previewID})
+	retry, _ := factorysession.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{RequestId: &requestID, Reason: &reason, DispatchId: " dispatch-1 ", ForceNewAttempt: &force})
+	interrupt, _ := factorysession.InterruptDispatchRequestFromAPI(factoryapi.FactorySessionInterruptDispatchRequest{RequestId: &requestID, Reason: &reason, DispatchId: " dispatch-2 "})
+	list, _ := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
+	result, _ := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode, IncludeArtifacts: &include})
+	events, _ := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterEventId: &afterEventID, AfterSequence: &afterSequence})
+
+	if start.RequestID != " request-1 " || start.Source.FactoryID != " factory-1 " {
+		t.Fatalf("start mapping = %#v", start)
+	}
+	if control.RequestID != requestID || control.Reason != reason || approve.ApprovalPreviewID != previewID {
+		t.Fatalf("control/approve mapping = %#v %#v", control, approve)
+	}
+	if retry.DispatchID != " dispatch-1 " || !retry.ForceNewAttempt || interrupt.DispatchID != " dispatch-2 " {
+		t.Fatalf("dispatch mapping = %#v %#v", retry, interrupt)
+	}
+	if list.Scope != factorysessionexecution.SessionListScopePersisted || result.Mode != factorysessionexecution.ResultModePartial || !result.IncludeArtifacts {
+		t.Fatalf("list/result mapping = %#v %#v", list, result)
+	}
+	if events.AfterEventID != " event-1 " || events.AfterSequence == nil || *events.AfterSequence != 7 {
+		t.Fatalf("event mapping = %#v", events)
+	}
 }
 
 func assertRequestValidationError(t *testing.T, err error) {

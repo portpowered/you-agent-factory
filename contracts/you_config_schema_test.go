@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config/globalconfiginventory"
-	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -53,6 +51,7 @@ func youConfigSchema(t *testing.T) *jsonschema.Schema {
 }
 
 func TestYouConfigSchemaDeclaresDraft202012AndStableID(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root, ok := document.(map[string]any)
 	if !ok {
@@ -67,22 +66,25 @@ func TestYouConfigSchemaDeclaresDraft202012AndStableID(t *testing.T) {
 }
 
 func TestYouConfigSchemaValidFixtures(t *testing.T) {
+	t.Parallel()
 	schema := youConfigSchema(t)
 
 	tests := []struct {
 		name    string
 		fixture string
 	}{
-		{name: "defaults only", fixture: filepath.Join("..", "pkg", "config", "operatorconfig", "testdata", "fixtures", "valid", "defaults-only.json")},
-		{name: "backend scope sibling", fixture: filepath.Join("..", "pkg", "config", "operatorconfig", "testdata", "fixtures", "valid", "backend-scope-sibling.json")},
-		{name: "worker presets missing", fixture: filepath.Join("..", "pkg", "config", "operatorconfig", "testdata", "fixtures", "valid", "worker-presets-missing.json")},
-		{name: "load defaults", fixture: filepath.Join("..", "pkg", "config", "operatorconfig", "testdata", "fixtures", "valid", "load-defaults.json")},
-		{name: "existing backend scope", fixture: filepath.Join("..", "pkg", "config", "systemconfig", "testdata", "fixtures", "valid", "existing-scope.json")},
-		{name: "defaults sibling", fixture: filepath.Join("..", "pkg", "config", "systemconfig", "testdata", "fixtures", "valid", "defaults-sibling.json")},
+		{name: "defaults only", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "defaults-only.json")},
+		{name: "backend scope sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "backend-scope-sibling.json")},
+		{name: "worker presets missing", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "worker-presets-missing.json")},
+		{name: "load defaults", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures", "valid", "load-defaults.json")},
+		{name: "existing backend scope", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "identityinventory", "testdata", "fixtures", "valid", "existing-scope.json")},
+		{name: "defaults sibling", fixture: filepath.Join("..", "pkg", "services", "operator_settings", "identityinventory", "testdata", "fixtures", "valid", "defaults-sibling.json")},
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, test.fixture)
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
@@ -92,6 +94,7 @@ func TestYouConfigSchemaValidFixtures(t *testing.T) {
 }
 
 func TestYouConfigSchemaContractCoversInventoriedTopology(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root, ok := document.(map[string]any)
 	if !ok {
@@ -130,7 +133,7 @@ func TestYouConfigSchemaContractCoversInventoriedTopology(t *testing.T) {
 		t.Fatalf("contract field inventory IDs = %v, want %v", gotIDs, wantIDs)
 	}
 
-	inventory := globalconfiginventory.ProjectTopologyInventory()
+	inventory := committedGlobalConfigInventory(t)
 	for _, record := range inventory.Fields {
 		field, ok := fields[record.ID].(map[string]any)
 		if !ok {
@@ -161,6 +164,7 @@ func TestYouConfigSchemaContractCoversInventoriedTopology(t *testing.T) {
 }
 
 func TestYouConfigSchemaContractMetadataValidatesThroughCommonVocabulary(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root := document.(map[string]any)
 	contract := root["contract"].(map[string]any)
@@ -201,7 +205,9 @@ func TestYouConfigSchemaContractMetadataValidatesThroughCommonVocabulary(t *test
 	fieldContractSchema := compileFieldContractSchema(t, root)
 
 	for _, inventoryID := range inventoriedGlobalConfigFieldIDs {
+		inventoryID := inventoryID
 		t.Run(inventoryID, func(t *testing.T) {
+			t.Parallel()
 			field := fields[inventoryID]
 			if err := fieldContractSchema.Validate(field); err != nil {
 				t.Fatalf("validate field contract: %v", err)
@@ -224,6 +230,7 @@ func TestYouConfigSchemaContractMetadataValidatesThroughCommonVocabulary(t *test
 }
 
 func TestYouConfigSchemaPrecedenceAndSensitivityMetadataAgreesWithInventory(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	contract := document.(map[string]any)["contract"].(map[string]any)
 	fields := contract["fields"].(map[string]any)
@@ -233,13 +240,15 @@ func TestYouConfigSchemaPrecedenceAndSensitivityMetadataAgreesWithInventory(t *t
 		t.Fatal("contract missing precedenceChain metadata")
 	}
 
-	inventory := globalconfiginventory.ProjectTopologyInventory()
+	inventory := committedGlobalConfigInventory(t)
 	if precedenceChain != inventory.PrecedenceChain {
 		t.Fatalf("contract precedenceChain = %q, want %q", precedenceChain, inventory.PrecedenceChain)
 	}
 
 	for _, record := range inventory.Fields {
+		record := record
 		t.Run(record.ID, func(t *testing.T) {
+			t.Parallel()
 			field, ok := fields[record.ID].(map[string]any)
 			if !ok {
 				t.Fatalf("contract missing field %q", record.ID)
@@ -274,6 +283,7 @@ func TestYouConfigSchemaPrecedenceAndSensitivityMetadataAgreesWithInventory(t *t
 }
 
 func TestYouConfigSchemaClosedObjectBoundaries(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root := document.(map[string]any)
 
@@ -293,8 +303,9 @@ func TestYouConfigSchemaClosedObjectBoundaries(t *testing.T) {
 }
 
 func TestYouConfigSchemaRejectsInvalidFixtures(t *testing.T) {
+	t.Parallel()
 	schema := youConfigSchema(t)
-	fixtureRoot := filepath.Join("..", "pkg", "config", "operatorconfig", "testdata", "fixtures")
+	fixtureRoot := filepath.Join("..", "pkg", "services", "operator_settings", "testdata", "fixtures")
 
 	tests := []struct {
 		name     string
@@ -339,7 +350,9 @@ func TestYouConfigSchemaRejectsInvalidFixtures(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 			instance := readJSON(t, test.fixture)
 			err := schema.Validate(instance)
 			if err == nil {
@@ -353,14 +366,15 @@ func TestYouConfigSchemaRejectsInvalidFixtures(t *testing.T) {
 }
 
 func TestYouConfigSchemaContractDocumentsSharedFileSplitAndPersistencePolicy(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	contract := document.(map[string]any)["contract"].(map[string]any)
 
-	topology := globalconfiginventory.ProjectTopologyInventory()
+	topology := committedGlobalConfigInventory(t)
 	if contract["sharedFileSplit"] == nil {
 		t.Fatal("contract missing sharedFileSplit metadata")
 	}
-	gotSplit := decodeContractValue[globalconfiginventory.SharedFileSplit](t, contract["sharedFileSplit"])
+	gotSplit := decodeContractValue[committedGlobalConfigSharedFileSplit](t, contract["sharedFileSplit"])
 	gotSplitJSON, err := json.Marshal(gotSplit)
 	if err != nil {
 		t.Fatalf("marshal decoded sharedFileSplit: %v", err)
@@ -373,12 +387,12 @@ func TestYouConfigSchemaContractDocumentsSharedFileSplitAndPersistencePolicy(t *
 		t.Fatalf("contract sharedFileSplit = %s, want %s", gotSplitJSON, wantSplitJSON)
 	}
 
-	gotPolicies := decodeContractValue[[]globalconfiginventory.UnknownFieldPolicy](t, contract["unknownFieldPolicy"])
+	gotPolicies := decodeContractValue[[]committedGlobalConfigUnknownPolicy](t, contract["unknownFieldPolicy"])
 	if !slices.Equal(gotPolicies, topology.UnknownFieldPolicy) {
 		t.Fatalf("contract unknownFieldPolicy = %#v, want %#v", gotPolicies, topology.UnknownFieldPolicy)
 	}
 
-	systemInventory := systemconfig.ProjectInputInventory()
+	systemInventory := committedIdentityInputInventory(t)
 	siblingPreservation, ok := contract["siblingPreservation"].(string)
 	if !ok || siblingPreservation == "" {
 		t.Fatal("contract missing siblingPreservation metadata")
@@ -389,33 +403,36 @@ func TestYouConfigSchemaContractDocumentsSharedFileSplitAndPersistencePolicy(t *
 }
 
 func TestYouConfigSchemaPersistenceCasesAgreeWithDocumentedSemantics(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	contract := document.(map[string]any)["contract"].(map[string]any)
 	fields := contract["fields"].(map[string]any)
 	backendScope := fields["backendScopeID"].(map[string]any)
 
-	if backendScope["persistenceOwner"] != "systemconfig" || backendScope["parseOwner"] != "systemconfig" {
-		t.Fatalf("backendScopeID ownership = parse %q persist %q, want systemconfig/systemconfig", backendScope["parseOwner"], backendScope["persistenceOwner"])
+	if backendScope["persistenceOwner"] != "operator_settings" || backendScope["parseOwner"] != "operator_settings" {
+		t.Fatalf("backendScopeID ownership = parse %q persist %q, want operator_settings/operator_settings", backendScope["parseOwner"], backendScope["persistenceOwner"])
 	}
 
 	defaults := fields["defaults"].(map[string]any)
-	if defaults["parseOwner"] != "operatorconfig" || defaults["persistenceOwner"] != "none" {
-		t.Fatalf("defaults ownership = parse %q persist %q, want operatorconfig/none", defaults["parseOwner"], defaults["persistenceOwner"])
+	if defaults["parseOwner"] != "operator_settings" || defaults["persistenceOwner"] != "none" {
+		t.Fatalf("defaults ownership = parse %q persist %q, want operator_settings/none", defaults["parseOwner"], defaults["persistenceOwner"])
 	}
 
 	summary := contract["sharedFileSplit"].(map[string]any)["summary"].(string)
-	if !strings.Contains(summary, "operatorconfig owns defaults and workerPresets") {
-		t.Fatalf("shared file split summary = %q, want operatorconfig defaults ownership", summary)
+	if !strings.Contains(summary, "operator_settings owns backendScopeID identity, defaults, and workerPresets") {
+		t.Fatalf("shared file split summary = %q, want unified operator_settings ownership", summary)
 	}
 
-	systemInventory := systemconfig.ProjectInputInventory()
+	systemInventory := committedIdentityInputInventory(t)
 	for _, inputCase := range systemInventory.Cases {
+		inputCase := inputCase
 		if inputCase.PersistedFileExpectation == nil && inputCase.Entrypoint != "persistBackendScopeID" {
 			continue
 		}
 		t.Run(inputCase.ID, func(t *testing.T) {
-			if backendScope["persistenceOwner"] != "systemconfig" {
-				t.Fatalf("persistence case %q requires systemconfig persistence owner", inputCase.ID)
+			t.Parallel()
+			if backendScope["persistenceOwner"] != "operator_settings" {
+				t.Fatalf("persistence case %q requires operator_settings persistence owner", inputCase.ID)
 			}
 			if inputCase.PersistedFileExpectation == nil {
 				return
@@ -434,6 +451,7 @@ func TestYouConfigSchemaPersistenceCasesAgreeWithDocumentedSemantics(t *testing.
 }
 
 func TestYouConfigSchemaDoesNotModelEnvOrFlagAsJSONProperties(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root := document.(map[string]any)
 	properties := root["properties"].(map[string]any)
@@ -460,6 +478,7 @@ func TestYouConfigSchemaDoesNotModelEnvOrFlagAsJSONProperties(t *testing.T) {
 }
 
 func TestYouConfigSchemaInstancePropertiesMatchInventoriedTopology(t *testing.T) {
+	t.Parallel()
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root := document.(map[string]any)
 	properties := root["properties"].(map[string]any)
@@ -522,16 +541,32 @@ func compileFieldContractSchema(t *testing.T, schemaRoot map[string]any) *jsonsc
 
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
-	if err := compiler.AddResource(documentationSchemaID, readJSON(t, filepath.Join("common", "documentation.schema.json"))); err != nil {
+	documentationSchema, err := readJSONDocument(filepath.Join("common", "documentation.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	if err := compiler.AddResource(documentationSchemaID, documentationSchema); err != nil {
 		t.Fatalf("add documentation schema: %v", err)
 	}
-	if err := compiler.AddResource(deprecationsSchemaID, readJSON(t, filepath.Join("common", "deprecations.schema.json"))); err != nil {
+	deprecationsSchema, err := readJSONDocument(filepath.Join("common", "deprecations.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	if err := compiler.AddResource(deprecationsSchemaID, deprecationsSchema); err != nil {
 		t.Fatalf("add deprecations schema: %v", err)
 	}
-	if err := compiler.AddResource(precedenceSchemaID, readJSON(t, filepath.Join("common", "precedence.schema.json"))); err != nil {
+	precedenceSchema, err := readJSONDocument(filepath.Join("common", "precedence.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	if err := compiler.AddResource(precedenceSchemaID, precedenceSchema); err != nil {
 		t.Fatalf("add precedence schema: %v", err)
 	}
-	if err := compiler.AddResource(sensitivitySchemaID, readJSON(t, filepath.Join("common", "sensitivity.schema.json"))); err != nil {
+	sensitivitySchema, err := readJSONDocument(filepath.Join("common", "sensitivity.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	if err := compiler.AddResource(sensitivitySchemaID, sensitivitySchema); err != nil {
 		t.Fatalf("add sensitivity schema: %v", err)
 	}
 	wrappedDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(payload))

@@ -4,14 +4,16 @@ package smoke
 
 import (
 	"testing"
-	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/root"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	providercontract "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func TestServiceHarness_HappyPath(t *testing.T) {
+func TestCustomerProcess_HappyPath(t *testing.T) {
 	support.SkipLongFunctional(t, "slow service-harness happy-path sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "service harness happy path"}`))
@@ -20,20 +22,7 @@ func TestServiceHarness_HappyPath(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
-
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+	runCustomerFactoryProcess(t, dir, provider)
 
 	if provider.CallCount() != 2 {
 		t.Errorf("expected provider called 2 times, got %d", provider.CallCount())
@@ -48,25 +37,15 @@ func TestServiceHarness_HappyPath(t *testing.T) {
 	}
 }
 
-func TestServiceHarness_NoopFallback(t *testing.T) {
+func TestCustomerProcess_NoopFallback(t *testing.T) {
 	support.SkipLongFunctional(t, "slow service-harness noop sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "noop_pipeline"))
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "noop fallback test"}`))
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 5*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("task:complete").
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed").
-		TokenCount(1)
+	runCustomerFactoryProcess(t, dir, nil)
 }
 
-func TestServiceHarness_MultipleWorkItems(t *testing.T) {
+func TestCustomerProcess_MultipleWorkItems(t *testing.T) {
 	support.SkipLongFunctional(t, "slow service-harness multi-item sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 
@@ -79,16 +58,34 @@ func TestServiceHarness_MultipleWorkItems(t *testing.T) {
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
 		workerexecution.InferenceResponse{Content: "Done. COMPLETE"},
 	)
+	runCustomerFactoryProcess(t, dir, provider)
+	if provider.CallCount() != 4 {
+		t.Fatalf("provider call count = %d, want 4", provider.CallCount())
+	}
+}
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 2).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:processing")
+func runCustomerFactoryProcess(
+	t *testing.T,
+	dir string,
+	provider providercontract.Provider,
+) {
+	t.Helper()
+	support.SetWorkingDirectory(t, dir)
+	inputs := support.FakeInputs(t.Context(), []string{
+		"you", "--json", "run", "--dir", dir, "--no-record",
+	})
+	process, err := root.BuildProcess(t.Context(), serviceedges.Edges{
+		ProviderOverride: provider,
+	})
+	if err != nil {
+		t.Fatalf("BuildProcess() error = %v", err)
+	}
+	if err := process.Execute(inputs.Input); err != nil {
+		t.Fatalf(
+			"Process.Execute() error = %v; stdout=%q stderr=%q",
+			err,
+			inputs.Stdout(),
+			inputs.Stderr(),
+		)
+	}
 }

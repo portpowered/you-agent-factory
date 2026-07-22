@@ -8,8 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -358,7 +357,7 @@ func TestCurrentFactoryPUT_RejectsLayoutForUnknownBundledDocNode(t *testing.T) {
 	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
-	if errResp.Targets == nil || !hasValidationTargetCode(*errResp.Targets, factoryvalidation.CodeLayoutUnknownNodeReference) {
+	if errResp.Targets == nil || !hasValidationTargetCode(*errResp.Targets, factoryValidationCodeLayoutUnknownNodeReference) {
 		t.Fatalf("error targets = %#v, want unknown bundled doc layout reference", errResp.Targets)
 	}
 }

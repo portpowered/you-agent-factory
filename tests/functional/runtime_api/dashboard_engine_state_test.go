@@ -8,16 +8,13 @@ import (
 	"testing"
 	"time"
 
-	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
-
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -25,19 +22,19 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	support.SkipLongFunctional(t, "slow dashboard engine-state sweep")
 	dir := scaffoldDashboardWorldViewFunctionalDir(t)
 	provider := newFunctionalWorldViewProvider()
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithProvider(provider),
-		testutil.WithExtraOptions(factory.WithServiceMode()),
-	)
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	submitDashboardWorldViewFunctionalWork(t, h, "world-view-success", "trace-world-view-success")
+	submitDashboardWorldViewFunctionalWork(t, server.URL(), "world-view-success", "trace-world-view-success")
 	provider.nextDispatch(t)
-	assertFunctionalWorldViewActive(t, buildFunctionalWorldView(t, h), "world-view-success")
+	if got := support.GetDefaultSession(t, server.URL()).Runtime.Progress.InFlightCount; got != 1 {
+		t.Fatalf("in-flight dispatch count = %d, want 1", got)
+	}
 	provider.respond(workerexecution.InferenceResponse{
 		Content: "COMPLETE",
 		ProviderSession: &workerexecution.ProviderSessionMetadata{
@@ -46,24 +43,32 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 			ID:       "sess-world-view-success",
 		},
 	}, nil)
-	waitForHarnessWorkInPlace(t, h, "task:complete", "world-view-success", time.Second)
+	waitForPublicWorkInPlace(t, server.URL(), "task:complete", "world-view-success", time.Second)
 
-	submitDashboardWorldViewFunctionalWork(t, h, "world-view-failed", "trace-world-view-failed")
+	submitDashboardWorldViewFunctionalWork(t, server.URL(), "world-view-failed", "trace-world-view-failed")
 	provider.nextDispatch(t)
-	provider.respond(workerexecution.InferenceResponse{}, workers.NewProviderErrorWithSession(
-		workerexecution.WorkFailureTypePermanentBadRequest,
-		"provider rejected dashboard world-view work",
-		errors.New("provider rejected"),
-		&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-world-view-failed"},
-	))
-	waitForHarnessWorkInPlace(t, h, "task:failed", "world-view-failed", time.Second)
+	provider.respond(workerexecution.InferenceResponse{}, &workerexecution.ProviderError{
+		Family:  workerexecution.WorkFailureFamilyTerminal,
+		Type:    workerexecution.WorkFailureTypePermanentBadRequest,
+		Message: "provider rejected dashboard world-view work",
+		Cause:   errors.New("provider rejected"),
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
+			Provider: "codex",
+			Kind:     "session_id",
+			ID:       "sess-world-view-failed",
+		},
+	})
+	waitForPublicWorkInPlace(t, server.URL(), "task:failed", "world-view-failed", time.Second)
 
-	assertFunctionalWorldViewTerminalSession(t, buildFunctionalWorldView(t, h))
-
-	cancel()
-	if err := <-errCh; err != nil && err != context.Canceled {
-		t.Fatalf("factory run error: %v", err)
+	session := support.GetDefaultSession(t, server.URL())
+	if got := support.SessionPlaceTokenCount(session, "task:complete"); got != 1 {
+		t.Fatalf("task:complete token count = %d, want 1", got)
 	}
+	if got := support.SessionPlaceTokenCount(session, "task:failed"); got != 1 {
+		t.Fatalf("task:failed token count = %d, want 1", got)
+	}
+	assertFunctionalProviderSessionsInEvents(t, server.GetFactoryEvents(t))
+	server.Stop(t)
 }
 
 func scaffoldDashboardWorldViewFunctionalDir(t *testing.T) string {
@@ -74,7 +79,7 @@ func scaffoldDashboardWorldViewFunctionalDir(t *testing.T) string {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Workers: []workerconfig.Config{{Name: "worker-a"}},
+		Workers: []interfaces.FactoryWorkerConfig{{Name: "worker-a"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "worker-a",
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -102,99 +107,49 @@ func writeDashboardWorldViewAgents(t *testing.T, dir string, agentType string) {
 	}
 }
 
-func submitDashboardWorldViewFunctionalWork(t *testing.T, h *testutil.ServiceTestHarness, workID string, traceID string) {
+func submitDashboardWorldViewFunctionalWork(t *testing.T, baseURL string, workID string, traceID string) {
 	t.Helper()
-	h.SubmitFull(context.Background(), []work.SubmitRequest{{
-		WorkID: workID, WorkTypeID: "task", TraceID: traceID, Payload: []byte(`{"item":"dashboard-world-view-functional"}`),
-	}})
+	support.UpsertDefaultSessionWorkRequest(t, baseURL, work.WorkRequest{
+		RequestID: "request-" + workID,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
+			Name: workID, WorkID: workID, WorkTypeID: "task", TraceID: traceID,
+			Payload: map[string]any{"item": "dashboard-world-view-functional"},
+		}},
+	})
 }
 
-func buildFunctionalWorldView(t *testing.T, h *testutil.ServiceTestHarness) interfaces.FactoryWorldView {
-	t.Helper()
-	es, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	if es.FactoryState == "" {
-		t.Fatal("expected non-empty FactoryState in engine state snapshot")
-	}
-
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, es.TickCount)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
-	return projections.BuildFactoryWorldViewWithActiveThrottlePauses(worldState, es.ActiveThrottlePauses)
-}
-
-func assertFunctionalWorldViewActive(t *testing.T, view interfaces.FactoryWorldView, workID string) {
-	t.Helper()
-	if view.Runtime.InFlightDispatchCount != 1 {
-		t.Fatalf("InFlightDispatchCount = %d, want 1", view.Runtime.InFlightDispatchCount)
-	}
-	if view.Runtime.Session.DispatchedCount != 1 {
-		t.Fatalf("DispatchedCount = %d, want 1", view.Runtime.Session.DispatchedCount)
-	}
-	for _, execution := range view.Runtime.ActiveExecutionsByDispatchID {
-		for _, item := range execution.WorkItems {
-			if item.WorkID == workID {
-				return
-			}
-		}
-	}
-	t.Fatalf("active executions did not include work %q: %#v", workID, view.Runtime.ActiveExecutionsByDispatchID)
-}
-
-func assertFunctionalWorldViewTerminalSession(t *testing.T, view interfaces.FactoryWorldView) {
-	t.Helper()
-	session := view.Runtime.Session
-	if session.DispatchedCount != 2 || session.CompletedCount != 1 || session.FailedCount != 1 {
-		t.Fatalf("session counts = %#v, want dispatched=2 completed=1 failed=1", session)
-	}
-	if len(session.DispatchHistory) != 2 {
-		t.Fatalf("dispatch history length = %d, want 2", len(session.DispatchHistory))
-	}
-	assertFunctionalWorldViewProviderSessions(t, session.ProviderSessions)
-	if !functionalWorldViewContainsWorkInPlace(view, "task:failed", "world-view-failed") {
-		t.Fatalf("failed occupancy missing world-view-failed: %#v", view.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:failed"])
-	}
-}
-
-func assertFunctionalWorldViewProviderSessions(t *testing.T, sessions []interfaces.FactoryWorldProviderSessionRecord) {
+func assertFunctionalProviderSessionsInEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
 	seen := map[string]bool{}
-	for _, session := range sessions {
-		seen[session.ProviderSession.ID] = true
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+			continue
+		}
+		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		if err != nil || payload.ProviderSession == nil {
+			continue
+		}
+		seen[support.StringPointerValue(payload.ProviderSession.Id)] = true
 	}
 	for _, want := range []string{"sess-world-view-success", "sess-world-view-failed"} {
 		if !seen[want] {
-			t.Fatalf("provider sessions = %#v, missing %q", sessions, want)
+			t.Fatalf("provider sessions in events = %#v, missing %q", seen, want)
 		}
 	}
 }
 
-func functionalWorldViewContainsWorkInPlace(view interfaces.FactoryWorldView, placeID, workID string) bool {
-	for _, item := range view.Runtime.PlaceOccupancyWorkItemsByPlaceID[placeID] {
-		if item.WorkID == workID {
-			return true
-		}
-	}
-	return false
-}
-
-func waitForHarnessWorkInPlace(t *testing.T, h *testutil.ServiceTestHarness, placeID, workID string, timeout time.Duration) {
+func waitForPublicWorkInPlace(t *testing.T, baseURL, placeID, workID string, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		snap, err := h.GetEngineStateSnapshot()
-		if err != nil {
-			t.Fatalf("GetEngineStateSnapshot: %v", err)
-		}
-		if support.HasWorkTokenInPlace(snap.Marking, placeID, workID) {
-			return
+		session := support.GetDefaultSession(t, baseURL)
+		if session.Runtime.Petri != nil {
+			for _, token := range session.Runtime.Petri.Marking {
+				if token.PlaceId == placeID && token.WorkId == workID {
+					return
+				}
+			}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -247,4 +202,4 @@ func (p *functionalWorldViewProvider) respond(response workerexecution.Inference
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
 
-var _ workers.Provider = (*functionalWorldViewProvider)(nil)
+var _ workerprovider.Provider = (*functionalWorldViewProvider)(nil)

@@ -84,28 +84,14 @@ func VerifyProjectedToolInventory() error {
 }
 
 // VerifyToolInventory fails when any inventoried canonical tool lacks handler
-// registration evidence or when a compatibility alias name appears even if the
-// alias resolves to a live handler.
+// registration evidence.
 func VerifyToolInventory(inventory ToolInventory) error {
-	aliasNames := compatibilityAliasNameSet()
 	for _, tool := range inventory.Tools {
-		if _, isAlias := aliasNames[tool.Name]; isAlias {
-			return fmt.Errorf("compatibility alias %q must not appear in canonical inventory", tool.Name)
-		}
 		if !tool.HandlerRegistered || !IsCanonicalToolHandlerRegistered(tool.Name) {
 			return fmt.Errorf("discovered canonical tool %q has no registered handler", tool.Name)
 		}
 	}
 	return nil
-}
-
-func compatibilityAliasNameSet() map[string]struct{} {
-	aliases := DiscoverCompatibilityAliases()
-	names := make(map[string]struct{}, len(aliases))
-	for _, alias := range aliases {
-		names[alias.Name] = struct{}{}
-	}
-	return names
 }
 
 func deriveToolIDCandidate(name string) string {
@@ -173,9 +159,9 @@ func canonicalizeSchemaValue(value any) (any, error) {
 	}
 }
 
-// DiscoverTools returns the canonical dynamic workflow Factory Session MCP tool
-// catalog in stable discovery order. Schemas mirror durable REST and Factory
-// preview contracts; deprecated /workflow-previews is not a primary surface.
+// DiscoverTools returns the canonical JavaScript-orchestrated Factory Session
+// MCP tool catalog in stable discovery order. Schemas mirror durable REST and
+// Factory preview contracts.
 func DiscoverTools() []ToolDefinition {
 	return []ToolDefinition{
 		listSessionsTool(),

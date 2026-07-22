@@ -7,28 +7,87 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
+	fse "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
-func contractFixtureCatalogPath(t *testing.T) string {
-	t.Helper()
-	return filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
+var canonicalListRequestPreparation fse.RequestPreparation = listRequestPreparation{}
+
+type listRequestPreparation struct{}
+
+func (listRequestPreparation) PrepareListSessions(request fse.ListSessionsRequest) (fse.ListSessionsRequest, error) {
+	if request.Scope == "" {
+		request.Scope = fse.SessionListScopeLive
+	}
+	switch request.Scope {
+	case fse.SessionListScopeLive, fse.SessionListScopePersisted, fse.SessionListScopeAll:
+		return request, nil
+	default:
+		return fse.ListSessionsRequest{}, &fse.ExecutionValidationError{Field: "scope", Message: fmt.Sprintf("scope must be live, persisted, or all (got %q)", request.Scope)}
+	}
+}
+func (listRequestPreparation) PrepareStart(fse.StartRequest) (fse.StartRequest, error) {
+	panic("unexpected PrepareStart")
+}
+func (listRequestPreparation) PrepareControl(fse.ControlRequest) (fse.ControlRequest, error) {
+	panic("unexpected PrepareControl")
+}
+func (listRequestPreparation) PrepareApprove(fse.ApproveRequest) (fse.ApproveRequest, error) {
+	panic("unexpected PrepareApprove")
+}
+func (listRequestPreparation) PrepareRetryDispatch(fse.RetryDispatchRequest) (fse.RetryDispatchRequest, error) {
+	panic("unexpected PrepareRetryDispatch")
+}
+func (listRequestPreparation) PrepareInterruptDispatch(fse.InterruptDispatchRequest) (fse.InterruptDispatchRequest, error) {
+	panic("unexpected PrepareInterruptDispatch")
+}
+func (listRequestPreparation) PrepareResult(fse.ResultRequest) (fse.ResultRequest, error) {
+	panic("unexpected PrepareResult")
+}
+func (listRequestPreparation) PrepareEventReconnect(fse.EventReconnectRequest) (fse.EventReconnectRequest, error) {
+	panic("unexpected PrepareEventReconnect")
 }
 
 func newContractDurableLister(t *testing.T) durableSessionLister {
 	t.Helper()
-	service, err := fse.NewFakeServiceFromContractFixtures(contractFixtureCatalogPath(t))
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	return func(_ context.Context, request fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		if request.Scope != fse.SessionListScopeAll {
+			t.Fatalf("durable list scope = %q, want all", request.Scope)
+		}
+		return contractDurableListResult(), nil
 	}
-	return service.ListSessions
+}
+
+func contractDurableListResult() fse.ListSessionsResult {
+	return fse.ListSessionsResult{
+		Scope: fse.SessionListScopeAll,
+		DurableSessions: []fse.DurableSessionListSummary{
+			{
+				SessionID:        "dur-sess-js-success-002",
+				Status:           fse.LifecycleStatusSucceeded,
+				OrchestratorKind: "JAVASCRIPT",
+				ResolvedSource: fse.ResolvedSource{
+					Kind:      "WORKFLOW_FILE",
+					SourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
+				},
+				Policy:        fse.PolicyProjection{EffectiveHash: "eff-policy-docs-refresh"},
+				Phase:         "complete",
+				ResultSummary: &fse.ResultSummary{ResultStatus: "FINAL"},
+				Actions:       fse.SessionActionAvailability{CanTerminate: true},
+			},
+			{
+				SessionID:        "dur-sess-petri-success-001",
+				Status:           fse.LifecycleStatusSucceeded,
+				OrchestratorKind: "PETRI_NET",
+				ResolvedSource:   fse.ResolvedSource{Kind: "FACTORY_ID", SourceRef: "factory/customer-support-triage"},
+				ResultSummary:    &fse.ResultSummary{ResultStatus: "FINAL"},
+			},
+		},
+	}
 }
 
 func TestList_PerformsGETFactorySessions(t *testing.T) {
@@ -48,7 +107,7 @@ func TestList_PerformsGETFactorySessions(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Server: srv.URL,
 		Output: &out,
 	})
@@ -72,7 +131,7 @@ func TestList_HumanOutputShowsEmptyState(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Port:   serverPort(t, srv),
 		Output: &out,
 	})
@@ -118,7 +177,7 @@ func TestList_HumanOutputRendersSessionTable(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Port:   serverPort(t, srv),
 		Output: &out,
 	})
@@ -146,7 +205,7 @@ func TestList_JSONModeEmitsListFactorySessionsResponse(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Port:   serverPort(t, srv),
 		JSON:   true,
 		Output: &out,
@@ -169,7 +228,7 @@ func TestList_JSONModeEmitsListFactorySessionsResponse(t *testing.T) {
 
 func TestList_UnreachableServiceNamesEndpoint(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Port:   1,
 		JSON:   true,
 		Output: &out,
@@ -187,7 +246,7 @@ func TestList_UnreachableServiceNamesEndpoint(t *testing.T) {
 
 func TestList_PersistedScopeRendersDurableJavaScriptFactorySessions(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		Output:        &out,
 		DurableLister: newContractDurableLister(t),
@@ -220,7 +279,7 @@ func TestList_PersistedScopeEmptyStateWithoutMatchingRows(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		Output:        &out,
 		DurableLister: emptyLister,
@@ -245,7 +304,7 @@ func TestList_AllScopeCombinesLiveHTTPAndDurableProviderRows(t *testing.T) {
 	defer srv.Close()
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "all",
 		Port:          serverPort(t, srv),
 		Output:        &out,
@@ -265,20 +324,14 @@ func TestList_AllScopeCombinesLiveHTTPAndDurableProviderRows(t *testing.T) {
 	if !strings.Contains(output, "Factory Sessions (durable):") {
 		t.Fatalf("output missing durable section: %q", output)
 	}
-	for _, row := range fixtures.PublishedFixtureScenarios {
-		if row.Purpose == fixtures.FixturePurposeSyncSuccess {
-			if !strings.Contains(output, row.SessionID) {
-				t.Fatalf("output missing persisted durable row %q: %q", row.SessionID, output)
-			}
-			return
-		}
+	if !strings.Contains(output, "dur-sess-petri-success-001") {
+		t.Fatalf("output missing persisted durable row: %q", output)
 	}
-	t.Fatal("published sync-success scenario missing from catalog")
 }
 
 func TestList_UnsupportedScopeReturnsCommandError(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:  "workspace",
 		Output: &out,
 	})
@@ -295,7 +348,7 @@ func TestList_UnsupportedScopeReturnsCommandError(t *testing.T) {
 
 func TestList_UnsupportedScopeJSONKeepsStdoutEmpty(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:  "workspace",
 		JSON:   true,
 		Output: &out,
@@ -314,7 +367,7 @@ func TestList_PersistedScopeProviderFailureReturnsErrorWithoutPartialOutput(t *t
 	}
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		Output:        &out,
 		DurableLister: failingLister,
@@ -336,7 +389,7 @@ func TestList_PersistedScopeProviderFailureJSONKeepsStdoutEmpty(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		JSON:          true,
 		Output:        &out,
@@ -366,7 +419,7 @@ func TestList_AllScopeProviderFailureReturnsErrorWithoutPartialOutput(t *testing
 	}
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "all",
 		Port:          serverPort(t, srv),
 		Output:        &out,
@@ -388,7 +441,7 @@ func TestList_PersistedScopeJSONMatchesCanonicalListResponse(t *testing.T) {
 	want := canonicalListResponse(t, lister, fse.SessionListScopePersisted, nil)
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		JSON:          true,
 		Output:        &out,
@@ -403,7 +456,7 @@ func TestList_PersistedScopeJSONMatchesCanonicalListResponse(t *testing.T) {
 
 func TestList_PersistedScopeJSONIncludesDurableJavaScriptSessionFields(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		JSON:          true,
 		Output:        &out,
@@ -463,7 +516,7 @@ func TestList_AllScopeJSONMatchesCanonicalListResponse(t *testing.T) {
 	want := canonicalListResponse(t, lister, fse.SessionListScopeAll, liveSessions)
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "all",
 		Port:          serverPort(t, srv),
 		JSON:          true,
@@ -485,7 +538,7 @@ func TestList_AllScopeJSONMatchesCanonicalListResponse(t *testing.T) {
 
 func TestList_PersistedScopeJSONOmitsSensitiveProviderInternals(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		JSON:          true,
 		Output:        &out,
@@ -518,7 +571,7 @@ func TestList_PersistedScopeJSONEmptyState(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		JSON:          true,
 		Output:        &out,
@@ -545,7 +598,7 @@ func TestList_PersistedScopeJSONEmptyState(t *testing.T) {
 
 func TestList_PersistedScopeJSONPreservesDeterministicOrdering(t *testing.T) {
 	var out bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Scope:         "persisted",
 		JSON:          true,
 		Output:        &out,
@@ -583,7 +636,7 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 
 	var out bytes.Buffer
 	var diagnostics bytes.Buffer
-	err := List(ListConfig{
+	err := NewList(testHTTPProtocol(t), canonicalListRequestPreparation)(ListConfig{Context: context.Background(),
 		Port:        serverPort(t, srv),
 		JSON:        true,
 		Verbose:     true,
@@ -618,20 +671,17 @@ func canonicalListResponse(
 ) factoryapi.ListFactorySessionsResponse {
 	t.Helper()
 
-	normalized, err := fse.NormalizeListSessionsRequest(fse.ListSessionsRequest{Scope: scope})
-	if err != nil {
-		t.Fatalf("NormalizeListSessionsRequest: %v", err)
-	}
+	normalized := fse.ListSessionsRequest{Scope: scope}
 	durableResult, err := lister(context.Background(), fse.ListSessionsRequest{Scope: fse.SessionListScopeAll})
 	if err != nil {
 		t.Fatalf("list durable sessions: %v", err)
 	}
-	scoped := fse.ApplySessionListScope(fse.ListSessionsResult{
+	detachedResult := fse.ListSessionsResult{
 		Scope:           normalized.Scope,
 		LiveSessions:    liveSessions,
 		DurableSessions: durableResult.DurableSessions,
-	}, normalized)
-	return factorysession.ListSessionsResponseToAPI(scoped)
+	}
+	return factorysession.ListSessionsResponseToAPI(detachedResult)
 }
 
 func assertListJSONMatchesCanonical(t *testing.T, gotJSON []byte, want factoryapi.ListFactorySessionsResponse) {

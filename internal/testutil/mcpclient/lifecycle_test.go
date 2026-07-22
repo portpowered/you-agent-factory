@@ -12,8 +12,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestClientPreservesProtocolAndToolErrorBoundariesOverRealStdio(t *testing.T) {
@@ -21,21 +21,17 @@ func TestClientPreservesProtocolAndToolErrorBoundariesOverRealStdio(t *testing.T
 	defer cancel()
 	client, requests, responses, serverErr := connectUnblockedRecordingClient(t, ctx)
 
-	err := client.SetLoggingLevel(ctx, mcp.LoggingLevel("info"))
+	if err := client.SetLoggingLevel(ctx, mcp.LoggingLevel("info")); err != nil {
+		t.Fatalf("SetLoggingLevel() error = %v", err)
+	}
+	_, err := client.CallTool(ctx, "unknown.tool", map[string]any{})
 	assertErrorStage(t, err, StageProtocolExchange)
-	var protocolErr *jsonrpc.Error
-	if !errors.As(err, &protocolErr) {
-		t.Fatalf("SetLoggingLevel() error = %T %v, want *jsonrpc.Error", err, err)
-	}
-	if protocolErr.Code != jsonrpc.CodeMethodNotFound {
-		t.Fatalf("SetLoggingLevel() protocol code = %d, want %d", protocolErr.Code, jsonrpc.CodeMethodNotFound)
-	}
 
-	toolResult, err := client.CallTool(ctx, "unsupported.tool", map[string]any{})
+	toolResult, err := client.CallTool(ctx, mcpfactorysession.ToolListSessions, map[string]any{"forceError": true})
 	if err != nil {
 		t.Fatalf("CallTool(unsupported) error = %v, want normal tool result", err)
 	}
-	assertRejectedTextToolResult(t, toolResult, `unsupported tool "unsupported.tool"`)
+	assertRejectedTextToolResult(t, toolResult, "injected tool operation failure")
 	assertErrorBoundaryFrames(t, requests.frames(), responses.frames())
 	closeClientAndWaitForServer(t, ctx, client, serverErr)
 }
@@ -110,7 +106,7 @@ func TestCallerInputCloseEndsRealStdioWithoutPendingClientOperations(t *testing.
 	}
 }
 
-func TestMalformedProtocolRawFrameRetainsRequestIdentity(t *testing.T) {
+func TestRejectedToolRawFrameRetainsRequestIdentity(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 	serverInput, rawClientInput := io.Pipe()
@@ -118,23 +114,23 @@ func TestMalformedProtocolRawFrameRetainsRequestIdentity(t *testing.T) {
 	serverErr := make(chan error, 1)
 	go func() { serverErr <- newRealServer(t).ServeStdio(ctx, serverInput, serverOutput) }()
 
-	const malformedProtocolFrame = `{"jsonrpc":"1.0","id":"malformed-1","method":"ping"}` + "\n"
-	if _, err := io.WriteString(rawClientInput, malformedProtocolFrame); err != nil {
-		t.Fatalf("write intentionally malformed raw frame: %v", err)
+	const unknownMethodFrame = `{"jsonrpc":"2.0","id":"unknown-1","method":"tools/call","params":{"name":"unknown.tool","arguments":{}}}` + "\n"
+	if _, err := io.WriteString(rawClientInput, unknownMethodFrame); err != nil {
+		t.Fatalf("write unknown-method raw frame: %v", err)
 	}
 	encoded, err := bufio.NewReader(rawClientOutput).ReadBytes('\n')
 	if err != nil {
-		t.Fatalf("read malformed-protocol response: %v", err)
+		t.Fatalf("read unknown-method response: %v", err)
 	}
 	var response boundaryFrame
 	if err := json.Unmarshal(bytes.TrimSpace(encoded), &response); err != nil {
-		t.Fatalf("decode malformed-protocol response: %v", err)
+		t.Fatalf("decode unknown-method response: %v", err)
 	}
-	if fmt.Sprint(response.ID) != "malformed-1" || response.Error == nil || response.Error.Code != jsonrpc.CodeInvalidRequest {
-		t.Fatalf("malformed-protocol response = %#v, want correlated invalid-request error", response)
+	if fmt.Sprint(response.ID) != "unknown-1" || response.Error == nil {
+		t.Fatalf("rejected-tool response=%s, want correlated protocol error", bytes.TrimSpace(encoded))
 	}
 	if err := rawClientInput.Close(); err != nil {
-		t.Fatalf("close malformed-protocol input: %v", err)
+		t.Fatalf("close unknown-method input: %v", err)
 	}
 	waitForServer(t, ctx, serverErr)
 	_ = rawClientOutput.Close()
@@ -205,8 +201,8 @@ func assertErrorBoundaryFrames(t *testing.T, requests, responses [][]byte) {
 		}
 		responseErrors[fmt.Sprint(frame.ID)] = frame.Error
 	}
-	if rpcErr := responseErrors[fmt.Sprint(requestIDs["logging/setLevel"])]; rpcErr == nil || rpcErr.Code != jsonrpc.CodeMethodNotFound {
-		t.Fatalf("logging response error = %#v, want method-not-found", rpcErr)
+	if rpcErr := responseErrors[fmt.Sprint(requestIDs["logging/setLevel"])]; rpcErr != nil {
+		t.Fatalf("logging response error = %#v, want successful SDK protocol response", rpcErr)
 	}
 	if rpcErr := responseErrors[fmt.Sprint(requestIDs["tools/call"])]; rpcErr != nil {
 		t.Fatalf("tool/domain response error = %#v, want normal CallToolResult", rpcErr)

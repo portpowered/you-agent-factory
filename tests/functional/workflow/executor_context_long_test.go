@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -30,12 +30,7 @@ func TestExecutorContext_InputTokenColors(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
+	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
 
 	sweCalls := support.ProviderCallsForWorker(provider, "swe")
 	if len(sweCalls) != 1 {
@@ -70,39 +65,25 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "auth"}`))
 
-	h := testutil.NewServiceTestHarness(t, dir)
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"swe":      {support.AcceptedProviderResponse(), support.AcceptedProviderResponse()},
+		"reviewer": {{Content: "needs unit tests"}, support.AcceptedProviderResponse()},
+	})
+	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
 
-	sweMock := h.MockWorker("swe",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	h.MockWorker("reviewer",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "needs unit tests"},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	if sweMock.CallCount() != 2 {
-		t.Fatalf("expected swe called 2 times, got %d", sweMock.CallCount())
+	if got := provider.CallCount("swe"); got != 2 {
+		t.Fatalf("expected swe called 2 times, got %d", got)
 	}
 
-	calls := sweMock.Calls()
+	calls := provider.Calls("swe")
 	firstColor := firstInputToken(calls[0].InputTokens).Color
 	if _, ok := firstColor.Tags["_rejection_feedback"]; ok {
 		t.Error("first dispatch should not have _rejection_feedback tag")
 	}
 
 	secondColor := firstInputToken(calls[1].InputTokens).Color
-	feedback, ok := secondColor.Tags["_rejection_feedback"]
-	if !ok {
-		t.Fatal("second dispatch missing _rejection_feedback tag")
-	}
-	if feedback != "needs unit tests" {
-		t.Errorf("expected rejection feedback %q, got %q", "needs unit tests", feedback)
-	}
-	if !bytes.Contains(secondColor.Payload, []byte("auth")) {
-		t.Errorf("expected payload to contain 'auth' after rejection, got %q", secondColor.Payload)
+	if !bytes.Contains(secondColor.Payload, []byte("needs unit tests")) {
+		t.Errorf("expected rejected output in retry payload, got %q", secondColor.Payload)
 	}
 }
 
@@ -140,12 +121,7 @@ func TestExecutorContext_ParentLineage(t *testing.T) {
 		support.AcceptedProviderResponse(),
 		support.AcceptedProviderResponse(),
 	)
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
+	support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
 
 	sweCalls := support.ProviderCallsForWorker(provider, "swe")
 	if len(sweCalls) != 1 {

@@ -5,14 +5,14 @@ import (
 	"strings"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/recordings"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-func dashboardQueueCountViewsFromRenderData(renderData dashboardrender.SimpleDashboardRenderData) []dashboardQueueCountView {
+func dashboardQueueCountViewsFromRenderData(renderData recordings.SimpleDashboardRenderData) []dashboardQueueCountView {
 	if len(renderData.PlaceTokenCounts) == 0 {
 		return nil
 	}
@@ -39,7 +39,7 @@ func dashboardQueueCountViewsFromRenderData(renderData dashboardrender.SimpleDas
 }
 
 func workItemsForQueuePlace(
-	renderData dashboardrender.SimpleDashboardRenderData,
+	renderData recordings.SimpleDashboardRenderData,
 	placeID string,
 ) []interfaces.FactoryWorldWorkItemRef {
 	if refs := renderData.CurrentWorkItemsByPlaceID[placeID]; len(refs) > 0 {
@@ -49,7 +49,7 @@ func workItemsForQueuePlace(
 }
 
 func dashboardWorkstationActivityViewsFromRenderData(
-	renderData dashboardrender.SimpleDashboardRenderData,
+	renderData recordings.SimpleDashboardRenderData,
 ) []dashboardWorkstationActivityView {
 	if len(renderData.WorkstationActivityByNodeID) == 0 {
 		return nil
@@ -93,7 +93,7 @@ func dashboardDispatchHistoryFromRenderData(completed []interfaces.FactoryWorldD
 	return views
 }
 
-func dashboardActiveViewFromRenderData(renderData dashboardrender.SimpleDashboardRenderData) dashboardActiveView {
+func dashboardActiveViewFromRenderData(renderData recordings.SimpleDashboardRenderData) dashboardActiveView {
 	entries := make([]dashboardActiveExecutionView, 0, len(renderData.ActiveExecutionsByDispatchID))
 	for dispatchID, execution := range renderData.ActiveExecutionsByDispatchID {
 		entries = append(entries, dashboardActiveExecutionView{
@@ -123,7 +123,7 @@ func sortActiveExecutionViews(entries []dashboardActiveExecutionView) {
 	})
 }
 
-func dashboardSessionViewFromRenderData(renderData dashboardrender.SimpleDashboardRenderData) dashboardSessionView {
+func dashboardSessionViewFromRenderData(renderData recordings.SimpleDashboardRenderData) dashboardSessionView {
 	session := renderData.Session
 	attempts := make([]dashboardProviderSessionView, 0, len(session.ProviderSessions))
 	for _, attempt := range session.ProviderSessions {
@@ -411,7 +411,7 @@ func worldProviderSessionWorkItems(session interfaces.FactoryWorldProviderSessio
 	return workItems
 }
 
-func activeWorkTypesFromWorldExecution(execution dashboardrender.SimpleDashboardActiveExecution) []string {
+func activeWorkTypesFromWorldExecution(execution recordings.SimpleDashboardActiveExecution) []string {
 	workTypes := append([]string(nil), execution.WorkTypeIDs...)
 	seen := make(map[string]struct{}, len(workTypes))
 	for _, workType := range workTypes {

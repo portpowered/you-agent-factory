@@ -14,12 +14,9 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/service"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -79,11 +76,7 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 	}
 
 	homeDir := t.TempDir()
-	globalRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
-	}
+	factoryDir := support.InstallPackagedFactory(t, homeDir, publicGoal.PackagedFactoryName)
 
 	goalText := fmt.Sprintf("functional-smoke-named-goal-parity-%d", time.Now().UnixNano())
 	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
@@ -106,7 +99,7 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 		binaryPath,
 		"--json",
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", publicGoal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -115,13 +108,13 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 		goalText,
 	)
 	cmd.Dir = unrelatedWorkingDir
-	cmd.Env = namedFactorySmokeEnvironment(homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout.String(), stderr.String())
+		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", publicGoal.PackagedFactoryName, err, stdout.String(), stderr.String())
 	}
 
 	var cliResponse factoryapi.InvocationResponse
@@ -335,18 +328,19 @@ func postPackagedGoalInvocationExpectError(
 func startPackagedGoalParityAPIServer(t *testing.T, factoryDir, mockWorkersPath string) *support.FunctionalAPIServer {
 	t.Helper()
 
-	mockWorkersConfig, err := factoryconfig.LoadMockWorkersConfig(mockWorkersPath)
+	payload, err := os.ReadFile(mockWorkersPath)
 	if err != nil {
-		t.Fatalf("LoadMockWorkersConfig: %v", err)
+		t.Fatalf("read customer mock-workers config: %v", err)
+	}
+	var mockWorkersConfig workers.MockWorkersConfig
+	if err := json.Unmarshal(payload, &mockWorkersConfig); err != nil {
+		t.Fatalf("decode customer mock-workers config: %v", err)
 	}
 
 	return support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir:                factoryDir,
 		WaitForServiceModeRuntime: true,
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.MockWorkersConfig = mockWorkersConfig
-		},
+		MockWorkersConfig:         &mockWorkersConfig,
 	})
 }
 
@@ -483,13 +477,13 @@ func invocationPrimaryResultText(t *testing.T, response factoryapi.InvocationRes
 func writePackagedGoalUnresolvedMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	cfg := factoryconfig.MockWorkersConfig{
-		MockWorkers: []factoryconfig.MockWorkerConfig{
+	cfg := workers.MockWorkersConfig{
+		MockWorkers: []workers.MockWorkerConfig{
 			{
 				WorkerName:      "goal-executor",
-				WorkstationName: goal.PackagedExecuteWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				WorkstationName: publicGoal.PackagedExecuteWorkstationName,
+				RunType:         workers.MockWorkerRunTypeScript,
+				ScriptConfig: &workers.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{"goal output without stop token"},
 				},

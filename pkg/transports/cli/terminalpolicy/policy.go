@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"go.uber.org/zap"
 )
 
@@ -33,9 +32,9 @@ type Policy struct {
 	resolved bool
 }
 
-// LoggerBuilder constructs the structured logger selected for verbose mode.
-// The CLI composition root owns the concrete builder and injects it here.
-type LoggerBuilder func(verbose, debug bool) (*zap.Logger, error)
+// LoggerBuilder constructs the structured logger for one resolved terminal
+// mode. The application injector supplies the platform-owned implementation.
+type LoggerBuilder func(mode Mode, debug bool) (*zap.Logger, error)
 
 // Resolve returns the single terminal-output mode for one CLI invocation.
 // Quiet wins over verbose/debug. Debug implies verbose diagnostics channels.
@@ -113,17 +112,10 @@ func (p Policy) HumanTerminalWriter(stdout io.Writer) io.Writer {
 // output while still allowing BuildRuntimeLogger to tee structured runtime
 // records into rolling file sinks.
 func (p Policy) BuildLogger(build LoggerBuilder) (*zap.Logger, error) {
-	switch p.Mode() {
-	case ModeQuiet:
-		return zap.NewNop(), nil
-	case ModeNormal:
-		return logging.BuildTerminalMutedLogger()
-	default:
-		if build == nil {
-			return nil, errors.New("verbose terminal policy requires a logger builder")
-		}
-		return build(p.VerboseEnabled(), p.DebugEnabled())
+	if build == nil {
+		return nil, errors.New("terminal policy requires an injected logger builder")
 	}
+	return build(p.Mode(), p.DebugEnabled())
 }
 
 // DiagnosticsEnabled chooses whether command diagnostics should emit, honoring

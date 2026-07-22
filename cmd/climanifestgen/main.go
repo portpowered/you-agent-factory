@@ -7,6 +7,8 @@ import (
 	"os"
 	"sort"
 
+	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
+	"github.com/portpowered/infinite-you/pkg/platform/generatedartifacts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
@@ -16,16 +18,31 @@ func main() {
 	root := flag.String("root", ".", "repository root")
 	check := flag.Bool("check", false, "verify generated CLI family artifacts are current")
 	flag.Parse()
-	os.Exit(run(*root, *check, os.Stdout, os.Stderr))
+	store, err := generatedartifacts.NewLocalStore(platformfilesystem.Local{})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[agent-factory:cli-manifest-generate] initialize artifact store: %v\n", err)
+		os.Exit(1)
+	}
+	os.Exit(run(store, *root, *check, os.Stdout, os.Stderr))
 }
 
-func run(root string, check bool, stdout, stderr io.Writer) int {
+func run(store generatedartifacts.Store, root string, check bool, stdout, stderr io.Writer) int {
+	if store == nil {
+		fmt.Fprintln(stderr, "[agent-factory:cli-manifest-generate] artifact store is required")
+		return 1
+	}
 	if check {
-		drift, err := climanifestgen.Check(root)
+		artifacts, err := climanifestgen.Artifacts(store, root)
 		if err != nil {
 			fmt.Fprintf(stderr, "[agent-factory:cli-manifest-check] check failed: %v\n", err)
 			return 1
 		}
+		baseDrift, err := store.Check(root, artifacts)
+		if err != nil {
+			fmt.Fprintf(stderr, "[agent-factory:cli-manifest-check] check failed: %v\n", err)
+			return 1
+		}
+		drift := climanifestgen.AnnotateDrift(baseDrift)
 		if drift.Empty() {
 			fmt.Fprintln(stdout, "[agent-factory:cli-manifest-check] CLI family metadata is current")
 			return 0
@@ -34,7 +51,12 @@ func run(root string, check bool, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	if err := climanifestgen.Generate(root); err != nil {
+	artifacts, err := climanifestgen.Artifacts(store, root)
+	if err != nil {
+		fmt.Fprintf(stderr, "[agent-factory:cli-manifest-generate] generation failed: %v\n", err)
+		return 1
+	}
+	if err := store.Write(root, artifacts); err != nil {
 		fmt.Fprintf(stderr, "[agent-factory:cli-manifest-generate] generation failed: %v\n", err)
 		return 1
 	}

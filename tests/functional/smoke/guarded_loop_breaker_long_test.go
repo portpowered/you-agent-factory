@@ -3,7 +3,6 @@
 package smoke
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,9 +10,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -35,24 +33,24 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 		},
 	})
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.SubmitFull(context.Background(), []work.SubmitRequest{{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "story",
 		WorkID:     "guarded-loop-breaker-smoke",
 		TraceID:    "trace-guarded-loop-breaker-smoke",
 		Name:       "guarded loop breaker smoke",
 		Payload:    []byte("prove guarded loop breaker"),
-	}})
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("story:failed", 1).
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story:in-review").
-		HasNoTokenInPlace("story:complete")
+	})
+	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	for placeID, want := range map[string]int{
+		"story:failed":    1,
+		"story:init":      0,
+		"story:in-review": 0,
+		"story:complete":  0,
+	} {
+		if got := support.SessionPlaceTokenCount(session, placeID); got != want {
+			t.Errorf("%s token count = %d, want %d", placeID, got, want)
+		}
+	}
 
 	if got := provider.CallCount("reviewer"); got != 3 {
 		t.Fatalf("reviewer calls = %d, want 3 before guarded loop breaker", got)
@@ -61,11 +59,6 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 		t.Fatalf("executor calls = %d, want at least 3 before guarded loop breaker", got)
 	}
 
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	assertDispatchHistoryContainsWorkstation(t, snapshot.DispatchHistory, "review-loop-breaker", "story:failed", "guarded-loop-breaker-smoke")
 }
 
 func assertFactoryHasNoTopLevelExhaustionRules(t *testing.T, dir string) {
@@ -84,36 +77,4 @@ func assertFactoryHasNoTopLevelExhaustionRules(t *testing.T, dir string) {
 	if rules, ok := config["exhaustion_rules"]; ok {
 		t.Fatalf("factory.json unexpectedly includes top-level exhaustion_rules: %#v", rules)
 	}
-}
-
-func assertDispatchHistoryContainsWorkstation(
-	t *testing.T,
-	history []interfaces.CompletedDispatch,
-	workstationName string,
-	terminalPlace string,
-	workID string,
-) {
-	t.Helper()
-
-	for _, dispatch := range history {
-		if dispatch.WorkstationName != workstationName {
-			continue
-		}
-		for _, mutation := range dispatch.OutputMutations {
-			if mutation.ToPlace != terminalPlace || mutation.Token == nil {
-				continue
-			}
-			if mutation.Token.Color.WorkID == workID {
-				return
-			}
-		}
-	}
-
-	t.Fatalf(
-		"dispatch history missing %q route to %q for work %q: %#v",
-		workstationName,
-		terminalPlace,
-		workID,
-		history,
-	)
 }

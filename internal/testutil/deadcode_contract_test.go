@@ -6,20 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	petri "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 )
-
-func TestWithExecutionBaseDir_SetsHarnessServiceConfig(t *testing.T) {
-	cfg := &harnessConfig{}
-
-	WithExecutionBaseDir("C:/factory-root")(cfg)
-
-	if got := cfg.serviceConfig.ExecutionBaseDir; got != "C:/factory-root" {
-		t.Fatalf("ExecutionBaseDir = %q, want %q", got, "C:/factory-root")
-	}
-}
 
 func TestWriteSeedMarkdownFile_WritesCanonicalMarkdownSeed(t *testing.T) {
 	dir := t.TempDir()
@@ -104,29 +94,29 @@ func TestWriteSeedBatchFile_WritesCanonicalBatchSeed(t *testing.T) {
 }
 
 func TestAssertNoTransitionExhaustion_PassesWithoutExhaustion(t *testing.T) {
-	AssertNoTransitionExhaustion(t, map[string]*petri.Transition{
-		"work": {Type: petri.TransitionNormal},
+	AssertNoTransitionExhaustion(t, map[string]*petri.PetriTransition{
+		"work": {Type: petri.PetriTransitionNormal},
 	}, PetriTransitionAssertOptions{ExhaustionContext: "customer-authored mapping"})
 }
 
 func TestAssertNoTransitionExhaustion_IgnoresNilTransitions(t *testing.T) {
-	AssertNoTransitionExhaustion(t, map[string]*petri.Transition{
+	AssertNoTransitionExhaustion(t, map[string]*petri.PetriTransition{
 		"nil-entry": nil,
-		"work":      {Type: petri.TransitionNormal},
+		"work":      {Type: petri.PetriTransitionNormal},
 	}, PetriTransitionAssertOptions{ExhaustionContext: "replay-mapped customer config"})
 }
 
 func TestAssertGuardedLoopBreakerTransition_ValidPasses(t *testing.T) {
-	transition := &petri.Transition{
-		Type: petri.TransitionNormal,
-		InputArcs: []petri.Arc{{
+	transition := &petri.PetriTransition{
+		Type: petri.PetriTransitionNormal,
+		InputArcs: []petri.PetriArc{{
 			PlaceID: "task:init",
-			Guard: &petri.VisitCountGuard{
+			Guard: &petri.PetriVisitCountGuard{
 				TransitionID: "reviewer",
 				MaxVisits:    3,
 			},
 		}},
-		OutputArcs: []petri.Arc{{PlaceID: "task:failed"}},
+		OutputArcs: []petri.PetriArc{{PlaceID: "task:failed"}},
 	}
 
 	AssertGuardedLoopBreakerTransition(t, transition, "task:init", "task:failed", "reviewer", 3)

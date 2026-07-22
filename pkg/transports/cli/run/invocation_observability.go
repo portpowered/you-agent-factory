@@ -1,27 +1,21 @@
 package run
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/runtimehost"
-	"github.com/portpowered/infinite-you/pkg/service"
-	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	"github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 )
 
@@ -38,25 +32,14 @@ const (
 )
 
 type runtimeLogDiagnosticsProvider interface {
-	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
+	RuntimeLogDiagnostics() runtimeartifact.Diagnostics
 }
 
-type runtimeHostLogDiagnosticsProvider interface {
-	RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics
-}
-
-func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
+func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) runtimeartifact.Diagnostics {
 	if provider, ok := runner.(runtimeLogDiagnosticsProvider); ok {
 		return provider.RuntimeLogDiagnostics()
 	}
-	if provider, ok := runner.(runtimeHostLogDiagnosticsProvider); ok {
-		diagnostics := provider.RuntimeLogDiagnostics()
-		return service.RuntimeLogDiagnostics{
-			Path: diagnostics.Path, RootDir: diagnostics.RootDir, StartTimeUTC: diagnostics.StartTimeUTC,
-			MetricsPath: diagnostics.MetricsPath, MetricsRootDir: diagnostics.MetricsRootDir, MetricsStartTimeUTC: diagnostics.MetricsStartTimeUTC,
-		}
-	}
-	return service.RuntimeLogDiagnostics{}
+	return runtimeartifact.Diagnostics{}
 }
 
 type cleanInvocationCounterSet struct {
@@ -76,11 +59,11 @@ type CleanInvocationMetricsSnapshot struct {
 }
 
 type cleanInvocationCompletionLogInput struct {
-	StartedAt time.Time
-	Snapshot  *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-	Target    *cleanInvocationWorkTarget
-	Success   *cleanInvocationSuccess
-	Err       error
+	Duration time.Duration
+	Snapshot *interfaces.EngineStateSnapshot[state.PetriMarkingSnapshot, *state.Net]
+	Target   *cleanInvocationWorkTarget
+	Success  *cleanInvocationSuccess
+	Err      error
 }
 
 var cleanInvocationMetrics cleanInvocationCounterSet
@@ -106,15 +89,10 @@ func ObserveInvocationRejection(logger *zap.Logger, err error) {
 
 func recordCleanInvocationCompletion(logger *zap.Logger, cfg RunConfig, input cleanInvocationCompletionLogInput) {
 	logger = cleanInvocationLogger(logger)
-	duration := time.Since(input.StartedAt)
-	if input.StartedAt.IsZero() {
-		duration = 0
-	}
-
 	fields := []zap.Field{
 		zap.String("mode", cleanInvocationModeLabel),
 		zap.String("inputSource", invocationInputSourceLogLabel(cfg.CleanInvocationInputSource)),
-		zap.Int64("durationMs", duration.Milliseconds()),
+		zap.Int64("durationMs", input.Duration.Milliseconds()),
 	}
 
 	if input.Success != nil {
@@ -238,7 +216,7 @@ func resetCleanInvocationMetricsForTest() {
 	cleanInvocationMetrics.cancellations.Store(0)
 }
 
-func recordCLIInvocationResolved(cfg RunConfig, source invocations.InputSourceLabel) {
+func recordCLIInvocationResolved(cfg RunConfig, source work.InputSourceLabel) {
 	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
@@ -251,18 +229,18 @@ func recordCLIInvocationFailure(cfg RunConfig, err error) {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	inputErr, ok := err.(*invocations.InputError)
+	inputErr, ok := err.(*work.InputError)
 	if !ok {
 		return
 	}
-	if inputErr.Code == invocations.InputErrorCodeSourceConflict {
-		recordInvocationMetric(cfg.InvocationMetricsRecorder, service.InvocationMetric{
+	if inputErr.Code == work.InputErrorCodeSourceConflict {
+		recordInvocationMetric(cfg.InvocationMetricsRecorder, factorysessions.InvocationMetric{
 			Name: "invocation.source_conflict",
 			Labels: map[string]string{
 				"input_source": "conflict",
 			},
 		})
-		recordInvocationMetric(cfg.InvocationMetricsRecorder, service.InvocationMetric{
+		recordInvocationMetric(cfg.InvocationMetricsRecorder, factorysessions.InvocationMetric{
 			Name: "invocation.failure",
 			Labels: map[string]string{
 				"input_source": "conflict",
@@ -283,14 +261,17 @@ func recordCLIInvocationFailure(cfg RunConfig, err error) {
 	)
 }
 
-func recordInvocationMetric(recorder service.InvocationMetricsRecorder, metric service.InvocationMetric) {
+func recordInvocationMetric(
+	recorder factorysessions.InvocationMetricsRecorder,
+	metric factorysessions.InvocationMetric,
+) {
 	if recorder == nil {
 		return
 	}
 	recorder.RecordInvocationMetric(metric)
 }
 
-func invocationSourceLabels(labels []invocations.InputSourceLabel) []string {
+func invocationSourceLabels(labels []work.InputSourceLabel) []string {
 	if len(labels) == 0 {
 		return nil
 	}
@@ -301,59 +282,39 @@ func invocationSourceLabels(labels []invocations.InputSourceLabel) []string {
 	return out
 }
 
-type sessionResponseEventAttachable interface {
-	SubscribeSessionResponseEventsFromLatest(sessionID string) (*responseeventstore.Subscription, error)
-}
-
-type responseEventSink interface {
-	onResponseEvents([]responseevents.FactoryResponseEvent)
-}
+type responseEventSink = factoryvisualization.ResponseEventSink
 
 // onResponseEvents consumes validated, session-ordered FactoryResponseEvent
 // values. Rendering policy is selected only from canonical kind, phase, and
 // typed payload fields; provider-native names and raw payload fallbacks are not
 // presentation inputs.
-func (r *humanResponseStreamRenderer) onResponseEvents(events []responseevents.FactoryResponseEvent) {
+func (r *humanResponseStreamRenderer) PresentResponseEvents(events []factorysessions.FactoryResponseEvent) {
 	if r == nil {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, event := range events {
-		if event.Sequence > 0 && event.Sequence <= r.lastResponseSequence {
-			continue
-		}
-		if event.Sequence > 0 {
-			r.lastResponseSequence = event.Sequence
-		}
-		r.renderResponseEventLocked(event)
-	}
+	r.stream.PresentResponseEvents(events)
 }
 
-func (r *humanResponseStreamRenderer) renderResponseEventLocked(event responseevents.FactoryResponseEvent) {
-	if line, ok := formatHumanResponseEvent(event); ok {
-		r.writeProgressLineLocked(line)
-	}
-}
-
-func formatHumanResponseEvent(event responseevents.FactoryResponseEvent) (string, bool) {
-	if err := responseevents.ValidateEvent(event); err != nil {
+func formatHumanResponseEvent(
+	validate factorysessions.ResponseEventValidator,
+	event factorysessions.FactoryResponseEvent,
+) (string, bool) {
+	if err := validate.Validate(event); err != nil {
 		return "", false
 	}
 
 	var line string
 	var ok bool
 	switch event.Kind {
-	case responseevents.KindReasoning:
+	case factorysessions.ResponseEventKindReasoning:
 		line, ok = formatHumanReasoningEvent(event)
-	case responseevents.KindTool:
+	case factorysessions.ResponseEventKindTool:
 		line, ok = formatHumanToolEvent(event)
-	case responseevents.KindError:
+	case factorysessions.ResponseEventKindError:
 		line, ok = formatHumanRetryEvent(event)
-	case responseevents.KindProgress:
+	case factorysessions.ResponseEventKindProgress:
 		line, ok = formatHumanProgressEvent(event)
-	case responseevents.KindStreamGap:
+	case factorysessions.ResponseEventKindStreamGap:
 		line, ok = formatHumanStreamGapEvent(event)
 	default:
 		return "", false
@@ -365,17 +326,17 @@ func formatHumanResponseEvent(event responseevents.FactoryResponseEvent) (string
 	return line, line != ""
 }
 
-func formatHumanToolEvent(event responseevents.FactoryResponseEvent) (string, bool) {
-	status, ok := map[responseevents.Phase]string{
-		responseevents.PhaseStarted:   "started",
-		responseevents.PhaseCompleted: "completed",
-		responseevents.PhaseFailed:    "failed",
-		responseevents.PhaseCanceled:  "canceled",
+func formatHumanToolEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
+	status, ok := map[factorysessions.ResponseEventPhase]string{
+		factorysessions.ResponseEventPhaseStarted:   "started",
+		factorysessions.ResponseEventPhaseCompleted: "completed",
+		factorysessions.ResponseEventPhaseFailed:    "failed",
+		factorysessions.ResponseEventPhaseCanceled:  "canceled",
 	}[event.Phase]
 	if !ok {
 		return "", false
 	}
-	var payload responseevents.ToolPayload
+	var payload factorysessions.ResponseEventTool
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		return "", false
 	}
@@ -387,19 +348,19 @@ func formatHumanToolEvent(event responseevents.FactoryResponseEvent) (string, bo
 	return "tool: name=" + name + " call=" + callID + " status=" + status, true
 }
 
-func formatHumanReasoningEvent(event responseevents.FactoryResponseEvent) (string, bool) {
-	var payload responseevents.ReasoningPayload
+func formatHumanReasoningEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
+	var payload factorysessions.ResponseEventReasoning
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		return "", false
 	}
 	switch event.Phase {
-	case responseevents.PhaseStarted:
+	case factorysessions.ResponseEventPhaseStarted:
 		return "reasoning: started", true
-	case responseevents.PhaseDelta:
+	case factorysessions.ResponseEventPhaseDelta:
 		if summary := normalizeHumanProgressField(payload.SummaryDelta); summary != "" {
 			return "reasoning: " + summary, true
 		}
-	case responseevents.PhaseCompleted:
+	case factorysessions.ResponseEventPhaseCompleted:
 		if summary := normalizeHumanProgressField(payload.Summary); summary != "" {
 			return "reasoning: " + summary, true
 		}
@@ -408,11 +369,11 @@ func formatHumanReasoningEvent(event responseevents.FactoryResponseEvent) (strin
 	return "", false
 }
 
-func formatHumanRetryEvent(event responseevents.FactoryResponseEvent) (string, bool) {
-	if event.Phase != responseevents.PhaseUpdated {
+func formatHumanRetryEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
+	if event.Phase != factorysessions.ResponseEventPhaseUpdated {
 		return "", false
 	}
-	var payload responseevents.ErrorPayload
+	var payload factorysessions.ResponseEventErrorPayload
 	if err := json.Unmarshal(event.Payload, &payload); err != nil || !humanRetryStatus(payload) {
 		return "", false
 	}
@@ -430,7 +391,7 @@ func formatHumanRetryEvent(event responseevents.FactoryResponseEvent) (string, b
 	return strings.Join(parts, " "), true
 }
 
-func humanRetryStatus(payload responseevents.ErrorPayload) bool {
+func humanRetryStatus(payload factorysessions.ResponseEventErrorPayload) bool {
 	if payload.Retryable || payload.RetryAfterSeconds != nil || payload.RetryAttempt != nil {
 		return true
 	}
@@ -442,11 +403,11 @@ func humanRetryStatus(payload responseevents.ErrorPayload) bool {
 	}
 }
 
-func formatHumanProgressEvent(event responseevents.FactoryResponseEvent) (string, bool) {
-	if event.Phase != responseevents.PhaseUpdated {
+func formatHumanProgressEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
+	if event.Phase != factorysessions.ResponseEventPhaseUpdated {
 		return "", false
 	}
-	var payload responseevents.ProgressPayload
+	var payload factorysessions.ResponseEventProgress
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		return "", false
 	}
@@ -465,11 +426,11 @@ func formatHumanProgressEvent(event responseevents.FactoryResponseEvent) (string
 	return line, true
 }
 
-func formatHumanStreamGapEvent(event responseevents.FactoryResponseEvent) (string, bool) {
-	if event.Phase != responseevents.PhaseUpdated {
+func formatHumanStreamGapEvent(event factorysessions.FactoryResponseEvent) (string, bool) {
+	if event.Phase != factorysessions.ResponseEventPhaseUpdated {
 		return "", false
 	}
-	var payload responseevents.StreamGapPayload
+	var payload factorysessions.ResponseEventStreamGap
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		return "", false
 	}
@@ -491,335 +452,8 @@ func formatHumanStreamGapEvent(event responseevents.FactoryResponseEvent) (strin
 	return line, true
 }
 
-type responseEventAttachment struct {
-	cancel       context.CancelFunc
-	done         chan struct{}
-	subscription *responseeventstore.Subscription
-	sink         responseEventSink
-}
-
-func startResponseEventAttachment(
-	ctx context.Context,
-	attachable sessionResponseEventAttachable,
-	sessionID string,
-	sink responseEventSink,
-) *responseEventAttachment {
-	if attachable == nil || sink == nil {
-		return nil
-	}
-	subscription, err := attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
-	if err != nil {
-		return nil
-	}
-	attachCtx, cancel := context.WithCancel(ctx)
-	attachment := &responseEventAttachment{
-		cancel:       cancel,
-		done:         make(chan struct{}),
-		subscription: subscription,
-		sink:         sink,
-	}
-	go func() {
-		defer close(attachment.done)
-		consumeResponseEventSubscription(attachCtx, subscription, sink)
-	}()
-	return attachment
-}
-
-func (a *responseEventAttachment) stop() {
-	if a == nil {
-		return
-	}
-	a.cancel()
-	<-a.done
-	if events, err := a.subscription.Drain(); err == nil && len(events) > 0 {
-		a.sink.onResponseEvents(events)
-	}
-	a.subscription.Detach()
-}
-
-func consumeResponseEventSubscription(
-	ctx context.Context,
-	subscription *responseeventstore.Subscription,
-	sink responseEventSink,
-) {
-	for {
-		events, err := subscription.Next(ctx)
-		if err != nil {
-			return
-		}
-		sink.onResponseEvents(events)
-	}
-}
-
-const (
-	defaultResponseStreamProgressQueueCapacity = 64
-	responseStreamProgressDrainTimeout         = 250 * time.Millisecond
-)
-
-// responseStreamProgressWriter decouples internal stream consumption from
-// terminal stdout writes so a slow or blocked consumer does not stall provider
-// dispatch or invocation completion indefinitely.
-type responseStreamProgressWriter struct {
-	mu            sync.Mutex
-	outputMu      sync.Mutex
-	output        io.Writer
-	queue         chan []byte
-	wg            sync.WaitGroup
-	closed        bool
-	drainTimedOut bool
-	droppedLines  int
-}
-
-func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {
-	if output == nil {
-		panic("response stream progress writer output is nil")
-	}
-	writer := &responseStreamProgressWriter{
-		output: output,
-		queue:  make(chan []byte, defaultResponseStreamProgressQueueCapacity),
-	}
-	writer.wg.Add(1)
-	go writer.run()
-	return writer
-}
-
-func (w *responseStreamProgressWriter) enqueue(payload []byte) bool {
-	if w == nil {
-		return false
-	}
-	line := appendPayloadLine(payload)
-
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		return false
-	}
-	w.mu.Unlock()
-
-	select {
-	case w.queue <- line:
-		return true
-	default:
-		w.mu.Lock()
-		w.droppedLines++
-		w.mu.Unlock()
-		return false
-	}
-}
-
-func (w *responseStreamProgressWriter) droppedProgressLines() int {
-	if w == nil {
-		return 0
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.droppedLines
-}
-
-func (w *responseStreamProgressWriter) stopAndDrain() {
-	if w == nil {
-		return
-	}
-
-	w.mu.Lock()
-	if w.closed {
-		w.mu.Unlock()
-		if !waitProgressWriter(&w.wg, responseStreamProgressDrainTimeout) {
-			w.abandonDrain()
-		}
-		return
-	}
-	w.closed = true
-	w.mu.Unlock()
-	close(w.queue)
-	if !waitProgressWriter(&w.wg, responseStreamProgressDrainTimeout) {
-		w.abandonDrain()
-	}
-}
-
-func (w *responseStreamProgressWriter) abandonDrain() {
-	if w == nil {
-		return
-	}
-	w.mu.Lock()
-	w.drainTimedOut = true
-	w.mu.Unlock()
-}
-
-func (w *responseStreamProgressWriter) acquireOutputExclusive() {
-	if w == nil {
-		return
-	}
-	w.outputMu.Lock()
-}
-
-func (w *responseStreamProgressWriter) releaseOutputExclusive() {
-	if w == nil {
-		return
-	}
-	w.outputMu.Unlock()
-}
-
-func (w *responseStreamProgressWriter) drainAbandoned() bool {
-	if w == nil {
-		return false
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.drainTimedOut
-}
-
-func waitProgressWriter(wg *sync.WaitGroup, timeout time.Duration) bool {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return true
-	case <-time.After(timeout):
-		return false
-	}
-}
-
-func (w *responseStreamProgressWriter) run() {
-	defer w.wg.Done()
-	for line := range w.queue {
-		if w.drainAbandoned() {
-			return
-		}
-		if !w.writeOutputLine(line) {
-			return
-		}
-	}
-}
-
-func (w *responseStreamProgressWriter) writeOutputLine(line []byte) bool {
-	w.outputMu.Lock()
-	defer w.outputMu.Unlock()
-	if w.drainAbandoned() {
-		return false
-	}
-	_, _ = w.output.Write(line)
-	return !w.drainAbandoned()
-}
-
-// canonicalResponseStreamWriter owns every JSON response-stream stdout write.
-// Its in-memory queue is intentionally lossless: canonical response events may
-// outpace a slow consumer, but they must remain ordered ahead of the terminal
-// invocation result instead of inheriting the human progress drop policy.
-type canonicalResponseStreamWriter struct {
-	mu       sync.Mutex
-	ready    *sync.Cond
-	output   io.Writer
-	pending  [][]byte
-	head     int
-	closed   bool
-	writeErr error
-	wg       sync.WaitGroup
-}
-
-func newCanonicalResponseStreamWriter(output io.Writer) *canonicalResponseStreamWriter {
-	if output == nil {
-		panic("canonical response stream writer output is nil")
-	}
-	writer := &canonicalResponseStreamWriter{output: output}
-	writer.ready = sync.NewCond(&writer.mu)
-	writer.wg.Add(1)
-	go writer.run()
-	return writer
-}
-
-func (w *canonicalResponseStreamWriter) enqueue(payload []byte) error {
-	if w == nil {
-		return fmt.Errorf("canonical response stream writer is nil")
-	}
-	line := appendPayloadLine(payload)
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.writeErr != nil {
-		return w.writeErr
-	}
-	if w.closed {
-		return fmt.Errorf("canonical response stream writer is closed")
-	}
-	w.pending = append(w.pending, line)
-	w.ready.Signal()
-	return nil
-}
-
-func (w *canonicalResponseStreamWriter) closeAndDrain() error {
-	if w == nil {
-		return nil
-	}
-	w.mu.Lock()
-	if !w.closed {
-		w.closed = true
-		w.ready.Broadcast()
-	}
-	w.mu.Unlock()
-	w.wg.Wait()
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.writeErr
-}
-
-func (w *canonicalResponseStreamWriter) run() {
-	defer w.wg.Done()
-	for {
-		line, ok := w.next()
-		if !ok {
-			return
-		}
-		written, err := w.output.Write(line)
-		if err == nil && written != len(line) {
-			err = io.ErrShortWrite
-		}
-		if err != nil {
-			w.fail(err)
-			return
-		}
-	}
-}
-
-func (w *canonicalResponseStreamWriter) next() ([]byte, bool) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for w.head == len(w.pending) && !w.closed {
-		w.ready.Wait()
-	}
-	if w.head == len(w.pending) {
-		return nil, false
-	}
-	line := w.pending[w.head]
-	w.head++
-	if w.head == len(w.pending) {
-		w.pending = nil
-		w.head = 0
-	}
-	return line, true
-}
-
-func (w *canonicalResponseStreamWriter) fail(err error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.writeErr = err
-	w.closed = true
-	w.pending = nil
-	w.head = 0
-	w.ready.Broadcast()
-}
-
-func appendPayloadLine(payload []byte) []byte {
-	line := make([]byte, len(payload)+1)
-	copy(line, payload)
-	line[len(payload)] = '\n'
-	return line
-}
-
 func isPackagedTTSRun(cfg RunConfig) bool {
-	return strings.TrimSpace(cfg.NamedFactoryName) == tts.PackagedFactoryName
+	return strings.TrimSpace(cfg.NamedFactoryName) == interfaces.PackagedTTSFactoryName
 }
 
 func logPackagedTTSInvocationStart(cfg RunConfig) {
@@ -831,9 +465,9 @@ func logPackagedTTSInvocationStart(cfg RunConfig) {
 		logger = zap.NewNop()
 	}
 	fields := []zap.Field{
-		zap.String("packaged_factory_name", tts.PackagedFactoryName),
-		zap.String("tts_backend", tts.BackendRuntimeLabel()),
-		zap.String("readiness_outcome", tts.FailureClassLoading),
+		zap.String("packaged_factory_name", interfaces.PackagedTTSFactoryName),
+		zap.String("tts_backend", interfaces.DefaultTTSModelName+"/"+interfaces.DefaultTTSBackendName),
+		zap.String("readiness_outcome", interfaces.TTSFailureClassLoading),
 	}
 	if resolution := cfg.NamedFactoryResolution; resolution != nil {
 		fields = append(fields,

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -28,21 +27,13 @@ func TestConflictResolution_ReviewFailResolveReReview(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.MockWorker("swe",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:complete").
-		HasNoTokenInPlace("code-change:failed").
-		HasNoTokenInPlace("code-change:resolving-conflicts").
-		HasNoTokenInPlace("code-change:in-review")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:complete":            1,
+		"code-change:failed":              0,
+		"code-change:resolving-conflicts": 0,
+		"code-change:in-review":           0,
+	})
 
 	if provider.CallCount("reviewer") != 2 {
 		t.Errorf("expected reviewer called 2 times, got %d", provider.CallCount("reviewer"))
@@ -69,17 +60,12 @@ func TestConflictResolution_ResolverFails(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:failed").
-		HasNoTokenInPlace("code-change:complete").
-		HasNoTokenInPlace("code-change:resolving-conflicts")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:failed":              1,
+		"code-change:complete":            0,
+		"code-change:resolving-conflicts": 0,
+	})
 }
 
 func TestConflictResolution_ReviewApproveFirstTry(t *testing.T) {
@@ -99,15 +85,11 @@ func TestConflictResolution_ReviewApproveFirstTry(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProviderWithDefault(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:complete").
-		HasNoTokenInPlace("code-change:resolving-conflicts")
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:complete":            1,
+		"code-change:resolving-conflicts": 0,
+	})
 
 	if provider.CallCount("reviewer") != 1 {
 		t.Errorf("expected reviewer called 1 time, got %d", provider.CallCount("reviewer"))

@@ -7,7 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,27 +19,16 @@ func TestRepeater_RefiresOnRejectedStopsOnAccepted(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "repeater test"}`))
 
-	h := testutil.NewServiceTestHarness(t, dir)
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"exec-worker":   {{Content: "retry"}, {Content: "retry"}, {Content: "done COMPLETE"}},
+		"finish-worker": {{Content: "done COMPLETE"}},
+	})
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
 
-	execMock := h.MockWorker("exec-worker",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-	h.MockWorker("finish-worker",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	if execMock.CallCount() != 3 {
-		t.Errorf("expected exec-worker called 3 times, got %d", execMock.CallCount())
+	if provider.CallCount("exec-worker") != 3 {
+		t.Errorf("expected exec-worker called 3 times, got %d", provider.CallCount("exec-worker"))
 	}
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 }
 
 func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
@@ -48,33 +38,24 @@ func TestRepeater_GuardedLoopBreakerTerminatesRejectedRepeater(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "exhaustion test"}`))
 
-	h := testutil.NewServiceTestHarness(t, dir)
-
-	h.MockWorker("exec-worker",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
-	)
-	h.MockWorker("finish-worker",
-		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:failed", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:complete")
-
-	snapshot, err := h.GetEngineStateSnapshot()
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshot: %v", err)
-	}
-	assertDispatchHistoryContainsWorkstationRoute(t, snapshot.DispatchHistory, "executor-loop-breaker", "task:failed")
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
+		"exec-worker": {
+			{Content: "retry"}, {Content: "retry"}, {Content: "retry"}, {Content: "retry"},
+			{Content: "retry"}, {Content: "retry"}, {Content: "retry"},
+		},
+		"finish-worker": {{Content: "done COMPLETE"}},
+	})
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:failed": 1, "task:init": 0, "task:complete": 0})
+	assertPublicDispatchRoute(t, server.GetFactoryEvents(t), "executor-loop-breaker", "task:failed")
+	server.Stop(t)
 }
 
 func TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness(t *testing.T) {
@@ -91,17 +72,8 @@ func TestRepeater_ResourceReleaseBetweenIterations_ServiceHarness(t *testing.T) 
 		workerexecution.InferenceResponse{Content: "Finalized. COMPLETE"},
 	)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 15*time.Second)
-
-	h.Assert().
-		PlaceTokenCount("task:complete", 1).
-		HasNoTokenInPlace("task:init").
-		HasNoTokenInPlace("task:failed")
+	session := support.RunFactoryToCompletion(t, dir, provider, 15*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{"task:complete": 1, "task:init": 0, "task:failed": 0})
 
 	if provider.CallCount() != 4 {
 		t.Errorf("expected provider called 4 times, got %d", provider.CallCount())

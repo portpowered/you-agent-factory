@@ -10,11 +10,12 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -26,8 +27,8 @@ type runtimeLoggingSmokeRunner struct {
 	exitCode int
 }
 
-func (r runtimeLoggingSmokeRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
-	return workers.CommandResult{
+func (r runtimeLoggingSmokeRunner) Run(_ context.Context, _ platformprocess.CommandRequest) (platformprocess.CommandResult, error) {
+	return platformprocess.CommandResult{
 		Stdout:   []byte(r.stdout),
 		Stderr:   []byte(r.stderr),
 		ExitCode: r.exitCode,
@@ -51,12 +52,11 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 			exitCode: 0,
 		}, rollingConfig)
 
-		result.harness.Assert().
-			PlaceTokenCount("task:done", 1).
-			HasNoTokenInPlace("task:init").
-			HasNoTokenInPlace("task:failed")
+		assertSessionPlaces(t, result.session, map[string]int{
+			"task:done": 1, "task:init": 0, "task:failed": 0,
+		})
 
-		completionRecord := requireRuntimeLogEvent(t, result.records, workers.WorkLogEventCommandRunnerCompleted)
+		completionRecord := requireRuntimeLogEvent(t, result.records, commandRunnerCompletedLogEvent)
 		if completionRecord["status"] != "succeeded" {
 			t.Fatalf("success completion status = %#v, want succeeded in record %#v", completionRecord["status"], completionRecord)
 		}
@@ -82,12 +82,11 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 			exitCode: 23,
 		}, rollingConfig)
 
-		result.harness.Assert().
-			PlaceTokenCount("task:failed", 1).
-			HasNoTokenInPlace("task:init").
-			HasNoTokenInPlace("task:done")
+		assertSessionPlaces(t, result.session, map[string]int{
+			"task:failed": 1, "task:init": 0, "task:done": 0,
+		})
 
-		completionRecord := requireRuntimeLogEvent(t, result.records, workers.WorkLogEventCommandRunnerCompleted)
+		completionRecord := requireRuntimeLogEvent(t, result.records, commandRunnerCompletedLogEvent)
 		if completionRecord["status"] != "failed" {
 			t.Fatalf("failure completion status = %#v, want failed in record %#v", completionRecord["status"], completionRecord)
 		}
@@ -111,13 +110,13 @@ func TestRuntimeLoggingSmoke_SuccessAndFailureRespectOutputEnvAndRollingPolicies
 }
 
 type runtimeLoggingSmokeResult struct {
-	harness  *testutil.ServiceTestHarness
+	session  factoryapi.FactorySession
 	records  []map[string]any
 	artifact *interfaces.ReplayArtifact
 	logPath  string
 }
 
-func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingConfig logging.RuntimeLogConfig) runtimeLoggingSmokeResult {
+func runRuntimeLoggingSmoke(t *testing.T, runner platformprocess.CommandRunner, rollingConfig logging.RuntimeLogConfig) runtimeLoggingSmokeResult {
 	t.Helper()
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
@@ -136,22 +135,27 @@ func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingC
 	}
 	t.Cleanup(func() { removeRuntimeLoggingSmokeDir(t, recordDir) })
 	recordPath := filepath.Join(recordDir, "runtime-logging-smoke.replay.json")
-	runtimeInstanceID := "runtime-logging-smoke"
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Args: []string{
+			"--record", recordPath,
+			"--runtime-log-dir", logDir,
+			"--runtime-log-max-size-mb", "1",
+			"--runtime-log-max-backups", "2",
+			"--runtime-log-max-age-days", "3",
+			"--runtime-log-compress",
+		},
+		Edges: serviceedges.Edges{
+			ScriptCommandRunner: runner,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 10*time.Second)
+	session := support.GetDefaultSession(t, server.URL())
+	server.Stop(t)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-		testutil.WithCommandRunner(runner),
-		testutil.WithRecordPath(recordPath),
-		testutil.WithRuntimeFileLoggingEnabled(true),
-		testutil.WithRuntimeLogDir(logDir),
-		testutil.WithRuntimeInstanceID(runtimeInstanceID),
-		testutil.WithRuntimeLogConfig(rollingConfig),
-	)
-	h.RunUntilComplete(t, 10*time.Second)
-
-	logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
+	logPath := requireAnyRuntimeLogPath(t, logDir)
 	return runtimeLoggingSmokeResult{
-		harness:  h,
+		session:  session,
 		records:  readRuntimeLoggingSmokeRecords(t, logPath),
 		artifact: testutil.LoadReplayArtifact(t, recordPath),
 		logPath:  logPath,

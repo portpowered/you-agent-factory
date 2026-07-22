@@ -10,25 +10,60 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work/content"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
+type workAPIObservations struct {
+	WorkRequests  []work.WorkRequest
+	ListWorkCalls int
+	GetWorkCalls  int
+	ReadItems     []work.ReadModel
+	accepted      map[string]work.WorkRequestSubmitResult
+}
+
+func newRecordingWorkRole() (*workAPIObservations, strictWorkAPIFake) {
+	observed := &workAPIObservations{
+		accepted: make(map[string]work.WorkRequestSubmitResult),
+	}
+	return observed, strictWorkAPIFake{
+		submit: func(_ context.Context, _ string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+			result := acceptProgrammedHTTPWorkRequest(request)
+			if previous, ok := observed.accepted[result.RequestID]; ok {
+				previous.Accepted = false
+				return previous, nil
+			}
+			observed.WorkRequests = append(observed.WorkRequests, request)
+			observed.accepted[result.RequestID] = result
+			return result, nil
+		},
+		list: func(_ context.Context, _ string, _ work.ListOptions) (work.ListResult, error) {
+			observed.ListWorkCalls++
+			return work.ListResult{Results: append([]work.ReadModel(nil), observed.ReadItems...), MaxResults: work.DefaultListMaxResults}, nil
+		},
+		getWork: func(_ context.Context, _ string, id string) (work.ReadModel, error) {
+			observed.GetWorkCalls++
+			for _, item := range observed.ReadItems {
+				if item.CursorID == id || item.WorkID == id {
+					return item, nil
+				}
+			}
+			return work.ReadModel{}, work.ErrWorkNotFound
+		},
+	}
+}
+
 func TestSubmitWork(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
 	if rec.Code != http.StatusCreated {
@@ -54,20 +89,18 @@ func TestSubmitWork(t *testing.T) {
 	if mf.WorkRequests[0].Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("work request type = %q, want FACTORY_REQUEST_BATCH", mf.WorkRequests[0].Type)
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("expected 1 submitted request, got %d", len(mf.Submitted))
+	if len(mf.WorkRequests[0].Works) != 1 || mf.WorkRequests[0].Works[0].WorkTypeID != "prd" {
+		t.Fatalf("received Works = %#v, want one prd Work", mf.WorkRequests[0].Works)
 	}
-	if mf.Submitted[0].WorkTypeID != "prd" {
-		t.Errorf("expected work type name prd, got %s", mf.Submitted[0].WorkTypeID)
-	}
-	if string(mf.Submitted[0].Payload) != `{"title":"Draft PRD"}` {
-		t.Errorf("payload = %s, want JSON object payload", string(mf.Submitted[0].Payload))
+	payload, ok := mf.WorkRequests[0].Works[0].Payload.([]byte)
+	if !ok || string(payload) != `{"title":"Draft PRD"}` {
+		t.Errorf("payload = %#v, want encoded JSON object payload", mf.WorkRequests[0].Works[0].Payload)
 	}
 }
 
 func TestSubmitWork_ReturnsAcceptedWorkIdentifiers(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
 	if rec.Code != http.StatusCreated {
@@ -127,30 +160,15 @@ func assertSubmitWorkResponseIdentifiers(t *testing.T, resp factoryapi.SubmitWor
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow.
 func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://fixtures/ui.png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
-	}
 	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
 		t.Fatalf("work requests = %#v, want one submitted work request", mf.WorkRequests)
-	}
-	if string(mf.Submitted[0].Payload) != "Review this UI." {
-		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
-	}
-	if len(mf.Submitted[0].Content) != 2 {
-		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
-	}
-	if mf.Submitted[0].Content[0].Type != work.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
-		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
-	}
-	if mf.Submitted[0].Content[1].Type != work.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
-		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 	if len(mf.WorkRequests[0].Works[0].Content) != 2 {
 		t.Fatalf("submitted work request content count = %d, want 2", len(mf.WorkRequests[0].Works[0].Content))
@@ -164,8 +182,8 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 }
 
 func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	staged := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
 
@@ -176,19 +194,17 @@ func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
 	assertStructuredSubmitWorkSubmission(t, mf, staged)
 }
 
-func assertStructuredSubmitWorkSubmission(t *testing.T, mf *testutil.MockFactory, staged factoryapi.StageSubmitWorkFileResponse) {
+func assertStructuredSubmitWorkSubmission(t *testing.T, mf *workAPIObservations, staged factoryapi.StageSubmitWorkFileResponse) {
 	t.Helper()
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("Work requests = %#v, want one Work", mf.WorkRequests)
 	}
-	if string(mf.Submitted[0].Payload) != "Review this UI." {
-		t.Fatalf("payload = %q, want legacy text fallback", mf.Submitted[0].Payload)
+	content := mf.WorkRequests[0].Works[0].Content
+	if len(content) != 2 {
+		t.Fatalf("content count = %d, want 2", len(content))
 	}
-	if len(mf.Submitted[0].Content) != 2 {
-		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
-	}
-	assertStructuredSubmitWorkTextPart(t, mf.Submitted[0].Content[0])
-	assertStructuredSubmitWorkStagedImagePart(t, mf.Submitted[0].Content[1], staged)
+	assertStructuredSubmitWorkTextPart(t, content[0])
+	assertStructuredSubmitWorkStagedImagePart(t, content[1], staged)
 }
 
 func assertStructuredSubmitWorkTextPart(t *testing.T, part work.WorkContentPart) {
@@ -210,26 +226,8 @@ func assertStructuredSubmitWorkStagedImagePart(
 	if part.File != "" {
 		t.Fatalf("submitted content[1].file = %q, want empty canonical file field", part.File)
 	}
-	stagedPath, err := resolveSubmitWorkStagedFileRef(staged.StagedFileRef)
-	if err != nil {
-		t.Fatalf("resolve staged file ref: %v", err)
-	}
-	wantURL, err := content.FilesystemPathToContentURL(stagedPath)
-	if err != nil {
-		t.Fatalf("stage content url: %v", err)
-	}
-	if part.URL != wantURL {
-		t.Fatalf("submitted content[1].url = %q, want %q", part.URL, wantURL)
-	}
-	stagedContent, err := os.ReadFile(stagedPath)
-	if err != nil {
-		t.Fatalf("read submitted staged file: %v", err)
-	}
-	if string(stagedContent) != "png-bytes" {
-		t.Fatalf("submitted staged file content = %q, want png-bytes", stagedContent)
-	}
-	if string(staged.Url) != wantURL {
-		t.Fatalf("stage response url = %q, want %q", staged.Url, wantURL)
+	if part.URL != string(staged.Url) {
+		t.Fatalf("submitted content[1].url = %q, want staged response URL %q", part.URL, staged.Url)
 	}
 	if part.Metadata[submitWorkItemTypeMetadataKey] != "image" || part.Metadata[submitWorkFileNameMetadataKey] != "ui.png" {
 		t.Fatalf("submitted content[1].metadata = %#v, want item type and file name metadata", part.Metadata)
@@ -237,8 +235,16 @@ func assertStructuredSubmitWorkStagedImagePart(
 }
 
 func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationResult(srv, func(input work.WorkRequestPreparation) work.WorkRequest {
+		prepared := input.Request
+		if got := prepared.Works[0].Content[0].Type; got != work.WorkContentPartType("TEXT") {
+			t.Fatalf("preparation role input type = %q, want representation-preserved TEXT", got)
+		}
+		prepared.Works[0].Content[0].Type = work.WorkContentPartTypeText
+		return prepared
+	})
 
 	rec := submitWorkRequest(t, srv, `{
 		"name":"tts-request",
@@ -255,17 +261,15 @@ func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
 	assertUppercaseExtendedCanonicalSubmission(t, mf)
 }
 
-func assertUppercaseExtendedCanonicalSubmission(t *testing.T, mf *testutil.MockFactory) {
+func assertUppercaseExtendedCanonicalSubmission(t *testing.T, mf *workAPIObservations) {
 	t.Helper()
-	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 3 {
-		t.Fatalf("submitted content = %#v, want 3 canonical parts", mf.Submitted)
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 || len(mf.WorkRequests[0].Works[0].Content) != 3 {
+		t.Fatalf("received Work content = %#v, want 3 canonical parts", mf.WorkRequests)
 	}
-	assertUppercaseExtendedTextPart(t, mf.Submitted[0].Content[0])
-	assertUppercaseExtendedAudioPart(t, mf.Submitted[0].Content[1])
-	assertUppercaseExtendedJSONPart(t, mf.Submitted[0].Content[2])
-	if string(mf.Submitted[0].Payload) != "Synthesize this" {
-		t.Fatalf("payload = %q, want legacy text projection from uppercase TEXT part", mf.Submitted[0].Payload)
-	}
+	content := mf.WorkRequests[0].Works[0].Content
+	assertUppercaseExtendedTextPart(t, content[0])
+	assertUppercaseExtendedAudioPart(t, content[1])
+	assertUppercaseExtendedJSONPart(t, content[2])
 }
 
 func assertUppercaseExtendedTextPart(t *testing.T, part work.WorkContentPart) {
@@ -298,28 +302,34 @@ func assertUppercaseExtendedJSONPart(t *testing.T, part work.WorkContentPart) {
 }
 
 func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, `work_request: works[0] ("conflicting-content") has invalid content/payload: payload conflicts with explicit content`)
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-content","workTypeName":"prd","content":[{"type":"text","text":"canonical"}],"payload":"different"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("conflicting-content") has invalid content/payload: payload conflicts with explicit content`)
 }
 
 func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "items cannot be combined with payload")
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items","workTypeName":"prd","items":[{"type":"text","text":"canonical"}],"payload":"different"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
 func TestSubmitWork_RejectsStructuredItemsCombinedWithContent(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "items cannot be combined with content")
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items-content","workTypeName":"prd","items":[{"type":"text","text":"structured"}],"content":[{"type":"text","text":"canonical"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with content")
 }
 
 func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
-	// inputs are blank. Header/type-only submissions carry no structured content.
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	// inputs are blank. Header/type-only submissions carry no structured work.
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 	rec := submitWorkRequest(t, srv, `{"name":"header-only-request","workTypeName":"prd","items":[]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("header-only structured submit-work: expected 201, got %d: %s", rec.Code, rec.Body.String())
@@ -328,20 +338,11 @@ func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 	if resp.TraceId == "" {
 		t.Fatalf("expected non-empty trace_id, got %q", resp.TraceId)
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
-	}
-	if mf.Submitted[0].Name != "header-only-request" {
-		t.Fatalf("submitted name = %q, want header-only-request", mf.Submitted[0].Name)
-	}
-	if mf.Submitted[0].WorkTypeID != "prd" {
-		t.Fatalf("submitted work type = %q, want prd", mf.Submitted[0].WorkTypeID)
-	}
-	if len(mf.Submitted[0].Content) != 0 {
-		t.Fatalf("submitted content count = %d, want empty structured content", len(mf.Submitted[0].Content))
-	}
 	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
 		t.Fatalf("work requests = %#v, want one submitted work request", mf.WorkRequests)
+	}
+	if item := mf.WorkRequests[0].Works[0]; item.Name != "header-only-request" || item.WorkTypeID != "prd" {
+		t.Fatalf("received Work = %#v, want header-only-request/prd", item)
 	}
 	if len(mf.WorkRequests[0].Works[0].Content) != 0 {
 		t.Fatalf("submitted work request content count = %d, want empty structured content", len(mf.WorkRequests[0].Works[0].Content))
@@ -349,26 +350,37 @@ func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	srv.contentStaging.(*contentStagingFake).prepareContent = func(
+		context.Context,
+		[]work.StagedSubmissionItem,
+	) ([]work.WorkContentPart, error) {
+		return nil, &work.ContentStagingError{
+			Message: "items must contain at least one non-empty item",
+		}
+	}
 	rec := submitWorkRequest(t, srv, `{"name":"blank-items","workTypeName":"prd","items":[{"type":"text","text":"   \t"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one non-empty item")
 }
 
 func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","url":"file://staged/spec.pdf","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
 }
 
 func TestSubmitWork_RejectsForgedStructuredFileReference(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","url":"file://staged/ui.png","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0]: stagedFileRef must be a backend-issued staged file reference")
 }
 
 func TestStageSubmitWorkFile(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newWorkTransportTestServer(nil)
 
 	response := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
 	if response.FileName != "ui.png" || response.MediaType != "image/png" {
@@ -380,23 +392,8 @@ func TestStageSubmitWorkFile(t *testing.T) {
 	if response.Url == "" {
 		t.Fatalf("url must be non-empty")
 	}
-	stagedPath, err := resolveSubmitWorkStagedFileRef(response.StagedFileRef)
-	if err != nil {
-		t.Fatalf("resolve staged file ref: %v", err)
-	}
-	stagedContent, err := os.ReadFile(stagedPath)
-	if err != nil {
-		t.Fatalf("read staged file: %v", err)
-	}
-	if string(stagedContent) != "png-bytes" {
-		t.Fatalf("staged file content = %q, want png-bytes", stagedContent)
-	}
-	wantURL, err := content.FilesystemPathToContentURL(stagedPath)
-	if err != nil {
-		t.Fatalf("stage content url: %v", err)
-	}
-	if string(response.Url) != wantURL {
-		t.Fatalf("stage url = %q, want %q", response.Url, wantURL)
+	if string(response.Url) != "file://staged/ui.png" {
+		t.Fatalf("stage url = %q, want fake Work service URL", response.Url)
 	}
 }
 
@@ -423,7 +420,7 @@ func stageSubmitWorkTestFile(
 }
 
 func TestStageSubmitWorkFile_RejectsTextItemType(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newWorkTransportTestServer(nil)
 
 	rec := submitWorkStageFileRequest(t, srv, "/factory-sessions/~default/work/staged-files", `{
 		"itemType":"text",
@@ -435,7 +432,7 @@ func TestStageSubmitWorkFile_RejectsTextItemType(t *testing.T) {
 }
 
 func TestStageSubmitWorkFileBySessionId_NotFound(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{})
+	srv := newWorkTransportTestServerWithRoles(nil, nil, factoryReadFake(factoryapi.Factory{}, apisurface.ErrFactorySessionNotFound))
 
 	rec := submitWorkStageFileRequest(t, srv, "/factory-sessions/session-missing/work/staged-files", `{
 		"itemType":"document",
@@ -447,28 +444,28 @@ func TestStageSubmitWorkFileBySessionId_NotFound(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
-	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
-		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work requests = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWork_RejectsInvalidExtendedContentMetadata(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","url":"file://voice.wav","metadata":"wrong"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].metadata must be an object")
-	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
-		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work requests = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"chain-submit","workTypeName":"prd","currentChainingTraceId":"chain-submit-1","payload":{"title":"Draft PRD"}}`)
 	if rec.Code != http.StatusCreated {
@@ -480,113 +477,107 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 	if mf.WorkRequests[0].CurrentChainingTraceID != "chain-submit-1" || mf.WorkRequests[0].Works[0].CurrentChainingTraceID != "chain-submit-1" {
 		t.Fatalf("current chaining trace IDs = %#v", mf.WorkRequests[0])
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("normalized submissions = %d, want 1", len(mf.Submitted))
-	}
-	if mf.Submitted[0].CurrentChainingTraceID != "chain-submit-1" || mf.Submitted[0].TraceID != "chain-submit-1" {
-		t.Fatalf("normalized submission = %#v, want chaining trace preserved", mf.Submitted[0])
-	}
 }
 
 func TestSubmitWork_CopiesTagMapBeforeRuntimeSubmission(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"tag-copy","workTypeName":"prd","payload":{"title":"Draft PRD"},"tags":{"priority":"high","team":"api"}}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("submitted count = %d, want 1", len(mf.Submitted))
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("received Work requests = %#v, want one", mf.WorkRequests)
 	}
-	if mf.Submitted[0].Tags["priority"] != "high" {
-		t.Fatalf("submitted tags = %#v, want priority=high", mf.Submitted[0].Tags)
-	}
-	if mf.Submitted[0].Tags["team"] != "api" {
-		t.Fatalf("submitted tags = %#v, want team=api", mf.Submitted[0].Tags)
+	tags := mf.WorkRequests[0].Works[0].Tags
+	if tags["priority"] != "high" || tags["team"] != "api" {
+		t.Fatalf("received Work tags = %#v, want priority=high and team=api", tags)
 	}
 }
 
 func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"chain-submit","workTypeName":"prd","currentChainingTraceId":"chain-submit-1","traceId":"chain-submit-1","payload":{"title":"Draft PRD"}}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("normalized submissions = %d, want 1", len(mf.Submitted))
-	}
-	if mf.Submitted[0].CurrentChainingTraceID != "chain-submit-1" || mf.Submitted[0].TraceID != "chain-submit-1" {
-		t.Fatalf("normalized submission = %#v, want matching aliases", mf.Submitted[0])
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 || mf.WorkRequests[0].Works[0].TraceID != "chain-submit-1" {
+		t.Fatalf("received Work request = %#v, want matching aliases", mf.WorkRequests)
 	}
 }
 
 func TestSubmitWork_ConflictingCurrentChainingTraceIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "currentChainingTraceId and traceId must match when both are provided")
 
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","currentChainingTraceId":"chain-submit-1","traceId":"trace-submit-1","payload":{"title":"Draft PRD"}}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "currentChainingTraceId and traceId must match when both are provided")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work request count = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "work_type_id is not supported; use workTypeName")
 
 	rec := submitWorkRequest(t, srv, `{"work_type_id":"legacy-task","traceId":"test-trace-legacy","payload":{"title":"Legacy"}}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_id is not supported; use workTypeName")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work request count = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWork_TargetStateReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "target_state is not supported; use state")
 
 	rec := submitWorkRequest(t, srv, `{"name":"draft","workTypeName":"prd","target_state":"queued","payload":{"title":"Draft PRD"}}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "target_state is not supported; use state")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work request count = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"runtime-relations","workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Relations) != 1 {
-		t.Fatalf("submitted relations = %#v, want one", mf.Submitted)
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 || len(mf.WorkRequests[0].Works[0].RuntimeRelations) != 1 {
+		t.Fatalf("received runtime relations = %#v, want one", mf.WorkRequests)
 	}
-	relation := mf.Submitted[0].Relations[0]
+	relation := mf.WorkRequests[0].Works[0].RuntimeRelations[0]
 	if relation.Type != work.RelationDependsOn || relation.TargetWorkID != "review-work" || relation.RequiredState != "complete" {
 		t.Fatalf("submitted relation = %#v, want dependency on review-work at complete", relation)
 	}
 }
 
 func TestSubmitWork_WorkTypeNameWithWorkTypeIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "work_type_id is not supported; use workTypeName")
 
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"tasks","work_type_id":"legacy-task","payload":"fix lint"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "work_type_id is not supported; use workTypeName")
-	if len(mf.Submitted) != 0 {
-		t.Fatalf("submitted count = %d, want 0", len(mf.Submitted))
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work request count = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWorkMissingWorkType(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "workTypeName is required")
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"name":"missing-work-type","traceId":"test-trace-1"}`))
 	rec := httptest.NewRecorder()
@@ -594,60 +585,57 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "workTypeName is required")
 }
 
-func TestSubmitWorkMissingNameUsesCanonicalSingleWorkIdentity(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+func TestSubmitWorkMissingName(t *testing.T) {
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "name is required")
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"workTypeName":"task","traceId":"test-trace-1","payload":{"title":"unnamed"}}`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if len(mf.Submitted) != 1 || mf.Submitted[0].Name != "work-1" {
-		t.Fatalf("submitted = %#v, want one canonically named work", mf.Submitted)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work request count = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
-func TestSubmitWorkBlankNameUsesCanonicalSingleWorkIdentity(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+func TestSubmitWorkBlankName(t *testing.T) {
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "name is required")
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString("{\"name\":\"   \\t\\n \",\"workTypeName\":\"task\",\"traceId\":\"test-trace-1\",\"payload\":{\"title\":\"blank\"}}"))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
-	}
-	if len(mf.Submitted) != 1 || mf.Submitted[0].Name != "work-1" {
-		t.Fatalf("submitted = %#v, want one canonically named work", mf.Submitted)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "name is required")
+	if len(mf.WorkRequests) != 0 {
+		t.Fatalf("Work request count = %d, want 0", len(mf.WorkRequests))
 	}
 }
 
 func TestSubmitWorkMarkdownPayload(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"markdown-fix","workTypeName":"tasks","traceId":"trace-markdown","payload":"# Fix lint\n\nRun gofmt."}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.Submitted) != 1 {
-		t.Fatalf("expected 1 submitted request, got %d", len(mf.Submitted))
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 {
+		t.Fatalf("received Work requests = %#v, want one", mf.WorkRequests)
 	}
-	if mf.Submitted[0].WorkTypeID != "tasks" {
-		t.Fatalf("WorkTypeID = %q, want tasks", mf.Submitted[0].WorkTypeID)
-	}
-	if string(mf.Submitted[0].Payload) != `"# Fix lint\n\nRun gofmt."` {
-		t.Fatalf("payload = %s, want marshaled markdown string", string(mf.Submitted[0].Payload))
+	item := mf.WorkRequests[0].Works[0]
+	payload, ok := item.Payload.([]byte)
+	if item.WorkTypeID != "tasks" || !ok || string(payload) != `"# Fix lint\n\nRun gofmt."` {
+		t.Fatalf("received Work = %#v, want tasks with markdown payload", item)
 	}
 }
 
 func TestSubmitWorkInvalidPayload_ReturnsDocumentedBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"workTypeName":`))
 	rec := httptest.NewRecorder()
@@ -656,23 +644,17 @@ func TestSubmitWorkInvalidPayload_ReturnsDocumentedBadRequest(t *testing.T) {
 }
 
 func TestSubmitWorkUnknownWorkTypeReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{
-		Marking:   &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
-		SubmitErr: errors.New(`work_request: works[0] ("unknown-work") references unknown work type "unknown"`),
-	}
-	srv := newTestServer(mf)
+	srv := newWorkTransportTestServer(strictWorkAPIFake{submit: func(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+		return work.WorkRequestSubmitResult{}, errors.New(`work_request: works[0] ("unknown-work") references unknown work type "unknown"`)
+	}})
 
 	rec := submitWorkRequest(t, srv, `{"name":"unknown-work","workTypeName":"unknown","payload":"fix lint"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("unknown-work") references unknown work type name "unknown"`)
 }
 
 func TestSubmitWorkBySessionId_ReturnsWorkIdentityFields(t *testing.T) {
-	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}, Net: sessionScopedStateNet()}
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"session-alpha": sessionFactory,
-		},
-	})
+	sessionFactory, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/session-alpha/work", bytes.NewBufferString(`{"name":"scoped-draft","workTypeName":"task","traceId":"trace-scoped-submit","payload":{"title":"Scoped"}}`))
 	rec := httptest.NewRecorder()
@@ -729,8 +711,8 @@ func assertSubmitWorkIdentityResponse(t *testing.T, resp factoryapi.SubmitWorkRe
 }
 
 func TestSubmitWorkAutoTraceID(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"name":"auto-trace","workTypeName":"prd"}`))
 	rec := httptest.NewRecorder()
@@ -748,9 +730,9 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	eventTime := testSubmitSurfaceSmokeEventTime()
 	liveEvents := make(chan interfaces.FactoryEvent, 1)
-	mf := newSubmitSurfaceSmokeFactory(t, eventTime, liveEvents)
+	srv, mf := newSubmitSurfaceSmokeServer(t, eventTime, liveEvents)
 
-	server := httptest.NewServer(newTestServer(mf).Handler())
+	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
 	assertSubmitSurfaceSmokeSubmitAndList(t, server.URL, mf)
@@ -762,42 +744,29 @@ func testSubmitSurfaceSmokeEventTime() time.Time {
 	return time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 }
 
-func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents chan interfaces.FactoryEvent) *testutil.MockFactory {
+func newSubmitSurfaceSmokeServer(t *testing.T, eventTime time.Time, liveEvents chan interfaces.FactoryEvent) (*Server, *workAPIObservations) {
 	t.Helper()
 
 	currentFactoryID := "beta"
-	return &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*factorytoken.Token{
-				"tok-api-surface-1": {
-					ID:        "tok-api-surface-1",
-					PlaceID:   "task:init",
-					Color:     factorytoken.Color{WorkID: "work-api-surface-1", WorkTypeID: "task"},
-					CreatedAt: eventTime,
-					EnteredAt: eventTime,
-					History: factorytoken.History{
-						TotalVisits:         make(map[string]int),
-						ConsecutiveFailures: make(map[string]int),
-						PlaceVisits:         make(map[string]int),
-					},
-				},
-			},
-		},
-		FactoryEventStream: &interfaces.FactoryEventStream{
+	observed, workRole := newRecordingWorkRole()
+	observed.ReadItems = []work.ReadModel{{CursorID: "tok-api-surface-1", WorkID: "work-api-surface-1", Name: "api-surface-smoke", WorkTypeName: "task", State: &work.State{Name: "init", Type: work.StateTypeInitial}}}
+	workRole.subscribe = func(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+		return &interfaces.FactoryEventStream{
 			History: []interfaces.FactoryEvent{
-				testutil.FactoryEvent(t, testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/api-surface-history", factoryapi.FactoryEventContext{
+				canonicalFactoryEventForHTTPTest(t, testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/api-surface-history", factoryapi.FactoryEventContext{
 					Tick:      1,
 					EventTime: eventTime,
 					RequestId: stringPointerForAPITest("request-api-surface"),
 				}, factoryapi.WorkRequestEventPayload{Type: factoryapi.WorkRequestTypeFactoryRequestBatch})),
 			},
 			Events: liveEvents,
-		},
-		CurrentFactory: &factoryapi.Factory{Name: "beta", Id: &currentFactoryID},
+		}, nil
 	}
+	definitions := factoryReadFake(factoryapi.Factory{Name: "beta", Id: &currentFactoryID}, nil)
+	return newWorkTransportTestServerWithRoles(nil, workRole, definitions), observed
 }
 
-func assertSubmitSurfaceSmokeSubmitAndList(t *testing.T, serverURL string, mf *testutil.MockFactory) {
+func assertSubmitSurfaceSmokeSubmitAndList(t *testing.T, serverURL string, mf *workAPIObservations) {
 	t.Helper()
 
 	submitResp, err := http.Post(serverURL+"/factory-sessions/~default/work", "application/json", bytes.NewBufferString(`{"name":"api-surface-smoke","workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
@@ -837,8 +806,8 @@ func assertSubmitSurfaceSmokeSubmitAndList(t *testing.T, serverURL string, mf *t
 	if len(listBody.Results) != 1 || stringValue(listBody.Results[0].WorkId) != "work-api-surface-1" {
 		t.Fatalf("GET /work results = %#v, want work-api-surface-1", listBody.Results)
 	}
-	if mf.EngineStateSnapshotCalls == 0 {
-		t.Fatal("expected GET /work to read engine state snapshot through the embedded API factory contract")
+	if mf.ListWorkCalls == 0 {
+		t.Fatal("expected GET /work to call the Work read role")
 	}
 }
 
@@ -891,7 +860,7 @@ func assertSubmitSurfaceSmokeEvents(t *testing.T, serverURL string) {
 }
 
 func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
+	_, workRole := newRecordingWorkRole()
 	request := work.WorkRequest{
 		RequestID: "request-idem-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
@@ -902,11 +871,11 @@ func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *t
 		}},
 	}
 
-	first, err := mf.SubmitWorkRequest(context.Background(), request)
+	first, err := workRole.SubmitWorkRequestForSession(context.Background(), factorysessions.DefaultSessionID, request)
 	if err != nil {
 		t.Fatalf("first submit: %v", err)
 	}
-	second, err := mf.SubmitWorkRequest(context.Background(), request)
+	second, err := workRole.SubmitWorkRequestForSession(context.Background(), factorysessions.DefaultSessionID, request)
 	if err != nil {
 		t.Fatalf("duplicate submit: %v", err)
 	}
@@ -933,37 +902,39 @@ func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *t
 	}
 }
 func TestSubmitWork_RejectsUnsupportedContentURLScheme(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "content[0].url url scheme must be one of file, http, https, or data")
 
 	rec := submitWorkRequest(t, srv, `{"name":"bad-url","workTypeName":"prd","content":[{"type":"image","url":"ftp://example.com/ui.png"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].url url scheme must be one of file, http, https, or data")
 }
 
 func TestSubmitWork_RejectsURLAndFileConflict(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	_, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
+	setWorkRequestPreparationError(srv, "content[0].url and file cannot both be set on the same content part")
 
 	rec := submitWorkRequest(t, srv, `{"name":"conflict","workTypeName":"prd","content":[{"type":"image","url":"file://fixtures/ui.png","file":"fixtures/ui.png"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].url and file cannot both be set on the same content part")
 }
 
 func TestSubmitWork_AcceptsLegacyFileOnlyContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
-	srv := newTestServer(mf)
+	mf, workRole := newRecordingWorkRole()
+	srv := newWorkTransportTestServer(workRole)
 
 	rec := submitWorkRequest(t, srv, `{"name":"legacy-file","workTypeName":"prd","content":[{"type":"image","file":"fixtures/ui.png"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 1 {
-		t.Fatalf("submitted = %#v, want one normalized image part", mf.Submitted)
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Works) != 1 || len(mf.WorkRequests[0].Works[0].Content) != 1 {
+		t.Fatalf("received Work requests = %#v, want one image part", mf.WorkRequests)
 	}
-	part := mf.Submitted[0].Content[0]
-	if part.Type != work.WorkContentPartTypeImage || part.URL != "file://fixtures/ui.png" {
-		t.Fatalf("content[0] = %#v, want image with normalized url", part)
+	part := mf.WorkRequests[0].Works[0].Content[0]
+	if part.Type != work.WorkContentPartTypeImage || part.File != "fixtures/ui.png" {
+		t.Fatalf("content[0] = %#v, want legacy image file preserved at the HTTP boundary", part)
 	}
-	if part.File != "" {
-		t.Fatalf("content[0].file = %q, want empty canonical file field", part.File)
+	if part.URL != "" {
+		t.Fatalf("content[0].url = %q, want normalization deferred to Work", part.URL)
 	}
 }

@@ -3,14 +3,14 @@
 package guards_batch
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,13 +23,20 @@ func TestFileWatcherParentChildBatch_SubmittedFanInSmoke(t *testing.T) {
 	dir := seedSubmittedParentChildBatch(t)
 	provider := newSubmittedParentChildProvider()
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir: dir,
+		Edges: serviceedges.Edges{
+			ProviderOverride: provider,
+		},
+	})
+	support.WaitForTerminalStatus(t, server.URL(), 15*time.Second)
+	assertSubmittedParentChildRuntimeOutcome(
+		t,
+		support.GetDefaultSession(t, server.URL()),
+		server.GetFactoryEvents(t),
+		provider,
 	)
-
-	h.RunUntilComplete(t, 15*time.Second)
-	assertSubmittedParentChildRuntimeOutcome(t, h, provider)
+	server.Stop(t)
 }
 
 func seedSubmittedParentChildBatch(t *testing.T) string {
@@ -103,16 +110,18 @@ func newSubmittedParentChildProvider() *testutil.MockWorkerMapProvider {
 	})
 }
 
-func assertSubmittedParentChildRuntimeOutcome(t *testing.T, h *testutil.ServiceTestHarness, provider *testutil.MockWorkerMapProvider) {
+func assertSubmittedParentChildRuntimeOutcome(
+	t *testing.T,
+	session factoryapi.FactorySession,
+	events []factoryapi.FactoryEvent,
+	provider *testutil.MockWorkerMapProvider,
+) {
 	t.Helper()
 
-	h.Assert().
-		PlaceTokenCount("story:complete", 1).
-		PlaceTokenCount("story:failed", 1).
-		PlaceTokenCount("story-set:failed", 1).
-		HasNoTokenInPlace("story:init").
-		HasNoTokenInPlace("story-set:waiting").
-		HasNoTokenInPlace("story-set:complete")
+	assertGuardSessionPlaces(t, session, map[string]int{
+		"story:complete": 1, "story:failed": 1, "story-set:failed": 1,
+		"story:init": 0, "story-set:waiting": 0, "story-set:complete": 0,
+	})
 
 	if provider.CallCount("story-worker") != 2 {
 		t.Fatalf("story-worker calls = %d, want 2", provider.CallCount("story-worker"))
@@ -121,10 +130,6 @@ func assertSubmittedParentChildRuntimeOutcome(t *testing.T, h *testutil.ServiceT
 		t.Fatalf("story-set-failure-handler calls = %d, want 1", provider.CallCount("story-set-failure-handler"))
 	}
 
-	events, err := h.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
 	assertWatchedParentChildRequestRecorded(t, events)
 	assertParentFailedOnlyAfterChildFailure(t, events)
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -30,19 +30,10 @@ func TestCodeReviewLoop(t *testing.T) {
 	}
 	provider := testutil.NewMockWorkerMapProvider(work)
 
-	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithProvider(provider),
-		testutil.WithFullWorkerPoolAndScriptWrap(),
-	)
-
-	h.RunUntilComplete(t, 10*time.Second)
-
-	h.Assert().
-		HasTokenInPlace("code-change:complete").
-		HasNoTokenInPlace("code-change:init").
-		HasNoTokenInPlace("code-change:in-review").
-		HasNoTokenInPlace("code-change:failed").
-		TokenCount(1)
+	session := support.RunFactoryToCompletion(t, dir, provider, 10*time.Second)
+	assertWorkflowSessionPlaces(t, session, map[string]int{
+		"code-change:complete": 1, "code-change:init": 0, "code-change:in-review": 0, "code-change:failed": 0,
+	})
 
 	if provider.CallCount("swe") != 2 {
 		t.Errorf("expected swe called 2 times, got %d", provider.CallCount("swe"))

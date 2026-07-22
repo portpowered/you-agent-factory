@@ -17,7 +17,6 @@
     "records": {
       "description": "Classified compatibility surfaces keyed by stable item ID. Object keys make duplicate stable IDs structurally unrepresentable.",
       "type": "object",
-      "minProperties": 1,
       "propertyNames": {
         "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
       },

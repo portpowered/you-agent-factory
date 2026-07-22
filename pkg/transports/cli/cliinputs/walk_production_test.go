@@ -8,9 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	"github.com/spf13/cobra"
 )
 
@@ -18,12 +16,11 @@ const cliCommandsBaselineFixture = "contracts/testdata/baseline/cli-commands.jso
 const cliCommandInputsBaselineFixture = "contracts/testdata/baseline/cli-command-inputs.json"
 
 func TestWalk_ProductionRootJoinsCommittedCommandIdentityBaseline(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inv, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
+	inv := observation.Snapshot.Inputs
 
 	fixturePath := testutil.MustRepoPath(t, cliCommandsBaselineFixture)
 	baselineData, err := os.ReadFile(fixturePath)
@@ -41,17 +38,12 @@ func TestWalk_ProductionRootJoinsCommittedCommandIdentityBaseline(t *testing.T) 
 }
 
 func TestWalk_ProductionRootJoinsLiveCommandIdentityWalk(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inputsInv, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
-
-	identityInv, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("commandidentity.Walk(production root) error = %v", err)
-	}
+	inputsInv := observation.Snapshot.Inputs
+	identityInv := observation.Snapshot.Commands
 
 	index := cliinputs.NewCommandIdentityIndex(identityInv.Commands)
 	if err := cliinputs.ValidateCommandJoins(inputsInv, index); err != nil {
@@ -60,12 +52,11 @@ func TestWalk_ProductionRootJoinsLiveCommandIdentityWalk(t *testing.T) {
 }
 
 func TestWalk_ProductionRootRepresentativeCommandsRetainInputs(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inv, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
+	inv := observation.Snapshot.Inputs
 
 	flagsByPath := indexFlagsByCommandPath(t, inv.Flags)
 	argsByPath := indexArgumentsByCommandPath(t, inv.Arguments)
@@ -152,17 +143,12 @@ func TestWalk_ProductionRootRepresentativeCommandsRetainInputs(t *testing.T) {
 }
 
 func TestWalk_ProductionInventoryOnlyReferencesKnownCommandPaths(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inv, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
-
-	identityInv, err := commandidentity.Walk(root)
-	if err != nil {
-		t.Fatalf("commandidentity.Walk(production root) error = %v", err)
-	}
+	inv := observation.Snapshot.Inputs
+	identityInv := observation.Snapshot.Commands
 
 	index := cliinputs.NewCommandIdentityIndex(identityInv.Commands)
 	if err := cliinputs.ValidateCommandJoins(inv, index); err != nil {
@@ -210,12 +196,11 @@ func flagLongPresent(flags []cliinputs.FlagRecord, longName string) bool {
 }
 
 func TestWalk_ProductionInventoryMatchesCommittedBaseline(t *testing.T) {
-	root := cli.NewRootCommand()
-
-	inventory, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
+	inventory := observation.Snapshot.Inputs
 
 	got, err := cliinputs.MarshalInventory(inventory)
 	if err != nil {
@@ -245,11 +230,11 @@ func TestWriteProductionInputsInventoryBaseline(t *testing.T) {
 		t.Skip("set UPDATE_CLI_BASELINES=1 to rewrite fixtures")
 	}
 
-	root := cli.NewRootCommand()
-	inventory, err := cliinputs.Walk(root)
+	observation, err := productionCLIObservation(t)
 	if err != nil {
-		t.Fatalf("Walk(production root) error = %v", err)
+		t.Fatalf("observe production CLI: %v", err)
 	}
+	inventory := observation.Snapshot.Inputs
 	got, err := cliinputs.MarshalInventory(inventory)
 	if err != nil {
 		t.Fatalf("MarshalInventory() error = %v", err)

@@ -6,21 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	factorymetrics "github.com/portpowered/infinite-you/pkg/factory/metrics"
-	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	internalartifact "github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
+	platformartifact "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
-	metricsMetricTypeCounter     = "counter"
-	metricsMetricTypeGauge       = "gauge"
-	metricsMetricTypeSample      = "sample"
 	defaultRuntimeMetricsMaxSize = 100
 	defaultRuntimeMetricsBackups = 20
 	defaultRuntimeMetricsMaxAge  = 30
@@ -42,18 +37,14 @@ type RuntimeMetricsConfig struct {
 // RuntimeMetricsSink owns the file-backed JSONL metrics emitter and rolling
 // writer for one live runtime/session bundle.
 type RuntimeMetricsSink struct {
-	mu                sync.Mutex
-	writer            io.Closer
-	encoder           *json.Encoder
-	path              string
-	rootDir           string
-	startTimeUTC      time.Time
-	config            RuntimeMetricsConfig
-	sessionID         string
-	runtimeInstanceID string
-	folderPath        string
-	factoryDir        string
-	closed            bool
+	mu           sync.Mutex
+	writer       io.Closer
+	encoder      *json.Encoder
+	path         string
+	rootDir      string
+	startTimeUTC time.Time
+	config       RuntimeMetricsConfig
+	closed       bool
 }
 
 var errRuntimeMetricsSinkClosed = errors.New("runtime metrics sink closed")
@@ -68,38 +59,56 @@ func DefaultRuntimeMetricsConfig() RuntimeMetricsConfig {
 	}
 }
 
-// BuildRuntimeMetricsSink creates a bounded rolling JSONL metrics sink.
-func BuildRuntimeMetricsSink(
-	sessionID string,
-	runtimeInstanceID string,
-	folderPath string,
-	factoryDir string,
-	metricsDir string,
-	config RuntimeMetricsConfig,
-) (*RuntimeMetricsSink, error) {
-	if runtimeInstanceID == "" {
+type RuntimeMetricsOpeningRequest struct {
+	SessionID         string
+	RuntimeInstanceID string
+	FolderPath        string
+	FactoryDirectory  string
+	RootDirectory     string
+	StartTimeUTC      time.Time
+	CollisionID       string
+	Config            RuntimeMetricsConfig
+}
+
+type RuntimeMetricsOpener struct{ paths platformartifact.Reserver }
+
+func NewRuntimeMetricsOpener(paths platformartifact.Reserver) (*RuntimeMetricsOpener, error) {
+	if paths == nil {
+		return nil, fmt.Errorf("runtime metrics path reserver is required")
+	}
+	return &RuntimeMetricsOpener{paths: paths}, nil
+}
+
+// Open creates a rolling metrics writer from fully selected inputs.
+func (opener *RuntimeMetricsOpener) Open(request RuntimeMetricsOpeningRequest) (*RuntimeMetricsSink, error) {
+	if opener == nil || opener.paths == nil {
+		return nil, fmt.Errorf("runtime metrics opener is required")
+	}
+	if request.RuntimeInstanceID == "" {
 		return nil, fmt.Errorf("runtime instance ID is required")
 	}
-	if metricsDir == "" {
-		dir, err := defaultRuntimeMetricsDir()
-		if err != nil {
-			return nil, err
-		}
-		metricsDir = dir
+	if request.RootDirectory == "" {
+		return nil, fmt.Errorf("runtime metrics root is required")
+	}
+	if request.StartTimeUTC.IsZero() {
+		return nil, fmt.Errorf("runtime metrics start time is required")
+	}
+	if request.CollisionID == "" {
+		return nil, fmt.Errorf("runtime metrics collision ID is required")
 	}
 
-	startTimeUTC := time.Now().UTC()
-	path, err := runtimeartifact.ReserveAvailablePath(
-		metricsDir,
+	startTimeUTC := request.StartTimeUTC.UTC()
+	path, err := opener.paths.Reserve(
+		request.RootDirectory,
 		startTimeUTC,
-		defaultpaths.RuntimeArtifactKindMetrics,
-		defaultpaths.RuntimeArtifactPathComponents(sessionID, runtimeInstanceID, uuid.NewString()),
+		string(internalartifact.RuntimeArtifactKindMetrics),
+		internalartifact.RuntimeArtifactPathComponents(request.SessionID, request.RuntimeInstanceID, request.CollisionID),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	metricsConfig := normalizeRuntimeMetricsConfig(config)
+	metricsConfig := normalizeRuntimeMetricsConfig(request.Config)
 	writer := newRuntimeMetricsWriter(&lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    metricsConfig.MaxSize,
@@ -109,32 +118,13 @@ func BuildRuntimeMetricsSink(
 	})
 
 	return &RuntimeMetricsSink{
-		writer:            writer,
-		encoder:           json.NewEncoder(writer),
-		path:              path,
-		rootDir:           metricsDir,
-		startTimeUTC:      startTimeUTC,
-		config:            metricsConfig,
-		sessionID:         sessionID,
-		runtimeInstanceID: runtimeInstanceID,
-		folderPath:        folderPath,
-		factoryDir:        factoryDir,
+		writer:       writer,
+		encoder:      json.NewEncoder(writer),
+		path:         path,
+		rootDir:      request.RootDirectory,
+		startTimeUTC: startTimeUTC,
+		config:       metricsConfig,
 	}, nil
-}
-
-// Counter records a monotonic increment.
-func (s *RuntimeMetricsSink) Counter(ctx context.Context, name string, delta float64, fields factorymetrics.Fields) error {
-	return s.emit(ctx, name, metricsMetricTypeCounter, delta, "", fields)
-}
-
-// Gauge records a point-in-time level.
-func (s *RuntimeMetricsSink) Gauge(ctx context.Context, name string, value float64, fields factorymetrics.Fields) error {
-	return s.emit(ctx, name, metricsMetricTypeGauge, value, "", fields)
-}
-
-// Sample records a measured value.
-func (s *RuntimeMetricsSink) Sample(ctx context.Context, name string, value float64, unit string, fields factorymetrics.Fields) error {
-	return s.emit(ctx, name, metricsMetricTypeSample, value, unit, fields)
 }
 
 // Path returns the active runtime metrics path.
@@ -184,7 +174,8 @@ func (s *RuntimeMetricsSink) Close() error {
 	return s.writer.Close()
 }
 
-func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType string, value float64, unit string, fields factorymetrics.Fields) error {
+// WriteMetric serializes one owner-projected record as a JSONL entry.
+func (s *RuntimeMetricsSink) WriteMetric(ctx context.Context, record any) error {
 	if s == nil {
 		return nil
 	}
@@ -198,49 +189,7 @@ func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType s
 	if s.closed {
 		return errRuntimeMetricsSinkClosed
 	}
-	return s.encoder.Encode(s.newRecord(name, metricType, value, unit, fields))
-}
-
-func (s *RuntimeMetricsSink) newRecord(name string, metricType string, value float64, unit string, fields factorymetrics.Fields) runtimeMetricsRecord {
-	return runtimeMetricsRecord{
-		Timestamp:         time.Now().UTC().Format(time.RFC3339Nano),
-		MetricName:        name,
-		MetricType:        metricType,
-		Value:             value,
-		Unit:              unit,
-		SessionID:         s.sessionID,
-		RuntimeInstanceID: s.runtimeInstanceID,
-		FolderPath:        s.folderPath,
-		FactoryDir:        s.factoryDir,
-		DispatchID:        fields.DispatchID,
-		WorkID:            fields.WorkID,
-		TraceID:           fields.TraceID,
-		Workstation:       fields.Workstation,
-		WorkerType:        fields.WorkerType,
-		Provider:          fields.Provider,
-		Outcome:           fields.Outcome,
-		Reason:            fields.Reason,
-	}
-}
-
-type runtimeMetricsRecord struct {
-	Timestamp         string  `json:"ts"`
-	MetricName        string  `json:"metric_name"`
-	MetricType        string  `json:"metric_type"`
-	Value             float64 `json:"value"`
-	Unit              string  `json:"unit"`
-	SessionID         string  `json:"session_id"`
-	RuntimeInstanceID string  `json:"runtime_instance_id"`
-	FolderPath        string  `json:"folder_path"`
-	FactoryDir        string  `json:"factory_dir"`
-	DispatchID        string  `json:"dispatch_id,omitempty"`
-	WorkID            string  `json:"work_id,omitempty"`
-	TraceID           string  `json:"trace_id,omitempty"`
-	Workstation       string  `json:"workstation,omitempty"`
-	WorkerType        string  `json:"worker_type,omitempty"`
-	Provider          string  `json:"provider,omitempty"`
-	Outcome           string  `json:"outcome,omitempty"`
-	Reason            string  `json:"reason,omitempty"`
+	return s.encoder.Encode(record)
 }
 
 type runtimeMetricsWriter struct {
@@ -289,12 +238,7 @@ func normalizeRuntimeMetricsConfig(config RuntimeMetricsConfig) RuntimeMetricsCo
 	return config
 }
 
-func defaultRuntimeMetricsDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve user home for runtime metrics: %w", err)
-	}
-	return defaultpaths.RuntimeMetricsRoot(home), nil
+// RuntimeMetricsRoot returns the Metrics-owned default runtime metrics root.
+func RuntimeMetricsRoot(home string) string {
+	return filepath.Join(home, ".you-agent-factory", "metrics")
 }
-
-var _ factorymetrics.MetricsEmitter = (*RuntimeMetricsSink)(nil)

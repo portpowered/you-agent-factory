@@ -1,37 +1,22 @@
 package factorysession_test
 
 import (
-	"context"
-	"path/filepath"
+	"encoding/json"
 	"testing"
 
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps fake-service projection assertions together across apisurface mappers.
 func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.T) {
-	fixturesPath := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-
 	scenario := findScenario(t, loadDurableFixtureCatalog(t), "petri-succeeded-one-dispatch")
-	executionRequest, ok := scenario["executionRequest"].(map[string]any)
+	sessionFixture, ok := scenario["session"].(map[string]any)
 	if !ok {
-		t.Fatal("missing executionRequest fixture")
+		t.Fatal("missing session fixture")
 	}
-	request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
-	if err != nil {
-		t.Fatalf("StartRequestFromAPI: %v", err)
-	}
-
-	started, err := service.StartAsync(context.Background(), request)
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
+	started := asyncStartFromSessionFixture(sessionFixture)
 	mappedStart := factorysession.AsyncStartResponseToAPI(started)
 	if mappedStart.SessionId != "dur-sess-petri-success-001" {
 		t.Fatalf("sessionId = %q", mappedStart.SessionId)
@@ -40,31 +25,23 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 		t.Fatalf("status = %q, want SUCCEEDED", mappedStart.Status)
 	}
 
-	read, err := service.GetSession(context.Background(), mappedStart.SessionId)
-	if err != nil {
-		t.Fatalf("GetSession: %v", err)
-	}
+	read := sessionReadFromFixture(sessionFixture)
 	mappedRead := factorysession.SessionReadResponseToAPI(read)
 	if mappedRead.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("read status = %q", mappedRead.Status)
 	}
 
-	dispatches, err := service.ListDispatches(context.Background(), mappedStart.SessionId)
-	if err != nil {
-		t.Fatalf("ListDispatches: %v", err)
-	}
+	dispatches := listDispatchesFromFixture(scenario)
 	mappedDispatches := factorysession.ListDispatchesResponseToAPI(dispatches)
 	if len(mappedDispatches.Dispatches) != 1 || mappedDispatches.Dispatches[0].Id != "disp-petri-success-001" {
 		t.Fatalf("dispatches = %#v", mappedDispatches.Dispatches)
 	}
 
-	result, err := service.GetResult(context.Background(), mappedStart.SessionId, factorysessionexecution.ResultRequest{
-		Mode:             factorysessionexecution.ResultModeFinal,
-		IncludeArtifacts: true,
-	})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
+	resultFixture, ok := scenario["result"].(map[string]any)
+	if !ok {
+		t.Fatal("missing result fixture")
 	}
+	result := resultFromFixture(resultFixture)
 	mappedResult := factorysession.ResultResponseToAPI(result)
 	if mappedResult.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
 		t.Fatalf("resultStatus = %q, want FINAL", mappedResult.ResultStatus)
@@ -73,23 +50,22 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 		t.Fatalf("artifactRefs = %#v", mappedResult.ArtifactRefs)
 	}
 
-	events, err := service.ReadEvents(context.Background(), mappedStart.SessionId, factorysessionexecution.EventReconnectRequest{})
-	if err != nil {
-		t.Fatalf("ReadEvents: %v", err)
+	eventRows, ok := scenario["events"].([]any)
+	if !ok {
+		eventRows = []any{map[string]any{
+			"id":       "session-completed/dur-sess-petri-success-001",
+			"type":     "factory.session.completed",
+			"sequence": 1,
+		}}
 	}
-	stream := factorysession.FactoryEventStreamFromReadResult(events)
-	if len(stream.History) == 0 {
+	events := eventReadResultFromFixture(t, eventRows)
+	mappedEvents := factorysession.EventReadResponseToAPI(events)
+	if len(mappedEvents) == 0 {
 		t.Fatal("terminal events missing")
 	}
 }
 
 func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTerminal(t *testing.T) {
-	fixturesPath := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-
 	cases := []struct {
 		scenarioID string
 		eventCount int
@@ -101,22 +77,11 @@ func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTer
 	for _, tc := range cases {
 		t.Run(tc.scenarioID, func(t *testing.T) {
 			scenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
-			executionRequest, ok := scenario["executionRequest"].(map[string]any)
+			eventRows, ok := scenario["events"].([]any)
 			if !ok {
-				t.Fatal("missing executionRequest fixture")
+				t.Fatal("missing events fixture")
 			}
-			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
-			if err != nil {
-				t.Fatalf("StartRequestFromAPI: %v", err)
-			}
-			started, err := service.StartAsync(context.Background(), request)
-			if err != nil {
-				t.Fatalf("StartAsync: %v", err)
-			}
-			events, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
-			if err != nil {
-				t.Fatalf("ReadEvents: %v", err)
-			}
+			events := eventReadResultFromFixture(t, eventRows)
 			mapped := factorysession.EventReadResponseToAPI(events)
 			if len(mapped) != tc.eventCount {
 				t.Fatalf("mapped events = %d, want %d", len(mapped), tc.eventCount)
@@ -127,6 +92,33 @@ func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTer
 				}
 			}
 		})
+	}
+}
+
+func eventReadResultFromFixture(t *testing.T, events []any) factorysessionexecution.EventReadResult {
+	t.Helper()
+	rawEvents := make([]json.RawMessage, 0, len(events))
+	for index, event := range events {
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("marshal event[%d]: %v", index, err)
+		}
+		rawEvents = append(rawEvents, raw)
+	}
+	return factorysessionexecution.EventReadResult{Events: rawEvents}
+}
+
+func asyncStartFromSessionFixture(session map[string]any) factorysessionexecution.AsyncStartResult {
+	read := sessionReadFromFixture(session)
+	return factorysessionexecution.AsyncStartResult{
+		SessionID:        read.SessionID,
+		Status:           string(read.Status),
+		OrchestratorKind: read.OrchestratorKind,
+		Dialect:          read.Dialect,
+		ResolvedSource:   read.ResolvedSource,
+		SourceHash:       read.SourceHash,
+		Policy:           read.Policy,
+		Links:            read.Links,
 	}
 }
 

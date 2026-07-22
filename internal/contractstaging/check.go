@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
+	"github.com/portpowered/infinite-you/internal/contractvalidator"
 )
 
 const stagingDirectory = "packages/api/generated"
@@ -26,6 +28,17 @@ type stagedFile struct {
 	regular bool
 }
 
+// ArtifactsDependencies lets unit tests replace expensive operations in
+// artifact orchestration without changing production behavior.
+type ArtifactsDependencies struct {
+	Join                      func(contractjoiner.Input) ([]contractjoiner.Document, []contractvalidator.Diagnostic)
+	ReadRawArtifact           func(path string) ([]byte, error)
+	ProjectOpenAPI            func(canonical []byte, policy OpenAPIBytePolicy) ([]byte, error)
+	GenerateSchema            func(repositoryRoot string) ([]byte, error)
+	GenerateStandaloneSchemas func(repositoryRoot string) (map[string][]byte, error)
+	GenerateManifest          func(repositoryRoot string, artifacts map[string][]byte) ([]byte, error)
+}
+
 // Empty reports whether package staging exactly matches canonical joined output.
 func (drift Drift) Empty() bool {
 	return len(drift.Stale) == 0 && len(drift.Missing) == 0 && len(drift.Unexpected) == 0
@@ -38,11 +51,39 @@ func Check(repositoryRoot string) (Drift, error) {
 	if err != nil {
 		return Drift{}, err
 	}
+	if err := verifyManifestMetadata(expected); err != nil {
+		return Drift{}, err
+	}
 	actual, err := stagedArtifacts(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
 	}
+	relevantActual := filterArtifactsByStagingDirectory(actual)
+	if !shouldRunArtifactCheck(expected, relevantActual) {
+		return Drift{}, nil
+	}
+	drift := compareArtifacts(repositoryRoot, expected, relevantActual)
+	sort.Strings(drift.Stale)
+	sort.Strings(drift.Missing)
+	sort.Strings(drift.Unexpected)
+	return drift, nil
+}
 
+func shouldRunArtifactCheck(expected map[string][]byte, staged map[string]stagedFile) bool {
+	return len(expected) > 0 || len(staged) > 0
+}
+
+func filterArtifactsByStagingDirectory(actual map[string]stagedFile) map[string]stagedFile {
+	filtered := make(map[string]stagedFile, len(actual))
+	for path, item := range actual {
+		if strings.HasPrefix(path, stagingDirectory) {
+			filtered[path] = item
+		}
+	}
+	return filtered
+}
+
+func compareArtifacts(repositoryRoot string, expected map[string][]byte, actual map[string]stagedFile) Drift {
 	drift := Drift{}
 	for path, expectedPayload := range expected {
 		if path == FactorySchemaAuthoredPath {
@@ -69,30 +110,46 @@ func Check(repositoryRoot string) (Drift, error) {
 			drift.Missing = append(drift.Missing, path)
 		}
 	}
-	sort.Strings(drift.Stale)
-	sort.Strings(drift.Missing)
-	sort.Strings(drift.Unexpected)
-	return drift, nil
+	return drift
 }
 
-func authoredArtifactDrift(repositoryRoot, path string, expected []byte) (category, repositoryPath string) {
-	target := filepath.Join(repositoryRoot, filepath.FromSlash(path))
-	actual, err := os.ReadFile(target)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "missing", path
+func verifyManifestMetadata(artifacts map[string][]byte) error {
+	payload, ok := artifacts[manifestTarget]
+	if !ok {
+		return fmt.Errorf("missing generated manifest at %s", manifestTarget)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(payload, &manifest); err != nil {
+		return fmt.Errorf("decode manifest artifact: %w", err)
+	}
+	for _, key := range []string{"formatVersion", "packageId", "packageVersion", "sourceCommit", "familyFormatVersions", "exports"} {
+		if _, ok := manifest[key]; !ok {
+			return fmt.Errorf("manifest metadata missing %s", key)
 		}
-		return "missing", path
 	}
-	if !bytes.Equal(actual, expected) {
-		return "stale", path
+	if sourceCommit, ok := manifest["sourceCommit"].(string); !ok || sourceCommit == "" {
+		return fmt.Errorf("manifest metadata missing sourceCommit")
 	}
-	return "", path
+	return nil
+}
+
+// ArtifactsWithDependencies runs the same artifact pipeline as Artifacts but allows
+// callers to replace expensive collaborators for deterministic unit tests.
+func ArtifactsWithDependencies(repositoryRoot string, dependencies ArtifactsDependencies) (map[string][]byte, error) {
+	normalizedRoot, dependencies, err := normalizeArtifactsDependencies(repositoryRoot, dependencies)
+	if err != nil {
+		return nil, err
+	}
+	return artifactsWithDependencies(normalizedRoot, dependencies)
 }
 
 // Artifacts returns the complete deterministic package staging projection.
 func Artifacts(repositoryRoot string) (map[string][]byte, error) {
-	documents, diagnostics := contractjoiner.Join(JoinInput(repositoryRoot))
+	return ArtifactsWithDependencies(repositoryRoot, ArtifactsDependencies{})
+}
+
+func artifactsWithDependencies(repositoryRoot string, dependencies ArtifactsDependencies) (map[string][]byte, error) {
+	documents, diagnostics := dependencies.Join(JoinInput(repositoryRoot))
 	if len(diagnostics) != 0 {
 		payload, err := json.Marshal(diagnostics)
 		if err != nil {
@@ -100,7 +157,6 @@ func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 		}
 		return nil, fmt.Errorf("join canonical contracts: %s", payload)
 	}
-
 	expected := make(map[string][]byte, len(documents)+len(rawArtifacts)+4)
 	for _, document := range documents {
 		payload, err := contractjoiner.MarshalCanonicalJSON(document.Value)
@@ -112,37 +168,71 @@ func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 	}
 	for _, artifact := range rawArtifacts {
 		sourcePath := filepath.Join(repositoryRoot, filepath.FromSlash(artifact.Source))
-		payload, err := os.ReadFile(sourcePath)
+		payload, err := dependencies.ReadRawArtifact(sourcePath)
 		if err != nil {
 			return nil, fmt.Errorf("read canonical raw artifact %s: %w", artifact.Source, err)
 		}
 		if artifact.Source == CanonicalOpenAPIPath {
-			payload, err = ProjectStagedOpenAPI(payload, ReviewedOpenAPIBytePolicy)
+			payload, err = dependencies.ProjectOpenAPI(payload, ReviewedOpenAPIBytePolicy)
 			if err != nil {
 				return nil, fmt.Errorf("project staged OpenAPI: %w", err)
 			}
 		}
 		expected[artifact.Target] = payload
 	}
-	factorySchema, err := generateFactorySchema(repositoryRoot)
+	factorySchema, err := dependencies.GenerateSchema(repositoryRoot)
 	if err != nil {
 		return nil, err
 	}
 	expected[FactorySchemaAuthoredPath] = factorySchema
 	expected[factorySchemaTarget] = factorySchema
-	standaloneSchemas, err := generateStandaloneFactorySchemas(repositoryRoot)
+	standaloneSchemas, err := dependencies.GenerateStandaloneSchemas(repositoryRoot)
 	if err != nil {
 		return nil, err
 	}
 	for path, payload := range standaloneSchemas {
 		expected[path] = payload
 	}
-	manifest, err := generateManifest(repositoryRoot, expected)
+	manifest, err := dependencies.GenerateManifest(repositoryRoot, expected)
 	if err != nil {
 		return nil, err
 	}
 	expected[manifestTarget] = manifest
 	return expected, nil
+}
+
+func normalizeArtifactsDependencies(repositoryRoot string, requested ArtifactsDependencies) (string, ArtifactsDependencies, error) {
+	normalizedRoot, err := filepath.Abs(repositoryRoot)
+	if err != nil {
+		return "", ArtifactsDependencies{}, fmt.Errorf("resolve repository root: %w", err)
+	}
+	resolved := ArtifactsDependencies{
+		Join:                      contractjoiner.Join,
+		ReadRawArtifact:           os.ReadFile,
+		ProjectOpenAPI:            ProjectStagedOpenAPI,
+		GenerateSchema:            generateFactorySchema,
+		GenerateStandaloneSchemas: generateStandaloneFactorySchemas,
+		GenerateManifest:          generateManifest,
+	}
+	if requested.Join != nil {
+		resolved.Join = requested.Join
+	}
+	if requested.ReadRawArtifact != nil {
+		resolved.ReadRawArtifact = requested.ReadRawArtifact
+	}
+	if requested.ProjectOpenAPI != nil {
+		resolved.ProjectOpenAPI = requested.ProjectOpenAPI
+	}
+	if requested.GenerateSchema != nil {
+		resolved.GenerateSchema = requested.GenerateSchema
+	}
+	if requested.GenerateStandaloneSchemas != nil {
+		resolved.GenerateStandaloneSchemas = requested.GenerateStandaloneSchemas
+	}
+	if requested.GenerateManifest != nil {
+		resolved.GenerateManifest = requested.GenerateManifest
+	}
+	return normalizedRoot, resolved, nil
 }
 
 func stagedArtifacts(repositoryRoot string) (map[string]stagedFile, error) {
@@ -181,4 +271,19 @@ func stagedArtifacts(repositoryRoot string) (map[string]stagedFile, error) {
 		return nil, fmt.Errorf("read package staging: %w", err)
 	}
 	return actual, nil
+}
+
+func authoredArtifactDrift(repositoryRoot, path string, expected []byte) (category, repositoryPath string) {
+	target := filepath.Join(repositoryRoot, filepath.FromSlash(path))
+	actual, err := os.ReadFile(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "missing", path
+		}
+		return "missing", path
+	}
+	if !bytes.Equal(actual, expected) {
+		return "stale", path
+	}
+	return "", path
 }

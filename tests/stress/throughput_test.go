@@ -10,11 +10,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/work"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	"github.com/portpowered/infinite-you/pkg/services/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
 // TestThroughputLargeScale verifies the engine handles a few hundred work items through
@@ -57,13 +56,7 @@ func TestThroughputNoTokenLoss(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
 
 	executor := &throughputExecutor{delay: 500 * time.Microsecond, tracker: newLatencyTracker(0)}
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-	h.SetCustomExecutor("pipeline-worker", executor)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	errCh := h.RunInBackground(ctx)
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: executor})
 
 	submitted := make(map[string]submittedWorkToken, totalItems)
 	var mu sync.Mutex
@@ -99,12 +92,9 @@ func TestThroughputNoTokenLoss(t *testing.T) {
 	submitWg.Wait()
 
 	pipelineTerminalPlaces := []string{"task:complete", "task:failed"}
-	pollUntilAllTerminalH(t, h, pipelineTerminalPlaces, totalItems, timeout-2*time.Second)
-
-	cancel()
-	<-errCh
-
+	h.WaitForTerminalCount(totalItems, timeout-2*time.Second)
 	snap := h.Marking()
+	h.Stop()
 	diagnostics := diagnoseSubmittedWorkPreservation(snap, submitted, pipelineTerminalPlaces)
 	expectedExecutorCalls := totalItems * (pipelineStages + 1)
 	actualExecutorCalls := executor.callCount()
@@ -133,13 +123,7 @@ func TestThroughputNoTokenLossRegression_CustomExecutorPreservesSubmittedWorkIde
 	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(pipelineStages, "pipeline-worker"))
 
 	executor := &throughputExecutor{delay: 100 * time.Microsecond, tracker: newLatencyTracker(0)}
-	h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-	h.SetCustomExecutor("pipeline-worker", executor)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	errCh := h.RunInBackground(ctx)
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: executor})
 
 	submitted := make(map[string]submittedWorkToken, totalItems)
 	var mu sync.Mutex
@@ -169,12 +153,10 @@ func TestThroughputNoTokenLossRegression_CustomExecutorPreservesSubmittedWorkIde
 	submitWg.Wait()
 
 	pipelineTerminalPlaces := []string{"task:complete", "task:failed"}
-	pollUntilAllTerminalH(t, h, pipelineTerminalPlaces, totalItems, timeout-1*time.Second)
-
-	cancel()
-	<-errCh
-
-	diagnostics := diagnoseSubmittedWorkPreservation(h.Marking(), submitted, pipelineTerminalPlaces)
+	h.WaitForTerminalCount(totalItems, timeout-1*time.Second)
+	snapshot := h.Marking()
+	h.Stop()
+	diagnostics := diagnoseSubmittedWorkPreservation(snapshot, submitted, pipelineTerminalPlaces)
 	if diagnostics.hasFailures() {
 		t.Error(diagnostics.failureMessage())
 	}
@@ -192,31 +174,31 @@ func TestSubmittedWorkPreservationDiagnostics_ReportsIdentityFailures(t *testing
 		"work-dup":     {WorkID: "work-dup", TraceID: "trace-dup"},
 		"work-stuck":   {WorkID: "work-stuck", TraceID: "trace-stuck"},
 	}
-	snap := &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
+	snap := &factoryruntime.PetriMarkingSnapshot{Tokens: map[string]*factoryruntime.RuntimeToken{
 		"tok-kept": {
 			ID:      "tok-kept",
 			PlaceID: "task:complete",
-			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-kept", TraceID: "trace-kept"},
+			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeWork, WorkTypeID: "task", WorkID: "work-kept", TraceID: "trace-kept"},
 		},
 		"tok-dup-a": {
 			ID:      "tok-dup-a",
 			PlaceID: "task:complete",
-			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
+			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
 		},
 		"tok-dup-b": {
 			ID:      "tok-dup-b",
 			PlaceID: "task:failed",
-			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
+			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
 		},
 		"tok-stuck": {
 			ID:      "tok-stuck",
 			PlaceID: "task:step2",
-			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-stuck", TraceID: "trace-stuck"},
+			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeWork, WorkTypeID: "task", WorkID: "work-stuck", TraceID: "trace-stuck"},
 		},
 		"resource-token": {
 			ID:      "resource-token",
 			PlaceID: "executor:available",
-			Color:   factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkID: "executor:0"},
+			Color:   factoryruntime.RuntimeTokenColor{DataType: factoryruntime.RuntimeTokenDataTypeResource, WorkID: "executor:0"},
 		},
 	}}
 
@@ -254,42 +236,27 @@ func TestThroughputTimeout(t *testing.T) {
 		timeout    = 8 * time.Second
 	)
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
+	start := time.Now()
+	dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(3, "pipeline-worker"))
+	executor := &throughputExecutor{delay: 100 * time.Microsecond, tracker: newLatencyTracker(0)}
+	h := startStressProcess(t, dir, workerExecutorProvider{executor: executor})
+	t.Cleanup(h.Stop)
 
-		dir := testutil.ScaffoldFactoryDir(t, testutil.PipelineConfig(3, "pipeline-worker"))
-		executor := &throughputExecutor{delay: 100 * time.Microsecond, tracker: newLatencyTracker(0)}
-		h := testutil.NewServiceTestHarness(t, dir, testutil.WithRunAsync())
-		h.SetCustomExecutor("pipeline-worker", executor)
-
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
-		errCh := h.RunInBackground(ctx)
-
-		// Submit all items from a single goroutine with interleaved sleeps.
-		for i := range totalItems {
-			h.SubmitFull(context.Background(), []work.SubmitRequest{{
-				WorkTypeID: "task",
-				TraceID:    fmt.Sprintf("trace-%d", i),
-				Payload:    fmt.Appendf(nil, `{"i":%d}`, i),
-			}})
-			if i%25 == 24 {
-				time.Sleep(time.Millisecond)
-			}
+	// Submit one customer-visible batch so this test measures runtime throughput
+	// rather than 200 sequential HTTP round trips.
+	requests := make([]work.SubmitRequest, totalItems)
+	for i := range totalItems {
+		requests[i] = work.SubmitRequest{
+			WorkTypeID: "task",
+			TraceID:    fmt.Sprintf("trace-%d", i),
+			Payload:    fmt.Appendf(nil, `{"i":%d}`, i),
 		}
+	}
+	h.SubmitFull(context.Background(), requests)
 
-		pollUntilAllTerminalH(t, h, []string{"task:complete", "task:failed"}, totalItems, timeout-2*time.Second)
-		cancel()
-		<-errCh
-	}()
-
-	select {
-	case <-done:
-		// Completed within timeout.
-	case <-time.After(10 * time.Second):
-		t.Fatal("throughput test did not complete within 10s — possible deadlock")
+	h.WaitForTerminalCount(totalItems, timeout-2*time.Second)
+	if elapsed := time.Since(start); elapsed > 10*time.Second {
+		t.Fatalf("throughput test completed in %v, want at most 10s", elapsed)
 	}
 }
 
@@ -333,7 +300,7 @@ func (d tokenPreservationDiagnostics) failureMessage() string {
 }
 
 func diagnoseSubmittedWorkPreservation(
-	snap *petri.MarkingSnapshot,
+	snap *factoryruntime.PetriMarkingSnapshot,
 	submitted map[string]submittedWorkToken,
 	terminalPlaces []string,
 ) tokenPreservationDiagnostics {
@@ -346,7 +313,7 @@ func diagnoseSubmittedWorkPreservation(
 	finalWorkCount := 0
 	terminalCount := 0
 	for _, tok := range snap.Tokens {
-		if tok.Color.DataType == factorytoken.DataTypeResource {
+		if tok.Color.DataType == factoryruntime.RuntimeTokenDataTypeResource {
 			continue
 		}
 		if tok.Color.WorkID == "" {

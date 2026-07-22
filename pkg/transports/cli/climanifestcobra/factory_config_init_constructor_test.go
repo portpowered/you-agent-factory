@@ -4,9 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
@@ -23,7 +22,7 @@ func TestNewFactoryConfigInitFamilyComponentsBuildsContractedPaths(t *testing.T)
 		t.Fatal("you factory group parent must wire unknown-subcommand guard RunE")
 	}
 
-	factoryConfig, err := climanifestparity.FindCommandByPath(factory, "factory config")
+	factoryConfig, err := findCommandByPath(factory, "factory config")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(factory config) error = %v", err)
 	}
@@ -31,7 +30,7 @@ func TestNewFactoryConfigInitFamilyComponentsBuildsContractedPaths(t *testing.T)
 		t.Fatalf("factory config name = %q, want config", factoryConfig.Name())
 	}
 
-	query, err := climanifestparity.FindCommandByPath(factory, "factory query")
+	query, err := findCommandByPath(factory, "factory query")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(factory query) error = %v", err)
 	}
@@ -45,7 +44,7 @@ func TestNewFactoryConfigInitFamilyComponentsBuildsContractedPaths(t *testing.T)
 	if components.Config.Name() != "config" {
 		t.Fatalf("config name = %q, want config", components.Config.Name())
 	}
-	if _, err := climanifestparity.FindCommandByPath(components.Config, "config init"); err != nil {
+	if _, err := findCommandByPath(components.Config, "config init"); err != nil {
 		t.Fatalf("missing config init: %v", err)
 	}
 
@@ -82,7 +81,7 @@ func TestNewFactoryConfigInitFamilyComponentsExposesOnlyFactoryConfigInitFamily(
 	for _, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
 		path := factoryConfigInitPathForID(id)
 		root := factoryConfigInitRootForID(components, id)
-		if _, err := climanifestparity.FindCommandByPath(root, path); err != nil {
+		if _, err := findCommandByPath(root, path); err != nil {
 			t.Fatalf("path for %q missing: %v", id, err)
 		}
 	}
@@ -90,7 +89,7 @@ func TestNewFactoryConfigInitFamilyComponentsExposesOnlyFactoryConfigInitFamily(
 
 func TestFactoryConfigInitFamilyReplaceCurrentRejectsPositionals(t *testing.T) {
 	components, _ := mustFactoryConfigInitFamilyComponents(t)
-	replaceCurrent, err := climanifestparity.FindCommandByPath(components.Factory, "factory replace-current")
+	replaceCurrent, err := findCommandByPath(components.Factory, "factory replace-current")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(factory replace-current) error = %v", err)
 	}
@@ -104,7 +103,7 @@ func TestFactoryConfigInitFamilyReplaceCurrentRejectsPositionals(t *testing.T) {
 
 func TestFactoryConfigInitFamilyQueryRejectsDeprecatedPort(t *testing.T) {
 	components, _ := mustFactoryConfigInitFamilyComponents(t)
-	query, err := climanifestparity.FindCommandByPath(components.Factory, "factory query")
+	query, err := findCommandByPath(components.Factory, "factory query")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(factory query) error = %v", err)
 	}

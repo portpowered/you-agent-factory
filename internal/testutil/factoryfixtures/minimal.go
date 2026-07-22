@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
 
 // MinimalFactoryConfig returns a minimal factory.json config map for tests.
@@ -45,7 +45,7 @@ func WriteFactoryJSON(t *testing.T, dir string, cfg map[string]any) {
 	if err != nil {
 		t.Fatalf("marshal factory config: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, factorydefinitions.FactoryConfigFile), data, 0o644); err != nil {
 		t.Fatalf("write factory.json: %v", err)
 	}
 }

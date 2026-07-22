@@ -12,11 +12,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/service"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
+	"github.com/portpowered/infinite-you/pkg/services/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/work"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // RecordReplayFixture creates a deterministic recorded artifact for functional
@@ -35,15 +34,13 @@ func RecordReplayFixture(t *testing.T) string {
 
 	server := StartFunctionalAPIServer(t, FunctionalAPIServerConfig{
 		FactoryDir:                dir,
-		RecordPath:                artifactPath,
+		Args:                      []string{"--record", artifactPath},
 		WaitForServiceModeRuntime: true,
-		Configure: func(cfg *service.FactoryServiceConfig) {
-			cfg.RuntimeMode = interfaces.RuntimeModeService
-			cfg.ProviderOverride = testutil.NewMockProvider(
+		Edges: serviceedges.Edges{
+			ProviderOverride: testutil.NewMockProvider(
 				workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
 				workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
-			)
-			cfg.SkipBuiltInRunnerPrerequisiteValidation = true
+			),
 		},
 	})
 	response := submitReplayFixtureWorkRequest(t, server.URL())

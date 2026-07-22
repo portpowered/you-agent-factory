@@ -10,8 +10,7 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -125,7 +124,7 @@ func TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter(
 		ctx,
 		binaryPath,
 		"run",
-		"--named", goal.PackagedFactoryName,
+		"--named", publicGoal.PackagedFactoryName,
 		"--with-mock-workers",
 		"--no-record",
 		"--server", baseURL,
@@ -141,7 +140,7 @@ func TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter(
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout.String(), stderr.String())
+		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", publicGoal.PackagedFactoryName, err, stdout.String(), stderr.String())
 	}
 	assertFactoryPromptCleanInvocationStdout(t, stdout.String(), packagedGoalMockWorkerAcceptedSummary)
 }
