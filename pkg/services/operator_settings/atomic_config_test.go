@@ -345,6 +345,56 @@ func TestConfigDocumentServiceConfigureProviderModel_PreCanceledContextHasNoFile
 	}
 }
 
+func TestConfigDocumentServiceOperations_RejectMissingBoundaries(t *testing.T) {
+	t.Parallel()
+	document := emptyConfigDocument()
+	prompt := func(context.Context, Defaults) (ProviderModelUpdate, error) {
+		return ProviderModelUpdate{}, nil
+	}
+	valid := persistedConfigService(testFiles, testCreateTemp)
+	for _, test := range []struct {
+		name    string
+		invoke  func() error
+		wantErr string
+	}{
+		{name: "configure context", invoke: func() error {
+			_, err := valid.ConfigureProviderModel(nil, "config.json", ProviderModelUpdate{})
+			return err
+		}, wantErr: "context is required"},
+		{name: "prompt", invoke: func() error {
+			_, err := valid.ConfigureProviderModelPrompted(context.Background(), "config.json", nil)
+			return err
+		}, wantErr: "prompt is required"},
+		{name: "prompt context", invoke: func() error {
+			_, err := valid.ConfigureProviderModelPrompted(nil, "config.json", prompt)
+			return err
+		}, wantErr: "context is required"},
+		{name: "persist context", invoke: func() error {
+			return valid.Persist(nil, "config.json", document)
+		}, wantErr: "context is required"},
+		{name: "filesystem", invoke: func() error {
+			return (ConfigDocumentService{}).Persist(context.Background(), "config.json", document)
+		}, wantErr: "filesystem is required"},
+		{name: "temporary file creator", invoke: func() error {
+			service := ConfigDocumentService{Files: testFiles}
+			return service.Persist(context.Background(), "config.json", document)
+		}, wantErr: "temporary-file creator is required"},
+		{name: "persistence lock", invoke: func() error {
+			service := ConfigDocumentService{Files: testFiles, CreateTemp: testCreateTemp}
+			return service.Persist(context.Background(), "config.json", document)
+		}, wantErr: "persistence lock is required"},
+		{name: "path", invoke: func() error {
+			return valid.Persist(context.Background(), "  ", document)
+		}, wantErr: "path is required"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.invoke(); err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("operation error = %v, want %q", err, test.wantErr)
+			}
+		})
+	}
+}
+
 type faultFileSystem struct {
 	FileSystem
 	failPhase      string
