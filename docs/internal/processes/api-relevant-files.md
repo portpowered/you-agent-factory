@@ -12,6 +12,11 @@ Use this map when changing the public REST contract.
   `pkg/transports/mapping/factoryconfig/openapitests/parity_inventory_test.go`;
   use the hashes reported by `TestProductionBoundarySources_UnchangedForParityLane`
   only after reviewing the corresponding source changes.
+- Factory output key normalization in
+  `pkg/transports/mapping/factoryconfig/openapi_factory.go` must preserve keys
+  inside opaque maps. Add new map-valued contract fields such as localized
+  `NameValue.values` to `preservesObjectKeys`; otherwise canonicalization can
+  rewrite customer-authored keys such as BCP 47 locale tags.
 
 - OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
   boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in

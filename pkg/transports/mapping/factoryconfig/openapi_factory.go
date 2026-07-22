@@ -183,7 +183,7 @@ func normalizeFactoryJSONValuePreservingKeys(value any) any {
 }
 
 func preservesObjectKeys(fieldName string) bool {
-	return fieldName == "env" || fieldName == "metadata"
+	return fieldName == "env" || fieldName == "metadata" || fieldName == "values"
 }
 
 func normalizeCanonicalFactoryInputFields(v any) (any, error) {

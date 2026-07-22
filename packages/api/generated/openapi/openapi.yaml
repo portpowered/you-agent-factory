@@ -8145,6 +8145,10 @@ components:
       properties:
         name:
           $ref: '#/components/schemas/FactoryName'
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this Factory.
         id:
           type: string
           description: Factory identifier used as the factory-level template context fallback.
@@ -8629,6 +8633,10 @@ components:
         name:
           type: string
           description: Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this work type.
         states:
           type: array
           description: Lifecycle states available for work items of this type.
@@ -8719,6 +8727,10 @@ components:
         name:
           type: string
           description: Worker name referenced by Workstation.worker.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this worker.
         type:
           allOf:
             - $ref: '#/components/schemas/WorkerType'
@@ -8924,6 +8936,10 @@ components:
         name:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.
+        description:
+          allOf:
+            - $ref: '#/components/schemas/NameValue'
+          description: Optional localized customer-facing explanation of this workstation.
         behavior:
           allOf:
             - $ref: '#/components/schemas/WorkstationKind'

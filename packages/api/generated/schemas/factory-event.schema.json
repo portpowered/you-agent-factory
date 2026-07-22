@@ -519,6 +519,14 @@
       "additionalProperties": false,
       "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
       "properties": {
+        "description": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NameValue"
+            }
+          ],
+          "description": "Optional localized customer-facing explanation of this Factory."
+        },
         "factoryDirectory": {
           "description": "Directory that contained the factory.json used for this serialized runtime config.",
           "type": "string"
@@ -3016,6 +3024,49 @@
       ],
       "type": "object"
     },
+    "NameValue": {
+      "additionalProperties": false,
+      "description": "A customer-facing value with a required base fallback and optional exact locale overrides. Locale tags must use their canonical BCP 47 spelling.",
+      "properties": {
+        "id": {
+          "description": "Optional stable metadata identifier; consumers must not render it as display copy.",
+          "type": "string"
+        },
+        "locales": {
+          "description": "Canonical BCP 47 locales for which the base value was authored.",
+          "items": {
+            "minLength": 2,
+            "type": "string"
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "type": {
+          "description": "Discriminator for localized customer-facing metadata.",
+          "enum": [
+            "LOCALIZABLE_ASSET"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "description": "Required base value returned when no exact locale override exists.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "values": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Exact canonical BCP 47 locale tags mapped to localized overrides.",
+          "type": "object"
+        }
+      },
+      "required": [
+        "type",
+        "value"
+      ],
+      "type": "object"
+    },
     "OrchestratorCheckpointWrittenEventPayload": {
       "additionalProperties": false,
       "description": "Orchestrator checkpoint reference recorded on the canonical factory event stream. Checkpoint identity lives in FactoryEvent.context and raw VM bodies remain orchestrator-owned.",
@@ -4328,6 +4379,14 @@
       "additionalProperties": false,
       "description": "A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.",
       "properties": {
+        "description": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NameValue"
+            }
+          ],
+          "description": "Optional localized customer-facing explanation of this work type."
+        },
         "handlingBehavior": {
           "description": "Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.",
           "items": {
@@ -4398,6 +4457,14 @@
         "command": {
           "description": "Command to execute when this worker runs through a command or script provider.",
           "type": "string"
+        },
+        "description": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NameValue"
+            }
+          ],
+          "description": "Optional localized customer-facing explanation of this worker."
         },
         "executorProvider": {
           "allOf": [
@@ -4570,6 +4637,14 @@
             }
           ],
           "description": "Cron trigger configuration for workstations whose behavior is CRON."
+        },
+        "description": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/NameValue"
+            }
+          ],
+          "description": "Optional localized customer-facing explanation of this workstation."
         },
         "env": {
           "allOf": [

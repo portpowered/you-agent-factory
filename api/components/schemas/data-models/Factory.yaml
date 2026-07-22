@@ -7,6 +7,10 @@ required:
 properties:
     name:
         $ref: './FactoryName.yaml'
+    description:
+        allOf:
+            - $ref: './NameValue.yaml'
+        description: Optional localized customer-facing explanation of this Factory.
     id:
         type: string
         description: Factory identifier used as the factory-level template context fallback.

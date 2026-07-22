@@ -284,15 +284,15 @@ var productionBoundarySources = []struct {
 }{
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/openapi_factory.go",
-		sha256Hex:    "4aa4efb0fbb4434623114db89589123811f67d6dea2a938f912ea5180ab9a679",
+		sha256Hex:    "0578d65c0cd14ce4e0f4a98a9276396db8a4f1fa9bf97e2870a92a3d0806fdb8",
 	},
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/factory_config_mapping.go",
-		sha256Hex:    "d08c67af3b0983af1fd5e63f77dac141ccfef1081e77e0ec079961c10ba82981",
+		sha256Hex:    "061ec49c463a1b2aa7f67d4a88ed3a0a019c99f4addef2ec42e0faeb08780e1b",
 	},
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/factory_config_mapping_internal.go",
-		sha256Hex:    "9a466c470e30cda41d7fccc376c3864aab2bbe203cb6db79a99c8050e1109ff3",
+		sha256Hex:    "8ac413d16835695c7151ac0eb45e7e3742ceac85c109d4137052b8b000bf838d",
 	},
 	{
 		relativePath: "pkg/transports/mapping/factoryconfig/layout_annotations.go",
@@ -304,11 +304,11 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "pkg/services/factory_definitions/contracts/factory_config.go",
-		sha256Hex:    "f707aa7fef75d4bf467093e471fc0ffd8a0bd81e3a9e0052c5b51126a53bddc4",
+		sha256Hex:    "168e7412ff843326500ebdeda70bbadc354d06a042f81c4840e463f4c1e27e15",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",
-		sha256Hex:    "bf3b2eb5709d1b4828bb6c0542b22ff50fb1cfc56ab24cf02ae8f546388a9304",
+		sha256Hex:    "5f0954c9f06bf8a2e6ca49f30c79022441e57e25b069cb6b54261eb256d6ce33",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/WorkerType.yaml",

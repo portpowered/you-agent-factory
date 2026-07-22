@@ -4005,6 +4005,8 @@ export interface components {
     /** @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field. */
     Factory: {
       name: components["schemas"]["FactoryName"];
+      /** @description Optional localized customer-facing explanation of this Factory. */
+      description?: components["schemas"]["NameValue"];
       /** @description Factory identifier used as the factory-level template context fallback. */
       id?: string;
       /** @description Default runner selection for the factory when a workstation does not declare its own runner override. */
@@ -4273,6 +4275,8 @@ export interface components {
       id?: string;
       /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
       name: string;
+      /** @description Optional localized customer-facing explanation of this work type. */
+      description?: components["schemas"]["NameValue"];
       /** @description Lifecycle states available for work items of this type. */
       states: components["schemas"]["WorkState"][];
       /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
@@ -4322,6 +4326,8 @@ export interface components {
       id?: string;
       /** @description Worker name referenced by Workstation.worker. */
       name: string;
+      /** @description Optional localized customer-facing explanation of this worker. */
+      description?: components["schemas"]["NameValue"];
       /** @description Worker implementation family to instantiate for this definition. */
       type?: components["schemas"]["WorkerType"];
       /** @description Built-in hosted provider identity when this worker uses repository-owned hosted execution. */
@@ -4427,6 +4433,8 @@ export interface components {
       id?: string;
       /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
       name: string;
+      /** @description Optional localized customer-facing explanation of this workstation. */
+      description?: components["schemas"]["NameValue"];
       /** @description Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution. */
       behavior?: components["schemas"]["WorkstationKind"];
       /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */

@@ -15,6 +15,11 @@ import (
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
 	cfg := interfaces.FactoryConfig{Name: string(apiCfg.Name)}
+	description, err := nameValueInternalFromAPI(apiCfg.Description, "factory.description")
+	if err != nil {
+		return interfaces.FactoryConfig{}, err
+	}
+	cfg.Description = description
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}
@@ -36,7 +41,11 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	}
 	cfg.Orchestrator = orchestrator
 	if apiCfg.WorkTypes != nil {
-		cfg.WorkTypes = workTypesInternalFromAPI(*apiCfg.WorkTypes)
+		workTypes, err := workTypesInternalFromAPI(*apiCfg.WorkTypes)
+		if err != nil {
+			return interfaces.FactoryConfig{}, err
+		}
+		cfg.WorkTypes = workTypes
 	}
 	if apiCfg.Resources != nil {
 		cfg.Resources = resourcesInternalFromAPI(*apiCfg.Resources)
@@ -73,6 +82,21 @@ func FactoryConfigFromOpenAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConf
 // NameValueFromOpenAPI validates and maps one generated localized value into
 // the transport-independent Factory definition contract.
 func NameValueFromOpenAPI(value factoryapi.NameValue) (interfaces.NameValueConfig, error) {
+	return nameValueFromOpenAPI(value, "")
+}
+
+func nameValueInternalFromAPI(value *factoryapi.NameValue, fieldPath string) (*interfaces.NameValueConfig, error) {
+	if value == nil {
+		return nil, nil
+	}
+	mapped, err := nameValueFromOpenAPI(*value, fieldPath)
+	if err != nil {
+		return nil, err
+	}
+	return &mapped, nil
+}
+
+func nameValueFromOpenAPI(value factoryapi.NameValue, fieldPath string) (interfaces.NameValueConfig, error) {
 	result := interfaces.NameValueConfig{
 		Type:  string(value.Type),
 		Value: value.Value,
@@ -88,6 +112,9 @@ func NameValueFromOpenAPI(value factoryapi.NameValue) (interfaces.NameValueConfi
 		}
 	}
 	if err := result.Validate(); err != nil {
+		if fieldPath != "" {
+			return interfaces.NameValueConfig{}, fmt.Errorf("%s.%w", fieldPath, err)
+		}
 		return interfaces.NameValueConfig{}, err
 	}
 	return result, nil
@@ -213,9 +240,13 @@ func workTypeHandlingBehaviorInternalFromAPI(behaviors *[]factoryapi.WorkTypeHan
 	return values
 }
 
-func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.WorkTypeConfig {
+func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) ([]interfaces.WorkTypeConfig, error) {
 	values := make([]interfaces.WorkTypeConfig, len(workTypes))
 	for i, workType := range workTypes {
+		description, err := nameValueInternalFromAPI(workType.Description, fmt.Sprintf("factory.workTypes[%d].description", i))
+		if err != nil {
+			return nil, err
+		}
 		states := make([]interfaces.StateConfig, len(workType.States))
 		for si, state := range workType.States {
 			states[si] = interfaces.StateConfig{
@@ -227,11 +258,12 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.Work
 		values[i] = interfaces.WorkTypeConfig{
 			ID:               stringValue(workType.Id),
 			Name:             workType.Name,
+			Description:      description,
 			States:           states,
 			HandlingBehavior: workTypeHandlingBehaviorInternalFromAPI(workType.HandlingBehavior),
 		}
 	}
-	return values
+	return values, nil
 }
 
 func resourcesInternalFromAPI(resources []factoryapi.Resource) []interfaces.ResourceConfig {
@@ -577,6 +609,11 @@ func modelOperationContentTypesInternalFromAPI(contentTypes []factoryapi.ModelOp
 // internal runtime config representation.
 func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (interfaces.FactoryWorkerConfig, error) {
 	cfg := workerInternalFromAPI(worker)
+	description, err := nameValueInternalFromAPI(worker.Description, fmt.Sprintf("factory.workers[%q].description", worker.Name))
+	if err != nil {
+		return interfaces.FactoryWorkerConfig{}, err
+	}
+	cfg.Description = description
 	openCodeAgent, err := openCodeAgentInternalFromAPI(worker.OpenCodeAgent, fmt.Sprintf("factory.workers[%q]", worker.Name))
 	if err != nil {
 		return interfaces.FactoryWorkerConfig{}, err
@@ -715,6 +752,11 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Env:                   stringMapValue(workstation.Env),
 		OpenCodeAgent:         openCodeAgent,
 	}
+	description, err := nameValueInternalFromAPI(workstation.Description, fieldPath+".description")
+	if err != nil {
+		return interfaces.FactoryWorkstationConfig{}, err
+	}
+	cfg.Description = description
 	if workstation.Type != nil {
 		cfg.Type = internalFactoryWorkstationTypeFromPublic(workstation.Type)
 	}

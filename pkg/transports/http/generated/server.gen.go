@@ -1290,6 +1290,9 @@ type ErrorTarget struct {
 
 // Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 type Factory struct {
+	// Description Optional localized customer-facing explanation of this Factory.
+	Description *NameValue `json:"description,omitempty"`
+
 	// FactoryDirectory Directory that contained the factory.json used for this serialized runtime config.
 	FactoryDirectory *string `json:"factoryDirectory,omitempty"`
 
@@ -6117,6 +6120,9 @@ type WorkTextContentPart struct {
 
 // WorkType A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy.
 type WorkType struct {
+	// Description Optional localized customer-facing explanation of this work type.
+	Description *NameValue `json:"description,omitempty"`
+
 	// HandlingBehavior Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
 	HandlingBehavior *[]WorkTypeHandlingBehavior `json:"handlingBehavior,omitempty"`
 
@@ -6149,6 +6155,9 @@ type Worker struct {
 
 	// Command Command to execute when this worker runs through a command or script provider.
 	Command *string `json:"command,omitempty"`
+
+	// Description Optional localized customer-facing explanation of this worker.
+	Description *NameValue `json:"description,omitempty"`
 
 	// ExecutorProvider Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
@@ -6341,6 +6350,9 @@ type Workstation struct {
 
 	// Cron Cron trigger configuration for workstations whose behavior is CRON.
 	Cron *WorkstationCron `json:"cron,omitempty"`
+
+	// Description Optional localized customer-facing explanation of this workstation.
+	Description *NameValue `json:"description,omitempty"`
 
 	// Env Environment variables added to the workstation execution context.
 	Env *StringMap `json:"env,omitempty"`

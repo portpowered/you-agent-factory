@@ -149,6 +149,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 
 	return factoryapi.Factory{
 		Name:                factoryReferenceName(cfg),
+		Description:         NameValueAPIFromInternal(cfg.Description),
 		Id:                  stringPtrIfNotEmpty(cfg.Project),
 		Version:             hybridLogicalTimestampPtr(cfg.Version),
 		Guards:              factoryGuardsAPIFromInternal(cfg.Guards),
@@ -807,6 +808,7 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 		result[i] = factoryapi.WorkType{
 			Id:               stringPtrIfNotEmpty(workType.ID),
 			Name:             workType.Name,
+			Description:      NameValueAPIFromInternal(workType.Description),
 			States:           states,
 			HandlingBehavior: workTypeHandlingBehaviorAPIFromInternal(workType.HandlingBehavior),
 		}
@@ -903,6 +905,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 
 	apiWorkstation := factoryapi.Workstation{
 		Name:                  normalized.Name,
+		Description:           NameValueAPIFromInternal(normalized.Description),
 		Worker:                normalized.WorkerTypeName,
 		Inputs:                workstationIOsAPIFromInternal(normalized.Inputs),
 		Outputs:               optionalWorkstationIOsAPIFromInternal(normalized.Outputs),
@@ -1069,6 +1072,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.FactoryWorkerConfi
 	}
 	return &factoryapi.Worker{
 		Id:               stringPtrIfNotEmpty(def.ID),
+		Description:      NameValueAPIFromInternal(def.Description),
 		Type:             workerTypePtrForFactoryUsage(def, workstations),
 		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
