@@ -1,4 +1,15 @@
 export {
+  type CliCommandInputProjection,
+  type CliCommandNavigationItem,
+  type CliCommandProjection,
+  type CliInputCardinality,
+  type CliInputSource,
+  type CliManifestProjection,
+  type CliRelationshipParticipantProjection,
+  type CliRelationshipProjection,
+  projectCliManifest,
+} from "../lib/cli-command-projection";
+export {
   loadCliManifest,
   loadingCliManifest,
   loadPublishedCliManifest,
@@ -6,8 +17,11 @@ export {
 export {
   type CliArgument,
   type CliCommand,
+  type CliDocumentation,
+  type CliDocumentationText,
   type CliFlag,
   type CliInputReference,
+  type CliLifecycle,
   type CliManifest,
   type CliManifestDiagnostic,
   type CliManifestDiagnosticCode,

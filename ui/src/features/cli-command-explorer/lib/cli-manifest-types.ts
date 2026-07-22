@@ -1,5 +1,35 @@
 export const SUPPORTED_CLI_MANIFEST_FORMAT_VERSION = "1.0.0" as const;
 
+export type CliDocumentationText = {
+  readonly id: string;
+  readonly canonicalEnglish: string;
+};
+
+export type CliDocumentation = {
+  readonly formatVersion: "1.0.0";
+  readonly itemId: string;
+  readonly documentation: {
+    readonly title: CliDocumentationText;
+    readonly description: CliDocumentationText;
+  };
+  readonly examples: readonly unknown[];
+  readonly visibility: "internal" | "public";
+  readonly sourceHash: string;
+};
+
+export type CliLifecycle = {
+  readonly formatVersion: "1.0.0";
+  readonly itemId: string;
+  readonly state: "active" | "deprecated" | "removed";
+  readonly since: string;
+  readonly deprecated?: string;
+  readonly removed?: string;
+  readonly successor?: {
+    readonly targetItemId: string;
+    readonly canonicalEnglish: string;
+  };
+};
+
 export type CliInputReference = {
   readonly type: "argument" | "flag";
   readonly id: string;
@@ -39,7 +69,7 @@ export type CliFlag = {
   readonly completion: "none" | "static" | "dynamic";
   readonly binding: string;
   readonly visibility: "hidden" | "visible";
-  readonly lifecycle: Readonly<Record<string, unknown>>;
+  readonly lifecycle: CliLifecycle;
 };
 
 export type CliRelationship = {
@@ -59,8 +89,8 @@ export type CliCommand = {
   readonly name: string;
   readonly path: string;
   readonly aliases: readonly string[];
-  readonly documentation: Readonly<Record<string, unknown>>;
-  readonly lifecycle: Readonly<Record<string, unknown>>;
+  readonly documentation: CliDocumentation;
+  readonly lifecycle: CliLifecycle;
   readonly visibility: "hidden" | "visible";
   readonly runnable: boolean;
   readonly usage: Readonly<{ line: string; example?: string }>;
