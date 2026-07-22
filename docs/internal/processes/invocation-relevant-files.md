@@ -17,6 +17,27 @@ primary-result behavior.
   package's observed numeric floor and the wrapper package's documented
   measurement exception when it has no executable statements. Verify both with
   `make test-unit-coverage` and `make test-functional-coverage`.
+- The customer-implementable provider inference contract lives in
+  `pkg/services/workers/provider/inferencecontract/`. Invoke implementations
+  through `ExecuteInvocation` so provider-authored drafts are validated for
+  provenance, invocation and item correlation, lifecycle ordering, terminal
+  result agreement, and exactly-once close before they reach orchestration.
+  Keep this boundary provider-neutral and test it with deterministic writers;
+  Factory Session publication identity, sequencing, retention, and replay stay
+  outside this package. Customer integrations can reuse
+  `inferencecontract/testkit.Run` with fresh factories for final-only,
+  streaming, and tool-lifecycle modes; pass at least two opaque identities so
+  conformance never depends on a built-in provider name. Reuse
+  `inferencecontract/testkit.RunAdverse` for normalized failure, cancellation,
+  deadline, response-sink backpressure, and terminal-state scenarios. A sink
+  write failure is terminal: preserve it for orchestration and reject every
+  later provider write or close without sending a competing completion. Once
+  an authoritative completed message represents success, reject a later
+  failure completion and discard the buffered terminal tail so orchestration
+  observes neither side of a contradictory outcome. Reject a second
+  authoritative completed message as `final_result_agreement`, even when it
+  uses a different item correlation, so no earlier represented result can be
+  overwritten before completion validation.
 
 ## CLI run and submit command contracts
 
