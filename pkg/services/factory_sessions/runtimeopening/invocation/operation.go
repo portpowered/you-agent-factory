@@ -133,16 +133,59 @@ func (o *operation) InvokeFactory(
 
 	if result, handled, err := invokeJavaScriptFactory(lifecycle.runContext, opened, target, request, o.generateSessionID); handled {
 		outcome.Result = result
+		if err == nil {
+			outcome.FactoryEvents, err = readInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, result)
+		}
 		return outcome, err
 	}
 
 	outcome.Result, resultErr = opened.Invoker.InvokeFactorySession(
 		lifecycle.runContext, factorysessions.DefaultSessionID, request,
 	)
-	if session := opened.Sessions.ResolveFactorySession(factorysessions.DefaultSessionID); session != nil && session.ResponseEvents != nil {
-		outcome.ResponseEvents = session.ResponseEvents.Events()
+	if resultErr == nil {
+		outcome.FactoryEvents, resultErr = readInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, outcome.Result)
 	}
 	return outcome, resultErr
+}
+
+type invocationFactoryEventReader interface {
+	SubscribeFactoryEventsForSession(context.Context, string, *factorydefinitions.FactoryEventReconnectCursor) (*factorydefinitions.FactoryEventStream, error)
+	ReadDurableFactorySessionEventStream(context.Context, string, factorysessions.EventReconnectRequest) (*factorydefinitions.FactoryEventStream, error)
+}
+
+func readInvocationFactoryEvents(
+	ctx context.Context,
+	reader invocationFactoryEventReader,
+	result factorydefinitions.FactoryInvocationResult,
+) ([]factorydefinitions.FactoryEvent, error) {
+	if reader == nil {
+		return nil, errors.New("Factory Session event reader is required")
+	}
+	sessionID := strings.TrimSpace(result.SessionID)
+	var (
+		stream *factorydefinitions.FactoryEventStream
+		err    error
+	)
+	if sessionID != "" && sessionID != factorysessions.DefaultSessionID {
+		stream, err = reader.ReadDurableFactorySessionEventStream(
+			ctx, sessionID, factorysessions.EventReconnectRequest{},
+		)
+	} else {
+		stream, err = reader.SubscribeFactoryEventsForSession(
+			ctx, factorysessions.DefaultSessionID, nil,
+		)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read invocation Factory Events: %w", err)
+	}
+	if stream == nil {
+		return nil, errors.New("read invocation Factory Events: stream is unavailable")
+	}
+	events := make([]factorydefinitions.FactoryEvent, len(stream.History))
+	for i := range stream.History {
+		events[i] = stream.History[i].Clone()
+	}
+	return events, nil
 }
 
 func invokeJavaScriptFactory(

@@ -629,3 +629,157 @@ type responseStreamJSONInvocationResultRecord struct {
 	RecordType string                        `json:"recordType"`
 	Invocation factoryapi.InvocationResponse `json:"invocation"`
 }
+
+const factoryEventJSONRecordType = "factory_event"
+
+type factoryEventRenderer interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	stopProgressRendering()
+	writeFinalInvocationResult(apisurface.FactoryInvocationResult) error
+}
+
+func invocationFactoryEventRenderer(
+	cfg RunConfig,
+	presentation factoryvisualization.ResponsePresentation,
+) factoryEventRenderer {
+	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return nil
+	}
+	if cfg.JSONOutput {
+		return newJSONFactoryEventRenderer(cfg.Output, presentation)
+	}
+	return newHumanFactoryEventRenderer(cfg.Output, presentation)
+}
+
+type factoryEventStream interface {
+	PresentFactoryEvents([]interfaces.FactoryEvent)
+	Finalize(factoryvisualization.FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+}
+
+type humanFactoryEventRenderer struct {
+	stream factoryEventStream
+}
+
+func newHumanFactoryEventRenderer(
+	output io.Writer,
+	presentation factoryvisualization.ResponsePresentation,
+) *humanFactoryEventRenderer {
+	if output == nil {
+		panic("Factory Event output is nil")
+	}
+	if presentation == nil {
+		panic("Factory Event presentation service is nil")
+	}
+	return &humanFactoryEventRenderer{stream: presentation.OpenBestEffortFactoryEventStream(
+		output,
+		func(event interfaces.FactoryEvent) ([]byte, bool) {
+			sequence := event.Context.Sequence
+			if event.Context.SessionSequence != nil {
+				sequence = *event.Context.SessionSequence
+			}
+			return []byte(fmt.Sprintf("[%d] %s", sequence, event.Type)), true
+		},
+	)}
+}
+
+func (renderer *humanFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
+	if renderer != nil {
+		renderer.stream.PresentFactoryEvents(events)
+	}
+}
+
+func (renderer *humanFactoryEventRenderer) stopProgressRendering() {
+	if renderer != nil {
+		_ = renderer.stream.CloseAndDrain()
+	}
+}
+
+func (renderer *humanFactoryEventRenderer) writeFinalInvocationResult(
+	result apisurface.FactoryInvocationResult,
+) error {
+	if renderer == nil {
+		return fmt.Errorf("Factory Event renderer is nil")
+	}
+	_, err := renderer.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
+		if result.Status == interfaces.InvocationTerminalStatusCompleted {
+			text, textErr := invocationPrimaryResultText(result.PrimaryResult)
+			if textErr != nil {
+				return textErr
+			}
+			return writeHumanPrimaryResult(writer, progressSeen, text)
+		}
+		return writeHumanInvocationOutcome(writer, progressSeen, result)
+	})
+	return err
+}
+
+type jsonFactoryEventRenderer struct {
+	stream factoryEventStream
+}
+
+func newJSONFactoryEventRenderer(
+	output io.Writer,
+	presentation factoryvisualization.ResponsePresentation,
+) *jsonFactoryEventRenderer {
+	if output == nil {
+		panic("Factory Event output is nil")
+	}
+	if presentation == nil {
+		panic("Factory Event presentation service is nil")
+	}
+	return &jsonFactoryEventRenderer{stream: presentation.OpenLosslessFactoryEventStream(
+		output,
+		func(event interfaces.FactoryEvent) ([]byte, bool) {
+			encoded, err := json.Marshal(factoryEventJSONRecord{
+				RecordType: factoryEventJSONRecordType,
+				Event:      event,
+			})
+			return encoded, err == nil
+		},
+	)}
+}
+
+func (renderer *jsonFactoryEventRenderer) PresentFactoryEvents(events []interfaces.FactoryEvent) {
+	if renderer != nil {
+		renderer.stream.PresentFactoryEvents(events)
+	}
+}
+
+func (renderer *jsonFactoryEventRenderer) stopProgressRendering() {
+	if renderer != nil {
+		_ = renderer.stream.CloseAndDrain()
+	}
+}
+
+func (renderer *jsonFactoryEventRenderer) writeFinalInvocationResult(
+	result apisurface.FactoryInvocationResult,
+) error {
+	if renderer == nil {
+		return fmt.Errorf("Factory Event renderer is nil")
+	}
+	first, err := renderer.stream.Finalize(func(writer io.Writer, _ bool) error {
+		encoded, encodeErr := json.Marshal(responseStreamJSONInvocationResultRecord{
+			RecordType: responseStreamJSONRecordInvocationResult,
+			Invocation: apisurface.InvocationResponseFromResult(result),
+		})
+		if encodeErr != nil {
+			return fmt.Errorf("marshal Factory Event terminal record: %w", encodeErr)
+		}
+		encoded = append(encoded, '\n')
+		written, writeErr := writer.Write(encoded)
+		if writeErr == nil && written != len(encoded) {
+			writeErr = io.ErrShortWrite
+		}
+		return writeErr
+	})
+	if !first {
+		return fmt.Errorf("Factory Event invocation result already written")
+	}
+	return err
+}
+
+type factoryEventJSONRecord struct {
+	RecordType string                  `json:"recordType"`
+	Event      interfaces.FactoryEvent `json:"event"`
+}

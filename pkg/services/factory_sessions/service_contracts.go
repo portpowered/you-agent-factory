@@ -6,7 +6,6 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	operatorconfig "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/work"
@@ -81,11 +80,11 @@ type InvocationTarget struct {
 	MetricsRecorder                  InvocationMetricsRecorder
 }
 
-// FactoryInvocationOutcome contains the canonical terminal result and the
-// response events retained during the invocation.
+// FactoryInvocationOutcome contains the canonical Factory Event history and
+// terminal result retained during the invocation.
 type FactoryInvocationOutcome struct {
-	Result         factorydefinitions.FactoryInvocationResult
-	ResponseEvents []responseevents.FactoryResponseEvent
+	Result        factorydefinitions.FactoryInvocationResult
+	FactoryEvents []factorydefinitions.FactoryEvent
 }
 
 // InvocationOperation owns one-shot model and Factory invocation lifecycle.

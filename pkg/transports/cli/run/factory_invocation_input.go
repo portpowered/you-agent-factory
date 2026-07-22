@@ -228,7 +228,7 @@ func runFactoryInvocation(
 
 	logPackagedTTSInvocationStart(cfg)
 
-	streamRenderer := invocationResponseStreamRenderer(cfg, presentation, responseEvents)
+	streamRenderer := invocationFactoryEventRenderer(cfg, presentation)
 	if streamRenderer != nil {
 		defer streamRenderer.stopProgressRendering()
 	}
@@ -239,28 +239,14 @@ func runFactoryInvocation(
 	if err != nil {
 		return err
 	}
-	if sink, ok := streamRenderer.(responseEventSink); ok && len(outcome.ResponseEvents) > 0 {
-		sink.PresentResponseEvents(outcome.ResponseEvents)
+	if streamRenderer != nil && len(outcome.FactoryEvents) > 0 {
+		streamRenderer.PresentFactoryEvents(outcome.FactoryEvents)
 	}
 	result := outcome.Result
 	if result.Status != interfaces.InvocationTerminalStatusCompleted {
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
-}
-
-func invocationResponseStreamRenderer(
-	cfg RunConfig,
-	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
-) responseStreamRenderer {
-	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		return nil
-	}
-	if cfg.JSONOutput {
-		return newJSONResponseStreamRenderer(cfg.Output, presentation)
-	}
-	return newHumanResponseStreamRenderer(cfg.Output, presentation, responseEvents)
 }
 
 func invocationTarget(

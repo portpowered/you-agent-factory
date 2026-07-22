@@ -105,12 +105,6 @@ func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
 	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
 		return nil
 	}
-	if strings.TrimSpace(cfg.ReplayPath) != "" {
-		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
-			Message: "response-stream output requires a live runtime owned by this CLI invocation; replay mode has no internal response stream",
-		}
-	}
 	if cfg.Continuously {
 		return &InvocationError{
 			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",

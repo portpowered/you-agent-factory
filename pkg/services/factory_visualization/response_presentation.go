@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
@@ -50,6 +51,16 @@ type ResponsePresentation interface {
 	OpenLosslessOutput(io.Writer) Output
 	OpenBestEffortResponseStream(io.Writer, ResponseEventEncoder) ResponseStream
 	OpenLosslessResponseStream(io.Writer, ResponseEventEncoder) ResponseStream
+	OpenBestEffortFactoryEventStream(io.Writer, FactoryEventEncoder) interface {
+		PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+		Finalize(FinalResponseWriter) (bool, error)
+		CloseAndDrain() error
+	}
+	OpenLosslessFactoryEventStream(io.Writer, FactoryEventEncoder) interface {
+		PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+		Finalize(FinalResponseWriter) (bool, error)
+		CloseAndDrain() error
+	}
 }
 
 type responsePresentation struct{}
@@ -101,6 +112,28 @@ func (responsePresentation) OpenLosslessResponseStream(
 	encode ResponseEventEncoder,
 ) ResponseStream {
 	return newSerializedResponseStream(newLosslessOutput(writer), encode)
+}
+
+func (responsePresentation) OpenBestEffortFactoryEventStream(
+	writer io.Writer,
+	encode FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+	Finalize(FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	return newSerializedFactoryEventStream(newBestEffortOutput(writer), encode)
+}
+
+func (responsePresentation) OpenLosslessFactoryEventStream(
+	writer io.Writer,
+	encode FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+	Finalize(FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	return newSerializedFactoryEventStream(newLosslessOutput(writer), encode)
 }
 
 type responseEventAttachment struct {

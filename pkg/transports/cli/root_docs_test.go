@@ -235,9 +235,9 @@ func TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary(t 
 	}
 	for _, marker := range []string{
 		"### Primary-result mode (default)",
-		"### Human response-stream mode",
+		"### Human Factory Event stream mode",
 		"### NDJSON automation mode",
-		"recordType=response_event",
+		"recordType=factory_event",
 		"recordType=invocation_result",
 		`you run --named team-review --output response-stream "Review the release notes"`,
 		`you --json run --factory ./factory.json --output response-stream "Summarize the changelog"`,

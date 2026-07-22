@@ -1,6 +1,7 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,93 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+func TestFactoryEventPresentation_LiveAndReplayPreserveCanonicalJavaScriptOrder(t *testing.T) {
+	events := canonicalJavaScriptFactoryEvents()
+	result := apisurface.FactoryInvocationResult{
+		RequestID: "request-js", Status: interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "complete"}},
+	}
+
+	outputs := make([]string, 0, 2)
+	for _, source := range []string{"live", "replay"} {
+		t.Run(source, func(t *testing.T) {
+			var output bytes.Buffer
+			renderer := newJSONFactoryEventRenderer(&output, testResponsePresentation())
+			renderer.PresentFactoryEvents(events)
+			if err := renderer.writeFinalInvocationResult(result); err != nil {
+				t.Fatalf("write terminal result: %v", err)
+			}
+			outputs = append(outputs, output.String())
+			assertCanonicalJavaScriptPresentation(t, output.String())
+		})
+	}
+	if outputs[0] != outputs[1] {
+		t.Fatalf("live and replay presentation differ:\nlive=%s\nreplay=%s", outputs[0], outputs[1])
+	}
+}
+
+func assertCanonicalJavaScriptPresentation(t *testing.T, output string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("records = %d, want three Factory Events and one terminal result:\n%s", len(lines), output)
+	}
+	wantTypes := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+	}
+	for i, wantType := range wantTypes {
+		var record factoryEventJSONRecord
+		if err := json.Unmarshal([]byte(lines[i]), &record); err != nil {
+			t.Fatalf("decode Factory Event record %d: %v", i, err)
+		}
+		if record.RecordType != factoryEventJSONRecordType || record.Event.Type != wantType {
+			t.Fatalf("record %d = %#v, want %s %s", i, record, factoryEventJSONRecordType, wantType)
+		}
+		if record.Event.Context.SessionSequence == nil || *record.Event.Context.SessionSequence != i+1 {
+			t.Fatalf("record %d sessionSequence = %#v, want %d", i, record.Event.Context.SessionSequence, i+1)
+		}
+	}
+	if !strings.Contains(lines[3], `"recordType":"invocation_result"`) {
+		t.Fatalf("terminal record = %q", lines[3])
+	}
+}
+
+func canonicalJavaScriptFactoryEvents() []interfaces.FactoryEvent {
+	types := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeOrchestratorPhaseChanged,
+		interfaces.FactoryEventTypeOrchestratorCheckpointWritten,
+	}
+	events := make([]interfaces.FactoryEvent, len(types))
+	for i, eventType := range types {
+		events[i] = canonicalFactoryEventFixture(i+1, eventType)
+	}
+	return events
+}
+
+func canonicalFactoryEventFixtures(count int) []interfaces.FactoryEvent {
+	events := make([]interfaces.FactoryEvent, count)
+	for i := range events {
+		events[i] = canonicalFactoryEventFixture(i+1, interfaces.FactoryEventTypeOrchestratorPhaseChanged)
+	}
+	return events
+}
+
+func canonicalFactoryEventFixture(sequence int, eventType interfaces.FactoryEventType) interfaces.FactoryEvent {
+	sessionID := "session-js"
+	sessionSequence := sequence
+	return interfaces.FactoryEvent{
+		Id: fmt.Sprintf("factory-event-%d", sequence), SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type: eventType, Payload: json.RawMessage(`{}`),
+		Context: interfaces.FactoryEventContext{
+			EventTime: time.Unix(int64(sequence), 0).UTC(), Sequence: sequence,
+			SessionID: &sessionID, SessionSequence: &sessionSequence,
+		},
+	}
+}
 
 type gatedResponseStreamWriter struct {
 	mu                   sync.Mutex
@@ -452,35 +540,24 @@ func TestRun_FactoryInvocationResponseStreamJSONPreservesSlowWriterOrder(t *test
 	output := &gatedResponseStreamWriter{}
 	output.block()
 	eventsPublished := make(chan struct{})
-	attachable := newRecordingResponseEventAttachable()
 	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
-		return stubResponseEventInvocationService{
-			stubInvocationService: stubInvocationService{
-				run: func(ctx context.Context) error {
-					<-ctx.Done()
-					return nil
-				},
-				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					select {
-					case <-attachable.subscribed:
-					case <-time.After(2 * time.Second):
-						return apisurface.FactoryInvocationResult{}, fmt.Errorf("canonical response-event subscription was not established")
-					}
-					if err := publishCanonicalResponseEventFixtures(attachable, eventCount); err != nil {
-						return apisurface.FactoryInvocationResult{}, err
-					}
-					close(eventsPublished)
-					return apisurface.FactoryInvocationResult{
-						RequestID: "req-slow-writer",
-						TraceID:   "trace-slow-writer",
-						Status:    interfaces.InvocationTerminalStatusCompleted,
-						PrimaryResult: []work.WorkContentPart{
-							{Type: work.WorkContentPartTypeText, Text: text},
-						},
-					}, nil
-				},
+		return stubInvocationService{
+			events: canonicalFactoryEventFixtures(eventCount),
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
 			},
-			attachable: attachable,
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				close(eventsPublished)
+				return apisurface.FactoryInvocationResult{
+					RequestID: "req-slow-writer",
+					TraceID:   "trace-slow-writer",
+					Status:    interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: text},
+					},
+				}, nil
+			},
 		}, nil
 	}
 
@@ -521,30 +598,25 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 	preserveRunGlobals(t)
 	text := "goal completed"
 	var output strings.Builder
-	attachable := newRecordingResponseEventAttachable()
 	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
-		return stubResponseEventInvocationService{
-			stubInvocationService: stubInvocationService{
-				run: func(ctx context.Context) error {
-					<-ctx.Done()
-					return nil
-				},
-				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					<-attachable.subscribed
-					if err := attachable.publish(canonicalResponseEventFixture(1, factorysessions.ResponseEventKindMessage)); err != nil {
-						return apisurface.FactoryInvocationResult{}, err
-					}
-					return apisurface.FactoryInvocationResult{
-						RequestID: "req-terminal-boundary",
-						TraceID:   "trace-terminal-boundary",
-						Status:    interfaces.InvocationTerminalStatusCompleted,
-						PrimaryResult: []work.WorkContentPart{
-							{Type: work.WorkContentPartTypeText, Text: text},
-						},
-					}, nil
-				},
+		return stubInvocationService{
+			events: []interfaces.FactoryEvent{
+				canonicalFactoryEventFixture(1, interfaces.FactoryEventTypeOrchestratorCheckpointWritten),
 			},
-			attachable: attachable,
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					RequestID: "req-terminal-boundary",
+					TraceID:   "trace-terminal-boundary",
+					Status:    interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: text},
+					},
+				}, nil
+			},
 		}, nil
 	}
 	if err := Run(context.Background(), RunConfig{
@@ -562,21 +634,12 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 	if len(lines) != 2 {
 		t.Fatalf("NDJSON lines = %d, want terminal-boundary event plus final result:\n%s", len(lines), output.String())
 	}
-	if !strings.Contains(lines[0], `"recordType":"response_event"`) {
-		t.Fatalf("first record = %q, want response_event", lines[0])
+	if !strings.Contains(lines[0], `"recordType":"factory_event"`) {
+		t.Fatalf("first record = %q, want factory_event", lines[0])
 	}
 	if !strings.Contains(lines[1], `"recordType":"invocation_result"`) {
 		t.Fatalf("final record = %q, want invocation_result", lines[1])
 	}
-}
-
-func publishCanonicalResponseEventFixtures(attachable *recordingResponseEventAttachable, count int) error {
-	for index := 1; index <= count; index++ {
-		if err := attachable.publish(canonicalResponseEventFixture(int64(index), factorysessions.ResponseEventKindMessage)); err != nil {
-			return fmt.Errorf("publish canonical response event %d: %w", index, err)
-		}
-	}
-	return nil
 }
 
 func assertSlowWriterCanonicalRecords(t *testing.T, output string, eventCount int) {
@@ -586,12 +649,12 @@ func assertSlowWriterCanonicalRecords(t *testing.T, output string, eventCount in
 		t.Fatalf("NDJSON lines = %d, want %d lossless events plus final result", len(lines), eventCount+1)
 	}
 	for index := 0; index < eventCount; index++ {
-		var record responseStreamJSONResponseEventRecord
+		var record factoryEventJSONRecord
 		if err := json.Unmarshal([]byte(lines[index]), &record); err != nil {
-			t.Fatalf("decode response event line %d: %v", index, err)
+			t.Fatalf("decode Factory Event line %d: %v", index, err)
 		}
-		if record.RecordType != responseStreamJSONRecordResponseEvent || record.Event.Sequence != int64(index+1) {
-			t.Fatalf("response event line %d = %#v", index, record)
+		if record.RecordType != factoryEventJSONRecordType || record.Event.Context.Sequence != index+1 {
+			t.Fatalf("Factory Event line %d = %#v", index, record)
 		}
 	}
 	var finalRecord responseStreamJSONInvocationResultRecord

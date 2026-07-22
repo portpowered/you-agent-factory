@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 )
@@ -73,6 +74,87 @@ func (fakeResponsePresentation) OpenLosslessResponseStream(
 		output: &fakePresentationOutput{writer: writer},
 		encode: encode,
 	}
+}
+
+func (fakeResponsePresentation) OpenBestEffortFactoryEventStream(
+	writer io.Writer,
+	encode factoryvisualization.FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+	Finalize(factoryvisualization.FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	return &fakeFactoryEventStream{
+		output: &fakePresentationOutput{writer: writer, capacity: defaultResponseStreamProgressQueueCapacity},
+		encode: encode,
+	}
+}
+
+func (fakeResponsePresentation) OpenLosslessFactoryEventStream(
+	writer io.Writer,
+	encode factoryvisualization.FactoryEventEncoder,
+) interface {
+	PresentFactoryEvents([]factorydefinitions.FactoryEvent)
+	Finalize(factoryvisualization.FinalResponseWriter) (bool, error)
+	CloseAndDrain() error
+} {
+	return &fakeFactoryEventStream{
+		output: &fakePresentationOutput{writer: writer},
+		encode: encode,
+	}
+}
+
+type fakeFactoryEventStream struct {
+	mu           sync.Mutex
+	output       factoryvisualization.Output
+	encode       factoryvisualization.FactoryEventEncoder
+	progressSeen bool
+	finalized    bool
+	finalErr     error
+}
+
+func (s *fakeFactoryEventStream) PresentFactoryEvents(events []factorydefinitions.FactoryEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finalized {
+		return
+	}
+	for _, event := range events {
+		payload, ok := s.encode(event)
+		if !ok || len(payload) == 0 {
+			continue
+		}
+		if err := s.output.Enqueue(payload); err == nil {
+			s.progressSeen = true
+		}
+	}
+}
+
+func (s *fakeFactoryEventStream) Finalize(write factoryvisualization.FinalResponseWriter) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.finalized {
+		return false, s.finalErr
+	}
+	s.finalized = true
+	if err := s.output.CloseAndDrain(); err != nil {
+		s.finalErr = err
+		return true, err
+	}
+	s.finalErr = s.output.WithWriterExclusive(func(writer io.Writer) error {
+		return write(writer, s.progressSeen)
+	})
+	return true, s.finalErr
+}
+
+func (s *fakeFactoryEventStream) CloseAndDrain() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.finalized {
+		s.finalized = true
+		s.finalErr = s.output.CloseAndDrain()
+	}
+	return s.finalErr
 }
 
 // fakeResponseStream is a programmable service-root edge for transport tests.

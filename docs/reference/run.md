@@ -169,10 +169,12 @@ stdout. Redirect it directly:
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
-### Human response-stream mode
+### Human Factory Event stream mode
 
-Select `--output response-stream` to render live progress for people on the
-terminal. The stream ends with the same primary result as primary-result mode:
+Select `--output response-stream` to render the ordered canonical Factory Event
+lifecycle for people on the terminal. The same consumer is used for live and
+`--replay` invocations, and the stream ends with the same primary result as
+primary-result mode:
 
 ```bash
 you run --named team-review --output response-stream "Review the release notes"
@@ -182,8 +184,8 @@ you run --named team-review --output response-stream "Review the release notes"
 
 Add global `--json` with `--output response-stream` for newline-delimited
 automation output. Each non-empty stdout line is one complete JSON record.
-Streamed events use `recordType=response_event` with a nested public
-`FactoryResponseEvent` that matches the session API contract. An available
+Streamed events use `recordType=factory_event` with a nested canonical
+`FactoryEvent`, including its unchanged session sequence context. An available
 invocation response ends with exactly one terminal `recordType=invocation_result`
 record. That terminal record is always the final line, including when stdout is
 slow. NDJSON mode does not emit retired private progress, compaction, gap, or
@@ -195,9 +197,10 @@ you --json run --factory ./factory.json --output response-stream "Summarize the 
 
 ### Mode availability
 
-`--output response-stream` is not available for `--work`, continuous, replay,
-or other non-invocation run shapes. For primary-result automation without
-response events, global `--json` preserves the invocation response contract:
+`--output response-stream` is available for live and replayed one-shot Factory
+invocations. It is not available for `--work`, continuous, or other
+non-invocation run shapes. For primary-result automation without Factory
+Events, global `--json` preserves the invocation response contract:
 
 ```bash
 you --json run --factory ./factory.json "Summarize the changelog"

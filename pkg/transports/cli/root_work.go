@@ -356,7 +356,7 @@ func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocati
 	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
-	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs")
+	cmd.Flags().StringVar(invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for canonical Factory Events on supported live or replayed one-shot factory runs")
 	var skipPermissions bool
 	cmd.Flags().BoolVar(&skipPermissions, "skip-permissions", false, "request an invocation-only unsafe permission bypass for agent workers without changing persisted factory configuration")
 }
@@ -382,7 +382,7 @@ func runCommandLongHelp() string {
 		"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
 		"Named-Factory selection and materialization live in " + cliBinaryName + " docs authoring-factories; invocation inputs and output modes live in " + cliBinaryName + " docs run and " + cliBinaryName + " docs sessions. " +
 		"Model readiness, direct TTS invocation, and audio or JSON result choices live in " + cliBinaryName + " docs models. " +
-		"Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
+		"Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render ordered canonical Factory Events for live or replayed invocations; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
 		"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
 		"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
 		"Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures."
@@ -399,7 +399,7 @@ func runCommandExamples() string {
 		"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"\n\n" +
 		"  # Pipe invocation input via stdin (default primary-result stdout).\n" +
 		"  echo \"Ship the login bugfix\" | " + cliBinaryName + " run --named @you/goal\n\n" +
-		"  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n" +
+		"  # Opt into ordered canonical Factory Event progress instead of primary-result-only stdout.\n" +
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
 }
 

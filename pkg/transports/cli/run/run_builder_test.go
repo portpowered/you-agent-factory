@@ -286,15 +286,12 @@ func (o testInvocationOperation) InvokeFactory(
 		return factorysessions.FactoryInvocationOutcome{}, err
 	}
 	outcome := factorysessions.FactoryInvocationOutcome{}
-	var subscription factorysessions.ResponseEventCursor
-	if attachable, ok := runner.(factoryvisualization.ResponseEventSource); ok {
-		subscription, _ = attachable.SubscribeSessionResponseEventsFromLatest(factorysessions.DefaultSessionID)
-	}
 	result, err := runner.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, generatedTestInvocationRequest(request))
 	outcome.Result = result
-	if subscription != nil {
-		outcome.ResponseEvents, _ = subscription.Drain()
-		subscription.Detach()
+	if source, ok := runner.(interface {
+		GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
+	}); ok {
+		outcome.FactoryEvents, _ = source.GetFactoryEvents(runCtx)
 	}
 	closeErr := runner.CloseFactorySession(runCtx, factorysessions.DefaultSessionID)
 	cancel()

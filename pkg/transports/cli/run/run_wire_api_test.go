@@ -3,7 +3,6 @@ package run
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -80,16 +79,6 @@ func TestValidateInvocationOutputMode_RejectsUnsupportedRunShapes(t *testing.T) 
 		wantCode       string
 	}{
 		{
-			name: "replay unsupported",
-			cfg: RunConfig{
-				InvocationOutputMode:     InvocationOutputResponseStream,
-				ReplayPath:               "/tmp/replay.json",
-				InvocationPositionalText: &text,
-			},
-			invocationMode: true,
-			wantCode:       "INVOCATION_OUTPUT_UNSUPPORTED",
-		},
-		{
 			name: "continuous unsupported",
 			cfg: RunConfig{
 				InvocationOutputMode:     InvocationOutputResponseStream,
@@ -138,6 +127,20 @@ func TestValidateInvocationOutputMode_AllowsSupportedInvocation(t *testing.T) {
 	}, true)
 	if err != nil {
 		t.Fatalf("validateInvocationOutputMode: %v", err)
+	}
+}
+
+func TestValidateInvocationOutputMode_AllowsReplayInvocation(t *testing.T) {
+	t.Parallel()
+
+	text := "Plan the sprint"
+	err := validateInvocationOutputMode(RunConfig{
+		InvocationOutputMode:     InvocationOutputResponseStream,
+		InvocationPositionalText: &text,
+		ReplayPath:               "/tmp/replay.json",
+	}, true)
+	if err != nil {
+		t.Fatalf("validateInvocationOutputMode replay: %v", err)
 	}
 }
 
@@ -297,19 +300,14 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
 		return stubResponseEventInvocationService{
 			stubInvocationService: stubInvocationService{
+				events: []interfaces.FactoryEvent{
+					canonicalFactoryEventFixture(1, interfaces.FactoryEventTypeOrchestratorPhaseChanged),
+				},
 				run: func(ctx context.Context) error {
 					<-ctx.Done()
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					select {
-					case <-attachable.subscribed:
-					case <-time.After(2 * time.Second):
-						t.Fatal("canonical response-event subscription was not established")
-					}
-					if err := attachable.publish(canonicalResponseEventFixture(1, factorysessions.ResponseEventKindMessage)); err != nil {
-						t.Fatalf("publish canonical response event: %v", err)
-					}
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
 						TraceID:   "trace-1",
@@ -341,15 +339,15 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
 	}
-	if !strings.Contains(lines[0], `"recordType":"response_event"`) || !strings.Contains(lines[0], `"kind":"MESSAGE"`) {
-		t.Fatalf("response event line = %q", lines[0])
+	if !strings.Contains(lines[0], `"recordType":"factory_event"`) || !strings.Contains(lines[0], `"type":"ORCHESTRATOR_PHASE_CHANGED"`) {
+		t.Fatalf("Factory Event line = %q", lines[0])
 	}
 	if !strings.Contains(lines[1], `"recordType":"invocation_result"`) || !strings.Contains(lines[1], `"requestId":"req-1"`) {
 		t.Fatalf("invocation result line = %q", lines[1])
 	}
 }
 
-func TestPrepareRunConfig_ResponseStreamRejectsReplay(t *testing.T) {
+func TestPrepareRunConfig_ResponseStreamAllowsReplay(t *testing.T) {
 	t.Parallel()
 
 	text := "Plan the sprint"
@@ -361,12 +359,8 @@ func TestPrepareRunConfig_ResponseStreamRejectsReplay(t *testing.T) {
 		ReplayPath:               "/tmp/replay.json",
 		StdinIsTTY:               func() bool { return true },
 	})
-	if err == nil {
-		t.Fatal("expected replay validation error")
-	}
-	var invocationErr *InvocationError
-	if !errors.As(err, &invocationErr) || invocationErr.Code != "INVOCATION_OUTPUT_UNSUPPORTED" {
-		t.Fatalf("error = %v, want INVOCATION_OUTPUT_UNSUPPORTED", err)
+	if err != nil {
+		t.Fatalf("prepare replay response-stream config: %v", err)
 	}
 }
 
@@ -550,39 +544,6 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 	}
 }
 
-func slowStdoutResponseEventInvoke(
-	attachable *recordingResponseEventAttachable,
-	eventsFlooded chan<- struct{},
-	primaryText string,
-) func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-	return func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-		select {
-		case <-attachable.subscribed:
-		case <-time.After(2 * time.Second):
-			return apisurface.FactoryInvocationResult{}, errors.New("canonical response-event subscription was not established")
-		}
-		for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
-			event := humanResponseEvent(
-				factorysessions.ResponseEventKindProgress,
-				factorysessions.ResponseEventPhaseUpdated,
-				factorysessions.ResponseEventProgress{Label: "working"},
-			)
-			if err := attachable.publish(event); err != nil {
-				return apisurface.FactoryInvocationResult{}, err
-			}
-		}
-		eventsFlooded <- struct{}{}
-		return apisurface.FactoryInvocationResult{
-			RequestID: "req-1",
-			TraceID:   "trace-1",
-			Status:    interfaces.InvocationTerminalStatusCompleted,
-			PrimaryResult: []work.WorkContentPart{
-				{Type: work.WorkContentPartTypeText, Text: primaryText},
-			},
-		}, nil
-	}
-}
-
 func waitForResponseStreamProgressFlood(t *testing.T, eventsFlooded <-chan struct{}, done <-chan error) {
 	t.Helper()
 	select {
@@ -626,8 +587,8 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 	if strings.Contains(got, "terminal output backlog") {
 		t.Fatalf("human output must not include terminal backlog notice:\n%s", got)
 	}
-	if !strings.Contains(got, "progress: working") {
-		t.Fatalf("canonical progress did not reach slow stdout:\n%s", got)
+	if !strings.Contains(got, "ORCHESTRATOR_PHASE_CHANGED") {
+		t.Fatalf("canonical Factory Event did not reach slow stdout:\n%s", got)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(got), text) {
 		t.Fatalf("output missing final primary result:\n%s", got)
@@ -635,7 +596,7 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 	if strings.Count(got, text) != 1 {
 		t.Fatalf("final primary result must appear exactly once:\n%s", got)
 	}
-	assertNoProgressAfterFinalMarker(t, got, responseStreamPrimaryResultHeader, "progress: working")
+	assertNoProgressAfterFinalMarker(t, got, responseStreamPrimaryResultHeader, "ORCHESTRATOR_PHASE_CHANGED")
 }
 
 func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T) {
@@ -654,17 +615,21 @@ func runFactoryInvocationResponseStreamSlowStdoutFixture(t *testing.T, jsonMode 
 	output := &gatedResponseStreamWriter{}
 	output.block()
 	eventsFlooded := make(chan struct{}, 1)
-	attachable := newRecordingResponseEventAttachable()
 	openTestInvocationRunner = func(_ context.Context, _ *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
-		return stubResponseEventInvocationService{
-			stubInvocationService: stubInvocationService{
-				run: func(ctx context.Context) error {
-					<-ctx.Done()
-					return nil
-				},
-				invoke: slowStdoutResponseEventInvoke(attachable, eventsFlooded, text),
+		return stubInvocationService{
+			events: canonicalFactoryEventFixtures(defaultResponseStreamProgressQueueCapacity + 4),
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
 			},
-			attachable: attachable,
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				eventsFlooded <- struct{}{}
+				return apisurface.FactoryInvocationResult{
+					RequestID: "req-1", TraceID: "trace-1",
+					Status:        interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}},
+				}, nil
+			},
 		}, nil
 	}
 
@@ -697,17 +662,17 @@ func assertSlowStdoutJSONResponseStreamOutput(t *testing.T, output *gatedRespons
 	got := output.String()
 	lines := strings.Split(strings.TrimSpace(got), "\n")
 	if len(lines) < 2 {
-		t.Fatalf("expected NDJSON response_event and invocation_result lines, got:\n%s", got)
+		t.Fatalf("expected NDJSON factory_event and invocation_result lines, got:\n%s", got)
 	}
 	foundProgress := false
 	for _, line := range lines[:len(lines)-1] {
-		if strings.Contains(line, `"recordType":"response_event"`) {
+		if strings.Contains(line, `"recordType":"factory_event"`) {
 			foundProgress = true
 			break
 		}
 	}
 	if !foundProgress {
-		t.Fatalf("NDJSON output missing response_event records:\n%s", got)
+		t.Fatalf("NDJSON output missing factory_event records:\n%s", got)
 	}
 	var finalRecord responseStreamJSONInvocationResultRecord
 	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {

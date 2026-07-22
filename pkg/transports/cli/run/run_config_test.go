@@ -9,7 +9,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
@@ -24,101 +23,20 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
-type canonicalResponseEventRunStub struct {
-	stubInvocationService
-	cursor     *scriptedResponseEventCursor
-	subscribed chan struct{}
-	once       sync.Once
-}
-
-func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEventsFromLatest(
-	_ string,
-) (factorysessions.ResponseEventCursor, error) {
-	s.once.Do(func() { close(s.subscribed) })
-	return s.cursor, nil
-}
-
-type scriptedResponseEventCursor struct {
-	batches chan []factorysessions.FactoryResponseEvent
-}
-
-func newScriptedResponseEventCursor() *scriptedResponseEventCursor {
-	return &scriptedResponseEventCursor{
-		batches: make(chan []factorysessions.FactoryResponseEvent, 1),
-	}
-}
-
-func (c *scriptedResponseEventCursor) Next(ctx context.Context) ([]factorysessions.FactoryResponseEvent, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case events, ok := <-c.batches:
-		if !ok {
-			return nil, factorysessions.ErrResponseEventSubscriptionClosed
-		}
-		return events, nil
-	}
-}
-
-func (c *scriptedResponseEventCursor) Drain() ([]factorysessions.FactoryResponseEvent, error) {
-	select {
-	case events, ok := <-c.batches:
-		if !ok {
-			return nil, factorysessions.ErrResponseEventSubscriptionClosed
-		}
-		return events, nil
-	default:
-		return nil, nil
-	}
-}
-
-func (c *scriptedResponseEventCursor) Detach() {}
-
-func (c *scriptedResponseEventCursor) publish(events []factorysessions.FactoryResponseEvent) {
-	c.batches <- events
-	close(c.batches)
-}
-
 func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	preserveRunGlobals(t)
 
 	const canary = "SECRET_PROVIDER_PAYLOAD_7f8a"
 	const answer = "authoritative answer"
 	var output strings.Builder
-	cursor := newScriptedResponseEventCursor()
-	stub := &canonicalResponseEventRunStub{
-		stubInvocationService: stubInvocationService{run: func(ctx context.Context) error {
+	stub := &stubInvocationService{
+		run: func(ctx context.Context) error {
 			<-ctx.Done()
 			return nil
-		}},
-		cursor: cursor, subscribed: make(chan struct{}),
+		},
+		events: canonicalJavaScriptFactoryEvents(),
 	}
 	stub.invoke = func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-		select {
-		case <-stub.subscribed:
-		case <-time.After(2 * time.Second):
-			t.Fatal("canonical response-event subscription was not established")
-		}
-		attempt := 2
-		events := []factorysessions.FactoryResponseEvent{
-			humanResponseEvent(factorysessions.ResponseEventKindReasoning, factorysessions.ResponseEventPhaseCompleted, factorysessions.ResponseEventReasoning{Summary: "selected safe path"}),
-			humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseStarted, factorysessions.ResponseEventTool{
-				ToolCallID: "call-1", ToolName: "search", ArgumentsSummary: json.RawMessage(`{"secret":"` + canary + `"}`),
-			}),
-			humanResponseEvent(factorysessions.ResponseEventKindTool, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventToolDelta{ToolCallID: "call-1", OutputDelta: canary}),
-			humanResponseEvent(factorysessions.ResponseEventKindError, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventErrorPayload{
-				Code: "rate_limited", Message: canary, Retryable: true, RetryAttempt: &attempt,
-			}),
-			humanResponseEvent(factorysessions.ResponseEventKindProgress, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventProgress{Label: "planning", Message: "next step"}),
-			humanResponseEvent(factorysessions.ResponseEventKindMessage, factorysessions.ResponseEventPhaseDelta, factorysessions.ResponseEventMessageDelta{
-				ContentBlockIndex: 0, ContentBlockKind: factorysessions.ResponseEventContentBlockText, TextDelta: answer,
-			}),
-			humanResponseEvent(factorysessions.ResponseEventKindUsage, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventUsage{InputTokens: 99, Model: canary}),
-			humanResponseEvent(factorysessions.ResponseEventKindStreamGap, factorysessions.ResponseEventPhaseUpdated, factorysessions.ResponseEventStreamGap{
-				FromSequence: 40, ToSequence: 44, FirstAvailableSequence: 45, Reason: "retention window",
-			}),
-		}
-		cursor.publish(events)
 		return apisurface.FactoryInvocationResult{
 			Status:        interfaces.InvocationTerminalStatusCompleted,
 			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
@@ -136,11 +54,9 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "reasoning: selected safe path\n" +
-		"tool: name=search call=call-1 status=started\n" +
-		"retry: code=rate_limited attempt=2\n" +
-		"progress: planning — next step\n" +
-		"stream gap: sequences 40-44 unavailable (reason=retention window)\n\n" +
+	want := "[1] SESSION_STARTED\n" +
+		"[2] ORCHESTRATOR_PHASE_CHANGED\n" +
+		"[3] ORCHESTRATOR_CHECKPOINT_WRITTEN\n\n" +
 		responseStreamPrimaryResultHeader + "\n" + answer
 	if got := output.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
