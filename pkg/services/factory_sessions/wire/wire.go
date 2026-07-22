@@ -11,6 +11,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/requestpreparation"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity/wire"
@@ -18,6 +19,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
+
+// NewRequestPreparation constructs the private request-normalization
+// implementation for injection into Factory Sessions-owned transports.
+func NewRequestPreparation() factorysessions.RequestPreparation {
+	return requestpreparation.New()
+}
 
 // NewService constructs the inert, process-scoped Factory Sessions service.
 // Runtime-specific values are supplied later through Service.ForRuntime.

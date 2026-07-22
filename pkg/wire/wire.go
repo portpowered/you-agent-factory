@@ -46,7 +46,7 @@ var apiSet = wire.NewSet(
 )
 
 var servicesSet = wire.NewSet(
-	factorysessions.NewRequestPreparation,
+	factorysessionwire.NewRequestPreparation,
 	factoryruntime.NewFactoryStatusProjector,
 	factoryruntime.NewSessionResultProjectionOperation,
 	provideOperatorSettingsFileSystem,

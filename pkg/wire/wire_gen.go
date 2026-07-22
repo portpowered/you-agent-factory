@@ -327,7 +327,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	submitWorkOperation := provideSubmitWorkOperation(payloadFileReader, wireExtendedCLIHTTPProtocol)
 	factoryRequestBatchPreparation := work.NewFactoryRequestBatchPreparation()
 	submitBatchOperation := provideSubmitBatchOperation(wireExtendedCLIHTTPProtocol, factoryRequestBatchPreparation)
-	requestPreparation := factorysessions.NewRequestPreparation()
+	requestPreparation := wire.NewRequestPreparation()
 	listSessionsOperation := provideListSessionsOperation(wireStandardCLIHTTPProtocol, requestPreparation)
 	showSessionOperation := provideShowSessionOperation(wireStandardCLIHTTPProtocol)
 	pauseSessionOperation := providePauseSessionOperation(wireStandardCLIHTTPProtocol)
@@ -501,7 +501,7 @@ var platformSet = wire2.NewSet(logging.NewDefaultLogger)
 
 var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
-var servicesSet = wire2.NewSet(factorysessions.NewRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+var servicesSet = wire2.NewSet(wire.NewRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
 	provideSystemInitializationInspectPath,

@@ -1804,11 +1804,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/request_preparation.go",
-      "target": "NewRequestPreparation"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/response_event_contract.go",
       "target": "SubscribeFactoryResponseEvents"
     },
