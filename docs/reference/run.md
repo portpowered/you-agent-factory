@@ -169,6 +169,22 @@ stdout. Redirect it directly:
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
+Add `--quiet` when the same terminal-only contract must also suppress operator
+diagnostics. Quiet stdout is the raw primary result: it has no lifecycle text,
+event records, JSON wrapper, or provider-session chunks. Live and `--replay`
+invocations use the same quiet presentation rule.
+
+### Single-JSON automation mode
+
+Add global `--json` without `--output response-stream` to write exactly one
+`InvocationResponse` JSON object. Lifecycle records and provider-session chunks
+are not included. Live and `--replay` invocations use the same single-response
+presentation rule:
+
+```bash
+you --json run --factory ./factory.json "Summarize the changelog"
+```
+
 ### Human Factory Event stream mode
 
 Select `--output response-stream` to render the ordered canonical Factory Event
@@ -206,12 +222,8 @@ you --json run --factory ./factory.json --output response-stream "Summarize the 
 
 `--output response-stream` is available for live and replayed one-shot Factory
 invocations. It is not available for `--work`, continuous, or other
-non-invocation run shapes. For primary-result automation without Factory
-Events, global `--json` preserves the invocation response contract:
-
-```bash
-you --json run --factory ./factory.json "Summarize the changelog"
-```
+non-invocation run shapes. Use single-JSON mode when automation needs the
+terminal invocation response without Factory Events.
 
 Factory authoring and validation live under `you docs config`. JavaScript
 orchestrator authoring uses `you docs javascript-workflows`; execution uses the

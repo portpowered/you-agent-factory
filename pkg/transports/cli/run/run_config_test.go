@@ -19,6 +19,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -64,6 +65,99 @@ func TestRun_RedirectedHumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *te
 	}
 	if strings.Contains(output.String(), canary) {
 		t.Fatalf("human output used unsafe provider data: %q", output.String())
+	}
+}
+
+func TestRun_TerminalOnlyModesIgnoreFactoryEventsForLiveAndReplay(t *testing.T) {
+	preserveRunGlobals(t)
+
+	const providerCanary = "SECRET_PROVIDER_CHUNK_3c19"
+	const finalResult = "authoritative terminal result"
+	providerResponse := providerCanary
+	events := append(canonicalJavaScriptFactoryEvents(), canonicalFactoryEventWithPayload(
+		4,
+		interfaces.FactoryEventTypeInferenceResponse,
+		workers.InferenceResponseEventPayload{Response: &providerResponse},
+	))
+
+	for _, source := range []struct {
+		name       string
+		replayPath string
+	}{
+		{name: "live"},
+		{name: "replay", replayPath: "/tmp/terminal-only-replay.json"},
+	} {
+		for _, mode := range []struct {
+			name       string
+			jsonOutput bool
+		}{
+			{name: "quiet"},
+			{name: "single JSON", jsonOutput: true},
+		} {
+			t.Run(source.name+"/"+mode.name, func(t *testing.T) {
+				var output strings.Builder
+				var openedReplayPath string
+				stub := &stubInvocationService{
+					run: func(ctx context.Context) error {
+						<-ctx.Done()
+						return nil
+					},
+					events: events,
+					invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+						return apisurface.FactoryInvocationResult{
+							RequestID: "request-terminal-only",
+							Status:    interfaces.InvocationTerminalStatusCompleted,
+							PrimaryResult: []work.WorkContentPart{{
+								Type: work.WorkContentPartTypeText,
+								Text: finalResult,
+							}},
+						}, nil
+					},
+				}
+				openTestInvocationRunner = func(_ context.Context, cfg *testRuntimeSelections, _ serviceedges.Edges) (sessionInvocationRunner, error) {
+					openedReplayPath = cfg.ReplayPath
+					return stub, nil
+				}
+
+				prompt := "terminal-only prompt"
+				err := Run(context.Background(), RunConfig{
+					FactoryConfigPath:        "/tmp/factory.json",
+					InvocationPositionalText: &prompt,
+					StdinIsTTY:               func() bool { return true },
+					ReplayPath:               source.replayPath,
+					TerminalPolicy: terminalpolicy.Resolve(terminalpolicy.Options{
+						Quiet: true,
+					}),
+					JSONOutput: mode.jsonOutput,
+					Output:     &output,
+				})
+				if err != nil {
+					t.Fatalf("Run: %v", err)
+				}
+				if openedReplayPath != source.replayPath {
+					t.Fatalf("opened replay path = %q, want %q", openedReplayPath, source.replayPath)
+				}
+				if strings.Contains(output.String(), providerCanary) || strings.Contains(output.String(), "factory_event") {
+					t.Fatalf("terminal-only output exposed lifecycle data: %q", output.String())
+				}
+
+				if !mode.jsonOutput {
+					if got := output.String(); got != finalResult {
+						t.Fatalf("quiet stdout = %q, want raw result %q", got, finalResult)
+					}
+					return
+				}
+
+				var response factoryapi.InvocationResponse
+				if err := json.Unmarshal([]byte(output.String()), &response); err != nil {
+					t.Fatalf("decode single JSON stdout: %v\n%s", err, output.String())
+				}
+				if response.Status != factoryapi.InvocationTerminalStatusCompleted ||
+					response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+					t.Fatalf("single JSON response = %#v, want one completed InvocationResponse", response)
+				}
+			})
+		}
 	}
 }
 
