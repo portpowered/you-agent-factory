@@ -83,7 +83,7 @@ func newFactorySessionRolesTestServer(
 	if sessions != nil {
 		liveLister = httpLiveSessionListReader{sessions: sessions}
 	}
-	return NewServer(
+	return newServerFromRoles(
 		nil, status, sessions, workAPI, workRead, invocation, &modelshttp.Handler{},
 		definitions, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, liveLister, nil, nil,

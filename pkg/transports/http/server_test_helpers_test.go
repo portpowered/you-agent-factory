@@ -85,28 +85,28 @@ func (f *workRequestPreparationFake) PrepareWorkRequest(
 }
 
 func setWorkRequestPreparationError(srv *Server, message string) {
-	srv.requestPreparation = &workRequestPreparationFake{
+	srv.Adapter = srv.Adapter.WithRequestPreparation(&workRequestPreparationFake{
 		prepare: func(
 			context.Context,
 			work.WorkRequestPreparation,
 		) (work.WorkRequest, error) {
 			return work.WorkRequest{}, &work.RequestPreparationError{Message: message}
 		},
-	}
+	})
 }
 
 func setWorkRequestPreparationResult(
 	srv *Server,
 	prepare func(work.WorkRequestPreparation) work.WorkRequest,
 ) {
-	srv.requestPreparation = &workRequestPreparationFake{
+	srv.Adapter = srv.Adapter.WithRequestPreparation(&workRequestPreparationFake{
 		prepare: func(
 			_ context.Context,
 			input work.WorkRequestPreparation,
 		) (work.WorkRequest, error) {
 			return prepare(input), nil
 		},
-	}
+	})
 }
 
 type contentStagingFake struct {
@@ -255,7 +255,7 @@ func newTestServerWithProviderSessionCallsAndLogger(t *testing.T, logger *zap.Lo
 			t.Errorf("Provider Sessions Details calls = %d, want %d", role.next, len(role.calls))
 		}
 	})
-	return NewServer(
+	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil, &modelshttp.Handler{},
 		nil, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, nil, role, nil, nil, nil, nil, logger,

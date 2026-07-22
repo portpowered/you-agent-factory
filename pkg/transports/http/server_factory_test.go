@@ -204,7 +204,7 @@ func newWorkTransportTestServerWithRoles(sessions apisurface.LiveSessionAPI, wor
 	if sessions != nil {
 		liveLister = httpLiveSessionListReader{sessions: sessions}
 	}
-	server := NewServer(
+	server := newServerFromRoles(
 		nil, nil, sessions, workAPI, workRead, nil, &modelshttp.Handler{},
 		definitions, httpFactoryValidator{}, nil,
 		nil, nil, nil, nil, nil, liveLister, nil, nil,
@@ -276,7 +276,7 @@ func newFactoryDefinitionTestServer(definitions apisurface.FactorySaveAPI, valid
 	if validator == nil {
 		validator = httpFactoryValidator{}
 	}
-	return NewServer(
+	return newServerFromRoles(
 		nil, nil, nil, nil, nil, nil, &modelshttp.Handler{},
 		definitions, validator, nil,
 		nil, nil, nil, nil, nil, nil, nil,

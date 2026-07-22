@@ -83,6 +83,12 @@ func requestFieldValidationMessage(err error) (string, bool) {
 	return "", false
 }
 
+// RequestFieldValidationMessage returns the public message carried by a
+// request-field validation failure.
+func RequestFieldValidationMessage(err error) (string, bool) {
+	return requestFieldValidationMessage(err)
+}
+
 func ensureSingleJSONObject(dec *json.Decoder) error {
 	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		if err == nil {
@@ -111,6 +117,11 @@ func decodeStrictJSON[T any](body io.Reader) (T, error) {
 		return zero, err
 	}
 	return req, nil
+}
+
+// DecodeStrictJSON decodes exactly one JSON object and rejects unknown fields.
+func DecodeStrictJSON[T any](body io.Reader) (T, error) {
+	return decodeStrictJSON[T](body)
 }
 
 func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
@@ -314,29 +325,12 @@ func stringPtrIfNotEmpty(value string) *string {
 	return optional.NonEmptyStringPtr(value)
 }
 
-func integerMapPtr(values map[string]int) *factoryapi.IntegerMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.IntegerMap(values)
-	return &converted
-}
-
 func stringMapPtr(values map[string]string) *factoryapi.StringMap {
 	return optional.CopiedStringMapPtr(values)
 }
 
 func intPtrIfPositive(value int) *int {
 	return optional.PositiveIntPtr(value)
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func generatedStringMap(values *factoryapi.StringMap) map[string]string {

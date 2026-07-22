@@ -10,6 +10,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
+	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -31,6 +33,16 @@ type factorySessionEventProgram struct {
 type programmedFactorySessionEvents struct {
 	mu       sync.RWMutex
 	sessions map[string]factorySessionEventProgram
+}
+
+type sseRequestPreparation struct {
+	factorysessions.RequestPreparation
+}
+
+func (sseRequestPreparation) PrepareEventReconnect(
+	request factorysessions.EventReconnectRequest,
+) (factorysessions.EventReconnectRequest, error) {
+	return request, nil
 }
 
 func newProgrammedFactorySessionEvents() *programmedFactorySessionEvents {
@@ -101,10 +113,10 @@ func (*programmedFactorySessionEvents) GetEngineStateSnapshotForSession(context.
 
 func newAPITestServer(workAPI apisurface.WorkAPI) *api.Server {
 	logger, _ := zap.NewDevelopment()
-	return api.NewServer(
-		nil, nil, nil, workAPI, nil, nil, nil, nil, nil, nil,
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, logger,
-	)
+	handler := factorysessionshttp.NewHandler(factorysessionshttp.Dependencies{
+		Work: workAPI, SessionRequests: sseRequestPreparation{},
+	}, logger)
+	return api.NewServer(handler, nil, nil, logger)
 }
 
 func readBody(t *testing.T, resp *http.Response) string {

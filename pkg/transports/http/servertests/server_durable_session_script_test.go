@@ -232,7 +232,7 @@ func newDurableAndLiveAPITestServer(execution factorysessions.ExecutionService, 
 		)
 	}
 	liveLister, _ := live.(factorysessions.LiveSessionListReader)
-	return api.NewServer(
+	return newAPIServerFromRoles(
 		nil, nil, live, nil, nil, nil, nil, nil, nil, nil,
 		durable, durable, durable, durable, execution, liveLister, nil, nil,
 		nil, nil, preparation, zap.NewNop(),
@@ -240,7 +240,7 @@ func newDurableAndLiveAPITestServer(execution factorysessions.ExecutionService, 
 }
 
 func newWorkAPITestServer(work apisurface.WorkAPI) *api.Server {
-	return api.NewServer(
+	return newAPIServerFromRoles(
 		nil, nil, nil, work, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, zap.NewNop(),
 	)

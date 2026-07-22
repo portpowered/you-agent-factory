@@ -96,6 +96,12 @@ func workReadModelToGenerated(item work.ReadModel) factoryapi.Work {
 	return result
 }
 
+// WorkReadModelToGenerated maps the canonical Work read model to the generated
+// HTTP representation.
+func WorkReadModelToGenerated(item work.ReadModel) factoryapi.Work {
+	return workReadModelToGenerated(item)
+}
+
 func workStopSummaryToGenerated(summary *work.StopSummary) *factoryapi.FactoryStopSummary {
 	if summary == nil {
 		return nil

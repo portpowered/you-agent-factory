@@ -273,9 +273,6 @@ pkg/transports/cli/sessionexecution/run.go: unreachable func: writeResultAvailab
 pkg/transports/cli/sessionexecution/run.go: unreachable func: writeResultFailureHuman
 pkg/transports/http/contracttests/factory_config_smoke_test.go: unreachable func: assertFactoryConfigJSONUsesRequiredAndForbiddenKeys
 pkg/transports/http/contracttests/factory_config_smoke_test.go: unreachable func: assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys
-pkg/transports/http/handlers_common.go: unreachable func: firstNonEmptyString
-pkg/transports/http/handlers_common.go: unreachable func: integerMapPtr
-pkg/transports/http/handlers_events.go: unreachable func: tokenToResponse
 pkg/transports/http/server_models_events_additional_test.go: unreachable func: modelWiringFactoryConfig
 pkg/transports/http/server_test_helpers_test.go: unreachable func: assertListedWorkIDs
 pkg/transports/http/server_test_helpers_test.go: unreachable func: encodeNextToken

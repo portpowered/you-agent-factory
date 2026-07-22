@@ -30,7 +30,6 @@
     { "packagePath": "pkg/transports/cli/run", "fileCount": 23, "owner": "cli-maintainers", "removalReason": "Split run invocation, presentation, and input behavior." },
     { "packagePath": "pkg/transports/cli/session", "fileCount": 17, "owner": "cli-maintainers", "removalReason": "Separate session command lifecycle and rendering behavior." },
     { "packagePath": "pkg/transports/cli/submit", "fileCount": 16, "owner": "cli-maintainers", "removalReason": "Consolidate submit command cases or extract stable input behavior." },
-    { "packagePath": "pkg/transports/http", "fileCount": 17, "owner": "http-transport-maintainers", "removalReason": "Separate HTTP composition from endpoint behavior." },
     { "packagePath": "pkg/transports/http/servertests", "fileCount": 16, "owner": "http-transport-maintainers", "removalReason": "Consolidate server fixtures and move focused scenarios beside handlers." },
     { "packagePath": "pkg/transports/mapping/factorysession", "fileCount": 19, "owner": "transport-mapping-maintainers", "removalReason": "Partition Factory Session mapping by contract direction." },
     { "packagePath": "pkg/transports/mcp/factorysession", "fileCount": 16, "owner": "mcp-transport-maintainers", "removalReason": "Separate Factory Session MCP tools by lifecycle responsibility." },

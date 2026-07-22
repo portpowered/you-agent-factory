@@ -24,6 +24,13 @@ const (
 	submitWorkFileNameMetadataKey = "fileName"
 )
 
+const (
+	// SubmitWorkItemTypeMetadataKey records the structured submission item kind.
+	SubmitWorkItemTypeMetadataKey = submitWorkItemTypeMetadataKey
+	// SubmitWorkFileNameMetadataKey records the original structured file name.
+	SubmitWorkFileNameMetadataKey = submitWorkFileNameMetadataKey
+)
+
 func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	req, err := decodeInvocationRequestBody(r.Body)
 	if err != nil {
@@ -275,6 +282,12 @@ func submitWorkResponseFromResult(result work.WorkRequestSubmitResult, sessionID
 		resp.SessionId = &sessionID
 	}
 	return resp
+}
+
+// SubmitWorkResponseFromResult maps a canonical submission result to the
+// generated HTTP response.
+func SubmitWorkResponseFromResult(result work.WorkRequestSubmitResult, sessionID string) factoryapi.SubmitWorkResponse {
+	return submitWorkResponseFromResult(result, sessionID)
 }
 
 func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {

@@ -11,7 +11,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	events "github.com/portpowered/infinite-you/pkg/services/recordings"
-	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
@@ -23,6 +22,18 @@ const (
 	sessionEventStreamLogicalSessionKeyHeader = "X-Factory-Session-Logical-Session-Key-Id"
 	sessionEventStreamFactorySessionHeader    = "X-Factory-Session-Factory-Session-Id"
 	sessionEventStreamGenerationHeader        = "X-Factory-Session-Stream-Generation-Id"
+)
+
+const (
+	// SessionEventStreamBackendScopeHeader identifies the backend scope used by
+	// a session-scoped event stream.
+	SessionEventStreamBackendScopeHeader = sessionEventStreamBackendScopeHeader
+	// SessionEventStreamLogicalSessionKeyHeader identifies the logical session.
+	SessionEventStreamLogicalSessionKeyHeader = sessionEventStreamLogicalSessionKeyHeader
+	// SessionEventStreamFactorySessionHeader identifies the resolved session.
+	SessionEventStreamFactorySessionHeader = sessionEventStreamFactorySessionHeader
+	// SessionEventStreamGenerationHeader identifies the stream generation.
+	SessionEventStreamGenerationHeader = sessionEventStreamGenerationHeader
 )
 
 // GetStatus handles GET /status as the supported runtime status read model.
@@ -344,6 +355,12 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 	return cursor
 }
 
+// ReconnectCursorFromParams maps generated reconnect query parameters into the
+// canonical Factory Event cursor.
+func ReconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
+	return reconnectCursorFromParams(afterEventID, afterSequence)
+}
+
 func afterEventIDParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterEventId {
 	if cursor == nil || strings.TrimSpace(cursor.AfterEventID) == "" {
 		return nil
@@ -438,34 +455,12 @@ func (s *Server) getEvents(
 	}
 }
 
-func tokenToResponse(t *factorytoken.Token, includeHistory bool) factoryapi.TokenResponse {
-	resp := factoryapi.TokenResponse{
-		Id:                       t.ID,
-		PlaceId:                  t.PlaceID,
-		WorkId:                   t.Color.WorkID,
-		WorkType:                 t.Color.WorkTypeID,
-		ChainingTraceDepth:       intPtrIfPositive(t.Color.ChainingTraceDepth),
-		CurrentChainingTraceId:   stringPtrIfNotEmpty(firstNonEmptyString(t.Color.CurrentChainingTraceID, t.Color.TraceID)),
-		PreviousChainingTraceIds: stringSlicePtrCopy(t.Color.PreviousChainingTraceIDs),
-		TraceId:                  t.Color.TraceID,
-		Content:                  domainWorkContentToGeneratedPtr(t.Color.Content),
-		Tags:                     stringMapPtr(t.Color.Tags),
-		CreatedAt:                t.CreatedAt,
-		EnteredAt:                t.EnteredAt,
-	}
-	if t.Color.Name != "" {
-		resp.Name = &t.Color.Name
-	}
-	if len(t.Color.Tags) == 0 {
-		resp.Tags = nil
-	}
-	if includeHistory {
-		resp.History = &factoryapi.TokenHistory{
-			TotalVisits:         integerMapPtr(t.History.TotalVisits),
-			ConsecutiveFailures: integerMapPtr(t.History.ConsecutiveFailures),
-			PlaceVisits:         integerMapPtr(t.History.PlaceVisits),
-			LastError:           stringPtrIfNotEmpty(t.History.LastError),
-		}
-	}
-	return resp
+// StreamFactoryEvents writes one canonical Factory Event subscription as SSE.
+func (s *Handler) StreamFactoryEvents(
+	w http.ResponseWriter,
+	r *http.Request,
+	includeSessionHandshake bool,
+	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
+) {
+	s.getEvents(w, r, includeSessionHandshake, subscribe)
 }

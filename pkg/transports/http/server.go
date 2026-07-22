@@ -12,15 +12,10 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
-	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	factorysessionshttp "github.com/portpowered/infinite-you/pkg/services/factory_sessions/transports/http"
 	modelshttp "github.com/portpowered/infinite-you/pkg/services/models/transports/http"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/work"
-	"github.com/portpowered/infinite-you/pkg/services/workers"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
 )
@@ -31,73 +26,28 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	runtime            apisurface.RuntimeAPI
-	factoryStatus      apisurface.FactoryStatusAPI
-	sessions           apisurface.LiveSessionAPI
-	work               apisurface.WorkAPI
-	workRead           apisurface.WorkReadAPI
-	invocation         apisurface.InvocationAPI
-	modelsHTTP         *modelshttp.Handler
-	factoryDefinitions apisurface.FactorySaveAPI
-	factoryValidation  factorydefinitions.SubmittedDefinitionValidationOperation
-	workflowPreview    factoryruntime.WorkflowPreviewOperation
-	durableExecution   apisurface.DurableSessionExecutionAPI
-	durableLifecycle   apisurface.DurableSessionLifecycleAPI
-	durableListing     apisurface.DurableSessionListingAPI
-	durableProjection  apisurface.DurableSessionProjectionAPI
-	durableLister      DurableExecutionSessionLister
-	liveSessionLister  factorysessionexecution.LiveSessionListReader
-	providerSessions   providersessions.Service
-	workerPrompts      workers.PromptTemplates
-	contentStaging     work.ContentStagingService
-	requestPreparation work.RequestPreparationService
-	sessionRequests    factorysessionexecution.RequestPreparation
-	logger             *zap.Logger
-	router             *mux.Router
+	*factorysessionshttp.Adapter
+	modelsHTTP       *modelshttp.Handler
+	providerSessions providersessions.Service
+	logger           *zap.Logger
+	router           *mux.Router
 }
 
 // NewServer composes an immutable generated HTTP server from dependencies
 // selected by Wire and the opened Factory Session. It performs no dependency
 // construction or service lookup.
 func NewServer(
-	runtime apisurface.RuntimeAPI,
-	factoryStatus apisurface.FactoryStatusAPI,
-	sessions apisurface.LiveSessionAPI,
-	workAPI apisurface.WorkAPI,
-	workRead apisurface.WorkReadAPI,
-	invocation apisurface.InvocationAPI,
+	factorySessionsHTTP *factorysessionshttp.Handler,
 	modelsHTTP *modelshttp.Handler,
-	factoryDefinitions apisurface.FactorySaveAPI,
-	factoryValidation factorydefinitions.SubmittedDefinitionValidationOperation,
-	workflowPreview factoryruntime.WorkflowPreviewOperation,
-	durableExecution apisurface.DurableSessionExecutionAPI,
-	durableLifecycle apisurface.DurableSessionLifecycleAPI,
-	durableListing apisurface.DurableSessionListingAPI,
-	durableProjection apisurface.DurableSessionProjectionAPI,
-	durableLister DurableExecutionSessionLister,
-	liveSessionLister factorysessionexecution.LiveSessionListReader,
 	providerSessions providersessions.Service,
-	workerPrompts workers.PromptTemplates,
-	contentStaging work.ContentStagingService,
-	requestPreparation work.RequestPreparationService,
-	sessionRequests factorysessionexecution.RequestPreparation,
 	logger *zap.Logger,
 ) *Server {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
 	srv := &Server{
-		runtime: runtime, factoryStatus: factoryStatus,
-		sessions: sessions, work: workAPI, workRead: workRead,
-		invocation: invocation, modelsHTTP: modelsHTTP,
-		factoryDefinitions: factoryDefinitions, factoryValidation: factoryValidation,
-		workflowPreview:  workflowPreview,
-		durableExecution: durableExecution, durableLifecycle: durableLifecycle,
-		durableListing: durableListing, durableProjection: durableProjection,
-		durableLister: durableLister, liveSessionLister: liveSessionLister,
-		providerSessions: providerSessions, workerPrompts: workerPrompts,
-		contentStaging: contentStaging, requestPreparation: requestPreparation,
-		sessionRequests: sessionRequests, logger: logger,
+		Adapter:    factorySessionsHTTP,
+		modelsHTTP: modelsHTTP, providerSessions: providerSessions, logger: logger,
 	}
 	srv.router = srv.buildRouter()
 	return srv

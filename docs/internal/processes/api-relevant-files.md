@@ -2,6 +2,12 @@
 
 Use this map when changing the public REST contract.
 
+- Factory Session HTTP decoding, generated-contract mapping, service
+  invocation, error mapping, and JSON/NDJSON/SSE streaming live in
+  `pkg/services/factory_sessions/transports/http`. The top-level
+  `pkg/transports/http` server only composes that injected adapter with other
+  service-owned handlers and registers the generated routes; runtime binding
+  occurs in `pkg/transports/http/application`.
 - OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
   boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in
   `internal/contractopenapiconverter` must translate those pairs to numeric
@@ -490,7 +496,7 @@ do not conflate reconnect parameters, retention, or error codes between them.
 **Runtime, handler, and mapping ownership**
 
 - HTTP SSE transport:
-  `pkg/transports/http/handlers_events.go` (`GetFactoryResponseEventsBySessionId`)
+  `pkg/services/factory_sessions/transports/http/handlers_events.go` (`GetFactoryResponseEventsBySessionId`)
 - Transport-neutral subscription contract:
   `pkg/transports/mapping/surface.go`, `pkg/transports/mapping/contract.go`
   (`SubscribeFactoryResponseEventsForSession`, `FactoryResponseEventRecord`)
