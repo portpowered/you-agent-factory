@@ -141,7 +141,13 @@ const INVOCATION_EXAMPLE_KEYS = new Set([
 ]);
 const NAME_VALUE_KEYS = new Set(["id", "locales", "type", "value", "values"]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
-const WORK_TYPE_KEYS = new Set(["handlingBehavior", "id", "name", "states"]);
+const WORK_TYPE_KEYS = new Set([
+  "description",
+  "handlingBehavior",
+  "id",
+  "name",
+  "states",
+]);
 const WORK_TYPE_HANDLING_BEHAVIOR_VALUES =
   new Set<FactoryWorkTypeHandlingBehavior>(["DEFAULT"]);
 const WORK_STATE_KEYS = new Set(["id", "name", "type"]);
@@ -181,6 +187,7 @@ const WORKER_KEYS = new Set([
   "auth",
   "body",
   "command",
+  "description",
   "executorProvider",
   "linear",
   "model",
@@ -212,6 +219,7 @@ const WORKSTATION_KEYS = new Set([
   "copyReferencedScripts",
   "classificationRoutes",
   "cron",
+  "description",
   "env",
   "guards",
   "id",
@@ -711,6 +719,12 @@ function decodeWorkType(value: unknown, path: string): FactoryWorkType {
     states: readRequiredArray(record, "states", path, decodeWorkState),
   };
   const id = readOptionalString(record, "id", path);
+  const description = readOptionalObject(
+    record,
+    "description",
+    path,
+    decodeNameValue,
+  );
   const handlingBehavior = readOptionalEnumArray(
     record,
     "handlingBehavior",
@@ -719,6 +733,9 @@ function decodeWorkType(value: unknown, path: string): FactoryWorkType {
   );
   if (id !== undefined) {
     workType.id = id;
+  }
+  if (description !== undefined) {
+    workType.description = description;
   }
   if (handlingBehavior !== undefined) {
     workType.handlingBehavior = handlingBehavior;
@@ -768,6 +785,12 @@ function decodeWorker(
     name: readRequiredString(record, "name", path),
   };
   const id = readOptionalString(record, "id", path);
+  const description = readOptionalObject(
+    record,
+    "description",
+    path,
+    decodeNameValue,
+  );
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
   const modelProvider = readOptionalWorkerModelProvider(
@@ -826,6 +849,9 @@ function decodeWorker(
 
   if (id !== undefined) {
     worker.id = id;
+  }
+  if (description !== undefined) {
+    worker.description = description;
   }
   if (type !== undefined) {
     worker.type = type;
@@ -1273,6 +1299,12 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
     worker: readRequiredString(record, "worker", path),
   };
   const id = readOptionalString(record, "id", path);
+  const description = readOptionalObject(
+    record,
+    "description",
+    path,
+    decodeNameValue,
+  );
   const behavior = readOptionalEnum(
     record,
     "behavior",
@@ -1357,6 +1389,9 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
 
   if (id !== undefined) {
     workstation.id = id;
+  }
+  if (description !== undefined) {
+    workstation.description = description;
   }
   if (behavior !== undefined) {
     workstation.behavior = behavior;

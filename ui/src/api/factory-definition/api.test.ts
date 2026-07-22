@@ -25,6 +25,58 @@ describe("factory-definition normalization boundary", () => {
   });
 });
 
+describe("normalizeFactoryDefinition localized descriptions", () => {
+  it("preserves localized descriptions for every principal graph entity", () => {
+    const workTypeDescription = {
+      id: "description:story",
+      locales: ["en-US"],
+      type: "LOCALIZABLE_ASSET" as const,
+      value: "A customer story",
+      values: { "fr-FR": "Une histoire client" },
+    };
+    const workerDescription = {
+      id: "description:writer",
+      locales: ["en-US"],
+      type: "LOCALIZABLE_ASSET" as const,
+      value: "Writes the story",
+      values: { "fr-FR": "Rédige l’histoire" },
+    };
+    const workstationDescription = {
+      id: "description:draft",
+      locales: ["en-US"],
+      type: "LOCALIZABLE_ASSET" as const,
+      value: "Drafts the story",
+      values: { "fr-FR": "Rédige le brouillon" },
+    };
+
+    const normalized = normalizeFactoryDefinition({
+      name: "localized-factory",
+      workers: [{ description: workerDescription, name: "writer" }],
+      workTypes: [
+        {
+          description: workTypeDescription,
+          name: "story",
+          states: [{ name: "new", type: "INITIAL" }],
+        },
+      ],
+      workstations: [
+        {
+          description: workstationDescription,
+          inputs: [{ state: "new", workType: "story" }],
+          name: "Draft",
+          worker: "writer",
+        },
+      ],
+    });
+
+    expect(normalized.workTypes?.[0]?.description).toEqual(workTypeDescription);
+    expect(normalized.workers?.[0]?.description).toEqual(workerDescription);
+    expect(normalized.workstations?.[0]?.description).toEqual(
+      workstationDescription,
+    );
+  });
+});
+
 describe("normalizeFactoryDefinition", () => {
   it("accepts canonical generated factory payloads", () => {
     expect(
