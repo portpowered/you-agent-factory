@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/portpowered/infinite-you/internal/testlanes"
 )
 
 func TestMainExecutesFunctionalLane(t *testing.T) {
@@ -155,12 +157,13 @@ func TestDiscoverPackagesKeepsRunnablePackagesAndExcludesSupport(t *testing.T) {
 	}
 
 	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
-	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join([]string{
+	discovered := append([]string{
 		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
 		"github.com/portpowered/infinite-you/tests/functional/internal/support",
 		"",
 		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
-	}, "\n"))
+	}, testlanes.RequiredProviderFunctionalPackages()...)
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join(discovered, "\n"))
 
 	pkgs, err := discoverPackages("./tests/functional/...")
 	if err != nil {
@@ -178,6 +181,7 @@ func TestDiscoverPackagesKeepsRunnablePackagesAndExcludesSupport(t *testing.T) {
 		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
 		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
 	}
+	want = append(want, testlanes.RequiredProviderFunctionalPackages()...)
 	if !slices.Equal(pkgs, want) {
 		t.Fatalf("discoverPackages() packages = %v, want %v", pkgs, want)
 	}
@@ -188,7 +192,7 @@ func TestRunFailsWhenNoRunnablePackagesRemain(t *testing.T) {
 	restoreArgsAndFlags(t)
 
 	execCommand = fakeFunctionalLaneCommand
-	os.Args = []string{"functionallane"}
+	os.Args = []string{"functionallane", "-root=./tests/functional/internal/..."}
 	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
 
 	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
@@ -202,7 +206,7 @@ func TestRunFailsWhenNoRunnablePackagesRemain(t *testing.T) {
 		t.Fatal("run() unexpectedly succeeded")
 	}
 
-	want := "discover functional packages: no test packages found under ./tests/functional/..."
+	want := "discover functional packages: no test packages found under ./tests/functional/internal/..."
 	if err.Error() != want {
 		t.Fatalf("run() error = %q, want %q", err.Error(), want)
 	}
@@ -223,12 +227,13 @@ func TestRunExecutesDiscoveredFunctionalPackagesWithParsedConfig(t *testing.T) {
 
 	testArgsFile := t.TempDir() + "/go-test-args.txt"
 	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
-	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join([]string{
+	discovered := append([]string{
 		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
 		"github.com/portpowered/infinite-you/tests/functional/internal/support",
 		"",
 		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
-	}, "\n"))
+	}, testlanes.RequiredProviderFunctionalPackages()...)
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join(discovered, "\n"))
 	t.Setenv("FUNCTIONALLANE_HELPER_TEST_ARGS_FILE", testArgsFile)
 
 	if err := run(); err != nil {
@@ -247,9 +252,12 @@ func TestRunExecutesDiscoveredFunctionalPackagesWithParsedConfig(t *testing.T) {
 		"-short",
 		"github.com/portpowered/infinite-you/tests/functional/runtime_api",
 		"github.com/portpowered/infinite-you/tests/functional/bootstrap_portability",
+	}
+	wantArgs = append(wantArgs, testlanes.RequiredProviderFunctionalPackages()...)
+	wantArgs = append(wantArgs,
 		"-count=3",
 		"-timeout=2m0s",
-	}
+	)
 	if !slices.Equal(gotArgs, wantArgs) {
 		t.Fatalf("run() go test args = %v, want %v", gotArgs, wantArgs)
 	}
@@ -287,7 +295,8 @@ func TestRunWrapsFunctionalTestExecutionFailures(t *testing.T) {
 	flag.CommandLine = flag.NewFlagSet("functionallane", flag.ContinueOnError)
 
 	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
-	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", "github.com/portpowered/infinite-you/tests/functional/runtime_api")
+	discovered := append([]string{"github.com/portpowered/infinite-you/tests/functional/runtime_api"}, testlanes.RequiredProviderFunctionalPackages()...)
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join(discovered, "\n"))
 	t.Setenv("FUNCTIONALLANE_HELPER_TEST_FAIL", "1")
 	t.Setenv("FUNCTIONALLANE_HELPER_TEST_STDERR", "go test failed")
 
@@ -299,6 +308,24 @@ func TestRunWrapsFunctionalTestExecutionFailures(t *testing.T) {
 	want := "run functional lane: exit status 2"
 	if err.Error() != want {
 		t.Fatalf("run() error = %q, want %q", err.Error(), want)
+	}
+}
+
+func TestDiscoverPackagesFailsWhenRequiredProviderPackageIsMissing(t *testing.T) {
+	restoreExecCommand(t)
+
+	execCommand = fakeFunctionalLaneCommand
+	required := testlanes.RequiredProviderFunctionalPackages()
+	missing := required[0]
+	t.Setenv("GO_WANT_FUNCTIONALLANE_HELPER", "1")
+	t.Setenv("FUNCTIONALLANE_HELPER_LIST_STDOUT", strings.Join(required[1:], "\n"))
+
+	_, err := discoverPackages(testlanes.FunctionalPackagePattern)
+	if err == nil {
+		t.Fatal("discoverPackages() unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Fatalf("discoverPackages() error = %q, want missing package %q", err, missing)
 	}
 }
 
