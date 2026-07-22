@@ -9,27 +9,43 @@ type Manifest struct {
 
 // Command is one §4.3 command record from the production manifest.
 type Command struct {
-	ID            string                  `json:"id"`
-	Name          string                  `json:"name"`
-	Path          string                  `json:"path"`
-	Aliases       []string                `json:"aliases"`
-	Completeness  string                  `json:"completeness,omitempty"`
-	GroupID       string                  `json:"groupId,omitempty"`
-	Documentation Documentation           `json:"documentation"`
-	Lifecycle     Lifecycle               `json:"lifecycle"`
-	Visibility    string                  `json:"visibility"`
-	Runnable      bool                    `json:"runnable"`
-	Usage         Usage                   `json:"usage"`
-	Arguments     map[string]Argument     `json:"arguments,omitempty"`
-	Flags         map[string]Flag         `json:"flags,omitempty"`
-	Relationships map[string]Relationship `json:"relationships,omitempty"`
-	Precedence    Precedence              `json:"precedence,omitempty"`
-	Channels      Channels                `json:"channels,omitempty"`
-	Outputs       map[string]Output       `json:"outputs,omitempty"`
-	Exits         map[string]Exit         `json:"exits,omitempty"`
-	SideEffects   map[string]SideEffect   `json:"sideEffects,omitempty"`
-	Constraints   Constraints             `json:"constraints,omitempty"`
-	Handler       *Handler                `json:"handler,omitempty"`
+	ID              string                    `json:"id"`
+	Name            string                    `json:"name"`
+	Path            string                    `json:"path"`
+	Aliases         []string                  `json:"aliases"`
+	Completeness    string                    `json:"completeness,omitempty"`
+	GroupID         string                    `json:"groupId,omitempty"`
+	Documentation   Documentation             `json:"documentation"`
+	Lifecycle       Lifecycle                 `json:"lifecycle"`
+	Visibility      string                    `json:"visibility"`
+	Runnable        bool                      `json:"runnable"`
+	Usage           Usage                     `json:"usage"`
+	Arguments       map[string]Argument       `json:"arguments,omitempty"`
+	Flags           map[string]Flag           `json:"flags,omitempty"`
+	SourceBindings  map[string]SourceBinding  `json:"sourceBindings,omitempty"`
+	HandlerBindings map[string]HandlerBinding `json:"handlerBindings,omitempty"`
+	Relationships   map[string]Relationship   `json:"relationships,omitempty"`
+	Precedence      Precedence                `json:"precedence,omitempty"`
+	Channels        Channels                  `json:"channels,omitempty"`
+	Outputs         map[string]Output         `json:"outputs,omitempty"`
+	Exits           map[string]Exit           `json:"exits,omitempty"`
+	SideEffects     map[string]SideEffect     `json:"sideEffects,omitempty"`
+	Constraints     Constraints               `json:"constraints,omitempty"`
+	Handler         *Handler                  `json:"handler,omitempty"`
+}
+
+// SourceBinding routes one non-CLI source into a stable input identity.
+type SourceBinding struct {
+	ID          string `json:"id"`
+	Source      string `json:"source"`
+	ExternalKey string `json:"externalKey,omitempty"`
+	InputID     string `json:"inputId"`
+}
+
+// HandlerBinding routes one stable input identity into a handler-owned slot.
+type HandlerBinding struct {
+	ID      string `json:"id"`
+	InputID string `json:"inputId"`
 }
 
 // Relationship describes a parse-time constraint between command inputs.

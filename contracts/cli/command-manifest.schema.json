@@ -122,6 +122,26 @@
             "$ref": "#/$defs/flag"
           }
         },
+        "sourceBindings": {
+          "description": "Environment, operator-configuration, and stdin routes keyed by stable binding identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sourceBinding"
+          }
+        },
+        "handlerBindings": {
+          "description": "Handler routes keyed by stable binding identity.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/handlerBinding"
+          }
+        },
         "relationships": {
           "description": "Parse-constraint relationship records keyed by stable relationship identifiers. Object keys make duplicate relationship IDs structurally unrepresentable.",
           "type": "object",
@@ -790,6 +810,47 @@
           "items": {
             "type": "string"
           }
+        }
+      }
+    },
+    "sourceBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "source", "inputId"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "source": {
+          "enum": ["stdin", "environment", "operator-config"]
+        },
+        "externalKey": {
+          "description": "Environment variable or operator-configuration key consumed by this binding.",
+          "type": "string",
+          "minLength": 1
+        },
+        "inputId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"source": {"const": "stdin"}}, "required": ["source"]},
+          "then": {"not": {"required": ["externalKey"]}},
+          "else": {"required": ["externalKey"]}
+        }
+      ]
+    },
+    "handlerBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "inputId"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "inputId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
         }
       }
     },

@@ -115,6 +115,193 @@ func TestCLIManifestDiagnosticsRejectInvalidInheritance(t *testing.T) {
 	}
 }
 
+func TestCLIManifestDiagnosticsAcceptTypedValuesAndExplicitBindings(t *testing.T) {
+	diagnostics := cliManifestDiagnostics("contract.json", cliCanonicalInputTestDocument())
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want a valid canonical input contract", diagnostics)
+	}
+}
+
+func TestCLIManifestDiagnosticsRejectInvalidTypedValues(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+		code   string
+		field  string
+	}{
+		{name: "wrong typed member", mutate: func(input map[string]any) { input["defaultValue"] = map[string]any{"int": float64(1)} }, code: "cli.input.value-type", field: "defaultValue"},
+		{name: "choice outside enum", mutate: func(input map[string]any) { input["defaultValue"] = map[string]any{"string": "other"} }, code: "cli.input.value-choice", field: "defaultValue"},
+		{name: "unnormalized default", mutate: func(input map[string]any) { input["defaultValue"] = map[string]any{"string": " Worker "} }, code: "cli.input.value-normalization", field: "defaultValue"},
+		{name: "invalid no-option type", mutate: func(input map[string]any) {
+			input["valueType"] = "int"
+			input["defaultValue"] = map[string]any{"int": float64(1)}
+			input["noOptionDefaultValue"] = map[string]any{"int": float64(1)}
+		}, code: "cli.input.no-option-invalid", field: "noOptionDefaultValue"},
+		{name: "normalization on integer", mutate: func(input map[string]any) {
+			input["valueType"] = "int"
+			input["defaultValue"] = map[string]any{"int": float64(1)}
+			delete(input, "noOptionDefaultValue")
+		}, code: "cli.input.normalization-value-type", field: "normalization"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document := cliCanonicalInputTestDocument()
+			input := cliCanonicalTestFlag(document, "example.flag.name")
+			test.mutate(input)
+			diagnostics := cliManifestDiagnostics("contract.json", document)
+			assertCLIDiagnostic(t, diagnostics, test.code, "/commands/example/flags/example.flag.name/"+test.field)
+		})
+	}
+}
+
+func TestCLIManifestDiagnosticsRejectImpossibleCardinality(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+		code   string
+		field  string
+	}{
+		{name: "required with zero minimum", mutate: func(input map[string]any) { input["required"] = true }, code: "cli.input.cardinality-required", field: "minCardinality"},
+		{name: "minimum above maximum", mutate: func(input map[string]any) { input["minCardinality"] = float64(2) }, code: "cli.input.cardinality-range", field: "maxCardinality"},
+		{name: "scalar repeated", mutate: func(input map[string]any) { input["repeatable"] = true; input["maxCardinality"] = float64(-1) }, code: "cli.input.cardinality-value-type", field: "valueType"},
+		{name: "repeatable capped at one", mutate: func(input map[string]any) {
+			input["repeatable"] = true
+			input["valueType"] = "stringArray"
+			input["defaultValue"] = map[string]any{"stringArray": []any{"worker"}}
+		}, code: "cli.input.cardinality-repeatable", field: "maxCardinality"},
+		{name: "default exceeds maximum", mutate: func(input map[string]any) {
+			input["valueType"] = "stringArray"
+			input["defaultValue"] = map[string]any{"stringArray": []any{"worker", "worker"}}
+			delete(input, "noOptionDefaultValue")
+		}, code: "cli.input.default-cardinality", field: "defaultValue"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document := cliCanonicalInputTestDocument()
+			test.mutate(cliCanonicalTestFlag(document, "example.flag.name"))
+			diagnostics := cliManifestDiagnostics("contract.json", document)
+			assertCLIDiagnostic(t, diagnostics, test.code, "/commands/example/flags/example.flag.name/"+test.field)
+		})
+	}
+}
+
+func TestCLIManifestDiagnosticsRejectInvalidSourceAndHandlerBindings(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+		code   string
+		path   string
+	}{
+		{
+			name: "unknown source target",
+			mutate: func(command map[string]any) {
+				command["sourceBindings"].(map[string]any)["example.source.env"].(map[string]any)["inputId"] = "example.flag.missing"
+			},
+			code: "cli.source.unknown-input", path: "/commands/example/sourceBindings/example.source.env/inputId",
+		},
+		{
+			name: "source not accepted",
+			mutate: func(command map[string]any) {
+				cliCanonicalTestFlagCommand(command, "example.flag.name")["acceptedSources"] = []any{"cli"}
+			},
+			code: "cli.source.not-accepted", path: "/commands/example/sourceBindings/example.source.env/inputId",
+		},
+		{
+			name:   "missing source binding",
+			mutate: func(command map[string]any) { command["sourceBindings"] = map[string]any{} },
+			code:   "cli.source.missing-binding", path: "/commands/example/flags/example.flag.name/acceptedSources/1",
+		},
+		{
+			name: "stdin cannot target boolean",
+			mutate: func(command map[string]any) {
+				input := cliCanonicalTestFlagCommand(command, "example.flag.name")
+				input["valueType"] = "bool"
+				input["defaultValue"] = map[string]any{"boolean": false}
+				input["noOptionDefaultValue"] = map[string]any{"boolean": true}
+				input["enum"] = []any{}
+				input["normalization"] = ""
+				input["acceptedSources"] = []any{"cli", "stdin"}
+				command["sourceBindings"].(map[string]any)["example.source.env"] = map[string]any{"id": "example.source.stdin", "source": "stdin", "inputId": "example.flag.name"}
+			},
+			code: "cli.source.stdin-shape", path: "/commands/example/sourceBindings/example.source.env/inputId",
+		},
+		{
+			name: "unknown handler declaration target",
+			mutate: func(command map[string]any) {
+				command["handlerBindings"].(map[string]any)["example.binding.name"].(map[string]any)["inputId"] = "example.flag.missing"
+			},
+			code: "cli.binding.unknown-input", path: "/commands/example/handlerBindings/example.binding.name/inputId",
+		},
+		{
+			name: "unknown handler reference",
+			mutate: func(command map[string]any) {
+				cliCanonicalTestFlagCommand(command, "example.flag.name")["handlerBindingId"] = "example.binding.missing"
+			},
+			code: "cli.binding.unknown-handler", path: "/commands/example/flags/example.flag.name/handlerBindingId",
+		},
+		{
+			name: "handler binding claimed twice",
+			mutate: func(command map[string]any) {
+				cliCanonicalTestFlagCommand(command, "example.flag.other")["handlerBindingId"] = "example.binding.name"
+			},
+			code: "cli.binding.multiple-targets", path: "/commands/example/flags/example.flag.name/handlerBindingId",
+		},
+		{
+			name: "external key targets twice",
+			mutate: func(command map[string]any) {
+				cliCanonicalTestFlagCommand(command, "example.flag.other")["acceptedSources"] = []any{"cli", "environment"}
+				command["sourceBindings"].(map[string]any)["example.source.other"] = map[string]any{"id": "example.source.other", "source": "environment", "externalKey": "EXAMPLE_NAME", "inputId": "example.flag.other"}
+			},
+			code: "cli.source.multiple-targets", path: "/commands/example/sourceBindings/example.source.env/inputId",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			document := cliCanonicalInputTestDocument()
+			command := document["commands"].(map[string]any)["example"].(map[string]any)
+			test.mutate(command)
+			diagnostics := cliManifestDiagnostics("contract.json", document)
+			assertCLIDiagnostic(t, diagnostics, test.code, test.path)
+		})
+	}
+}
+
+func cliCanonicalInputTestDocument() map[string]any {
+	name := map[string]any{
+		"id": "example.flag.name", "valueType": "string", "required": false,
+		"minCardinality": float64(0), "maxCardinality": float64(1), "repeatable": false,
+		"defaultValue": map[string]any{"string": "worker"}, "noOptionDefaultValue": map[string]any{"string": "worker"},
+		"enum": []any{"worker"}, "normalization": "lowercase-trim", "acceptedSources": []any{"cli", "environment", "manifest-default"},
+		"handlerBindingId": "example.binding.name",
+	}
+	other := map[string]any{
+		"id": "example.flag.other", "valueType": "string", "required": false,
+		"minCardinality": float64(0), "maxCardinality": float64(1), "repeatable": false,
+		"defaultValue": map[string]any{"string": "other"}, "normalization": "", "acceptedSources": []any{"cli", "manifest-default"},
+		"handlerBindingId": "example.binding.other",
+	}
+	return map[string]any{"commands": map[string]any{"example": map[string]any{
+		"id": "example", "path": "example", "flags": map[string]any{"example.flag.name": name, "example.flag.other": other},
+		"sourceBindings": map[string]any{"example.source.env": map[string]any{"id": "example.source.env", "source": "environment", "externalKey": "EXAMPLE_NAME", "inputId": "example.flag.name"}},
+		"handlerBindings": map[string]any{
+			"example.binding.name":  map[string]any{"id": "example.binding.name", "inputId": "example.flag.name"},
+			"example.binding.other": map[string]any{"id": "example.binding.other", "inputId": "example.flag.other"},
+		},
+	}}}
+}
+
+func cliCanonicalTestFlag(document map[string]any, id string) map[string]any {
+	command := document["commands"].(map[string]any)["example"].(map[string]any)
+	return cliCanonicalTestFlagCommand(command, id)
+}
+
+func cliCanonicalTestFlagCommand(command map[string]any, id string) map[string]any {
+	return command["flags"].(map[string]any)[id].(map[string]any)
+}
+
 func cliScopeTestDocument() map[string]any {
 	persistent := cliScopeTestFlag("you.flag.verbose", "verbose", "persistent")
 	persistent["shorthand"] = "v"

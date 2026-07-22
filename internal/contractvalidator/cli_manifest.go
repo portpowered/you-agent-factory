@@ -28,6 +28,7 @@ func cliManifestDiagnostics(document string, value any) []Diagnostic {
 		diagnostics = append(diagnostics, cliCommandInputAmbiguityDiagnostics(document, commandKey, command)...)
 		diagnostics = append(diagnostics, cliCommandInheritanceDiagnostics(document, commandKey, command, index)...)
 		diagnostics = append(diagnostics, cliCommandSpellingDiagnostics(document, commandKey, command, index)...)
+		diagnostics = append(diagnostics, cliCommandValueAndBindingDiagnostics(document, commandKey, command)...)
 		diagnostics = append(diagnostics, cliCommandRelationshipDiagnostics(document, commandKey, command)...)
 	}
 	sortDiagnostics(diagnostics)

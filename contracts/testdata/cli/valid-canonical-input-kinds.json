@@ -91,10 +91,39 @@
         "example.invoke.flag.labels": {
           "id": "example.invoke.flag.labels", "kind": "named", "long": "label", "shorthand": "l", "aliases": ["tag"], "scope": "local",
           "valueType": "stringArray", "required": false, "minCardinality": 0, "maxCardinality": -1, "defaultValue": {"stringArray": ["default"]},
-          "repeatable": true, "normalization": "trim", "completion": "dynamic", "acceptedSources": ["cli", "stdin", "manifest-default"],
+          "repeatable": true, "normalization": "trim", "completion": "dynamic", "acceptedSources": ["cli", "manifest-default"],
           "handlerBindingId": "example.invoke.binding.flag-labels", "visibility": "visible",
           "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.labels", "state": "active", "since": "1.0.0"}
         }
+      },
+      "sourceBindings": {
+        "example.invoke.source.arg-name-env": {
+          "id": "example.invoke.source.arg-name-env", "source": "environment", "externalKey": "EXAMPLE_NAME", "inputId": "example.invoke.arg.name"
+        },
+        "example.invoke.source.arg-count-config": {
+          "id": "example.invoke.source.arg-count-config", "source": "operator-config", "externalKey": "invoke.count", "inputId": "example.invoke.arg.count"
+        },
+        "example.invoke.source.arg-labels-stdin": {
+          "id": "example.invoke.source.arg-labels-stdin", "source": "stdin", "inputId": "example.invoke.arg.labels"
+        },
+        "example.invoke.source.flag-enabled-env": {
+          "id": "example.invoke.source.flag-enabled-env", "source": "environment", "externalKey": "EXAMPLE_ENABLED", "inputId": "example.invoke.flag.enabled"
+        },
+        "example.invoke.source.flag-name-config": {
+          "id": "example.invoke.source.flag-name-config", "source": "operator-config", "externalKey": "invoke.name", "inputId": "example.invoke.flag.name"
+        }
+      },
+      "handlerBindings": {
+        "example.invoke.binding.enabled": {"id": "example.invoke.binding.enabled", "inputId": "example.invoke.arg.enabled"},
+        "example.invoke.binding.name": {"id": "example.invoke.binding.name", "inputId": "example.invoke.arg.name"},
+        "example.invoke.binding.count": {"id": "example.invoke.binding.count", "inputId": "example.invoke.arg.count"},
+        "example.invoke.binding.offset": {"id": "example.invoke.binding.offset", "inputId": "example.invoke.arg.offset"},
+        "example.invoke.binding.labels": {"id": "example.invoke.binding.labels", "inputId": "example.invoke.arg.labels"},
+        "example.invoke.binding.flag-enabled": {"id": "example.invoke.binding.flag-enabled", "inputId": "example.invoke.flag.enabled"},
+        "example.invoke.binding.flag-name": {"id": "example.invoke.binding.flag-name", "inputId": "example.invoke.flag.name"},
+        "example.invoke.binding.flag-count": {"id": "example.invoke.binding.flag-count", "inputId": "example.invoke.flag.count"},
+        "example.invoke.binding.flag-offset": {"id": "example.invoke.binding.flag-offset", "inputId": "example.invoke.flag.offset"},
+        "example.invoke.binding.flag-labels": {"id": "example.invoke.binding.flag-labels", "inputId": "example.invoke.flag.labels"}
       }
     }
   }
