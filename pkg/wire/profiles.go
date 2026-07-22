@@ -162,6 +162,15 @@ func provideFactorySessionResolveHomeDirectory(
 	return os.UserHomeDir
 }
 
+func provideFactorySessionResolveLogicalTargetSymlinks(
+	edges serviceedges.Edges,
+) factorysessions.LogicalTargetResolveSymlinks {
+	if edges.FactorySessionResolveLogicalTargetSymlinks != nil {
+		return edges.FactorySessionResolveLogicalTargetSymlinks
+	}
+	return filepath.EvalSymlinks
+}
+
 func provideFactorySessionCursorPersistenceFileSystem(
 	edges serviceedges.Edges,
 ) factorysessions.CursorPersistenceFileSystem {

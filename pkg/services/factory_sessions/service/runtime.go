@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 
 	"go.uber.org/zap"
 )
@@ -79,6 +80,7 @@ type SessionRuntime struct {
 	resolveHome                  factorysessions.HomeDirectoryResolver
 	namedPaths                   interfaces.NamedPathResolver
 	initialWorkFiles             fileeffects.InitialWorkReader
+	identity                     identity.Service
 }
 
 // ActivateNamedFactory builds a replacement runtime from a persisted named

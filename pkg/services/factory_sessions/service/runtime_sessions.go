@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	identityservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
 	"path/filepath"
@@ -74,7 +75,14 @@ func (fs *SessionRuntime) SubscribeFactoryEventsForSession(ctx context.Context, 
 		return stream, err
 	}
 	stream.FactorySessionID = strings.TrimSpace(session.ID)
-	stream.LogicalSessionKeyID = factorysessions.LogicalSessionKeyID(session)
+	identity, identityErr := fs.identity.Normalize(ctx, identityservice.NormalizeRequest{
+		BackendScopeID: strings.TrimSpace(session.Runtime.BackendScopeID),
+		FolderPath:     session.FolderPath, Target: session.Target,
+	})
+	if identityErr != nil {
+		return nil, identityErr
+	}
+	stream.LogicalSessionKeyID = identity.LogicalSessionKeyID
 	stream.BackendScopeID = strings.TrimSpace(session.Runtime.BackendScopeID)
 	return stream, nil
 }

@@ -57,6 +57,7 @@ func TestFactorySessionsServiceRequiresRuntimeClockBinding(t *testing.T) {
 		namedPathResolver,
 		fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		func(path string) (string, error) { return path, nil },
 	)
 	if err != nil {
 		t.Fatalf("provide Factory Sessions service: %v", err)

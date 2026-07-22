@@ -24,6 +24,10 @@ func (h *openControlHost) DiscoverTargets(_ string) ([]factorysessions.Target, e
 	return h.targets, nil
 }
 
+func (h *openControlHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
+	return factorysessions.SelectTarget(targets, ref)
+}
+
 func (h *openControlHost) InitializeFactoryScaffold(_ string) error {
 	return h.scaffoldErr
 }
@@ -150,6 +154,10 @@ func (h *initNewFactoryHost) DiscoverTargets(_ string) ([]factorysessions.Target
 		)
 	}
 	return h.targets, nil
+}
+
+func (h *initNewFactoryHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
+	return factorysessions.SelectTarget(targets, ref)
 }
 
 func (h *initNewFactoryHost) InitializeFactoryScaffold(_ string) error {

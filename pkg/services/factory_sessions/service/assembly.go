@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -35,6 +36,7 @@ type Assembly struct {
 	namedPaths                   factorydefinitions.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
+	identity                     identity.Service
 }
 
 type streamManager interface {
@@ -57,8 +59,9 @@ func NewAssembly(
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
 ) factorysessions.RuntimeAssembly {
-	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil {
+	if clock == nil || eventIDs == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || invocationInputFiles == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil {
 		return nil
 	}
 	registry := sessionregistry.New()
@@ -83,6 +86,7 @@ func NewAssembly(
 		namedPaths:                   namedPaths,
 		invocationInputFiles:         invocationInputFiles,
 		initialWorkFiles:             initialWorkFiles,
+		identity:                     identityService,
 	}
 }
 
@@ -229,6 +233,7 @@ func (a *Assembly) Complete(
 		a.directoryInspection,
 		a.namedPaths,
 		a.initialWorkFiles,
+		a.identity,
 	)
 	if runtime == nil {
 		return nil, nil, nil, nil, fmt.Errorf("Factory Sessions runtime is required")

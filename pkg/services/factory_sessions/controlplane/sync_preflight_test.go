@@ -40,6 +40,10 @@ func (h *syncPreflightTestHost) BackendScopeID() string {
 	return h.backendID
 }
 
+func (h *syncPreflightTestHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	return controlplane.LogicalSessionKeyID(session)
+}
+
 func (h *syncPreflightTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string {
 	return h.streamGenID
 }

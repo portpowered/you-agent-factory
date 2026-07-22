@@ -39,6 +39,7 @@ type openTestHost struct {
 	sessionIDs      []string
 	sessions        map[string]*factorysessions.LiveSession
 	projectionErr   error
+	selectCalls     int
 }
 
 func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
@@ -46,6 +47,11 @@ func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, erro
 		return nil, h.discoverErr
 	}
 	return h.targets, nil
+}
+
+func (h *openTestHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
+	h.selectCalls++
+	return factorysessions.SelectTarget(targets, ref)
 }
 
 func (h *openTestHost) InitializeFactoryScaffold(_ string) error {
@@ -97,6 +103,10 @@ func (h *openTestHost) ResolveSyncPreflightTarget(_ string, _ *interfaces.Factor
 
 func (h *openTestHost) BackendScopeID() string {
 	return "runtime-test"
+}
+
+func (h *openTestHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	return controlplane.LogicalSessionKeyID(session)
 }
 
 func (h *openTestHost) StreamGenerationID(_ *factorysessions.LiveSession) string {
@@ -195,6 +205,9 @@ func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T
 	}
 	if result.SessionID != "sess-1" {
 		t.Fatalf("session id = %q, want sess-1", result.SessionID)
+	}
+	if host.selectCalls != 1 {
+		t.Fatalf("identity target selections = %d, want 1", host.selectCalls)
 	}
 }
 

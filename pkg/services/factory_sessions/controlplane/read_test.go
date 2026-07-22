@@ -36,6 +36,10 @@ func (h *defaultIdentityTestHost) BackendScopeID() string {
 	return "backend-default-identity-test"
 }
 
+func (h *defaultIdentityTestHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	return controlplane.LogicalSessionKeyID(session)
+}
+
 func (h *defaultIdentityTestHost) StreamGenerationID(*factorysessions.LiveSession) string {
 	return "stream-default-identity-test"
 }

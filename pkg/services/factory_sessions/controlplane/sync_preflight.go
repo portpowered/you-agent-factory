@@ -25,6 +25,7 @@ type SyncPreflightHost interface {
 		logicalResolve *interfaces.FactorySessionLogicalResolveHint,
 	) (SyncPreflightTarget, error)
 	BackendScopeID() string
+	LogicalSessionKeyID(session *factorysessions.LiveSession) string
 	StreamGenerationID(session *factorysessions.LiveSession) string
 	LiveSessionEvents(session *factorysessions.LiveSession) []interfaces.FactoryEvent
 }
@@ -67,7 +68,7 @@ func GetLiveFactorySessionSyncPreflight(
 	session := resolved.Session
 
 	response.BackendScopeID = stringPointer(host.BackendScopeID())
-	response.LogicalSessionKeyID = stringPointer(logicalSessionKeyID(session))
+	response.LogicalSessionKeyID = stringPointer(host.LogicalSessionKeyID(session))
 	response.FactorySessionID = stringPointer(factorysessions.CanonicalFactorySessionID(session))
 	response.StreamGenerationID = stringPointer(host.StreamGenerationID(session))
 	if resolved.Remapped {

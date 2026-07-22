@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
+	identitywire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity/wire"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
@@ -32,6 +33,7 @@ func NewService(
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
+	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 ) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -57,6 +59,10 @@ func NewService(
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
 	}
+	identityService, err := identitywire.NewService(resolveSymlinks, resolveHome, directoryInspection)
+	if err != nil {
+		return nil, err
+	}
 
 	service, err := factorysessionroot.NewRoot(
 		newJavaScriptCheckpointStore,
@@ -71,6 +77,7 @@ func NewService(
 		namedPaths,
 		invocationInputFiles,
 		initialWorkFiles,
+		identityService,
 	)
 	if err != nil {
 		return nil, err

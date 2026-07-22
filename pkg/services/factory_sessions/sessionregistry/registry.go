@@ -132,10 +132,15 @@ func (r *Registry) DefaultSession() *factorysessions.LiveSession {
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for _, session := range r.sessions {
+	ids := make([]string, 0, len(r.sessions))
+	for id, session := range r.sessions {
 		if session != nil && session.IsDefault {
-			return session
+			ids = append(ids, id)
 		}
+	}
+	if len(ids) > 0 {
+		sort.Strings(ids)
+		return r.sessions[ids[0]]
 	}
 	return nil
 }

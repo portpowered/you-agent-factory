@@ -458,9 +458,14 @@ its detached checkpoint-backed partial projection. Convert those values through
 assembles generated public responses. Control-plane result reads return the
 detached result-owner values and must not import transport contracts.
 
-Normalized Factory Session logical-target identity is derived in
-`pkg/factory/sessions/logicaltarget` and represented by its canonical reference
-or the live runtime projection contract. Convert that reference to generated
+Normalized Factory Session logical-target identity, target discovery, selection,
+and restart remapping are owned by the injected subservice rooted at
+`pkg/services/factory_sessions/services/identity`; its implementation receives
+home, directory-inspection, and symlink-resolution effects through service-local
+Wire. The outer Factory Sessions service delegates open, list/read projection,
+and reconnect behavior to that subservice without exposing it cross-service.
+Canonical reference and runtime projection value contracts remain at the
+Factory Sessions root. Convert those values to generated
 logical-target kinds and provider-boundary fields only in
 `pkg/transports/mapping/factorysession`; domain target normalization must not
 return generated HTTP values.

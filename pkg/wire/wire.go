@@ -89,6 +89,7 @@ var servicesSet = wire.NewSet(
 	provideFactorySessionsWorkingDirectory,
 	provideFactorySessionExecutionOpeningFileSystem,
 	provideFactorySessionDirectoryInspection,
+	provideFactorySessionResolveLogicalTargetSymlinks,
 	provideFactorySessionContractFixtureReader,
 	provideFactorySessionInvocationInputReader,
 	provideFactorySessionReplayRecordingReader,

@@ -22,6 +22,7 @@ func newSessionHost(
 	buildSessionProjectionContext func(context.Context, *factorysessions.LiveSession) (factorysessions.ProjectionContext, error),
 	resolveSyncPreflightTarget func(string, *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error),
 	backendScopeID func() string,
+	logicalSessionKeyID func(*factorysessions.LiveSession) string,
 	streamGenerationID func(*factorysessions.LiveSession) string,
 	stopLiveSession func(string) error,
 	observeLiveLifecycleControl func(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error),
@@ -29,16 +30,19 @@ func newSessionHost(
 	newJavaScriptCheckpointStore factory.JavaScriptCheckpointStoreFactory,
 	directoryInspection factorysessions.DirectoryInspection,
 	resolveSessionFolder func(string) (string, error),
+	selectTarget func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error),
 ) Host {
 	host := dependencyHost{
 		discoverTargets: discoverTargets, initializeFactoryScaffold: initializeFactoryScaffold,
 		openLiveSessionForTarget:      openLiveSessionForTarget,
 		buildSessionProjectionContext: buildSessionProjectionContext,
 		resolveSyncPreflightTarget:    resolveSyncPreflightTarget,
-		backendScopeID:                backendScopeID, streamGenerationID: streamGenerationID,
-		stopLiveSession: stopLiveSession, observeLiveLifecycleControl: observeLiveLifecycleControl,
+		backendScopeID:                backendScopeID, logicalSessionKeyID: logicalSessionKeyID,
+		streamGenerationID: streamGenerationID,
+		stopLiveSession:    stopLiveSession, observeLiveLifecycleControl: observeLiveLifecycleControl,
 		durableExecution: durableExecution, directoryInspection: directoryInspection,
 		resolveSessionFolder: resolveSessionFolder,
+		selectTarget:         selectTarget,
 	}
 	if state != nil {
 		host.requireSession = func(sessionID string) (*factorysessions.LiveSession, error) {

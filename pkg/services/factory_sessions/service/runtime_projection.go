@@ -10,9 +10,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
 	factorysessioncursors "github.com/portpowered/infinite-you/pkg/services/factory_sessions/cursors"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 )
 
 type sessionSyncPreflightTarget struct {
@@ -59,7 +59,7 @@ func (fs *SessionRuntime) resolveSessionSyncPreflightByLogicalKey(
 	if serviceScope == "" || strings.TrimSpace(hint.BackendScopeID) != serviceScope {
 		return sessionSyncPreflightTarget{unresolved: true}, nil
 	}
-	session := fs.sessionState.Registry().FindByLogicalSessionKeyID(hint.LogicalSessionKeyID)
+	session := fs.identity.ResolveLogical(fs.sessionState.Registry(), serviceScope, hint.LogicalSessionKeyID)
 	if session == nil {
 		return sessionSyncPreflightTarget{unresolved: true}, nil
 	}
@@ -92,11 +92,18 @@ func (fs *SessionRuntime) buildSessionProjectionContext(
 	backendScopeID := ""
 	if bundle != nil {
 		startedAt = bundle.StartTime()
-		backendScopeID = strings.TrimSpace(bundle.BackendScope())
+	}
+	backendScopeID = runtimebinding.BackendScopeID(fs.backendScopeID, session)
+	resolvedIdentity, err := fs.identity.Normalize(ctx, identity.NormalizeRequest{
+		BackendScopeID: backendScopeID, FolderPath: session.FolderPath, Target: session.Target,
+	})
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
 	}
 	return factorysessions.BuildProjectionContext(factorysessions.ProjectionBuildInput{
 		Session: session, RuntimeConfig: runtimeCfg, Snapshot: snapshot,
-		BackendScopeID: backendScopeID, RuntimeStartedAt: startedAt,
+		BackendScopeID: backendScopeID, LogicalSessionKey: resolvedIdentity.LogicalSessionKeyID,
+		NormalizedTarget: &resolvedIdentity.RuntimeTarget, RuntimeStartedAt: startedAt,
 		CheckpointStore: checkpointStore, Events: runtimebinding.CanonicalEventsFromSession(session),
 		WorldStateProjector: fs.worldStateProjector, Now: fs.clock.Now().UTC(),
 	})
@@ -116,7 +123,7 @@ func (fs *SessionRuntime) sessionPersistenceScopeFromSession(
 	runtime := factorysessions.ProjectRuntimeContract(projectionCtx)
 	scope := factorysessioncursors.IdentityScope{
 		BackendScopeID:      runtimebinding.BackendScopeID(fs.backendScopeID, session),
-		LogicalSessionKeyID: controlplane.LogicalSessionKeyID(session),
+		LogicalSessionKeyID: projectionCtx.LogicalSessionKeyID,
 		FactorySessionID:    strings.TrimSpace(session.ID),
 	}
 	if runtime.StreamIdentity != nil {

@@ -27,6 +27,7 @@ type OpenControlHost interface {
 	ScaffoldHost
 	NestedFactoryDirectoryValidator
 	ResolveSessionFolder(string) (string, error)
+	SelectTarget([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
 }
 
 // OpenFromFolder applies session open policy: target discovery, selection,
@@ -64,7 +65,7 @@ func OpenFromFolder(
 		return nil, err
 	}
 
-	selectedTarget, err := factorysessions.SelectTarget(targets, target)
+	selectedTarget, err := host.SelectTarget(targets, target)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +123,7 @@ func initNewFactoryAndOpenSession(
 	if err != nil {
 		return nil, fmt.Errorf("discover initialized factory targets: %w", err)
 	}
-	selectedTarget, err := factorysessions.SelectTarget(targets, nil)
+	selectedTarget, err := host.SelectTarget(targets, nil)
 	if err != nil {
 		return nil, err
 	}

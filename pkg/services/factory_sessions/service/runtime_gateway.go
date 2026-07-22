@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/observations"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 	"go.uber.org/zap"
 )
 
@@ -227,18 +228,17 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	if runtime == nil {
 		return newSessionHost(
 			nil, nil, initializeFactoryScaffold, nil, nil, nil,
-			nil, nil, nil, nil, nil, nil, nil, nil,
+			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		)
 	}
 	discoverTargets := func(folderPath string) ([]factorysessions.Target, error) {
-		return factorysessions.DiscoverConfiguredTargets(
-			folderPath, runtime.workstationLoader, runtime.loadFactory, runtime.logger,
-			runtime.directoryInspection,
-			runtime.resolveHome,
-		)
+		return runtime.identity.Discover(context.Background(), identity.DiscoverRequest{
+			FolderPath: folderPath, WorkstationLoader: runtime.workstationLoader,
+			LoadFactory: runtime.loadFactory, Logger: runtime.logger,
+		})
 	}
 	resolveSessionFolder := func(folderPath string) (string, error) {
-		return factorysessions.ResolveSessionFolder(folderPath, runtime.resolveHome, runtime.directoryInspection)
+		return runtime.identity.ResolveFolder(folderPath)
 	}
 	resolveSyncPreflightTarget := func(
 		sessionID string,
@@ -252,6 +252,18 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 	backendScopeID := func() string {
 		return runtimebinding.BackendScopeID(runtime.backendScopeID, nil)
 	}
+	logicalSessionKeyID := func(session *factorysessions.LiveSession) string {
+		if session == nil {
+			return ""
+		}
+		resolved, err := runtime.identity.Normalize(context.Background(), identity.NormalizeRequest{
+			BackendScopeID: backendScopeID(), FolderPath: session.FolderPath, Target: session.Target,
+		})
+		if err != nil {
+			return ""
+		}
+		return resolved.LogicalSessionKeyID
+	}
 	streamGenerationID := func(session *factorysessions.LiveSession) string {
 		return runtimebinding.StreamGenerationID(session)
 	}
@@ -263,6 +275,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		runtime.buildSessionProjectionContext,
 		resolveSyncPreflightTarget,
 		backendScopeID,
+		logicalSessionKeyID,
 		streamGenerationID,
 		runtime.stopFactorySession,
 		runtime.observeLiveLifecycleControl,
@@ -270,6 +283,7 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		runtime.newJavaScriptCheckpointStore,
 		runtime.directoryInspection,
 		resolveSessionFolder,
+		runtime.identity.Select,
 	)
 }
 

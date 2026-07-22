@@ -7,6 +7,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 	"go.uber.org/zap"
 )
 
@@ -43,8 +44,9 @@ func NewSessionRuntime(
 	directoryInspection factorysessions.DirectoryInspection,
 	namedPaths interfaces.NamedPathResolver,
 	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
 ) *SessionRuntime {
-	if sessionState == nil || clock == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || initialWorkFiles == nil || sessionResultProjection == nil {
+	if sessionState == nil || clock == nil || sessionIDs == nil || resolveHome == nil || directoryInspection == nil || namedPaths == nil || initialWorkFiles == nil || sessionResultProjection == nil || identityService == nil {
 		return nil
 	}
 	host := &SessionRuntime{
@@ -69,6 +71,7 @@ func NewSessionRuntime(
 		resolveHome:                  resolveHome,
 		namedPaths:                   namedPaths,
 		initialWorkFiles:             initialWorkFiles,
+		identity:                     identityService,
 	}
 	host.runtimeState.SetStartup(startupBundle)
 	return host

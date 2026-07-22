@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	legacyservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/identity"
 )
 
 // Root retains process-scoped Factory Sessions dependencies. It is inert until
@@ -26,6 +27,7 @@ type Root struct {
 	namedPaths                   factorydefinitions.NamedPathResolver
 	invocationInputFiles         fileeffects.InvocationInputReader
 	initialWorkFiles             fileeffects.InitialWorkReader
+	identity                     identity.Service
 }
 
 var _ factorysessions.Service = (*Root)(nil)
@@ -45,6 +47,7 @@ func NewRoot(
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
+	identityService identity.Service,
 ) (*Root, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
@@ -70,6 +73,9 @@ func NewRoot(
 	if initialWorkFiles == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
 	}
+	if identityService == nil {
+		return nil, fmt.Errorf("construct Factory Sessions: identity service is required")
+	}
 	return &Root{
 		newJavaScriptCheckpointStore: newJavaScriptCheckpointStore,
 		sessionResultProjection:      sessionResultProjection,
@@ -83,6 +89,7 @@ func NewRoot(
 		namedPaths:                   namedPaths,
 		invocationInputFiles:         invocationInputFiles,
 		initialWorkFiles:             initialWorkFiles,
+		identity:                     identityService,
 	}, nil
 }
 
@@ -109,6 +116,7 @@ func (r *Root) ForRuntime(binding factorysessions.RuntimeBinding) (factorysessio
 		r.namedPaths,
 		r.invocationInputFiles,
 		r.initialWorkFiles,
+		r.identity,
 	)
 	if assembly == nil {
 		return nil, fmt.Errorf("construct Factory Sessions runtime: implementation rejected its dependencies")

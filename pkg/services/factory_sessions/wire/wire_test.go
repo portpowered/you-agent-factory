@@ -14,7 +14,7 @@ import (
 
 func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 	service, err := NewService(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "session result projection is required") {
 		t.Fatalf("NewService() error = %v, want deterministic required dependency error", err)
@@ -27,6 +27,7 @@ func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
 func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	clock := &recordingClock{}
 	directories := &recordingDirectoryInspection{}
+	symlinkCalls := 0
 	service, err := NewService(
 		nil,
 		resultProjector{},
@@ -40,6 +41,7 @@ func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 		namedPathResolver{},
 		fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
+		func(path string) (string, error) { symlinkCalls++; return path, nil },
 	)
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -53,6 +55,9 @@ func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	if directories.calls != 0 {
 		t.Fatalf("construction inspected filesystem %d times, want no runtime activity", directories.calls)
 	}
+	if symlinkCalls != 0 {
+		t.Fatalf("construction resolved symlinks %d times, want no filesystem activity", symlinkCalls)
+	}
 	if assembly, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{}); bindErr == nil || assembly != nil {
 		t.Fatalf("ForRuntime() without clock = %#v, %v; want deterministic error", assembly, bindErr)
 	}
@@ -65,6 +70,9 @@ func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	}
 	if directories.calls != 0 {
 		t.Fatalf("runtime binding inspected filesystem %d times, want no runtime activity", directories.calls)
+	}
+	if symlinkCalls != 0 {
+		t.Fatalf("runtime binding resolved symlinks %d times, want no filesystem activity", symlinkCalls)
 	}
 }
 

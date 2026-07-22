@@ -33,6 +33,7 @@ type dependencyHost struct {
 	buildSessionProjectionContext func(context.Context, *factorysessions.LiveSession) (factorysessions.ProjectionContext, error)
 	resolveSyncPreflightTarget    func(string, *interfaces.FactorySessionLogicalResolveHint) (controlplane.SyncPreflightTarget, error)
 	backendScopeID                func() string
+	logicalSessionKeyID           func(*factorysessions.LiveSession) string
 	streamGenerationID            func(*factorysessions.LiveSession) string
 	liveSessionEvents             func(*factorysessions.LiveSession) []interfaces.FactoryEvent
 	sessionFactory                func(string) (factory.Service, error)
@@ -42,6 +43,7 @@ type dependencyHost struct {
 	javaScriptCheckpointStore     func(*factorysessions.LiveSession) factory.JavaScriptCheckpointStore
 	directoryInspection           factorysessions.DirectoryInspection
 	resolveSessionFolder          func(string) (string, error)
+	selectTarget                  func([]factorysessions.Target, *factorysessions.TargetRef) (*factorysessions.Target, error)
 }
 
 func (h dependencyHost) ResolveSessionFolder(folderPath string) (string, error) {
@@ -49,6 +51,13 @@ func (h dependencyHost) ResolveSessionFolder(folderPath string) (string, error) 
 		return "", fmt.Errorf("Factory Session folder resolver is required")
 	}
 	return h.resolveSessionFolder(folderPath)
+}
+
+func (h dependencyHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
+	if h.selectTarget == nil {
+		return nil, fmt.Errorf("Factory Session target selector is required")
+	}
+	return h.selectTarget(targets, ref)
 }
 
 func (h dependencyHost) DiscoverTargets(folderPath string) ([]factorysessions.Target, error) {
@@ -119,6 +128,13 @@ func (h dependencyHost) BackendScopeID() string {
 		return ""
 	}
 	return h.backendScopeID()
+}
+
+func (h dependencyHost) LogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	if h.logicalSessionKeyID == nil {
+		return ""
+	}
+	return h.logicalSessionKeyID(session)
 }
 
 func (h dependencyHost) StreamGenerationID(session *factorysessions.LiveSession) string {
