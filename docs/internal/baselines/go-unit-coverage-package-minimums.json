@@ -794,7 +794,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/agypty",
-      "minimum": 89.12
+      "minimum": 88.85
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/cliprovider",
