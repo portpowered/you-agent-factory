@@ -52,6 +52,9 @@ function flag(id: string, scope: "inherited" | "local" | "persistent") {
     binding: "",
     visibility: "visible",
     lifecycle: lifecycle(id),
+    ...(scope === "inherited"
+      ? { inheritedFromInputId: "you.flag.verbose" }
+      : {}),
   };
 }
 
