@@ -215,7 +215,8 @@ is always the final line, including when stdout is slow. Provider response,
 diagnostic, Provider Session, delta, and tool-call fields are omitted from event
 payloads at this presentation boundary. NDJSON mode does not emit retired
 private progress, compaction, gap, or `primary_result` record shapes from
-earlier releases.
+earlier releases. The CLI never emits a raw `FactoryResponseEvent` or a
+`recordType=response_event` record.
 
 ```bash
 you --json run --factory ./factory.json --output response-stream "Summarize the changelog"
