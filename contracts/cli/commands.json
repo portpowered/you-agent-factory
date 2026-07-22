@@ -297,6 +297,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -320,6 +321,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -343,6 +345,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -366,6 +369,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -389,6 +393,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -412,6 +417,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -533,6 +539,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -556,6 +563,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -579,6 +587,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -602,6 +611,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -625,6 +635,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -648,6 +659,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -743,6 +755,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -766,6 +779,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -789,6 +803,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -812,6 +827,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -835,6 +851,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -858,6 +875,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -922,6 +940,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -945,6 +964,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -968,6 +988,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -991,6 +1012,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1014,6 +1036,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1037,6 +1060,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1158,6 +1182,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1181,6 +1206,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1204,6 +1230,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1227,6 +1254,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1250,6 +1278,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1273,6 +1302,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1420,6 +1450,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1443,6 +1474,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1466,6 +1498,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1489,6 +1522,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1512,6 +1546,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1535,6 +1570,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1684,6 +1720,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1707,6 +1744,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1730,6 +1768,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1753,6 +1792,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -1776,6 +1816,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -1799,6 +1840,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -1954,6 +1996,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -1977,6 +2020,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2000,6 +2044,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2069,6 +2114,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2092,6 +2138,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2138,6 +2185,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -2291,6 +2339,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -2314,6 +2363,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2337,6 +2387,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2383,6 +2434,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2406,6 +2458,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2429,6 +2482,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -2583,6 +2637,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -2606,6 +2661,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2629,6 +2685,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2675,6 +2732,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2698,6 +2756,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2721,6 +2780,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -2875,6 +2935,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -2898,6 +2959,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2921,6 +2983,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -2944,6 +3007,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -2990,6 +3054,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3013,6 +3078,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3147,6 +3213,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -3170,6 +3237,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3193,6 +3261,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3216,6 +3285,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3262,6 +3332,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3308,6 +3379,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3462,6 +3534,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -3485,6 +3558,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3508,6 +3582,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3577,6 +3652,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3600,6 +3676,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3623,6 +3700,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -3777,6 +3855,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -3800,6 +3879,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3823,6 +3903,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3846,6 +3927,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -3869,6 +3951,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -3892,6 +3975,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -4056,6 +4140,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -4079,6 +4164,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4102,6 +4188,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4125,6 +4212,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -4148,6 +4236,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4171,6 +4260,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -4294,6 +4384,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -4317,6 +4408,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4340,6 +4432,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4408,7 +4501,8 @@
           "normalization": "",
           "repeatable": false,
           "required": false,
-          "scope": "local",
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -4455,6 +4549,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4547,6 +4642,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -4720,6 +4816,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -4743,6 +4840,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4766,6 +4864,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4788,7 +4887,8 @@
           "normalization": "",
           "repeatable": false,
           "required": false,
-          "scope": "local",
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -4835,6 +4935,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -4858,6 +4959,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5012,6 +5114,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5035,6 +5138,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5058,6 +5162,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5081,6 +5186,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -5150,6 +5256,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5196,6 +5303,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5351,6 +5459,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5374,6 +5483,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5397,6 +5507,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5419,7 +5530,8 @@
           "normalization": "",
           "repeatable": false,
           "required": false,
-          "scope": "local",
+          "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -5489,6 +5601,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5512,6 +5625,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5668,6 +5782,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5691,6 +5806,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5714,6 +5830,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5737,6 +5854,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -5783,6 +5901,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -5806,6 +5925,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -5962,6 +6082,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -5985,6 +6106,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6008,6 +6130,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6031,6 +6154,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -6077,6 +6201,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6100,6 +6225,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -6255,6 +6381,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "shorthand": "d",
           "valueType": "bool",
           "visibility": "visible"
@@ -6278,6 +6405,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6301,6 +6429,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6324,6 +6453,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "shorthand": "",
           "valueType": "bool",
           "visibility": "visible"
@@ -6370,6 +6500,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "shorthand": "",
           "valueType": "string",
           "visibility": "visible"
@@ -6393,6 +6524,7 @@
           "repeatable": false,
           "required": false,
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "shorthand": "v",
           "valueType": "bool",
           "visibility": "visible"
@@ -6495,6 +6627,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6518,6 +6651,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6541,6 +6675,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6564,6 +6699,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6587,6 +6723,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -6610,6 +6747,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6673,6 +6811,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6696,6 +6835,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6719,6 +6859,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -6742,6 +6883,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -6765,6 +6907,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -6788,6 +6931,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7172,6 +7316,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7195,6 +7340,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7218,6 +7364,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7241,6 +7388,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7264,6 +7412,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -7287,6 +7436,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7505,6 +7655,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7528,6 +7679,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7551,6 +7703,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7574,6 +7727,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7597,6 +7751,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -7620,6 +7775,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7843,6 +7999,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7866,6 +8023,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7889,6 +8047,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -7912,6 +8071,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -7935,6 +8095,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -7958,6 +8119,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8180,6 +8342,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8203,6 +8366,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8226,6 +8390,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8249,6 +8414,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8272,6 +8438,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -8295,6 +8462,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8427,15 +8595,15 @@
         "you.mcp.serve.exit.usage": {"code": 1, "id": "you.mcp.serve.exit.usage", "kind": "usage"}
       },
       "flags": {
-        "you.mcp.serve.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
-        "you.mcp.serve.flag.default-worker-model": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model", "since": "1.0.0", "state": "active"}, "long": "default-worker-model", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.default-worker-model-provider": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model-provider", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model-provider", "since": "1.0.0", "state": "active"}, "long": "default-worker-model-provider", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.debug": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.debug", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.debug", "since": "1.0.0", "state": "active"}, "long": "debug", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.debug", "shorthand": "d", "valueType": "bool", "visibility": "visible"},
+        "you.mcp.serve.flag.default-worker-model": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model", "since": "1.0.0", "state": "active"}, "long": "default-worker-model", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.default-worker-model-provider": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.default-worker-model-provider", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.default-worker-model-provider", "since": "1.0.0", "state": "active"}, "long": "default-worker-model-provider", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.default-worker-model-provider", "shorthand": "", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.fixture-catalog": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.fixture-catalog", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.fixture-catalog", "since": "1.0.0", "state": "active"}, "long": "fixture-catalog", "noOptionDefault": "", "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "bool", "visibility": "visible"},
+        "you.mcp.serve.flag.json": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.json", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.json", "since": "1.0.0", "state": "active"}, "long": "json", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.json", "shorthand": "", "valueType": "bool", "visibility": "visible"},
         "you.mcp.serve.flag.project-root": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "", "id": "you.mcp.serve.flag.project-root", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.project-root", "since": "1.0.0", "state": "active"}, "long": "project-root", "noOptionDefault": "", "normalization": "trim", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "string", "visibility": "visible"},
         "you.mcp.serve.flag.runtime": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.runtime", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.runtime", "since": "1.0.0", "state": "active"}, "long": "runtime", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "local", "shorthand": "", "valueType": "bool", "visibility": "visible"},
-        "you.mcp.serve.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.mcp.serve.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "", "valueType": "string", "visibility": "visible"},
-        "you.mcp.serve.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
+        "you.mcp.serve.flag.server": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "http://localhost:7437", "id": "you.mcp.serve.flag.server", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.server", "since": "1.0.0", "state": "active"}, "long": "server", "noOptionDefault": "", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.server", "shorthand": "", "valueType": "string", "visibility": "visible"},
+        "you.mcp.serve.flag.verbose": {"aliases": [], "binding": "", "changedDefault": false, "completion": "none", "default": "false", "id": "you.mcp.serve.flag.verbose", "lifecycle": {"formatVersion": "1.0.0", "itemId": "you.mcp.serve.flag.verbose", "since": "1.0.0", "state": "active"}, "long": "verbose", "noOptionDefault": "true", "normalization": "", "repeatable": false, "required": false, "scope": "inherited", "inheritedFromInputId": "you.flag.verbose", "shorthand": "v", "valueType": "bool", "visibility": "visible"}
       },
       "handler": {"id": "you.mcp.serve.handler"},
       "id": "you.mcp.serve",
@@ -8504,6 +8672,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8527,6 +8696,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8550,6 +8720,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8573,6 +8744,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8596,6 +8768,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -8619,6 +8792,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8682,6 +8856,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8705,6 +8880,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8728,6 +8904,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -8751,6 +8928,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8774,6 +8952,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -8797,6 +8976,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8974,6 +9154,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -8997,6 +9178,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9020,6 +9202,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9043,6 +9226,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9066,6 +9250,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -9089,6 +9274,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9266,6 +9452,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9289,6 +9476,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9312,6 +9500,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9335,6 +9524,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9358,6 +9548,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -9381,6 +9572,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9635,6 +9827,7 @@
           "shorthand": "d",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9658,6 +9851,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9681,6 +9875,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
           "valueType": "string",
           "required": false,
           "default": "",
@@ -9704,6 +9899,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9727,6 +9923,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
@@ -9750,6 +9947,7 @@
           "shorthand": "v",
           "aliases": [],
           "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
           "valueType": "bool",
           "required": false,
           "default": "false",
@@ -9954,6 +10152,7 @@
             "shorthand": "d",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -9977,6 +10176,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10000,6 +10200,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10069,6 +10270,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10483,6 +10685,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
             "valueType": "string",
             "required": false,
             "default": "http://localhost:7437",
@@ -10529,6 +10732,7 @@
             "shorthand": "v",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10768,6 +10972,7 @@
             "shorthand": "d",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10791,6 +10996,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10814,6 +11020,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -10837,6 +11044,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -10929,6 +11137,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
             "valueType": "string",
             "required": false,
             "default": "http://localhost:7437",
@@ -10975,6 +11184,7 @@
             "shorthand": "v",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11155,6 +11365,7 @@
             "shorthand": "d",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.debug",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11178,6 +11389,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -11201,6 +11413,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.default-worker-model-provider",
             "valueType": "string",
             "required": false,
             "default": "",
@@ -11270,6 +11483,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.json",
             "valueType": "bool",
             "required": false,
             "default": "false",
@@ -11316,6 +11530,7 @@
             "shorthand": "",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.server",
             "valueType": "string",
             "required": false,
             "default": "http://localhost:7437",
@@ -11362,6 +11577,7 @@
             "shorthand": "v",
             "aliases": [],
             "scope": "inherited",
+          "inheritedFromInputId": "you.flag.verbose",
             "valueType": "bool",
             "required": false,
             "default": "false",

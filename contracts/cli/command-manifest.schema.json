@@ -527,6 +527,10 @@
             "inherited"
           ]
         },
+        "inheritedFromInputId": {
+          "description": "Stable ID of the persistent ancestor input represented by an inherited flag.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
         "valueType": {
           "description": "The scalar or collection type accepted for one flag value.",
           "enum": [
@@ -666,6 +670,30 @@
               }
             }
           ]
+        },
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "const": "inherited"
+              }
+            },
+            "required": [
+              "scope"
+            ]
+          },
+          "then": {
+            "required": [
+              "inheritedFromInputId"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "inheritedFromInputId"
+              ]
+            }
+          }
         },
         {
           "if": {

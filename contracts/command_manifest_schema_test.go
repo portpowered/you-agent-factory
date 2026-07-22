@@ -126,6 +126,41 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 	}
 }
 
+func TestCommandManifestSchemaInheritedFlagRequiresExclusiveSourceReference(t *testing.T) {
+	t.Parallel()
+	schema := commandManifestSchema(t)
+
+	t.Run("inherited flag requires source", func(t *testing.T) {
+		instance := readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json")).(map[string]any)
+		commands := instance["commands"].(map[string]any)
+		flags := commands["example.factory.watch"].(map[string]any)["flags"].(map[string]any)
+		delete(flags["example.factory.watch.flag.verbose"].(map[string]any), "inheritedFromInputId")
+		err := schema.Validate(instance)
+		if err == nil {
+			t.Fatal("expected inherited flag without source reference to fail")
+		}
+		wantPath := "/commands/example.factory.watch/flags/example.factory.watch.flag.verbose"
+		if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+			t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+		}
+	})
+
+	t.Run("persistent flag forbids inherited source", func(t *testing.T) {
+		instance := readJSON(t, filepath.Join("testdata", "cli", "valid-inherited-flag.json")).(map[string]any)
+		commands := instance["commands"].(map[string]any)
+		flags := commands["example.factory"].(map[string]any)["flags"].(map[string]any)
+		flags["example.factory.flag.verbose"].(map[string]any)["inheritedFromInputId"] = "example.flag.verbose"
+		err := schema.Validate(instance)
+		if err == nil {
+			t.Fatal("expected persistent flag with inherited source reference to fail")
+		}
+		wantPath := "/commands/example.factory/flags/example.factory.flag.verbose"
+		if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+			t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+		}
+	})
+}
+
 func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
 	t.Parallel()
 	schema := commandManifestSchema(t)

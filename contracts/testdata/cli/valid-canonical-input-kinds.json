@@ -82,7 +82,7 @@
           "lifecycle": {"formatVersion": "1.0.0", "itemId": "example.invoke.flag.count", "state": "active", "since": "1.0.0"}
         },
         "example.invoke.flag.offset": {
-          "id": "example.invoke.flag.offset", "kind": "named", "long": "offset", "shorthand": "", "aliases": [], "scope": "inherited",
+          "id": "example.invoke.flag.offset", "kind": "named", "long": "offset", "shorthand": "", "aliases": [], "scope": "local",
           "valueType": "int64", "required": false, "minCardinality": 0, "maxCardinality": 1, "defaultValue": {"int64": -9223372036854775808},
           "repeatable": false, "normalization": "", "completion": "none", "acceptedSources": ["cli", "manifest-default"],
           "handlerBindingId": "example.invoke.binding.flag-offset", "visibility": "hidden",

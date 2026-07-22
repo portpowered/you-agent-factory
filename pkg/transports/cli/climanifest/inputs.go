@@ -33,6 +33,7 @@ type Flag struct {
 	Shorthand        string      `json:"shorthand"`
 	Aliases          []string    `json:"aliases"`
 	Scope            string      `json:"scope"`
+	InheritedFromID  string      `json:"inheritedFromInputId,omitempty"`
 	ValueType        string      `json:"valueType"`
 	Enum             []string    `json:"enum,omitempty"`
 	Required         bool        `json:"required"`

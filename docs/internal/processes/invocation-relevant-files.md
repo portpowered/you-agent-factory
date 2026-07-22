@@ -305,6 +305,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `noOptionDefault`, `changedDefault`, `binding`, and argument `channels` remain
   compatibility fields for manifests not yet migrated. Preserve both shapes in
   generated family artifacts until the authored production manifest is migrated.
+  Every `scope: inherited` flag must identify its persistent ancestor through
+  `inheritedFromInputId` and preserve that source's public and value semantics.
+  Keep effective-scope spelling and inheritance checks in
+  `internal/contractvalidator` so schema-valid manifests still receive stable,
+  path-specific semantic diagnostics before generation or consumption.
 - Classification-aware workflow/MCP generation lives in
   `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
   metadata is emitted from `commands.json` into `mcp_family.json`, while approved

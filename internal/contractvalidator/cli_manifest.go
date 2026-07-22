@@ -18,6 +18,7 @@ func cliManifestDiagnostics(document string, value any) []Diagnostic {
 		return nil
 	}
 
+	index := newCLIManifestIndex(commands)
 	var diagnostics []Diagnostic
 	for _, commandKey := range sortedStringKeys(commands) {
 		command, ok := commands[commandKey].(map[string]any)
@@ -25,8 +26,11 @@ func cliManifestDiagnostics(document string, value any) []Diagnostic {
 			continue
 		}
 		diagnostics = append(diagnostics, cliCommandInputAmbiguityDiagnostics(document, commandKey, command)...)
+		diagnostics = append(diagnostics, cliCommandInheritanceDiagnostics(document, commandKey, command, index)...)
+		diagnostics = append(diagnostics, cliCommandSpellingDiagnostics(document, commandKey, command, index)...)
 		diagnostics = append(diagnostics, cliCommandRelationshipDiagnostics(document, commandKey, command)...)
 	}
+	sortDiagnostics(diagnostics)
 	return diagnostics
 }
 
