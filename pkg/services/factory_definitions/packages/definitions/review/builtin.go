@@ -1,17 +1,16 @@
 package builtinreview
 
 import (
-	"embed"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 )
 
-//go:embed factory.json
-var factoryJSON []byte
-
-//go:embed prompts/*.md
-var promptAssets embed.FS
+var (
+	factoryJSON  = authoredsource.MustFactoryJSON("review")
+	promptAssets = authoredsource.MustFactoryFS("review")
+)
 
 // BuiltInReviewFactoryJSON is the canonical runnable @you/review packaged factory payload.
 var BuiltInReviewFactoryJSON = mustAssembleBuiltInReviewFactoryJSON()
