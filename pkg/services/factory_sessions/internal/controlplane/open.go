@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 )
 
 type LiveOpener interface {
@@ -73,10 +74,10 @@ func OpenFromFolder(
 		return nil, err
 	}
 	if selectedTarget == nil {
-		return &factorysessions.OpenResult{Targets: factorysessions.CloneTargets(targets)}, nil
+		return &factorysessions.OpenResult{Targets: logicaltarget.Clone(targets)}, nil
 	}
 	if validateOnly {
-		return &factorysessions.OpenResult{Targets: factorysessions.CloneTargets(targets)}, nil
+		return &factorysessions.OpenResult{Targets: logicaltarget.Clone(targets)}, nil
 	}
 	if liveOpener == nil {
 		return nil, fmt.Errorf("live session dataplane opener is required")

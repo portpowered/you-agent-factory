@@ -108,7 +108,7 @@ func NewConfigLoadFailedError(failures []DiscoveryFailure) error {
 	}
 	targets := make([]factoryvalidation.ValidationTarget, 0, len(failures))
 	for _, failure := range failures {
-		targetID := TargetDisplayName(failure.Ref)
+		targetID := targetDisplayName(failure.Ref)
 		message := fmt.Sprintf("Factory target %q at %q could not be loaded: %s", targetID, failure.FactoryDir, failure.Summary)
 		targets = append(targets, validationTargetErrorTarget(validationReasonConfigLoadFailed, targetID, message))
 	}
@@ -119,6 +119,13 @@ func NewConfigLoadFailedError(failures []DiscoveryFailure) error {
 		code:    validationErrorCodeConfigLoadFailed,
 		targets: targets,
 	}
+}
+
+func targetDisplayName(ref TargetRef) string {
+	if ref.Kind == TargetKindDefault {
+		return "default"
+	}
+	return ref.Name
 }
 
 // ValidationReasonFromError returns the validation reason and field when err is a factory-session validation error.

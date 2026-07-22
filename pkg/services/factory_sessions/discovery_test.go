@@ -1,4 +1,4 @@
-package factorysessions
+package factorysessions_test
 
 import (
 	"errors"
@@ -10,6 +10,8 @@ import (
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
+	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 )
 
 type discoveryDirectoryInspection struct {
@@ -45,7 +47,7 @@ func (e discoveryDirEntry) Type() fs.FileMode          { return 0 }
 func (e discoveryDirEntry) Info() (fs.FileInfo, error) { return nil, nil }
 
 func alwaysRunnableProbe(folderPath, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure) {
-	return BuildTargetFromConfig(folderPath, factoryDir, ref, filepath.Base(factoryDir)), true, nil
+	return logicaltarget.Build(folderPath, factoryDir, ref, filepath.Base(factoryDir)), true, nil
 }
 
 func TestDiscoverTargets_ReturnsDefaultAndNamedTargets(t *testing.T) {
@@ -54,7 +56,7 @@ func TestDiscoverTargets_ReturnsDefaultAndNamedTargets(t *testing.T) {
 		t.Fatalf("MkdirAll: %v", err)
 	}
 
-	targets, err := DiscoverTargets(root, alwaysRunnableProbe, platformfilesystem.Local{}, os.UserHomeDir)
+	targets, err := logicaltarget.Discover(root, alwaysRunnableProbe, platformfilesystem.Local{}, os.UserHomeDir)
 	if err != nil {
 		t.Fatalf("DiscoverTargets: %v", err)
 	}
@@ -68,7 +70,7 @@ func TestDiscoverTargets_ReturnsDefaultAndNamedTargets(t *testing.T) {
 
 func TestDiscoverTargets_RejectsFolderWithoutRunnableTargets(t *testing.T) {
 	root := t.TempDir()
-	_, err := DiscoverTargets(root, func(string, string, TargetRef) (Target, bool, *DiscoveryFailure) {
+	_, err := logicaltarget.Discover(root, func(string, string, TargetRef) (Target, bool, *DiscoveryFailure) {
 		return Target{}, false, nil
 	}, platformfilesystem.Local{}, os.UserHomeDir)
 	if err == nil {
@@ -83,7 +85,7 @@ func TestDiscoverTargets_RejectsFolderWithoutRunnableTargets(t *testing.T) {
 func TestDiscoverTargets_PreservesConfigLoadFailuresWhenNoRunnableTargetsRemain(t *testing.T) {
 	root := t.TempDir()
 
-	_, err := DiscoverTargets(root, func(_ string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure) {
+	_, err := logicaltarget.Discover(root, func(_ string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure) {
 		return Target{}, false, &DiscoveryFailure{
 			FactoryDir: factoryDir,
 			Ref:        ref,
@@ -123,7 +125,7 @@ func TestDiscoverTargets_UsesInjectedDirectoryOrderingAndFiltering(t *testing.T)
 		discoveryDirEntry{name: "bad/name", isDir: true},
 		discoveryDirEntry{name: "alpha", isDir: true},
 	}}
-	targets, err := DiscoverTargets(root, alwaysRunnableProbe, directories, os.UserHomeDir)
+	targets, err := logicaltarget.Discover(root, alwaysRunnableProbe, directories, os.UserHomeDir)
 	if err != nil {
 		t.Fatalf("DiscoverTargets: %v", err)
 	}
@@ -144,16 +146,16 @@ func TestDiscoverTargets_UsesInjectedDirectoryOrderingAndFiltering(t *testing.T)
 
 func TestDiscoverTargets_FailsClosedAndClassifiesDirectoryErrors(t *testing.T) {
 	root := t.TempDir()
-	if _, err := DiscoverTargets(root, alwaysRunnableProbe, nil, os.UserHomeDir); err == nil {
+	if _, err := logicaltarget.Discover(root, alwaysRunnableProbe, nil, os.UserHomeDir); err == nil {
 		t.Fatal("DiscoverTargets(nil inspection) error = nil")
 	}
-	if _, err := DiscoverTargets(root, alwaysRunnableProbe, discoveryDirectoryInspection{err: fs.ErrPermission}, os.UserHomeDir); err == nil {
+	if _, err := logicaltarget.Discover(root, alwaysRunnableProbe, discoveryDirectoryInspection{err: fs.ErrPermission}, os.UserHomeDir); err == nil {
 		t.Fatal("DiscoverTargets(permission) error = nil")
 	} else if reason, field, ok := ValidationReasonFromError(err); !ok || reason != ValidationReasonUnreadable || field != "folderPath" {
 		t.Fatalf("permission validation = (%q, %q, %v)", reason, field, ok)
 	}
 	readErr := errors.New("directory unavailable")
-	if _, err := DiscoverTargets(root, alwaysRunnableProbe, discoveryDirectoryInspection{err: readErr}, os.UserHomeDir); !errors.Is(err, readErr) {
+	if _, err := logicaltarget.Discover(root, alwaysRunnableProbe, discoveryDirectoryInspection{err: readErr}, os.UserHomeDir); !errors.Is(err, readErr) {
 		t.Fatalf("DiscoverTargets(generic read error) = %v, want wrapped %v", err, readErr)
 	}
 }
@@ -163,7 +165,7 @@ func TestSelectTarget_AutoSelectsSingleTarget(t *testing.T) {
 		Ref:   TargetRef{Kind: TargetKindDefault},
 		Label: "default",
 	}}
-	selected, err := SelectTarget(targets, nil)
+	selected, err := logicaltarget.Select(targets, nil)
 	if err != nil {
 		t.Fatalf("SelectTarget: %v", err)
 	}
@@ -177,7 +179,7 @@ func TestSelectTarget_ReturnsNilForAmbiguousFolder(t *testing.T) {
 		{Ref: TargetRef{Kind: TargetKindDefault}},
 		{Ref: TargetRef{Kind: TargetKindNamed, Name: "beta"}},
 	}
-	selected, err := SelectTarget(targets, nil)
+	selected, err := logicaltarget.Select(targets, nil)
 	if err != nil {
 		t.Fatalf("SelectTarget: %v", err)
 	}
@@ -188,7 +190,7 @@ func TestSelectTarget_ReturnsNilForAmbiguousFolder(t *testing.T) {
 
 func TestSelectTarget_RejectsMissingNamedTarget(t *testing.T) {
 	targets := []Target{{Ref: TargetRef{Kind: TargetKindDefault}}}
-	_, err := SelectTarget(targets, &TargetRef{Kind: TargetKindNamed, Name: "missing"})
+	_, err := logicaltarget.Select(targets, &TargetRef{Kind: TargetKindNamed, Name: "missing"})
 	if err == nil {
 		t.Fatal("SelectTarget(missing) error = nil, want target_not_found")
 	}
@@ -200,7 +202,7 @@ func TestSelectTarget_RejectsMissingNamedTarget(t *testing.T) {
 
 func TestCloneTargets_ReturnsDefensiveCopy(t *testing.T) {
 	original := []Target{{Ref: TargetRef{Kind: TargetKindDefault}, Label: "default"}}
-	cloned := CloneTargets(original)
+	cloned := logicaltarget.Clone(original)
 	original[0].Label = "mutated"
 	if cloned[0].Label != "default" {
 		t.Fatalf("cloned label = %q, want unchanged copy", cloned[0].Label)

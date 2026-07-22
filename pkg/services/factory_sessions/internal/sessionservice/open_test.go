@@ -12,6 +12,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/execution"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
 	"go.uber.org/zap"
@@ -51,7 +52,7 @@ func (h *openTestHost) DiscoverTargets(_ string) ([]factorysessions.Target, erro
 
 func (h *openTestHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
 	h.selectCalls++
-	return factorysessions.SelectTarget(targets, ref)
+	return logicaltarget.Select(targets, ref)
 }
 
 func (h *openTestHost) InitializeFactoryScaffold(_ string) error {

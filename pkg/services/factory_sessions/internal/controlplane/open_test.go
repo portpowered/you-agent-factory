@@ -8,6 +8,7 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 )
 
 type openControlHost struct {
@@ -24,7 +25,7 @@ func (h *openControlHost) DiscoverTargets(_ string) ([]factorysessions.Target, e
 }
 
 func (h *openControlHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	return factorysessions.SelectTarget(targets, ref)
+	return logicaltarget.Select(targets, ref)
 }
 
 func (h *openControlHost) InitializeFactoryScaffold(_ string) error {
@@ -156,7 +157,7 @@ func (h *initNewFactoryHost) DiscoverTargets(_ string) ([]factorysessions.Target
 }
 
 func (h *initNewFactoryHost) SelectTarget(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	return factorysessions.SelectTarget(targets, ref)
+	return logicaltarget.Select(targets, ref)
 }
 
 func (h *initNewFactoryHost) InitializeFactoryScaffold(_ string) error {

@@ -58,7 +58,7 @@ func resolvedIdentity(ref factorysessions.CanonicalLogicalTargetReference) ident
 }
 
 func (s *Service) Discover(_ context.Context, request identity.DiscoverRequest) ([]factorysessions.Target, error) {
-	return factorysessions.DiscoverConfiguredTargets(
+	return logicaltarget.DiscoverConfigured(
 		request.FolderPath, request.WorkstationLoader, request.LoadFactory, request.Logger,
 		s.directories, s.resolveHome,
 	)
@@ -69,7 +69,7 @@ func (s *Service) ResolveFolder(folderPath string) (string, error) {
 }
 
 func (s *Service) Select(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*factorysessions.Target, error) {
-	return factorysessions.SelectTarget(targets, ref)
+	return logicaltarget.Select(targets, ref)
 }
 
 func (s *Service) Resolve(registry sessionregistry.Service, selector string) *factorysessions.LiveSession {

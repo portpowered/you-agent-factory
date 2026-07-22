@@ -1814,41 +1814,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "BuildTargetFromConfig"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "CloneTargets"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "DiscoverConfiguredTargets"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "DiscoverTargets"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "ProbeConfiguredTarget"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "SelectTarget"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/discovery.go",
-      "target": "TargetDisplayName"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/execution_contract.go",
       "target": "NewExecutionValidationError"
     },
