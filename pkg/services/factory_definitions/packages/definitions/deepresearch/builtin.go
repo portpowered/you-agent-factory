@@ -2,17 +2,16 @@
 package deepresearch
 
 import (
-	"embed"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource"
 	"github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/packageassets"
 )
 
-//go:embed factory.json
-var factoryJSON []byte
-
-//go:embed scripts/*.js
-var assets embed.FS
+var (
+	factoryJSON = authoredsource.MustFactoryJSON("deep-research")
+	assets      = authoredsource.MustFactoryFS("deep-research")
+)
 
 // BuiltInFactoryJSON is the canonical runnable @you/deep-research payload,
 // including its authored JavaScript workflow asset.

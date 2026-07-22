@@ -2,11 +2,13 @@ package goal
 
 import (
 	"encoding/json"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
@@ -54,8 +56,8 @@ func TestMaterializePackagedGoalFactory_DerivesRolePromptsFromCanonicalSource(t 
 
 func authoredGoalPrompt(t *testing.T, source PackagedGoalRolePromptSource) string {
 	t.Helper()
-	path := filepath.Join("..", "definitions", "goal", filepath.FromSlash(source.PromptFile))
-	content, err := os.ReadFile(path)
+	path := "factories/goal/" + source.PromptFile
+	content, err := fs.ReadFile(packagedfactories.Source(), path)
 	if err != nil {
 		t.Fatalf("read authored prompt for role %q: %v", source.Role, err)
 	}

@@ -54,3 +54,27 @@ func TestAllocator_RejectsNilNativeAllocation(t *testing.T) {
 		t.Fatalf("Allocate() error = %v", err)
 	}
 }
+
+func TestAllocator_RejectsMissingRuntimeDependencies(t *testing.T) {
+	t.Parallel()
+	launch := ProcessLaunch{Executable: "agy", Argv: []string{"agy"}}
+
+	tests := []struct {
+		name      string
+		allocator *Allocator
+		want      error
+	}{
+		{name: "nil allocator", want: ErrHostRequired},
+		{name: "missing host", allocator: &Allocator{clock: testPTYClock}, want: ErrHostRequired},
+		{name: "missing clock", allocator: &Allocator{host: failingHost{}}, want: ErrClockRequired},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := test.allocator.Allocate(context.Background(), launch, DefaultSessionConfig())
+			if !errors.Is(err, test.want) {
+				t.Fatalf("Allocate() error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}

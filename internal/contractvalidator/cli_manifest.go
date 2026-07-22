@@ -3,7 +3,6 @@ package contractvalidator
 import (
 	"fmt"
 	"sort"
-	"strings"
 )
 
 const commandManifestSchemaID = "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json"
@@ -18,6 +17,7 @@ func cliManifestDiagnostics(document string, value any) []Diagnostic {
 		return nil
 	}
 
+	index := newCLIManifestIndex(commands)
 	var diagnostics []Diagnostic
 	for _, commandKey := range sortedStringKeys(commands) {
 		command, ok := commands[commandKey].(map[string]any)
@@ -25,72 +25,74 @@ func cliManifestDiagnostics(document string, value any) []Diagnostic {
 			continue
 		}
 		diagnostics = append(diagnostics, cliCommandInputAmbiguityDiagnostics(document, commandKey, command)...)
-		diagnostics = append(diagnostics, cliCommandRelationshipDiagnostics(document, commandKey, command)...)
+		diagnostics = append(diagnostics, cliCommandInheritanceDiagnostics(document, commandKey, command, index)...)
+		diagnostics = append(diagnostics, cliCommandSpellingDiagnostics(document, commandKey, command, index)...)
+		diagnostics = append(diagnostics, cliCommandValueAndBindingDiagnostics(document, commandKey, command)...)
+		diagnostics = append(diagnostics, cliCommandRelationshipDiagnostics(document, commandKey, command, index)...)
+		diagnostics = append(diagnostics, cliCommandPrecedenceDiagnostics(document, commandKey, command)...)
 	}
+	sortDiagnostics(diagnostics)
 	return diagnostics
 }
 
-func cliCommandRelationshipDiagnostics(document, commandKey string, command map[string]any) []Diagnostic {
-	known := make(map[string]string)
-	for _, field := range []string{"arguments", "flags"} {
-		for id := range collectCLIRecordIDPaths(commandKey, command, field) {
-			known[id] = strings.TrimSuffix(field, "s")
-		}
-	}
+var canonicalCLIPrecedence = []string{
+	"cli",
+	"stdin",
+	"environment",
+	"operator-config",
+	"manifest-default",
+	"factory-signature-default",
+}
 
-	relationships, ok := command["relationships"].(map[string]any)
-	if !ok {
+func cliCommandPrecedenceDiagnostics(document, commandKey string, command map[string]any) []Diagnostic {
+	precedence, exists := command["precedence"].(map[string]any)
+	if !exists {
+		if command["completeness"] == "authoritative" || cliCommandHasCanonicalInputs(commandKey, command) {
+			return []Diagnostic{newDiagnostic("cli.precedence.missing", instancePath([]string{"commands", commandKey, "precedence"}), "command requiring canonical source resolution is missing source precedence", document)}
+		}
 		return nil
 	}
+	order, _ := precedence["order"].([]any)
+	if len(order) != len(canonicalCLIPrecedence) {
+		return []Diagnostic{newDiagnostic("cli.precedence.incomplete", instancePath([]string{"commands", commandKey, "precedence", "order"}), "source precedence must contain every canonical tier exactly once", document)}
+	}
+	seen := make(map[string]int, len(order))
+	known := make(map[string]bool, len(canonicalCLIPrecedence))
+	for _, source := range canonicalCLIPrecedence {
+		known[source] = true
+	}
 	var diagnostics []Diagnostic
-	for _, relationshipKey := range sortedStringKeys(relationships) {
-		relationship, ok := relationships[relationshipKey].(map[string]any)
-		if !ok {
+	for index, raw := range order {
+		source, _ := raw.(string)
+		path := instancePath([]string{"commands", commandKey, "precedence", "order", fmt.Sprint(index)})
+		if !known[source] {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.unknown", path, fmt.Sprintf("source tier %q is not canonical", source), document))
 			continue
 		}
-		participants, _ := relationship["participants"].([]any)
-		for index, participant := range participants {
-			diagnostics = append(diagnostics, cliRelationshipParticipantDiagnostics(
-				document, commandKey, relationshipKey, []string{"participants", fmt.Sprint(index)}, participant, known,
-			)...)
+		if first, duplicate := seen[source]; duplicate {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.duplicate", path, fmt.Sprintf("source tier %q duplicates index %d", source, first), document))
+			continue
 		}
-		if when, exists := relationship["when"]; exists {
-			diagnostics = append(diagnostics, cliRelationshipParticipantDiagnostics(
-				document, commandKey, relationshipKey, []string{"when"}, when, known,
-			)...)
+		seen[source] = index
+		if source != canonicalCLIPrecedence[index] {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.order", path, fmt.Sprintf("source tier %q must be %q at index %d", source, canonicalCLIPrecedence[index], index), document))
+		}
+	}
+	for _, source := range canonicalCLIPrecedence {
+		if _, exists := seen[source]; !exists {
+			diagnostics = append(diagnostics, newDiagnostic("cli.precedence.missing-tier", instancePath([]string{"commands", commandKey, "precedence", "order"}), fmt.Sprintf("source precedence is missing tier %q", source), document))
 		}
 	}
 	return diagnostics
 }
 
-func cliRelationshipParticipantDiagnostics(
-	document, commandKey, relationshipKey string,
-	pathParts []string,
-	participantValue any,
-	known map[string]string,
-) []Diagnostic {
-	participant, _ := participantValue.(map[string]any)
-	id, _ := participant["id"].(string)
-	participantType, _ := participant["type"].(string)
-	knownType, exists := known[id]
-	path := instancePath(append([]string{"commands", commandKey, "relationships", relationshipKey}, append(pathParts, "id")...))
-	if !exists {
-		return []Diagnostic{newDiagnostic(
-			"cli.relationship.unknown-participant",
-			path,
-			fmt.Sprintf("relationship participant %q does not reference a flag or argument on command %q", id, commandKey),
-			document,
-		)}
+func cliCommandHasCanonicalInputs(commandKey string, command map[string]any) bool {
+	for _, input := range collectCLIInputs(commandKey, command) {
+		if cliInputIsCanonical(input.record) {
+			return true
+		}
 	}
-	if participantType != knownType {
-		return []Diagnostic{newDiagnostic(
-			"cli.relationship.participant-type",
-			path,
-			fmt.Sprintf("relationship participant %q is declared as %s but references a %s", id, participantType, knownType),
-			document,
-		)}
-	}
-	return nil
+	return false
 }
 
 func cliCommandInputAmbiguityDiagnostics(document, commandKey string, command map[string]any) []Diagnostic {

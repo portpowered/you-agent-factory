@@ -213,6 +213,10 @@
       "minimum": 80.00
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/internal/authoredsource",
+      "minimum": 80.00
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/quorum",
       "exception": {
         "kind": "measurement",
@@ -909,6 +913,10 @@
         "deadline": "2027-07-15",
         "removalGate": "The unit coverage profile reports at least one measurable statement for this package."
       }
+    },
+    {
+      "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/inferencecontract/testkit",
+      "minimum": 76.13
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/provider/kiro",

@@ -1,10 +1,12 @@
 package subagent
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
 
+	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/services/factory_definitions/validation"
 )
@@ -54,8 +56,8 @@ func TestMaterializePackagedSubagentFactory_WritesEditableSplitLayout(t *testing
 
 func authoredSubagentPrompt(t *testing.T, promptFile string) string {
 	t.Helper()
-	path := filepath.Join("..", "definitions", "subagent", filepath.FromSlash(promptFile))
-	content, err := os.ReadFile(path)
+	path := "factories/subagent/" + promptFile
+	content, err := fs.ReadFile(packagedfactories.Source(), path)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", path, err)
 	}

@@ -2,17 +2,18 @@ package builtingoal_test
 
 import (
 	"encoding/json"
-	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
-	"os"
+	"io/fs"
 	"testing"
 
+	packagedfactories "github.com/portpowered/infinite-you/packages/packaged-factories"
 	builtingoal "github.com/portpowered/infinite-you/pkg/services/factory_definitions/packages/definitions/goal"
+	factorymapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryconfig"
 )
 
 const executorPromptPath = "prompts/executor.md"
 
 func TestBuiltInGoalFactoryJSON_AssemblesFromDeclarativePromptAssets(t *testing.T) {
-	wantPrompt, err := os.ReadFile(executorPromptPath)
+	wantPrompt, err := fs.ReadFile(packagedfactories.Source(), "factories/goal/"+executorPromptPath)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", executorPromptPath, err)
 	}

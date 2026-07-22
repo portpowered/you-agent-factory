@@ -29,18 +29,21 @@ func newSessionHandlerRegistry(
 	}
 	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
 		CreateRunE: commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
-			Config: configs.Create, SessionDiagnosticsBinding: diagnosticsBinding, CreateSession: options.CreateSession,
+			Config: configs.Create, JSON: &globals.json,
+			SessionDiagnosticsBinding: diagnosticsBinding, CreateSession: options.CreateSession,
 		}),
 		ListRunE: commandregistry.SessionListRunE(commandregistry.SessionListBinding{
 			Config: configs.List, SessionDiagnosticsBinding: diagnosticsBinding,
-			Server: &globals.server, Prepare: sessionListPrepare(options), ListSessions: options.ListSessions,
+			Server: &globals.server, JSON: &globals.json,
+			Prepare: sessionListPrepare(options), ListSessions: options.ListSessions,
 		}),
 		ShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
 			Server: &globals.server, JSON: &globals.json, Verbose: diagnostics.verboseEnabled,
 			Debug: &diagnostics.debug, DiagnosticsWriter: diagnostics.writer, ShowSession: options.ShowSession,
 		}),
 		DeleteRunE: commandregistry.SessionDeleteRunE(commandregistry.SessionDeleteBinding{
-			Config: configs.Delete, SessionDiagnosticsBinding: diagnosticsBinding, DeleteSession: options.DeleteSession,
+			Config: configs.Delete, JSON: &globals.json,
+			SessionDiagnosticsBinding: diagnosticsBinding, DeleteSession: options.DeleteSession,
 		}),
 		DispatchesRunE: commandregistry.SessionDispatchesRunE(commandregistry.SessionDispatchesBinding{
 			Config: configs.Dispatches, Server: &globals.server, JSON: &globals.json,

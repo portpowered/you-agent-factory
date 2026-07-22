@@ -41,13 +41,19 @@
       },
       "precedence": {
         "order": [
-          "flags",
-          "args",
-          "env",
-          "config",
+          "cli",
           "stdin",
-          "defaults"
-        ]
+          "environment",
+          "operator-config",
+          "manifest-default",
+          "factory-signature-default"
+        ],
+        "withinTier": {
+          "scalar": "last",
+          "repeated": "append"
+        },
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
       },
       "channels": {
         "input": [

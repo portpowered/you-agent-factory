@@ -28,6 +28,7 @@ var specializedPackageSegments = map[string]Lane{
 }
 
 var explicitlyClassifiedPackages = map[string]Lane{
+	ModulePath + "/packages/packaged-factories":                      LaneMaintenance,
 	ModulePath + "/pkg/services/factory_sessions/execution/fixtures": LaneIntegration,
 	ModulePath + "/pkg/transports/cli/baseline":                      LaneFunctional,
 	ModulePath + "/pkg/transports/cli/clicontract":                   LaneContract,
