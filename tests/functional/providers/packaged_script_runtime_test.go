@@ -3,6 +3,7 @@ package providers
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -10,6 +11,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	platformprocess "github.com/portpowered/infinite-you/pkg/platform/process"
+	serviceedges "github.com/portpowered/infinite-you/pkg/services/edges"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -26,6 +30,7 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir,
+		Edges:      packagedScriptRuntimeEdges(t),
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
@@ -42,6 +47,15 @@ func TestPackagedScriptRuntime_FreshInstallExecutesFactoryRelativeScript(t *test
 	assertListedWorkText(t, support.ListDefaultSessionWork(t, server.URL()), "task", "complete", "packaged runtime success")
 }
 
+func packagedScriptRuntimeEdges(t *testing.T) serviceedges.Edges {
+	t.Helper()
+	runner, err := platformprocess.NewExecCommandRunner(exec.Command, platformclock.Real{}, nil)
+	if err != nil {
+		t.Fatalf("construct packaged script runtime command runner: %v", err)
+	}
+	return serviceedges.Edges{ScriptCommandRunner: runner}
+}
+
 func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("executable shebang scripts are not supported on Windows")
@@ -52,6 +66,7 @@ func TestPackagedScriptRuntime_NonZeroExitUsesStandardFailureOutcome(t *testing.
 
 	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
 		FactoryDir: factoryDir,
+		Edges:      packagedScriptRuntimeEdges(t),
 	})
 	defer server.Stop(t)
 	support.WaitForTerminalStatus(t, server.URL(), 5*time.Second)
@@ -76,7 +91,7 @@ func installPackagedScriptRuntimeFixture(t *testing.T, packageName, scriptBody s
   "name":%q,
   "workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
   "workers":[{"name":"runner","type":"SCRIPT_WORKER","command":%q}],
-  "workstations":[{"name":"run-script","worker":"runner","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}]}]
+  "workstations":[{"name":"run-script","worker":"runner","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"onFailure":[{"workType":"task","state":"failed"}],"definition":{"type":"SCRIPT_RUN","worker":"runner","body":"Run the packaged script."}}]
 }`, packageName, packagedRuntimeScriptPath))
 	if err := os.WriteFile(filepath.Join(factoryDir, "factory.json"), factoryJSON, 0o600); err != nil {
 		t.Fatalf("write customer factory.json: %v", err)

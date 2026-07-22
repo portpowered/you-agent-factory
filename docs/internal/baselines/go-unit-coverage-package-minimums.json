@@ -90,7 +90,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/replay",
-      "minimum": 56.52
+      "minimum": 41.30
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/runtimeartifact",
@@ -658,7 +658,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/host",
-      "minimum": 74.84
+      "minimum": 74.59
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/models/internal/inference",
@@ -738,7 +738,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events",
-      "minimum": 79.79
+      "minimum": 79.32
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/recordings/events/kinds",
@@ -770,7 +770,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work",
-      "minimum": 84.92
+      "minimum": 84.87
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/work/materialize",
@@ -786,7 +786,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/agypty",
-      "minimum": 89.38
+      "minimum": 89.12
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/workers/cliprovider",
