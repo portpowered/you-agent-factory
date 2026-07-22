@@ -7,8 +7,9 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/dataplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/responsestream"
+	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/live_runtime"
+	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/live_runtime/wire"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/stream"
 )
@@ -16,8 +17,7 @@ import (
 // Service is the canonical Factory Session application gateway for open, read, and lifecycle behavior.
 type Service struct {
 	host           Host
-	liveOpener     *dataplane.LiveOpener
-	liveLifecycle  *dataplane.LiveLifecycle
+	liveRuntime    liveruntime.Service
 	streams        *stream.Manager
 	reconnects     factorysessions.ReconnectCursorValidator
 	results        factoryruntime.SessionResultProjectionOperation
@@ -74,10 +74,13 @@ func NewWithResponseService(
 	if host == nil || sessions == nil || observer == nil || responseStreams == nil {
 		return nil
 	}
+	liveRuntime, err := liveruntimewire.NewService(liveRuntimeDependencies(host))
+	if err != nil {
+		return nil
+	}
 	return &Service{
 		host:           host,
-		liveOpener:     dataplane.NewLiveOpener(host),
-		liveLifecycle:  dataplane.NewLiveLifecycle(host),
+		liveRuntime:    liveRuntime,
 		streams:        stream.NewManagerWithResponseService(sessions, observer, responseStreams, responseEvents),
 		reconnects:     reconnects,
 		results:        results,
@@ -124,10 +127,23 @@ func (s *Service) OpenFactorySessionFromFolder(
 	return controlplane.OpenFromFolder(
 		ctx,
 		s.host,
-		s.liveOpener,
+		s.liveRuntime,
 		folderPath,
 		target,
 		validateOnly,
 		initNewFactory,
 	)
+}
+
+func liveRuntimeDependencies(host Host) liveruntime.Dependencies {
+	return liveruntime.Dependencies{
+		OpenForTarget:          host.OpenLiveSessionForTarget,
+		ListSessionIDs:         host.ListLiveSessionIDs,
+		GetSession:             host.GetLiveSession,
+		RequireSession:         host.RequireSession,
+		BuildProjectionContext: host.BuildSessionProjectionContext,
+		SessionFactory:         host.SessionFactory,
+		StopSession:            host.StopLiveSession,
+		ObserveControl:         host.ObserveLiveLifecycleControl,
+	}
 }

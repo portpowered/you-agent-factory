@@ -7,8 +7,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/dataplane"
 )
+
+type LiveOpener interface {
+	OpenForTarget(context.Context, factorysessions.Target) (string, error)
+}
 
 // ScaffoldHost materializes a new factory scaffold for init-new-factory opens.
 type ScaffoldHost interface {
@@ -35,7 +38,7 @@ type OpenControlHost interface {
 func OpenFromFolder(
 	ctx context.Context,
 	host OpenControlHost,
-	liveOpener *dataplane.LiveOpener,
+	liveOpener LiveOpener,
 	folderPath string,
 	target *factorysessions.TargetRef,
 	validateOnly bool,
@@ -89,7 +92,7 @@ func OpenFromFolder(
 func initNewFactoryAndOpenSession(
 	ctx context.Context,
 	host OpenControlHost,
-	liveOpener *dataplane.LiveOpener,
+	liveOpener LiveOpener,
 	folderPath string,
 ) (*factorysessions.OpenResult, error) {
 	resolvedFolder, err := host.ResolveSessionFolder(folderPath)

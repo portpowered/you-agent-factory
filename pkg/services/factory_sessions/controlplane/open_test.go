@@ -8,7 +8,6 @@ import (
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/dataplane"
 )
 
 type openControlHost struct {
@@ -45,7 +44,7 @@ type liveOpenHost struct {
 	err       error
 }
 
-func (h *liveOpenHost) OpenLiveSessionForTarget(_ context.Context, _ factorysessions.Target) (string, error) {
+func (h *liveOpenHost) OpenForTarget(_ context.Context, _ factorysessions.Target) (string, error) {
 	if h.err != nil {
 		return "", h.err
 	}
@@ -62,7 +61,7 @@ func TestOpenFromFolder_ValidateOnlyNotRunnableReturnsInitNewFactoryHint(t *test
 			errors.New("no runnable targets"),
 		),
 	}
-	opener := dataplane.NewLiveOpener(&liveOpenHost{err: errors.New("open should not run")})
+	opener := &liveOpenHost{err: errors.New("open should not run")}
 
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
@@ -90,7 +89,7 @@ func TestOpenFromFolder_PropagatesTargetSelectionError(t *testing.T) {
 			{Ref: factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "beta"}},
 		},
 	}
-	opener := dataplane.NewLiveOpener(&liveOpenHost{})
+	opener := &liveOpenHost{}
 
 	_, err := controlplane.OpenFromFolder(
 		context.Background(),
@@ -119,7 +118,7 @@ func TestOpenFromFolder_OpensSelectedTarget(t *testing.T) {
 			FactoryDir: "/tmp/factory",
 		}},
 	}
-	opener := dataplane.NewLiveOpener(&liveOpenHost{sessionID: "sess-opened"})
+	opener := &liveOpenHost{sessionID: "sess-opened"}
 
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),
@@ -181,7 +180,7 @@ func TestOpenFromFolder_InitNewFactoryScaffoldsAndOpens(t *testing.T) {
 			FactoryDir: "/tmp/factory",
 		}},
 	}
-	opener := dataplane.NewLiveOpener(&liveOpenHost{sessionID: "sess-init"})
+	opener := &liveOpenHost{sessionID: "sess-init"}
 
 	result, err := controlplane.OpenFromFolder(
 		context.Background(),

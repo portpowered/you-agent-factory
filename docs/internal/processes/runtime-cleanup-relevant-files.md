@@ -480,6 +480,16 @@ subscriptions through it. Keep transport consumers on the Factory Sessions root
 cursor contract; they must not construct stores or import this private
 capability.
 
+Live Factory Session opening, ordered registry reads, runtime snapshots,
+pause/resume decisions, lifecycle diagnostics, and stop coordination are owned
+by the runtime-bound subservice rooted at
+`pkg/services/factory_sessions/services/live_runtime`. Construct it through
+Factory Sessions-local Wire from explicit runtime host callbacks; construction
+must not open, start, stop, or inspect a runtime. The outer Factory Sessions
+service delegates live operations through this capability, while discovery and
+target selection remain with the identity owner and durable lifecycle remains
+with the durable-execution owner.
+
 Live Factory Session artifact projection follows that placement rule as well.
 `pkg/factory/sessions` normalizes checkpoint-derived and runtime artifacts into
 Factory-owned `FactoryArtifact` metadata, including capture and redaction

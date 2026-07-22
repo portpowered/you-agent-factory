@@ -18,7 +18,7 @@ func (s *Service) ResolveFactorySession(sessionID string) *factorysessions.LiveS
 	if s == nil || s.host == nil {
 		return nil
 	}
-	return s.host.GetLiveSession(sessionID)
+	return s.liveRuntime.Resolve(sessionID)
 }
 
 // SubscribeFactoryResponseEvents resolves exactly one live Factory Session and
@@ -30,7 +30,7 @@ func (s *Service) SubscribeFactoryResponseEvents(
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
-	session := s.host.GetLiveSession(request.SessionID)
+	session := s.liveRuntime.Resolve(request.SessionID)
 	if session == nil {
 		return nil, factorysessions.ErrSessionNotFound
 	}
@@ -64,7 +64,7 @@ func (s *Service) ListFactorySessions(ctx context.Context) ([]factorysessions.Re
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.ListLiveFactorySessions(ctx, s.host)
+	return s.liveRuntime.List(ctx)
 }
 
 // GetFactorySession returns one live session detail through control-plane read routing.
@@ -72,7 +72,7 @@ func (s *Service) GetFactorySession(ctx context.Context, sessionID string) (fact
 	if s == nil || s.host == nil {
 		return factorysessions.SessionProjection{}, fmt.Errorf("factory session gateway is required")
 	}
-	return controlplane.GetLiveFactorySession(ctx, s.host, sessionID)
+	return s.liveRuntime.Get(ctx, sessionID)
 }
 
 // GetFactorySessionSyncPreflight validates reconnect cursors before live event recovery.

@@ -94,15 +94,7 @@ func (s *Service) GetEngineStateSnapshotForSession(
 	if s == nil || s.host == nil {
 		return nil, fmt.Errorf("Factory Sessions gateway is required")
 	}
-	runtime, err := s.host.SessionFactory(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	snapshot, err := runtime.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get engine state snapshot: %w", err)
-	}
-	return snapshot, nil
+	return s.liveRuntime.Snapshot(ctx, sessionID)
 }
 
 func (fs *SessionRuntime) SubscribeSessionResponseStream(

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
@@ -31,13 +30,7 @@ func (s *Service) CloseFactorySession(ctx context.Context, sessionID string) err
 	if s == nil || s.host == nil {
 		return fmt.Errorf("factory session gateway is required")
 	}
-	if strings.TrimSpace(sessionID) == "" {
-		return fmt.Errorf("factory session id is required")
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return s.liveLifecycle.CloseSession(sessionID)
+	return s.liveRuntime.Close(ctx, sessionID)
 }
 
 func (s *Service) applyLiveLifecycleControl(
@@ -49,5 +42,5 @@ func (s *Service) applyLiveLifecycleControl(
 	if s == nil || s.host == nil {
 		return factorysessions.LifecycleControlResult{}, fmt.Errorf("factory session gateway is required")
 	}
-	return s.liveLifecycle.ApplyControl(ctx, sessionID, operation, request)
+	return s.liveRuntime.ApplyControl(ctx, sessionID, operation, request)
 }

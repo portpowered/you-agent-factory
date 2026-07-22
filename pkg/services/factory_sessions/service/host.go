@@ -8,7 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/dataplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/stream"
 )
 
@@ -19,8 +18,10 @@ type Host interface {
 	controlplane.SyncPreflightHost
 	controlplane.ResultReadHost
 	controlplane.DurableLifecycleHost
-	dataplane.LiveOpenHost
-	dataplane.LiveLifecycleHost
+	OpenLiveSessionForTarget(context.Context, factorysessions.Target) (string, error)
+	SessionFactory(string) (factory.Service, error)
+	StopLiveSession(string) error
+	ObserveLiveLifecycleControl(string, factorysessions.LifecycleControlKind, factorysessions.ControlRequest, factorysessions.LifecycleControlOutcome, factorysessions.LifecycleStatus, error)
 }
 
 type dependencyHost struct {
