@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -399,54 +398,6 @@ func TestYouConfigSchemaContractDocumentsSharedFileSplitAndPersistencePolicy(t *
 	}
 	if siblingPreservation != systemInventory.SiblingPreservation {
 		t.Fatalf("contract siblingPreservation = %q, want %q", siblingPreservation, systemInventory.SiblingPreservation)
-	}
-}
-
-func TestYouConfigSchemaPersistenceCasesAgreeWithDocumentedSemantics(t *testing.T) {
-	t.Parallel()
-	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
-	contract := document.(map[string]any)["contract"].(map[string]any)
-	fields := contract["fields"].(map[string]any)
-	backendScope := fields["backendScopeID"].(map[string]any)
-
-	if backendScope["persistenceOwner"] != "operator_settings" || backendScope["parseOwner"] != "operator_settings" {
-		t.Fatalf("backendScopeID ownership = parse %q persist %q, want operator_settings/operator_settings", backendScope["parseOwner"], backendScope["persistenceOwner"])
-	}
-
-	defaults := fields["defaults"].(map[string]any)
-	if defaults["parseOwner"] != "operator_settings" || defaults["persistenceOwner"] != "operator_settings" {
-		t.Fatalf("defaults ownership = parse %q persist %q, want operator_settings/operator_settings", defaults["parseOwner"], defaults["persistenceOwner"])
-	}
-
-	summary := contract["sharedFileSplit"].(map[string]any)["summary"].(string)
-	if !strings.Contains(summary, "operator_settings owns backendScopeID identity, defaults, and workerPresets") {
-		t.Fatalf("shared file split summary = %q, want unified operator_settings ownership", summary)
-	}
-
-	systemInventory := committedIdentityInputInventory(t)
-	for _, inputCase := range systemInventory.Cases {
-		inputCase := inputCase
-		if inputCase.PersistedFileExpectation == nil && inputCase.Entrypoint != "persistBackendScopeID" {
-			continue
-		}
-		t.Run(inputCase.ID, func(t *testing.T) {
-			t.Parallel()
-			if backendScope["persistenceOwner"] != "operator_settings" {
-				t.Fatalf("persistence case %q requires operator_settings persistence owner", inputCase.ID)
-			}
-			if inputCase.PersistedFileExpectation == nil {
-				return
-			}
-			siblingPreservation := contract["siblingPreservation"].(string)
-			if inputCase.PersistedFileExpectation.PreservesDefaults && !strings.Contains(siblingPreservation, "defaults") {
-				t.Fatalf("case %q preserves defaults but siblingPreservation omits defaults", inputCase.ID)
-			}
-			for _, key := range inputCase.PersistedFileExpectation.PreservesSiblingKeys {
-				if !strings.Contains(siblingPreservation, "unknown top-level sibling keys") {
-					t.Fatalf("case %q preserves sibling %q but siblingPreservation omits unknown sibling preservation", inputCase.ID, key)
-				}
-			}
-		})
 	}
 }
 

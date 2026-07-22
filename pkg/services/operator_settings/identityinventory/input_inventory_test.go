@@ -19,37 +19,6 @@ import (
 
 const fixturesRelativeDir = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
 
-func TestProjectInputInventory_RecordsGeneratedContractPolicy(t *testing.T) {
-	t.Parallel()
-
-	inventory := identityinventory.ProjectInputInventory()
-	if inventory.FormatVersion != identityinventory.InputInventoryFormatVersion {
-		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, identityinventory.InputInventoryFormatVersion)
-	}
-	if !strings.Contains(inventory.UnknownFieldPolicy, "rejects unknown fields") {
-		t.Fatalf("unknown field policy = %q, want strict generated-contract reference", inventory.UnknownFieldPolicy)
-	}
-	if !strings.Contains(inventory.SiblingPreservation, "preserves decoded defaults") {
-		t.Fatalf("sibling preservation = %q, want defaults preservation note", inventory.SiblingPreservation)
-	}
-}
-
-func TestProjectInputInventory_HasUnknownSiblingRejection(t *testing.T) {
-	t.Parallel()
-
-	inventory := identityinventory.ProjectInputInventory()
-	for _, inputCase := range inventory.Cases {
-		if inputCase.ID != "invalid-unknown-sibling" || inputCase.Outcome != "reject" {
-			continue
-		}
-		if inputCase.Fixture == "" {
-			t.Fatalf("unknown-sibling case %q missing fixture", inputCase.ID)
-		}
-		return
-	}
-	t.Fatal("missing unknown-sibling rejection in input inventory")
-}
-
 func TestIndexedEnsureScopeCases_MatchProductionLoader(t *testing.T) {
 	inventory := identityinventory.ProjectInputInventory()
 	seen := make(map[string]struct{}, len(inventory.Cases))

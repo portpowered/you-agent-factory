@@ -8,7 +8,7 @@ properties:
   id:
     type: string
     minLength: 1
-    pattern: '.*\S.*'
+    pattern: ".*[^\t-\r \u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000].*"
     description: Non-empty preset identifier after surrounding whitespace is trimmed.
   modelProvider:
     $ref: './GlobalConfigWorkerPresetModelProvider.yaml'

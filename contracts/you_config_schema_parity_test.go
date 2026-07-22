@@ -98,6 +98,43 @@ func TestYouConfigSchemaAndLoaderAcceptCanonicalizedPresetFields(t *testing.T) {
 	}
 }
 
+func TestYouConfigSchemaAndLoaderAcceptUnicodePaddedPresetFields(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{"workerPresets":[{"id":"research","modelProvider":"\u00a0openai\u00a0","reasoningEffort":"\u00a0HIGH\u00a0"}]}`)
+	instance, ok := parseJSONDocument(data)
+	if !ok {
+		t.Fatal("Unicode-padded worker preset must be valid JSON")
+	}
+	if err := youConfigSchema(t).Validate(instance); err != nil {
+		t.Fatalf("schema rejected Unicode-padded preset input: %v", err)
+	}
+
+	config, err := globalconfigmapping.Decode(data)
+	if err != nil {
+		t.Fatalf("Decode() rejected Unicode-padded preset input: %v", err)
+	}
+	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0].ModelProvider != "CODEX" || config.WorkerPresets[0].ReasoningEffort != "high" {
+		t.Fatalf("worker presets = %#v, want provider CODEX and reasoning effort high", config.WorkerPresets)
+	}
+}
+
+func TestYouConfigSchemaAndLoaderRejectUnicodeWhitespaceOnlyPresetID(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`{"workerPresets":[{"id":"\u00a0","modelProvider":"openai"}]}`)
+	instance, ok := parseJSONDocument(data)
+	if !ok {
+		t.Fatal("Unicode-whitespace worker preset must be valid JSON")
+	}
+	if err := youConfigSchema(t).Validate(instance); err == nil {
+		t.Fatal("schema accepted Unicode-whitespace-only preset id")
+	}
+	if _, err := globalconfigmapping.Decode(data); err == nil {
+		t.Fatal("Decode() accepted Unicode-whitespace-only preset id")
+	}
+}
+
 func TestYouConfigSchemaParityMatrixCoversAllIndexedCases(t *testing.T) {
 	for _, inputCase := range operator_settings.ProjectInputInventory().Cases {
 		assertParityRuleRegistered(t, "operator_settings", inputCase.ID)

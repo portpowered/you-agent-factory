@@ -9694,7 +9694,7 @@ components:
         id:
           type: string
           minLength: 1
-          pattern: .*\S.*
+          pattern: ".*[^\t-\r \N\_  - \L\P  　].*"
           description: Non-empty preset identifier after surrounding whitespace is trimmed.
         modelProvider:
           $ref: '#/components/schemas/GlobalConfigWorkerPresetModelProvider'
@@ -9706,11 +9706,11 @@ components:
     GlobalConfigWorkerPresetModelProvider:
       type: string
       description: Concrete supported model provider or alias; surrounding whitespace is trimmed, and symbolic DEFAULT is not accepted for presets.
-      pattern: ^[ \t\r\n]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[ \t\r\n]*$
+      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:AGY|ANTHROPIC|CLAUDE|CODEX|CURSOR|CURSOR_AGENT|GEMINI|KIRO|OPENAI|OPENCODE|PI|agent|agy|anthropic|antigravity|claude|codex|cursor|cursor-agent|gemini|kiro|kiro-cli|openai|opencode|pi)[\t-\r \N\_  - \L\P  　]*$"
     GlobalConfigWorkerPresetReasoningEffort:
       type: string
       description: Optional reasoning effort; surrounding whitespace and letter case are normalized, and an empty value is treated as unspecified.
-      pattern: ^[ \t\r\n]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH])?[ \t\r\n]*$
+      pattern: "^[\t-\r \N\_  - \L\P  　]*(?:[mM][iI][nN][iI][mM][aA][lL]|[lL][oO][wW]|[mM][eE][dD][iI][uU][mM]|[hH][iI][gG][hH])?[\t-\r \N\_  - \L\P  　]*$"
     WorkRequest:
       type: object
       additionalProperties: false

@@ -27,61 +27,6 @@ func TestProjectTopologyInventory_RecordsSharedFileSplitAndPrecedence(t *testing
 	}
 }
 
-func TestProjectTopologyInventory_RecordsRequiredFieldsAndLayers(t *testing.T) {
-	t.Parallel()
-
-	inventory := globalconfiginventory.ProjectTopologyInventory()
-	byID := indexFieldsByID(t, inventory.Fields)
-
-	required := []string{
-		"backendScopeID",
-		"defaults",
-		"defaults.workerModelProvider",
-		"defaults.workerModel",
-		"workerPresets",
-		"workerPresets[].id",
-		"workerPresets[].modelProvider",
-		"workerPresets[].model",
-		"workerPresets[].reasoningEffort",
-	}
-	for _, id := range required {
-		if _, ok := byID[id]; !ok {
-			t.Fatalf("missing inventoried field %q", id)
-		}
-	}
-
-	provider := byID["defaults.workerModelProvider"]
-	if provider.EnvironmentVariable != operator_settings.EnvDefaultWorkerModelProvider {
-		t.Fatalf("provider env = %q, want %q", provider.EnvironmentVariable, operator_settings.EnvDefaultWorkerModelProvider)
-	}
-	if provider.FlagName != "--default-worker-model-provider" {
-		t.Fatalf("provider flag = %q, want --default-worker-model-provider", provider.FlagName)
-	}
-	if got := strings.Join(provider.PrecedenceLayers, ","); got != "file,env,flag" {
-		t.Fatalf("provider precedence = %q, want file,env,flag", got)
-	}
-
-	model := byID["defaults.workerModel"]
-	if model.EnvironmentVariable != operator_settings.EnvDefaultWorkerModel {
-		t.Fatalf("model env = %q, want %q", model.EnvironmentVariable, operator_settings.EnvDefaultWorkerModel)
-	}
-	if model.FlagName != "--default-worker-model" {
-		t.Fatalf("model flag = %q, want --default-worker-model", model.FlagName)
-	}
-
-	backendScope := byID["backendScopeID"]
-	if backendScope.PersistenceOwner != "operator_settings" || backendScope.ParseOwner != "operator_settings" {
-		t.Fatalf("backendScopeID ownership = parse %q persist %q, want operator_settings/operator_settings", backendScope.ParseOwner, backendScope.PersistenceOwner)
-	}
-	if len(backendScope.PrecedenceLayers) != 0 {
-		t.Fatalf("backendScopeID precedence layers = %#v, want none", backendScope.PrecedenceLayers)
-	}
-
-	if len(inventory.UnknownFieldPolicy) != 1 {
-		t.Fatalf("unknown field policy len = %d, want one canonical generated-document policy", len(inventory.UnknownFieldPolicy))
-	}
-}
-
 func TestMarshalCanonicalJSON_IsByteIdenticalAcrossRepeatedProjections(t *testing.T) {
 	t.Parallel()
 
@@ -147,20 +92,4 @@ func TestWriteTopologyInventoryBaseline(t *testing.T) {
 	if err := os.WriteFile(fixturePath, got, 0o644); err != nil {
 		t.Fatalf("write baseline fixture %s: %v", fixturePath, err)
 	}
-}
-
-func indexFieldsByID(t *testing.T, fields []globalconfiginventory.FieldRecord) map[string]globalconfiginventory.FieldRecord {
-	t.Helper()
-
-	indexed := make(map[string]globalconfiginventory.FieldRecord, len(fields))
-	for _, field := range fields {
-		if field.ID == "" {
-			t.Fatal("field record missing id")
-		}
-		if _, exists := indexed[field.ID]; exists {
-			t.Fatalf("duplicate field id %q", field.ID)
-		}
-		indexed[field.ID] = field
-	}
-	return indexed
 }

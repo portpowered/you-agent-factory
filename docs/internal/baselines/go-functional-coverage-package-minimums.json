@@ -70,7 +70,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/metrics",
-      "minimum": 72.00
+      "minimum": 73.33
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/platform/portablefiles",
@@ -660,7 +660,7 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtime",
-      "minimum": 60.29
+      "minimum": 61.02
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimebinding",

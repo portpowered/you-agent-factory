@@ -38,6 +38,7 @@ func TestGlobalConfigContract_AcceptsSupportedDocumentShapes(t *testing.T) {
 				{"id":"fast","modelProvider":"CLAUDE","reasoningEffort":""}
 			]
 		}`,
+		`{"workerPresets":[{"id":"research","modelProvider":"\u00a0openai\u00a0","reasoningEffort":"\u00a0HIGH\u00a0"}]}`,
 	} {
 		assertGlobalConfigValidates(t, schema, payload)
 	}
@@ -53,6 +54,7 @@ func TestGlobalConfigContract_RejectsUnsupportedDocumentShapes(t *testing.T) {
 		{name: "free-form defaults field", payload: `{"defaults":{"provider":"codex"}}`},
 		{name: "missing preset id", payload: `{"workerPresets":[{"modelProvider":"codex"}]}`},
 		{name: "blank preset id", payload: `{"workerPresets":[{"id":"   ","modelProvider":"codex"}]}`},
+		{name: "Unicode-whitespace preset id", payload: `{"workerPresets":[{"id":"\u00a0","modelProvider":"codex"}]}`},
 		{name: "missing preset provider", payload: `{"workerPresets":[{"id":"build"}]}`},
 		{name: "symbolic preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"DEFAULT"}]}`},
 		{name: "unsupported preset provider", payload: `{"workerPresets":[{"id":"build","modelProvider":"other"}]}`},
