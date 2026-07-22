@@ -14,39 +14,40 @@ import (
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	"github.com/portpowered/infinite-you/pkg/services/operator_settings/globalconfiginventory"
 	identityinventory "github.com/portpowered/infinite-you/pkg/services/operator_settings/identityinventory"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig"
 )
 
 const fixturesRelativeDir = "pkg/services/operator_settings/identityinventory/testdata/fixtures"
 
-func TestProjectInputInventory_RecordsTolerantUnknownFieldPolicy(t *testing.T) {
+func TestProjectInputInventory_RecordsGeneratedContractPolicy(t *testing.T) {
 	t.Parallel()
 
 	inventory := identityinventory.ProjectInputInventory()
 	if inventory.FormatVersion != identityinventory.InputInventoryFormatVersion {
 		t.Fatalf("FormatVersion = %q, want %q", inventory.FormatVersion, identityinventory.InputInventoryFormatVersion)
 	}
-	if !strings.Contains(inventory.UnknownFieldPolicy, "ignores other top-level keys on read") {
-		t.Fatalf("unknown field policy = %q, want tolerant load reference", inventory.UnknownFieldPolicy)
+	if !strings.Contains(inventory.UnknownFieldPolicy, "rejects unknown fields") {
+		t.Fatalf("unknown field policy = %q, want strict generated-contract reference", inventory.UnknownFieldPolicy)
 	}
-	if !strings.Contains(inventory.SiblingPreservation, "preserves defaults") {
+	if !strings.Contains(inventory.SiblingPreservation, "preserves decoded defaults") {
 		t.Fatalf("sibling preservation = %q, want defaults preservation note", inventory.SiblingPreservation)
 	}
 }
 
-func TestProjectInputInventory_HasTolerantSiblingCase(t *testing.T) {
+func TestProjectInputInventory_HasUnknownSiblingRejection(t *testing.T) {
 	t.Parallel()
 
 	inventory := identityinventory.ProjectInputInventory()
 	for _, inputCase := range inventory.Cases {
-		if inputCase.Category != "tolerant-sibling" || inputCase.Outcome != "accept" {
+		if inputCase.ID != "invalid-unknown-sibling" || inputCase.Outcome != "reject" {
 			continue
 		}
 		if inputCase.Fixture == "" {
-			t.Fatalf("tolerant-sibling case %q missing fixture", inputCase.ID)
+			t.Fatalf("unknown-sibling case %q missing fixture", inputCase.ID)
 		}
 		return
 	}
-	t.Fatal("missing tolerant-sibling accept case in input inventory")
+	t.Fatal("missing unknown-sibling rejection in input inventory")
 }
 
 func TestIndexedEnsureScopeCases_MatchProductionLoader(t *testing.T) {
@@ -87,6 +88,8 @@ func runEnsureScopeCase(t *testing.T, inputCase identityinventory.InputCase) {
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operatorsettings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
 		uuid.NewString,
+		globalconfig.Decode,
+		globalconfig.Encode,
 		configPath,
 	)
 	if inputCase.Outcome == "accept" {

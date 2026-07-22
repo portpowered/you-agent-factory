@@ -318,7 +318,7 @@
         "policy": "identity loading reads only backendScopeID and ignores other top-level keys; identity persistence rewrites through a raw-message map that preserves unrelated sibling keys"
       }
     ],
-    "siblingPreservation": "persistBackendScopeID preserves defaults, workerPresets, and unknown top-level sibling keys already present in the shared config file",
+    "siblingPreservation": "persistBackendScopeID re-encodes the generated GlobalConfig contract and preserves decoded defaults and workerPresets",
     "fields": {
       "backendScopeID": {
         "inventoryId": "backendScopeID",

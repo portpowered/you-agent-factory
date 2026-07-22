@@ -239,7 +239,8 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 	}
 	createTemporaryFile := provideOperatorSettingsCreateTemporaryFile(edges2)
 	operatorsettingsIDGenerator := provideOperatorSettingsIDGenerator(edges2)
-	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator)
+	configEncoder := provideOperatorConfigEncoder()
+	backendScopeEnsurer := provideOperatorBackendScopeEnsurer(fileSystem, createTemporaryFile, operatorsettingsIDGenerator, configDecoder, configEncoder)
 	runtimeInstanceIDGenerator := provideFactorySessionRuntimeInstanceIDGenerator(edges2)
 	replayRecordingReader := provideFactorySessionReplayRecordingReader(edges2)
 	runtimeopeningFactory, err := runtimeopening.NewFactory(providersessionsService, javaScriptWorkflowDefinitions, workflowPreviewOperation, v9, namedPathResolver, durableExecutionFactory, workerExecutionFactory, modelsService, v10, v11, v14, v15, v16, v17, v18, runtimeRecorderFactory, v20, replayExecutionFactory, v23, workersRuntimeExecutorsFactory, workersMockCommandRunnerFactory, v24, v25, v30, factoryScaffoldInitializer, editableFactoryValidator, initialFactorySnapshotFactory, assembly, contentMaterializer, v33, v34, replayRuntimeConfigDecoder, replayArtifactLoader, v19, clockResolver, sessionLoggerFactory, workerCommandRunnerAdapter, processRuntimeFactory, backendScopeEnsurer, runtimeInstanceIDGenerator, homeDirectoryResolver, replayRecordingReader)
@@ -462,6 +463,7 @@ var servicesSet = wire.NewSet(factorysessions.NewRequestPreparation, factory.New
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
 	provideOperatorConfigDecoder,
+	provideOperatorConfigEncoder,
 	provideSystemInitializationInspectPath,
 	provideSystemInitializationLegacyFactoryMigrationFileSystem,
 	provideOperatorConfigLoader,

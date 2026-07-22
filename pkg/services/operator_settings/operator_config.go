@@ -47,8 +47,9 @@ type WorkerPreset struct {
 // Config holds normalized operator settings after the serialized global-config
 // contract has been decoded at the transport boundary.
 type Config struct {
-	Defaults      Defaults
-	WorkerPresets []WorkerPreset
+	BackendScopeID string
+	Defaults       Defaults
+	WorkerPresets  []WorkerPreset
 }
 
 // ResolvedDefaults holds effective operator defaults after precedence and
@@ -113,7 +114,7 @@ func (cfg Config) Normalize() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{Defaults: Defaults{
+	return Config{BackendScopeID: strings.TrimSpace(cfg.BackendScopeID), Defaults: Defaults{
 		WorkerModelProvider: strings.TrimSpace(cfg.Defaults.WorkerModelProvider),
 		WorkerModel:         strings.TrimSpace(cfg.Defaults.WorkerModel),
 	}, WorkerPresets: presets}, nil

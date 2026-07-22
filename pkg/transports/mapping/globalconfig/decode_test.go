@@ -30,6 +30,9 @@ func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *tes
 	if err != nil {
 		t.Fatalf("LoadFileConfig() error = %v", err)
 	}
+	if got, want := config.BackendScopeID, "local-11111111-1111-4111-8111-111111111111"; got != want {
+		t.Fatalf("backendScopeID = %q, want %q", got, want)
+	}
 	if got, want := config.Defaults, (operatorsettings.Defaults{
 		WorkerModelProvider: "codex",
 		WorkerModel:         "gpt-5.4",
@@ -41,6 +44,34 @@ func TestLoadFileConfig_DecodesGeneratedContractAndNormalizesDomainValues(t *tes
 	}
 	if len(config.WorkerPresets) != 1 || config.WorkerPresets[0] != wantPreset {
 		t.Fatalf("worker presets = %#v, want %#v", config.WorkerPresets, []operatorsettings.WorkerPreset{wantPreset})
+	}
+}
+
+func TestEncode_RoundTripsCanonicalIdentityAndSiblingSettings(t *testing.T) {
+	want := operatorsettings.Config{
+		BackendScopeID: "local-11111111-1111-4111-8111-111111111111",
+		Defaults: operatorsettings.Defaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "gpt-5.4",
+		},
+		WorkerPresets: []operatorsettings.WorkerPreset{{
+			ID: "research", ModelProvider: "CODEX", Model: "gpt-5.4-mini", ReasoningEffort: "high",
+		}},
+	}
+
+	payload, err := globalconfig.Encode(want)
+	if err != nil {
+		t.Fatalf("Encode() error = %v", err)
+	}
+	got, err := globalconfig.Decode(payload)
+	if err != nil {
+		t.Fatalf("Decode(Encode()) error = %v", err)
+	}
+	if got.BackendScopeID != want.BackendScopeID || got.Defaults != want.Defaults {
+		t.Fatalf("round trip config = %#v, want identity/defaults %#v", got, want)
+	}
+	if len(got.WorkerPresets) != 1 || got.WorkerPresets[0] != want.WorkerPresets[0] {
+		t.Fatalf("round trip presets = %#v, want %#v", got.WorkerPresets, want.WorkerPresets)
 	}
 }
 

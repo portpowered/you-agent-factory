@@ -2,11 +2,12 @@
 
 Use this map when changing the public REST contract.
 
-- Shared filesystem documents represented in OpenAPI should decode through the
-  generated model in a focused `pkg/transports/mapping` package, then map into
-  domain-owned values. Inject that decoder into the service filesystem loader
-  from `pkg/wire` so services retain IO and normalization ownership without
-  importing generated HTTP contracts; global config follows this pattern in
+- Shared filesystem documents represented in OpenAPI should decode and encode
+  through the generated model in a focused `pkg/transports/mapping` package,
+  then map into domain-owned values. Inject that codec into the service
+  filesystem loader from `pkg/wire` so services retain IO and normalization
+  ownership without importing generated HTTP contracts; global-config identity
+  persistence follows this pattern in
   `pkg/transports/mapping/globalconfig` and `pkg/services/operator_settings`.
 - OpenAPI 3.0 exclusive numeric bounds use `minimum`/`maximum` together with
   boolean `exclusiveMinimum`/`exclusiveMaximum`. The contract projection in

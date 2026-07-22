@@ -52,16 +52,11 @@ var youConfigSchemaParityOverrides = map[string]youConfigSchemaParityRule{
 		kind:   schemaParityNotApplicable,
 		reason: "malformed on-disk JSON is rejected before schema instance validation",
 	},
-	"operator_settings_identity:valid-tolerates-unknown-sibling": {
-		kind:         schemaParityDiverges,
-		schemaAccept: boolPtr(false),
-		reason:       "the operator_settings identity loader tolerates unknown top-level siblings while the schema enforces a closed root object",
-	},
 	"operator_settings_identity:valid-missing-file": {
 		kind:   schemaParityNotApplicable,
 		reason: "missing config file has no JSON document for schema validation",
 	},
-	"operator_settings_identity:valid-whitespace-config": {
+	"operator_settings_identity:invalid-whitespace-config": {
 		kind:   schemaParityNotApplicable,
 		reason: "whitespace-only config file content is not a JSON document for schema validation",
 	},
@@ -316,6 +311,8 @@ func runSystemEnsureScopeSchemaParityCase(
 		platformfilesystem.Local{},
 		func(dir, pattern string) (operator_settings.TemporaryFile, error) { return os.CreateTemp(dir, pattern) },
 		uuid.NewString,
+		globalconfigmapping.Decode,
+		globalconfigmapping.Encode,
 		configPath,
 	)
 	if inputCase.Outcome == "accept" {

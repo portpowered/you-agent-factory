@@ -25,6 +25,9 @@ func decodeTestConfig(data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("unexpected trailing JSON")
 	}
 	config := Config{}
+	if generated.BackendScopeID != nil {
+		config.BackendScopeID = *generated.BackendScopeID
+	}
 	if generated.Defaults != nil {
 		if generated.Defaults.WorkerModelProvider != nil {
 			config.Defaults.WorkerModelProvider = *generated.Defaults.WorkerModelProvider
@@ -46,6 +49,41 @@ func decodeTestConfig(data []byte) (Config, error) {
 		}
 	}
 	return config.Normalize()
+}
+
+func encodeTestConfig(config Config) ([]byte, error) {
+	generated := factoryapi.GlobalConfig{}
+	if config.BackendScopeID != "" {
+		generated.BackendScopeID = &config.BackendScopeID
+	}
+	if config.Defaults != (Defaults{}) {
+		generated.Defaults = &factoryapi.GlobalConfigDefaults{}
+		if config.Defaults.WorkerModelProvider != "" {
+			generated.Defaults.WorkerModelProvider = &config.Defaults.WorkerModelProvider
+		}
+		if config.Defaults.WorkerModel != "" {
+			generated.Defaults.WorkerModel = &config.Defaults.WorkerModel
+		}
+	}
+	if config.WorkerPresets != nil {
+		presets := make([]factoryapi.GlobalConfigWorkerPreset, len(config.WorkerPresets))
+		for i, preset := range config.WorkerPresets {
+			presets[i] = factoryapi.GlobalConfigWorkerPreset{
+				Id:            preset.ID,
+				ModelProvider: factoryapi.GlobalConfigWorkerPresetModelProvider(preset.ModelProvider),
+			}
+			if preset.Model != "" {
+				presets[i].Model = &preset.Model
+			}
+			if preset.ReasoningEffort != "" {
+				effort := factoryapi.GlobalConfigWorkerPresetReasoningEffort(preset.ReasoningEffort)
+				presets[i].ReasoningEffort = &effort
+			}
+		}
+		generated.WorkerPresets = &presets
+	}
+	payload, err := json.MarshalIndent(generated, "", "  ")
+	return append(payload, '\n'), err
 }
 
 func TestLoadFileDefaults_MissingFileReturnsEmptyDefaults(t *testing.T) {

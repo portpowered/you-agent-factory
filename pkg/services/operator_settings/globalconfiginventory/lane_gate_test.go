@@ -25,11 +25,11 @@ var productionLoaderSources = []struct {
 }{
 	{
 		relativePath: "pkg/services/operator_settings/operator_config.go",
-		sha256Hex:    "7414fa453ddedfdc9f3f4f860401da2428c8f74a3e7722d2bc9fb5b87af5dcc5",
+		sha256Hex:    "b3fd70dca2683f7bc9827198fd0694ce90c6dc931eb6d9447fdb5cb0cea05dbc",
 	},
 	{
 		relativePath: "pkg/services/operator_settings/identity.go",
-		sha256Hex:    "3096225cbc7ccfed3d71cec83e44450b6910d7b4dccf209b6d045015a978438e",
+		sha256Hex:    "1da54445379289a7967188821d016fd5a86f308e870ba5684d6ab66f0bdef59b",
 	},
 	{
 		relativePath: "pkg/services/operator_settings/provider_scope.go",

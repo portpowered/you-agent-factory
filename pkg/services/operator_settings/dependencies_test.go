@@ -12,3 +12,7 @@ var testIDGenerator IDGenerator = uuid.NewString
 var testCreateTemp CreateTemporaryFile = func(dir, pattern string) (TemporaryFile, error) {
 	return os.CreateTemp(dir, pattern)
 }
+
+func ensureTestBackendScope(path string) (ResolvedBackendScope, error) {
+	return EnsureLocalBackendScope(testFiles, testCreateTemp, testIDGenerator, decodeTestConfig, encodeTestConfig, path)
+}

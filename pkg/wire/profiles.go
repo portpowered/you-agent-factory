@@ -259,9 +259,11 @@ func provideOperatorBackendScopeEnsurer(
 	files operatorsettings.FileSystem,
 	createTemp operatorsettings.CreateTemporaryFile,
 	generateID operatorsettings.IDGenerator,
+	decode operatorsettings.ConfigDecoder,
+	encode operatorsettings.ConfigEncoder,
 ) operatorsettings.BackendScopeEnsurer {
 	return func(path string) (operatorsettings.ResolvedBackendScope, error) {
-		return operatorsettings.EnsureLocalBackendScope(files, createTemp, generateID, path)
+		return operatorsettings.EnsureLocalBackendScope(files, createTemp, generateID, decode, encode, path)
 	}
 }
 

@@ -32,6 +32,10 @@ type IDGenerator func() string
 // Wire supplies the OpenAPI-generated contract decoder at the transport boundary.
 type ConfigDecoder func([]byte) (Config, error)
 
+// ConfigEncoder maps domain values into the serialized generated global
+// configuration contract. Wire supplies the transport-boundary implementation.
+type ConfigEncoder func(Config) ([]byte, error)
+
 // ConfigLoader loads the operator-owned configuration from an explicit path.
 type ConfigLoader func(string) (Config, error)
 

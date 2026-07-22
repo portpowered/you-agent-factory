@@ -76,6 +76,10 @@ func provideOperatorConfigDecoder() operatorsettings.ConfigDecoder {
 	return globalconfigmapping.Decode
 }
 
+func provideOperatorConfigEncoder() operatorsettings.ConfigEncoder {
+	return globalconfigmapping.Encode
+}
+
 func provideOperatorDefaultsResolver(files operatorsettings.FileSystem, decode operatorsettings.ConfigDecoder) operatorsettings.DefaultsResolver {
 	return func(home string, environment operatorsettings.Defaults, flags operatorsettings.FlagOverrides) (operatorsettings.ResolvedDefaults, error) {
 		return operatorsettings.ResolveFromHomeWithEnvironment(files, decode, home, environment, flags)

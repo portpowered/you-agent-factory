@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	operatorsettings "github.com/portpowered/infinite-you/pkg/services/operator_settings"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -41,7 +42,7 @@ func requireEOF(decoder *json.Decoder) error {
 }
 
 func mapConfig(generated factoryapi.GlobalConfig) operatorsettings.Config {
-	config := operatorsettings.Config{}
+	config := operatorsettings.Config{BackendScopeID: optionalString(generated.BackendScopeID)}
 	if generated.Defaults != nil {
 		config.Defaults = operatorsettings.Defaults{
 			WorkerModelProvider: optionalString(generated.Defaults.WorkerModelProvider),
@@ -62,6 +63,49 @@ func mapConfig(generated factoryapi.GlobalConfig) operatorsettings.Config {
 		}
 	}
 	return config
+}
+
+// Encode maps normalized Operator Settings values into the generated
+// GlobalConfig model and serializes one canonical filesystem document.
+func Encode(config operatorsettings.Config) ([]byte, error) {
+	generated := factoryapi.GlobalConfig{}
+	if scopeID := strings.TrimSpace(config.BackendScopeID); scopeID != "" {
+		generated.BackendScopeID = &scopeID
+	}
+	if config.Defaults != (operatorsettings.Defaults{}) {
+		generated.Defaults = &factoryapi.GlobalConfigDefaults{
+			WorkerModelProvider: optionalStringPointer(config.Defaults.WorkerModelProvider),
+			WorkerModel:         optionalStringPointer(config.Defaults.WorkerModel),
+		}
+	}
+	if config.WorkerPresets != nil {
+		presets := make([]factoryapi.GlobalConfigWorkerPreset, len(config.WorkerPresets))
+		for i, preset := range config.WorkerPresets {
+			presets[i] = factoryapi.GlobalConfigWorkerPreset{
+				Id:            preset.ID,
+				ModelProvider: factoryapi.GlobalConfigWorkerPresetModelProvider(preset.ModelProvider),
+				Model:         optionalStringPointer(preset.Model),
+			}
+			if preset.ReasoningEffort != "" {
+				effort := factoryapi.GlobalConfigWorkerPresetReasoningEffort(preset.ReasoningEffort)
+				presets[i].ReasoningEffort = &effort
+			}
+		}
+		generated.WorkerPresets = &presets
+	}
+
+	payload, err := json.MarshalIndent(generated, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("encode generated global config: %w", err)
+	}
+	return append(payload, '\n'), nil
+}
+
+func optionalStringPointer(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func optionalString(value *string) string {
