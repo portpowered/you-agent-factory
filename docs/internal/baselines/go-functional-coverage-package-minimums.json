@@ -1269,6 +1269,10 @@
       "minimum": 69.23
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/globalconfig",
+      "minimum": 85.71
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/transports/mapping/optional",
       "minimum": 97.50
     },
