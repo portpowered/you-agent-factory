@@ -105,4 +105,37 @@ describe("static CLI controls", () => {
       expect.stringContaining("conflicts with --named, --factory"),
     );
   });
+
+  it("localizes repeated controls and relationship feedback", async () => {
+    const user = userEvent.setup();
+    const run = commandControls("you.run");
+    render(<StaticCliControls locale="zh-CN" model={run} />);
+
+    const directory = screen.getByRole("textbox", { name: "--dir" });
+    expect(directory).toHaveAccessibleDescription(
+      expect.stringContaining("相关输入：--named, --factory。"),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "<invocation-input> 的第 1 个值" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", {
+        name: "添加另一个 <invocation-input> 值",
+      }),
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "移除 <invocation-input> 的第 1 个值",
+      }),
+    ).toBeVisible();
+
+    await user.type(directory, "./factory");
+    await user.type(
+      screen.getByRole("textbox", { name: "--named" }),
+      "example",
+    );
+    expect(directory).toHaveAccessibleErrorMessage(
+      expect.stringContaining("此值与 --named, --factory 冲突。"),
+    );
+  });
 });

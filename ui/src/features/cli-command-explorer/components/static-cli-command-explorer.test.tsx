@@ -134,3 +134,40 @@ describe("static CLI command explorer", () => {
     );
   });
 });
+
+describe("localized static CLI command explorer", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("localizes the selected nested command surface", async () => {
+    const user = userEvent.setup();
+    render(<StaticCliCommandExplorer locale="zh-CN" state={readyState()} />);
+
+    expect(screen.getByRole("navigation", { name: "命令" })).toBeVisible();
+    await user.click(
+      screen.getByRole("treeitem", {
+        name: /^you run生命周期：active$/,
+      }),
+    );
+
+    expect(
+      screen.getByRole("region", { name: "已选择命令：you run" }),
+    ).toBeVisible();
+    expect(screen.getByRole("heading", { name: "用法" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "示例" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "输入关系" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "静态输入" })).toBeVisible();
+    expect(
+      screen.getByText("mutually-exclusive：--dir, --named, --factory"),
+    ).toBeVisible();
+  });
+});
