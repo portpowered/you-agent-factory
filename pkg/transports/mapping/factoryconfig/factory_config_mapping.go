@@ -129,7 +129,10 @@ func validateGeneratedFactoryBoundary(apiCfg factoryapi.Factory) error {
 // Flatten serializes an internal factory configuration into canonical JSON that is
 // stable for persisted output and downstream tooling.
 func (m *FactoryConfigMapper) Flatten(cfg *interfaces.FactoryConfig) ([]byte, error) {
-	apiCfg := factoryAPIFromInternalConfig(cfg)
+	apiCfg, err := factoryAPIFromInternalConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
 	if isDefaultPetriOrchestratorAPI(apiCfg.Orchestrator) {
 		apiCfg.Orchestrator = nil
 	}
@@ -152,9 +155,13 @@ func (m *FactoryConfigMapper) Flatten(cfg *interfaces.FactoryConfig) ([]byte, er
 	return encoded, nil
 }
 
-func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {
+func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) (factoryapi.Factory, error) {
 	if cfg == nil {
-		return factoryapi.Factory{}
+		return factoryapi.Factory{}, nil
+	}
+	examples, err := invocationExamplesAPIFromInternal(cfg.Examples)
+	if err != nil {
+		return factoryapi.Factory{}, err
 	}
 
 	return factoryapi.Factory{
@@ -166,7 +173,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		InputTypes:          inputTypesAPIFromInternal(cfg.InputTypes),
 		InvocationReturn:    invocationReturnAPIFromInternal(cfg.InvocationReturn),
 		InvocationSignature: invocationSignatureAPIFromInternal(cfg.InvocationSignature),
-		Examples:            invocationExamplesAPIFromInternal(cfg.Examples),
+		Examples:            examples,
 		Orchestrator:        orchestratorAPIFromInternal(cfg),
 		WorkTypes:           workTypesAPIFromInternal(cfg.WorkTypes),
 		Resources:           resourcesAPIFromInternal(cfg.Resources),
@@ -174,7 +181,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		Layout:              factoryLayoutAPIFromInternal(cfg.Layout),
 		Workers:             workersAPIFromInternal(cfg.Workers, cfg.Workstations),
 		Workstations:        workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
-	}
+	}, nil
 }
 
 // NameValueAPIFromInternal maps a validated internal localized value into the
@@ -296,42 +303,44 @@ func invocationOutputContractModePtr(value string) *factoryapi.FactoryInvocation
 	return &mode
 }
 
-func invocationExamplesAPIFromInternal(examples []interfaces.InvocationExampleConfig) *[]factoryapi.FactoryInvocationExample {
+func invocationExamplesAPIFromInternal(examples []interfaces.InvocationExampleConfig) (*[]factoryapi.FactoryInvocationExample, error) {
 	if len(examples) == 0 {
-		return nil
+		return nil, nil
 	}
 	values := make([]factoryapi.FactoryInvocationExample, len(examples))
 	for i, example := range examples {
+		args, err := invocationExampleArgsAPIFromInternal(example.Args, fmt.Sprintf("factory.examples[%d].args", i))
+		if err != nil {
+			return nil, err
+		}
 		values[i] = factoryapi.FactoryInvocationExample{
 			Name:        example.Name,
 			Description: *NameValueAPIFromInternal(&example.Description),
-			Args:        invocationExampleArgsAPIFromInternal(example.Args),
+			Args:        args,
 		}
 	}
-	return &values
+	return &values, nil
 }
 
-func invocationExampleArgsAPIFromInternal(args map[string]interface{}) factoryapi.FactoryInvocationArguments {
+func invocationExampleArgsAPIFromInternal(args map[string]interface{}, path string) (factoryapi.FactoryInvocationArguments, error) {
 	values := make(factoryapi.FactoryInvocationArguments, len(args))
 	for name, value := range args {
 		var union factoryapi.FactoryInvocationArguments_AdditionalProperties
 		switch typed := value.(type) {
 		case string:
-			_ = union.FromFactoryInvocationArguments0(typed)
-		case []string:
-			_ = union.FromFactoryInvocationArguments1(append([]string(nil), typed...))
-		case []interface{}:
-			items := make([]string, 0, len(typed))
-			for _, item := range typed {
-				if text, ok := item.(string); ok {
-					items = append(items, text)
-				}
+			if err := union.FromFactoryInvocationArguments0(typed); err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", path, name, err)
 			}
-			_ = union.FromFactoryInvocationArguments1(items)
+		case []string:
+			if err := union.FromFactoryInvocationArguments1(append([]string(nil), typed...)); err != nil {
+				return nil, fmt.Errorf("%s.%s: %w", path, name, err)
+			}
+		default:
+			return nil, fmt.Errorf("%s.%s must be a string or array of strings", path, name)
 		}
 		values[name] = union
 	}
-	return values
+	return values, nil
 }
 
 func validatePortableLayoutBoundaryJSON(data []byte) error {
@@ -911,9 +920,10 @@ func factoryReferenceName(cfg *interfaces.FactoryConfig) factoryapi.FactoryName 
 	return factoryapi.FactoryName("factory")
 }
 
-// FactoryConfigToOpenAPI converts the internal factory config into the generated
-// OpenAPI model without passing through normalized on-disk JSON.
-func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) factoryapi.Factory {
+// FactoryConfigToOpenAPI converts a valid internal factory config into the
+// generated OpenAPI model without passing through normalized on-disk JSON.
+// It rejects values that cannot be represented by the public contract.
+func FactoryConfigToOpenAPI(cfg *interfaces.FactoryConfig) (factoryapi.Factory, error) {
 	return factoryAPIFromInternalConfig(cfg)
 }
 

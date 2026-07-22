@@ -57,7 +57,10 @@ func TestFactoryConfigToOpenAPI_PreservesWorkPropagation(t *testing.T) {
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	workstation := requireSingleGeneratedWorkstation(t, generated)
 	if workstation.WorkPropagation == nil {
 		t.Fatal("expected generated workstation workPropagation")
@@ -96,7 +99,10 @@ func TestFactoryConfigToOpenAPI_OmitsUnsetWorkPropagation(t *testing.T) {
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	workstation := requireSingleGeneratedWorkstation(t, generated)
 	if workstation.WorkPropagation != nil {
 		t.Fatalf("expected unset workPropagation to be omitted, got %#v", workstation.WorkPropagation)

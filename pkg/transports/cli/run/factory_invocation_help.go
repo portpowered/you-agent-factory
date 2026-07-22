@@ -418,7 +418,11 @@ func invocationExampleCommandArguments(signature *interfaces.InvocationSignature
 	}
 	parameters := make(map[string]interfaces.InvocationParameterConfig, len(signature.Parameters))
 	for _, parameter := range signature.Parameters {
-		parameters[parameter.Name] = parameter
+		for _, key := range append([]string{parameter.Name, parameter.ExternalName}, parameter.Aliases...) {
+			if key = strings.TrimSpace(key); key != "" {
+				parameters[key] = parameter
+			}
+		}
 	}
 	keys := make([]string, 0, len(args))
 	for key := range args {

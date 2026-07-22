@@ -71,6 +71,31 @@ func TestFormatInvocationExampleRendersStructuredStdin(t *testing.T) {
 	}
 }
 
+func TestFormatInvocationExampleResolvesAliasAndExternalNameBindings(t *testing.T) {
+	t.Parallel()
+
+	signature := &interfaces.InvocationSignatureConfig{Parameters: []interfaces.InvocationParameterConfig{
+		{Name: "input", ExternalName: "prompt", Aliases: []string{"p"}, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "POSITIONAL", Position: 1}}},
+		{Name: "body", ExternalName: "content", Aliases: []string{"c"}, Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: "STDIN"}}},
+	}}
+	tests := []struct {
+		name string
+		args interfaces.InvocationExampleArguments
+		want string
+	}{
+		{name: "alias follows positional binding", args: interfaces.InvocationExampleArguments{"p": "hello"}, want: "you run --factory factory.json hello\n"},
+		{name: "external name follows stdin binding", args: interfaces.InvocationExampleArguments{"content": "from stdin"}, want: "printf '%s\\n' 'from stdin' | you run --factory factory.json\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			example := interfaces.InvocationExampleConfig{Name: test.name, Args: test.args}
+			if got := formatInvocationExample("you run --factory factory.json", signature, example); got != "  "+test.want {
+				t.Fatalf("formatInvocationExample() = %q, want %q", got, "  "+test.want)
+			}
+		})
+	}
+}
+
 // Work owns ambiguity detection. This transport test verifies only the stable
 // CLI representation and observability of the injected role's typed failure.
 func TestObserveInvocationRejection_AmbiguousInputRecordsStructuredLogAndMetrics(t *testing.T) {

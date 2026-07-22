@@ -250,7 +250,10 @@ func TestFactoryConfigToOpenAPI_CopiesOptionalCollections(t *testing.T) {
 		}},
 	}
 
-	generated := FactoryConfigToOpenAPI(cfg)
+	generated, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	stopWords[0] = "MUTATED"
 	stopWords = append(stopWords, "LATE")
 	env["MODE"] = "mutated"

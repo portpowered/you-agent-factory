@@ -16,7 +16,10 @@ func TestFactoryEntityDescriptionsRoundTripWithoutAffectingTopology(t *testing.T
 	cfg := factoryWithLocalizedDescriptions()
 	wantTopology := topologyIdentity(cfg)
 
-	public := FactoryConfigToOpenAPI(cfg)
+	public, err := FactoryConfigToOpenAPI(cfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigToOpenAPI: %v", err)
+	}
 	roundTrip, err := FactoryConfigFromOpenAPI(public)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)

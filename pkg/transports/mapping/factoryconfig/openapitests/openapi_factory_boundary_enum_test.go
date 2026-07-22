@@ -67,6 +67,47 @@ func TestFactoryInvocationExamples_RejectsDualSourcesAndInvalidArgumentShapes(t 
 	}
 }
 
+func TestFactoryInvocationExamples_CanonicalWriterRejectsInvalidInternalArgumentShapes(t *testing.T) {
+	tests := []struct {
+		name  string
+		value interface{}
+		key   string
+	}{
+		{name: "mixed array", value: []interface{}{"alpha", 3}, key: "tag"},
+		{name: "unsupported scalar", value: 3, key: "count"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := &interfaces.FactoryConfig{
+				Name: "invalid-writer",
+				Examples: []interfaces.InvocationExampleConfig{{
+					Name:        "invalid",
+					Description: interfaces.NameValueConfig{Type: interfaces.NameValueTypeLocalizableAsset, Value: "Invalid"},
+					Args:        interfaces.InvocationExampleArguments{test.key: test.value},
+				}},
+			}
+			want := "factory.examples[0].args." + test.key + " must be a string or array of strings"
+			for name, write := range map[string]func() error{
+				"OpenAPI mapping": func() error {
+					_, err := FactoryConfigToOpenAPI(cfg)
+					return err
+				},
+				"canonical flatten": func() error {
+					_, err := MarshalCanonicalFactoryConfig(cfg)
+					return err
+				},
+			} {
+				t.Run(name, func(t *testing.T) {
+					err := write()
+					if err == nil || !strings.Contains(err.Error(), want) {
+						t.Fatalf("writer error = %v, want containing %q", err, want)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestFactoryInvocationExamples_YAMLRepresentationPreservesStructuredValues(t *testing.T) {
 	cfg := interfaces.FactoryConfig{Name: "yaml", Examples: []interfaces.InvocationExampleConfig{{Name: "yaml-example", Description: interfaces.NameValueConfig{Type: interfaces.NameValueTypeLocalizableAsset, Value: "YAML example", ID: "yaml-example-id", Locales: []string{"en-US"}, Values: map[string]string{"es-ES": "Ejemplo YAML"}}, Args: interfaces.InvocationExampleArguments{"input": "line one\nline two", "tag": []string{"one", "two"}}}}}
 	data, err := yaml.Marshal(cfg)
