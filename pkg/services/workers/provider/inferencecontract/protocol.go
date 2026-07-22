@@ -84,6 +84,8 @@ func (w *protocolWriter) WriteEvent(ctx context.Context, event EventDraft) error
 	}
 	draft := event.Draft()
 	if err := w.validateDraft(draft); err != nil {
+		w.closed = true
+		w.terminalErr = err
 		return err
 	}
 	if w.bufferTerminalTail || beginsTerminalTail(draft) {

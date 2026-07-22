@@ -233,6 +233,25 @@ func TestExecuteInvocationPreservesIgnoredDestinationFailure(t *testing.T) {
 	}
 }
 
+func TestExecuteInvocationPreservesIgnoredProtocolValidationFailure(t *testing.T) {
+	t.Parallel()
+	destination := &orderedWriter{}
+	var writeErr, closeErr error
+	integration := lifecycleIntegration{invoke: func(ctx context.Context, request contract.InvocationRequest, writer contract.ResponseWriter) error {
+		writeErr = writer.WriteEvent(ctx, event(t, "other-invocation", workers.KindRun, workers.PhaseStarted, "", runPayload(t, "started")))
+		closeErr = writer.Close(ctx, contract.SuccessfulCompletion(contract.NewResponse(contract.ResponseInput{Content: "answer"})))
+		return nil
+	}}
+
+	err := contract.ExecuteInvocation(context.Background(), integration, request(), destination)
+	assertProtocolRule(t, writeErr, "invocation_correlation")
+	assertProtocolRule(t, closeErr, "duplicate_close")
+	assertProtocolRule(t, err, "invocation_correlation")
+	if len(destination.order) != 0 || destination.closes != 0 {
+		t.Fatalf("destination received output after invalid draft: order = %v, closes = %d", destination.order, destination.closes)
+	}
+}
+
 func TestExecuteInvocationRejectsMissingAndDuplicateClose(t *testing.T) {
 	t.Parallel()
 	t.Run("missing", func(t *testing.T) {
