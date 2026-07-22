@@ -99,41 +99,41 @@ define run_timed_step
 endef
 
 
-.PHONY: default build install bundle-api 
+.PHONY: default build install bundle-api
 .PHONY: fmt vet deps deps-tidy clean init typecheck release lint
 
 .PHONY: test test-full test-unit test-unit-fresh test-lane-audit test-maintenance test-integration test-contract test-stress test-release
-.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check 
+.PHONY: test-functional test-functional-long test-backend-functional functional-boundary-check
 .PHONY: test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend
-.PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race 
-.PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval 
+.PHONY: test-unit-coverage test-functional-coverage test-backend-coverage test-coverage-go test-race
+.PHONY: test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval
 
-.PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api 
-.PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage 
+.PHONY: verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api
+.PHONY: verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage
 
 .PHONY: backend-dependency-graph
 
 .PHONY: generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire
 
-.PHONY: wire-smoke api-smoke api-package-pack-smoke 
-.PHONY: contracts-validate contracts-generate contracts-check contracts-smoke 
+.PHONY: wire-smoke api-smoke api-package-pack-smoke
+.PHONY: contracts-validate contracts-generate contracts-check contracts-smoke
 
 .PHONY: cli-contract-smoke cli-manifest-generate cli-manifest-check
 
-.PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check 
+.PHONY: mcp-contract-check mcp-contract-smoke mcp-discovery-generate mcp-discovery-check
 
-.PHONY: docs-reference-check docs-reference-smoke 
+.PHONY: docs-reference-check docs-reference-smoke
 
-.PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke 
+.PHONY: script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke
 .PHONY: backend-size pkg-maint pkg-file-count pkg-boundary pkg-structure durable-runtime-construction-check logging-boundary-check
-.PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout 
-.PHONY: compatibility-alias-check retired-surface-check readme-check deadcodedashboard-verify 
+.PHONY: response-stream-stress-smoke release-surface-smoke artifact-contract-closeout
+.PHONY: compatibility-alias-check retired-surface-check readme-check deadcodedashboard-verify
 
-.PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests 
+.PHONY: ci ci-typecheck ci-verify-build-contracts ci-verify-tests
 
-.PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright 
-.PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install 
-.PHONY: ui-storybook  ui-deadcode 
+.PHONY: ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright
+.PHONY: ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install
+.PHONY: ui-storybook  ui-deadcode
 
 
 default:

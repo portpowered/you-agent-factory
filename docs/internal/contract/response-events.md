@@ -1,10 +1,10 @@
 # Response events
 
-# Why? 
-We need a CLI agnostic event stream of operations as the CLI responds back so that our internal systems can process them. 
+# Why?
+We need a CLI agnostic event stream of operations as the CLI responds back so that our internal systems can process them.
 
 ## What
-We have this in response events. 
+We have this in response events.
 
 Response events are the provider-neutral, transient observations produced while a
 worker is running. They let the CLI and API show messages, tool activity,

@@ -1,24 +1,24 @@
 # deep interface abstractions
 
-The large system definitions are largely complex because they expose an abstraction that is fairly complex. 
-We try to create abstractions that are deep and complex. 
+The large system definitions are largely complex because they expose an abstraction that is fairly complex.
+We try to create abstractions that are deep and complex.
 
 ## Workers
 
-Workers are things that can do work. 
+Workers are things that can do work.
 
-We can allow many things to work: 
+We can allow many things to work:
 
 1. An AI Agent wrapped in a CLI can do work
 2. A script can do work
 3. Some code that we defined can do work
 4. A remote webservice API can do work
 5. A container running in someone's webhost can do work
-6. An AI model running locally can do work. 
+6. An AI model running locally can do work.
 
 ## Workstations
 
-Workstations are placed where work is worked on by a worker, and also moved and transformed. 
+Workstations are placed where work is worked on by a worker, and also moved and transformed.
 
 A workstation can be things like:
 1. (inert) do nothing
@@ -31,7 +31,7 @@ A workstation can be things like:
 8. (consume) consume a work and do nothign with it
 9. (event hook) take in events and generate work
 10. (cron) run on a clock and repeat every X times
-11. (accumulator/skip) listen to x work, drop the first Y, and then let the next N go. 
+11. (accumulator/skip) listen to x work, drop the first Y, and then let the next N go.
 
 ### More
 Generally any operator in a reactive stream is a workstation
@@ -39,9 +39,9 @@ https://reactivex.io/documentation/operators.html
 
 ## Factory
 
-A factory is a coordinator of work, workers and workstations. 
+A factory is a coordinator of work, workers and workstations.
 
-A factory can be: 
+A factory can be:
 1. a petri graph based transition orchestrator runtime
 2. a javascript runtime
 3. a stream processor
@@ -52,7 +52,7 @@ A factory can be:
 
 An automation is an inert daemon that does some work or is activated by trigger:
 
-An automation can be: 
+An automation can be:
 1. a cron
 2. a sse event hook listener
 3. a device filewatcher that triggers on file system events
@@ -61,7 +61,7 @@ An automation can be:
 
 ## Resources/Limits
 
-Limits are things that prevent things from being done: 
+Limits are things that prevent things from being done:
 
 1. money
 2. request rate per second

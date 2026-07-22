@@ -1,8 +1,8 @@
-# What? 
-This defines the backend structure and how all components are set. 
-It defines the meta system, not necessarily deep internals of how each component works. 
+# What?
+This defines the backend structure and how all components are set.
+It defines the meta system, not necessarily deep internals of how each component works.
 
-# overview 
+# overview
 pkg/
     -> initializer
     -> root/
@@ -86,13 +86,13 @@ be removed.
 
 # intializer
 
-intiializer is the function that is responsible for initializing the appropriate bundle roots and services during invocation. 
+intiializer is the function that is responsible for initializing the appropriate bundle roots and services during invocation.
 
-i.e. the CLI may want to activate a http server mode. the initializer is responsible for getting the pointer instances of the services for 
+i.e. the CLI may want to activate a http server mode. the initializer is responsible for getting the pointer instances of the services for
 1. worker daemons
 2. crons and automations
 
-and triggering start/stop as appropriate. 
+and triggering start/stop as appropriate.
 
 type Initializer struct{
     Start(ctx context.Context, StartRequest) (StartResponse, error)
@@ -103,7 +103,7 @@ func NewInitializer(sessionService, workerService, etc) Initializer {
 
 }
 
-In general the initializer is very thing, and does mostly nothing but initilize/lifecycle operations. 
+In general the initializer is very thing, and does mostly nothing but initilize/lifecycle operations.
 
 ## Initializer conformance checklist
 
@@ -118,7 +118,7 @@ In general the initializer is very thing, and does mostly nothing but initilize/
 
 platform are utility functions that are generally used across services
 
-i.e. 
+i.e.
 
 platform
     /filesystem
@@ -128,10 +128,10 @@ platform
     /clock
     /random
 
-These represent base structures and utilities that are injected generally across services that have no meaningful functionality. 
+These represent base structures and utilities that are injected generally across services that have no meaningful functionality.
 
-Generally, platform functions are to be mockable and are to be injected as necessary. 
-i.e. the platform may construct a clock, but a mock may be injected for functional tests to test system behavior. 
+Generally, platform functions are to be mockable and are to be injected as necessary.
+i.e. the platform may construct a clock, but a mock may be injected for functional tests to test system behavior.
 
 ## Platform conformance checklist
 
@@ -145,10 +145,10 @@ i.e. the platform may construct a clock, but a mock may be injected for function
 
 # wire
 
-Wire is the primary dependenct injection functiont hat wires all the dpeendencies together. 
-its largely just about grabbing and providing data, it has no functionality implemented on its own. There are no real constructors, it delegates constructors to downstreams. 
+Wire is the primary dependenct injection functiont hat wires all the dpeendencies together.
+its largely just about grabbing and providing data, it has no functionality implemented on its own. There are no real constructors, it delegates constructors to downstreams.
 
-It has a single function in wire.InjectBundle, and nothing else is exposed in the wire package. 
+It has a single function in wire.InjectBundle, and nothing else is exposed in the wire package.
 
 ## Wire conformance checklist
 
@@ -164,7 +164,7 @@ It has a single function in wire.InjectBundle, and nothing else is exposed in th
 
 # transports
 
-transports compose of 
+transports compose of
 
 transports/
     http
@@ -173,7 +173,7 @@ transports/
 
 ## http
 
-The http server constructs a http.handler that handles requests, it wires all the dependent handlers from all the services together. It does not itself implement any handlesr. 
+The http server constructs a http.handler that handles requests, it wires all the dependent handlers from all the services together. It does not itself implement any handlesr.
 
 type Handler struct {
     sessionHandler sessionservicehttp.Handler
@@ -183,13 +183,13 @@ func NewHandler(sessionHandler sessionservicehttp.Handler) {
 
 }
 
-The HTTP server handles the wiring of the routes to the handlers manually, but that's basically it. 
+The HTTP server handles the wiring of the routes to the handlers manually, but that's basically it.
 
 ## MCP/CLI
 
-The same functional wrapping logic holds for the MCP/CLI. 
+The same functional wrapping logic holds for the MCP/CLI.
 
-i.e. the CLI is responsible for flags and what not, but the actual run functions that are used to perform execution and transformation between the interface presentation and the internal system interfaces are done bespoke to each service implementation's transports package for the function. 
+i.e. the CLI is responsible for flags and what not, but the actual run functions that are used to perform execution and transformation between the interface presentation and the internal system interfaces are done bespoke to each service implementation's transports package for the function.
 
 ## Transport conformance checklist
 
@@ -203,7 +203,7 @@ i.e. the CLI is responsible for flags and what not, but the actual run functions
 
 # service
 
-each service declares an interface and an implmememntation of an interface. 
+each service declares an interface and an implmememntation of an interface.
 
 pkg/services/<factorysessions>
     -> service.go (an interface declaration)
@@ -220,7 +220,7 @@ pkg/services/<factorysessions>
 
 ## root package (services/factorysessions)
 
-root package has no implementation logic, its just a 
+root package has no implementation logic, its just a
 ```
 interface Blah {
     GetX()
@@ -295,7 +295,7 @@ internal implementation types as cross-service contracts.
 | Service-local Wire performs construction only and owns no lifecycle or domain behavior. | General review rules and selected constructor/lifecycle scanners. | **Partial** | Extend Wire behavior checks to every service-local Wire package. |
 
 ## service-owned transports (`services/factorysession/transports/http`)
-This just declares a handler that handles a request. A root server gets injected an instance of the transport then uses that to handle certain requests. 
+This just declares a handler that handles a request. A root server gets injected an instance of the transport then uses that to handle certain requests.
 This transport is responsible for interpreting between the request interface and the internal details of the interface.
 
 
@@ -343,7 +343,7 @@ additional constraint that other programs cannot call subservices directly.
 
 # tests
 
-the system has tests in the general form as follows: 
+the system has tests in the general form as follows:
 - unit tests
 - functional tests
 - integration tests
@@ -361,16 +361,16 @@ the system has tests in the general form as follows:
 
 pkg/<my-package>/*_test.go
 
-These tests instantiate a class and test the internal logic. 
+These tests instantiate a class and test the internal logic.
 
 ## constraints
-Generally, these are not allowed to call across services. i.e. they don't perform initialization or call new on the children. 
+Generally, these are not allowed to call across services. i.e. they don't perform initialization or call new on the children.
 They are supposed to be fast.
 
-We don't for example create the entire subservices here as we're not mean to, that's a functional tests job. 
+We don't for example create the entire subservices here as we're not mean to, that's a functional tests job.
 
 ## density
-we keep these plentiful as necessary but light, because we want them to run fast. 
+we keep these plentiful as necessary but light, because we want them to run fast.
 
 ## Unit-test conformance checklist
 
@@ -387,19 +387,19 @@ we keep these plentiful as necessary but light, because we want them to run fast
 tests/functional/**.go
 
 ## logic
-The functional tests are intended to test customer facing expected behaviors. 
+The functional tests are intended to test customer facing expected behaviors.
 
 the functioanl tests call nito the root.go and instantiate the entire internal bundle and test it as an aggregate, we mock the edges.
 
 ## constraints
 - they can't call into the internal service logic
-- they generall operate blackbox so don't have systems internals except those that can be observed at the edges. 
+- they generall operate blackbox so don't have systems internals except those that can be observed at the edges.
 
 ## structure
 
 tests/functional/<feature-set>/my_test.go
 
-i.e. 
+i.e.
 we want to implement dynamic workflows
 
 tests/functional/dynamic_workflows/http/start_test.go
@@ -434,7 +434,7 @@ feature owner.
 
 ## density
 
-we have these as many as possible since they test system flows the best. 
+we have these as many as possible since they test system flows the best.
 
 ## Functional-test conformance checklist
 
@@ -457,10 +457,10 @@ tests/integration/**.go
 the integration tests are used to test the system behavior with the real filesystem and behavior and integrations and see it really works e2e.
 
 ## constraints
-- these are full white box 
+- these are full white box
 - we try to keep these as low as possible
 ## density
-- we keep one when possible for happy case on each integration path. 
+- we keep one when possible for happy case on each integration path.
 
 ## Integration-test conformance checklist
 

@@ -1,11 +1,11 @@
 # Backend
 
-## What? 
+## What?
 
-The backend is largely a golang based backend that is responsible for orchestrating AI agents together. The architecture is largely straightforward and is generic to extension in various angles. 
+The backend is largely a golang based backend that is responsible for orchestrating AI agents together. The architecture is largely straightforward and is generic to extension in various angles.
 
-### abstractions 
-The primary abstractions the backend works off of are: 
+### abstractions
+The primary abstractions the backend works off of are:
 - factory
 - work
 - workers
@@ -16,12 +16,12 @@ The primary abstractions the backend works off of are:
 - automations
 - recordings
 
-### interactions 
-- A factory is a place where workers do work in workstations. 
-- Factories are defined in a factory definition. 
-- A factory is run inside of a factory session. 
+### interactions
+- A factory is a place where workers do work in workstations.
+- Factories are defined in a factory definition.
+- A factory is run inside of a factory session.
 - A factory session takes care of handling of wiring up the workers, work, automations and event recorder with the factory.
-- A worker can use models to run. 
+- A worker can use models to run.
 
 ## package-structured
 see ./packaged-structure.md for more details on how package structures is supposed to work.
@@ -67,10 +67,10 @@ flowchart LR
 
 ## System boundaries
 
-The structure of the architecture is largely composed of a modular monolith, wherein we split each layer into a series of services. 
+The structure of the architecture is largely composed of a modular monolith, wherein we split each layer into a series of services.
 Each service is responsible for some layer of complexity and all other consumers integrate against that abstracted service.
 
-The services are meant to be deep, providing a simple abstraction that users of its interface can interact, but not outwardly. 
+The services are meant to be deep, providing a simple abstraction that users of its interface can interact, but not outwardly.
 
 
 ```mermaid
@@ -150,22 +150,22 @@ owners; Petri-net concepts stay behind the internal runtime boundary.
 ### System state of a session
 
 
-The system largely operates off of a concept of a "factory session", which are instances of a loop along with its accoutrements, such as crons, daemon sse hooks, and other pollers. 
+The system largely operates off of a concept of a "factory session", which are instances of a loop along with its accoutrements, such as crons, daemon sse hooks, and other pollers.
 
-There is a bit of complex wiring between factory sessions and runtime so we break it out as follows: 
+There is a bit of complex wiring between factory sessions and runtime so we break it out as follows:
 
-a factory session is responsible for: 
+a factory session is responsible for:
 1. retrieving the config/definition
 2. converting all the config/definition and turning it into a declaration of what all services need to be activated
 3. wiring the runtime factory with the appropriate set of definitions to execute
-4. deploying the factory runtime and the appropriate services. 
+4. deploying the factory runtime and the appropriate services.
 
-For example: 
+For example:
 
 1. bob asks for a factory session to do some work
-2. factory session gets the definition fo the factory, and figures out what all things needs to be deployed. 
-3. factory session sends requests to create all those resources. 
-4. factory wires the created resources together, i.e. tells the factory runtime service, what all worker hooks needs to be pushed to, wires the evnet hooks to push from th efactory runtime to the recorder etc. 
+2. factory session gets the definition fo the factory, and figures out what all things needs to be deployed.
+3. factory session sends requests to create all those resources.
+4. factory wires the created resources together, i.e. tells the factory runtime service, what all worker hooks needs to be pushed to, wires the evnet hooks to push from th efactory runtime to the recorder etc.
 
 The factory runtime is generally unaware of how the workers, recordsings, models, etc are running, it only knows that it has the service hooks wired to push to them. Same is true for all the other services.
 
@@ -290,21 +290,21 @@ This split keeps the frontend lightweight and keeps the backend authoritative. T
 
 ### Editor state
 
-The graph editor state represents the website's way of managing the world state. 
+The graph editor state represents the website's way of managing the world state.
 
 The event stream is cloud-backed input, but the dashboard snapshot used by current activity is client-computed from events:
 
-You can sort of see here that basically as events get streamed in, the events get streamed in. 
+You can sort of see here that basically as events get streamed in, the events get streamed in.
 
 1. from that event stream we construct snapshots of the world state at every single sample time.
-2. Then the world state at a sample time presents the factory graph. the workstations, workers, work types, states, and their projection layout. 
-3. Then from that world state,  corresponding new UI state is persisted and combined with an internal editor stream of operations. 
-4. From the editor operation stream + world state, a projected currented factory/editor state is created. 
+2. Then the world state at a sample time presents the factory graph. the workstations, workers, work types, states, and their projection layout.
+3. Then from that world state,  corresponding new UI state is persisted and combined with an internal editor stream of operations.
+4. From the editor operation stream + world state, a projected currented factory/editor state is created.
 5. from the editor state, we map the factory/editor state into a projection that is bespoke to the view of teh "react flow library"
-6. from that flow library projection and the editor state we create a fnal state that is called the view model. 
-7. the state changes from the view model are projected out to the components, and components render and operate against changes by sending hook calls into the view model. 
-8. the view model is responsible for injecting calls into the editor state, which is then responsible for sending API calls to the backend. 
-9. the backend, as it finishes changes sends back events to the event stream denoting the world stat echanges as a consequences of API operations. 
+6. from that flow library projection and the editor state we create a fnal state that is called the view model.
+7. the state changes from the view model are projected out to the components, and components render and operate against changes by sending hook calls into the view model.
+8. the view model is responsible for injecting calls into the editor state, which is then responsible for sending API calls to the backend.
+9. the backend, as it finishes changes sends back events to the event stream denoting the world stat echanges as a consequences of API operations.
 
 
 ```mermaid
