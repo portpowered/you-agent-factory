@@ -356,10 +356,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `sourceBindings`, with an external key where applicable and an explicit input
   target. Declare each canonical handler route in `handlerBindings`; its stable
   ID is the value referenced by the input's `handlerBindingId`.
-  Every canonical command precedence record uses the exact highest-to-lowest
-  order `cli`, `stdin`, `environment`, `operator-config`, `manifest-default`,
-  `factory-signature-default`. `climanifest.CanonicalPrecedence` owns the pure
-  policy: higher tiers replace lower tiers, scalar observations from one binding
+  Every command containing a canonical input must declare a precedence record,
+  even when the command is not otherwise marked authoritative. That record uses
+  the exact highest-to-lowest order `cli`, `stdin`, `environment`,
+  `operator-config`, `manifest-default`, `factory-signature-default`.
+  `climanifest.CanonicalPrecedence` owns the pure policy: higher tiers replace
+  lower tiers, scalar observations from one binding
   use the last value, repeated observations append in order, and multiple
   same-tier bindings for one input are rejected.
   Static-plus-Factory composition is owned by

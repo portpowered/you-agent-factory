@@ -7,6 +7,12 @@
       "name": "invoke",
       "path": "example invoke",
       "aliases": [],
+      "precedence": {
+        "order": ["cli", "stdin", "environment", "operator-config", "manifest-default", "factory-signature-default"],
+        "withinTier": {"scalar": "last", "repeated": "append"},
+        "acrossTiers": "replace",
+        "multipleBindings": "reject"
+      },
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "example.invoke",

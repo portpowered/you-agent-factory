@@ -47,8 +47,8 @@ var canonicalCLIPrecedence = []string{
 func cliCommandPrecedenceDiagnostics(document, commandKey string, command map[string]any) []Diagnostic {
 	precedence, exists := command["precedence"].(map[string]any)
 	if !exists {
-		if command["completeness"] == "authoritative" {
-			return []Diagnostic{newDiagnostic("cli.precedence.missing", instancePath([]string{"commands", commandKey, "precedence"}), "authoritative command is missing source precedence", document)}
+		if command["completeness"] == "authoritative" || cliCommandHasCanonicalInputs(commandKey, command) {
+			return []Diagnostic{newDiagnostic("cli.precedence.missing", instancePath([]string{"commands", commandKey, "precedence"}), "command requiring canonical source resolution is missing source precedence", document)}
 		}
 		return nil
 	}
@@ -84,6 +84,15 @@ func cliCommandPrecedenceDiagnostics(document, commandKey string, command map[st
 		}
 	}
 	return diagnostics
+}
+
+func cliCommandHasCanonicalInputs(commandKey string, command map[string]any) bool {
+	for _, input := range collectCLIInputs(commandKey, command) {
+		if cliInputIsCanonical(input.record) {
+			return true
+		}
+	}
+	return false
 }
 
 func cliCommandInputAmbiguityDiagnostics(document, commandKey string, command map[string]any) []Diagnostic {

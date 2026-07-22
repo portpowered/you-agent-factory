@@ -10,8 +10,16 @@ func TestCLIManifestDiagnosticsValidateCanonicalPrecedence(t *testing.T) {
 		path   string
 	}{
 		{
-			name: "missing precedence",
+			name: "authoritative command missing precedence",
 			mutate: func(command map[string]any) {
+				delete(command, "precedence")
+			},
+			code: "cli.precedence.missing", path: "/commands/example/precedence",
+		},
+		{
+			name: "non-authoritative canonical command missing precedence",
+			mutate: func(command map[string]any) {
+				delete(command, "completeness")
 				delete(command, "precedence")
 			},
 			code: "cli.precedence.missing", path: "/commands/example/precedence",
@@ -47,6 +55,20 @@ func TestCLIManifestDiagnosticsValidateCanonicalPrecedence(t *testing.T) {
 			diagnostics := cliManifestDiagnostics("contract.json", document)
 			assertCLIDiagnostic(t, diagnostics, test.code, test.path)
 		})
+	}
+}
+
+func TestCLIManifestDiagnosticsAcceptPartialLegacyCommandWithoutPrecedence(t *testing.T) {
+	document := map[string]any{"commands": map[string]any{"example": map[string]any{
+		"id": "example", "path": "example", "completeness": "partial",
+		"flags": map[string]any{"example.flag.legacy": map[string]any{
+			"id": "example.flag.legacy", "long": "legacy",
+		}},
+	}}}
+
+	diagnostics := cliManifestDiagnostics("contract.json", document)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want partial legacy command without precedence to remain valid", diagnostics)
 	}
 }
 
