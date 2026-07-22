@@ -27,7 +27,11 @@ primary-result behavior.
   outside this package. Customer integrations can reuse
   `inferencecontract/testkit.Run` with fresh factories for final-only,
   streaming, and tool-lifecycle modes; pass at least two opaque identities so
-  conformance never depends on a built-in provider name.
+  conformance never depends on a built-in provider name. Reuse
+  `inferencecontract/testkit.RunAdverse` for normalized failure, cancellation,
+  deadline, response-sink backpressure, and terminal-state scenarios. A sink
+  write failure is terminal: preserve it for orchestration and reject every
+  later provider write or close without sending a competing completion.
 
 ## CLI run and submit command contracts
 

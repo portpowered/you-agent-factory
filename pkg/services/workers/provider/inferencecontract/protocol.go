@@ -62,6 +62,7 @@ type protocolWriter struct {
 	lifecycles         map[string]lifecycleState
 	finalMessage       string
 	hasFinalMessage    bool
+	terminalErr        error
 }
 
 func newProtocolWriter(invocationID string, provider Identity, destination ResponseWriter) *protocolWriter {
@@ -77,7 +78,9 @@ func (w *protocolWriter) WriteEvent(ctx context.Context, event EventDraft) error
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
-		return protocolError("write_after_close", "response event cannot be written after completion")
+		err := protocolError("write_after_close", "response event cannot be written after completion")
+		w.terminalErr = errors.Join(w.terminalErr, err)
+		return err
 	}
 	draft := event.Draft()
 	if err := w.validateDraft(draft); err != nil {
@@ -88,7 +91,12 @@ func (w *protocolWriter) WriteEvent(ctx context.Context, event EventDraft) error
 		w.terminalBuffer = append(w.terminalBuffer, event)
 		return nil
 	}
-	return w.destination.WriteEvent(ctx, event)
+	if err := w.destination.WriteEvent(ctx, event); err != nil {
+		w.closed = true
+		w.terminalErr = err
+		return err
+	}
+	return nil
 }
 
 func (w *protocolWriter) Close(ctx context.Context, completion Completion) error {
@@ -99,25 +107,36 @@ func (w *protocolWriter) Close(ctx context.Context, completion Completion) error
 
 func (w *protocolWriter) closeLocked(ctx context.Context, completion Completion) error {
 	if w.closed {
-		return protocolError("duplicate_close", "response completion may be closed exactly once")
+		err := protocolError("duplicate_close", "response completion may be closed exactly once")
+		w.terminalErr = errors.Join(w.terminalErr, err)
+		return err
 	}
 	w.closed = true
 	if err := w.validateCompletion(completion); err != nil {
+		w.terminalErr = err
 		return err
 	}
 	for _, event := range w.terminalBuffer {
 		if err := w.destination.WriteEvent(ctx, event); err != nil {
+			w.terminalErr = err
 			return err
 		}
 	}
-	return w.destination.Close(ctx, completion)
+	if err := w.destination.Close(ctx, completion); err != nil {
+		w.terminalErr = err
+		return err
+	}
+	return nil
 }
 
 func (w *protocolWriter) finish(ctx context.Context, invokeErr error) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
-		return invokeErr
+		if invokeErr == nil || errors.Is(invokeErr, w.terminalErr) {
+			return w.terminalErr
+		}
+		return errors.Join(invokeErr, w.terminalErr)
 	}
 	if invokeErr != nil {
 		closeErr := w.closeLocked(ctx, FailedCompletion(normalizeInvocationError(ctx, invokeErr)))

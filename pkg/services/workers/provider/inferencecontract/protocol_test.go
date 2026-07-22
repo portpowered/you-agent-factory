@@ -194,6 +194,45 @@ func TestExecuteInvocationNormalizesErrorBeforeClose(t *testing.T) {
 	}
 }
 
+func TestExecuteInvocationStopsAfterDestinationWriteFailure(t *testing.T) {
+	t.Parallel()
+	sinkErr := errors.New("response sink failed")
+	destination := &failingWriter{err: sinkErr}
+	var lateWrite, lateClose error
+	integration := lifecycleIntegration{invoke: func(ctx context.Context, request contract.InvocationRequest, writer contract.ResponseWriter) error {
+		writeErr := writer.WriteEvent(ctx, event(t, request.InvocationID(), workers.KindRun, workers.PhaseStarted, "", runPayload(t, "started")))
+		lateWrite = writer.WriteEvent(ctx, event(t, request.InvocationID(), workers.KindRun, workers.PhaseCompleted, "", runPayload(t, "completed")))
+		lateClose = writer.Close(ctx, contract.FailedCompletion(contract.NewFailure(contract.FailureInput{
+			Kind: contract.FailureDependency, Message: "response sink failed",
+		})))
+		return writeErr
+	}}
+
+	err := contract.ExecuteInvocation(context.Background(), integration, request(), destination)
+	if !errors.Is(err, sinkErr) {
+		t.Fatalf("ExecuteInvocation() error = %v, want response sink error", err)
+	}
+	assertProtocolRule(t, lateWrite, "write_after_close")
+	assertProtocolRule(t, lateClose, "duplicate_close")
+	if destination.writes != 1 || destination.closes != 0 {
+		t.Fatalf("destination calls = %d writes, %d closes; want one failed write and no close", destination.writes, destination.closes)
+	}
+}
+
+func TestExecuteInvocationPreservesIgnoredDestinationFailure(t *testing.T) {
+	t.Parallel()
+	sinkErr := errors.New("response sink failed")
+	integration := lifecycleIntegration{invoke: func(ctx context.Context, request contract.InvocationRequest, writer contract.ResponseWriter) error {
+		_ = writer.WriteEvent(ctx, event(t, request.InvocationID(), workers.KindRun, workers.PhaseStarted, "", runPayload(t, "started")))
+		return nil
+	}}
+
+	err := contract.ExecuteInvocation(context.Background(), integration, request(), &failingWriter{err: sinkErr})
+	if !errors.Is(err, sinkErr) {
+		t.Fatalf("ExecuteInvocation() error = %v, want ignored response sink error", err)
+	}
+}
+
 func TestExecuteInvocationRejectsMissingAndDuplicateClose(t *testing.T) {
 	t.Parallel()
 	t.Run("missing", func(t *testing.T) {
@@ -244,6 +283,22 @@ type orderedWriter struct {
 	order      []string
 	completion *contract.Completion
 	closes     int
+}
+
+type failingWriter struct {
+	err    error
+	writes int
+	closes int
+}
+
+func (w *failingWriter) WriteEvent(context.Context, contract.EventDraft) error {
+	w.writes++
+	return w.err
+}
+
+func (w *failingWriter) Close(context.Context, contract.Completion) error {
+	w.closes++
+	return nil
 }
 
 func (w *orderedWriter) WriteEvent(_ context.Context, event contract.EventDraft) error {
