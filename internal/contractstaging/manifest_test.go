@@ -96,7 +96,7 @@ func TestManifestDigestChangesWhenStagedArtifactSourceChanges(t *testing.T) {
 	before := testArtifactsForRepository(t, root)
 	beforeDigest := exportDigestForPath(t, decodeManifestPayload(t, before[manifestTarget]), "generated/cli/commands.json")
 
-	writeCheckFixture(t, root, "contracts/testdata/baseline/cli-commands.json", `{"changed":true}`)
+	writeCheckFixture(t, root, "contracts/cli/commands.json", `{"changed":true}`)
 	if err := contractstaging.Generate(root); err != nil {
 		t.Fatalf("Generate() after source change: %v", err)
 	}

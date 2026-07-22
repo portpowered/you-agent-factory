@@ -72,7 +72,7 @@ func TestArtifactsWithDependenciesOrchestratesPipelineInExpectedOrder(t *testing
 		"join",
 		"read:openapi.yaml",
 		"projectOpenAPI",
-		"read:cli-commands.json",
+		"read:commands.json",
 		"read:mcp-tools.json",
 		"read:you-config.schema.json",
 		"read:mock-workers.schema.json",

@@ -38,7 +38,7 @@ var (
 	}
 	rawArtifacts = []RawArtifact{
 		{Source: CanonicalOpenAPIPath, Target: StagedOpenAPIPath},
-		{Source: "contracts/testdata/baseline/cli-commands.json", Target: "packages/api/generated/cli/commands.json"},
+		{Source: "contracts/cli/commands.json", Target: "packages/api/generated/cli/commands.json"},
 		{Source: "contracts/testdata/baseline/mcp-tools.json", Target: "packages/api/generated/mcp/tools.json"},
 		{Source: "contracts/config/you-config.schema.json", Target: "packages/api/generated/schemas/you-config.schema.json"},
 		{Source: "contracts/config/mock-workers.schema.json", Target: "packages/api/generated/schemas/mock-workers.schema.json"},

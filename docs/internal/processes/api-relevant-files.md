@@ -91,6 +91,10 @@ Use this map when changing the public REST contract.
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.
+- The public `@you-agent-factory/api/cli` raw artifact is the byte-identical
+  staging projection of canonical `contracts/cli/commands.json`. Compatibility
+  inventories under `contracts/testdata/baseline/` are test fixtures and must
+  not replace the rich command graph at the published package boundary.
 - Standalone Factory Event and Factory Recording generation lives in
   `internal/contractstaging/factory_recording_schema.go`. It removes OpenAPI-only
   annotations before fail-closed conversion, restores the event discriminator
