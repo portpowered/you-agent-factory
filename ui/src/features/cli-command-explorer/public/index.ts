@@ -1,4 +1,8 @@
 export {
+  StaticCliCommandExplorer,
+  type StaticCliCommandExplorerProps,
+} from "../components/static-cli-command-explorer";
+export {
   StaticCliControls,
   type StaticCliControlsProps,
 } from "../components/static-cli-controls";
