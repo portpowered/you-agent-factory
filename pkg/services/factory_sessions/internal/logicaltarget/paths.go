@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 )
 
@@ -102,4 +103,74 @@ func SameFactoryDir(left, right string) bool {
 		return false
 	}
 	return filepath.Clean(left) == filepath.Clean(right)
+}
+
+// SessionFactoryRootDir resolves the editable-definition root for a live session.
+func SessionFactoryRootDir(serviceRootDir string, session *factorysessions.LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	rootDir := session.FolderPath
+	if session.FolderPath == "" || session.FactoryDir == "" || !SameFactoryDir(session.FactoryDir, session.FolderPath) {
+		return rootDir
+	}
+	serviceRoot := filepath.Clean(serviceRootDir)
+	if serviceRoot != "" && filepath.Dir(session.FactoryDir) == serviceRoot {
+		return serviceRoot
+	}
+	return rootDir
+}
+
+// SessionFactoryPersistRoot resolves the on-disk definition persistence root.
+func SessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
+	if session != nil && !session.IsDefault && strings.TrimSpace(session.FolderPath) != "" {
+		return session.FolderPath
+	}
+	return SessionFactoryRootDir(serviceRootDir, session)
+}
+
+// ValidateInitNewFactoryNestedDir rejects initialization over conflicting content.
+func ValidateInitNewFactoryNestedDir(resolvedFolder string, directories factorysessions.DirectoryInspection) error {
+	if directories == nil {
+		return newValidationError(
+			factorysessions.ValidationReasonUnreadable,
+			"folderPath",
+			fmt.Errorf("inspect nested factory directory: directory inspection is required"),
+		)
+	}
+	nestedFactoryDir := filepath.Join(resolvedFolder, factorydefinitions.FactoryDir)
+	info, err := directories.Stat(nestedFactoryDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return newValidationError(
+			factorysessions.ValidationReasonUnreadable,
+			"folderPath",
+			fmt.Errorf("inspect nested factory directory %s: %w", nestedFactoryDir, err),
+		)
+	}
+	if !info.IsDir() {
+		return newValidationError(
+			factorysessions.ValidationReasonConflict,
+			"folderPath",
+			fmt.Errorf("cannot initialize factory scaffold: %q exists and is not a directory", nestedFactoryDir),
+		)
+	}
+	entries, err := directories.ReadDir(nestedFactoryDir)
+	if err != nil {
+		return newValidationError(
+			factorysessions.ValidationReasonUnreadable,
+			"folderPath",
+			fmt.Errorf("read nested factory directory %s: %w", nestedFactoryDir, err),
+		)
+	}
+	if len(entries) > 0 {
+		return newValidationError(
+			factorysessions.ValidationReasonConflict,
+			"folderPath",
+			fmt.Errorf("cannot initialize factory scaffold: %q already exists with conflicting content", nestedFactoryDir),
+		)
+	}
+	return nil
 }

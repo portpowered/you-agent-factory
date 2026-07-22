@@ -157,7 +157,6 @@ pkg/services/factory_runtime/service/host/operations.go: unreachable func: Snaps
 pkg/services/factory_runtime/subsystems/noop_dispatcher.go: unreachable func: NoOpDispatcherSubsystem.TickGroup
 pkg/services/factory_runtime/testkit/runtime.go: unreachable func: NewPetriMarking
 pkg/services/factory_runtime/token/lineage.go: unreachable func: CurrentChainingTraceIDFromColors
-pkg/services/factory_sessions/api.go: unreachable func: FactoryName
 pkg/services/factory_sessions/internal/cursors/observer.go: unreachable func: RecordPreflight
 pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go: unreachable func: newResumeCoverageBlockingProvider
 pkg/services/factory_sessions/internal/execution/fake_service_runtime_test.go: unreachable func: resumeCoverageBlockingProvider.Execute

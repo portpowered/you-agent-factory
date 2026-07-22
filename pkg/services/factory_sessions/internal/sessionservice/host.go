@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
@@ -76,7 +77,7 @@ func (h dependencyHost) InitializeFactoryScaffold(factoryDir string) error {
 }
 
 func (h dependencyHost) ValidateInitNewFactoryNestedDir(resolvedFolder string) error {
-	return factorysessions.ValidateInitNewFactoryNestedDir(resolvedFolder, h.directoryInspection)
+	return logicaltarget.ValidateInitNewFactoryNestedDir(resolvedFolder, h.directoryInspection)
 }
 
 func (h dependencyHost) OpenLiveSessionForTarget(ctx context.Context, target factorysessions.Target) (string, error) {

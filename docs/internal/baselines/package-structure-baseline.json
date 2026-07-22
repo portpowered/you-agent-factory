@@ -1755,27 +1755,7 @@
     {
       "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/api.go",
-      "target": "FactoryName"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/api.go",
       "target": "NewLiveSession"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/api.go",
-      "target": "SessionFactoryPersistRoot"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/api.go",
-      "target": "SessionFactoryRootDir"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/api.go",
-      "target": "ValidateInitNewFactoryNestedDir"
     },
     {
       "rule": "service-root-exported-function",

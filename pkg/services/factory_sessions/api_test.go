@@ -5,35 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"sync/atomic"
 	"testing"
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 )
-
-type directoryInspectionStub struct {
-	stat    func(string) (fs.FileInfo, error)
-	readDir func(string) ([]fs.DirEntry, error)
-}
-
-func (s directoryInspectionStub) Stat(path string) (fs.FileInfo, error) {
-	if s.stat == nil {
-		return nil, fs.ErrNotExist
-	}
-	return s.stat(path)
-}
-
-func (s directoryInspectionStub) ReadDir(path string) ([]fs.DirEntry, error) {
-	if s.readDir == nil {
-		return nil, nil
-	}
-	return s.readDir(path)
-}
 
 var factorySessionTestClock = platformclock.Real{}
 var factorySessionResponseEventIdentity atomic.Uint64
@@ -64,90 +41,6 @@ func TestSessionErrorsMatchStableBoundarySentinels(t *testing.T) {
 		})
 	}
 }
-
-func TestValidateInitNewFactoryNestedDir_AllowsMissingNestedDirectory(t *testing.T) {
-	root := t.TempDir()
-	if err := ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{}); err != nil {
-		t.Fatalf("ValidateInitNewFactoryNestedDir(missing) = %v, want nil", err)
-	}
-}
-
-func TestValidateInitNewFactoryNestedDir_AllowsEmptyNestedDirectory(t *testing.T) {
-	root := t.TempDir()
-	nested := filepath.Join(root, interfaces.FactoryDir)
-	if err := os.Mkdir(nested, 0o755); err != nil {
-		t.Fatalf("Mkdir(nested): %v", err)
-	}
-	if err := ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{}); err != nil {
-		t.Fatalf("ValidateInitNewFactoryNestedDir(empty nested) = %v, want nil", err)
-	}
-}
-
-func TestValidateInitNewFactoryNestedDir_RejectsNestedFile(t *testing.T) {
-	root := t.TempDir()
-	nested := filepath.Join(root, interfaces.FactoryDir)
-	if err := os.WriteFile(nested, []byte("not a directory\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(nested): %v", err)
-	}
-	err := ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{})
-	if err == nil {
-		t.Fatal("ValidateInitNewFactoryNestedDir(file) = nil, want conflict")
-	}
-	reason, field, ok := ValidationReasonFromError(err)
-	if !ok || reason != ValidationReasonConflict || field != "folderPath" {
-		t.Fatalf("ValidationReasonFromError = (%q, %q, %v), want conflict on folderPath", reason, field, ok)
-	}
-}
-
-func TestValidateInitNewFactoryNestedDir_RejectsPopulatedNestedDirectory(t *testing.T) {
-	root := t.TempDir()
-	nested := filepath.Join(root, interfaces.FactoryDir)
-	if err := os.MkdirAll(nested, 0o755); err != nil {
-		t.Fatalf("MkdirAll(nested): %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(nested, "notes.txt"), []byte("existing notes\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(notes): %v", err)
-	}
-	err := ValidateInitNewFactoryNestedDir(root, platformfilesystem.Local{})
-	if err == nil {
-		t.Fatal("ValidateInitNewFactoryNestedDir(populated) = nil, want conflict")
-	}
-	reason, field, ok := ValidationReasonFromError(err)
-	if !ok || reason != ValidationReasonConflict || field != "folderPath" {
-		t.Fatalf("ValidationReasonFromError = (%q, %q, %v), want conflict on folderPath", reason, field, ok)
-	}
-}
-
-func TestValidateInitNewFactoryNestedDir_FailsClosedAndClassifiesInjectedFailures(t *testing.T) {
-	if err := ValidateInitNewFactoryNestedDir(t.TempDir(), nil); err == nil {
-		t.Fatal("ValidateInitNewFactoryNestedDir(nil inspection) error = nil")
-	} else if reason, field, ok := ValidationReasonFromError(err); !ok || reason != ValidationReasonUnreadable || field != "folderPath" {
-		t.Fatalf("nil inspection validation = (%q, %q, %v)", reason, field, ok)
-	}
-
-	statErr := errors.New("stat unavailable")
-	err := ValidateInitNewFactoryNestedDir("project", directoryInspectionStub{
-		stat: func(string) (fs.FileInfo, error) { return nil, statErr },
-	})
-	if !errors.Is(err, statErr) {
-		t.Fatalf("injected stat error = %v, want %v", err, statErr)
-	}
-
-	readErr := errors.New("read unavailable")
-	err = ValidateInitNewFactoryNestedDir("project", directoryInspectionStub{
-		stat: func(string) (fs.FileInfo, error) { return directoryInfo{}, nil },
-		readDir: func(string) ([]fs.DirEntry, error) {
-			return nil, readErr
-		},
-	})
-	if !errors.Is(err, readErr) {
-		t.Fatalf("injected read error = %v, want %v", err, readErr)
-	}
-}
-
-type directoryInfo struct{ fs.FileInfo }
-
-func (directoryInfo) IsDir() bool { return true }
 
 func TestNewSessionResponseEventStoreAlias(t *testing.T) {
 	t.Parallel()

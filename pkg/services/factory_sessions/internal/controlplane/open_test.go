@@ -33,7 +33,7 @@ func (h *openControlHost) InitializeFactoryScaffold(_ string) error {
 }
 
 func (h *openControlHost) ValidateInitNewFactoryNestedDir(folder string) error {
-	return factorysessions.ValidateInitNewFactoryNestedDir(folder, platformfilesystem.Local{})
+	return logicaltarget.ValidateInitNewFactoryNestedDir(folder, platformfilesystem.Local{})
 }
 
 func (h *openControlHost) ResolveSessionFolder(folder string) (string, error) {
@@ -165,7 +165,7 @@ func (h *initNewFactoryHost) InitializeFactoryScaffold(_ string) error {
 }
 
 func (h *initNewFactoryHost) ValidateInitNewFactoryNestedDir(folder string) error {
-	return factorysessions.ValidateInitNewFactoryNestedDir(folder, platformfilesystem.Local{})
+	return logicaltarget.ValidateInitNewFactoryNestedDir(folder, platformfilesystem.Local{})
 }
 
 func (h *initNewFactoryHost) ResolveSessionFolder(folder string) (string, error) {

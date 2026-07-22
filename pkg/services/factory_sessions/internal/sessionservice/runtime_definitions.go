@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
 )
 
@@ -70,7 +71,7 @@ func DefinitionCallbacks(runtime *SessionRuntime) DefinitionHostCallbacks {
 		return runtimebinding.RuntimeConfigForSession(runtime.sessionState, sessionID)
 	}
 	dependencies.SessionFactoryPersistRoot = func(session *factorysessions.LiveSession) string {
-		return factorysessions.SessionFactoryPersistRoot(runtime.factoryRootDir, session)
+		return logicaltarget.SessionFactoryPersistRoot(runtime.factoryRootDir, session)
 	}
 	dependencies.ValidateEditableFactorySnapshot = func(ctx context.Context, snapshot *interfaces.FactorySnapshot) error {
 		if runtime.editableFactoryValidator == nil {
