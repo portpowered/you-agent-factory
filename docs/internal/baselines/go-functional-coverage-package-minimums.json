@@ -139,6 +139,10 @@
       "minimum": 62.01
     },
     {
+      "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/contracts/namevalue",
+      "minimum": 25.92
+    },
+    {
       "package": "github.com/portpowered/infinite-you/pkg/services/factory_definitions/decisionenvelope",
       "minimum": 40.90
     },
