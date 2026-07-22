@@ -7,6 +7,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
 type Service struct {
@@ -71,7 +72,7 @@ func (s *Service) Select(targets []factorysessions.Target, ref *factorysessions.
 	return factorysessions.SelectTarget(targets, ref)
 }
 
-func (s *Service) Resolve(registry factorysessions.Registry, selector string) *factorysessions.LiveSession {
+func (s *Service) Resolve(registry sessionregistry.Service, selector string) *factorysessions.LiveSession {
 	if registry == nil {
 		return nil
 	}
@@ -88,7 +89,7 @@ func (s *Service) Resolve(registry factorysessions.Registry, selector string) *f
 	return nil
 }
 
-func (s *Service) ResolveLogical(registry factorysessions.Registry, backendScopeID, logicalSessionKeyID string) *factorysessions.LiveSession {
+func (s *Service) ResolveLogical(registry sessionregistry.Service, backendScopeID, logicalSessionKeyID string) *factorysessions.LiveSession {
 	if registry == nil || strings.TrimSpace(logicalSessionKeyID) == "" {
 		return nil
 	}

@@ -7,6 +7,7 @@ import (
 
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
@@ -87,7 +88,7 @@ func TestCompatibilityOnlyIsDefaultSessionSelector(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			if got := IsDefaultSessionSelector(tc.sessionID); got != tc.want {
+			if got := logicaltarget.IsLiveSessionDefaultSelector(tc.sessionID); got != tc.want {
 				t.Fatalf("IsDefaultSessionSelector(%q) = %t, want %t", tc.sessionID, got, tc.want)
 			}
 		})
@@ -156,7 +157,7 @@ func TestLogicalSessionKeyID_DefaultTargetUsesStableKey(t *testing.T) {
 			Kind: TargetKindDefault,
 		},
 	}
-	if got := LogicalSessionKeyID(session); got != "/workspace/root::default::" {
+	if got := logicaltarget.LegacyLiveSessionKeyID(session); got != "/workspace/root::default::" {
 		t.Fatalf("LogicalSessionKeyID(default) = %q, want /workspace/root::default::", got)
 	}
 }
@@ -171,7 +172,7 @@ func TestLogicalSessionKeyID_NamedTargetIncludesFactoryName(t *testing.T) {
 			Name: "beta",
 		},
 	}
-	if got := LogicalSessionKeyID(session); got != "/workspace/root::named::beta" {
+	if got := logicaltarget.LegacyLiveSessionKeyID(session); got != "/workspace/root::named::beta" {
 		t.Fatalf("LogicalSessionKeyID(named) = %q, want /workspace/root::named::beta", got)
 	}
 }

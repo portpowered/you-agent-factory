@@ -1884,16 +1884,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/registry.go",
-      "target": "IsDefaultSessionSelector"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/registry.go",
-      "target": "LogicalSessionKeyID"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_sessions/request_preparation.go",
       "target": "NewRequestPreparation"
     },

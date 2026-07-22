@@ -10,10 +10,10 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/fileeffects"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
-	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"go.uber.org/zap"
@@ -22,7 +22,7 @@ import (
 // Assembly retains Factory Sessions-owned mutable registries while peer
 // services are constructed against its root resolver roles.
 type Assembly struct {
-	registry                     factorysessions.Registry
+	registry                     sessionregistry.Service
 	state                        *sessionruntime.Service
 	streams                      streamManager
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory

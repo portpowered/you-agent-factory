@@ -12,8 +12,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
-	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionregistry"
 )
 
 // Registration contains the host-independent state needed to register one
@@ -110,7 +112,7 @@ func DefaultTarget(bundleDir, bundleFolder, factoryRootDir string) factorysessio
 // Service is the authoritative mutable registry for one process's live
 // Factory Sessions.
 type Service struct {
-	registry       factorysessions.Registry
+	registry       sessionregistry.Service
 	responses      *responsestream.Registry
 	close          func(*factorysessions.LiveSession)
 	clock          factoryruntime.Clock
@@ -159,7 +161,7 @@ func (s *Service) WithActivationLock(fn func() error) error {
 // New constructs the session runtime with explicit live-session, response-stream,
 // cleanup, and clock dependencies.
 func New(
-	registry factorysessions.Registry,
+	registry sessionregistry.Service,
 	responses *responsestream.Registry,
 	closeSession func(*factorysessions.LiveSession),
 	clock factoryruntime.Clock,
@@ -172,7 +174,7 @@ func New(
 // NewWithResponseStreams constructs the session runtime with both canonical
 // live-session and response-stream registries.
 func NewWithResponseStreams(
-	registry factorysessions.Registry,
+	registry sessionregistry.Service,
 	responses *responsestream.Registry,
 	closeSession func(*factorysessions.LiveSession),
 	clock factoryruntime.Clock,
@@ -185,7 +187,7 @@ func NewWithResponseStreams(
 // NewWithResponseService constructs the live registry with the owner-private
 // response-stream capability used for per-session event-store lifecycle.
 func NewWithResponseService(
-	registry factorysessions.Registry,
+	registry sessionregistry.Service,
 	responses *responsestream.Registry,
 	closeSession func(*factorysessions.LiveSession),
 	clock factoryruntime.Clock,
@@ -232,7 +234,7 @@ func (s *Service) CloseResponseStreams(session *factorysessions.LiveSession) {
 }
 
 // Registry exposes the canonical registry to bounded compatibility adapters.
-func (s *Service) Registry() factorysessions.Registry {
+func (s *Service) Registry() sessionregistry.Service {
 	if s == nil {
 		return nil
 	}
@@ -248,7 +250,7 @@ func (s *Service) Register(registration Registration) string {
 	if sessionID == "" {
 		return ""
 	}
-	isDefault := registration.Default || factorysessions.IsDefaultSessionSelector(sessionID)
+	isDefault := registration.Default || logicaltarget.IsLiveSessionDefaultSelector(sessionID)
 	if isDefault && registration.AllocateDefaultID {
 		if existing := s.registry.DefaultSession(); existing != nil {
 			sessionID = existing.ID

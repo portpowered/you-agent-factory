@@ -83,6 +83,14 @@ func isDefaultSessionSelector(selector string) bool {
 	}
 }
 
+// IsLiveSessionDefaultSelector reports whether a live-session selector uses
+// the compatibility default alias. The literal target kind is not a live
+// session identifier.
+func IsLiveSessionDefaultSelector(selector string) bool {
+	trimmed := strings.TrimSpace(selector)
+	return trimmed == "" || trimmed == factorysessions.DefaultSessionID
+}
+
 func NormalizeDefaultTargetWithEffects(
 	resolveSymlinks factorysessions.LogicalTargetResolveSymlinks,
 	resolveHome factorysessions.HomeDirectoryResolver,

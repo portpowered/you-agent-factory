@@ -7,7 +7,22 @@ import (
 	"sync"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 )
+
+// Service is the private live Factory Session directory contract shared by
+// owner-local runtime and identity capabilities.
+type Service interface {
+	Upsert(*factorysessions.LiveSession, bool)
+	Select(string) bool
+	Current() *factorysessions.LiveSession
+	Get(string) *factorysessions.LiveSession
+	Remove(string)
+	Count() int
+	IDs() []string
+	DefaultSession() *factorysessions.LiveSession
+	FindByLogicalSessionKeyID(string) *factorysessions.LiveSession
+}
 
 // Registry is the synchronized in-memory implementation of the Factory
 // Sessions registry contract.
@@ -17,7 +32,7 @@ type Registry struct {
 	sessions   map[string]*factorysessions.LiveSession
 }
 
-var _ factorysessions.Registry = (*Registry)(nil)
+var _ Service = (*Registry)(nil)
 
 // New constructs an empty live session registry.
 func New() *Registry {
@@ -62,7 +77,7 @@ func (r *Registry) Get(id string) *factorysessions.LiveSession {
 	if r == nil {
 		return nil
 	}
-	if factorysessions.IsDefaultSessionSelector(id) {
+	if logicaltarget.IsLiveSessionDefaultSelector(id) {
 		return r.DefaultSession()
 	}
 	id = strings.TrimSpace(id)
@@ -78,7 +93,7 @@ func (r *Registry) Remove(id string) {
 	if r == nil || id == "" {
 		return
 	}
-	if factorysessions.IsDefaultSessionSelector(id) {
+	if logicaltarget.IsLiveSessionDefaultSelector(id) {
 		if session := r.DefaultSession(); session != nil {
 			id = session.ID
 		} else {
@@ -156,7 +171,7 @@ func (r *Registry) FindByLogicalSessionKeyID(logicalSessionKeyID string) *factor
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, session := range r.sessions {
-		if session != nil && factorysessions.LogicalSessionKeyID(session) == logicalSessionKeyID {
+		if session != nil && logicaltarget.LegacyLiveSessionKeyID(session) == logicalSessionKeyID {
 			return session
 		}
 	}

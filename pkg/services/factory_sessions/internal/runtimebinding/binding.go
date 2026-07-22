@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	runtimemetrics "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	sessionstream "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 	"go.uber.org/zap"
@@ -294,7 +295,7 @@ func Register(state *sessionruntime.Service, input Registration) string {
 		ExecutionBaseDir: metadata.ExecutionBaseDir, Target: metadata.Target,
 		Handle:  &SessionState{Instance: bundle, Handle: input.Handle, Spec: metadata.PreparedSpec},
 		Runtime: &factorysessions.LiveRuntime{Factory: bundle.RuntimeService(), BackendScopeID: bundle.BackendScope(), RuntimeConfig: loadedFactorySnapshotSource(bundle.LoadedRuntimeConfig())},
-		Default: factorysessions.IsDefaultSessionSelector(input.SessionID), Project: metadata.Project,
+		Default: logicaltarget.IsLiveSessionDefaultSelector(input.SessionID), Project: metadata.Project,
 		Select: input.Select, AllocateDefaultID: true, AddEventTypeRecorder: bundle.AddEventTypeRecorder,
 	})
 }

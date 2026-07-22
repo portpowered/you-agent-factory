@@ -599,6 +599,12 @@ session registries, and process-lifecycle policy. When moving one of these
 packages, relocate path-keyed quality entries and fixture-relative paths with
 the implementation, but delete its `service-root-unexpected-directory`
 baseline finding instead of replacing that finding with an internal path.
+Owner-local collaborators shared by multiple private capabilities, such as the
+live-session registry, should publish their narrow contract from the owning
+`internal` package. Migrate private consumers to that contract before the final
+atomic removal of the root's consolidated interface-count baseline; removing
+root interfaces one at a time replaces the exact deletion-only finding instead
+of reducing it.
 
 Retire leaf compatibility packages that only re-export Factory Sessions root
 value or function contracts. Same-owner implementations should consume the root
