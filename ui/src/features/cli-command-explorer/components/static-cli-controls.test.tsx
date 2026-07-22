@@ -95,15 +95,28 @@ describe("static CLI controls", () => {
     expect(directory).toHaveAccessibleDescription(
       expect.stringContaining("Related inputs: --named, --factory"),
     );
+    await user.type(named, "example");
+
+    expect(directory).not.toHaveAttribute("aria-invalid", "true");
+    expect(named).not.toHaveAttribute("aria-invalid", "true");
+
     await user.clear(directory);
     await user.type(directory, "./factory");
-    await user.type(named, "example");
 
     expect(directory).toHaveAttribute("aria-invalid", "true");
     expect(named).toHaveAttribute("aria-invalid", "true");
     expect(directory).toHaveAccessibleErrorMessage(
       expect.stringContaining("conflicts with --named, --factory"),
     );
+  });
+
+  it("does not render manifest inputs hidden from default help", () => {
+    const run = commandControls("you.run");
+    render(<StaticCliControls model={run} />);
+
+    expect(
+      screen.queryByRole("textbox", { name: "--port" }),
+    ).not.toBeInTheDocument();
   });
 
   it("localizes repeated controls and relationship feedback", async () => {

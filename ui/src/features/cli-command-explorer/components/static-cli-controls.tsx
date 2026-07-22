@@ -36,15 +36,19 @@ export function StaticCliControls({ locale, model }: StaticCliControlsProps) {
   const [values, setValues] = useState<Record<string, CliControlValue>>(() =>
     initialValues(model),
   );
+  const [explicitlySetInputIds, setExplicitlySetInputIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const violations = useMemo(
-    () => validateCliControlValues(model, values),
-    [model, values],
+    () => validateCliControlValues(model, values, explicitlySetInputIds),
+    [explicitlySetInputIds, model, values],
   );
   const labels = new Map(
     model.controls.map((control) => [control.inputId, control.label] as const),
   );
   const updateValue = (inputId: string, value: CliControlValue) => {
     setValues((current) => ({ ...current, [inputId]: value }));
+    setExplicitlySetInputIds((current) => new Set(current).add(inputId));
   };
 
   return (

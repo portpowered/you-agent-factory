@@ -50,6 +50,9 @@ describe("static CLI control projection", () => {
     expect(
       run.controls.find(({ inputId }) => inputId === "you.run.flag.verbose"),
     ).toMatchObject({ kind: "boolean", inherited: true });
+    expect(
+      run.controls.some(({ inputId }) => inputId === "you.run.flag.port"),
+    ).toBe(false);
   });
 
   it("fails explicitly for an unsupported input kind", () => {
@@ -85,7 +88,9 @@ describe("static CLI control projection", () => {
       valueType: "duration",
     });
   });
+});
 
+describe("static CLI control validation", () => {
   it("reports deterministic cardinality and relationship violations on affected inputs", () => {
     const create = commandControls("you.factory.create");
     expect(validateCliControlValues(create, {})).toContainEqual({
@@ -109,6 +114,36 @@ describe("static CLI control projection", () => {
         expect.objectContaining({
           code: "relationship",
           inputId: "you.run.flag.named",
+          relationshipId: "you.run.rel.selectors",
+        }),
+      ]),
+    );
+  });
+
+  it("validates relationships from explicit input state instead of displayed defaults", () => {
+    const run = commandControls("you.run");
+    const values = {
+      "you.run.flag.dir": "factory",
+      "you.run.flag.named": "demo",
+    };
+
+    expect(
+      validateCliControlValues(run, values, new Set(["you.run.flag.named"])),
+    ).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "relationship" }),
+      ]),
+    );
+    expect(
+      validateCliControlValues(
+        run,
+        values,
+        new Set(["you.run.flag.dir", "you.run.flag.named"]),
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "relationship",
           relationshipId: "you.run.rel.selectors",
         }),
       ]),

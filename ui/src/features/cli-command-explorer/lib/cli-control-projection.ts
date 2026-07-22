@@ -137,9 +137,22 @@ function projectControl(
 export function projectCliCommandControls(
   command: CliCommandProjection,
 ): CliControlProjectionResult {
+  const visibleInputs = command.effectiveInputs.filter(
+    (input) =>
+      input.kind !== "flag" ||
+      (input.manifestInput as CliFlag).visibility !== "hidden",
+  );
+  const visibleInputIds = new Set(visibleInputs.map(({ id }) => id));
+  const visibleRelationships = command.relationships.filter(
+    (relationship) =>
+      relationship.participants.every(({ inputId }) =>
+        visibleInputIds.has(inputId),
+      ) &&
+      (!relationship.when || visibleInputIds.has(relationship.when.inputId)),
+  );
   const controls: CliStaticControl[] = [];
-  for (const input of command.effectiveInputs) {
-    const projected = projectControl(input, command.relationships);
+  for (const input of visibleInputs) {
+    const projected = projectControl(input, visibleRelationships);
     if ("status" in projected) return projected;
     controls.push(projected);
   }
@@ -148,7 +161,7 @@ export function projectCliCommandControls(
     model: {
       commandId: command.id,
       controls,
-      relationships: command.relationships,
+      relationships: visibleRelationships,
     },
   };
 }
@@ -186,12 +199,15 @@ function violatesRelationship(
 export function validateCliControlValues(
   model: CliControlModel,
   values: CliControlValues,
+  explicitlySetInputIds: ReadonlySet<string> = new Set(Object.keys(values)),
 ): readonly CliControlViolation[] {
   const violations: CliControlViolation[] = [];
   const active = new Set<string>();
   for (const control of model.controls) {
     const count = valueCount(values[control.inputId]);
-    if (count > 0) active.add(control.inputId);
+    if (count > 0 && explicitlySetInputIds.has(control.inputId)) {
+      active.add(control.inputId);
+    }
     if (
       count < control.cardinality.minimum ||
       (control.cardinality.maximum !== null &&
