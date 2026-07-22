@@ -9,6 +9,7 @@ import documentationSchema from "../../../../../contracts/common/documentation.s
   type: "json",
 };
 import { publishedCliManifestArtifact } from "../../../api/cli/published-cli-manifest";
+import { getCliManifestMessages } from "../messages/cli-manifest";
 import {
   type CliCommand,
   type CliFlag,
@@ -75,6 +76,7 @@ function schemaIssueCode(error: ErrorObject): CliManifestDiagnosticCode {
 function schemaDiagnostics(
   errors: readonly ErrorObject[],
 ): CliManifestDiagnostic[] {
+  const messages = getCliManifestMessages();
   return errors
     .filter((error) => error.keyword !== "if")
     .map((error) => {
@@ -84,8 +86,11 @@ function schemaDiagnostics(
         path,
         message:
           error.keyword === "required"
-            ? `Expected required field ${String(path.at(-1))}.`
-            : `Expected ${path.join(".") || "manifest"} to satisfy the CLI manifest contract: ${error.message ?? error.keyword}.`,
+            ? messages.requiredField(String(path.at(-1)))
+            : messages.contractFailure(
+                path.join(".") || "manifest",
+                error.message ?? error.keyword,
+              ),
       };
     });
 }

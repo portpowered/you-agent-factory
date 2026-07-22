@@ -1,4 +1,8 @@
 export {
+  StaticCliControls,
+  type StaticCliControlsProps,
+} from "../components/static-cli-controls";
+export {
   type CliCommandInputProjection,
   type CliCommandNavigationItem,
   type CliCommandProjection,
@@ -9,6 +13,16 @@ export {
   type CliRelationshipProjection,
   projectCliManifest,
 } from "../lib/cli-command-projection";
+export {
+  type CliControlModel,
+  type CliControlProjectionResult,
+  type CliControlValue,
+  type CliControlValues,
+  type CliControlViolation,
+  type CliStaticControl,
+  projectCliCommandControls,
+  validateCliControlValues,
+} from "../lib/cli-control-projection";
 export {
   loadCliManifest,
   loadingCliManifest,
