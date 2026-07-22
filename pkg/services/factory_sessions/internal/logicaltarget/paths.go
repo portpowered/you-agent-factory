@@ -9,6 +9,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
 // AbsolutizeFactoryDirectory resolves and cleans a factory directory path.
@@ -32,7 +33,7 @@ func AbsolutizeFactoryDirectory(dir string, resolveHome factorysessions.HomeDire
 func ResolveSessionFolder(folderPath string, resolveHome factorysessions.HomeDirectoryResolver, directories factorysessions.DirectoryInspection) (string, error) {
 	trimmed := strings.TrimSpace(folderPath)
 	if trimmed == "" {
-		return "", factorysessions.NewValidationError(
+		return "", sessionvalidation.New(
 			factorysessions.ValidationReasonRequired,
 			"folderPath",
 			fmt.Errorf("factory session folder is required"),
@@ -53,13 +54,13 @@ func ResolveSessionFolder(folderPath string, resolveHome factorysessions.HomeDir
 	if err != nil {
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
-			return "", factorysessions.NewValidationError(
+			return "", sessionvalidation.New(
 				factorysessions.ValidationReasonMissing,
 				"folderPath",
 				fmt.Errorf("stat factory session folder %q: %w", resolved, err),
 			)
 		case errors.Is(err, fs.ErrPermission):
-			return "", factorysessions.NewValidationError(
+			return "", sessionvalidation.New(
 				factorysessions.ValidationReasonUnreadable,
 				"folderPath",
 				fmt.Errorf("stat factory session folder %q: %w", resolved, err),
@@ -69,7 +70,7 @@ func ResolveSessionFolder(folderPath string, resolveHome factorysessions.HomeDir
 		}
 	}
 	if !info.IsDir() {
-		return "", factorysessions.NewValidationError(
+		return "", sessionvalidation.New(
 			factorysessions.ValidationReasonNotDirectory,
 			"folderPath",
 			fmt.Errorf("factory session folder %q must be a directory", resolved),

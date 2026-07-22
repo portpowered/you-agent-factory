@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
 type openControlHost struct {
@@ -56,7 +57,7 @@ func TestOpenFromFolder_ValidateOnlyNotRunnableReturnsInitNewFactoryHint(t *test
 	t.Parallel()
 
 	host := &openControlHost{
-		discoverErr: factorysessions.NewValidationError(
+		discoverErr: sessionvalidation.New(
 			factorysessions.ValidationReasonNotRunnable,
 			"folderPath",
 			errors.New("no runnable targets"),
@@ -104,7 +105,7 @@ func TestOpenFromFolder_PropagatesTargetSelectionError(t *testing.T) {
 	if err == nil {
 		t.Fatal("OpenFromFolder = nil, want target not found")
 	}
-	reason, _, ok := factorysessions.ValidationReasonFromError(err)
+	reason, _, ok := sessionvalidation.ReasonFromError(err)
 	if !ok || reason != factorysessions.ValidationReasonTargetNotFound {
 		t.Fatalf("validation reason = %q ok=%v, want target_not_found", reason, ok)
 	}
@@ -147,7 +148,7 @@ type initNewFactoryHost struct {
 func (h *initNewFactoryHost) DiscoverTargets(_ string) ([]factorysessions.Target, error) {
 	h.discoverCalls++
 	if h.discoverCalls == 1 {
-		return nil, factorysessions.NewValidationError(
+		return nil, sessionvalidation.New(
 			factorysessions.ValidationReasonNotRunnable,
 			"folderPath",
 			errors.New("no runnable targets"),

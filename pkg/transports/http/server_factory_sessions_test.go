@@ -978,11 +978,19 @@ func TestFactorySessionsAPI_OpenFactorySession(t *testing.T) {
 
 func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	srv := newLiveSessionTestServer(strictLiveSessionAPIFake{open: func(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
-		return factoryapi.OpenFactorySessionResponse{}, factorysessions.NewValidationError(
-			factorysessions.ValidationReasonMissing,
-			"folderPath",
-			errors.New("folder validation failed"),
-		)
+		return factoryapi.OpenFactorySessionResponse{}, apiTestSessionValidationError{
+			message: "folder validation failed",
+			targets: []factoryapi.FactoryValidationTarget{{
+				Code:     "factory.session.field.missing",
+				Severity: factoryapi.FactoryValidationSeverityError,
+				Message:  "folder validation failed",
+				Subject: factoryapi.FactoryValidationSubject{
+					Type:     factoryapi.FactoryValidationSubjectTypeFactory,
+					Id:       "folderPath",
+					Location: factoryapi.FactoryValidationSubjectLocationReference,
+				},
+			}},
+		}
 	}})
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/missing","validateOnly":true}`))

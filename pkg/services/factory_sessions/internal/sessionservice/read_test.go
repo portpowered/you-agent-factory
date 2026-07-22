@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responseevents"
 	responsestreamwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream/wire"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionservice"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
 func newResponseServiceTestGateway(t *testing.T, host *openTestHost) *factorysessionservice.Service {
@@ -211,7 +212,7 @@ func TestService_OpenFactorySession_MapsInitNewFactoryHint(t *testing.T) {
 	t.Parallel()
 
 	host := &openTestHost{
-		discoverErr: factorysessions.NewValidationError(
+		discoverErr: sessionvalidation.New(
 			factorysessions.ValidationReasonNotRunnable,
 			"folderPath",
 			errors.New("no runnable targets"),

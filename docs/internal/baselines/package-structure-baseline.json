@@ -1879,21 +1879,6 @@
     },
     {
       "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/validation.go",
-      "target": "NewConfigLoadFailedError"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/validation.go",
-      "target": "NewValidationError"
-    },
-    {
-      "rule": "service-root-exported-function",
-      "filePath": "pkg/services/factory_sessions/validation.go",
-      "target": "ValidationReasonFromError"
-    },
-    {
-      "rule": "service-root-exported-function",
       "filePath": "pkg/services/factory_visualization/response_presentation.go",
       "target": "NewResponsePresentation"
     },

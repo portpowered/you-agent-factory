@@ -12,6 +12,7 @@ import (
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	. "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
 type discoveryDirectoryInspection struct {
@@ -76,7 +77,7 @@ func TestDiscoverTargets_RejectsFolderWithoutRunnableTargets(t *testing.T) {
 	if err == nil {
 		t.Fatal("DiscoverTargets(empty) error = nil, want not runnable")
 	}
-	reason, field, ok := ValidationReasonFromError(err)
+	reason, field, ok := sessionvalidation.ReasonFromError(err)
 	if !ok || reason != ValidationReasonNotRunnable || field != "folderPath" {
 		t.Fatalf("validation = (%q, %q, %v), want not_runnable folderPath", reason, field, ok)
 	}
@@ -95,7 +96,7 @@ func TestDiscoverTargets_PreservesConfigLoadFailuresWhenNoRunnableTargetsRemain(
 	if err == nil {
 		t.Fatal("DiscoverTargets(config load failed) error = nil, want structured failure")
 	}
-	reason, field, ok := ValidationReasonFromError(err)
+	reason, field, ok := sessionvalidation.ReasonFromError(err)
 	if !ok || reason != ValidationReasonConfigLoadFailed || field != "folderPath" {
 		t.Fatalf("validation = (%q, %q, %v), want config_load_failed folderPath", reason, field, ok)
 	}
@@ -151,7 +152,7 @@ func TestDiscoverTargets_FailsClosedAndClassifiesDirectoryErrors(t *testing.T) {
 	}
 	if _, err := logicaltarget.Discover(root, alwaysRunnableProbe, discoveryDirectoryInspection{err: fs.ErrPermission}, os.UserHomeDir); err == nil {
 		t.Fatal("DiscoverTargets(permission) error = nil")
-	} else if reason, field, ok := ValidationReasonFromError(err); !ok || reason != ValidationReasonUnreadable || field != "folderPath" {
+	} else if reason, field, ok := sessionvalidation.ReasonFromError(err); !ok || reason != ValidationReasonUnreadable || field != "folderPath" {
 		t.Fatalf("permission validation = (%q, %q, %v)", reason, field, ok)
 	}
 	readErr := errors.New("directory unavailable")
@@ -194,7 +195,7 @@ func TestSelectTarget_RejectsMissingNamedTarget(t *testing.T) {
 	if err == nil {
 		t.Fatal("SelectTarget(missing) error = nil, want target_not_found")
 	}
-	reason, field, ok := ValidationReasonFromError(err)
+	reason, field, ok := sessionvalidation.ReasonFromError(err)
 	if !ok || reason != ValidationReasonTargetNotFound || field != "target.name" {
 		t.Fatalf("validation = (%q, %q, %v), want target_not_found target.name", reason, field, ok)
 	}

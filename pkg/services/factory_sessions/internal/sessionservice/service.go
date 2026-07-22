@@ -7,12 +7,13 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
 	durableexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution"
 	durableexecutionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/durable_execution/wire"
 	liveruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime"
 	liveruntimewire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/live_runtime/wire"
 	responsestreamservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/response_stream"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/responsestream"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/stream"
 )
 
@@ -109,7 +110,7 @@ func (s *Service) OpenFactorySession(
 		return nil, fmt.Errorf("factory session gateway is required")
 	}
 	if request.ValidateOnly && request.InitNewFactory {
-		return nil, factorysessions.NewValidationError(
+		return nil, sessionvalidation.New(
 			factorysessions.ValidationReasonRequired,
 			"initNewFactory",
 			fmt.Errorf("initNewFactory cannot be combined with validateOnly"),

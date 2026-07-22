@@ -10,6 +10,7 @@ import (
 
 	factorydefinitions "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"go.uber.org/zap"
 )
 
@@ -37,9 +38,9 @@ func Discover(folderPath string, probe factorysessions.TargetProbe, directories 
 	})
 	if len(targets) == 0 {
 		if len(loadFailures) > 0 {
-			return nil, factorysessions.NewConfigLoadFailedError(loadFailures)
+			return nil, sessionvalidation.NewConfigLoadFailed(loadFailures)
 		}
-		return nil, factorysessions.NewValidationError(factorysessions.ValidationReasonNotRunnable, "folderPath", fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder))
+		return nil, sessionvalidation.New(factorysessions.ValidationReasonNotRunnable, "folderPath", fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder))
 	}
 	return targets, nil
 }
@@ -96,7 +97,7 @@ func collect(folderPath string, probe factorysessions.TargetProbe, directories f
 	entries, err := directories.ReadDir(folderPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrPermission) {
-			return nil, nil, factorysessions.NewValidationError(factorysessions.ValidationReasonUnreadable, "folderPath", fmt.Errorf("read factory session folder %s: %w", folderPath, err))
+			return nil, nil, sessionvalidation.New(factorysessions.ValidationReasonUnreadable, "folderPath", fmt.Errorf("read factory session folder %s: %w", folderPath, err))
 		}
 		return nil, nil, fmt.Errorf("read factory session folder %s: %w", folderPath, err)
 	}
@@ -151,7 +152,7 @@ func Select(targets []factorysessions.Target, ref *factorysessions.TargetRef) (*
 			return &target, nil
 		}
 	}
-	return nil, factorysessions.NewValidationError(factorysessions.ValidationReasonTargetNotFound, "target.name", fmt.Errorf("factory session target %q was not found", DisplayName(normalized)))
+	return nil, sessionvalidation.New(factorysessions.ValidationReasonTargetNotFound, "target.name", fmt.Errorf("factory session target %q was not found", DisplayName(normalized)))
 }
 
 // DisplayName formats a target reference for operator-facing errors.

@@ -471,6 +471,15 @@ logical-target kinds and provider-boundary fields only in
 `pkg/transports/mapping/factorysession`; domain target normalization must not
 return generated HTTP values.
 
+Factory Session folder/discovery validation reasons remain plain value
+constants at the service root, while concrete error state, target construction,
+config-load aggregation, and reason inspection live under
+`pkg/services/factory_sessions/internal/sessionvalidation`. Owner-private open,
+logical-target, and session-service code may consume that implementation;
+cross-owner transport tests should exercise the public error-code/target
+protocol with boundary fakes instead of constructing a Factory Sessions
+implementation error.
+
 Factory Session response-event validation, retained-then-live subscription,
 cursor filtering and gap signaling, event-store lifecycle, and internal stream
 registry allocation are owned by the injected subservice rooted at

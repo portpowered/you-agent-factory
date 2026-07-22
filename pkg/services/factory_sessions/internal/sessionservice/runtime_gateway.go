@@ -9,9 +9,10 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/controlplane"
-	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
 	sessionruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtime"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/runtimebinding"
+	identity "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/services/identity"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 	"go.uber.org/zap"
 )
 
@@ -189,7 +190,7 @@ func (fs *SessionRuntime) ReconnectCursorValidator() factorysessions.ReconnectCu
 func SessionServiceHost(runtime *SessionRuntime) Host {
 	initializeFactoryScaffold := func(factoryDir string) error {
 		if runtime == nil {
-			return factorysessions.NewValidationError(
+			return sessionvalidation.New(
 				factorysessions.ValidationReasonUnreadable,
 				"folderPath",
 				fmt.Errorf("initialize factory scaffold: initializer is required"),
@@ -197,14 +198,14 @@ func SessionServiceHost(runtime *SessionRuntime) Host {
 		}
 		initialize := runtime.factoryScaffoldInitializer
 		if initialize == nil {
-			return factorysessions.NewValidationError(
+			return sessionvalidation.New(
 				factorysessions.ValidationReasonUnreadable,
 				"folderPath",
 				fmt.Errorf("initialize factory scaffold: initializer is required"),
 			)
 		}
 		if err := initialize(factoryDir); err != nil {
-			return factorysessions.NewValidationError(
+			return sessionvalidation.New(
 				factorysessions.ValidationReasonUnreadable,
 				"folderPath",
 				fmt.Errorf("initialize factory scaffold: %w", err),

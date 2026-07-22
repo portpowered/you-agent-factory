@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/sessionvalidation"
 )
 
 type LiveOpener interface {
@@ -55,7 +56,7 @@ func OpenFromFolder(
 	targets, err := host.DiscoverTargets(folderPath)
 	if err != nil {
 		if validateOnly {
-			if reason, _, ok := factorysessions.ValidationReasonFromError(err); ok && reason == factorysessions.ValidationReasonNotRunnable {
+			if reason, _, ok := sessionvalidation.ReasonFromError(err); ok && reason == factorysessions.ValidationReasonNotRunnable {
 				resolved, resolveErr := host.ResolveSessionFolder(folderPath)
 				if resolveErr != nil {
 					return nil, resolveErr
@@ -103,13 +104,13 @@ func initNewFactoryAndOpenSession(
 
 	targets, discoverErr := host.DiscoverTargets(folderPath)
 	if discoverErr == nil {
-		return nil, factorysessions.NewValidationError(
+		return nil, sessionvalidation.New(
 			factorysessions.ValidationReasonNotRunnable,
 			"folderPath",
 			fmt.Errorf("folder %q already exposes runnable factory targets", resolvedFolder),
 		)
 	}
-	reason, _, ok := factorysessions.ValidationReasonFromError(discoverErr)
+	reason, _, ok := sessionvalidation.ReasonFromError(discoverErr)
 	if !ok || reason != factorysessions.ValidationReasonNotRunnable {
 		return nil, discoverErr
 	}
