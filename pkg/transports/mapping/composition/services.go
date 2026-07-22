@@ -23,18 +23,18 @@ func NewRuntimeAPI(
 }
 
 func NewLiveSessionAPI(
-	sessions factorysessions.Gateway,
+	sessions factorysessions.Service,
 ) apisurface.LiveSessionAPI {
 	return factorysessionmapping.NewLiveAPI(sessions)
 }
 
-func NewWorkAPI(workService work.Service, sessions factorysessions.Gateway) apisurface.WorkAPI {
+func NewWorkAPI(workService work.Service, sessions factorysessions.Service) apisurface.WorkAPI {
 	return workAPI{work: workService, sessions: sessions}
 }
 
 type workAPI struct {
 	work     work.Service
-	sessions factorysessions.Gateway
+	sessions factorysessions.Service
 }
 
 func (a workAPI) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
@@ -80,7 +80,7 @@ func NewInvocationAPI(invocations factorysessions.SessionInvoker) apisurface.Inv
 
 func NewDurableAPI(
 	execution factorysessions.ExecutionService,
-	sessions factorysessions.Gateway,
+	sessions factorysessions.Service,
 ) apisurface.DurableSessionAPI {
 	return factorysessionmapping.NewDurableAPI(
 		execution,

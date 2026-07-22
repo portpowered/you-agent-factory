@@ -57,11 +57,11 @@ func TestFactorySessionsFactoryRequiresWireResolvedClock(t *testing.T) {
 		fileeffects.InvocationInputReader(func(string) ([]byte, error) { return nil, nil }),
 		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 	)
-	if assembly := factory(nil); assembly != nil {
+	if assembly, err := factory(nil); assembly != nil || err == nil {
 		t.Fatalf("Factory Sessions assembly without clock = %#v, want nil", assembly)
 	}
-	if assembly := factory(&wireTestClock{}); assembly == nil {
-		t.Fatal("Factory Sessions assembly with explicit Wire clock = nil")
+	if assembly, err := factory(&wireTestClock{}); assembly == nil || err != nil {
+		t.Fatalf("Factory Sessions assembly with explicit Wire clock = %#v, error = %v", assembly, err)
 	}
 }
 

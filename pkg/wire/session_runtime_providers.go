@@ -37,7 +37,7 @@ import (
 	factorysessionexecutionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 	factorysessionruntimeopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
-	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
+	factorysessionwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/wire"
 	"github.com/portpowered/infinite-you/pkg/services/models"
 	providersessions "github.com/portpowered/infinite-you/pkg/services/provider_sessions"
 	providersessionsservice "github.com/portpowered/infinite-you/pkg/services/provider_sessions/service"
@@ -390,8 +390,8 @@ func provideFactorySessionsFactory(
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
 ) factorysessionruntimeopening.FactorySessionsFactory {
-	return func(clock factoryruntime.Clock) factorysessions.RuntimeAssembly {
-		return factorysessionservice.NewAssembly(func() factoryruntime.JavaScriptCheckpointStore {
+	return func(clock factoryruntime.Clock) (factorysessions.RuntimeAssembly, error) {
+		return factorysessionwire.NewRuntimeAssembly(func() factoryruntime.JavaScriptCheckpointStore {
 			return factorycheckpointstore.New()
 		}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, clock, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles)
 	}
@@ -412,7 +412,7 @@ func provideFactorySessionExecutionFactory(
 		workerPresetIDs map[string]struct{},
 		workerSettings factoryruntime.JavaScriptWorkerSettings,
 	) (factorysessions.ExecutionService, error) {
-		return factorysessionservice.NewDurableExecution(
+		return factorysessionwire.NewDurableExecution(
 			projectRoot,
 			persistencePolicy,
 			stores,
@@ -445,7 +445,7 @@ func provideStandaloneSessionExecutionFactory(
 		executor workers.InvocationExecutor,
 		clock factoryruntime.Clock,
 	) (factorysessions.ExecutionService, error) {
-		return factorysessionservice.NewStandaloneExecution(
+		return factorysessionwire.NewStandaloneExecution(
 			provider,
 			projectRoot,
 			stores,

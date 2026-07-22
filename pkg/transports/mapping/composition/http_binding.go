@@ -45,7 +45,7 @@ func NewHTTPBinder(
 func (binder *HTTPBinder) Bind(
 	runtime factoryruntime.Service,
 	definitions factorydefinitions.Service,
-	sessions factorysessions.Gateway,
+	sessions factorysessions.Service,
 	invocations factorysessions.SessionInvoker,
 	execution factorysessions.ExecutionService,
 	workService work.Service,

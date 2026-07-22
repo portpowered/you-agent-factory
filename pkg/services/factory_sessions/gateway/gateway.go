@@ -3,4 +3,4 @@ package gateway
 
 import factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 
-type Gateway = factorysessions.Gateway
+type Gateway = factorysessions.Service

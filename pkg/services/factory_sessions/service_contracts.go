@@ -102,7 +102,9 @@ type InvocationOperation interface {
 	InvokeFactory(context.Context, InvocationTarget, InvocationRequest) (FactoryInvocationOutcome, error)
 }
 
-// Gateway is the complete Factory Sessions application boundary.
+// Gateway is the legacy name of the complete Factory Sessions application
+// boundary. New consumers use the Service alias below while the remaining root
+// contracts are consolidated into the single Service interface.
 type Gateway interface {
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
@@ -136,3 +138,9 @@ type Gateway interface {
 	InferenceProgressPublisherFactory(*zap.Logger) func(string) ProgressPublisher
 	DispatchCompletionObserverFactory() func(string) func(string)
 }
+
+// Service is the canonical Factory Sessions application contract exposed to
+// new consumers. It aliases Gateway only during the contract-consolidation
+// migration so the deletion-only structure baseline is not replaced with a
+// renamed exception.
+type Service = Gateway

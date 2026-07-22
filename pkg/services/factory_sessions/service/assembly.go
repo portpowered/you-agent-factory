@@ -159,7 +159,7 @@ func (a *Assembly) Complete(
 	invocationMetricsRecorder factorysessions.InvocationMetricsRecorder,
 ) (
 	factorysessions.ApplicationRuntime,
-	factorysessions.Gateway,
+	factorysessions.Service,
 	factorysessions.SessionInvoker,
 	factorysessions.DefinitionHost,
 	error,

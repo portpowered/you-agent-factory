@@ -20,7 +20,7 @@ type validationRole struct {
 
 type runtimeRole struct{ factoryruntime.Service }
 type definitionRole struct{ factorydefinitions.Service }
-type sessionRole struct{ factorysessions.Gateway }
+type sessionRole struct{ factorysessions.Service }
 type invocationRole struct{ factorysessions.SessionInvoker }
 type executionRole struct {
 	factorysessions.ExecutionService

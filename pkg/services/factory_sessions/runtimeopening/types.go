@@ -19,7 +19,7 @@ type runtimeProducts struct {
 
 func assembleRuntimeProducts(
 	factoryDefinitions factorydefinitions.Service,
-	factorySessionGateway factorysessions.Gateway,
+	factorySessionGateway factorysessions.Service,
 	sessionExecution factorysessions.ExecutionService,
 	sessionInvocation factorysessions.SessionInvoker,
 	factoryRuntime factoryruntime.Service,

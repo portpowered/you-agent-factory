@@ -148,7 +148,10 @@ func openRuntime(
 	if factorySessionsFactory == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions factory is required")
 	}
-	runtimeService := factorySessionsFactory(clock)
+	runtimeService, err := factorySessionsFactory(clock)
+	if err != nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service: %w", err)
+	}
 	if runtimeService == nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions factory returned nil assembly")
 	}
