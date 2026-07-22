@@ -43,6 +43,13 @@ wildcard `./tests/functional/...` path. The long lane runs the full behavior
 tree plus any `functionallong`-tagged files, so broad or slow scenarios stay
 available without widening the default feedback loop.
 
+The default and functional-coverage lanes share their runnable-package policy
+from `internal/testlanes`. Both lanes still execute every package returned by
+discovery rather than selecting from an allowlist. The same policy verifies
+that the provider contract, all eight built-in providers, script, mock-worker,
+and observability destinations remain present; a missing required destination
+fails discovery with the omitted import path.
+
 The coverage lanes intentionally use separate profiles. The
 `make test-functional-coverage` command executes only the maintained non-long
 functional packages while measuring backend-owned `cmd/factory` and `pkg/...`.
@@ -56,6 +63,10 @@ The lane enforces the current aggregate floor and an 80% target for every new
 backend package. Existing packages below 80% are explicitly grandfathered in
 the functional package baseline and should be removed from that file as their
 functional coverage reaches the target.
+Provider test destinations are test packages rather than measured backend
+packages, so adding an empty destination does not create a package-minimum
+manifest entry. Its scenarios still contribute to the shared backend profile
+as soon as tests are added there.
 
 The `make test-unit-coverage` command executes only backend package tests
 against that same owned code set. Functional coverage therefore remains
