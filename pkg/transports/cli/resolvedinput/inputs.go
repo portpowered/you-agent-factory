@@ -119,11 +119,11 @@ func (i Inputs) StringArray(inputID string) ([]string, error) {
 func (i Inputs) valueOfKind(inputID string, expected ValueKind) (Value, error) {
 	resolved, ok := i.entries[inputID]
 	if !ok {
-		return Value{}, fmt.Errorf("resolved CLI input %q is missing", inputID)
+		return Value{}, newMissingInputError(inputID, expected)
 	}
 	value := resolved.value
 	if value.Kind() != expected {
-		return Value{}, fmt.Errorf("resolved CLI input %q requires accessor kind %q, got %q", inputID, expected, value.Kind())
+		return Value{}, newKindMismatchError(inputID, expected, value.Kind())
 	}
 	return value, nil
 }

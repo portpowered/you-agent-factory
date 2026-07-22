@@ -370,7 +370,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   spelling, position, environment, filesystem, or process-global dependency.
   Definitions supply typed source precedence explicitly; the resolved snapshot
   retains the winning provenance and derives changed/default state from that
-  source instead of asking handlers to infer it.
+  source instead of asking handlers to infer it. Typed, wrap-safe access
+  diagnostics identify missing IDs and value-kind mismatches so handler adapters
+  can translate failures without string parsing.
   Static-plus-Factory composition is owned by
   `pkg/transports/cli/climanifest.ComposeRunInputs`: pass the validated `you.run`
   command and only the selected Factory's `InvocationSignatureConfig`. The pure
