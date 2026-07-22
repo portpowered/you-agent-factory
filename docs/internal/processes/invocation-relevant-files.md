@@ -80,8 +80,11 @@ response-stream output.
 - Shared ordered output serialization and final-once terminal write:
   `pkg/services/factory_visualization/factory_event_stream.go`
 - Keep provider-response chunks and ephemeral `FactoryResponseEvent` values out
-  of this presentation boundary; live and replay modes both present the detached
-  canonical event history returned by Factory Session invocation.
+  of this presentation boundary. The Factory Session invocation operation
+  attaches the canonical consumer before live execution, durable JavaScript
+  execution publishes canonical phase/checkpoint updates through the same
+  invocation-local callback, and finite replay history enters that consumer
+  before the separate terminal response is finalized.
 - Preserve the canonical event envelope and sequence context, but recursively
   omit provider response, diagnostic, Provider Session, delta, and tool-call
   fields from the JSON presentation payload before encoding. Keep this pure
@@ -419,22 +422,21 @@ response-stream output.
   select primary-result-only versus the session-owned canonical
   `FactoryResponseEvent` subscription for supported one-shot factory invocations.
   Do not fall back to legacy provider-progress payloads when the canonical
-  subscription is unavailable. Keep mode validation, unsupported
-  run-shape rejection, and fallback behavior in `pkg/transports/cli/run/invocation_error.go`,
-  stream attachment, bounded human-progress draining, and lossless canonical
-  JSON stdout ordering in
-  `pkg/transports/cli/run/invocation_observability.go`, human progress and canonical JSON rendering in
-  `pkg/transports/cli/run/run_clean_invocation.go`, response-stream unit tests in
-  `pkg/transports/cli/run/run_config_test.go`, response-stream CLI integration tests in
-  `pkg/transports/cli/run/run_wire_api_test.go`, and invocation wiring in
-  `pkg/transports/cli/run/factory_invocation_input.go`. `pkg/transports/cli/root_work.go` and
+  subscription is unavailable. Keep mode validation and unsupported run-shape
+  rejection in `pkg/transports/cli/run/invocation_error.go`, canonical human and
+  JSON rendering in `pkg/transports/cli/run/run_clean_invocation.go`, live/replay
+  consumer wiring in `pkg/transports/cli/run/factory_invocation_input.go` and
+  `pkg/services/factory_sessions/runtimeopening/invocation/operation.go`, and
+  JavaScript canonical event publication in
+  `pkg/services/factory_sessions/execution`. `pkg/transports/cli/root_work.go` and
   `pkg/transports/cli/root_run_test.go` apply manually parsed `you run --output response-stream`
   to `RunConfig.InvocationOutputMode` after `DisableFlagParsing` argument parsing.
   The `pkg/transports/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
-  fields. Both human and JSON modes consume the detached canonical Factory Event
-  history returned by the invocation operation. Human mode renders only its
+  fields. Both human and JSON modes consume canonical events incrementally for
+  live invocations and consume finite canonical history through the same callback
+  for replay. Human mode renders only its
   bounded typed allow-list; JSON emits only `factory_event` records and sends
   every accepted event plus the final `invocation_result` through one lossless
   ordered writer. Do not reuse the human progress queue's drop policy for JSON.

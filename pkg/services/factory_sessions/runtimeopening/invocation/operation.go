@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	platformfilesystem "github.com/portpowered/infinite-you/pkg/platform/filesystem"
@@ -122,6 +123,7 @@ func (o *operation) InvokeFactory(
 	ctx context.Context,
 	target factorysessions.InvocationTarget,
 	request factorysessions.InvocationRequest,
+	consume factorysessions.FactoryEventConsumer,
 ) (outcome factorysessions.FactoryInvocationOutcome, resultErr error) {
 	opened, lifecycle, err := o.open(ctx, target)
 	if err != nil {
@@ -131,21 +133,137 @@ func (o *operation) InvokeFactory(
 		resultErr = errors.Join(resultErr, lifecycle.close(ctx, opened))
 	}()
 
-	if result, handled, err := invokeJavaScriptFactory(lifecycle.runContext, opened, target, request, o.generateSessionID); handled {
+	projection, projectionErr := opened.Sessions.GetFactorySession(
+		lifecycle.runContext, factorysessions.DefaultSessionID,
+	)
+	if projectionErr == nil && factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
+		delivery := newInvocationFactoryEventDelivery(consume)
+		result, err := invokeJavaScriptFactory(
+			lifecycle.runContext, opened, projection.Context, target, request, o.generateSessionID,
+			delivery.present,
+		)
 		outcome.Result = result
-		if err == nil {
-			outcome.FactoryEvents, err = readInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, result)
+		if err == nil && consume != nil {
+			events, readErr := readInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, result)
+			if readErr != nil {
+				return outcome, readErr
+			}
+			delivery.present(events)
 		}
 		return outcome, err
 	}
 
+	liveEvents, err := startLiveInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, consume)
+	if err != nil {
+		return outcome, err
+	}
 	outcome.Result, resultErr = opened.Invoker.InvokeFactorySession(
 		lifecycle.runContext, factorysessions.DefaultSessionID, request,
 	)
-	if resultErr == nil {
-		outcome.FactoryEvents, resultErr = readInvocationFactoryEvents(lifecycle.runContext, opened.Sessions, outcome.Result)
+	if liveEvents != nil {
+		resultErr = errors.Join(resultErr, liveEvents.finish(lifecycle.runContext, opened.Sessions, outcome.Result))
 	}
 	return outcome, resultErr
+}
+
+type liveInvocationFactoryEvents struct {
+	consume factorysessions.FactoryEventConsumer
+	cancel  context.CancelFunc
+	done    chan struct{}
+	seen    map[string]struct{}
+}
+
+type invocationFactoryEventDelivery struct {
+	mu      sync.Mutex
+	consume factorysessions.FactoryEventConsumer
+	seen    map[string]struct{}
+}
+
+func newInvocationFactoryEventDelivery(
+	consume factorysessions.FactoryEventConsumer,
+) *invocationFactoryEventDelivery {
+	return &invocationFactoryEventDelivery{consume: consume, seen: make(map[string]struct{})}
+}
+
+func (delivery *invocationFactoryEventDelivery) present(events []factorydefinitions.FactoryEvent) {
+	if delivery == nil || delivery.consume == nil {
+		return
+	}
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	unseen := make([]factorydefinitions.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if _, ok := delivery.seen[event.Id]; ok {
+			continue
+		}
+		delivery.seen[event.Id] = struct{}{}
+		unseen = append(unseen, event.Clone())
+	}
+	if len(unseen) > 0 {
+		delivery.consume(unseen)
+	}
+}
+
+func startLiveInvocationFactoryEvents(
+	ctx context.Context,
+	reader invocationFactoryEventReader,
+	consume factorysessions.FactoryEventConsumer,
+) (*liveInvocationFactoryEvents, error) {
+	if consume == nil {
+		return nil, nil
+	}
+	streamCtx, cancel := context.WithCancel(ctx)
+	stream, err := reader.SubscribeFactoryEventsForSession(
+		streamCtx, factorysessions.DefaultSessionID, nil,
+	)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("subscribe invocation Factory Events: %w", err)
+	}
+	if stream == nil || stream.Events == nil {
+		cancel()
+		return nil, errors.New("subscribe invocation Factory Events: stream is unavailable")
+	}
+	live := &liveInvocationFactoryEvents{
+		consume: consume, cancel: cancel, done: make(chan struct{}), seen: make(map[string]struct{}),
+	}
+	live.presentUnseen(stream.History)
+	go func() {
+		defer close(live.done)
+		for event := range stream.Events {
+			live.presentUnseen([]factorydefinitions.FactoryEvent{event})
+		}
+	}()
+	return live, nil
+}
+
+func (live *liveInvocationFactoryEvents) finish(
+	ctx context.Context,
+	reader invocationFactoryEventReader,
+	result factorydefinitions.FactoryInvocationResult,
+) error {
+	live.cancel()
+	<-live.done
+	events, err := readInvocationFactoryEvents(ctx, reader, result)
+	if err != nil {
+		return err
+	}
+	live.presentUnseen(events)
+	return nil
+}
+
+func (live *liveInvocationFactoryEvents) presentUnseen(events []factorydefinitions.FactoryEvent) {
+	unseen := make([]factorydefinitions.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		if _, ok := live.seen[event.Id]; ok {
+			continue
+		}
+		live.seen[event.Id] = struct{}{}
+		unseen = append(unseen, event.Clone())
+	}
+	if len(unseen) > 0 {
+		live.consume(unseen)
+	}
 }
 
 type invocationFactoryEventReader interface {
@@ -191,33 +309,32 @@ func readInvocationFactoryEvents(
 func invokeJavaScriptFactory(
 	ctx context.Context,
 	opened factorysessions.OpenedInvocationRuntime,
+	projection factorysessions.ProjectionContext,
 	target factorysessions.InvocationTarget,
 	request factorysessions.InvocationRequest,
 	generateSessionID factorysessions.SessionIDGenerator,
-) (factorydefinitions.FactoryInvocationResult, bool, error) {
-	projection, err := opened.Sessions.GetFactorySession(ctx, factorysessions.DefaultSessionID)
-	if err != nil || !factorydefinitions.IsJavaScriptOrchestratorFactory(projection.Context.FactoryCfg) {
-		return factorydefinitions.FactoryInvocationResult{}, false, nil
-	}
+	consume factorysessions.FactoryEventConsumer,
+) (factorydefinitions.FactoryInvocationResult, error) {
 	resolver := opened.InputResolver
 	if resolver == nil {
-		return factorydefinitions.FactoryInvocationResult{}, true, errors.New("Factory Session invocation input resolver is required")
+		return factorydefinitions.FactoryInvocationResult{}, errors.New("Factory Session invocation input resolver is required")
 	}
-	startRequest, err := javaScriptStartRequest(projection.Context, target, request, resolver, generateSessionID)
+	startRequest, err := javaScriptStartRequest(projection, target, request, resolver, generateSessionID)
 	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, true, err
+		return factorydefinitions.FactoryInvocationResult{}, err
 	}
+	startRequest.EventConsumer = factorysessions.ExecutionFactoryEventConsumer(consume)
 	started, err := opened.Execution.StartSync(ctx, startRequest)
 	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, true, err
+		return factorydefinitions.FactoryInvocationResult{}, err
 	}
 	result, err := opened.Execution.GetResult(ctx, started.SessionID, factorysessions.ResultRequest{
 		Mode: factorysessions.ResultModeFinal,
 	})
 	if err != nil {
-		return factorydefinitions.FactoryInvocationResult{}, true, err
+		return factorydefinitions.FactoryInvocationResult{}, err
 	}
-	return javaScriptInvocationResult(startRequest.RequestID, result), true, nil
+	return javaScriptInvocationResult(startRequest.RequestID, result), nil
 }
 
 func javaScriptStartRequest(

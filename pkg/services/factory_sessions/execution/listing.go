@@ -451,6 +451,11 @@ func BuildCanonicalRuntimeSessionEvents(
 	dispatch ...RuntimeDispatchEventInput,
 ) []json.RawMessage {
 	events := buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
+	if len(session.PhaseSummaries) > 0 {
+		events = appendCanonicalOrchestratorPhaseEvents(
+			events, session, canonicalEventSourceRuntimeService,
+		)
+	}
 	if len(dispatch) == 0 {
 		return events
 	}

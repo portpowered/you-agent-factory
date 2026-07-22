@@ -83,9 +83,13 @@ type InvocationTarget struct {
 // FactoryInvocationOutcome contains the canonical Factory Event history and
 // terminal result retained during the invocation.
 type FactoryInvocationOutcome struct {
-	Result        factorydefinitions.FactoryInvocationResult
-	FactoryEvents []factorydefinitions.FactoryEvent
+	Result factorydefinitions.FactoryInvocationResult
 }
+
+// FactoryEventConsumer receives ordered canonical events during one invocation.
+// Transports may adapt this callback to presentation without moving transport
+// encoding into the Factory Sessions owner.
+type FactoryEventConsumer func([]factorydefinitions.FactoryEvent)
 
 // InvocationOperation owns one-shot model and Factory invocation lifecycle.
 // Callers supply invocation data; opening, readiness, session release and
@@ -98,7 +102,7 @@ type ModelInvocationOperation interface {
 
 type InvocationOperation interface {
 	ModelInvocationOperation
-	InvokeFactory(context.Context, InvocationTarget, InvocationRequest) (FactoryInvocationOutcome, error)
+	InvokeFactory(context.Context, InvocationTarget, InvocationRequest, FactoryEventConsumer) (FactoryInvocationOutcome, error)
 }
 
 // Gateway is the complete Factory Sessions application boundary.

@@ -112,6 +112,7 @@ func (s *JavaScriptRuntimeService) publishAsyncTerminalCandidate(
 	policyResolution factory.JavaScriptPolicyResolution,
 	startedAt time.Time,
 ) {
+	sessionID := state.session.SessionID
 	if err := s.recordCanonicalTerminalState(state, candidate); err != nil {
 		failureOutcome := factory.JavaScriptRuntimeOutcome{Failure: factory.JavaScriptRuntimeFailure{
 			Code:    factory.JavaScriptRuntimeCodeScriptError,
@@ -132,6 +133,7 @@ func (s *JavaScriptRuntimeService) publishAsyncTerminalCandidate(
 		*state = failed
 	}
 	s.mu.Unlock()
+	s.presentCurrentFactoryEvents(sessionID)
 }
 
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(

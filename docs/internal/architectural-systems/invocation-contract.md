@@ -79,6 +79,13 @@ incremental public response events; final-only providers may emit only terminal
 semantic snapshots. Authoritative invocation success remains `primaryResult` and
 canonical Factory event facts even when intermediate observation is sparse.
 
+CLI lifecycle presentation attaches an invocation-local canonical Factory Event
+consumer before live execution. Default sessions drain retained-then-live event
+streams, durable JavaScript execution publishes phase and checkpoint projections
+to that callback as runtime records arrive, and replay supplies finite canonical
+history through the same consumer. The terminal `InvocationResponse` remains a
+separate final value; provider response streams are never a CLI lifecycle source.
+
 For copyable examples, cursor semantics, typed HTTP outcomes, and provider
 fidelity guidance, use `you docs run`, `you docs sessions`, and `you docs
 workers`.

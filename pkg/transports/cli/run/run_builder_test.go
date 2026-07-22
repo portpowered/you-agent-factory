@@ -245,7 +245,8 @@ func (f testRunnerOpeners) Invocation() factorysessions.InvocationOperation {
 }
 
 type testInvocationOperation struct {
-	open testInvocationRunnerOpener
+	open          testInvocationRunnerOpener
+	invokeFactory func(context.Context, factorysessions.InvocationTarget, factorysessions.InvocationRequest, factorysessions.FactoryEventConsumer) (factorysessions.FactoryInvocationOutcome, error)
 }
 
 func (testInvocationOperation) ResolveModelInvocationFactoryDir(dir string) (string, error) {
@@ -269,7 +270,11 @@ func (o testInvocationOperation) InvokeFactory(
 	ctx context.Context,
 	target factorysessions.InvocationTarget,
 	request factorysessions.InvocationRequest,
+	consume factorysessions.FactoryEventConsumer,
 ) (factorysessions.FactoryInvocationOutcome, error) {
+	if o.invokeFactory != nil {
+		return o.invokeFactory(ctx, target, request, consume)
+	}
 	if o.open == nil {
 		return factorysessions.FactoryInvocationOutcome{}, errors.New("construct factory invocation: test operation is required")
 	}
@@ -285,13 +290,12 @@ func (o testInvocationOperation) InvokeFactory(
 		cancel()
 		return factorysessions.FactoryInvocationOutcome{}, err
 	}
-	outcome := factorysessions.FactoryInvocationOutcome{}
 	result, err := runner.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, generatedTestInvocationRequest(request))
-	outcome.Result = result
 	if source, ok := runner.(interface {
 		GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error)
-	}); ok {
-		outcome.FactoryEvents, _ = source.GetFactoryEvents(runCtx)
+	}); ok && consume != nil {
+		events, _ := source.GetFactoryEvents(runCtx)
+		consume(events)
 	}
 	closeErr := runner.CloseFactorySession(runCtx, factorysessions.DefaultSessionID)
 	cancel()
@@ -302,7 +306,7 @@ func (o testInvocationOperation) InvokeFactory(
 	if err == nil && lifecycleErr != nil && !errors.Is(lifecycleErr, context.Canceled) {
 		err = lifecycleErr
 	}
-	return outcome, err
+	return factorysessions.FactoryInvocationOutcome{Result: result}, err
 }
 
 func testInvocationRuntimeConfig(target factorysessions.InvocationTarget) *testRuntimeSelections {
@@ -394,7 +398,6 @@ func runWithTestRuntimeRunnerAndMockWorkersLoader(
 		factory.BuildRunner,
 		factory.Invocation(),
 		testResponsePresentation(),
-		testResponseEventValidator(),
 		prepareSingleWorkTargetForTest,
 		loadMockWorkers,
 		testRuntimeOpeningRequestFactory,

@@ -12,6 +12,9 @@ import (
 
 type invocationEventReaderStub struct {
 	liveEvents     []factorydefinitions.FactoryEvent
+	liveHistories  [][]factorydefinitions.FactoryEvent
+	liveStream     <-chan factorydefinitions.FactoryEvent
+	liveReads      int
 	durableEvents  []factorydefinitions.FactoryEvent
 	liveSession    string
 	durableSession string
@@ -23,7 +26,18 @@ func (stub *invocationEventReaderStub) SubscribeFactoryEventsForSession(
 	_ *factorydefinitions.FactoryEventReconnectCursor,
 ) (*factorydefinitions.FactoryEventStream, error) {
 	stub.liveSession = sessionID
-	return &factorydefinitions.FactoryEventStream{History: stub.liveEvents}, nil
+	history := stub.liveEvents
+	if stub.liveReads < len(stub.liveHistories) {
+		history = stub.liveHistories[stub.liveReads]
+	}
+	stub.liveReads++
+	events := stub.liveStream
+	if events == nil {
+		closed := make(chan factorydefinitions.FactoryEvent)
+		close(closed)
+		events = closed
+	}
+	return &factorydefinitions.FactoryEventStream{History: history, Events: events}, nil
 }
 
 func (stub *invocationEventReaderStub) ReadDurableFactorySessionEventStream(
@@ -72,6 +86,67 @@ func TestReadInvocationFactoryEvents_UsesDurableHistoryForJavaScriptSession(t *t
 		t.Fatalf("reader calls = live %q durable %q", reader.liveSession, reader.durableSession)
 	}
 }
+
+func TestLiveInvocationFactoryEvents_PresentsBeforeTerminalAndReconcilesFinalHistory(t *testing.T) {
+	events := invocationFactoryEventFixtures()
+	terminal := events[1].Clone()
+	terminal.Id = "event-terminal"
+	terminal.Context.Sequence = 6
+	terminal.Context.SessionSequence = intPointer(6)
+	allEvents := append(append([]factorydefinitions.FactoryEvent(nil), events...), terminal)
+	liveStream := make(chan factorydefinitions.FactoryEvent, 1)
+	reader := &invocationEventReaderStub{
+		liveHistories: [][]factorydefinitions.FactoryEvent{events[:1], allEvents},
+		liveStream:    liveStream,
+	}
+
+	presented := make(chan factorydefinitions.FactoryEvent, len(allEvents))
+	live, err := startLiveInvocationFactoryEvents(
+		context.Background(), reader,
+		func(batch []factorydefinitions.FactoryEvent) {
+			for _, event := range batch {
+				presented <- event
+			}
+		},
+	)
+	if err != nil {
+		t.Fatalf("start live Factory Event consumption: %v", err)
+	}
+	assertPresentedInvocationEvent(t, presented, events[0])
+
+	liveStream <- events[1]
+	assertPresentedInvocationEvent(t, presented, events[1])
+	close(liveStream)
+	if err := live.finish(
+		context.Background(), reader, factorydefinitions.FactoryInvocationResult{},
+	); err != nil {
+		t.Fatalf("finish live Factory Event consumption: %v", err)
+	}
+	assertPresentedInvocationEvent(t, presented, terminal)
+	select {
+	case duplicate := <-presented:
+		t.Fatalf("duplicate event presented during final reconciliation: %#v", duplicate)
+	default:
+	}
+}
+
+func assertPresentedInvocationEvent(
+	t *testing.T,
+	presented <-chan factorydefinitions.FactoryEvent,
+	want factorydefinitions.FactoryEvent,
+) {
+	t.Helper()
+	select {
+	case got := <-presented:
+		if got.Id != want.Id || got.Context.Sequence != want.Context.Sequence {
+			t.Fatalf("presented event = %#v, want %#v", got, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for Factory Event %q", want.Id)
+	}
+}
+
+func intPointer(value int) *int { return &value }
 
 func invocationFactoryEventFixtures() []factorydefinitions.FactoryEvent {
 	sessionID := "session-javascript"

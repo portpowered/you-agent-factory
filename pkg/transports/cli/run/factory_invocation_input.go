@@ -109,7 +109,6 @@ func openInvocation(
 	recordPath resolvedRunRecordPath,
 	invocation factorysessions.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
 	mockWorkersConfig *workers.MockWorkersConfig,
 ) (*Operation, error) {
 	if invocation == nil {
@@ -118,13 +117,10 @@ func openInvocation(
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && presentation == nil {
 		return nil, fmt.Errorf("construct factory invocation: response presentation operation is required")
 	}
-	if isResponseStreamOutputMode(cfg.InvocationOutputMode) && responseEvents == nil {
-		return nil, fmt.Errorf("construct factory invocation: response-event validator is required")
-	}
 	return &Operation{
 		cfg: cfg, logger: logger, invocationRequest: request,
 		invocationTarget: invocationTarget(cfg, logger, mockWorkersConfig),
-		invocation:       invocation, presentation: presentation, responseEvents: responseEvents,
+		invocation:       invocation, presentation: presentation,
 		invocationMode: true, recordPath: recordPath,
 	}, nil
 }
@@ -221,7 +217,6 @@ func runFactoryInvocation(
 	request factoryapi.InvocationRequest,
 	invocation factorysessions.InvocationOperation,
 	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
 ) error {
 	if invocation == nil {
 		return fmt.Errorf("run factory invocation: operation is required")
@@ -234,14 +229,15 @@ func runFactoryInvocation(
 		defer streamRenderer.stopProgressRendering()
 	}
 
+	var consume factorysessions.FactoryEventConsumer
+	if streamRenderer != nil {
+		consume = streamRenderer.PresentFactoryEvents
+	}
 	outcome, err := invocation.InvokeFactory(
-		ctx, target, factorysessionmapping.InvocationRequestFromAPI(request),
+		ctx, target, factorysessionmapping.InvocationRequestFromAPI(request), consume,
 	)
 	if err != nil {
 		return MapInvocationFailure(err)
-	}
-	if streamRenderer != nil && len(outcome.FactoryEvents) > 0 {
-		streamRenderer.PresentFactoryEvents(outcome.FactoryEvents)
 	}
 	result := outcome.Result
 	if result.Status != interfaces.InvocationTerminalStatusCompleted {
@@ -346,7 +342,7 @@ func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 func writeInvocationFailure(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer responseStreamRenderer,
+	streamRenderer factoryEventRenderer,
 ) error {
 	if streamRenderer != nil {
 		if err := streamRenderer.writeFinalInvocationResult(result); err != nil {
@@ -363,7 +359,7 @@ func writeInvocationFailure(
 func writeInvocationSuccess(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer responseStreamRenderer,
+	streamRenderer factoryEventRenderer,
 ) error {
 	if streamRenderer != nil {
 		return streamRenderer.writeFinalInvocationResult(result)

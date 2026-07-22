@@ -10,9 +10,7 @@ import (
 )
 
 func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *testing.T) {
-	support.SkipLongFunctional(t, "slow batch generated API normalization smoke")
-
-	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	dir := support.ScaffoldFactory(t, competingPipelineConfig())
 	server := support.StartFunctionalAPIServiceModeServer(t, dir, true)
 	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	_ = stream.next(5 * time.Second) // RUN_REQUEST
@@ -48,6 +46,19 @@ func TestGeneratedAPIIntegrationSmoke_BatchWorkTypeNameNormalizesRuntimeWork(t *
 	}
 	assertPublicBatchDurableOutcomes(t, server.URL(), firstWorkID, secondWorkID)
 	assertPublicBatchDependencyAndIdempotency(t, stream, request.RequestId, firstWorkID, secondWorkID)
+}
+
+func competingPipelineConfig() map[string]any {
+	config := simplePipelineConfig()
+	config["workers"] = []map[string]string{{"name": "worker-a"}, {"name": "worker-b"}}
+	config["workstations"] = append(config["workstations"].([]map[string]any), map[string]any{
+		"name":      "process-alternate",
+		"worker":    "worker-b",
+		"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+		"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+		"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+	})
+	return config
 }
 
 func assertPublicBatchDurableOutcomes(t *testing.T, baseURL, firstWorkID, secondWorkID string) {

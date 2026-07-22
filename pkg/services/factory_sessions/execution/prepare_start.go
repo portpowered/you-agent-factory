@@ -361,6 +361,47 @@ func checkpointEventsFromRuntimeState(state *runtimeSessionState) []RuntimeCheck
 	return events
 }
 
+func appendCanonicalOrchestratorPhaseEvents(
+	events []json.RawMessage,
+	session SessionReadResult,
+	source string,
+) []json.RawMessage {
+	if len(session.PhaseSummaries) == 0 {
+		return events
+	}
+	eventTime := canonicalSessionEventTime(session)
+	sessionID := session.SessionID
+	orchestratorKind := string(session.OrchestratorKind)
+	var orchestratorDialect *string
+	if dialect := strings.TrimSpace(session.Dialect); dialect != "" {
+		orchestratorDialect = &dialect
+	}
+	phaseEvents := make([]json.RawMessage, 0, len(session.PhaseSummaries))
+	for index, summary := range session.PhaseSummaries {
+		phase := strings.TrimSpace(summary.Phase)
+		if phase == "" {
+			continue
+		}
+		status := "COMPLETED"
+		if !IsTerminalLifecycleStatus(session.Status) && index == len(session.PhaseSummaries)-1 {
+			status = "ACTIVE"
+		}
+		builder := canonicalSessionEventBuilder{
+			sessionID: sessionID, orchestratorKind: orchestratorKind,
+			orchestratorDialect: orchestratorDialect,
+			phaseID:             &phase, phaseName: &phase, source: source, eventTime: eventTime,
+		}
+		sequence := nextCanonicalSessionEventSequence(events) + len(phaseEvents)
+		phaseEvents = append(phaseEvents, builder.event(
+			"ORCHESTRATOR_PHASE_CHANGED",
+			fmt.Sprintf("orchestrator-phase-changed/%s/%d/%s", sessionID, index, phase),
+			sequence,
+			mustMarshalPayload(map[string]any{"phaseStatus": status}),
+		))
+	}
+	return insertEventsBeforeSessionCompleted(events, phaseEvents)
+}
+
 func appendCanonicalOrchestratorCheckpointEvents(
 	events []json.RawMessage,
 	session SessionReadResult,
@@ -714,4 +755,130 @@ func resequenceCanonicalEvents(events []json.RawMessage) []json.RawMessage {
 		}
 	}
 	return events
+}
+
+func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, record factory.JavaScriptRuntimeRecord) {
+	s.mu.Lock()
+
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	preservedInterrupted := snapshotInterruptedDispatches(state)
+	state.runtimeRecords = append(state.runtimeRecords, cloneRuntimeRecord(record))
+	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, s.now())
+	if record.Kind == factory.JavaScriptRecordKindCheckpoint && record.Checkpoint != nil {
+		state.checkpointSummary = s.checkpointSummaries.Build(factory.JavaScriptCheckpointSummaryInput{
+			SessionID:       sessionID,
+			CheckpointID:    record.Checkpoint.ID,
+			Label:           record.Checkpoint.Label,
+			Phase:           strings.TrimSpace(projection.Phase),
+			SourceHash:      strings.TrimSpace(state.session.SourceHash),
+			PolicyHash:      strings.TrimSpace(state.session.Policy.EffectiveHash),
+			CreatedAt:       s.now(),
+			CheckpointState: record.Checkpoint.State,
+			Records:         state.runtimeRecords,
+		})
+	}
+	state.dispatches = cloneDispatchSummaries(projection.Dispatches)
+	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(projection.DispatchJavaScript)
+	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(projection.DispatchStatusTransitions)
+	state.artifacts = cloneArtifactSummaries(projection.Artifacts)
+	if phase := strings.TrimSpace(projection.Phase); phase != "" {
+		state.session.Phase = phase
+	}
+	state.session.PhaseSummaries = append([]PhaseSummary(nil), projection.PhaseSummaries...)
+	if record.Kind == factory.JavaScriptRecordKindCheckpoint && record.Checkpoint != nil {
+		state.session.LatestCheckpoint = &CheckpointRef{
+			ID: strings.TrimSpace(record.Checkpoint.ID), Label: strings.TrimSpace(record.Checkpoint.Label), Phase: strings.TrimSpace(projection.Phase),
+		}
+	}
+	progress := projection.Progress
+	state.session.Progress = &progress
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
+	consume, events := nextFactoryEventsForConsumer(state)
+	s.mu.Unlock()
+	if consume != nil && len(events) > 0 {
+		consume(events)
+	}
+}
+
+func (s *JavaScriptRuntimeService) registerFactoryEventConsumer(
+	state *runtimeSessionState,
+	consume FactoryEventConsumer,
+) {
+	if consume == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state.eventConsumer = consume
+	state.presentedEventIDs = make(map[string]struct{})
+}
+
+func (s *JavaScriptRuntimeService) observeFactoryEvents(
+	state *runtimeSessionState,
+	consume FactoryEventConsumer,
+) func() {
+	s.registerFactoryEventConsumer(state, consume)
+	if consume == nil {
+		return func() {}
+	}
+	return func() {
+		s.unregisterFactoryEventConsumer(state.session.SessionID)
+	}
+}
+
+func (s *JavaScriptRuntimeService) unregisterFactoryEventConsumer(sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		return
+	}
+	state.eventConsumer = nil
+	state.presentedEventIDs = nil
+}
+
+func (s *JavaScriptRuntimeService) presentCurrentFactoryEvents(sessionID string) {
+	s.mu.Lock()
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	consume, events := nextFactoryEventsForConsumer(state)
+	s.mu.Unlock()
+	if consume != nil && len(events) > 0 {
+		consume(events)
+	}
+}
+
+func nextFactoryEventsForConsumer(
+	state *runtimeSessionState,
+) (FactoryEventConsumer, []interfaces.FactoryEvent) {
+	if state == nil || state.eventConsumer == nil {
+		return nil, nil
+	}
+	if state.presentedEventIDs == nil {
+		state.presentedEventIDs = make(map[string]struct{})
+	}
+	events := make([]interfaces.FactoryEvent, 0, len(state.events))
+	for _, raw := range state.events {
+		var event interfaces.FactoryEvent
+		if err := json.Unmarshal(raw, &event); err != nil {
+			continue
+		}
+		if _, seen := state.presentedEventIDs[event.Id]; seen {
+			continue
+		}
+		state.presentedEventIDs[event.Id] = struct{}{}
+		event.Payload = append(json.RawMessage(nil), event.Payload...)
+		events = append(events, event)
+	}
+	return state.eventConsumer, events
 }

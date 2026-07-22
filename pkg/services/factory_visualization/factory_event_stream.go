@@ -11,6 +11,11 @@ import (
 // canonical Factory Event. A false result omits the event from that adapter.
 type FactoryEventEncoder func(factorydefinitions.FactoryEvent) ([]byte, bool)
 
+// FinalResponseWriter writes one terminal invocation representation after all
+// accepted Factory Event records have drained. progressSeen reports whether
+// the stream accepted any lifecycle record.
+type FinalResponseWriter func(io.Writer, bool) error
+
 type serializedFactoryEventStream struct {
 	mu           sync.Mutex
 	output       Output

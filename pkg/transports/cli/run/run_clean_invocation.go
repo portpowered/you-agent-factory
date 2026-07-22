@@ -14,7 +14,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/services/factory_definitions"
 	state "github.com/portpowered/infinite-you/pkg/services/factory_runtime"
-	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factoryvisualization "github.com/portpowered/infinite-you/pkg/services/factory_visualization"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	factorytoken "github.com/portpowered/infinite-you/pkg/services/workers"
@@ -389,72 +388,7 @@ const (
 	responseStreamPrimaryResultHeader     = "--- primary result ---"
 	responseStreamInvocationOutcomeHeader = "--- invocation outcome ---"
 	maxHumanProgressLineBytes             = 1024
-
-	responseStreamJSONRecordResponseEvent    = "response_event"
-	responseStreamJSONRecordInvocationResult = "invocation_result"
 )
-
-// responseStreamRenderer writes ordered canonical progress output followed by
-// the final invocation result.
-type responseStreamRenderer interface {
-	stopProgressRendering()
-	writeFinalInvocationResult(result apisurface.FactoryInvocationResult) error
-}
-
-// humanResponseStreamRenderer prints canonical response-event progress to
-// stdout and keeps the final invocation result separate from transient output.
-type humanResponseStreamRenderer struct {
-	stream factoryvisualization.ResponseStream
-}
-
-func newHumanResponseStreamRenderer(
-	output io.Writer,
-	presentation factoryvisualization.ResponsePresentation,
-	responseEvents factorysessions.ResponseEventValidator,
-) *humanResponseStreamRenderer {
-	if output == nil {
-		panic("response-stream output is nil")
-	}
-	if presentation == nil {
-		panic("response presentation service is nil")
-	}
-	if responseEvents == nil {
-		panic("Factory response-event validator is nil")
-	}
-	return &humanResponseStreamRenderer{stream: presentation.OpenBestEffortResponseStream(
-		output,
-		func(event factorysessions.FactoryResponseEvent) ([]byte, bool) {
-			line, ok := formatHumanResponseEvent(responseEvents, event)
-			return []byte(line), ok
-		},
-	)}
-}
-
-func (r *humanResponseStreamRenderer) stopProgressRendering() {
-	if r == nil {
-		return
-	}
-	_ = r.stream.CloseAndDrain()
-}
-
-func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
-	result apisurface.FactoryInvocationResult,
-) error {
-	if r == nil {
-		return fmt.Errorf("response-stream renderer is nil")
-	}
-	_, err := r.stream.Finalize(func(writer io.Writer, progressSeen bool) error {
-		if result.Status == interfaces.InvocationTerminalStatusCompleted {
-			text, err := invocationPrimaryResultText(result.PrimaryResult)
-			if err != nil {
-				return err
-			}
-			return writeHumanPrimaryResult(writer, progressSeen, text)
-		}
-		return writeHumanInvocationOutcome(writer, progressSeen, result)
-	})
-	return err
-}
 
 func writeHumanInvocationOutcome(
 	output io.Writer,
@@ -551,86 +485,10 @@ func normalizeHumanProgressField(value string) string {
 	return strings.Join(strings.Fields(normalized), " ")
 }
 
-// jsonResponseStreamRenderer emits canonical response-event NDJSON followed by
-// the shared invocation response.
-type jsonResponseStreamRenderer struct {
-	stream factoryvisualization.ResponseStream
-}
-
-func newJSONResponseStreamRenderer(
-	output io.Writer,
-	presentation factoryvisualization.ResponsePresentation,
-) *jsonResponseStreamRenderer {
-	if output == nil {
-		panic("response-stream output is nil")
-	}
-	if presentation == nil {
-		panic("response presentation service is nil")
-	}
-	return &jsonResponseStreamRenderer{stream: presentation.OpenLosslessResponseStream(
-		output,
-		func(event factorysessions.FactoryResponseEvent) ([]byte, bool) {
-			encoded, err := json.Marshal(responseStreamJSONResponseEventRecord{
-				RecordType: responseStreamJSONRecordResponseEvent,
-				Event:      event,
-			})
-			return encoded, err == nil
-		},
-	)}
-}
-
-func (r *jsonResponseStreamRenderer) stopProgressRendering() {
-	if r == nil {
-		return
-	}
-	_ = r.stream.CloseAndDrain()
-}
-
-func (r *jsonResponseStreamRenderer) PresentResponseEvents(events []factorysessions.FactoryResponseEvent) {
-	if r == nil {
-		return
-	}
-	r.stream.PresentResponseEvents(events)
-}
-
-func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
-	result apisurface.FactoryInvocationResult,
-) error {
-	if r == nil {
-		return fmt.Errorf("response-stream renderer is nil")
-	}
-	first, err := r.stream.Finalize(func(writer io.Writer, _ bool) error {
-		encoded, encodeErr := json.Marshal(responseStreamJSONInvocationResultRecord{
-			RecordType: responseStreamJSONRecordInvocationResult,
-			Invocation: apisurface.InvocationResponseFromResult(result),
-		})
-		if encodeErr != nil {
-			return fmt.Errorf("marshal response-stream JSON record: %w", encodeErr)
-		}
-		encoded = append(encoded, '\n')
-		written, writeErr := writer.Write(encoded)
-		if writeErr == nil && written != len(encoded) {
-			writeErr = io.ErrShortWrite
-		}
-		return writeErr
-	})
-	if !first {
-		return fmt.Errorf("response-stream invocation result already written")
-	}
-	return err
-}
-
-type responseStreamJSONResponseEventRecord struct {
-	RecordType string                               `json:"recordType"`
-	Event      factorysessions.FactoryResponseEvent `json:"event"`
-}
-
-type responseStreamJSONInvocationResultRecord struct {
-	RecordType string                        `json:"recordType"`
-	Invocation factoryapi.InvocationResponse `json:"invocation"`
-}
-
-const factoryEventJSONRecordType = "factory_event"
+const (
+	factoryEventJSONRecordType                 = "factory_event"
+	factoryEventJSONInvocationResultRecordType = "invocation_result"
+)
 
 type factoryEventRenderer interface {
 	PresentFactoryEvents([]interfaces.FactoryEvent)
@@ -951,7 +809,7 @@ func (renderer *jsonFactoryEventRenderer) writeFinalInvocationResult(
 	}
 	first, err := renderer.stream.Finalize(func(writer io.Writer, _ bool) error {
 		encoded, encodeErr := json.Marshal(factoryEventJSONInvocationResultRecord{
-			RecordType: responseStreamJSONRecordInvocationResult,
+			RecordType: factoryEventJSONInvocationResultRecordType,
 			Response:   apisurface.InvocationResponseFromResult(result),
 		})
 		if encodeErr != nil {

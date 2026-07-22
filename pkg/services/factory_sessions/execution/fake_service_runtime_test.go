@@ -3305,6 +3305,92 @@ func TestCheckpointEventProjection_BuildsCanonicalCheckpointEvents(t *testing.T)
 	}
 }
 
+func TestPhaseEventProjection_PreservesOrderedRunningAndTerminalPhases(t *testing.T) {
+	t.Parallel()
+	startedAt := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	session := SessionReadResult{
+		SessionID:        "dur-sess-phase-events-001",
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Dialect:          "you-workflow-v1",
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		PhaseSummaries: []PhaseSummary{
+			{Phase: "setup"}, {Phase: " "}, {Phase: "execute"},
+		},
+	}
+	events := appendCanonicalOrchestratorPhaseEvents(nil, session, canonicalEventSourceRuntimeService)
+	if got, want := phaseEventStatuses(t, events), []string{"setup:COMPLETED", "execute:ACTIVE"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("running phases = %v, want %v", got, want)
+	}
+
+	session.Status = LifecycleStatusSucceeded
+	events = appendCanonicalOrchestratorPhaseEvents(nil, session, canonicalEventSourceRuntimeService)
+	if got, want := phaseEventStatuses(t, events), []string{"setup:COMPLETED", "execute:COMPLETED"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("terminal phases = %v, want %v", got, want)
+	}
+	if got := appendCanonicalOrchestratorPhaseEvents(events, SessionReadResult{}, canonicalEventSourceRuntimeService); len(got) != len(events) {
+		t.Fatalf("empty phase projection changed event count from %d to %d", len(events), len(got))
+	}
+}
+
+func phaseEventStatuses(t *testing.T, events []json.RawMessage) []string {
+	t.Helper()
+	statuses := make([]string, 0, len(events))
+	for _, raw := range events {
+		var event struct {
+			Context struct {
+				PhaseID *string `json:"phaseId"`
+			} `json:"context"`
+			Payload struct {
+				PhaseStatus string `json:"phaseStatus"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(raw, &event); err != nil {
+			t.Fatalf("decode phase event: %v", err)
+		}
+		if event.Context.PhaseID != nil {
+			statuses = append(statuses, *event.Context.PhaseID+":"+event.Payload.PhaseStatus)
+		}
+	}
+	return statuses
+}
+
+func TestJavaScriptRuntimeService_FactoryEventObserverDeliversOnlyUnseenEvents(t *testing.T) {
+	t.Parallel()
+	const sessionID = "dur-sess-observer-events-001"
+	session := SessionReadResult{
+		SessionID: sessionID, Status: LifecycleStatusRunning,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+	}
+	state := &runtimeSessionState{
+		session: session,
+		result:  ResultReadResult{SessionID: sessionID, SessionStatus: LifecycleStatusRunning},
+	}
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	service := &JavaScriptRuntimeService{sessions: map[string]*runtimeSessionState{sessionID: state}}
+	var delivered []interfaces.FactoryEvent
+	stop := service.observeFactoryEvents(state, func(events []interfaces.FactoryEvent) {
+		delivered = append(delivered, events...)
+	})
+	service.presentCurrentFactoryEvents(sessionID)
+	service.presentCurrentFactoryEvents(sessionID)
+	if len(delivered) != len(state.events) {
+		t.Fatalf("delivered %d events after duplicate presentation, want %d", len(delivered), len(state.events))
+	}
+	stop()
+	service.presentCurrentFactoryEvents(sessionID)
+	if len(delivered) != len(state.events) {
+		t.Fatalf("delivery continued after observer stopped: got %d, want %d", len(delivered), len(state.events))
+	}
+	if stopNil := service.observeFactoryEvents(state, nil); stopNil == nil {
+		t.Fatal("nil observer cleanup is nil")
+	} else {
+		stopNil()
+	}
+	service.unregisterFactoryEventConsumer("missing-session")
+	service.presentCurrentFactoryEvents("missing-session")
+}
+
 func TestFakeService_ResumeInterruptedSession_ReturnsUnsupported(t *testing.T) {
 	t.Parallel()
 	service := newContractFakeService(t)
