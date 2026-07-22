@@ -32,7 +32,7 @@ type Factory struct {
 	modelService                    models.Service
 	workFactory                     WorkFactory
 	automationFactory               AutomationFactory
-	factorySessionsFactory          FactorySessionsFactory
+	factorySessionsService          factorysessions.Service
 	factorySessionExecutionFactory  FactorySessionExecutionFactory
 	recordingsProjectionFactory     RecordingsProjectionFactory
 	recordingsFactory               RecordingsFactory
@@ -84,7 +84,7 @@ func NewFactory(
 	modelService models.Service,
 	workFactory WorkFactory,
 	automationFactory AutomationFactory,
-	factorySessionsFactory FactorySessionsFactory,
+	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
 	recordingsFactory RecordingsFactory,
@@ -147,13 +147,16 @@ func NewFactory(
 	if replayFiles == nil {
 		return nil, fmt.Errorf("Factory Session replay recording reader is required")
 	}
+	if factorySessionsService == nil {
+		return nil, fmt.Errorf("Factory Sessions service is required")
+	}
 	return &Factory{
 		durableExecutionFactory:         durableExecutionFactory,
 		workerExecutionFactory:          workerExecutionFactory,
 		modelService:                    modelService,
 		workFactory:                     workFactory,
 		automationFactory:               automationFactory,
-		factorySessionsFactory:          factorySessionsFactory,
+		factorySessionsService:          factorySessionsService,
 		factorySessionExecutionFactory:  factorySessionExecutionFactory,
 		recordingsProjectionFactory:     recordingsProjectionFactory,
 		recordingsFactory:               recordingsFactory,
@@ -206,7 +209,7 @@ func (f *Factory) openRuntime(
 		f.modelService,
 		f.workFactory,
 		f.automationFactory,
-		f.factorySessionsFactory,
+		f.factorySessionsService,
 		f.factorySessionExecutionFactory,
 		f.recordingsProjectionFactory,
 		f.recordingsFactory,

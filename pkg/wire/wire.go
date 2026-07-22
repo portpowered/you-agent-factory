@@ -119,7 +119,7 @@ var servicesSet = wire.NewSet(
 	provideWorkPropagationPolicyService,
 	provideTTSObservabilityService,
 	provideAutomationFactory,
-	provideFactorySessionsFactory,
+	provideFactorySessionsService,
 	providePortableRecordingWriter,
 	provideFactorySessionExecutionFactory,
 	provideRecordingsProjectionFactory,

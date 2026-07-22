@@ -53,8 +53,6 @@ type AutomationFactory = func(
 	automations.HostedPollers,
 ) automations.Service
 
-type FactorySessionsFactory = func(factoryruntime.Clock) (factorysessions.RuntimeAssembly, error)
-
 type FactorySessionExecutionFactory = func(
 	string,
 	factorysessions.PersistencePolicy,

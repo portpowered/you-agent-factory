@@ -102,10 +102,18 @@ type InvocationOperation interface {
 	InvokeFactory(context.Context, InvocationTarget, InvocationRequest) (FactoryInvocationOutcome, error)
 }
 
-// Gateway is the legacy name of the complete Factory Sessions application
-// boundary. New consumers use the Service alias below while the remaining root
-// contracts are consolidated into the single Service interface.
+// RuntimeBinding contains values selected while opening one Factory Session
+// runtime. Process-scoped construction dependencies remain in the injected
+// Service.
+type RuntimeBinding struct {
+	Clock factoryruntime.Clock
+}
+
+// Gateway is the complete Factory Sessions boundary. The process-scoped root
+// uses ForRuntime to create an isolated runtime view; a bound view serves the
+// remaining application operations.
 type Gateway interface {
+	ForRuntime(RuntimeBinding) (RuntimeAssembly, error)
 	OpenFactorySession(context.Context, OpenRequest) (*OpenResult, error)
 	OpenFactorySessionFromFolder(context.Context, string, *TargetRef, bool, bool) (*OpenResult, error)
 	ListFactorySessions(context.Context) ([]ReadProjection, error)
@@ -139,8 +147,7 @@ type Gateway interface {
 	DispatchCompletionObserverFactory() func(string) func(string)
 }
 
-// Service is the canonical Factory Sessions application contract exposed to
-// new consumers. It aliases Gateway only during the contract-consolidation
-// migration so the deletion-only structure baseline is not replaced with a
-// renamed exception.
+// Service is the canonical Factory Sessions application contract. Gateway is
+// retained as the declared interface during the deletion-only root-contract
+// migration.
 type Service = Gateway

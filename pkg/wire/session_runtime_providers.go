@@ -377,7 +377,7 @@ func provideAutomationFactory() factorysessionruntimeopening.AutomationFactory {
 	}
 }
 
-func provideFactorySessionsFactory(
+func provideFactorySessionsService(
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
@@ -389,12 +389,10 @@ func provideFactorySessionsFactory(
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
-) factorysessionruntimeopening.FactorySessionsFactory {
-	return func(clock factoryruntime.Clock) (factorysessions.RuntimeAssembly, error) {
-		return factorysessionwire.NewRuntimeAssembly(func() factoryruntime.JavaScriptCheckpointStore {
-			return factorycheckpointstore.New()
-		}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, clock, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles)
-	}
+) (factorysessions.Service, error) {
+	return factorysessionwire.NewService(func() factoryruntime.JavaScriptCheckpointStore {
+		return factorycheckpointstore.New()
+	}, sessionResultProjection, interpolation, invocationWorkTypes, ttsObservability, eventIDs, sessionIDs, resolveHome, directories, namedPaths, invocationInputFiles, initialWorkFiles)
 }
 
 func provideFactorySessionExecutionFactory(

@@ -12,28 +12,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
 )
 
-func TestNewRuntimeAssemblyRejectsMissingRequiredDependencies(t *testing.T) {
-	assembly, err := NewRuntimeAssembly(
-		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+func TestNewServiceRejectsMissingRequiredDependencies(t *testing.T) {
+	service, err := NewService(
+		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 	)
 	if err == nil || !strings.Contains(err.Error(), "session result projection is required") {
-		t.Fatalf("NewRuntimeAssembly() error = %v, want deterministic required dependency error", err)
+		t.Fatalf("NewService() error = %v, want deterministic required dependency error", err)
 	}
-	if assembly != nil {
-		t.Fatalf("NewRuntimeAssembly() = %#v, want nil assembly", assembly)
+	if service != nil {
+		t.Fatalf("NewService() = %#v, want nil service", service)
 	}
 }
 
-func TestNewRuntimeAssemblyIsInert(t *testing.T) {
+func TestNewServiceIsInertAndRequiresRuntimeClockBinding(t *testing.T) {
 	clock := &recordingClock{}
 	directories := &recordingDirectoryInspection{}
-	assembly, err := NewRuntimeAssembly(
+	service, err := NewService(
 		nil,
 		resultProjector{},
 		nil,
 		nil,
 		nil,
-		clock,
 		func() string { return "response-event-id" },
 		func() string { return "session-id" },
 		func() (string, error) { return "home", nil },
@@ -43,16 +42,29 @@ func TestNewRuntimeAssemblyIsInert(t *testing.T) {
 		fileeffects.InitialWorkReader(func(string) ([]byte, error) { return nil, nil }),
 	)
 	if err != nil {
-		t.Fatalf("NewRuntimeAssembly() error = %v", err)
+		t.Fatalf("NewService() error = %v", err)
 	}
-	if assembly == nil {
-		t.Fatal("NewRuntimeAssembly() returned nil assembly")
+	if service == nil {
+		t.Fatal("NewService() returned nil service")
 	}
 	if clock.calls != 0 {
 		t.Fatalf("construction read clock %d times, want no runtime activity", clock.calls)
 	}
 	if directories.calls != 0 {
 		t.Fatalf("construction inspected filesystem %d times, want no runtime activity", directories.calls)
+	}
+	if assembly, bindErr := service.ForRuntime(factorysessions.RuntimeBinding{}); bindErr == nil || assembly != nil {
+		t.Fatalf("ForRuntime() without clock = %#v, %v; want deterministic error", assembly, bindErr)
+	}
+	assembly, err := service.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
+	if err != nil || assembly == nil {
+		t.Fatalf("ForRuntime() = %#v, %v; want bound assembly", assembly, err)
+	}
+	if clock.calls != 0 {
+		t.Fatalf("runtime binding read clock %d times, want no runtime activity", clock.calls)
+	}
+	if directories.calls != 0 {
+		t.Fatalf("runtime binding inspected filesystem %d times, want no runtime activity", directories.calls)
 	}
 }
 

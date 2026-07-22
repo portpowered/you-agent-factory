@@ -31,7 +31,7 @@ func openRuntime(
 	modelService models.Service,
 	workFactory WorkFactory,
 	automationFactory AutomationFactory,
-	factorySessionsFactory FactorySessionsFactory,
+	factorySessionsService factorysessions.Service,
 	factorySessionExecutionFactory FactorySessionExecutionFactory,
 	recordingsProjectionFactory RecordingsProjectionFactory,
 	recordingsFactory RecordingsFactory,
@@ -145,15 +145,15 @@ func openRuntime(
 	if err != nil {
 		return runtimeProducts{}, err
 	}
-	if factorySessionsFactory == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions factory is required")
+	if factorySessionsService == nil {
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service is required")
 	}
-	runtimeService, err := factorySessionsFactory(clock)
+	runtimeService, err := factorySessionsService.ForRuntime(factorysessions.RuntimeBinding{Clock: clock})
 	if err != nil {
 		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service: %w", err)
 	}
 	if runtimeService == nil {
-		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions factory returned nil assembly")
+		return runtimeProducts{}, fmt.Errorf("construct runtime scope: Factory Sessions service returned nil runtime assembly")
 	}
 	currentRuntimeConfig := func() *models.RuntimeConfig {
 		runtime := runtimeService.CurrentRuntime()

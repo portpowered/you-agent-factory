@@ -11,21 +11,20 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/services/factory_sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/services/factory_sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/fileeffects"
+	factorysessionroot "github.com/portpowered/infinite-you/pkg/services/factory_sessions/internal/service"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/service"
 	"github.com/portpowered/infinite-you/pkg/services/recordings"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 )
 
-// NewRuntimeAssembly constructs the inert Factory Sessions runtime assembly
-// selected by canonical application Wire. Runtime values are supplied later
-// through the assembly's typed Complete operation.
-func NewRuntimeAssembly(
+// NewService constructs the inert, process-scoped Factory Sessions service.
+// Runtime-specific values are supplied later through Service.ForRuntime.
+func NewService(
 	newJavaScriptCheckpointStore factoryruntime.JavaScriptCheckpointStoreFactory,
 	sessionResultProjection factoryruntime.SessionResultProjectionOperation,
 	interpolation factorydefinitions.InvocationInterpolationService,
 	invocationWorkTypes factorydefinitions.InvocationWorkTypeService,
 	ttsObservability factorydefinitions.TTSObservabilityService,
-	clock factoryruntime.Clock,
 	eventIDs factorysessions.ResponseEventIDGenerator,
 	sessionIDs factorysessions.SessionIDGenerator,
 	resolveHome factorysessions.HomeDirectoryResolver,
@@ -33,12 +32,9 @@ func NewRuntimeAssembly(
 	namedPaths factorydefinitions.NamedPathResolver,
 	invocationInputFiles fileeffects.InvocationInputReader,
 	initialWorkFiles fileeffects.InitialWorkReader,
-) (factorysessions.RuntimeAssembly, error) {
+) (factorysessions.Service, error) {
 	if sessionResultProjection == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: session result projection is required")
-	}
-	if clock == nil {
-		return nil, fmt.Errorf("construct Factory Sessions: clock is required")
 	}
 	if eventIDs == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: response event ID generator is required")
@@ -62,13 +58,12 @@ func NewRuntimeAssembly(
 		return nil, fmt.Errorf("construct Factory Sessions: initial Work reader is required")
 	}
 
-	assembly := factorysessionservice.NewAssembly(
+	service, err := factorysessionroot.NewRoot(
 		newJavaScriptCheckpointStore,
 		sessionResultProjection,
 		interpolation,
 		invocationWorkTypes,
 		ttsObservability,
-		clock,
 		eventIDs,
 		sessionIDs,
 		resolveHome,
@@ -77,10 +72,13 @@ func NewRuntimeAssembly(
 		invocationInputFiles,
 		initialWorkFiles,
 	)
-	if assembly == nil {
+	if err != nil {
+		return nil, err
+	}
+	if service == nil {
 		return nil, fmt.Errorf("construct Factory Sessions: implementation rejected its dependencies")
 	}
-	return assembly, nil
+	return service, nil
 }
 
 // NewDurableExecution constructs the configured durable execution capability
