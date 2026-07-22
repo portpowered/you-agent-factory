@@ -4828,6 +4828,38 @@ export interface components {
       /** @description Canonical validation targets for the submitted factory definition. */
       targets: components["schemas"]["FactoryValidationTarget"][];
     };
+    /** @description Shared operator configuration stored in .you-agent-factory/config.json. */
+    GlobalConfig: {
+      /** @description Stable identifier for the local provider-backed runtime boundary. */
+      backendScopeID?: string;
+      defaults?: components["schemas"]["GlobalConfigDefaults"];
+      /** @description Named worker model presets loaded from the shared configuration file. */
+      workerPresets?: components["schemas"]["GlobalConfigWorkerPreset"][];
+    };
+    /** @description Operator defaults that participate independently in file, environment, and flag precedence. */
+    GlobalConfigDefaults: {
+      /** @description Default worker model provider, including supported aliases and symbolic DEFAULT resolution. */
+      workerModelProvider?: string;
+      /** @description Default worker model name. */
+      workerModel?: string;
+    };
+    /** @description Named worker model selection available to Factory Session runtime opening. */
+    GlobalConfigWorkerPreset: {
+      /** @description Non-empty preset identifier after surrounding whitespace is trimmed. */
+      id: string;
+      /**
+       * @description Concrete supported model provider or alias; symbolic DEFAULT is not accepted for presets.
+       * @enum {string}
+       */
+      modelProvider: GlobalConfigWorkerPresetModelProvider;
+      /** @description Optional model name, trimmed when present. */
+      model?: string;
+      /**
+       * @description Optional reasoning effort; an empty value is accepted and normalized as unspecified.
+       * @enum {string}
+       */
+      reasoningEffort?: GlobalConfigWorkerPresetReasoningEffort;
+    };
     WorkRequest: {
       /** @description Stable client-provided request identifier used for idempotent batch submission. */
       requestId: string;
@@ -7900,6 +7932,44 @@ export const FactoryValidationSubjectLocation = {
 } as const;
 export type FactoryValidationSubjectLocation =
   (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const GlobalConfigWorkerPresetModelProvider = {
+  GlobalConfigWorkerPresetModelProviderAGYUpper: "AGY",
+  GlobalConfigWorkerPresetModelProviderAnthropicUpper: "ANTHROPIC",
+  GlobalConfigWorkerPresetModelProviderClaudeUpper: "CLAUDE",
+  GlobalConfigWorkerPresetModelProviderCodexUpper: "CODEX",
+  GlobalConfigWorkerPresetModelProviderCursorUpper: "CURSOR",
+  GlobalConfigWorkerPresetModelProviderCursorAgentUpper: "CURSOR_AGENT",
+  GlobalConfigWorkerPresetModelProviderGeminiUpper: "GEMINI",
+  GlobalConfigWorkerPresetModelProviderKiroUpper: "KIRO",
+  GlobalConfigWorkerPresetModelProviderOpenAIUpper: "OPENAI",
+  GlobalConfigWorkerPresetModelProviderOpenCodeUpper: "OPENCODE",
+  GlobalConfigWorkerPresetModelProviderPIUpper: "PI",
+  GlobalConfigWorkerPresetModelProviderAgent: "agent",
+  GlobalConfigWorkerPresetModelProviderAgy: "agy",
+  GlobalConfigWorkerPresetModelProviderAnthropic: "anthropic",
+  GlobalConfigWorkerPresetModelProviderAntigravity: "antigravity",
+  GlobalConfigWorkerPresetModelProviderClaude: "claude",
+  GlobalConfigWorkerPresetModelProviderCodex: "codex",
+  GlobalConfigWorkerPresetModelProviderCursor: "cursor",
+  GlobalConfigWorkerPresetModelProviderCursorAgent: "cursor-agent",
+  GlobalConfigWorkerPresetModelProviderGemini: "gemini",
+  GlobalConfigWorkerPresetModelProviderKiro: "kiro",
+  GlobalConfigWorkerPresetModelProviderKiroCLI: "kiro-cli",
+  GlobalConfigWorkerPresetModelProviderOpenAI: "openai",
+  GlobalConfigWorkerPresetModelProviderOpenCode: "opencode",
+  GlobalConfigWorkerPresetModelProviderPI: "pi",
+} as const;
+export type GlobalConfigWorkerPresetModelProvider =
+  (typeof GlobalConfigWorkerPresetModelProvider)[keyof typeof GlobalConfigWorkerPresetModelProvider];
+export const GlobalConfigWorkerPresetReasoningEffort = {
+  GlobalConfigWorkerPresetReasoningEffortUnspecified: "",
+  GlobalConfigWorkerPresetReasoningEffortMinimal: "minimal",
+  GlobalConfigWorkerPresetReasoningEffortLow: "low",
+  GlobalConfigWorkerPresetReasoningEffortMedium: "medium",
+  GlobalConfigWorkerPresetReasoningEffortHigh: "high",
+} as const;
+export type GlobalConfigWorkerPresetReasoningEffort =
+  (typeof GlobalConfigWorkerPresetReasoningEffort)[keyof typeof GlobalConfigWorkerPresetReasoningEffort];
 export const WorkRequestType = {
   // Normalized request containing one or more work items and their relationships.
   WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",
