@@ -18,7 +18,7 @@ import (
 	sessionexecutionopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
-	invocationopening "github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening/invocation"
+	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/invocation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -292,7 +292,7 @@ var BundleSet = wire.NewSet(
 	initializerapplication.NewRuntimeRunnerBuilder,
 	provideRunRuntimeRunnerBuilder,
 	provideRunSelectionFactory,
-	invocationopening.NewOperation,
+	invocationwire.NewOperation,
 	initializerapplication.NewStdioRunnerBuilder,
 	initializerapplication.NewOpenedStdioRunnerBuilder,
 	provideFixtureStdioApplicationBuilder,

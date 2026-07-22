@@ -8,7 +8,7 @@ package wire
 
 import (
 	"context"
-	"github.com/google/wire"
+	wire2 "github.com/google/wire"
 	"github.com/portpowered/infinite-you/pkg/initializer/application"
 	"github.com/portpowered/infinite-you/pkg/initializer/process"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/executionopening"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/processlifecycle"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening"
-	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/runtimeopening/invocation"
+	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/invocation/wire"
 	"github.com/portpowered/infinite-you/pkg/services/work"
 	"github.com/portpowered/infinite-you/pkg/services/workers"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
@@ -273,7 +273,7 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 		return nil, err
 	}
 	modelInvocationTimeout := provideModelInvocationTimeout()
-	invocationOperation, err := invocation.NewOperation(runtimeopeningFactory, edges2, workingDirectory, v2, invocationArtifactExporter, modelInvocationTimeout, runtimeArtifactRootResolver, v13)
+	invocationOperation, err := wire.NewOperation(runtimeopeningFactory, edges2, workingDirectory, v2, invocationArtifactExporter, modelInvocationTimeout, runtimeArtifactRootResolver, v13)
 	if err != nil {
 		return nil, err
 	}
@@ -457,11 +457,11 @@ func InjectBundle(ctx context.Context, edges2 edges.Edges) (*application.Process
 
 // wire.go:
 
-var platformSet = wire.NewSet(logging.NewDefaultLogger)
+var platformSet = wire2.NewSet(logging.NewDefaultLogger)
 
-var apiSet = wire.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
+var apiSet = wire2.NewSet(composition.NewWorkAPI, composition.NewHTTPBinder, apisurface.NewRuntimeAPI, composition.NewLiveSessionAPI, factorydefinition.NewAPI, factorysession.NewDurableAPI, factorysession.NewLiveAPI, factorysession.NewInvocationAPI, stdio.NewOpener, application2.NewHandler)
 
-var servicesSet = wire.NewSet(factorysessions.NewRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
+var servicesSet = wire2.NewSet(factorysessions.NewRequestPreparation, factory.NewFactoryStatusProjector, factory.NewSessionResultProjectionOperation, provideOperatorSettingsFileSystem,
 	provideOperatorSettingsCreateTemporaryFile,
 	provideOperatorSettingsIDGenerator,
 	provideSystemInitializationInspectPath,
@@ -573,22 +573,22 @@ var servicesSet = wire.NewSet(factorysessions.NewRequestPreparation, factory.New
 	provideFactoryDefinitionsFactory,
 	provideFactoryScaffoldInitializer,
 	provideEditableFactoryValidator,
-	provideInitialFactorySnapshotFactory, service.NewRuntimeFactory, service.NewAssembly, wire.Bind(new(runtimeopening.FactoryRuntimeAssembler), new(*service.Assembly)), provideLoadedFactorySourceFactory,
+	provideInitialFactorySnapshotFactory, service.NewRuntimeFactory, service.NewAssembly, wire2.Bind(new(runtimeopening.FactoryRuntimeAssembler), new(*service.Assembly)), provideLoadedFactorySourceFactory,
 	provideLoadedFactoryLoader,
 	provideReplayArtifactLoader,
 	provideReplayRuntimeConfigDecoder, runtimeopening.NewFactory,
 )
 
-var providerSessionServiceSet = wire.NewSet(
+var providerSessionServiceSet = wire2.NewSet(
 	provideProviderSessions,
 )
 
-var factorySessionsServicesSet = wire.NewSet(
+var factorySessionsServicesSet = wire2.NewSet(
 	provideStandaloneSessionExecutionFactory,
 	provideJavaScriptWorkflows,
 )
 
-var factoryDefinitionsServicesSet = wire.NewSet(
+var factoryDefinitionsServicesSet = wire2.NewSet(
 	provideFactoryDefinitionValidationService,
 	provideFactoryDefinitionValidator,
 	provideDefinitionValidationOperation,
@@ -603,13 +603,13 @@ var factoryDefinitionsServicesSet = wire.NewSet(
 	provideNamedFactoryPersistenceOperation,
 )
 
-var workerServiceSet = wire.NewSet(
+var workerServiceSet = wire2.NewSet(
 	provideWorkerInvocationFactory,
 	provideWorkerProcessEnvironment,
 	provideWorkerCurrentWorkingDirectory,
 )
 
-var cliCommandOperationsSet = wire.NewSet(
+var cliCommandOperationsSet = wire2.NewSet(
 	provideCLIObserver,
 	provideNamedFactoryRootsResolver,
 	provideNamedFactoryCandidatePathsResolver,
@@ -651,12 +651,12 @@ var cliCommandOperationsSet = wire.NewSet(
 	provideShowWorkOperation,
 	provideMoveWorkOperation,
 	provideWorkVisualizationOperation,
-	provideVisualizeWorkOperation, wire.Struct(new(cli.CommandOperations), "*"),
+	provideVisualizeWorkOperation, wire2.Struct(new(cli.CommandOperations), "*"),
 )
 
 // BundleSet is the one canonical provider set used by both public bundle
 // injectors. It constructs only inert command and service initializers.
-var BundleSet = wire.NewSet(
+var BundleSet = wire2.NewSet(
 	platformSet,
 	apiSet,
 	servicesSet,
@@ -673,8 +673,8 @@ var BundleSet = wire.NewSet(
 	provideRuntimeOpeningRequestFactory,
 	provideRunOpener,
 	provideRuntimeInputResolver, applicationopening.New, application.NewRuntimeRunnerBuilder, provideRunRuntimeRunnerBuilder,
-	provideRunSelectionFactory, invocation.NewOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
+	provideRunSelectionFactory, wire.NewOperation, application.NewStdioRunnerBuilder, application.NewOpenedStdioRunnerBuilder, provideFixtureStdioApplicationBuilder,
 	provideRuntimeStdioApplicationBuilder,
-	provideSessionExecutionOpeningFactory, wire.Bind(new(factorysessions.StdioExecutionOpening), new(*executionopening.Factory)), executionopening.NewStdioOpeningService, wire.Bind(new(factorysessions.StdioOpeningOperation), new(*executionopening.StdioOpeningService)), provideStdioApplicationOpener,
-	provideDirectJavaScriptSyncRunner, executionopening.NewDirectJavaScriptRunOperation, application.NewInitializer, executionopening.NewServiceBuilder, provideCLICommandFactory, application.NewProcess, wire.Bind(new(process.Initializer), new(*application.Initializer)), wire.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
+	provideSessionExecutionOpeningFactory, wire2.Bind(new(factorysessions.StdioExecutionOpening), new(*executionopening.Factory)), executionopening.NewStdioOpeningService, wire2.Bind(new(factorysessions.StdioOpeningOperation), new(*executionopening.StdioOpeningService)), provideStdioApplicationOpener,
+	provideDirectJavaScriptSyncRunner, executionopening.NewDirectJavaScriptRunOperation, application.NewInitializer, executionopening.NewServiceBuilder, provideCLICommandFactory, application.NewProcess, wire2.Bind(new(process.Initializer), new(*application.Initializer)), wire2.Bind(new(process.CommandFactory), new(cli.CommandFactory)),
 )

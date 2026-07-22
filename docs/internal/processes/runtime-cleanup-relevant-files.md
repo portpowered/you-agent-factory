@@ -565,6 +565,15 @@ before invoking domain normalization, validation, submission, waiting, or
 telemetry policy; generated request and Work-content models must not enter the
 Factory Session invocation owner.
 
+Construct the runtime-bound invocation owner through
+`factory_sessions/services/invocation/wire` from exact Factory-config,
+Work-submission, observation, interpolation, Work-Type, input-file, and
+telemetry ports. Runtime assembly and root Wire consume the capability contract
+and its service-local constructors; they must not select the concrete session
+owner or one-shot invocation implementation directly. Construction remains
+inert, while timeout and cancellation ownership stays inside the invocation
+capability.
+
 Live lifecycle results, including their post-control inspection links, are
 Factory Session execution contracts. Build those links in
 `pkg/factory/sessions/execution` before the dataplane returns its result; the

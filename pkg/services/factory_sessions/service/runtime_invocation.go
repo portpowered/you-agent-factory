@@ -13,6 +13,8 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation/packagedtts"
 	invocationruntime "github.com/portpowered/infinite-you/pkg/services/factory_sessions/invocation/runtimeadapter"
+	invocationservice "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/invocation"
+	invocationwire "github.com/portpowered/infinite-you/pkg/services/factory_sessions/services/invocation/wire"
 )
 
 // NewInvocationOwner constructs the canonical invocation owner from the
@@ -23,20 +25,19 @@ func NewInvocationOwner(
 	invocationWorkTypes interfaces.InvocationWorkTypeService,
 	ttsObservability interfaces.TTSObservabilityService,
 	inputFiles fileeffects.InvocationInputReader,
-) (*sessioninvocation.SessionOwner, error) {
+) (invocationservice.Service, error) {
 	if fs == nil {
 		return nil, fmt.Errorf("session runtime is required")
 	}
-	return sessioninvocation.NewSessionOwner(
-		func(sessionID string) (*interfaces.FactoryConfig, error) {
+	return invocationwire.New(invocationservice.Dependencies{
+		FactoryConfig: func(sessionID string) (*interfaces.FactoryConfig, error) {
 			return invocationruntime.FactoryConfig(fs.sessionState, sessionID)
 		},
-		fs.submitOwnedSessionInvocationWork,
-		func(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
+		SubmitWork: fs.submitOwnedSessionInvocationWork,
+		Observe: func(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
 			return invocationruntime.Observe(ctx, fs.sessionState, sessionID, input, fs.worldStateProjector)
 		},
-		nil,
-		packagedtts.NewTelemetry(
+		Telemetry: packagedtts.NewTelemetry(
 			ttsObservability,
 			func(metric sessioninvocation.SessionInvocationMetric) {
 				fs.recordInvocationMetric(metric.Name, metric.Labels)
@@ -45,11 +46,11 @@ func NewInvocationOwner(
 				invocationruntime.WriteLogRecord(fs.logger, record)
 			},
 		),
-		packagedtts.NewSpecialCase(ttsObservability),
-		interpolation,
-		invocationWorkTypes,
-		inputFiles,
-	), nil
+		SpecialCase:   packagedtts.NewSpecialCase(ttsObservability),
+		Interpolation: interpolation,
+		WorkTypes:     invocationWorkTypes,
+		InputFiles:    inputFiles,
+	})
 }
 
 func (fs *SessionRuntime) submitOwnedSessionInvocationWork(ctx context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
