@@ -24,7 +24,10 @@ primary-result behavior.
   result agreement, and exactly-once close before they reach orchestration.
   Keep this boundary provider-neutral and test it with deterministic writers;
   Factory Session publication identity, sequencing, retention, and replay stay
-  outside this package.
+  outside this package. Customer integrations can reuse
+  `inferencecontract/testkit.Run` with fresh factories for final-only,
+  streaming, and tool-lifecycle modes; pass at least two opaque identities so
+  conformance never depends on a built-in provider name.
 
 ## CLI run and submit command contracts
 
