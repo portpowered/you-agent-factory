@@ -7,11 +7,6 @@ Use this map when changing the public REST contract.
   `api/openapi.yaml`, Go server/client, and TypeScript outputs before running the
   smoke target so the drift check detects nondeterminism rather than the
   intended authored change.
-- Intentional Factory schema or mapper changes may require refreshing the
-  production-boundary SHA-256 entries in
-  `pkg/transports/mapping/factoryconfig/openapitests/parity_inventory_test.go`;
-  use the hashes reported by `TestProductionBoundarySources_UnchangedForParityLane`
-  only after reviewing the corresponding source changes.
 - Factory output key normalization in
   `pkg/transports/mapping/factoryconfig/openapi_factory.go` must preserve keys
   inside opaque maps. Add new map-valued contract fields such as localized
