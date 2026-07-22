@@ -251,7 +251,6 @@
         "enum",
         "pattern",
         "completion",
-        "channels",
         "doubleDash"
       ],
       "properties": {
@@ -275,9 +274,21 @@
           ]
         },
         "valueType": {
-          "description": "The scalar type accepted for one positional value.",
+          "description": "The scalar or repeated value kind accepted by this positional input.",
           "enum": [
-            "string"
+            "bool",
+            "string",
+            "int",
+            "int64",
+            "stringArray"
+          ]
+        },
+        "scope": {
+          "description": "The effective command scope of this positional input.",
+          "enum": [
+            "local",
+            "persistent",
+            "inherited"
           ]
         },
         "required": {
@@ -297,6 +308,9 @@
         "variadic": {
           "description": "Whether the argument consumes all remaining positional values.",
           "type": "boolean"
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/inputValue"
         },
         "enum": {
           "description": "Closed set of accepted values when the argument is restricted to enumerated strings.",
@@ -333,6 +347,35 @@
           },
           "uniqueItems": true
         },
+        "acceptedSources": {
+          "description": "Canonical sources permitted to supply this input.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "handlerBindingId": {
+          "description": "Stable handler binding that receives the resolved input value.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "visibility": {
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
         "doubleDash": {
           "description": "How a bare -- token is interpreted relative to this command's positional arguments.",
           "enum": [
@@ -342,6 +385,30 @@
         }
       },
       "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "channels"
+              ]
+            },
+            {
+              "required": [
+                "scope",
+                "defaultValue",
+                "acceptedSources",
+                "handlerBindingId",
+                "visibility",
+                "lifecycle"
+              ],
+              "not": {
+                "required": [
+                  "channels"
+                ]
+              }
+            }
+          ]
+        },
         {
           "if": {
             "properties": {
@@ -417,19 +484,21 @@
         "scope",
         "valueType",
         "required",
-        "default",
-        "changedDefault",
-        "noOptionDefault",
         "repeatable",
         "normalization",
         "completion",
-        "binding",
         "visibility",
         "lifecycle"
       ],
       "properties": {
         "id": {
           "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The transport-neutral input category.",
+          "enum": [
+            "named"
+          ]
         },
         "long": {
           "description": "The primary long flag name without leading dashes.",
@@ -482,6 +551,22 @@
           "description": "Whether the flag must be supplied before invocation proceeds.",
           "type": "boolean"
         },
+        "minCardinality": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCardinality": {
+          "description": "Maximum accepted values, or -1 when unbounded.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "defaultValue": {
+          "$ref": "#/$defs/inputValue"
+        },
+        "noOptionDefaultValue": {
+          "description": "Typed value used when a named input is present without an option value.",
+          "$ref": "#/$defs/inputValue"
+        },
         "default": {
           "description": "Serialized default value for the flag when it is omitted.",
           "type": "string"
@@ -520,6 +605,26 @@
           "description": "Optional binding target for this flag. Use an empty string when the flag is not bound to another input surface.",
           "type": "string"
         },
+        "acceptedSources": {
+          "description": "Canonical sources permitted to supply this input.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "stdin",
+              "environment",
+              "operator-config",
+              "manifest-default",
+              "factory-signature-default"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "handlerBindingId": {
+          "description": "Stable handler binding that receives the resolved input value.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
         "visibility": {
           "description": "Whether the flag is shown in default help output.",
           "enum": [
@@ -532,6 +637,36 @@
         }
       },
       "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "default",
+                "changedDefault",
+                "noOptionDefault",
+                "binding"
+              ]
+            },
+            {
+              "required": [
+                "kind",
+                "minCardinality",
+                "maxCardinality",
+                "defaultValue",
+                "acceptedSources",
+                "handlerBindingId"
+              ],
+              "not": {
+                "anyOf": [
+                  { "required": ["default"] },
+                  { "required": ["changedDefault"] },
+                  { "required": ["noOptionDefault"] },
+                  { "required": ["binding"] }
+                ]
+              }
+            }
+          ]
+        },
         {
           "if": {
             "properties": {
@@ -600,6 +735,35 @@
           }
         }
       ]
+    },
+    "inputValue": {
+      "description": "An explicitly typed scalar or repeated input value. The member name preserves the authored value kind without serialized reinterpretation.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "boolean": {
+          "type": "boolean"
+        },
+        "string": {
+          "type": "string"
+        },
+        "int": {
+          "type": "integer"
+        },
+        "int64": {
+          "type": "integer",
+          "minimum": -9223372036854775808,
+          "maximum": 9223372036854775807
+        },
+        "stringArray": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "participantRef": {
       "description": "Stable reference to one flag or argument participant in a relationship group.",

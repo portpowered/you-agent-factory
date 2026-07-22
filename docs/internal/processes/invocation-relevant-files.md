@@ -297,6 +297,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   to the manifest classification that owns that family: `LoadProduction` owns
   canonical run/submit validation, while `LoadCompatibility` must remain able to
   decode the separately classified workflow-only manifest.
+- Canonical flag and positional-input shapes are defined in
+  `contracts/cli/command-manifest.schema.json` and decoded by
+  `pkg/transports/cli/climanifest`. New canonical records use the shared typed
+  `defaultValue` / `noOptionDefaultValue` shape plus explicit cardinality,
+  accepted sources, and stable `handlerBindingId`; serialized `default`,
+  `noOptionDefault`, `changedDefault`, `binding`, and argument `channels` remain
+  compatibility fields for manifests not yet migrated. Preserve both shapes in
+  generated family artifacts until the authored production manifest is migrated.
 - Classification-aware workflow/MCP generation lives in
   `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
   metadata is emitted from `commands.json` into `mcp_family.json`, while approved

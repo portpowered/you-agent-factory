@@ -1,10 +1,45 @@
 package climanifest_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 )
+
+func TestCanonicalInputValueDecodingPreservesAuthoredTypes(t *testing.T) {
+	payload := []byte(`{
+		"id":"example.flag.labels",
+		"long":"label",
+		"shorthand":"l",
+		"aliases":["tag"],
+		"scope":"local",
+		"valueType":"stringArray",
+		"required":false,
+		"repeatable":true,
+		"normalization":"trim",
+		"completion":"dynamic",
+		"visibility":"visible",
+		"lifecycle":{},
+		"kind":"named",
+		"minCardinality":0,
+		"maxCardinality":-1,
+		"defaultValue":{"stringArray":[]},
+		"acceptedSources":["cli","manifest-default"],
+		"handlerBindingId":"example.binding.labels"
+	}`)
+
+	var input climanifest.Flag
+	if err := json.Unmarshal(payload, &input); err != nil {
+		t.Fatalf("decode canonical input: %v", err)
+	}
+	if input.DefaultValue == nil || input.DefaultValue.StringArray == nil || len(*input.DefaultValue.StringArray) != 0 {
+		t.Fatalf("defaultValue = %#v, want an explicitly authored empty string array", input.DefaultValue)
+	}
+	if input.HandlerBindingID != "example.binding.labels" {
+		t.Fatalf("handlerBindingId = %q, want example.binding.labels", input.HandlerBindingID)
+	}
+}
 
 func TestCommand_InputLookups(t *testing.T) {
 	command := climanifest.Command{

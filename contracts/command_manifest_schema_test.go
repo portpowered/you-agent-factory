@@ -188,6 +188,7 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 		{name: "conditional relationship", fixture: "valid-conditional-relationship.json"},
 		{name: "precedence and execution metadata", fixture: "valid-precedence.json"},
 		{name: "handler binding", fixture: "valid-handler-binding.json"},
+		{name: "canonical input kinds", fixture: "valid-canonical-input-kinds.json"},
 	}
 
 	for _, test := range tests {
